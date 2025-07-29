@@ -124,9 +124,20 @@ func (r *MCPToolRepo) GetByServerInEnvironment(environmentID int64, serverName s
 }
 
 func (r *MCPToolRepo) DeleteByServerID(serverID int64) error {
+	return r.DeleteByServerIDTx(nil, serverID)
+}
+
+func (r *MCPToolRepo) DeleteByServerIDTx(tx *sql.Tx, serverID int64) error {
 	query := `DELETE FROM mcp_tools WHERE mcp_server_id = ?`
-	_, err := r.db.Exec(query, serverID)
-	return err
+	
+	// Use transaction if provided, otherwise use regular db connection
+	if tx != nil {
+		_, err := tx.Exec(query, serverID)
+		return err
+	} else {
+		_, err := r.db.Exec(query, serverID)
+		return err
+	}
 }
 
 func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) {
