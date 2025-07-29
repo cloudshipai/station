@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	
 	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
+	"station/pkg/models"
 )
 
 // MCPModel represents the MCP servers configuration tab
@@ -21,13 +24,28 @@ type MCPModel struct {
 	// UI components
 	configEditor textarea.Model
 	nameInput    textinput.Model
+	environmentList list.Model
+	
+	// Data
+	envs         []*models.Environment
+	repos        *repositories.Repositories
 	
 	// State
 	mode         MCPMode
 	configs      []MCPConfigDisplay
 	selectedIdx  int
 	showEditor   bool
+	selectedEnvID int64
+	focusedField MCPField
 }
+
+type MCPField int
+
+const (
+	MCPFieldName MCPField = iota
+	MCPFieldEnvironment
+	MCPFieldConfig
+)
 
 type MCPMode int
 
@@ -46,6 +64,8 @@ type MCPConfigDisplay struct {
 
 // NewMCPModel creates a new MCP model
 func NewMCPModel(database db.Database) *MCPModel {
+	repos := repositories.New(database)
+	
 	// Create textarea for config editing
 	ta := textarea.New()
 	ta.Placeholder = "Paste your MCP server configuration here (JSON format)..."
@@ -57,13 +77,31 @@ func NewMCPModel(database db.Database) *MCPModel {
 	ti.Placeholder = "Configuration name"
 	ti.Width = 30
 	
-	return &MCPModel{
-		BaseTabModel: NewBaseTabModel(database, "MCP Servers"),
-		configEditor: ta,
-		nameInput:    ti,
-		mode:         MCPModeList,
-		showEditor:   false,
+	// Create environment list
+	envList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 4)
+	envList.SetShowHelp(false)
+	envList.SetShowStatusBar(false)
+	envList.SetShowTitle(false)
+	envList.SetFilteringEnabled(false)
+	
+	m := &MCPModel{
+		BaseTabModel:    NewBaseTabModel(database, "MCP Servers"),
+		configEditor:    ta,
+		nameInput:       ti,
+		environmentList: envList,
+		repos:           repos,
+		mode:            MCPModeList,
+		configs:         []MCPConfigDisplay{},
+		selectedIdx:     0,
+		showEditor:      false,
+		selectedEnvID:   1, // Default to first environment
+		focusedField:    MCPFieldName,
 	}
+	
+	// Load environments
+	m.loadEnvironments()
+	
+	return m
 }
 
 // Init initializes the MCP tab
@@ -121,23 +159,35 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				m.selectedIdx = (m.selectedIdx + 1) % len(m.configs)
 				return m, nil
 			}
+		case "tab":
+			if m.mode == MCPModeEdit {
+				// Cycle through fields
+				switch m.focusedField {
+				case MCPFieldName:
+					m.nameInput.Blur()
+					m.focusedField = MCPFieldEnvironment
+				case MCPFieldEnvironment:
+					m.focusedField = MCPFieldConfig
+					m.configEditor.Focus()
+				case MCPFieldConfig:
+					m.configEditor.Blur()
+					m.focusedField = MCPFieldName
+					m.nameInput.Focus()
+				}
+				return m, nil
+			}
 		case "esc":
 			if m.mode == MCPModeEdit {
 				m.mode = MCPModeList
 				m.showEditor = false
 				m.nameInput.Blur()
 				m.configEditor.Blur()
+				m.focusedField = MCPFieldName
 				return m, nil
 			}
-		case "tab", "right":
+		case "right":
 			if m.mode == MCPModeEdit && m.showEditor {
-				if m.nameInput.Focused() {
-					m.nameInput.Blur()
-					m.configEditor.Focus()
-				} else {
-					m.configEditor.Blur()
-					m.nameInput.Focus()
-				}
+				// Handled by the main tab case above
 				return m, nil
 			}
 		case "ctrl+s":
@@ -145,17 +195,34 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				return m, m.saveConfig()
 			}
 		}
+		
+		// Handle input for components based on focused field
+		if m.mode == MCPModeEdit {
+			switch m.focusedField {
+			case MCPFieldName:
+				var cmd tea.Cmd
+				m.nameInput, cmd = m.nameInput.Update(msg)
+				cmds = append(cmds, cmd)
+			case MCPFieldEnvironment:
+				var cmd tea.Cmd
+				m.environmentList, cmd = m.environmentList.Update(msg)
+				cmds = append(cmds, cmd)
+				// Update selected environment ID
+				if selectedItem := m.environmentList.SelectedItem(); selectedItem != nil {
+					if envItem, ok := selectedItem.(EnvironmentItem); ok {
+						m.selectedEnvID = envItem.env.ID
+					}
+				}
+			case MCPFieldConfig:
+				var cmd tea.Cmd
+				m.configEditor, cmd = m.configEditor.Update(msg)
+				cmds = append(cmds, cmd)
+			}
+		}
 	}
 	
-	// Update components when editor is shown
-	if m.showEditor {
-		var cmd tea.Cmd
-		m.nameInput, cmd = m.nameInput.Update(msg)
-		cmds = append(cmds, cmd)
-		
-		m.configEditor, cmd = m.configEditor.Update(msg)
-		cmds = append(cmds, cmd)
-	}
+	// Update components when editor is shown - handled by focused field logic above
+	// This section is now handled in the switch statement based on focusedField
 	
 	return m, tea.Batch(cmds...)
 }
@@ -230,20 +297,49 @@ func (m MCPModel) renderEditor() string {
 	sections = append(sections, header)
 	
 	// Name input
+	nameStyle := styles.HeaderStyle
+	if m.focusedField == MCPFieldName {
+		nameStyle = nameStyle.Foreground(styles.Primary)
+	}
 	nameSection := lipgloss.JoinVertical(
 		lipgloss.Left,
-		styles.HeaderStyle.Render("Configuration Name:"),
+		nameStyle.Render("Configuration Name:"),
 		m.nameInput.View(),
 	)
 	sections = append(sections, nameSection)
 	sections = append(sections, "")
 	
-	// Config editor
+	// Environment selection
+	envStyle := styles.HeaderStyle
+	if m.focusedField == MCPFieldEnvironment {
+		envStyle = envStyle.Foreground(styles.Primary)
+	}
+	envSection := lipgloss.JoinVertical(
+		lipgloss.Left,
+		envStyle.Render("Environment:"),
+		m.environmentList.View(),
+	)
+	sections = append(sections, envSection)
+	sections = append(sections, "")
+	
+	// Config editor with height constraint
+	// Calculate available height: total - (breadcrumb + header + name + spacing + help)
+	availableHeight := m.height - 8 // Conservative estimate
+	if availableHeight < 5 {
+		availableHeight = 5 // Minimum height
+	}
+	
+	// Set editor size to fit available space
+	m.configEditor.SetWidth(m.width - 6) // Account for border padding
+	m.configEditor.SetHeight(availableHeight)
+	
 	editorSection := lipgloss.JoinVertical(
 		lipgloss.Left,
 		styles.HeaderStyle.Render("Configuration (JSON):"),
 		styles.WithBorder(lipgloss.NewStyle()).
 			Padding(1).
+			Height(availableHeight).
+			Width(m.width - 4).
 			Render(m.configEditor.View()),
 	)
 	sections = append(sections, editorSection)
@@ -267,6 +363,32 @@ func (m MCPModel) loadConfigs() tea.Cmd {
 			{ID: 3, Name: "database-connector", Version: 103, Updated: "3 days ago", Size: "0.8MB"},
 		}
 		m.SetLoading(false)
+		return nil
+	})
+}
+
+// Load environments from database
+func (m *MCPModel) loadEnvironments() tea.Cmd {
+	return tea.Cmd(func() tea.Msg {
+		envs, err := m.repos.Environments.List()
+		if err != nil {
+			return err
+		}
+		
+		m.envs = envs
+		
+		// Convert to list items
+		items := make([]list.Item, len(envs))
+		for i, env := range envs {
+			items[i] = EnvironmentItem{env: *env}
+		}
+		m.environmentList.SetItems(items)
+		
+		// Set default selection to first environment
+		if len(envs) > 0 {
+			m.selectedEnvID = envs[0].ID
+		}
+		
 		return nil
 	})
 }
