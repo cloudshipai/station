@@ -60,6 +60,11 @@ func runMainServer() error {
 	if err := modelProviderSvc.LoadAndSyncProvidersOnBoot(ctx); err != nil {
 		log.Printf("Warning: Failed to load model providers: %v", err)
 	}
+	
+	// Create default environment if none exists
+	if err := ensureDefaultEnvironment(ctx, repos); err != nil {
+		log.Printf("Warning: Failed to create default environment: %v", err)
+	}
 
 	toolDiscoverySvc := services.NewToolDiscoveryService(repos, mcpConfigSvc)
 	mcpClientSvc := services.NewMCPClientService(repos, mcpConfigSvc, toolDiscoverySvc)
@@ -124,5 +129,35 @@ func runMainServer() error {
 		fmt.Println("⏰ Shutdown timeout exceeded, forcing exit")
 	}
 
+	return nil
+}
+
+// ensureDefaultEnvironment creates a default environment if none exists
+func ensureDefaultEnvironment(ctx context.Context, repos *repositories.Repositories) error {
+	// Check if any environments exist
+	envs, err := repos.Environments.List()
+	if err != nil {
+		return fmt.Errorf("failed to check existing environments: %w", err)
+	}
+	
+	// If environments exist, nothing to do
+	if len(envs) > 0 {
+		log.Printf("✅ Found %d existing environments", len(envs))
+		return nil
+	}
+	
+	// Create default environment
+	description := "Default environment for MCP configurations"
+	defaultEnv, err := repos.Environments.Create("default", &description)
+	if err != nil {
+		// Check if it's a unique constraint error (environment already exists)
+		if err.Error() == "UNIQUE constraint failed: environments.name" {
+			log.Printf("✅ Default environment already exists")
+			return nil
+		}
+		return fmt.Errorf("failed to create default environment: %w", err)
+	}
+	
+	log.Printf("✅ Created default environment (ID: %d)", defaultEnv.ID)
 	return nil
 }
