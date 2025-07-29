@@ -48,6 +48,7 @@ type AgentsModel struct {
 	
 	// Detail view state
 	actionButtonIndex int  // Track which action button is selected (0=Run, 1=Edit, 2=Delete)
+	assignedTools     []models.AgentToolWithDetails  // Tools assigned to selected agent
 }
 
 type AgentFormField int
@@ -158,6 +159,11 @@ type AgentsToolsLoadedMsg struct {
 	Tools []models.MCPTool
 }
 
+type AgentToolsLoadedMsg struct {
+	AgentID int64
+	Tools   []models.AgentToolWithDetails
+}
+
 // NewAgentsModel creates a new agents model
 func NewAgentsModel(database db.Database) *AgentsModel {
 	repos := repositories.New(database)
@@ -249,6 +255,7 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 						m.PushNavigation(item.agent.Name)
 						m.SetViewMode("detail")
 						m.actionButtonIndex = 0  // Start with first button selected
+						return m, m.loadAgentTools(item.agent.ID)  // Load assigned tools
 					}
 				}
 				return m, nil
@@ -317,6 +324,11 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		
 	case AgentsToolsLoadedMsg:
 		m.availableTools = msg.Tools
+		
+	case AgentToolsLoadedMsg:
+		if m.selectedAgent != nil && m.selectedAgent.ID == msg.AgentID {
+			m.assignedTools = msg.Tools
+		}
 		
 	case AgentCreatedMsg:
 		// Add new agent to the list
@@ -527,6 +539,10 @@ func (m AgentsModel) renderAgentDetails() string {
 	prompt := m.renderPromptPreview(agent)
 	sections = append(sections, prompt)
 	
+	// Assigned tools
+	assignedTools := m.renderAssignedTools()
+	sections = append(sections, assignedTools)
+	
 	// Actions
 	actions := m.renderAgentActions()
 	sections = append(sections, actions)
@@ -579,6 +595,43 @@ func (m AgentsModel) renderPromptPreview(agent *models.Agent) string {
 	return styles.WithBorder(lipgloss.NewStyle()).
 		Width(60).
 		Height(8).
+		Padding(1).
+		Render(content)
+}
+
+// Render assigned tools section
+func (m AgentsModel) renderAssignedTools() string {
+	var toolsList []string
+	
+	toolsList = append(toolsList, styles.HeaderStyle.Render("Assigned Tools:"))
+	toolsList = append(toolsList, "")
+	
+	if len(m.assignedTools) == 0 {
+		toolsList = append(toolsList, styles.BaseStyle.Render("No tools assigned"))
+	} else {
+		for _, tool := range m.assignedTools {
+			// Get environment name from tool's server info
+			envInfo := fmt.Sprintf("(Server: %s)", tool.ServerName)
+			
+			toolLine := fmt.Sprintf("• %s - %s", tool.ToolName, tool.ToolDescription)
+			if len(toolLine) > 50 {
+				toolLine = toolLine[:50] + "..."
+			}
+			
+			mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+			content := lipgloss.JoinVertical(
+				lipgloss.Left,
+				styles.BaseStyle.Render(toolLine),
+				mutedStyle.Render("  "+envInfo),
+			)
+			toolsList = append(toolsList, content)
+		}
+	}
+	
+	content := lipgloss.JoinVertical(lipgloss.Left, toolsList...)
+	
+	return styles.WithBorder(lipgloss.NewStyle()).
+		Width(60).
 		Padding(1).
 		Render(content)
 }
@@ -803,6 +856,24 @@ func (m AgentsModel) loadTools() tea.Cmd {
 		}
 		
 		return AgentsToolsLoadedMsg{Tools: mcpTools}
+	})
+}
+
+// Load tools assigned to a specific agent
+func (m AgentsModel) loadAgentTools(agentID int64) tea.Cmd {
+	return tea.Cmd(func() tea.Msg {
+		tools, err := m.repos.AgentTools.List(agentID)
+		if err != nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("failed to load agent tools: %w", err)}
+		}
+		
+		// Convert from []*models.AgentToolWithDetails to []models.AgentToolWithDetails
+		var agentTools []models.AgentToolWithDetails
+		for _, tool := range tools {
+			agentTools = append(agentTools, *tool)
+		}
+		
+		return AgentToolsLoadedMsg{AgentID: agentID, Tools: agentTools}
 	})
 }
 
