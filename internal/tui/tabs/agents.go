@@ -151,6 +151,10 @@ type AgentDeletedMsg struct {
 	AgentID int64
 }
 
+type AgentUpdatedMsg struct {
+	Agent models.Agent
+}
+
 type AgentsEnvironmentsLoadedMsg struct {
 	Environments []models.Environment
 }
@@ -243,6 +247,8 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		// Handle view-specific keys with simpler string matching
 		if m.GetViewMode() == "create" {
 			return m.handleCreateFormKeys(msg)
+		} else if m.GetViewMode() == "edit" {
+			return m.handleEditFormKeys(msg)
 		} else if m.GetViewMode() == "detail" {
 			return m.handleDetailViewKeys(msg)
 		} else if m.GetViewMode() == "list" {
@@ -339,6 +345,25 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.GoBack()
 		m.resetCreateForm()
 		return m, tea.Printf("Agent '%s' created successfully", msg.Agent.Name)
+		
+	case AgentUpdatedMsg:
+		// Update agent in the list
+		for i, agent := range m.agents {
+			if agent.ID == msg.Agent.ID {
+				m.agents[i] = msg.Agent
+				break
+			}
+		}
+		m.updateListItems()
+		// Update selected agent and return to detail view
+		m.selectedAgent = &msg.Agent
+		m.SetViewMode("detail")
+		m.GoBack()
+		// Reload assigned tools since they may have changed
+		return m, tea.Batch(
+			tea.Printf("Agent '%s' updated successfully", msg.Agent.Name),
+			m.loadAgentTools(msg.Agent.ID),
+		)
 	}
 	
 	// Update list component
@@ -365,6 +390,8 @@ func (m AgentsModel) View() string {
 		content = m.renderAgentDetails()
 	case "create":
 		content = m.renderCreateAgentForm()
+	case "edit":
+		content = m.renderEditAgentForm()
 	default:
 		content = m.renderAgentsList()
 	}
@@ -737,6 +764,76 @@ func (m AgentsModel) renderCreateAgentForm() string {
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
+// Render edit agent form (same as create but with different header and save text)
+func (m AgentsModel) renderEditAgentForm() string {
+	var sections []string
+	
+	// Header
+	header := components.RenderSectionHeader("Edit Agent")
+	sections = append(sections, header)
+	sections = append(sections, "")
+	
+	// Name field
+	nameLabel := "Name:"
+	if m.focusedField == AgentFieldName {
+		nameLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Name:")
+	}
+	nameSection := lipgloss.JoinVertical(lipgloss.Left, nameLabel, m.nameInput.View())
+	sections = append(sections, nameSection)
+	sections = append(sections, "")
+	
+	// Description field
+	descLabel := "Description:"
+	if m.focusedField == AgentFieldDesc {
+		descLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Description:")
+	}
+	descSection := lipgloss.JoinVertical(lipgloss.Left, descLabel, m.descInput.View())
+	sections = append(sections, descSection)
+	sections = append(sections, "")
+	
+	// Environment selection
+	envLabel := "Environment:"
+	if m.focusedField == AgentFieldEnvironment {
+		envLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Environment:")
+	}
+	envName := "No environments available"
+	if len(m.environments) > 0 {
+		for _, env := range m.environments {
+			if env.ID == m.selectedEnvID {
+				envName = env.Name
+				break
+			}
+		}
+	}
+	envSection := lipgloss.JoinVertical(lipgloss.Left, envLabel, styles.BaseStyle.Render("▶ "+envName))
+	sections = append(sections, envSection)
+	sections = append(sections, "")
+	
+	// System prompt
+	promptLabel := "System Prompt:"
+	if m.focusedField == AgentFieldPrompt {
+		promptLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("System Prompt:")
+	}
+	promptSection := lipgloss.JoinVertical(lipgloss.Left, promptLabel, m.promptArea.View())
+	sections = append(sections, promptSection)
+	sections = append(sections, "")
+	
+	// Tools selection
+	toolsLabel := "Available Tools:"
+	if m.focusedField == AgentFieldTools {
+		toolsLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Available Tools:")
+	}
+	toolsSection := m.renderToolsSelection(toolsLabel)
+	sections = append(sections, toolsSection)
+	sections = append(sections, "")
+	
+	// Help text (different for edit)
+	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: update • esc: cancel")
+	sections = append(sections, helpText)
+	
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
 // Render tools selection section
 func (m AgentsModel) renderToolsSelection(label string) string {
 	var toolsList []string
@@ -890,6 +987,26 @@ func (m *AgentsModel) resetCreateForm() {
 	}
 }
 
+// Populate edit form with current agent data
+func (m *AgentsModel) populateEditForm() {
+	if m.selectedAgent == nil {
+		return
+	}
+	
+	m.nameInput.SetValue(m.selectedAgent.Name)
+	m.descInput.SetValue(m.selectedAgent.Description)
+	m.promptArea.SetValue(m.selectedAgent.Prompt)
+	m.selectedEnvID = m.selectedAgent.EnvironmentID
+	m.focusedField = AgentFieldName
+	m.toolCursor = 0
+	
+	// Populate selected tools from assigned tools
+	m.selectedToolIDs = []int64{}
+	for _, tool := range m.assignedTools {
+		m.selectedToolIDs = append(m.selectedToolIDs, tool.ToolID)
+	}
+}
+
 // Handle key events in create form
 func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -1017,7 +1134,12 @@ func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		case 0: // Run Agent
 			return m, tea.Printf("Running agent: %s", m.selectedAgent.Name)
 		case 1: // Edit
-			return m, tea.Printf("Edit functionality not yet implemented")
+			// Switch to edit mode - populate form with current agent data
+			m.PushNavigation("Edit Agent")
+			m.SetViewMode("edit")
+			m.populateEditForm()
+			m.nameInput.Focus()
+			return m, nil
 		case 2: // Delete
 			return m, m.deleteAgent(m.selectedAgent.ID)
 		}
@@ -1039,6 +1161,105 @@ func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	}
 	
 	return m, nil
+}
+
+// Handle key events in edit form (same as create form but saves updates)
+func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
+	var cmds []tea.Cmd
+	
+	switch msg.String() {
+	case "esc":
+		// Cancel edit and go back to detail view
+		m.SetViewMode("detail")
+		m.GoBack()
+		return m, nil
+		
+	case "tab":
+		// Cycle through form fields
+		m.cycleFocusedField()
+		return m, nil
+		
+	case "ctrl+s":
+		// Save agent updates
+		return m, m.updateAgent()
+		
+	case "up", "k":
+		if m.focusedField == AgentFieldEnvironment {
+			// Navigate environment selection
+			for i, env := range m.environments {
+				if env.ID == m.selectedEnvID && i > 0 {
+					m.selectedEnvID = m.environments[i-1].ID
+					break
+				}
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldTools {
+			// Navigate tool selection up
+			if len(m.availableTools) > 0 && m.toolCursor > 0 {
+				m.toolCursor--
+			}
+			return m, nil
+		}
+		
+	case "down", "j":
+		if m.focusedField == AgentFieldEnvironment {
+			// Navigate environment selection
+			for i, env := range m.environments {
+				if env.ID == m.selectedEnvID && i < len(m.environments)-1 {
+					m.selectedEnvID = m.environments[i+1].ID
+					break
+				}
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldTools {
+			// Navigate tool selection down
+			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools)-1 {
+				m.toolCursor++
+			}
+			return m, nil
+		}
+		
+	case " ":
+		if m.focusedField == AgentFieldTools {
+			// Toggle tool selection
+			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools) {
+				toolID := m.availableTools[m.toolCursor].ID
+				
+				// Check if tool is already selected
+				found := false
+				for i, selectedID := range m.selectedToolIDs {
+					if selectedID == toolID {
+						// Remove from selection
+						m.selectedToolIDs = append(m.selectedToolIDs[:i], m.selectedToolIDs[i+1:]...)
+						found = true
+						break
+					}
+				}
+				
+				// If not found, add to selection
+				if !found {
+					m.selectedToolIDs = append(m.selectedToolIDs, toolID)
+				}
+			}
+			return m, nil
+		}
+	}
+	
+	// Update focused input component
+	var cmd tea.Cmd
+	switch m.focusedField {
+	case AgentFieldName:
+		m.nameInput, cmd = m.nameInput.Update(msg)
+		cmds = append(cmds, cmd)
+	case AgentFieldDesc:
+		m.descInput, cmd = m.descInput.Update(msg)
+		cmds = append(cmds, cmd)
+	case AgentFieldPrompt:
+		m.promptArea, cmd = m.promptArea.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+	
+	return m, tea.Batch(cmds...)
 }
 
 // Cycle through form fields
@@ -1127,5 +1348,88 @@ func (m AgentsModel) createAgent() tea.Cmd {
 		}
 		
 		return AgentCreatedMsg{Agent: *agent}
+	})
+}
+
+// Update agent command
+func (m AgentsModel) updateAgent() tea.Cmd {
+	return tea.Cmd(func() tea.Msg {
+		if m.selectedAgent == nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("no agent selected for update")}
+		}
+		
+		// Validate inputs (same as create)
+		name := strings.TrimSpace(m.nameInput.Value())
+		if name == "" {
+			return AgentsErrorMsg{Err: fmt.Errorf("agent name is required")}
+		}
+		if len(name) > 100 {
+			return AgentsErrorMsg{Err: fmt.Errorf("agent name too long (max 100 characters)")}
+		}
+		
+		description := strings.TrimSpace(m.descInput.Value())
+		if description == "" {
+			description = "No description provided"
+		}
+		if len(description) > 500 {
+			return AgentsErrorMsg{Err: fmt.Errorf("description too long (max 500 characters)")}
+		}
+		
+		prompt := strings.TrimSpace(m.promptArea.Value())
+		if prompt == "" {
+			prompt = "You are a helpful AI assistant."
+		}
+		if len(prompt) > 5000 {
+			return AgentsErrorMsg{Err: fmt.Errorf("system prompt too long (max 5000 characters)")}
+		}
+		
+		// Validate environment exists
+		validEnv := false
+		for _, env := range m.environments {
+			if env.ID == m.selectedEnvID {
+				validEnv = true
+				break
+			}
+		}
+		if !validEnv {
+			return AgentsErrorMsg{Err: fmt.Errorf("selected environment does not exist")}
+		}
+		
+		// Update agent in database
+		if err := m.repos.Agents.Update(m.selectedAgent.ID, name, description, prompt, m.selectedAgent.MaxSteps); err != nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("failed to update agent: %w", err)}
+		}
+		
+		// Create updated agent model for return
+		updatedAgent := &models.Agent{
+			ID:            m.selectedAgent.ID,
+			Name:          name,
+			Description:   description,
+			Prompt:        prompt,
+			MaxSteps:      m.selectedAgent.MaxSteps,
+			EnvironmentID: m.selectedEnvID,
+			CreatedBy:     m.selectedAgent.CreatedBy,
+			CreatedAt:     m.selectedAgent.CreatedAt,
+		}
+		
+		// Clear existing tool associations
+		if err := m.repos.AgentTools.Clear(m.selectedAgent.ID); err != nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("failed to clear agent tools: %w", err)}
+		}
+		
+		// Associate selected tools with agent
+		var failedTools []int64
+		for _, toolID := range m.selectedToolIDs {
+			if _, err := m.repos.AgentTools.Add(m.selectedAgent.ID, toolID); err != nil {
+				failedTools = append(failedTools, toolID)
+			}
+		}
+		
+		// Show warning if some tools failed to associate
+		if len(failedTools) > 0 {
+			return AgentsErrorMsg{Err: fmt.Errorf("agent updated but %d tools failed to associate", len(failedTools))}
+		}
+		
+		return AgentUpdatedMsg{Agent: *updatedAgent}
 	})
 }
