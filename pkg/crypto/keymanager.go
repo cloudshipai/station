@@ -1,7 +1,7 @@
 package crypto
 
 import (
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -24,7 +24,7 @@ type KeyManager struct {
 
 // NewKeyManager creates a new key manager with an initial key
 func NewKeyManager(initialKey *Key) *KeyManager {
-	keyID := generateKeyID()
+	keyID := generateKeyID(initialKey[:])
 	keyVersion := &KeyVersion{
 		ID:        keyID,
 		Key:       initialKey,
@@ -83,7 +83,7 @@ func (km *KeyManager) RotateKey() (*KeyVersion, error) {
 		return nil, fmt.Errorf("failed to generate new key: %w", err)
 	}
 
-	keyID := generateKeyID()
+	keyID := generateKeyID(newKey[:])
 	newKeyVersion := &KeyVersion{
 		ID:        keyID,
 		Key:       newKey,
@@ -148,12 +148,11 @@ func (km *KeyManager) DecryptWithVersion(ciphertext []byte, keyID string) ([]byt
 	return Decrypt(ciphertext, keyVersion.Key)
 }
 
-// generateKeyID creates a unique identifier for a key version
-func generateKeyID() string {
-	// Generate a random 16-byte ID and encode as hex
-	idBytes := make([]byte, 16)
-	rand.Read(idBytes)
-	return fmt.Sprintf("key_%d_%s", time.Now().Unix(), hex.EncodeToString(idBytes)[:8])
+// generateKeyID creates a deterministic identifier for a key version based on the key content
+func generateKeyID(keyContent []byte) string {
+	// Create a deterministic ID based on the key content hash
+	hash := sha256.Sum256(keyContent)
+	return fmt.Sprintf("key_%s", hex.EncodeToString(hash[:8]))
 }
 
 // MigrateData re-encrypts data from old key to new key (for key rotation)

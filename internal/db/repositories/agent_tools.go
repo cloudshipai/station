@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"database/sql"
+	"strings"
 	"station/pkg/models"
 )
 
@@ -32,6 +33,32 @@ func (r *AgentToolRepo) Add(agentID, toolID int64) (*models.AgentTool, error) {
 func (r *AgentToolRepo) Remove(agentID, toolID int64) error {
 	query := `DELETE FROM agent_tools WHERE agent_id = ? AND tool_id = ?`
 	_, err := r.db.Exec(query, agentID, toolID)
+	return err
+}
+
+// RemoveByToolID removes all agent-tool associations for a specific tool
+func (r *AgentToolRepo) RemoveByToolID(toolID int64) error {
+	query := `DELETE FROM agent_tools WHERE tool_id = ?`
+	_, err := r.db.Exec(query, toolID)
+	return err
+}
+
+// RemoveByToolIDs removes all agent-tool associations for multiple tools
+func (r *AgentToolRepo) RemoveByToolIDs(toolIDs []int64) error {
+	if len(toolIDs) == 0 {
+		return nil
+	}
+	
+	// Build the IN clause with placeholders
+	placeholders := make([]string, len(toolIDs))
+	args := make([]interface{}, len(toolIDs))
+	for i, id := range toolIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	
+	query := `DELETE FROM agent_tools WHERE tool_id IN (` + strings.Join(placeholders, ",") + `)`
+	_, err := r.db.Exec(query, args...)
 	return err
 }
 

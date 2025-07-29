@@ -52,6 +52,7 @@ type Model struct {
 	agentsModel    tabs.TabModel
 	runsModel      tabs.TabModel
 	mcpModel       tabs.TabModel
+	toolsModel     tabs.TabModel
 	envModel       tabs.TabModel
 	settingsModel  tabs.TabModel
 	
@@ -105,7 +106,7 @@ func NewModel(database db.Database) *Model {
 	
 	return &Model{
 		db:        database,
-		tabs:      []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Environments", "Settings"},
+		tabs:      []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Settings"},
 		activeTab: 0,
 		keyMap:    DefaultKeyMap(),
 		help:      help.New(),
@@ -131,6 +132,7 @@ func (m *Model) initializeTabModels() tea.Cmd {
 	m.agentsModel = tabs.NewAgentsModel(m.db)
 	m.runsModel = tabs.NewRunsModel(m.db)
 	m.mcpModel = tabs.NewMCPModel(m.db)
+	m.toolsModel = tabs.NewToolsModel(m.db)
 	m.envModel = tabs.NewEnvironmentsModel(m.db)
 	m.settingsModel = tabs.NewSettingsModel(m.db)
 	
@@ -139,6 +141,7 @@ func (m *Model) initializeTabModels() tea.Cmd {
 	cmds = append(cmds, m.agentsModel.Init())
 	cmds = append(cmds, m.runsModel.Init())
 	cmds = append(cmds, m.mcpModel.Init())
+	cmds = append(cmds, m.toolsModel.Init())
 	cmds = append(cmds, m.envModel.Init())
 	cmds = append(cmds, m.settingsModel.Init())
 	
@@ -165,6 +168,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agentsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.runsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.mcpModel.SetSize(layout.ContentWidth, layout.ContentHeight)
+		m.toolsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.envModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.settingsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		
@@ -173,6 +177,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agentsModel, _ = m.agentsModel.Update(msg)
 		m.runsModel, _ = m.runsModel.Update(msg)
 		m.mcpModel, _ = m.mcpModel.Update(msg)
+		m.toolsModel, _ = m.toolsModel.Update(msg)
 		m.envModel, _ = m.envModel.Update(msg)
 		m.settingsModel, _ = m.settingsModel.Update(msg)
 		
@@ -211,13 +216,45 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.runsModel, cmd = m.runsModel.Update(msg)
 			case 3: // MCP Servers
 				m.mcpModel, cmd = m.mcpModel.Update(msg)
-			case 4: // Environments
+			case 4: // Tools
+				m.toolsModel, cmd = m.toolsModel.Update(msg)
+			case 5: // Environments
 				m.envModel, cmd = m.envModel.Update(msg)
-			case 5: // Settings
+			case 6: // Settings
 				m.settingsModel, cmd = m.settingsModel.Update(msg)
 			}
 			return m, cmd
 		}
+		
+	default:
+		// Forward all other messages to all tab models
+		// This ensures custom messages like MCPConfigsLoadedMsg reach their handlers
+		var tabCmds []tea.Cmd
+		
+		// Forward to all tabs since we don't know which one should handle the message
+		var cmd tea.Cmd
+		m.dashboardModel, cmd = m.dashboardModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
+		m.agentsModel, cmd = m.agentsModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
+		m.runsModel, cmd = m.runsModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
+		m.mcpModel, cmd = m.mcpModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
+		m.toolsModel, cmd = m.toolsModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
+		m.envModel, cmd = m.envModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
+		m.settingsModel, cmd = m.settingsModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
+		return m, tea.Batch(tabCmds...)
 	}
 	
 	return m, tea.Batch(cmds...)
@@ -239,7 +276,7 @@ func (m *Model) View() string {
 		Render("STATION ◆◇◆ AI AGENT MANAGEMENT PLATFORM ◆◇◆")
 	
 	// Create tab navigation
-	tabNames := []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Environments", "Settings"}
+	tabNames := []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Settings"}
 	var tabItems []string
 	for i, name := range tabNames {
 		if i == m.activeTab {
@@ -260,11 +297,8 @@ func (m *Model) View() string {
 		Foreground(lipgloss.Color("#4169E1")).
 		Render(strings.Repeat("─", m.width))
 	
-	// Status bar
-	statusBar := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888")).
-		Width(m.width).
-		Render("Press ? for help • Tab/Shift+Tab to navigate • q to quit")
+	// Status bar with branding
+	statusBar := m.renderStatusBar()
 	
 	if m.loading {
 		return lipgloss.JoinVertical(lipgloss.Left, banner, navigation, separator, "Loading...", statusBar)
@@ -487,9 +521,11 @@ func (m Model) renderActiveTabContent() string {
 		return m.runsModel.View()
 	case 3: // MCP Servers
 		return m.mcpModel.View()
-	case 4: // Environments
+	case 4: // Tools
+		return m.toolsModel.View()
+	case 5: // Environments
 		return m.envModel.View()
-	case 5: // Settings
+	case 6: // Settings
 		return m.settingsModel.View()
 	default:
 		return "Invalid tab selected"
@@ -555,8 +591,10 @@ func (m Model) refreshActiveTab() tea.Cmd {
 	case 3:
 		return m.mcpModel.RefreshData()
 	case 4:
-		return m.envModel.RefreshData()
+		return m.toolsModel.RefreshData()
 	case 5:
+		return m.envModel.RefreshData()
+	case 6:
 		return m.settingsModel.RefreshData()
 	default:
 		return nil
@@ -574,9 +612,11 @@ func (m Model) getActiveTabModel() tabs.TabModel {
 		return m.runsModel
 	case 3: // MCP Servers
 		return m.mcpModel
-	case 4: // Environments
+	case 4: // Tools
+		return m.toolsModel
+	case 5: // Environments
 		return m.envModel
-	case 5: // Settings
+	case 6: // Settings
 		return m.settingsModel
 	default:
 		return m.dashboardModel

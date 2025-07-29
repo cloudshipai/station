@@ -26,8 +26,14 @@ func NewMCPConfigService(repos *repositories.Repositories, keyManager *crypto.Ke
 
 // UploadConfig encrypts and stores an MCP configuration
 func (s *MCPConfigService) UploadConfig(environmentID int64, configData *models.MCPConfigData) (*models.MCPConfig, error) {
-	// Get the next version number
-	nextVersion, err := s.repos.MCPConfigs.GetNextVersion(environmentID)
+	// Use the config name from the data, fallback to default if empty
+	configName := configData.Name
+	if configName == "" {
+		configName = "default"
+	}
+
+	// Get the next version number for this named config
+	nextVersion, err := s.repos.MCPConfigs.GetNextVersion(environmentID, configName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get next version: %w", err)
 	}
@@ -47,6 +53,7 @@ func (s *MCPConfigService) UploadConfig(environmentID int64, configData *models.
 	// Store the encrypted config
 	mcpConfig, err := s.repos.MCPConfigs.Create(
 		environmentID,
+		configName,
 		nextVersion,
 		string(encryptedConfig),
 		keyID,
@@ -55,10 +62,8 @@ func (s *MCPConfigService) UploadConfig(environmentID int64, configData *models.
 		return nil, fmt.Errorf("failed to store config: %w", err)
 	}
 
-	// Process the config to extract servers and tools
-	if err := s.processConfig(mcpConfig.ID, configData); err != nil {
-		return nil, fmt.Errorf("failed to process config: %w", err)
-	}
+	// Note: Tool discovery and replacement is now handled by ToolDiscoveryService.ReplaceToolsWithTransaction
+	// This is called from the UI after the config is saved to ensure transactional consistency
 
 	return mcpConfig, nil
 }
@@ -244,19 +249,12 @@ func (s *MCPConfigService) GetKeyManagerStats() map[string]interface{} {
 	return stats
 }
 
-// DecryptConfig decrypts a raw encrypted config string
-func (s *MCPConfigService) DecryptConfig(encryptedConfig string) (*models.MCPConfigData, error) {
-	// For now, assume the first part of the config contains the key ID
-	// This is a simplified implementation - in practice you'd need proper key ID extraction
-	activeKey := s.keyManager.GetActiveKey()
-	if activeKey == nil {
-		return nil, fmt.Errorf("no active encryption key found")
-	}
-
-	// Decrypt the configuration
+// DecryptConfig decrypts a raw encrypted config string with a specific key ID
+func (s *MCPConfigService) DecryptConfigWithKeyID(encryptedConfig string, keyID string) (*models.MCPConfigData, error) {
+	// Decrypt the configuration using the specific key ID
 	decryptedData, err := s.keyManager.DecryptWithVersion(
 		[]byte(encryptedConfig),
-		activeKey.ID,
+		keyID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt config: %w", err)
@@ -269,4 +267,14 @@ func (s *MCPConfigService) DecryptConfig(encryptedConfig string) (*models.MCPCon
 	}
 
 	return &configData, nil
+}
+
+// DecryptConfig decrypts a raw encrypted config string using active key (deprecated - use DecryptConfigWithKeyID)
+func (s *MCPConfigService) DecryptConfig(encryptedConfig string) (*models.MCPConfigData, error) {
+	activeKey := s.keyManager.GetActiveKey()
+	if activeKey == nil {
+		return nil, fmt.Errorf("no active encryption key found")
+	}
+	
+	return s.DecryptConfigWithKeyID(encryptedConfig, activeKey.ID)
 }

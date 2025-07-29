@@ -34,13 +34,14 @@ func setupTestDBForServices(t *testing.T) *sql.DB {
 	CREATE TABLE mcp_configs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		environment_id INTEGER NOT NULL,
+		config_name TEXT NOT NULL DEFAULT '',
 		version INTEGER NOT NULL DEFAULT 1,
 		config_json TEXT NOT NULL,
 		encryption_key_id TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (environment_id) REFERENCES environments (id),
-		UNIQUE (environment_id, version)
+		UNIQUE (environment_id, config_name, version)
 	);
 
 	CREATE TABLE mcp_servers (
@@ -60,7 +61,7 @@ func setupTestDBForServices(t *testing.T) *sql.DB {
 		mcp_server_id INTEGER NOT NULL,
 		name TEXT NOT NULL,
 		description TEXT,
-		schema TEXT,
+		input_schema TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id),
 		UNIQUE (mcp_server_id, name)
