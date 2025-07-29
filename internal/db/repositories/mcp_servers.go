@@ -40,6 +40,32 @@ func (r *MCPServerRepo) Create(server *models.MCPServer) (int64, error) {
 	return id, nil
 }
 
+func (r *MCPServerRepo) CreateTx(tx *sql.Tx, server *models.MCPServer) (int64, error) {
+	// Marshal env map to JSON
+	envJSON, err := json.Marshal(server.Env)
+	if err != nil {
+		envJSON = []byte("{}")
+	}
+	
+	// Marshal args to JSON
+	argsJSON, err := json.Marshal(server.Args)
+	if err != nil {
+		argsJSON = []byte("[]")
+	}
+	
+	query := `INSERT INTO mcp_servers (mcp_config_id, name, command, args, env) 
+			  VALUES (?, ?, ?, ?, ?) 
+			  RETURNING id`
+	
+	var id int64
+	err = tx.QueryRow(query, server.MCPConfigID, server.Name, server.Command, string(argsJSON), string(envJSON)).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	
+	return id, nil
+}
+
 func (r *MCPServerRepo) GetByID(id int64) (*models.MCPServer, error) {
 	query := `SELECT id, mcp_config_id, name, command, args, env, created_at FROM mcp_servers WHERE id = ?`
 	
