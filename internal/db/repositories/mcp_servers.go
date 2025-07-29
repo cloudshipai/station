@@ -135,7 +135,18 @@ func (r *MCPServerRepo) GetByEnvironmentID(environmentID int64) ([]*models.MCPSe
 }
 
 func (r *MCPServerRepo) DeleteByConfigID(configID int64) error {
+	return r.DeleteByConfigIDTx(nil, configID)
+}
+
+func (r *MCPServerRepo) DeleteByConfigIDTx(tx *sql.Tx, configID int64) error {
 	query := `DELETE FROM mcp_servers WHERE mcp_config_id = ?`
-	_, err := r.db.Exec(query, configID)
-	return err
+	
+	// Use transaction if provided, otherwise use regular db connection
+	if tx != nil {
+		_, err := tx.Exec(query, configID)
+		return err
+	} else {
+		_, err := r.db.Exec(query, configID)
+		return err
+	}
 }

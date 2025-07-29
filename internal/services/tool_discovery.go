@@ -264,6 +264,10 @@ func (s *ToolDiscoveryService) discoverToolsFromServer(serverConfig models.MCPSe
 }
 
 func (s *ToolDiscoveryService) clearExistingData(mcpConfigID int64) error {
+	return s.clearExistingDataTx(nil, mcpConfigID)
+}
+
+func (s *ToolDiscoveryService) clearExistingDataTx(tx *sql.Tx, mcpConfigID int64) error {
 	// Get all servers for this config
 	servers, err := s.repos.MCPServers.GetByConfigID(mcpConfigID)
 	if err != nil {
@@ -272,13 +276,13 @@ func (s *ToolDiscoveryService) clearExistingData(mcpConfigID int64) error {
 
 	// Delete tools for each server
 	for _, server := range servers {
-		if err := s.repos.MCPTools.DeleteByServerID(server.ID); err != nil {
+		if err := s.repos.MCPTools.DeleteByServerIDTx(tx, server.ID); err != nil {
 			log.Printf("Failed to delete tools for server %d: %v", server.ID, err)
 		}
 	}
 
 	// Delete servers
-	return s.repos.MCPServers.DeleteByConfigID(mcpConfigID)
+	return s.repos.MCPServers.DeleteByConfigIDTx(tx, mcpConfigID)
 }
 
 // ReplaceToolsWithTransaction handles the complete tool replacement workflow
@@ -311,14 +315,14 @@ func (s *ToolDiscoveryService) ReplaceToolsWithTransaction(environmentID int64, 
 			oldToolIDs[i] = tool.ID
 		}
 		
-		if err := s.repos.AgentTools.RemoveByToolIDs(oldToolIDs); err != nil {
+		if err := s.repos.AgentTools.RemoveByToolIDsTx(tx, oldToolIDs); err != nil {
 			return nil, fmt.Errorf("failed to remove agent-tool associations: %w", err)
 		}
 		log.Printf("Removed %d agent-tool associations for config %s", len(oldToolIDs), configName)
 	}
 
 	// Step 3: Clear existing servers and tools for the latest config
-	if err := s.clearExistingData(latestConfig.ID); err != nil {
+	if err := s.clearExistingDataTx(tx, latestConfig.ID); err != nil {
 		return nil, fmt.Errorf("failed to clear existing data: %w", err)
 	}
 
