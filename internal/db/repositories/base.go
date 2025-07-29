@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"database/sql"
 	"station/internal/db"
 )
 
@@ -15,6 +16,7 @@ type Repositories struct {
 	Agents         *AgentRepo
 	AgentTools     *AgentToolRepo
 	AgentRuns      *AgentRunRepo
+	db             db.Database // Store reference to database for transactions
 }
 
 func New(database db.Database) *Repositories {
@@ -31,5 +33,11 @@ func New(database db.Database) *Repositories {
 		Agents:         NewAgentRepo(conn),
 		AgentTools:     NewAgentToolRepo(conn),
 		AgentRuns:      NewAgentRunRepo(conn),
+		db:             database,
 	}
+}
+
+// BeginTx starts a database transaction
+func (r *Repositories) BeginTx() (*sql.Tx, error) {
+	return r.db.Conn().Begin()
 }

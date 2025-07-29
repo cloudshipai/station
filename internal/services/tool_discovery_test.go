@@ -35,13 +35,14 @@ func setupTestDBForToolDiscovery(t *testing.T) *sql.DB {
 	CREATE TABLE mcp_configs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		environment_id INTEGER NOT NULL,
+		config_name TEXT NOT NULL DEFAULT '',
 		version INTEGER NOT NULL DEFAULT 1,
 		config_json TEXT NOT NULL,
 		encryption_key_id TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (environment_id) REFERENCES environments (id),
-		UNIQUE (environment_id, version)
+		UNIQUE (environment_id, config_name, version)
 	);
 
 	CREATE TABLE mcp_servers (
@@ -61,7 +62,7 @@ func setupTestDBForToolDiscovery(t *testing.T) *sql.DB {
 		mcp_server_id INTEGER NOT NULL,
 		name TEXT NOT NULL,
 		description TEXT,
-		schema TEXT,
+		input_schema TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id),
 		UNIQUE (mcp_server_id, name)
@@ -159,48 +160,57 @@ func TestToolDiscoveryService_DiscoverTools(t *testing.T) {
 	}
 
 	// Test tool discovery - this will fail gracefully if the MCP server isn't available
-	err = toolDiscoveryService.DiscoverTools(env.ID)
+	result, err := toolDiscoveryService.DiscoverTools(env.ID)
 	
 	// We expect this to fail in CI since we don't have the actual MCP server running
 	// But we want to verify that the error handling works correctly
 	if err != nil {
-		t.Logf("Tool discovery failed as expected (MCP server not available): %v", err)
-		
-		// Verify that at least the server was stored in the database before failing
-		servers, err := repos.MCPServers.GetByConfigID(config.ID)
-		if err == nil && len(servers) > 0 {
-			t.Logf("Server was stored successfully before discovery failed")
-		}
-	} else {
-		t.Log("Tool discovery succeeded - MCP server was available")
-		
-		// If discovery succeeded, verify the results
-		servers, err := repos.MCPServers.GetByConfigID(config.ID)
-		if err != nil {
-			t.Fatalf("Failed to get servers: %v", err)
-		}
-
-		if len(servers) != 1 {
-			t.Errorf("Expected 1 server, got %d", len(servers))
-		}
-
-		if len(servers) > 0 {
-			server := servers[0]
-			if server.Name != "filesystem" {
-				t.Errorf("Expected server name 'filesystem', got '%s'", server.Name)
+		t.Logf("Tool discovery failed with error: %v", err)
+	}
+	
+	if result != nil {
+		if result.HasErrors() {
+			t.Logf("Tool discovery completed with errors as expected (MCP server not available):")
+			for _, discoveryErr := range result.Errors {
+				t.Logf("  - %s: %s", discoveryErr.Type, discoveryErr.Message)
 			}
-
-			// Check if tools were discovered
-			tools, err := repos.MCPTools.GetByServerID(server.ID)
-			if err != nil {
-				t.Fatalf("Failed to get tools: %v", err)
-			}
-
-			t.Logf("Discovered %d tools from filesystem server", len(tools))
 			
-			// Log the discovered tools
-			for _, tool := range tools {
-				t.Logf("Tool: %s - %s", tool.Name, tool.Description)
+			// Verify that at least the server was stored in the database before failing
+			servers, err := repos.MCPServers.GetByConfigID(config.ID)
+			if err == nil && len(servers) > 0 {
+				t.Logf("Server was stored successfully before discovery failed")
+			}
+		} else {
+			t.Log("Tool discovery succeeded - MCP server was available")
+		
+			// If discovery succeeded, verify the results
+			servers, err := repos.MCPServers.GetByConfigID(config.ID)
+			if err != nil {
+				t.Fatalf("Failed to get servers: %v", err)
+			}
+
+			if len(servers) != 1 {
+				t.Errorf("Expected 1 server, got %d", len(servers))
+			}
+
+			if len(servers) > 0 {
+				server := servers[0]
+				if server.Name != "filesystem" {
+					t.Errorf("Expected server name 'filesystem', got '%s'", server.Name)
+				}
+
+				// Check if tools were discovered
+				tools, err := repos.MCPTools.GetByServerID(server.ID)
+				if err != nil {
+					t.Fatalf("Failed to get tools: %v", err)
+				}
+
+				t.Logf("Discovered %d tools from filesystem server", len(tools))
+				
+				// Log the discovered tools
+				for _, tool := range tools {
+					t.Logf("Tool: %s - %s", tool.Name, tool.Description)
+				}
 			}
 		}
 	}
