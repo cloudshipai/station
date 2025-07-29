@@ -14,24 +14,19 @@ import (
 
 	"station/internal/config"
 	"station/internal/db"
-	"station/internal/db/repositories"
-	"station/internal/ssh/apps"
+	"station/internal/tui"
 )
 
 type Server struct {
-	cfg   *config.Config
-	db    *db.DB
-	repos *repositories.Repositories
-	srv   *ssh.Server
+	cfg *config.Config
+	db  *db.DB
+	srv *ssh.Server
 }
 
 func New(cfg *config.Config, database *db.DB) *Server {
-	repos := repositories.New(database)
-	
 	s := &Server{
-		cfg:   cfg,
-		db:    database,
-		repos: repos,
+		cfg: cfg,
+		db:  database,
 	}
 
 	s.srv = s.createSSHServer()
@@ -42,6 +37,14 @@ func (s *Server) createSSHServer() *ssh.Server {
 	srv, err := wish.NewServer(
 		wish.WithAddress(fmt.Sprintf(":%d", s.cfg.SSHPort)),
 		wish.WithHostKeyPath(s.cfg.SSHHostKeyPath),
+		wish.WithPublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
+			// Allow any public key for now (development only)
+			return true
+		}),
+		wish.WithPasswordAuth(func(ctx ssh.Context, password string) bool {
+			// Allow any password for now (development only)
+			return true
+		}),
 		wish.WithMiddleware(
 			bubbletea.Middleware(s.teaHandler),
 			logging.Middleware(),
@@ -54,12 +57,10 @@ func (s *Server) createSSHServer() *ssh.Server {
 }
 
 func (s *Server) teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
-	username := session.User()
+	// Create the new TUI model with database access
+	tuiModel := tui.NewModel(s.db)
 	
-	// Create the main dashboard app with access to repositories
-	dashboardApp := apps.NewDashboard(s.repos, username)
-	
-	return dashboardApp, []tea.ProgramOption{
+	return tuiModel, []tea.ProgramOption{
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	}

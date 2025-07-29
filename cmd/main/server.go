@@ -19,23 +19,23 @@ import (
 	"time"
 )
 
-func main() {
+func runMainServer() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("Failed to load config:", err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal("Failed to initialize database:", err)
+		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer database.Close()
 
 	if err := database.Migrate(); err != nil {
-		log.Fatal("Failed to run database migrations:", err)
+		return fmt.Errorf("failed to run database migrations: %w", err)
 	}
 
 	var wg sync.WaitGroup
@@ -46,19 +46,19 @@ func main() {
 	repos := repositories.New(database)
 	keyManager, err := crypto.NewKeyManagerFromEnv()
 	if err != nil {
-		log.Fatal("Failed to initialize key manager:", err)
+		return fmt.Errorf("failed to initialize key manager: %w", err)
 	}
 
 	// Initialize all required services
 	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
 	modelProviderSvc, err := services.NewModelProviderBootService(repos, keyManager)
 	if err != nil {
-		log.Fatal("Failed to initialize model provider service:", err)
+		return fmt.Errorf("failed to initialize model provider service: %w", err)
 	}
 
 	// Load model providers on startup
 	if err := modelProviderSvc.LoadAndSyncProvidersOnBoot(ctx); err != nil {
-		log.Fatal("Failed to load model providers:", err)
+		log.Printf("Warning: Failed to load model providers: %v", err)
 	}
 
 	toolDiscoverySvc := services.NewToolDiscoveryService(repos, mcpConfigSvc)
@@ -72,6 +72,7 @@ func main() {
 
 	go func() {
 		defer wg.Done()
+		log.Printf("🌐 Starting SSH server on port %d", cfg.SSHPort)
 		if err := sshServer.Start(ctx); err != nil {
 			log.Printf("SSH server error: %v", err)
 		}
@@ -79,6 +80,7 @@ func main() {
 
 	go func() {
 		defer wg.Done()
+		log.Printf("🔧 Starting MCP server on port %d", cfg.MCPPort)
 		if err := mcpServer.Start(ctx, cfg.MCPPort); err != nil {
 			log.Printf("MCP server error: %v", err)
 		}
@@ -86,16 +88,23 @@ func main() {
 
 	go func() {
 		defer wg.Done()
+		log.Printf("🚀 Starting API server on port %d", cfg.APIPort)
 		if err := apiServer.Start(ctx); err != nil {
 			log.Printf("API server error: %v", err)
 		}
 	}()
 
+	fmt.Printf("\n✅ Station is running!\n")
+	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
+	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)
+	fmt.Printf("🌐 API Server: http://localhost:%d\n", cfg.APIPort)
+	fmt.Printf("\nPress Ctrl+C to stop\n\n")
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	<-c
-	fmt.Println("\nReceived shutdown signal, gracefully shutting down...")
+	fmt.Println("\n🛑 Received shutdown signal, gracefully shutting down...")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
@@ -110,8 +119,10 @@ func main() {
 
 	select {
 	case <-done:
-		fmt.Println("All servers stopped gracefully")
+		fmt.Println("✅ All servers stopped gracefully")
 	case <-shutdownCtx.Done():
-		fmt.Println("Shutdown timeout exceeded, forcing exit")
+		fmt.Println("⏰ Shutdown timeout exceeded, forcing exit")
 	}
+
+	return nil
 }
