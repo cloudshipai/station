@@ -220,6 +220,7 @@ func (m *EnvironmentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 			}
 		}
 		m.updateListItems()
+		m.editMode = EnvModeList // Return to list mode after deletion
 		m.showDetails = false
 	}
 
@@ -284,6 +285,31 @@ func (m *EnvironmentsModel) handleDetailsKeys(msg tea.KeyMsg) (TabModel, tea.Cmd
 	switch msg.String() {
 	case "esc", "enter":
 		m.editMode = EnvModeList
+		return m, nil
+	case "d":
+		// Delete the currently selected environment
+		if m.selectedID > 0 {
+			return m, m.deleteEnvironment(m.selectedID)
+		}
+		return m, nil
+	case "e":
+		// Edit the currently selected environment
+		if m.selectedID > 0 {
+			// Find the environment and switch to edit mode
+			for _, env := range m.environments {
+				if env.ID == m.selectedID {
+					m.editMode = EnvModeEdit
+					m.nameInput.SetValue(env.Name)
+					if env.Description != nil {
+						m.descInput.SetValue(*env.Description)
+					} else {
+						m.descInput.SetValue("")
+					}
+					m.nameInput.Focus()
+					break
+				}
+			}
+		}
 		return m, nil
 	}
 	return m, nil
@@ -459,10 +485,10 @@ func (m EnvironmentsModel) renderEnvironmentDetails() string {
 	status := m.renderEnvironmentStatus(env)
 	sections = append(sections, status)
 
-	// Back instruction
-	backText := styles.HelpStyle.Render("Press enter or esc to go back to list")
+	// Available actions
+	actionsText := styles.HelpStyle.Render("• enter/esc: back to list • e: edit • d: delete environment")
 	sections = append(sections, "")
-	sections = append(sections, backText)
+	sections = append(sections, actionsText)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
