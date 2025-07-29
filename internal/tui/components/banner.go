@@ -72,7 +72,7 @@ func RenderBranding() string {
 	return lipgloss.NewStyle().
 		Foreground(styles.TextMuted).
 		Italic(true).
-		Render("makers of cloudshipai")
+		Render("by the makers of cloudshipai")
 }
 
 // Version info

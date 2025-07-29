@@ -27,6 +27,7 @@ type User struct {
 type MCPConfig struct {
 	ID              int64     `json:"id" db:"id"`
 	EnvironmentID   int64     `json:"environment_id" db:"environment_id"`
+	ConfigName      string    `json:"config_name" db:"config_name"`
 	Version         int64     `json:"version" db:"version"`
 	ConfigJSON      string    `json:"config_json" db:"config_json"` // encrypted
 	EncryptedConfig string    `json:"encrypted_config" db:"config_json"` // alias for consistency
@@ -50,7 +51,7 @@ type MCPTool struct {
 	MCPServerID int64           `json:"mcp_server_id" db:"mcp_server_id"`
 	Name        string          `json:"name" db:"name"`
 	Description string          `json:"description" db:"description"`
-	Schema      json.RawMessage `json:"schema" db:"schema"` // JSON schema
+	Schema      json.RawMessage `json:"schema" db:"input_schema"` // JSON schema
 	CreatedAt   time.Time       `json:"created_at" db:"created_at"`
 }
 
@@ -79,6 +80,16 @@ type AgentToolWithDetails struct {
 	ToolDescription string          `json:"tool_description" db:"tool_description"`
 	ToolSchema      json.RawMessage `json:"tool_schema" db:"tool_schema"`
 	ServerName      string          `json:"server_name" db:"server_name"`
+}
+
+type MCPToolWithDetails struct {
+	MCPTool
+	ServerName      string `json:"server_name" db:"server_name"`
+	ConfigID        int64  `json:"config_id" db:"config_id"`
+	ConfigName      string `json:"config_name" db:"config_name"`
+	ConfigVersion   int64  `json:"config_version" db:"config_version"`
+	EnvironmentID   int64  `json:"environment_id" db:"environment_id"`
+	EnvironmentName string `json:"environment_name" db:"environment_name"`
 }
 
 type AgentRun struct {
@@ -127,6 +138,7 @@ func (j *JSONArray) Scan(value interface{}) error {
 
 // MCPConfigData represents the decrypted MCP configuration
 type MCPConfigData struct {
+	Name    string                     `json:"name,omitempty"`
 	Servers map[string]MCPServerConfig `json:"servers"`
 }
 

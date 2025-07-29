@@ -14,8 +14,10 @@ import (
 	
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
+	"station/pkg/crypto"
 	"station/pkg/models"
 )
 
@@ -31,6 +33,11 @@ type MCPModel struct {
 	// Data
 	envs         []*models.Environment
 	repos        *repositories.Repositories
+	database     db.Database  // Need this to create services
+	
+	// Services - shared instances to avoid key ID mismatches
+	mcpConfigSvc    *services.MCPConfigService
+	toolDiscoverySvc *services.ToolDiscoveryService
 	
 	// State
 	mode         MCPMode
@@ -93,18 +100,36 @@ func NewMCPModel(database db.Database) *MCPModel {
 	envList.SetShowTitle(false)
 	envList.SetFilteringEnabled(false)
 	
+	// Initialize shared services to avoid key ID mismatches
+	keyManager, err := crypto.NewKeyManagerFromEnv()
+	var mcpConfigSvc *services.MCPConfigService
+	var toolDiscoverySvc *services.ToolDiscoveryService
+	
+	if err != nil {
+		log.Printf("WARNING: Failed to create key manager: %v", err)
+		// Create services without encryption support
+		mcpConfigSvc = services.NewMCPConfigService(repos, nil)
+		toolDiscoverySvc = services.NewToolDiscoveryService(repos, mcpConfigSvc)
+	} else {
+		mcpConfigSvc = services.NewMCPConfigService(repos, keyManager)
+		toolDiscoverySvc = services.NewToolDiscoveryService(repos, mcpConfigSvc)
+	}
+	
 	m := &MCPModel{
-		BaseTabModel:    NewBaseTabModel(database, "MCP Servers"),
-		configEditor:    ta,
-		nameInput:       ti,
-		environmentList: envList,
-		repos:           repos,
-		mode:            MCPModeList,
-		configs:         []MCPConfigDisplay{},
-		selectedIdx:     0,
-		showEditor:      false,
-		selectedEnvID:   1, // Default to first environment
-		focusedField:    MCPFieldName,
+		BaseTabModel:     NewBaseTabModel(database, "MCP Servers"),
+		configEditor:     ta,
+		nameInput:        ti,
+		environmentList:  envList,
+		repos:            repos,
+		database:         database,
+		mcpConfigSvc:     mcpConfigSvc,
+		toolDiscoverySvc: toolDiscoverySvc,
+		mode:             MCPModeList,
+		configs:          []MCPConfigDisplay{},
+		selectedIdx:      0,
+		showEditor:       false,
+		selectedEnvID:    1, // Default to first environment
+		focusedField:     MCPFieldName,
 	}
 	
 	// Load environments
@@ -202,12 +227,18 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				}
 				
 				// Basic JSON validation
-				var configData models.MCPConfigData
-				if err := json.Unmarshal([]byte(configText), &configData); err != nil {
+				var rawConfig map[string]interface{}
+				if err := json.Unmarshal([]byte(configText), &rawConfig); err != nil {
 					log.Printf("DEBUG: JSON validation failed: %v", err)
-					return m, tea.Printf("Error: Invalid JSON: %v", err)
+					// Set a persistent error state and show detailed feedback
+					m.SetError(fmt.Sprintf("Invalid JSON: %v", err))
+					// Also show the specific line/character if possible
+					errorMsg := fmt.Sprintf("JSON Validation Error: %v\n\nPlease check your JSON syntax. Common issues:\n• Trailing commas in arrays/objects\n• Missing quotes around strings\n• Unclosed brackets or braces", err)
+					return m, tea.Printf(errorMsg)
 				}
 				log.Printf("DEBUG: JSON validation passed")
+				// Clear any previous error since JSON is now valid
+				m.SetError("")
 				
 				// Save config to database
 				configName := m.nameInput.Value()
@@ -216,47 +247,73 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				}
 				log.Printf("DEBUG: Config name: '%s'", configName)
 				
-				// Add the name to the JSON config for identification
-				var configMap map[string]interface{}
-				if err := json.Unmarshal([]byte(configText), &configMap); err == nil {
-					configMap["name"] = configName
-					if modifiedJSON, err := json.MarshalIndent(configMap, "", "  "); err == nil {
-						configText = string(modifiedJSON)
+				// Convert from UI format (mcpServers) to internal format (servers)
+				var configData models.MCPConfigData
+				configData.Servers = make(map[string]models.MCPServerConfig)
+				
+				// Handle both old format (mcpServers) and new format (servers)
+				var serversData map[string]interface{}
+				if mcpServers, ok := rawConfig["mcpServers"].(map[string]interface{}); ok {
+					serversData = mcpServers
+				} else if servers, ok := rawConfig["servers"].(map[string]interface{}); ok {
+					serversData = servers
+				} else {
+					m.SetError("Invalid config format: must contain 'mcpServers' or 'servers' field")
+					return m, tea.Printf("Error: Invalid config format")
+				}
+				
+				// Convert servers to the expected format
+				for serverName, serverConfigRaw := range serversData {
+					serverConfigMap, ok := serverConfigRaw.(map[string]interface{})
+					if !ok {
+						continue
 					}
+					
+					serverConfig := models.MCPServerConfig{}
+					if command, ok := serverConfigMap["command"].(string); ok {
+						serverConfig.Command = command
+					}
+					if argsRaw, ok := serverConfigMap["args"].([]interface{}); ok {
+						for _, arg := range argsRaw {
+							if argStr, ok := arg.(string); ok {
+								serverConfig.Args = append(serverConfig.Args, argStr)
+							}
+						}
+					}
+					if envRaw, ok := serverConfigMap["env"].(map[string]interface{}); ok {
+						serverConfig.Env = make(map[string]string)
+						for k, v := range envRaw {
+							if vStr, ok := v.(string); ok {
+								serverConfig.Env[k] = vStr
+							}
+						}
+					}
+					
+					configData.Servers[serverName] = serverConfig
 				}
 				
-				// Get next version for the selected environment
-				nextVersion, err := m.repos.MCPConfigs.GetNextVersion(m.selectedEnvID)
-				if err != nil {
-					log.Printf("DEBUG: Failed to get next version: %v", err)
-					return m, tea.Printf("Error: Failed to get next version: %v", err)
-				}
-				log.Printf("DEBUG: Next version: %d", nextVersion)
+				log.Printf("DEBUG: Converted to internal format with %d servers", len(configData.Servers))
 				
-				// Save to database (simplified - not using encryption for now)
-				savedConfig, err := m.repos.MCPConfigs.Create(m.selectedEnvID, nextVersion, configText, "")
+				// Add the config name to the data structure
+				configData.Name = configName
+				
+				// Save config using service (with proper encryption)
+				savedConfig, err := m.mcpConfigSvc.UploadConfig(m.selectedEnvID, &configData)
 				if err != nil {
 					log.Printf("DEBUG: Failed to save config: %v", err)
 					return m, tea.Printf("Error: Failed to save config: %v", err)
 				}
-				log.Printf("DEBUG: Saved config to database: %+v", savedConfig)
+				log.Printf("DEBUG: Saved encrypted config to database: %+v", savedConfig)
 				
-				// Return to list mode
-				log.Printf("DEBUG: Returning to list mode")
-				m.mode = MCPModeList
-				m.showEditor = false
-				m.nameInput.Blur()
-				m.configEditor.Blur()
-				m.focusedField = MCPFieldName
-				m.nameInput.SetValue("")
-				m.configEditor.SetValue("")
+				// Trigger tool replacement for the saved config
+				log.Printf("DEBUG: Starting tool replacement for config '%s' in environment %d", configName, m.selectedEnvID)
+				go m.replaceToolsAsync(m.selectedEnvID, configName)
 				
-				// Set loading state and reload configs to show success message
-				m.SetLoading(true)
-				return m, tea.Batch(
-					m.loadConfigs(),
-					tea.Printf("Configuration '%s' v%d saved successfully", configName, nextVersion),
-				)
+				// Stay in editor mode and show success toast
+				log.Printf("DEBUG: Staying in editor mode, showing success toast")
+				
+				// Show success message but stay in editor
+				return m, tea.Printf("✅ Configuration '%s' v%d saved successfully", configName, savedConfig.Version)
 			}
 		case "d":
 			log.Printf("DEBUG: Received 'd' key - mode: %d, configs count: %d, selectedIdx: %d", m.mode, len(m.configs), m.selectedIdx)
@@ -305,24 +362,15 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				m.nameInput.Blur()
 				m.configEditor.Blur()
 				m.focusedField = MCPFieldName
-				return m, nil
+				// Reload configs when exiting editor to show any newly saved configs
+				return m, m.loadConfigs()
 			}
 		case "F1":
 			// F1 key as a reliable save - should work from any field
 			if m.mode == MCPModeEdit {
 				return m, m.saveConfig()
 			}
-		case "right":
-			if m.mode == MCPModeEdit && m.showEditor {
-				// Handled by the main tab case above
-				return m, nil
-			}
 		case "ctrl+s":
-			if m.mode == MCPModeEdit {
-				return m, m.saveConfig()
-			}
-		case "s":
-			// Also allow just 's' key as a backup for save
 			if m.mode == MCPModeEdit {
 				return m, m.saveConfig()
 			}
@@ -359,6 +407,10 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 					}
 				}
 			case MCPFieldConfig:
+				// Clear error when user starts typing
+				if msg.Type == tea.KeyRunes || msg.String() == "backspace" || msg.String() == "delete" {
+					m.SetError("")
+				}
 				// Handle save keys in config field before passing to textarea
 				if msg.String() == "ctrl+s" || msg.String() == "ctrl+enter" {
 					return m, m.saveConfig()
@@ -498,6 +550,18 @@ func (m MCPModel) renderEditor() string {
 	header := components.RenderSectionHeader("MCP Configuration Editor")
 	sections = append(sections, header)
 	
+	// Show error if there is one
+	if m.GetError() != "" {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6B6B")).
+			Background(lipgloss.Color("#331111")).
+			Padding(1).
+			Margin(1).
+			Bold(true)
+		sections = append(sections, errorStyle.Render("❌ "+m.GetError()))
+		sections = append(sections, "")
+	}
+	
 	// Compact form layout - everything inline like dashboard stats  
 	nameLabel := "Name:"
 	envLabel := "Environment:"
@@ -543,7 +607,7 @@ func (m MCPModel) renderEditor() string {
 	sections = append(sections, m.configEditor.View())
 	
 	// Simple help text
-	helpText := styles.HelpStyle.Render("tab: switch • enter: save (from name/env field) • esc: cancel")
+	helpText := styles.HelpStyle.Render("tab: switch • enter: save (from name/env field) • ctrl+s: save • esc: cancel")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 	
@@ -561,6 +625,8 @@ func (m MCPModel) loadConfigs() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
 		log.Printf("DEBUG: Loading configs from database")
 		
+		// Use shared services for decryption
+		
 		// Load all configs from all environments and group them by name
 		configMap := make(map[string]*MCPConfigDisplay)
 		
@@ -571,24 +637,76 @@ func (m MCPModel) loadConfigs() tea.Cmd {
 			return MCPConfigsLoadedMsg{Error: err}
 		}
 		
-		// For each environment, load its configs
+		// For each environment, load only the latest configs
 		for _, env := range envs {
-			configs, err := m.repos.MCPConfigs.ListByEnvironment(env.ID)
+			configs, err := m.repos.MCPConfigs.GetLatestConfigs(env.ID)
 			if err != nil {
-				log.Printf("DEBUG: Failed to load configs for env %d: %v", env.ID, err)
+				log.Printf("DEBUG: Failed to load latest configs for env %d: %v", env.ID, err)
 				continue
 			}
 			
-			// Convert to display format - keep only the latest version of each config
+			// Convert to display format - these are already the latest versions
 			for _, config := range configs {
-				// Extract name from config JSON (simplified - would need proper parsing)
-				configName := fmt.Sprintf("config-%d", config.ID)
+				// Decrypt the config to extract name and JSON for display
+				var configJSON string
+				var configName string = fmt.Sprintf("config-%d", config.ID) // Default fallback
 				
-				// Try to extract name from JSON if possible
-				var configData map[string]interface{}
-				if err := json.Unmarshal([]byte(config.ConfigJSON), &configData); err == nil {
-					if name, ok := configData["name"].(string); ok && name != "" {
-						configName = name
+				if config.EncryptionKeyID == "" {
+					// Config is not encrypted - parse to extract name and format for UI
+					var rawConfig map[string]interface{}
+					if err := json.Unmarshal([]byte(config.ConfigJSON), &rawConfig); err == nil {
+						// Extract name if present
+						if name, ok := rawConfig["name"].(string); ok && name != "" {
+							configName = name
+						}
+						
+						// Convert to UI format if needed
+						if _, ok := rawConfig["mcpServers"]; ok {
+							// Already in UI format
+							configJSON = config.ConfigJSON
+						} else if servers, ok := rawConfig["servers"]; ok {
+							// Convert from internal format to UI format
+							uiFormat := map[string]interface{}{
+								"mcpServers": servers,
+							}
+							if uiJSON, err := json.MarshalIndent(uiFormat, "", "  "); err == nil {
+								configJSON = string(uiJSON)
+							} else {
+								configJSON = config.ConfigJSON // fallback
+							}
+						} else {
+							configJSON = config.ConfigJSON // fallback
+						}
+					} else {
+						configJSON = config.ConfigJSON // fallback on parse error
+					}
+				} else {
+					// Config is encrypted, decrypt it
+					decryptedData, err := m.mcpConfigSvc.DecryptConfigWithKeyID(config.ConfigJSON, config.EncryptionKeyID)
+					if err != nil {
+						log.Printf("DEBUG: Failed to decrypt config %d: %v", config.ID, err)
+						configName = fmt.Sprintf("config-%d (encrypted)", config.ID)
+						configJSON = "{\"error\": \"failed to decrypt\"}"
+					} else {
+						// Use the name from the decrypted data if available
+						if decryptedData.Name != "" {
+							configName = decryptedData.Name
+						}
+						
+						// Convert from internal format (servers) to UI format (mcpServers)
+						uiFormat := map[string]interface{}{
+							"mcpServers": decryptedData.Servers,
+						}
+						
+						if decryptedJSON, err := json.MarshalIndent(uiFormat, "", "  "); err == nil {
+							configJSON = string(decryptedJSON)
+						} else {
+							log.Printf("DEBUG: Failed to serialize decrypted config %d: %v", config.ID, err)  
+							configJSON = "{\"error\": \"failed to serialize\"}"
+						}
+						
+						// For encrypted configs, use a generated name since we don't store name separately
+						// In the future, we could enhance this to extract name from decrypted data
 					}
 				}
 				
@@ -598,8 +716,8 @@ func (m MCPModel) loadConfigs() tea.Cmd {
 					Name:       configName,
 					Version:    config.Version,
 					Updated:    config.UpdatedAt.Format("Jan 2 15:04"),
-					Size:       fmt.Sprintf("%.1fKB", float64(len(config.ConfigJSON))/1024),
-					ConfigJSON: config.ConfigJSON,
+					Size:       fmt.Sprintf("%.1fKB", float64(len(configJSON))/1024),
+					ConfigJSON: configJSON, // Use the decrypted JSON for display
 				}
 				
 				// Keep only the latest version of each named config
@@ -712,58 +830,114 @@ func (m MCPModel) deleteConfig(configID int64) tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
 		log.Printf("DEBUG: Deleting MCP config %d with cascade deletion", configID)
 		
-		// Get all servers for this config to cascade delete tools
-		servers, err := m.repos.MCPServers.GetByConfigID(configID)
+		// First, get the config to extract its name and environment
+		targetConfig, err := m.repos.MCPConfigs.GetByID(configID)
 		if err != nil {
-			log.Printf("DEBUG: Failed to get servers for config %d: %v", configID, err)
+			log.Printf("DEBUG: Failed to get config %d: %v", configID, err)
 			return MCPConfigDeletedMsg{
 				ConfigID: configID,
 				Error:    err,
-				Message:  fmt.Sprintf("Failed to get servers for config: %v", err),
+				Message:  fmt.Sprintf("Configuration not found: %v", err),
 			}
 		}
 		
-		log.Printf("DEBUG: Found %d servers to cascade delete", len(servers))
+		// Extract the config name to delete all versions with the same name
+		var configName string
+		var configData map[string]interface{}
+		if err := json.Unmarshal([]byte(targetConfig.ConfigJSON), &configData); err == nil {
+			if name, ok := configData["name"].(string); ok && name != "" {
+				configName = name
+			}
+		}
+		if configName == "" {
+			configName = fmt.Sprintf("config-%d", configID)
+		}
+		log.Printf("DEBUG: Config name extracted: '%s', will delete all versions", configName)
 		
-		// Delete tools for each server
-		for _, server := range servers {
-			if err := m.repos.MCPTools.DeleteByServerID(server.ID); err != nil {
-				log.Printf("DEBUG: Failed to delete tools for server %d: %v", server.ID, err)
+		// Get all configs with the same name in the same environment
+		allConfigs, err := m.repos.MCPConfigs.ListByEnvironment(targetConfig.EnvironmentID)
+		if err != nil {
+			log.Printf("DEBUG: Failed to get configs for environment %d: %v", targetConfig.EnvironmentID, err)
+			return MCPConfigDeletedMsg{
+				ConfigID: configID,
+				Error:    err,
+				Message:  fmt.Sprintf("Failed to get configs for deletion: %v", err),
+			}
+		}
+		
+		// Find all configs with the same name
+		var configsToDelete []*models.MCPConfig
+		for _, config := range allConfigs {
+			var otherConfigData map[string]interface{}
+			otherConfigName := fmt.Sprintf("config-%d", config.ID)
+			if err := json.Unmarshal([]byte(config.ConfigJSON), &otherConfigData); err == nil {
+				if name, ok := otherConfigData["name"].(string); ok && name != "" {
+					otherConfigName = name
+				}
+			}
+			
+			if otherConfigName == configName {
+				configsToDelete = append(configsToDelete, config)
+			}
+		}
+		
+		log.Printf("DEBUG: Found %d config versions to delete with name '%s'", len(configsToDelete), configName)
+		
+		// Delete each config version with cascade deletion
+		for _, config := range configsToDelete {
+			log.Printf("DEBUG: Deleting config version %d (ID: %d)", config.Version, config.ID)
+			
+			// Get all servers for this config to cascade delete tools
+			servers, err := m.repos.MCPServers.GetByConfigID(config.ID)
+			if err != nil {
+				log.Printf("DEBUG: Failed to get servers for config %d: %v", config.ID, err)
 				return MCPConfigDeletedMsg{
 					ConfigID: configID,
 					Error:    err,
-					Message:  fmt.Sprintf("Failed to delete tools for server %s: %v", server.Name, err),
+					Message:  fmt.Sprintf("Failed to get servers for config %d: %v", config.ID, err),
 				}
 			}
-			log.Printf("DEBUG: Deleted tools for server %s (ID: %d)", server.Name, server.ID)
-		}
-		
-		// Delete the servers
-		if err := m.repos.MCPServers.DeleteByConfigID(configID); err != nil {
-			log.Printf("DEBUG: Failed to delete servers for config %d: %v", configID, err)
-			return MCPConfigDeletedMsg{
-				ConfigID: configID,
-				Error:    err,
-				Message:  fmt.Sprintf("Failed to delete servers: %v", err),
+			
+			// Delete tools for each server
+			for _, server := range servers {
+				if err := m.repos.MCPTools.DeleteByServerID(server.ID); err != nil {
+					log.Printf("DEBUG: Failed to delete tools for server %d: %v", server.ID, err)
+					return MCPConfigDeletedMsg{
+						ConfigID: configID,
+						Error:    err,
+						Message:  fmt.Sprintf("Failed to delete tools for server %s: %v", server.Name, err),
+					}
+				}
+				log.Printf("DEBUG: Deleted tools for server %s (ID: %d)", server.Name, server.ID)
 			}
-		}
-		
-		log.Printf("DEBUG: Deleted %d servers for config %d", len(servers), configID)
-		
-		// Delete the config itself
-		if err := m.repos.MCPConfigs.Delete(configID); err != nil {
-			log.Printf("DEBUG: Failed to delete config %d: %v", configID, err)
-			return MCPConfigDeletedMsg{
-				ConfigID: configID,
-				Error:    err,
-				Message:  fmt.Sprintf("Failed to delete configuration: %v", err),
+			
+			// Delete the servers
+			if err := m.repos.MCPServers.DeleteByConfigID(config.ID); err != nil {
+				log.Printf("DEBUG: Failed to delete servers for config %d: %v", config.ID, err)
+				return MCPConfigDeletedMsg{
+					ConfigID: configID,
+					Error:    err,
+					Message:  fmt.Sprintf("Failed to delete servers for config %d: %v", config.ID, err),
+				}
 			}
+			
+			// Delete the config itself
+			if err := m.repos.MCPConfigs.Delete(config.ID); err != nil {
+				log.Printf("DEBUG: Failed to delete config %d: %v", config.ID, err)
+				return MCPConfigDeletedMsg{
+					ConfigID: configID,
+					Error:    err,
+					Message:  fmt.Sprintf("Failed to delete configuration %d: %v", config.ID, err),
+				}
+			}
+			
+			log.Printf("DEBUG: Successfully deleted config version %d (ID: %d)", config.Version, config.ID)
 		}
 		
-		log.Printf("DEBUG: Successfully deleted config %d with cascade deletion", configID)
+		log.Printf("DEBUG: Successfully deleted all %d versions of config '%s'", len(configsToDelete), configName)
 		return MCPConfigDeletedMsg{
 			ConfigID: configID,
-			Message:  "Configuration and all associated tools deleted successfully",
+			Message:  fmt.Sprintf("Configuration '%s' (all %d versions) deleted successfully", configName, len(configsToDelete)),
 		}
 	})
 }
@@ -771,4 +945,28 @@ func (m MCPModel) deleteConfig(configID int64) tea.Cmd {
 // IsMainView returns true if in main list view
 func (m MCPModel) IsMainView() bool {
 	return m.mode == MCPModeList
+}
+
+
+// replaceToolsAsync runs tool replacement in the background after config save  
+func (m *MCPModel) replaceToolsAsync(environmentID int64, configName string) {
+	// Run tool replacement using shared service with transaction support
+	result, err := m.toolDiscoverySvc.ReplaceToolsWithTransaction(environmentID, configName)
+	if err != nil {
+		log.Printf("ERROR: Tool replacement failed for config '%s' in environment %d: %v", configName, environmentID, err)
+		return
+	}
+	
+	if !result.Success {
+		log.Printf("ERROR: Tool replacement completed with errors for config '%s' in environment %d:", configName, environmentID)
+		for _, discoveryErr := range result.Errors {
+			log.Printf("  - %s: %s", discoveryErr.Type, discoveryErr.Message)
+			if discoveryErr.Details != "" {
+				log.Printf("    Details: %s", discoveryErr.Details)
+			}
+		}
+	} else {
+		log.Printf("DEBUG: Tool replacement completed successfully for config '%s' in environment %d - %d tools from %d/%d servers", 
+			configName, environmentID, result.TotalTools, result.SuccessfulServers, result.TotalServers)
+	}
 }
