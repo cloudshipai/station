@@ -208,7 +208,7 @@ func (s *ToolDiscoveryService) DiscoverTools(environmentID int64) (*ToolDiscover
 }
 
 func (s *ToolDiscoveryService) discoverToolsFromServer(serverConfig models.MCPServerConfig) ([]mcp.Tool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Convert env map to slice of strings
@@ -327,7 +327,7 @@ func (s *ToolDiscoveryService) ReplaceToolsWithTransaction(environmentID int64, 
 	}
 
 	// Step 4: Discover new tools from the latest config
-	result, err := s.discoverToolsForConfig(latestConfig)
+	result, err := s.discoverToolsForConfigTx(tx, latestConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover tools: %w", err)
 	}
@@ -493,6 +493,137 @@ func (s *ToolDiscoveryService) discoverToolsForConfig(config *models.MCPConfig) 
 					fmt.Sprintf("Failed to store tool %s", tool.Name),
 					toolErr.Error(),
 				))
+			}
+		}
+	}
+
+	result.CompletedAt = time.Now()
+	result.Success = !result.HasErrors() || result.SuccessfulServers > 0
+
+	log.Printf("Tool discovery completed for config %s. Success: %v, Servers: %d/%d, Tools: %d, Errors: %d", 
+		config.ConfigName, result.Success, result.SuccessfulServers, result.TotalServers, result.TotalTools, len(result.Errors))
+	
+	return result, nil
+}
+
+// discoverToolsForConfigTx is the transaction-aware version of discoverToolsForConfig
+func (s *ToolDiscoveryService) discoverToolsForConfigTx(tx *sql.Tx, config *models.MCPConfig) (*ToolDiscoveryResult, error) {
+	result := &ToolDiscoveryResult{
+		EnvironmentID: config.EnvironmentID,
+		ConfigID:      config.ID,
+		ConfigName:    config.ConfigName,
+		StartedAt:     time.Now(),
+	}
+
+	// Decrypt the config data
+	var configData *models.MCPConfigData
+	
+	if config.EncryptionKeyID == "" {
+		// Config is not encrypted, parse directly
+		configData = &models.MCPConfigData{}
+		if err := json.Unmarshal([]byte(config.ConfigJSON), configData); err != nil {
+			result.AddError(NewToolDiscoveryError(
+				ErrorTypeInvalidConfig,
+				"",
+				"Failed to parse unencrypted config",
+				err.Error(),
+			))
+			result.CompletedAt = time.Now()
+			result.Success = false
+			return result, nil
+		}
+	} else {
+		// Config is encrypted, decrypt first
+		var err error
+		configData, err = s.mcpConfigService.DecryptConfigWithKeyID(config.ConfigJSON, config.EncryptionKeyID)
+		if err != nil {
+			result.AddError(NewToolDiscoveryError(
+				ErrorTypeDecryption,
+				"",
+				"Failed to decrypt config",
+				err.Error(),
+			))
+			result.CompletedAt = time.Now()
+			result.Success = false
+			return result, nil
+		}
+	}
+
+	result.TotalServers = len(configData.Servers)
+
+	// Process each server in the config
+	for serverName, serverConfig := range configData.Servers {
+		log.Printf("Processing server: %s for config %s", serverName, config.ConfigName)
+		
+		// Store the server in database using transaction
+		mcpServer := &models.MCPServer{
+			MCPConfigID: config.ID,
+			Name:        serverName,
+			Command:     serverConfig.Command,
+			Args:        serverConfig.Args,
+			Env:         serverConfig.Env,
+		}
+
+		serverID, err := s.repos.MCPServers.CreateTx(tx, mcpServer)
+		if err != nil {
+			result.AddError(NewToolDiscoveryError(
+				ErrorTypeDatabase,
+				serverName,
+				"Failed to store server in database",
+				err.Error(),
+			))
+			continue
+		}
+		mcpServer.ID = serverID
+
+		// Discover tools from this server
+		tools, err := s.discoverToolsFromServer(serverConfig)
+		if err != nil {
+			// Determine error type based on error message
+			errorType := ErrorTypeConnection
+			if err.Error() == "context deadline exceeded" {
+				errorType = ErrorTypeTimeout
+			} else if err.Error() == "failed to start client" {
+				errorType = ErrorTypeServerStart
+			}
+			
+			result.AddError(NewToolDiscoveryError(
+				errorType,
+				serverName,
+				"Failed to discover tools from server",
+				err.Error(),
+			))
+			continue
+		}
+
+		result.SuccessfulServers++
+
+		// Store each discovered tool in database using transaction
+		for _, tool := range tools {
+			// Serialize the schema to JSON
+			schemaBytes, err := json.Marshal(tool.InputSchema)
+			if err != nil {
+				log.Printf("Failed to marshal schema for tool %s: %v", tool.Name, err)
+				schemaBytes = []byte("{}")
+			}
+			
+			mcpTool := &models.MCPTool{
+				MCPServerID: serverID,
+				Name:        tool.Name,
+				Description: tool.Description,
+				Schema:      json.RawMessage(schemaBytes),
+			}
+
+			_, toolErr := s.repos.MCPTools.CreateTx(tx, mcpTool)
+			if toolErr != nil {
+				result.AddError(NewToolDiscoveryError(
+					ErrorTypeDatabase,
+					serverName,
+					fmt.Sprintf("Failed to store tool %s", tool.Name),
+					toolErr.Error(),
+				))
+			} else {
+				result.TotalTools++
 			}
 		}
 	}

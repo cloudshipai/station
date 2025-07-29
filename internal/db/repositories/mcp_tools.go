@@ -27,6 +27,20 @@ func (r *MCPToolRepo) Create(tool *models.MCPTool) (int64, error) {
 	return id, nil
 }
 
+func (r *MCPToolRepo) CreateTx(tx *sql.Tx, tool *models.MCPTool) (int64, error) {
+	query := `INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema) 
+			  VALUES (?, ?, ?, ?) 
+			  RETURNING id`
+	
+	var id int64
+	err := tx.QueryRow(query, tool.MCPServerID, tool.Name, tool.Description, tool.Schema).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	
+	return id, nil
+}
+
 func (r *MCPToolRepo) GetByID(id int64) (*models.MCPTool, error) {
 	query := `SELECT id, mcp_server_id, name, description, input_schema, created_at 
 			  FROM mcp_tools WHERE id = ?`
@@ -141,10 +155,22 @@ func (r *MCPToolRepo) DeleteByServerIDTx(tx *sql.Tx, serverID int64) error {
 }
 
 func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) {
+	// First check if there are any configs at all to avoid JSON extraction errors
+	var configCount int
+	countQuery := `SELECT COUNT(*) FROM mcp_configs`
+	if err := r.db.QueryRow(countQuery).Scan(&configCount); err != nil {
+		return nil, err
+	}
+	
+	// If no configs exist, return empty slice
+	if configCount == 0 {
+		return []*models.MCPToolWithDetails{}, nil
+	}
+	
 	query := `SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at,
 			         s.name as server_name,
 			         c.id as config_id,
-			         COALESCE(json_extract(c.config_json, '$.name'), 'config-' || c.id) as config_name,
+			         COALESCE(c.config_name, 'config-' || c.id) as config_name,
 			         c.version as config_version,
 			         e.id as environment_id,
 			         e.name as environment_name
@@ -153,7 +179,7 @@ func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) 
 			  JOIN mcp_configs c ON s.mcp_config_id = c.id
 			  JOIN environments e ON c.environment_id = e.id
 			  WHERE c.version = (
-				  SELECT MAX(version) FROM mcp_configs WHERE environment_id = e.id
+				  SELECT MAX(version) FROM mcp_configs mc WHERE mc.config_name = c.config_name AND mc.environment_id = c.environment_id
 			  )
 			  ORDER BY e.name, c.version DESC, s.name, t.name`
 	
