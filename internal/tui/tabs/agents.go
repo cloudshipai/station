@@ -7,6 +7,8 @@ import (
 	
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	
@@ -24,13 +26,36 @@ type AgentsModel struct {
 	// UI components
 	list         list.Model
 	
+	// Create form components
+	nameInput    textinput.Model
+	descInput    textinput.Model
+	promptArea   textarea.Model
+	
 	// Data access
 	repos        *repositories.Repositories
 	
 	// State
 	agents        []models.Agent
 	selectedAgent *models.Agent
+	
+	// Create form state
+	environments    []models.Environment
+	availableTools  []models.MCPTool
+	selectedEnvID   int64
+	selectedToolIDs []int64
+	focusedField    AgentFormField
+	toolCursor      int  // Track which tool is currently highlighted
 }
+
+type AgentFormField int
+
+const (
+	AgentFieldName AgentFormField = iota
+	AgentFieldDesc
+	AgentFieldEnvironment
+	AgentFieldPrompt
+	AgentFieldTools
+)
 
 // AgentItem implements list.Item interface for bubbles list component
 type AgentItem struct {
@@ -122,6 +147,14 @@ type AgentDeletedMsg struct {
 	AgentID int64
 }
 
+type AgentsEnvironmentsLoadedMsg struct {
+	Environments []models.Environment
+}
+
+type AgentsToolsLoadedMsg struct {
+	Tools []models.MCPTool
+}
+
 // NewAgentsModel creates a new agents model
 func NewAgentsModel(database db.Database) *AgentsModel {
 	repos := repositories.New(database)
@@ -142,16 +175,38 @@ func NewAgentsModel(database db.Database) *AgentsModel {
 	keyMap := newAgentsKeyMap()
 	l.KeyMap = keyMap.KeyMap
 	
+	// Create form inputs
+	nameInput := textinput.New()
+	nameInput.Placeholder = "Agent name"
+	nameInput.Width = 40
+	
+	descInput := textinput.New()
+	descInput.Placeholder = "Agent description"
+	descInput.Width = 60
+	
+	promptArea := textarea.New()
+	promptArea.Placeholder = "Enter system prompt for the agent..."
+	promptArea.SetWidth(60)
+	promptArea.SetHeight(4)
+	
 	return &AgentsModel{
 		BaseTabModel: NewBaseTabModel(database, "Agents"),
 		list:         l,
 		repos:        repos,
+		nameInput:    nameInput,
+		descInput:    descInput,
+		promptArea:   promptArea,
+		focusedField: AgentFieldName,
 	}
 }
 
 // Init initializes the agents tab
 func (m AgentsModel) Init() tea.Cmd {
-	return m.loadAgents()
+	return tea.Batch(
+		m.loadAgents(),
+		m.loadEnvironments(),
+		// Note: tools will be loaded after environments are loaded
+	)
 }
 
 // Update handles messages
@@ -176,7 +231,9 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		}
 		
 		// Handle view-specific keys with simpler string matching
-		if m.GetViewMode() == "list" {
+		if m.GetViewMode() == "create" {
+			return m.handleCreateFormKeys(msg)
+		} else if m.GetViewMode() == "list" {
 			switch msg.String() {
 			case "enter", " ":
 				// Show agent details
@@ -193,6 +250,9 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				// Create new agent - show create form
 				m.PushNavigation("Create Agent")
 				m.SetViewMode("create")
+				// Reset form and focus first field
+				m.resetCreateForm()
+				m.nameInput.Focus()
 				return m, nil
 				
 			case "d":
@@ -239,6 +299,27 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.updateListItems()
 		m.SetViewMode("list")
 		m.selectedAgent = nil
+		
+	case AgentsEnvironmentsLoadedMsg:
+		m.environments = msg.Environments
+		if len(m.environments) > 0 {
+			m.selectedEnvID = m.environments[0].ID
+		}
+		// Load tools after environments are loaded
+		return m, m.loadTools()
+		
+	case AgentsToolsLoadedMsg:
+		m.availableTools = msg.Tools
+		
+	case AgentCreatedMsg:
+		// Add new agent to the list
+		m.agents = append(m.agents, msg.Agent)
+		m.updateListItems()
+		// Return to list view
+		m.SetViewMode("list")
+		m.GoBack()
+		m.resetCreateForm()
+		return m, tea.Printf("Agent '%s' created successfully", msg.Agent.Name)
 	}
 	
 	// Update list component
@@ -516,30 +597,114 @@ func (m AgentsModel) renderCreateAgentForm() string {
 	sections = append(sections, header)
 	sections = append(sections, "")
 	
-	// Form placeholder
-	formContent := lipgloss.JoinVertical(
-		lipgloss.Left,
-		styles.HeaderStyle.Render("Agent Configuration:"),
-		"",
-		styles.BaseStyle.Render("• Name: [Input field coming soon]"),
-		styles.BaseStyle.Render("• Description: [Input field coming soon]"),
-		styles.BaseStyle.Render("• Environment: [Dropdown coming soon]"),
-		styles.BaseStyle.Render("• System Prompt: [Textarea coming soon]"),
-		"",
-		lipgloss.NewStyle().Foreground(styles.TextMuted).Render("This feature is under development."),
-	)
+	// Name field
+	nameLabel := "Name:"
+	if m.focusedField == AgentFieldName {
+		nameLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Name:")
+	}
+	nameSection := lipgloss.JoinVertical(lipgloss.Left, nameLabel, m.nameInput.View())
+	sections = append(sections, nameSection)
+	sections = append(sections, "")
 	
-	sections = append(sections, styles.WithBorder(lipgloss.NewStyle()).
-		Width(60).
-		Padding(2).
-		Render(formContent))
+	// Description field
+	descLabel := "Description:"
+	if m.focusedField == AgentFieldDesc {
+		descLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Description:")
+	}
+	descSection := lipgloss.JoinVertical(lipgloss.Left, descLabel, m.descInput.View())
+	sections = append(sections, descSection)
+	sections = append(sections, "")
+	
+	// Environment selection
+	envLabel := "Environment:"
+	if m.focusedField == AgentFieldEnvironment {
+		envLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Environment:")
+	}
+	envName := "No environments available"
+	if len(m.environments) > 0 {
+		for _, env := range m.environments {
+			if env.ID == m.selectedEnvID {
+				envName = env.Name
+				break
+			}
+		}
+	}
+	envSection := lipgloss.JoinVertical(lipgloss.Left, envLabel, styles.BaseStyle.Render("▶ "+envName))
+	sections = append(sections, envSection)
+	sections = append(sections, "")
+	
+	// System prompt
+	promptLabel := "System Prompt:"
+	if m.focusedField == AgentFieldPrompt {
+		promptLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("System Prompt:")
+	}
+	promptSection := lipgloss.JoinVertical(lipgloss.Left, promptLabel, m.promptArea.View())
+	sections = append(sections, promptSection)
+	sections = append(sections, "")
+	
+	// Tools selection
+	toolsLabel := "Available Tools:"
+	if m.focusedField == AgentFieldTools {
+		toolsLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Available Tools:")
+	}
+	toolsSection := m.renderToolsSelection(toolsLabel)
+	sections = append(sections, toolsSection)
+	sections = append(sections, "")
 	
 	// Help text
-	helpText := styles.HelpStyle.Render("• ESC: go back to list")
-	sections = append(sections, "")
+	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: save • esc: cancel")
 	sections = append(sections, helpText)
 	
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+// Render tools selection section
+func (m AgentsModel) renderToolsSelection(label string) string {
+	var toolsList []string
+	toolsList = append(toolsList, label)
+	toolsList = append(toolsList, "")
+	
+	if len(m.availableTools) == 0 {
+		toolsList = append(toolsList, styles.BaseStyle.Render("No tools available"))
+	} else {
+		// Show first few tools with selection status
+		maxShow := 5
+		for i, tool := range m.availableTools {
+			if i >= maxShow {
+				remaining := len(m.availableTools) - maxShow
+				toolsList = append(toolsList, styles.BaseStyle.Render(fmt.Sprintf("... and %d more tools", remaining)))
+				break
+			}
+			
+			// Check if tool is selected
+			selected := false
+			for _, selectedID := range m.selectedToolIDs {
+				if selectedID == tool.ID {
+					selected = true
+					break
+				}
+			}
+			
+			prefix := "☐ "
+			if selected {
+				prefix = "☑ "
+			}
+			
+			toolLine := fmt.Sprintf("%s%s - %s", prefix, tool.Name, tool.Description)
+			if len(toolLine) > 50 {
+				toolLine = toolLine[:50] + "..."
+			}
+			
+			// Highlight current cursor position when in tools field
+			if m.focusedField == AgentFieldTools && i == m.toolCursor {
+				toolsList = append(toolsList, styles.ListItemSelectedStyle.Render("▶ "+toolLine))
+			} else {
+				toolsList = append(toolsList, styles.BaseStyle.Render("  "+toolLine))
+			}
+		}
+	}
+	
+	return lipgloss.JoinVertical(lipgloss.Left, toolsList...)
 }
 
 // Navigation interface implementation
@@ -558,8 +723,10 @@ func (m AgentsModel) GetBreadcrumb() string {
 // Delete agent command
 func (m AgentsModel) deleteAgent(agentID int64) tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		// TODO: Actually delete from database
-		// For now, just return success
+		// Delete agent from database
+		if err := m.repos.Agents.Delete(agentID); err != nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("failed to delete agent: %w", err)}
+		}
 		return AgentDeletedMsg{AgentID: agentID}
 	})
 }
@@ -568,4 +735,249 @@ func (m AgentsModel) deleteAgent(agentID int64) tea.Cmd {
 func (m AgentsModel) IsMainView() bool {
 	// Use the base implementation for reliable navigation
 	return m.BaseTabModel.IsMainView()
+}
+
+// Load environments from database
+func (m AgentsModel) loadEnvironments() tea.Cmd {
+	return tea.Cmd(func() tea.Msg {
+		envs, err := m.repos.Environments.List()
+		if err != nil {
+			// Return empty slice on error
+			return EnvironmentsLoadedMsg{Environments: []models.Environment{}}
+		}
+		
+		// Convert from []*models.Environment to []models.Environment
+		var environments []models.Environment
+		for _, env := range envs {
+			environments = append(environments, *env)
+		}
+		
+		return AgentsEnvironmentsLoadedMsg{Environments: environments}
+	})
+}
+
+// Load available tools from database
+func (m AgentsModel) loadTools() tea.Cmd {
+	return tea.Cmd(func() tea.Msg {
+		var allTools []*models.MCPTool
+		
+		// Get tools from all environments
+		for _, env := range m.environments {
+			tools, err := m.repos.MCPTools.GetByEnvironmentID(env.ID)
+			if err != nil {
+				continue // Skip this environment on error
+			}
+			allTools = append(allTools, tools...)
+		}
+		
+		// Convert from []*models.MCPTool to []models.MCPTool
+		var mcpTools []models.MCPTool
+		for _, tool := range allTools {
+			mcpTools = append(mcpTools, *tool)
+		}
+		
+		return AgentsToolsLoadedMsg{Tools: mcpTools}
+	})
+}
+
+// Reset create form to initial state
+func (m *AgentsModel) resetCreateForm() {
+	m.nameInput.SetValue("")
+	m.descInput.SetValue("")
+	m.promptArea.SetValue("")
+	m.selectedToolIDs = []int64{}
+	m.focusedField = AgentFieldName
+	m.toolCursor = 0
+	if len(m.environments) > 0 {
+		m.selectedEnvID = m.environments[0].ID
+	}
+}
+
+// Handle key events in create form
+func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
+	var cmds []tea.Cmd
+	
+	switch msg.String() {
+	case "esc":
+		// Cancel creation and go back to list
+		m.SetViewMode("list")
+		m.GoBack()
+		m.resetCreateForm()
+		return m, nil
+		
+	case "tab":
+		// Cycle through form fields
+		m.cycleFocusedField()
+		return m, nil
+		
+	case "ctrl+s":
+		// Save agent
+		return m, m.createAgent()
+		
+	case "up", "k":
+		if m.focusedField == AgentFieldEnvironment {
+			// Navigate environment selection
+			for i, env := range m.environments {
+				if env.ID == m.selectedEnvID && i > 0 {
+					m.selectedEnvID = m.environments[i-1].ID
+					break
+				}
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldTools {
+			// Navigate tool selection up
+			if len(m.availableTools) > 0 && m.toolCursor > 0 {
+				m.toolCursor--
+			}
+			return m, nil
+		}
+		
+	case "down", "j":
+		if m.focusedField == AgentFieldEnvironment {
+			// Navigate environment selection
+			for i, env := range m.environments {
+				if env.ID == m.selectedEnvID && i < len(m.environments)-1 {
+					m.selectedEnvID = m.environments[i+1].ID
+					break
+				}
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldTools {
+			// Navigate tool selection down
+			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools)-1 {
+				m.toolCursor++
+			}
+			return m, nil
+		}
+		
+	case " ":
+		if m.focusedField == AgentFieldTools {
+			// Toggle tool selection
+			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools) {
+				toolID := m.availableTools[m.toolCursor].ID
+				
+				// Check if tool is already selected
+				found := false
+				for i, selectedID := range m.selectedToolIDs {
+					if selectedID == toolID {
+						// Remove from selection
+						m.selectedToolIDs = append(m.selectedToolIDs[:i], m.selectedToolIDs[i+1:]...)
+						found = true
+						break
+					}
+				}
+				
+				// If not found, add to selection
+				if !found {
+					m.selectedToolIDs = append(m.selectedToolIDs, toolID)
+				}
+			}
+			return m, nil
+		}
+	}
+	
+	// Update focused input component
+	var cmd tea.Cmd
+	switch m.focusedField {
+	case AgentFieldName:
+		m.nameInput, cmd = m.nameInput.Update(msg)
+		cmds = append(cmds, cmd)
+	case AgentFieldDesc:
+		m.descInput, cmd = m.descInput.Update(msg)
+		cmds = append(cmds, cmd)
+	case AgentFieldPrompt:
+		m.promptArea, cmd = m.promptArea.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+	
+	return m, tea.Batch(cmds...)
+}
+
+// Cycle through form fields
+func (m *AgentsModel) cycleFocusedField() {
+	// Blur current field
+	switch m.focusedField {
+	case AgentFieldName:
+		m.nameInput.Blur()
+	case AgentFieldDesc:
+		m.descInput.Blur()
+	case AgentFieldPrompt:
+		m.promptArea.Blur()
+	}
+	
+	// Move to next field
+	m.focusedField = (m.focusedField + 1) % 5
+	
+	// Focus new field
+	switch m.focusedField {
+	case AgentFieldName:
+		m.nameInput.Focus()
+	case AgentFieldDesc:
+		m.descInput.Focus()
+	case AgentFieldPrompt:
+		m.promptArea.Focus()
+	}
+}
+
+// Create agent command
+func (m AgentsModel) createAgent() tea.Cmd {
+	return tea.Cmd(func() tea.Msg {
+		// Validate inputs
+		name := strings.TrimSpace(m.nameInput.Value())
+		if name == "" {
+			return AgentsErrorMsg{Err: fmt.Errorf("agent name is required")}
+		}
+		if len(name) > 100 {
+			return AgentsErrorMsg{Err: fmt.Errorf("agent name too long (max 100 characters)")}
+		}
+		
+		description := strings.TrimSpace(m.descInput.Value())
+		if description == "" {
+			description = "No description provided"
+		}
+		if len(description) > 500 {
+			return AgentsErrorMsg{Err: fmt.Errorf("description too long (max 500 characters)")}
+		}
+		
+		prompt := strings.TrimSpace(m.promptArea.Value())
+		if prompt == "" {
+			prompt = "You are a helpful AI assistant."
+		}
+		if len(prompt) > 5000 {
+			return AgentsErrorMsg{Err: fmt.Errorf("system prompt too long (max 5000 characters)")}
+		}
+		
+		// Validate environment exists
+		validEnv := false
+		for _, env := range m.environments {
+			if env.ID == m.selectedEnvID {
+				validEnv = true
+				break
+			}
+		}
+		if !validEnv {
+			return AgentsErrorMsg{Err: fmt.Errorf("selected environment does not exist")}
+		}
+		
+		// Create agent in database
+		agent, err := m.repos.Agents.Create(name, description, prompt, 10, m.selectedEnvID, 1) // Default to user ID 1
+		if err != nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("failed to create agent: %w", err)}
+		}
+		
+		// Associate selected tools with agent
+		var failedTools []int64
+		for _, toolID := range m.selectedToolIDs {
+			if _, err := m.repos.AgentTools.Add(agent.ID, toolID); err != nil {
+				failedTools = append(failedTools, toolID)
+			}
+		}
+		
+		// Show warning if some tools failed to associate
+		if len(failedTools) > 0 {
+			return AgentsErrorMsg{Err: fmt.Errorf("agent created but %d tools failed to associate", len(failedTools))}
+		}
+		
+		return AgentCreatedMsg{Agent: *agent}
+	})
 }
