@@ -66,11 +66,11 @@ type MCPConfigDisplay struct {
 func NewMCPModel(database db.Database) *MCPModel {
 	repos := repositories.New(database)
 	
-	// Create textarea for config editing
+	// Create textarea for config editing - scrollable
 	ta := textarea.New()
 	ta.Placeholder = "Paste your MCP server configuration here (JSON format)..."
-	ta.SetWidth(60)
-	ta.SetHeight(15)
+	ta.SetWidth(60) // Will be adjusted dynamically in renderEditor
+	ta.SetHeight(5)  // Will be adjusted dynamically in renderEditor
 	
 	// Create text input for name
 	ti := textinput.New()
@@ -309,33 +309,55 @@ func (m MCPModel) renderEditor() string {
 	sections = append(sections, nameSection)
 	sections = append(sections, "")
 	
-	// Environment selection
+	// Environment selection with constrained height
 	envStyle := styles.HeaderStyle
 	if m.focusedField == MCPFieldEnvironment {
 		envStyle = envStyle.Foreground(styles.Primary)
 	}
+	
+	// Constrain environment list size
+	m.environmentList.SetSize(m.width-8, 3)
+	
 	envSection := lipgloss.JoinVertical(
 		lipgloss.Left,
 		envStyle.Render("Environment:"),
-		m.environmentList.View(),
+		styles.WithBorder(lipgloss.NewStyle()).
+			Padding(0, 1).
+			Height(3).
+			Width(m.width - 6).
+			Render(m.environmentList.View()),
 	)
 	sections = append(sections, envSection)
 	sections = append(sections, "")
 	
-	// Config editor with height constraint
-	// Calculate available height: total - (breadcrumb + header + name + spacing + help)
-	availableHeight := m.height - 8 // Conservative estimate
-	if availableHeight < 5 {
-		availableHeight = 5 // Minimum height
+	// Config editor with precise height calculation
+	// Components that take up space:
+	// - Breadcrumb: 1 line + 1 empty = 2
+	// - Header: 1 line = 1  
+	// - Name section: 1 header + 1 input + 1 empty = 3
+	// - Environment section: 1 header + 3 list (bordered) + 1 empty = 7 
+	// - Config header: 1 line = 1
+	// - Help text: 1 empty + 1 help = 2
+	// - Config border padding: 2
+	// Total overhead: 18 lines
+	usedHeight := 18
+	availableHeight := m.height - usedHeight
+	if availableHeight < 3 {
+		availableHeight = 3 // Absolute minimum for usability
 	}
 	
-	// Set editor size to fit available space
-	m.configEditor.SetWidth(m.width - 6) // Account for border padding
+	// Set editor size to fit remaining space
+	m.configEditor.SetWidth(m.width - 8) // Account for border + padding
 	m.configEditor.SetHeight(availableHeight)
+	
+	configStyle := styles.HeaderStyle
+	if m.focusedField == MCPFieldConfig {
+		configStyle = configStyle.Foreground(styles.Primary)
+	}
 	
 	editorSection := lipgloss.JoinVertical(
 		lipgloss.Left,
-		styles.HeaderStyle.Render("Configuration (JSON):"),
+		configStyle.Render("Configuration (JSON):"),
 		styles.WithBorder(lipgloss.NewStyle()).
 			Padding(1).
 			Height(availableHeight).
@@ -344,8 +366,8 @@ func (m MCPModel) renderEditor() string {
 	)
 	sections = append(sections, editorSection)
 	
-	// Help text
-	helpText := styles.HelpStyle.Render("• tab/→: switch fields • ctrl+s: save • esc: cancel")
+	// Help text with updated instructions
+	helpText := styles.HelpStyle.Render("• tab: switch fields (name→env→config) • ↑↓: navigate env • ctrl+s: save • esc: cancel")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 	
