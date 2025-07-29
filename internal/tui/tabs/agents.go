@@ -45,6 +45,9 @@ type AgentsModel struct {
 	selectedToolIDs []int64
 	focusedField    AgentFormField
 	toolCursor      int  // Track which tool is currently highlighted
+	
+	// Detail view state
+	actionButtonIndex int  // Track which action button is selected (0=Run, 1=Edit, 2=Delete)
 }
 
 type AgentFormField int
@@ -226,6 +229,7 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 			if m.CanGoBack() {
 				m.GoBack()
 				m.selectedAgent = nil
+				m.actionButtonIndex = 0  // Reset button selection
 				return m, nil
 			}
 		}
@@ -233,6 +237,8 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		// Handle view-specific keys with simpler string matching
 		if m.GetViewMode() == "create" {
 			return m.handleCreateFormKeys(msg)
+		} else if m.GetViewMode() == "detail" {
+			return m.handleDetailViewKeys(msg)
 		} else if m.GetViewMode() == "list" {
 			switch msg.String() {
 			case "enter", " ":
@@ -242,6 +248,7 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 						m.selectedAgent = &item.agent
 						m.PushNavigation(item.agent.Name)
 						m.SetViewMode("detail")
+						m.actionButtonIndex = 0  // Start with first button selected
 					}
 				}
 				return m, nil
@@ -524,9 +531,11 @@ func (m AgentsModel) renderAgentDetails() string {
 	actions := m.renderAgentActions()
 	sections = append(sections, actions)
 	
-	// Back instruction
+	// Help instructions
+	helpText := styles.HelpStyle.Render("• ←/→ or h/l: navigate buttons • enter: execute • r: run • d: delete • esc: back")
 	backText := styles.HelpStyle.Render("Press ESC to go back to list")
 	sections = append(sections, "")
+	sections = append(sections, helpText)
 	sections = append(sections, backText)
 	
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -576,14 +585,31 @@ func (m AgentsModel) renderPromptPreview(agent *models.Agent) string {
 
 // Render agent action buttons
 func (m AgentsModel) renderAgentActions() string {
-	runBtn := styles.ButtonActiveStyle.Render("Run Agent")
-	editBtn := styles.ButtonStyle.Render("Edit")
-	deleteBtn := styles.ErrorStyle.Render("Delete")
+	// Style buttons based on selection
+	var runBtn, editBtn, deleteBtn string
+	
+	if m.actionButtonIndex == 0 {
+		runBtn = styles.ButtonActiveStyle.Render("▶ Run Agent")
+	} else {
+		runBtn = styles.ButtonStyle.Render("Run Agent")
+	}
+	
+	if m.actionButtonIndex == 1 {
+		editBtn = styles.ButtonActiveStyle.Render("▶ Edit")
+	} else {
+		editBtn = styles.ButtonStyle.Render("Edit")
+	}
+	
+	if m.actionButtonIndex == 2 {
+		deleteBtn = styles.ButtonActiveStyle.Render("▶ Delete")
+	} else {
+		deleteBtn = styles.ErrorStyle.Render("Delete")
+	}
 	
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		runBtn,
-		editBtn,
+		runBtn, "  ",
+		editBtn, "  ",
 		deleteBtn,
 	)
 }
@@ -891,6 +917,57 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	}
 	
 	return m, tea.Batch(cmds...)
+}
+
+// Handle key events in detail view
+func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
+	switch msg.String() {
+	case "left", "h":
+		// Navigate left through action buttons
+		if m.actionButtonIndex > 0 {
+			m.actionButtonIndex--
+		}
+		return m, nil
+		
+	case "right", "l":
+		// Navigate right through action buttons
+		if m.actionButtonIndex < 2 {  // 0=Run, 1=Edit, 2=Delete
+			m.actionButtonIndex++
+		}
+		return m, nil
+		
+	case "enter", " ":
+		// Execute selected action
+		if m.selectedAgent == nil {
+			return m, nil
+		}
+		
+		switch m.actionButtonIndex {
+		case 0: // Run Agent
+			return m, tea.Printf("Running agent: %s", m.selectedAgent.Name)
+		case 1: // Edit
+			return m, tea.Printf("Edit functionality not yet implemented")
+		case 2: // Delete
+			return m, m.deleteAgent(m.selectedAgent.ID)
+		}
+		return m, nil
+		
+	case "r":
+		// Quick run with 'r' key
+		if m.selectedAgent != nil {
+			return m, tea.Printf("Running agent: %s", m.selectedAgent.Name)
+		}
+		return m, nil
+		
+	case "d":
+		// Quick delete with 'd' key
+		if m.selectedAgent != nil {
+			return m, m.deleteAgent(m.selectedAgent.ID)
+		}
+		return m, nil
+	}
+	
+	return m, nil
 }
 
 // Cycle through form fields
