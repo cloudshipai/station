@@ -6,13 +6,11 @@ toolchain go1.23.11
 
 require (
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
-	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/bytedance/sonic v1.13.2 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
-	github.com/charmbracelet/bubbles v0.21.0 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/charmbracelet/keygen v0.5.3 // indirect
@@ -76,9 +74,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.12.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	github.com/spf13/viper v1.20.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
@@ -104,6 +100,8 @@ require (
 replace github.com/cloudwego/eino => ../eino
 
 require (
+	github.com/atotto/clipboard v0.1.4
+	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/ssh v0.0.0-20250128164007-98fd5ae11894
@@ -113,6 +111,9 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/mark3labs/mcp-go v0.36.0
 	github.com/pressly/goose/v3 v3.24.3
+	github.com/robfig/cron/v3 v3.0.1
+	github.com/spf13/cobra v1.9.1
+	github.com/spf13/viper v1.20.1
 	golang.org/x/crypto v0.40.0
 	modernc.org/sqlite v1.38.1
 )

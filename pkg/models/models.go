@@ -56,15 +56,20 @@ type MCPTool struct {
 }
 
 type Agent struct {
-	ID            int64     `json:"id" db:"id"`
-	Name          string    `json:"name" db:"name"`
-	Description   string    `json:"description" db:"description"`
-	Prompt        string    `json:"prompt" db:"prompt"`
-	MaxSteps      int64     `json:"max_steps" db:"max_steps"`
-	EnvironmentID int64     `json:"environment_id" db:"environment_id"`
-	CreatedBy     int64     `json:"created_by" db:"created_by"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+	ID                int64      `json:"id" db:"id"`
+	Name              string     `json:"name" db:"name"`
+	Description       string     `json:"description" db:"description"`
+	Prompt            string     `json:"prompt" db:"prompt"`
+	MaxSteps          int64      `json:"max_steps" db:"max_steps"`
+	EnvironmentID     int64      `json:"environment_id" db:"environment_id"`
+	CreatedBy         int64      `json:"created_by" db:"created_by"`
+	CronSchedule      *string    `json:"cron_schedule,omitempty" db:"cron_schedule"`
+	IsScheduled       bool       `json:"is_scheduled" db:"is_scheduled"`
+	LastScheduledRun  *time.Time `json:"last_scheduled_run,omitempty" db:"last_scheduled_run"`
+	NextScheduledRun  *time.Time `json:"next_scheduled_run,omitempty" db:"next_scheduled_run"`
+	ScheduleEnabled   bool       `json:"schedule_enabled" db:"schedule_enabled"`
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type AgentTool struct {

@@ -7,21 +7,25 @@ package queries
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createAgent = `-- name: CreateAgent :one
-INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by)
-VALUES (?, ?, ?, ?, ?, ?)
-RETURNING id, name, description, prompt, max_steps, environment_id, created_by, model_id, created_at, updated_at
+INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, cron_schedule, is_scheduled, schedule_enabled)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at
 `
 
 type CreateAgentParams struct {
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	Prompt        string `json:"prompt"`
-	MaxSteps      int64  `json:"max_steps"`
-	EnvironmentID int64  `json:"environment_id"`
-	CreatedBy     int64  `json:"created_by"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	Prompt          string `json:"prompt"`
+	MaxSteps        int64  `json:"max_steps"`
+	EnvironmentID   int64  `json:"environment_id"`
+	CreatedBy       int64  `json:"created_by"`
+	CronSchedule    string `json:"cron_schedule"`
+	IsScheduled     bool   `json:"is_scheduled"`
+	ScheduleEnabled bool   `json:"schedule_enabled"`
 }
 
 func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
@@ -32,6 +36,9 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		arg.MaxSteps,
 		arg.EnvironmentID,
 		arg.CreatedBy,
+		arg.CronSchedule,
+		arg.IsScheduled,
+		arg.ScheduleEnabled,
 	)
 	var i Agent
 	err := row.Scan(
@@ -43,6 +50,11 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.EnvironmentID,
 		&i.CreatedBy,
 		&i.ModelID,
+		&i.CronSchedule,
+		&i.IsScheduled,
+		&i.LastScheduledRun,
+		&i.NextScheduledRun,
+		&i.ScheduleEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -217,15 +229,18 @@ func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agen
 }
 
 const updateAgent = `-- name: UpdateAgent :exec
-UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ? WHERE id = ?
+UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?
 `
 
 type UpdateAgentParams struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Prompt      string `json:"prompt"`
-	MaxSteps    int64  `json:"max_steps"`
-	ID          int64  `json:"id"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	Prompt          string `json:"prompt"`
+	MaxSteps        int64  `json:"max_steps"`
+	CronSchedule    string `json:"cron_schedule"`
+	IsScheduled     bool   `json:"is_scheduled"`
+	ScheduleEnabled bool   `json:"schedule_enabled"`
+	ID              int64  `json:"id"`
 }
 
 func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) error {
@@ -234,7 +249,95 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) error 
 		arg.Description,
 		arg.Prompt,
 		arg.MaxSteps,
+		arg.CronSchedule,
+		arg.IsScheduled,
+		arg.ScheduleEnabled,
 		arg.ID,
 	)
 	return err
+}
+
+const listScheduledAgents = `-- name: ListScheduledAgents :many
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE is_scheduled = TRUE AND schedule_enabled = TRUE ORDER BY next_scheduled_run
+`
+
+func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
+	rows, err := q.db.QueryContext(ctx, listScheduledAgents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Agent
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Prompt,
+			&i.MaxSteps,
+			&i.EnvironmentID,
+			&i.CreatedBy,
+			&i.ModelID,
+			&i.CronSchedule,
+			&i.IsScheduled,
+			&i.LastScheduledRun,
+			&i.NextScheduledRun,
+			&i.ScheduleEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateAgentScheduleTime = `-- name: UpdateAgentScheduleTime :exec
+UPDATE agents SET last_scheduled_run = ?, next_scheduled_run = ? WHERE id = ?
+`
+
+type UpdateAgentScheduleTimeParams struct {
+	LastScheduledRun sql.NullTime `json:"last_scheduled_run"`
+	NextScheduledRun sql.NullTime `json:"next_scheduled_run"`
+	ID               int64        `json:"id"`
+}
+
+func (q *Queries) UpdateAgentScheduleTime(ctx context.Context, arg UpdateAgentScheduleTimeParams) error {
+	_, err := q.db.ExecContext(ctx, updateAgentScheduleTime, arg.LastScheduledRun, arg.NextScheduledRun, arg.ID)
+	return err
+}
+
+const getAgentBySchedule = `-- name: GetAgentBySchedule :one
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE
+`
+
+func (q *Queries) GetAgentBySchedule(ctx context.Context, id int64) (Agent, error) {
+	row := q.db.QueryRowContext(ctx, getAgentBySchedule, id)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Prompt,
+		&i.MaxSteps,
+		&i.EnvironmentID,
+		&i.CreatedBy,
+		&i.ModelID,
+		&i.CronSchedule,
+		&i.IsScheduled,
+		&i.LastScheduledRun,
+		&i.NextScheduledRun,
+		&i.ScheduleEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
