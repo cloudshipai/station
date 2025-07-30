@@ -95,6 +95,11 @@ CREATE TABLE agents (
     environment_id INTEGER NOT NULL,
     created_by INTEGER NOT NULL,
     model_id INTEGER REFERENCES models(id),
+    cron_schedule TEXT DEFAULT NULL, -- Cron expression for scheduling
+    is_scheduled BOOLEAN DEFAULT FALSE,
+    last_scheduled_run DATETIME DEFAULT NULL,
+    next_scheduled_run DATETIME DEFAULT NULL,
+    schedule_enabled BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (environment_id) REFERENCES environments (id),

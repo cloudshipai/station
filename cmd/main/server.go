@@ -70,6 +70,15 @@ func runMainServer() error {
 	mcpClientSvc := services.NewMCPClientService(repos, mcpConfigSvc, toolDiscoverySvc)
 	agentSvc := services.NewEinoAgentService(repos, mcpClientSvc, toolDiscoverySvc)
 	
+	// Initialize scheduler service for cron-based agent execution
+	schedulerSvc := services.NewSchedulerService(database)
+	
+	// Start scheduler service
+	if err := schedulerSvc.Start(); err != nil {
+		return fmt.Errorf("failed to start scheduler service: %w", err)
+	}
+	defer schedulerSvc.Stop()
+	
 	mcpServer := mcp.NewServer(database, mcpConfigSvc, agentSvc, repos)
 	apiServer := api.New(cfg, database)
 

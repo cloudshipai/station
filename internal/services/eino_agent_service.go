@@ -86,6 +86,8 @@ func (s *EinoAgentService) CreateAgent(ctx context.Context, config *AgentConfig)
 		config.MaxSteps,
 		config.EnvironmentID,
 		config.CreatedBy,
+		nil,   // cronSchedule - not set through this service  
+		false, // scheduleEnabled - not set through this service
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -246,8 +248,8 @@ func (s *EinoAgentService) UpdateAgent(ctx context.Context, agentID int64, confi
 		agent.MaxSteps = config.MaxSteps
 	}
 
-	// Save updates
-	if err := s.repos.Agents.Update(agent.ID, agent.Name, agent.Description, agent.Prompt, agent.MaxSteps); err != nil {
+	// Save updates (preserve existing schedule settings)
+	if err := s.repos.Agents.Update(agent.ID, agent.Name, agent.Description, agent.Prompt, agent.MaxSteps, agent.CronSchedule, agent.ScheduleEnabled); err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
 

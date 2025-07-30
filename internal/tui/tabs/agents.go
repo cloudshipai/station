@@ -28,9 +28,11 @@ type AgentsModel struct {
 	list         list.Model
 	
 	// Create form components
-	nameInput    textinput.Model
-	descInput    textinput.Model
-	promptArea   textarea.Model
+	nameInput         textinput.Model
+	descInput         textinput.Model
+	promptArea        textarea.Model
+	scheduleInput     textinput.Model
+	scheduleEnabled   bool
 	
 	// Data access
 	repos        *repositories.Repositories
@@ -65,6 +67,8 @@ const (
 	AgentFieldEnvironment
 	AgentFieldPrompt
 	AgentFieldTools
+	AgentFieldSchedule
+	AgentFieldScheduleEnabled
 )
 
 // AgentItem implements list.Item interface for bubbles list component
@@ -208,6 +212,10 @@ func NewAgentsModel(database db.Database) *AgentsModel {
 	promptArea.SetWidth(80)  // Wider for right column
 	promptArea.SetHeight(12) // Much taller for better editing
 	
+	scheduleInput := textinput.New()
+	scheduleInput.Placeholder = "* * * * * (cron expression, e.g., 0 0 * * * for daily at midnight)"
+	scheduleInput.Width = 60
+	
 	// Initialize viewport for details view
 	detailsViewport := viewport.New(80, 20)
 	detailsViewport.Style = lipgloss.NewStyle().
@@ -221,6 +229,8 @@ func NewAgentsModel(database db.Database) *AgentsModel {
 		nameInput:       nameInput,
 		descInput:       descInput,
 		promptArea:      promptArea,
+		scheduleInput:   scheduleInput,
+		scheduleEnabled: false,
 		focusedField:    AgentFieldName,
 		detailsViewport: detailsViewport,
 	}
@@ -822,6 +832,30 @@ func (m AgentsModel) renderCreateAgentForm() string {
 	leftColumn = append(leftColumn, envSection)
 	leftColumn = append(leftColumn, "")
 	
+	// Schedule enabled checkbox
+	scheduleEnabledLabel := "Schedule Enabled:"
+	if m.focusedField == AgentFieldScheduleEnabled {
+		scheduleEnabledLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Schedule Enabled:")
+	}
+	scheduleEnabledValue := "☐ No"
+	if m.scheduleEnabled {
+		scheduleEnabledValue = "☑ Yes"
+	}
+	scheduleEnabledSection := lipgloss.JoinVertical(lipgloss.Left, scheduleEnabledLabel, styles.BaseStyle.Render("▶ "+scheduleEnabledValue))
+	leftColumn = append(leftColumn, scheduleEnabledSection)
+	leftColumn = append(leftColumn, "")
+	
+	// Cron schedule input (only show if scheduling is enabled)
+	if m.scheduleEnabled {
+		scheduleLabel := "Cron Schedule:"
+		if m.focusedField == AgentFieldSchedule {
+			scheduleLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Cron Schedule:")
+		}
+		scheduleSection := lipgloss.JoinVertical(lipgloss.Left, scheduleLabel, m.scheduleInput.View())
+		leftColumn = append(leftColumn, scheduleSection)
+		leftColumn = append(leftColumn, "")
+	}
+	
 	// Tools selection
 	toolsLabel := "Available Tools:"
 	if m.focusedField == AgentFieldTools {
@@ -918,6 +952,30 @@ func (m AgentsModel) renderEditAgentForm() string {
 	envSection := lipgloss.JoinVertical(lipgloss.Left, envLabel, styles.BaseStyle.Render("▶ "+envName))
 	leftColumn = append(leftColumn, envSection)
 	leftColumn = append(leftColumn, "")
+	
+	// Schedule enabled checkbox
+	scheduleEnabledLabel := "Schedule Enabled:"
+	if m.focusedField == AgentFieldScheduleEnabled {
+		scheduleEnabledLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Schedule Enabled:")
+	}
+	scheduleEnabledValue := "☐ No"
+	if m.scheduleEnabled {
+		scheduleEnabledValue = "☑ Yes"
+	}
+	scheduleEnabledSection := lipgloss.JoinVertical(lipgloss.Left, scheduleEnabledLabel, styles.BaseStyle.Render("▶ "+scheduleEnabledValue))
+	leftColumn = append(leftColumn, scheduleEnabledSection)
+	leftColumn = append(leftColumn, "")
+	
+	// Cron schedule input (only show if scheduling is enabled)
+	if m.scheduleEnabled {
+		scheduleLabel := "Cron Schedule:"
+		if m.focusedField == AgentFieldSchedule {
+			scheduleLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Cron Schedule:")
+		}
+		scheduleSection := lipgloss.JoinVertical(lipgloss.Left, scheduleLabel, m.scheduleInput.View())
+		leftColumn = append(leftColumn, scheduleSection)
+		leftColumn = append(leftColumn, "")
+	}
 	
 	// Tools selection
 	toolsLabel := "Available Tools:"
@@ -1186,6 +1244,8 @@ func (m *AgentsModel) resetCreateForm() {
 	m.nameInput.SetValue("")
 	m.descInput.SetValue("")
 	m.promptArea.SetValue("")
+	m.scheduleInput.SetValue("")
+	m.scheduleEnabled = false
 	m.selectedToolIDs = []int64{}
 	m.focusedField = AgentFieldName
 	m.toolCursor = 0
@@ -1203,6 +1263,14 @@ func (m *AgentsModel) populateEditForm() {
 	m.nameInput.SetValue(m.selectedAgent.Name)
 	m.descInput.SetValue(m.selectedAgent.Description)
 	m.promptArea.SetValue(m.selectedAgent.Prompt)
+	
+	// Set schedule fields
+	if m.selectedAgent.CronSchedule != nil {
+		m.scheduleInput.SetValue(*m.selectedAgent.CronSchedule)
+	} else {
+		m.scheduleInput.SetValue("")
+	}
+	m.scheduleEnabled = m.selectedAgent.ScheduleEnabled
 	
 	// Set environment ID, but default to first available if agent's environment doesn't exist
 	m.selectedEnvID = m.selectedAgent.EnvironmentID
@@ -1336,7 +1404,15 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		}
 		
 	case " ", "enter":
-		if m.focusedField == AgentFieldTools {
+		if m.focusedField == AgentFieldScheduleEnabled {
+			// Toggle schedule enabled
+			m.scheduleEnabled = !m.scheduleEnabled
+			// Clear schedule input if disabling
+			if !m.scheduleEnabled {
+				m.scheduleInput.SetValue("")
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldTools {
 			// Toggle tool selection (work with filtered tools)
 			filteredTools := m.getFilteredTools()
 			if len(filteredTools) > 0 && m.toolCursor < len(filteredTools) {
@@ -1381,6 +1457,9 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case AgentFieldPrompt:
 		m.promptArea, cmd = m.promptArea.Update(msg)
+		cmds = append(cmds, cmd)
+	case AgentFieldSchedule:
+		m.scheduleInput, cmd = m.scheduleInput.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 	
@@ -1603,7 +1682,15 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		}
 		
 	case " ", "enter":
-		if m.focusedField == AgentFieldTools {
+		if m.focusedField == AgentFieldScheduleEnabled {
+			// Toggle schedule enabled
+			m.scheduleEnabled = !m.scheduleEnabled
+			// Clear schedule input if disabling
+			if !m.scheduleEnabled {
+				m.scheduleInput.SetValue("")
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldTools {
 			// Toggle tool selection (work with filtered tools)
 			filteredTools := m.getFilteredTools()
 			if len(filteredTools) > 0 && m.toolCursor < len(filteredTools) {
@@ -1649,6 +1736,9 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	case AgentFieldPrompt:
 		m.promptArea, cmd = m.promptArea.Update(msg)
 		cmds = append(cmds, cmd)
+	case AgentFieldSchedule:
+		m.scheduleInput, cmd = m.scheduleInput.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 	
 	return m, tea.Batch(cmds...)
@@ -1664,10 +1754,19 @@ func (m *AgentsModel) cycleFocusedField() {
 		m.descInput.Blur()
 	case AgentFieldPrompt:
 		m.promptArea.Blur()
+	case AgentFieldSchedule:
+		m.scheduleInput.Blur()
 	}
 	
-	// Move to next field
-	m.focusedField = (m.focusedField + 1) % 5
+	// Move to next field (skip schedule field if scheduling is disabled)
+	for {
+		m.focusedField = (m.focusedField + 1) % 7
+		// Skip schedule field if scheduling is disabled
+		if m.focusedField == AgentFieldSchedule && !m.scheduleEnabled {
+			continue
+		}
+		break
+	}
 	
 	// Focus new field
 	switch m.focusedField {
@@ -1677,6 +1776,8 @@ func (m *AgentsModel) cycleFocusedField() {
 		m.descInput.Focus()
 	case AgentFieldPrompt:
 		m.promptArea.Focus()
+	case AgentFieldSchedule:
+		m.scheduleInput.Focus()
 	}
 }
 
@@ -1720,8 +1821,18 @@ func (m AgentsModel) createAgent() tea.Cmd {
 			return AgentsErrorMsg{Err: fmt.Errorf("selected environment does not exist")}
 		}
 		
+		// Validate and prepare schedule fields
+		var cronSchedule *string
+		if m.scheduleEnabled {
+			schedule := strings.TrimSpace(m.scheduleInput.Value())
+			if schedule != "" {
+				// TODO: Add cron expression validation here if needed
+				cronSchedule = &schedule
+			}
+		}
+		
 		// Create agent in database
-		agent, err := m.repos.Agents.Create(name, description, prompt, 10, m.selectedEnvID, 1) // Default to user ID 1
+		agent, err := m.repos.Agents.Create(name, description, prompt, 10, m.selectedEnvID, 1, cronSchedule, m.scheduleEnabled) // Default to user ID 1
 		if err != nil {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to create agent: %w", err)}
 		}
@@ -1787,21 +1898,34 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 			return AgentsErrorMsg{Err: fmt.Errorf("selected environment does not exist")}
 		}
 		
+		// Validate and prepare schedule fields
+		var cronSchedule *string
+		if m.scheduleEnabled {
+			schedule := strings.TrimSpace(m.scheduleInput.Value())
+			if schedule != "" {
+				// TODO: Add cron expression validation here if needed
+				cronSchedule = &schedule
+			}
+		}
+		
 		// Update agent in database
-		if err := m.repos.Agents.Update(m.selectedAgent.ID, name, description, prompt, m.selectedAgent.MaxSteps); err != nil {
+		if err := m.repos.Agents.Update(m.selectedAgent.ID, name, description, prompt, m.selectedAgent.MaxSteps, cronSchedule, m.scheduleEnabled); err != nil {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to update agent: %w", err)}
 		}
 		
 		// Create updated agent model for return
 		updatedAgent := &models.Agent{
-			ID:            m.selectedAgent.ID,
-			Name:          name,
-			Description:   description,
-			Prompt:        prompt,
-			MaxSteps:      m.selectedAgent.MaxSteps,
-			EnvironmentID: m.selectedEnvID,
-			CreatedBy:     m.selectedAgent.CreatedBy,
-			CreatedAt:     m.selectedAgent.CreatedAt,
+			ID:              m.selectedAgent.ID,
+			Name:            name,
+			Description:     description,
+			Prompt:          prompt,
+			MaxSteps:        m.selectedAgent.MaxSteps,
+			EnvironmentID:   m.selectedEnvID,
+			CreatedBy:       m.selectedAgent.CreatedBy,
+			CronSchedule:    cronSchedule,
+			IsScheduled:     cronSchedule != nil && *cronSchedule != "" && m.scheduleEnabled,
+			ScheduleEnabled: m.scheduleEnabled,
+			CreatedAt:       m.selectedAgent.CreatedAt,
 		}
 		
 		// Clear existing tool associations
