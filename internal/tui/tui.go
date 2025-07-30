@@ -54,6 +54,7 @@ type Model struct {
 	mcpModel       tabs.TabModel
 	toolsModel     tabs.TabModel
 	envModel       tabs.TabModel
+	usersModel     tabs.TabModel
 	settingsModel  tabs.TabModel
 	
 	// UI components
@@ -106,7 +107,7 @@ func NewModel(database db.Database) *Model {
 	
 	return &Model{
 		db:        database,
-		tabs:      []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Settings"},
+		tabs:      []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Users", "Settings"},
 		activeTab: 0,
 		keyMap:    DefaultKeyMap(),
 		help:      help.New(),
@@ -134,6 +135,7 @@ func (m *Model) initializeTabModels() tea.Cmd {
 	m.mcpModel = tabs.NewMCPModel(m.db)
 	m.toolsModel = tabs.NewToolsModel(m.db)
 	m.envModel = tabs.NewEnvironmentsModel(m.db)
+	m.usersModel = tabs.NewUsersModel(m.db)
 	m.settingsModel = tabs.NewSettingsModel(m.db)
 	
 	// Get initialization commands from each model
@@ -143,6 +145,7 @@ func (m *Model) initializeTabModels() tea.Cmd {
 	cmds = append(cmds, m.mcpModel.Init())
 	cmds = append(cmds, m.toolsModel.Init())
 	cmds = append(cmds, m.envModel.Init())
+	cmds = append(cmds, m.usersModel.Init())
 	cmds = append(cmds, m.settingsModel.Init())
 	
 	m.initialized = true
@@ -170,6 +173,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mcpModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.toolsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.envModel.SetSize(layout.ContentWidth, layout.ContentHeight)
+		m.usersModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.settingsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		
 		// Forward the message to tab models
@@ -179,6 +183,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mcpModel, _ = m.mcpModel.Update(msg)
 		m.toolsModel, _ = m.toolsModel.Update(msg)
 		m.envModel, _ = m.envModel.Update(msg)
+		m.usersModel, _ = m.usersModel.Update(msg)
 		m.settingsModel, _ = m.settingsModel.Update(msg)
 		
 		return m, nil
@@ -220,7 +225,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.toolsModel, cmd = m.toolsModel.Update(msg)
 			case 5: // Environments
 				m.envModel, cmd = m.envModel.Update(msg)
-			case 6: // Settings
+			case 6: // Users
+				m.usersModel, cmd = m.usersModel.Update(msg)
+			case 7: // Settings
 				m.settingsModel, cmd = m.settingsModel.Update(msg)
 			}
 			return m, cmd
@@ -251,6 +258,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.envModel, cmd = m.envModel.Update(msg)
 		tabCmds = append(tabCmds, cmd)
 		
+		m.usersModel, cmd = m.usersModel.Update(msg)
+		tabCmds = append(tabCmds, cmd)
+		
 		m.settingsModel, cmd = m.settingsModel.Update(msg)
 		tabCmds = append(tabCmds, cmd)
 		
@@ -266,17 +276,11 @@ func (m *Model) View() string {
 		return "Waiting for terminal size..."
 	}
 	
-	// Create banner with blue neon styling
-	banner := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#00FFFF")).
-		Background(lipgloss.Color("#000080")).
-		Bold(true).
-		Width(m.width).
-		Align(lipgloss.Center).
-		Render("STATION ◆◇◆ AI AGENT MANAGEMENT PLATFORM ◆◇◆")
+	// Create retro banner with ASCII art
+	banner := components.RenderBanner()
 	
 	// Create tab navigation
-	tabNames := []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Settings"}
+	tabNames := []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Users", "Settings"}
 	var tabItems []string
 	for i, name := range tabNames {
 		if i == m.activeTab {
@@ -287,14 +291,14 @@ func (m *Model) View() string {
 	}
 	
 	navigation := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#4169E1")).
+		Foreground(lipgloss.Color("#7aa2f7")).
 		Width(m.width).
 		Align(lipgloss.Center).
 		Render(strings.Join(tabItems, "  "))
 	
 	// Separator line
 	separator := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#4169E1")).
+		Foreground(lipgloss.Color("#7aa2f7")).
 		Render(strings.Repeat("─", m.width))
 	
 	// Status bar with branding
@@ -328,7 +332,7 @@ func (m *Model) View() string {
 	// Style content with EXACT height constraint
 	styledContent := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#4169E1")).
+		BorderForeground(lipgloss.Color("#7aa2f7")).
 		Padding(1, 2).
 		Width(m.width - 4).
 		Height(contentHeight).
@@ -525,7 +529,9 @@ func (m Model) renderActiveTabContent() string {
 		return m.toolsModel.View()
 	case 5: // Environments
 		return m.envModel.View()
-	case 6: // Settings
+	case 6: // Users
+		return m.usersModel.View()
+	case 7: // Settings
 		return m.settingsModel.View()
 	default:
 		return "Invalid tab selected"
@@ -595,6 +601,8 @@ func (m Model) refreshActiveTab() tea.Cmd {
 	case 5:
 		return m.envModel.RefreshData()
 	case 6:
+		return m.usersModel.RefreshData()
+	case 7:
 		return m.settingsModel.RefreshData()
 	default:
 		return nil
@@ -616,7 +624,9 @@ func (m Model) getActiveTabModel() tabs.TabModel {
 		return m.toolsModel
 	case 5: // Environments
 		return m.envModel
-	case 6: // Settings
+	case 6: // Users
+		return m.usersModel
+	case 7: // Settings
 		return m.settingsModel
 	default:
 		return m.dashboardModel

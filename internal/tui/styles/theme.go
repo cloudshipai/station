@@ -4,19 +4,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Retro terminal theme with blue colors
+// Tokyo Night theme with proper color palette
 var (
-	// Core colors - retro blue theme
-	Primary   = lipgloss.Color("#00BFFF") // Deep sky blue
-	Secondary = lipgloss.Color("#4169E1") // Royal blue  
-	Accent    = lipgloss.Color("#87CEEB") // Sky blue
-	Background = lipgloss.Color("#000B1E") // Very dark blue
-	Surface   = lipgloss.Color("#1E3875") // Dark blue
-	Text      = lipgloss.Color("#E6F3FF") // Light blue-white
-	TextMuted = lipgloss.Color("#8BB8E8") // Muted blue
-	Success   = lipgloss.Color("#00FF7F") // Spring green
-	Warning   = lipgloss.Color("#FFD700") // Gold
-	Error     = lipgloss.Color("#FF4500") // Orange red
+	// Core colors - Official Tokyo Night theme
+	Primary   = lipgloss.Color("#7aa2f7") // Tokyo Night blue
+	Secondary = lipgloss.Color("#bb9af7") // Tokyo Night purple  
+	Accent    = lipgloss.Color("#7dcfff") // Tokyo Night cyan
+	Background = lipgloss.Color("#1a1b26") // Tokyo Night dark background
+	Surface   = lipgloss.Color("#24283b") // Tokyo Night surface
+	Text      = lipgloss.Color("#a9b1d6") // Tokyo Night main foreground
+	TextMuted = lipgloss.Color("#565f89") // Tokyo Night comment
+	Success   = lipgloss.Color("#9ece6a") // Tokyo Night green
+	Warning   = lipgloss.Color("#e0af68") // Tokyo Night yellow
+	Error     = lipgloss.Color("#f7768e") // Tokyo Night red
 	
 	// Base styles
 	BaseStyle = lipgloss.NewStyle().
@@ -70,8 +70,8 @@ var (
 		Padding(0, 2)
 	
 	ListItemSelectedStyle = lipgloss.NewStyle().
-		Background(Surface).
-		Foreground(Primary).
+		Background(lipgloss.Color("#bb9af7")). // Tokyo Night purple for selection
+		Foreground(lipgloss.Color("#1a1b26")). // Dark background for contrast
 		Padding(0, 2).
 		Bold(true)
 	
@@ -87,8 +87,8 @@ var (
 		Padding(0, 1)
 	
 	TableSelectedStyle = lipgloss.NewStyle().
-		Background(Surface).
-		Foreground(Primary).
+		Background(lipgloss.Color("#bb9af7")). // Tokyo Night purple for selection
+		Foreground(lipgloss.Color("#1a1b26")). // Dark background for contrast
 		Padding(0, 1).
 		Bold(true)
 	

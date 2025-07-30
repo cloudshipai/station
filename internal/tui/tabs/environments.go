@@ -2,6 +2,7 @@ package tabs
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
 	"station/pkg/models"
@@ -25,6 +27,9 @@ type EnvironmentsModel struct {
 	list          list.Model
 	nameInput     textinput.Model
 	descInput     textinput.Model
+
+	// Data access
+	repos         *repositories.Repositories
 
 	// State
 	environments  []models.Environment
@@ -42,6 +47,14 @@ const (
 	EnvModeCreate
 	EnvModeEdit
 )
+
+// EnvironmentStats holds statistics for an environment
+type EnvironmentStats struct {
+	ActiveAgents int
+	TotalRuns    int
+	LastUsed     string
+	Status       string
+}
 
 // EnvironmentItem implements list.Item interface for bubbles list component
 type EnvironmentItem struct {
@@ -135,12 +148,18 @@ type EnvironmentCreatedMsg struct {
 	Environment models.Environment
 }
 
+type EnvironmentUpdatedMsg struct {
+	EnvironmentID int64
+}
+
 type EnvironmentDeletedMsg struct {
 	EnvironmentID int64
 }
 
 // NewEnvironmentsModel creates a new environments model
 func NewEnvironmentsModel(database db.Database) *EnvironmentsModel {
+	repos := repositories.New(database)
+	
 	// Create list with custom styling
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = styles.ListItemSelectedStyle
@@ -172,6 +191,7 @@ func NewEnvironmentsModel(database db.Database) *EnvironmentsModel {
 		list:         l,
 		nameInput:    nameInput,
 		descInput:    descInput,
+		repos:        repos,
 		editMode:     EnvModeList,
 	}
 }
@@ -193,6 +213,7 @@ func (m *EnvironmentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	case tea.KeyMsg:
 		
 		// Handle navigation between modes
+		log.Printf("DEBUG: Environment received key '%s', current editMode: %d", msg.String(), m.editMode)
 		switch m.editMode {
 		case EnvModeList:
 			return m.handleListKeys(msg)
@@ -210,6 +231,18 @@ func (m *EnvironmentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	case EnvironmentsErrorMsg:
 		m.SetError(msg.Err.Error())
 		m.SetLoading(false)
+
+	case EnvironmentCreatedMsg:
+		// Add new environment to list and reload from database to get fresh data
+		log.Printf("DEBUG: Environment created, reloading list")
+		m.editMode = EnvModeList // Return to list mode after creation
+		return m, m.loadEnvironments()
+
+	case EnvironmentUpdatedMsg:
+		// Environment updated, reload from database to get fresh data
+		log.Printf("DEBUG: Environment updated, reloading list")
+		m.editMode = EnvModeList // Return to list mode after update
+		return m, m.loadEnvironments()
 
 	case EnvironmentDeletedMsg:
 		// Remove deleted environment from list
@@ -247,6 +280,7 @@ func (m *EnvironmentsModel) handleListKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.getKeyMap().createEnv):
+		log.Printf("DEBUG: Entering EnvModeCreate, setting editMode to %d", int(EnvModeCreate))
 		m.editMode = EnvModeCreate
 		m.nameInput.Focus()
 		return m, nil
@@ -275,9 +309,12 @@ func (m *EnvironmentsModel) handleListKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			}
 		}
 		return m, nil
+	default:
+		// Let the list component handle unhandled keys (like j/k navigation)
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return m, cmd
 	}
-
-	return m, nil
 }
 
 // Handle key presses in details mode
@@ -319,13 +356,38 @@ func (m *EnvironmentsModel) handleDetailsKeys(msg tea.KeyMsg) (TabModel, tea.Cmd
 func (m *EnvironmentsModel) handleCreateKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	var cmds []tea.Cmd
 	
+	// Debug logging to see what keys are being received
+	log.Printf("DEBUG: Environment handleCreateKeys received key: '%s', editMode: %d", msg.String(), m.editMode)
+	
 	switch msg.String() {
 	case "esc":
+		// Auto-save if there's content in the form fields
+		nameValue := m.nameInput.Value()
+		descValue := m.descInput.Value()
+		
+		log.Printf("DEBUG: ESC pressed - nameValue: '%s', descValue: '%s'", nameValue, descValue)
+		
+		if nameValue != "" || descValue != "" {
+			log.Printf("DEBUG: Content found, calling saveEnvironment()")
+			// Save the environment before exiting
+			cmd := m.saveEnvironment()
+			m.editMode = EnvModeList
+			m.nameInput.Blur()
+			m.descInput.Blur()
+			m.nameInput.SetValue("")
+			m.descInput.SetValue("")
+			log.Printf("DEBUG: Returning from ESC with save command")
+			return m, cmd
+		}
+		
+		log.Printf("DEBUG: No content to save, just exiting")
+		// No content to save, just exit
 		m.editMode = EnvModeList
 		m.nameInput.Blur()
 		m.descInput.Blur()
 		m.nameInput.SetValue("")
 		m.descInput.SetValue("")
+		log.Printf("DEBUG: Returning from ESC without save")
 		return m, nil
 
 	case "tab":
@@ -388,37 +450,24 @@ func (m EnvironmentsModel) getKeyMap() environmentsKeyMap {
 // Load environments from database
 func (m EnvironmentsModel) loadEnvironments() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		// TODO: Load real environments from database
-		// For now, return mock data
-		desc1 := "Production environment with full access to external services"
-		desc2 := "Development environment for testing new features"
-		desc3 := "Isolated sandbox environment with restricted access"
+		log.Printf("DEBUG: Loading environments from database...")
 		
-		environments := []models.Environment{
-			{
-				ID:          1,
-				Name:        "Production",
-				Description: &desc1,
-				CreatedAt:   time.Now().Add(-time.Hour * 24 * 30),
-				UpdatedAt:   time.Now().Add(-time.Hour * 24),
-			},
-			{
-				ID:          2,
-				Name:        "Development",
-				Description: &desc2,
-				CreatedAt:   time.Now().Add(-time.Hour * 24 * 15),
-				UpdatedAt:   time.Now().Add(-time.Hour * 12),
-			},
-			{
-				ID:          3,
-				Name:        "Sandbox",
-				Description: &desc3,
-				CreatedAt:   time.Now().Add(-time.Hour * 24 * 7),
-				UpdatedAt:   time.Now().Add(-time.Hour * 6),
-			},
+		// Get environment repository from database
+		environments, err := m.repos.Environments.List()
+		if err != nil {
+			log.Printf("ERROR: Failed to load environments: %v", err)
+			return EnvironmentsErrorMsg{Err: err}
+		}
+		
+		log.Printf("DEBUG: Loaded %d environments from database", len(environments))
+		
+		// Convert from []*models.Environment to []models.Environment
+		envSlice := make([]models.Environment, len(environments))
+		for i, env := range environments {
+			envSlice[i] = *env
 		}
 
-		return EnvironmentsLoadedMsg{Environments: environments}
+		return EnvironmentsLoadedMsg{Environments: envSlice}
 	})
 }
 
@@ -519,12 +568,13 @@ func (m EnvironmentsModel) renderEnvironmentInfo(env *models.Environment) string
 func (m EnvironmentsModel) renderEnvironmentStatus(env *models.Environment) string {
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
 	
-	// TODO: Get actual usage statistics from database
+	// Get actual usage statistics from database
+	stats := m.getEnvironmentStats(env.ID)
 	statusInfo := []string{
-		"Active agents: 3",
-		"Total runs: 156",
-		"Last used: 2 hours ago",
-		"Status: Active",
+		fmt.Sprintf("Active agents: %d", stats.ActiveAgents),
+		fmt.Sprintf("Total runs: %d", stats.TotalRuns),
+		fmt.Sprintf("Last used: %s", stats.LastUsed),
+		fmt.Sprintf("Status: %s", stats.Status),
 	}
 	
 	content := lipgloss.JoinVertical(
@@ -571,7 +621,7 @@ func (m EnvironmentsModel) renderEnvironmentForm() string {
 	sections = append(sections, descSection)
 
 	// Help text
-	helpText := styles.HelpStyle.Render("• tab: switch fields • ctrl+s: save • esc: cancel")
+	helpText := styles.HelpStyle.Render("• tab: switch fields • ctrl+s: save • esc: auto-save & exit")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 
@@ -580,29 +630,143 @@ func (m EnvironmentsModel) renderEnvironmentForm() string {
 
 // Save environment command
 func (m EnvironmentsModel) saveEnvironment() tea.Cmd {
+	log.Printf("DEBUG: saveEnvironment() called")
 	return tea.Cmd(func() tea.Msg {
-		// TODO: Actually save to database
-		// For now, just return success and go back to list
-		m.editMode = EnvModeList
-		m.nameInput.Blur()
-		m.descInput.Blur()
-		m.nameInput.SetValue("")
-		m.descInput.SetValue("")
-		return nil
+		log.Printf("DEBUG: saveEnvironment() tea.Cmd executing")
+		
+		nameValue := m.nameInput.Value()
+		descValue := m.descInput.Value()
+		
+		log.Printf("DEBUG: Saving environment - name: '%s', desc: '%s'", nameValue, descValue)
+		
+		if nameValue == "" {
+			log.Printf("ERROR: Cannot save environment with empty name")
+			return tea.Printf("❌ Environment name cannot be empty")
+		}
+		
+		var description *string
+		if descValue != "" {
+			description = &descValue
+		}
+		
+		// Check if we're editing an existing environment or creating a new one
+		if m.editMode == EnvModeEdit && m.selectedID > 0 {
+			// Update existing environment
+			log.Printf("DEBUG: Updating existing environment with ID: %d, name: '%s', desc: '%s'", m.selectedID, nameValue, func() string {
+				if description != nil {
+					return *description
+				}
+				return "nil"
+			}())
+			err := m.repos.Environments.Update(m.selectedID, nameValue, description)
+			if err != nil {
+				log.Printf("ERROR: Failed to update environment: %v", err)
+				return tea.Printf("❌ Failed to update environment: %v", err)
+			}
+			
+			log.Printf("DEBUG: Environment updated successfully with ID: %d", m.selectedID)
+			
+			// Return success message for update
+			return EnvironmentUpdatedMsg{EnvironmentID: m.selectedID}
+		} else {
+			// Create new environment
+			log.Printf("DEBUG: Creating new environment")
+			env, err := m.repos.Environments.Create(nameValue, description)
+			if err != nil {
+				log.Printf("ERROR: Failed to create environment: %v", err)
+				return tea.Printf("❌ Failed to create environment: %v", err)
+			}
+			
+			log.Printf("DEBUG: Environment created successfully with ID: %d", env.ID)
+			
+			// Return success message for create
+			return EnvironmentCreatedMsg{Environment: *env}
+		}
 	})
 }
 
 // Delete environment command
 func (m EnvironmentsModel) deleteEnvironment(envID int64) tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		// TODO: Actually delete from database
-		// For now, just return success
+		log.Printf("DEBUG: Attempting to delete environment with ID: %d", envID)
+		
+		// Actually delete from database
+		err := m.repos.Environments.Delete(envID)
+		if err != nil {
+			log.Printf("ERROR: Failed to delete environment: %v", err)
+			return EnvironmentsErrorMsg{Err: err}
+		}
+		
+		log.Printf("DEBUG: Environment deleted successfully from database with ID: %d", envID)
 		return EnvironmentDeletedMsg{EnvironmentID: envID}
 	})
 }
 
 // IsMainView returns true if in main list view
 func (m EnvironmentsModel) IsMainView() bool {
-	// Use the base implementation for reliable navigation
-	return m.BaseTabModel.IsMainView()
+	// Only return true when we're actually in the main list view
+	// This prevents the main TUI from intercepting tab keys when in forms
+	return m.editMode == EnvModeList
+}
+
+// getEnvironmentStats retrieves real statistics for an environment from the database
+func (m EnvironmentsModel) getEnvironmentStats(envID int64) EnvironmentStats {
+	// Get agents for this environment
+	agents, err := m.repos.Agents.ListByEnvironment(envID)
+	if err != nil {
+		log.Printf("Error getting agents for environment %d: %v", envID, err)
+		agents = []*models.Agent{}
+	}
+
+	// Count total runs for all agents in this environment
+	totalRuns := 0
+	var lastRunTime time.Time
+	var hasLastRunTime bool
+	
+	for _, agent := range agents {
+		runs, err := m.repos.AgentRuns.ListByAgent(agent.ID)
+		if err != nil {
+			log.Printf("Error getting runs for agent %d: %v", agent.ID, err)
+			continue
+		}
+		totalRuns += len(runs)
+		
+		// Find the most recent run time
+		for _, run := range runs {
+			if !hasLastRunTime || run.StartedAt.After(lastRunTime) {
+				lastRunTime = run.StartedAt
+				hasLastRunTime = true
+			}
+		}
+	}
+
+	// Format last used time
+	lastUsed := "Never"
+	if hasLastRunTime {
+		duration := time.Since(lastRunTime)
+		if duration < time.Hour {
+			lastUsed = fmt.Sprintf("%d minutes ago", int(duration.Minutes()))
+		} else if duration < 24*time.Hour {
+			lastUsed = fmt.Sprintf("%d hours ago", int(duration.Hours()))
+		} else {
+			lastUsed = fmt.Sprintf("%d days ago", int(duration.Hours()/24))
+		}
+	}
+
+	// Determine status based on recent activity
+	status := "Inactive"
+	if len(agents) > 0 {
+		if hasLastRunTime && time.Since(lastRunTime) < 24*time.Hour {
+			status = "Active"
+		} else {
+			status = "Idle"
+		}
+	}
+
+	return EnvironmentStats{
+		ActiveAgents: len(agents),
+		TotalRuns:    totalRuns,
+		LastUsed:     lastUsed,
+		Status:       status,
+	}
 }

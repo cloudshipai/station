@@ -14,10 +14,14 @@ func NewEnvironmentRepo(db *sql.DB) *EnvironmentRepo {
 }
 
 func (r *EnvironmentRepo) Create(name string, description *string) (*models.Environment, error) {
-	query := `INSERT INTO environments (name, description) VALUES (?, ?) RETURNING id, name, description, created_at, updated_at`
+	// For now, use user ID 1 (test_mcp_user) as the creator
+	// TODO: Pass actual user ID from authentication context
+	createdBy := int64(1)
+	
+	query := `INSERT INTO environments (name, description, created_by) VALUES (?, ?, ?) RETURNING id, name, description, created_at, updated_at`
 	
 	var env models.Environment
-	err := r.db.QueryRow(query, name, description).Scan(
+	err := r.db.QueryRow(query, name, description, createdBy).Scan(
 		&env.ID, &env.Name, &env.Description, &env.CreatedAt, &env.UpdatedAt,
 	)
 	if err != nil {
