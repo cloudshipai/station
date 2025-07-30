@@ -7,72 +7,46 @@ import (
 	"station/internal/tui/styles"
 )
 
-// STATION banner with retro ASCII art and multi-colored blue theme
+// STATION banner - compact single line version with Tokyo Night colors
 func RenderBanner() string {
-	// Retro 80s-style ASCII art for STATION with neon/terminal aesthetics
-	bannerText := []string{
-		"╔═══════════════════════════════════════════════════════════╗",
-		"║   ▄████████    ▄████████    ▄████████    ▄████████  ███    ███",
-		"║  ███    ███   ███    ███   ███    ███   ███    ███  ███    ███",  
-		"║  ███    █▀    ███    █▀    ███    ███   ███    ███  ███    ███",
-		"║ ▄███          ███         ▄███▄▄▄▄██▀  ▄███▄▄▄▄██▀  ███    ███",
-		"║▀▀███ ████▄  ▀███████████ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀▀▀    ███    ███",
-		"║  ███    ███          ███ ▀███████████ ▀███████████  ███    ███",
-		"║  ███    ███    ▄█    ███   ███    ███   ███    ███  ███▄▄▄███",
-		"║  ████████▀   ▄████████▀    ███    ███   ███    █▀    ▀▀▀▀▀▀▀",
-		"║              ███    ███",
-		"╚═══════════════════════════════════════════════════════════╝",
-	}
-	
-	// Retro neon color gradient - cyan to magenta
-	colors := []lipgloss.Color{
-		lipgloss.Color("#00FFFF"), // Cyan
-		lipgloss.Color("#40E0D0"), // Turquoise
-		lipgloss.Color("#FF1493"), // Deep pink
-		lipgloss.Color("#FF69B4"), // Hot pink
-		lipgloss.Color("#00CED1"), // Dark turquoise
-		lipgloss.Color("#8A2BE2"), // Blue violet
-		lipgloss.Color("#FF00FF"), // Magenta
-		lipgloss.Color("#00BFFF"), // Deep sky blue
-		lipgloss.Color("#DA70D6"), // Orchid
-		lipgloss.Color("#1E90FF"), // Dodger blue
-		lipgloss.Color("#C71585"), // Medium violet red
-	}
-	
-	var coloredLines []string
-	for i, line := range bannerText {
-		color := colors[i%len(colors)]
-		style := lipgloss.NewStyle().
-			Foreground(color).
-			Bold(true)
-		coloredLines = append(coloredLines, style.Render(line))
-	}
-	
-	banner := strings.Join(coloredLines, "\n")
-	
-	// Add retro subtitle with neon glow effect
-	subtitle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#00FFFF")).
-		Background(lipgloss.Color("#000080")).
+	// Compact banner with Tokyo Night gradient
+	stationText := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7aa2f7")). // Tokyo Night blue
 		Bold(true).
-		Align(lipgloss.Center).
-		Render("◆◇◆ AI AGENT MANAGEMENT PLATFORM ◆◇◆")
+		Render("STATION")
 	
-	// Combine banner and subtitle
-	return lipgloss.JoinVertical(
-		lipgloss.Center,
-		banner,
-		"",
-		subtitle,
+	broadcast := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#bb9af7")). // Tokyo Night purple
+		Render("◆◇◆")
+	
+	platform := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7dcfff")). // Tokyo Night cyan
+		Render("AI AGENT MANAGEMENT PLATFORM")
+	
+	// Combine into single line with spacing
+	banner := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		stationText,
+		" ",
+		broadcast,
+		" ",
+		platform,
+		" ",
+		broadcast,
 	)
+	
+	// Center the banner
+	return lipgloss.NewStyle().
+		Align(lipgloss.Center).
+		Render(banner)
 }
 
-// CloudshipAI branding for bottom right
+// Simple branding text for status bar
 func RenderBranding() string {
 	return lipgloss.NewStyle().
-		Foreground(styles.TextMuted).
+		Foreground(lipgloss.Color("#565f89")). // Tokyo Night muted
 		Italic(true).
-		Render("by the makers of cloudshipai")
+		Render("v1.0.0")
 }
 
 // Version info

@@ -19,12 +19,13 @@ type SettingsModel struct {
 	// UI components
 	inputs        []textinput.Model
 	focusedInput  int
-
+	
 	// State
 	settings      map[string]string
 	editMode      bool
 	settingFields []SettingField
 }
+
 
 type SettingField struct {
 	Key         string
@@ -35,6 +36,7 @@ type SettingField struct {
 	ReadOnly    bool
 	Category    string
 }
+
 
 // Messages for async operations
 type SettingsLoadedMsg struct {
@@ -112,44 +114,7 @@ func (m *SettingsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.SetSize(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "tab", "down":
-			// Move to next editable input
-			m.inputs[m.focusedInput].Blur()
-			for i := m.focusedInput + 1; i < len(m.inputs); i++ {
-				if !m.settingFields[i].ReadOnly {
-					m.focusedInput = i
-					m.inputs[m.focusedInput].Focus()
-					break
-				}
-			}
-			return m, nil
-
-		case "shift+tab", "up":
-			// Move to previous editable input
-			m.inputs[m.focusedInput].Blur()
-			for i := m.focusedInput - 1; i >= 0; i-- {
-				if !m.settingFields[i].ReadOnly {
-					m.focusedInput = i
-					m.inputs[m.focusedInput].Focus()
-					break
-				}
-			}
-			return m, nil
-
-		case "ctrl+s":
-			// Save settings
-			return m, m.saveSettings()
-
-		case "ctrl+r":
-			// Reset to defaults
-			return m, m.resetSettings()
-
-		case "esc":
-			// Cancel editing
-			m.editMode = false
-			return m, nil
-		}
+		return m.handleKeyPress(msg)
 
 	case SettingsLoadedMsg:
 		m.settings = msg.Settings
@@ -165,7 +130,7 @@ func (m *SettingsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.editMode = false
 	}
 
-	// Update focused input
+	// Update focused input for system settings
 	if len(m.inputs) > 0 && m.focusedInput < len(m.inputs) {
 		var cmd tea.Cmd
 		m.inputs[m.focusedInput], cmd = m.inputs[m.focusedInput].Update(msg)
@@ -175,6 +140,56 @@ func (m *SettingsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// handleKeyPress handles keyboard input
+func (m *SettingsModel) handleKeyPress(msg tea.KeyMsg) (TabModel, tea.Cmd) {
+	return m.handleSystemKeys(msg)
+}
+
+// handleSystemKeys handles keys for system settings view
+func (m *SettingsModel) handleSystemKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
+	switch msg.String() {
+	case "tab", "down":
+		// Move to next editable input
+		m.inputs[m.focusedInput].Blur()
+		for i := m.focusedInput + 1; i < len(m.inputs); i++ {
+			if !m.settingFields[i].ReadOnly {
+				m.focusedInput = i
+				m.inputs[m.focusedInput].Focus()
+				break
+			}
+		}
+		return m, nil
+
+	case "shift+tab", "up":
+		// Move to previous editable input
+		m.inputs[m.focusedInput].Blur()
+		for i := m.focusedInput - 1; i >= 0; i-- {
+			if !m.settingFields[i].ReadOnly {
+				m.focusedInput = i
+				m.inputs[m.focusedInput].Focus()
+				break
+			}
+		}
+		return m, nil
+
+	case "ctrl+s":
+		// Save settings
+		return m, m.saveSettings()
+
+	case "ctrl+r":
+		// Reset to defaults
+		return m, m.resetSettings()
+
+	case "esc":
+		// Auto-save settings if any have changed, then exit edit mode
+		cmd := m.saveSettings()
+		m.editMode = false
+		return m, cmd
+	}
+	return m, nil
+}
+
+
 // View renders the settings tab
 func (m SettingsModel) View() string {
 	if m.IsLoading() {
@@ -182,10 +197,10 @@ func (m SettingsModel) View() string {
 	}
 
 	if m.GetError() != "" {
-		return styles.ErrorStyle.Render("Error loading settings: " + m.GetError())
+		return styles.ErrorStyle.Render("Error: " + m.GetError())
 	}
 
-	return m.renderSettingsForm()
+	return m.renderSystemSettings()
 }
 
 // RefreshData reloads settings from database
@@ -211,6 +226,7 @@ func (m SettingsModel) loadSettings() tea.Cmd {
 		return SettingsLoadedMsg{Settings: settings}
 	})
 }
+
 
 // Populate input fields with loaded settings
 func (m *SettingsModel) populateInputs() {
@@ -250,7 +266,7 @@ func (m SettingsModel) renderSettingsForm() string {
 	sections = append(sections, sysInfo)
 
 	// Help text
-	helpText := styles.HelpStyle.Render("• tab/↑↓: navigate • ctrl+s: save • ctrl+r: reset • esc: cancel")
+	helpText := styles.HelpStyle.Render("• tab/↑↓: navigate • ctrl+s: save • ctrl+r: reset • esc: auto-save & exit")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 
@@ -351,6 +367,32 @@ func (m SettingsModel) renderSystemInfo() string {
 	)
 }
 
+// renderSystemSettings renders the system settings view
+func (m SettingsModel) renderSystemSettings() string {
+	var sections []string
+	
+	// Header
+	header := components.RenderSectionHeader("System Settings")
+	sections = append(sections, header)
+	sections = append(sections, "")
+
+	// Settings form
+	form := m.renderForm()
+	sections = append(sections, form)
+
+	// System info section
+	sysInfo := m.renderSystemInfo()
+	sections = append(sections, sysInfo)
+
+	// Help text
+	helpText := styles.HelpStyle.Render("• tab/↑↓: navigate • ctrl+s: save • ctrl+r: reset • esc: auto-save & exit")
+	sections = append(sections, "")
+	sections = append(sections, helpText)
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+
 // Save settings command
 func (m SettingsModel) saveSettings() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
@@ -375,4 +417,22 @@ func (m SettingsModel) resetSettings() tea.Cmd {
 
 		return SettingsLoadedMsg{Settings: defaults}
 	})
+}
+
+// IsMainView returns true if in main view (always true for settings)
+func (m SettingsModel) IsMainView() bool {
+	return true
+}
+
+// Navigation methods (unused for simple settings but required by interface)
+func (m SettingsModel) CanGoBack() bool {
+	return false
+}
+
+func (m *SettingsModel) GoBack() tea.Cmd {
+	return nil
+}
+
+func (m SettingsModel) GetBreadcrumb() string {
+	return "Settings"
 }

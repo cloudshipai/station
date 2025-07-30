@@ -758,7 +758,7 @@ func (m AgentsModel) renderCreateAgentForm() string {
 	sections = append(sections, "")
 	
 	// Help text
-	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: save • esc: cancel")
+	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: save • esc: auto-save & exit")
 	sections = append(sections, helpText)
 	
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -828,7 +828,7 @@ func (m AgentsModel) renderEditAgentForm() string {
 	sections = append(sections, "")
 	
 	// Help text (different for edit)
-	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: update • esc: cancel")
+	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: update • esc: auto-save & exit")
 	sections = append(sections, helpText)
 	
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -1013,7 +1013,20 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	
 	switch msg.String() {
 	case "esc":
-		// Cancel creation and go back to list
+		// Auto-save if form has content, then go back to list
+		nameValue := m.nameInput.Value()
+		descValue := m.descInput.Value()
+		
+		if nameValue != "" || descValue != "" {
+			// Save the agent before exiting
+			cmd := m.createAgent()
+			m.SetViewMode("list")
+			m.GoBack()
+			m.resetCreateForm()
+			return m, cmd
+		}
+		
+		// No content to save, just cancel and go back
 		m.SetViewMode("list")
 		m.GoBack()
 		m.resetCreateForm()
@@ -1169,7 +1182,19 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	
 	switch msg.String() {
 	case "esc":
-		// Cancel edit and go back to detail view
+		// Auto-save changes if form has been modified, then go back to detail view
+		nameValue := m.nameInput.Value()
+		descValue := m.descInput.Value()
+		
+		if nameValue != "" || descValue != "" {
+			// Save the updated agent before exiting 
+			cmd := m.updateAgent()
+			m.SetViewMode("detail")
+			m.GoBack()
+			return m, cmd
+		}
+		
+		// No changes to save, just go back
 		m.SetViewMode("detail")
 		m.GoBack()
 		return m, nil
