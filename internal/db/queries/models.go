@@ -69,12 +69,13 @@ type McpServer struct {
 }
 
 type McpTool struct {
-	ID              int64          `json:"id"`
-	ServerID        int64          `json:"server_id"`
-	ToolName        string         `json:"tool_name"`
-	ToolDescription sql.NullString `json:"tool_description"`
-	ToolSchema      sql.NullString `json:"tool_schema"`
-	CreatedAt       sql.NullTime   `json:"created_at"`
+	ID            int64          `json:"id"`
+	McpServerID   int64          `json:"mcp_server_id"`
+	Name          string         `json:"name"`
+	Description   sql.NullString `json:"description"`
+	InputSchema   sql.NullString `json:"input_schema"`
+	CreatedAt     sql.NullTime   `json:"created_at"`
+	UpdatedAt     sql.NullTime   `json:"updated_at"`
 }
 
 type Model struct {

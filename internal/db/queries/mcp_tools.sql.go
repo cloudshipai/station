@@ -11,39 +11,39 @@ import (
 )
 
 const createMCPTool = `-- name: CreateMCPTool :one
-INSERT INTO mcp_tools (server_id, tool_name, tool_description, tool_schema)
+INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema)
 VALUES (?, ?, ?, ?)
-RETURNING id, server_id, tool_name, tool_description, tool_schema, created_at
+RETURNING id, mcp_server_id, name, description, input_schema, created_at
 `
 
 type CreateMCPToolParams struct {
-	ServerID        int64          `json:"server_id"`
-	ToolName        string         `json:"tool_name"`
-	ToolDescription sql.NullString `json:"tool_description"`
-	ToolSchema      sql.NullString `json:"tool_schema"`
+	McpServerID int64          `json:"mcp_server_id"`
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	InputSchema sql.NullString `json:"input_schema"`
 }
 
 func (q *Queries) CreateMCPTool(ctx context.Context, arg CreateMCPToolParams) (McpTool, error) {
 	row := q.db.QueryRowContext(ctx, createMCPTool,
-		arg.ServerID,
-		arg.ToolName,
-		arg.ToolDescription,
-		arg.ToolSchema,
+		arg.McpServerID,
+		arg.Name,
+		arg.Description,
+		arg.InputSchema,
 	)
 	var i McpTool
 	err := row.Scan(
 		&i.ID,
-		&i.ServerID,
-		&i.ToolName,
-		&i.ToolDescription,
-		&i.ToolSchema,
+		&i.McpServerID,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const deleteMCPToolsByServer = `-- name: DeleteMCPToolsByServer :exec
-DELETE FROM mcp_tools WHERE server_id = ?
+DELETE FROM mcp_tools WHERE mcp_server_id = ?
 `
 
 func (q *Queries) DeleteMCPToolsByServer(ctx context.Context, serverID int64) error {
@@ -52,7 +52,7 @@ func (q *Queries) DeleteMCPToolsByServer(ctx context.Context, serverID int64) er
 }
 
 const getMCPTool = `-- name: GetMCPTool :one
-SELECT id, server_id, tool_name, tool_description, tool_schema, created_at FROM mcp_tools WHERE id = ?
+SELECT id, mcp_server_id, name, description, input_schema, created_at, updated_at FROM mcp_tools WHERE id = ?
 `
 
 func (q *Queries) GetMCPTool(ctx context.Context, id int64) (McpTool, error) {
@@ -60,23 +60,24 @@ func (q *Queries) GetMCPTool(ctx context.Context, id int64) (McpTool, error) {
 	var i McpTool
 	err := row.Scan(
 		&i.ID,
-		&i.ServerID,
-		&i.ToolName,
-		&i.ToolDescription,
-		&i.ToolSchema,
+		&i.McpServerID,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const listMCPToolsByEnvironment = `-- name: ListMCPToolsByEnvironment :many
-SELECT t.id, t.server_id, t.tool_name, t.tool_description, t.tool_schema, t.created_at FROM mcp_tools t
-JOIN mcp_servers s ON t.server_id = s.id
+SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
+JOIN mcp_servers s ON t.mcp_server_id = s.id
 JOIN mcp_configs c ON s.config_id = c.id
 WHERE c.environment_id = ? AND c.version = (
     SELECT MAX(mc.version) FROM mcp_configs mc WHERE mc.environment_id = c.environment_id
 )
-ORDER BY s.server_name, t.tool_name
+ORDER BY s.name, t.name
 `
 
 func (q *Queries) ListMCPToolsByEnvironment(ctx context.Context, environmentID int64) ([]McpTool, error) {
@@ -90,11 +91,12 @@ func (q *Queries) ListMCPToolsByEnvironment(ctx context.Context, environmentID i
 		var i McpTool
 		if err := rows.Scan(
 			&i.ID,
-			&i.ServerID,
-			&i.ToolName,
-			&i.ToolDescription,
-			&i.ToolSchema,
+			&i.McpServerID,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -110,7 +112,7 @@ func (q *Queries) ListMCPToolsByEnvironment(ctx context.Context, environmentID i
 }
 
 const listMCPToolsByServer = `-- name: ListMCPToolsByServer :many
-SELECT id, server_id, tool_name, tool_description, tool_schema, created_at FROM mcp_tools WHERE server_id = ? ORDER BY tool_name
+SELECT id, mcp_server_id, name, description, input_schema, created_at, updated_at FROM mcp_tools WHERE mcp_server_id = ? ORDER BY name
 `
 
 func (q *Queries) ListMCPToolsByServer(ctx context.Context, serverID int64) ([]McpTool, error) {
@@ -124,11 +126,12 @@ func (q *Queries) ListMCPToolsByServer(ctx context.Context, serverID int64) ([]M
 		var i McpTool
 		if err := rows.Scan(
 			&i.ID,
-			&i.ServerID,
-			&i.ToolName,
-			&i.ToolDescription,
-			&i.ToolSchema,
+			&i.McpServerID,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -144,13 +147,13 @@ func (q *Queries) ListMCPToolsByServer(ctx context.Context, serverID int64) ([]M
 }
 
 const listMCPToolsByServerInEnvironment = `-- name: ListMCPToolsByServerInEnvironment :many
-SELECT t.id, t.server_id, t.tool_name, t.tool_description, t.tool_schema, t.created_at FROM mcp_tools t
-JOIN mcp_servers s ON t.server_id = s.id
+SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
+JOIN mcp_servers s ON t.mcp_server_id = s.id
 JOIN mcp_configs c ON s.config_id = c.id
 WHERE c.environment_id = ? AND s.server_name = ? AND c.version = (
     SELECT MAX(mc.version) FROM mcp_configs mc WHERE mc.environment_id = c.environment_id
 )
-ORDER BY t.tool_name
+ORDER BY t.name
 `
 
 type ListMCPToolsByServerInEnvironmentParams struct {
@@ -169,11 +172,12 @@ func (q *Queries) ListMCPToolsByServerInEnvironment(ctx context.Context, arg Lis
 		var i McpTool
 		if err := rows.Scan(
 			&i.ID,
-			&i.ServerID,
-			&i.ToolName,
-			&i.ToolDescription,
-			&i.ToolSchema,
+			&i.McpServerID,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

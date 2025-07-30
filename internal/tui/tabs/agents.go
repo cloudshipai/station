@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	
@@ -40,15 +41,19 @@ type AgentsModel struct {
 	
 	// Create form state
 	environments    []models.Environment
-	availableTools  []models.MCPTool
+	availableTools  []models.MCPToolWithDetails  // Changed to include environment/config info
 	selectedEnvID   int64
 	selectedToolIDs []int64
 	focusedField    AgentFormField
-	toolCursor      int  // Track which tool is currently highlighted
+	toolCursor      int    // Track which tool is currently highlighted
+	toolsOffset     int    // Track scroll position in tools list
+	toolsFilter     string // Filter text for tools
+	isFiltering     bool   // Whether we're in filter mode
 	
 	// Detail view state
 	actionButtonIndex int  // Track which action button is selected (0=Run, 1=Edit, 2=Delete)
 	assignedTools     []models.AgentToolWithDetails  // Tools assigned to selected agent
+	detailsViewport   viewport.Model  // Viewport for scrollable agent details
 }
 
 type AgentFormField int
@@ -160,7 +165,7 @@ type AgentsEnvironmentsLoadedMsg struct {
 }
 
 type AgentsToolsLoadedMsg struct {
-	Tools []models.MCPTool
+	Tools []models.MCPToolWithDetails
 }
 
 type AgentToolsLoadedMsg struct {
@@ -199,17 +204,24 @@ func NewAgentsModel(database db.Database) *AgentsModel {
 	
 	promptArea := textarea.New()
 	promptArea.Placeholder = "Enter system prompt for the agent..."
-	promptArea.SetWidth(60)
-	promptArea.SetHeight(4)
+	promptArea.SetWidth(80)  // Wider for right column
+	promptArea.SetHeight(12) // Much taller for better editing
+	
+	// Initialize viewport for details view
+	detailsViewport := viewport.New(80, 20)
+	detailsViewport.Style = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.TextMuted)
 	
 	return &AgentsModel{
-		BaseTabModel: NewBaseTabModel(database, "Agents"),
-		list:         l,
-		repos:        repos,
-		nameInput:    nameInput,
-		descInput:    descInput,
-		promptArea:   promptArea,
-		focusedField: AgentFieldName,
+		BaseTabModel:    NewBaseTabModel(database, "Agents"),
+		list:            l,
+		repos:           repos,
+		nameInput:       nameInput,
+		descInput:       descInput,
+		promptArea:      promptArea,
+		focusedField:    AgentFieldName,
+		detailsViewport: detailsViewport,
 	}
 }
 
@@ -230,13 +242,17 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 		m.list.SetSize(msg.Width-4, msg.Height-8) // Account for borders and header
+		// Update viewport size for details view
+		m.detailsViewport.Width = msg.Width - 4
+		m.detailsViewport.Height = msg.Height - 8
 		
 	case tea.KeyMsg:
 		
-		// Handle back navigation first
+		// Handle back navigation first (but only for ESC, not backspace in forms)
 		switch msg.String() {
-		case "esc", "backspace":
-			if m.CanGoBack() {
+		case "esc":
+			// Only handle ESC for navigation if we're NOT in a form
+			if m.CanGoBack() && m.GetViewMode() != "create" && m.GetViewMode() != "edit" {
 				m.GoBack()
 				m.selectedAgent = nil
 				m.actionButtonIndex = 0  // Reset button selection
@@ -261,6 +277,7 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 						m.PushNavigation(item.agent.Name)
 						m.SetViewMode("detail")
 						m.actionButtonIndex = 0  // Start with first button selected
+						m.detailsViewport.GotoTop()  // Reset scroll position
 						return m, m.loadAgentTools(item.agent.ID)  // Load assigned tools
 					}
 				}
@@ -370,6 +387,12 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	cmds = append(cmds, cmd)
+	
+	// Update viewport component when in detail view
+	if m.GetViewMode() == "detail" {
+		m.detailsViewport, cmd = m.detailsViewport.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 	
 	return m, tea.Batch(cmds...)
 }
@@ -538,14 +561,14 @@ func (m AgentsModel) renderBreadcrumb() string {
 }
 
 // Render agent details view
-func (m AgentsModel) renderAgentDetails() string {
+func (m *AgentsModel) renderAgentDetails() string {
 	if m.selectedAgent == nil {
 		return styles.ErrorStyle.Render("No agent selected")
 	}
 	
 	agent := m.selectedAgent
 	
-	// Agent details layout
+	// Simple single-column layout
 	var sections []string
 	
 	// Header
@@ -558,12 +581,13 @@ func (m AgentsModel) renderAgentDetails() string {
 	sections = append(sections, header)
 	sections = append(sections, "")
 	
+	
 	// Basic info
 	info := m.renderAgentInfo(agent)
 	sections = append(sections, info)
 	
-	// Prompt preview
-	prompt := m.renderPromptPreview(agent)
+	// System prompt
+	prompt := m.renderFullPrompt(agent)
 	sections = append(sections, prompt)
 	
 	// Assigned tools
@@ -575,40 +599,56 @@ func (m AgentsModel) renderAgentDetails() string {
 	sections = append(sections, actions)
 	
 	// Help instructions
-	helpText := styles.HelpStyle.Render("• ←/→ or h/l: navigate buttons • enter: execute • r: run • d: delete • esc: back")
+	helpText := styles.HelpStyle.Render("• ↑/↓ or j/k: scroll • ←/→ or h/l: navigate buttons • enter: execute • r: run • d: delete • esc: back")
 	backText := styles.HelpStyle.Render("Press ESC to go back to list")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 	sections = append(sections, backText)
 	
-	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+	// Simple vertical layout - return directly without viewport for now
+	fullContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
+	
+	// Return content directly (viewport causes display issues)
+	return fullContent
 }
 
 // Render agent basic information
 func (m AgentsModel) renderAgentInfo(agent *models.Agent) string {
-	fields := []string{
-		fmt.Sprintf("ID: %d", agent.ID),
-		fmt.Sprintf("Description: %s", agent.Description),
-		fmt.Sprintf("Environment ID: %d", agent.EnvironmentID),
-		fmt.Sprintf("Max Steps: %d", agent.MaxSteps),
-		fmt.Sprintf("Created: %s", agent.CreatedAt.Format("Jan 2, 2006 15:04")),
-		fmt.Sprintf("Updated: %s", agent.UpdatedAt.Format("Jan 2, 2006 15:04")),
-		fmt.Sprintf("Created By: User %d", agent.CreatedBy),
+	// Compact info display like in the list view
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+	
+	// First line: Description
+	descLine := agent.Description
+	if descLine == "" {
+		descLine = "No description"
 	}
 	
-	content := strings.Join(fields, "\n")
+	// Second line: compact details with bullet separators
+	createdAt := agent.CreatedAt.Format("Jan 2, 2006")
+	detailsLine := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		mutedStyle.Render(fmt.Sprintf("ID: %d • ", agent.ID)),
+		mutedStyle.Render(fmt.Sprintf("Env: %d • ", agent.EnvironmentID)),
+		mutedStyle.Render(fmt.Sprintf("Max steps: %d • ", agent.MaxSteps)),
+		mutedStyle.Render(fmt.Sprintf("Created: %s", createdAt)),
+	)
 	
-	return styles.WithBorder(lipgloss.NewStyle()).
-		Width(60).
-		Padding(1).
-		Render(content)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		descLine,
+		detailsLine,
+		"", // Add some spacing
+	)
 }
 
 // Render prompt preview
 func (m AgentsModel) renderPromptPreview(agent *models.Agent) string {
 	prompt := agent.Prompt
-	if len(prompt) > 200 {
-		prompt = prompt[:200] + "..."
+	
+	// Truncate very long prompts for preview
+	maxLength := 500
+	if len(prompt) > maxLength {
+		prompt = prompt[:maxLength] + "..."
 	}
 	
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
@@ -621,9 +661,26 @@ func (m AgentsModel) renderPromptPreview(agent *models.Agent) string {
 	
 	return styles.WithBorder(lipgloss.NewStyle()).
 		Width(60).
-		Height(8).
 		Padding(1).
 		Render(content)
+}
+
+// Render full system prompt for right column in details view
+func (m AgentsModel) renderFullPrompt(agent *models.Agent) string {
+	prompt := agent.Prompt
+	if prompt == "" {
+		prompt = "No system prompt configured"
+	}
+	
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		styles.HeaderStyle.Render("System Prompt:"),
+		mutedStyle.Render(prompt),
+		"", // Add spacing after prompt
+	)
+	
+	return content
 }
 
 // Render assigned tools section
@@ -657,10 +714,7 @@ func (m AgentsModel) renderAssignedTools() string {
 	
 	content := lipgloss.JoinVertical(lipgloss.Left, toolsList...)
 	
-	return styles.WithBorder(lipgloss.NewStyle()).
-		Width(60).
-		Padding(1).
-		Render(content)
+	return content
 }
 
 // Render agent action buttons
@@ -694,14 +748,13 @@ func (m AgentsModel) renderAgentActions() string {
 	)
 }
 
-// Render create agent form
+// Render create agent form with two-column layout
 func (m AgentsModel) renderCreateAgentForm() string {
-	var sections []string
-	
 	// Header
 	header := components.RenderSectionHeader("Create New Agent")
-	sections = append(sections, header)
-	sections = append(sections, "")
+	
+	// LEFT COLUMN - Basic fields and tools
+	var leftColumn []string
 	
 	// Name field
 	nameLabel := "Name:"
@@ -709,8 +762,8 @@ func (m AgentsModel) renderCreateAgentForm() string {
 		nameLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Name:")
 	}
 	nameSection := lipgloss.JoinVertical(lipgloss.Left, nameLabel, m.nameInput.View())
-	sections = append(sections, nameSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, nameSection)
+	leftColumn = append(leftColumn, "")
 	
 	// Description field
 	descLabel := "Description:"
@@ -718,8 +771,8 @@ func (m AgentsModel) renderCreateAgentForm() string {
 		descLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Description:")
 	}
 	descSection := lipgloss.JoinVertical(lipgloss.Left, descLabel, m.descInput.View())
-	sections = append(sections, descSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, descSection)
+	leftColumn = append(leftColumn, "")
 	
 	// Environment selection
 	envLabel := "Environment:"
@@ -736,17 +789,8 @@ func (m AgentsModel) renderCreateAgentForm() string {
 		}
 	}
 	envSection := lipgloss.JoinVertical(lipgloss.Left, envLabel, styles.BaseStyle.Render("▶ "+envName))
-	sections = append(sections, envSection)
-	sections = append(sections, "")
-	
-	// System prompt
-	promptLabel := "System Prompt:"
-	if m.focusedField == AgentFieldPrompt {
-		promptLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("System Prompt:")
-	}
-	promptSection := lipgloss.JoinVertical(lipgloss.Left, promptLabel, m.promptArea.View())
-	sections = append(sections, promptSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, envSection)
+	leftColumn = append(leftColumn, "")
 	
 	// Tools selection
 	toolsLabel := "Available Tools:"
@@ -754,24 +798,60 @@ func (m AgentsModel) renderCreateAgentForm() string {
 		toolsLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Available Tools:")
 	}
 	toolsSection := m.renderToolsSelection(toolsLabel)
-	sections = append(sections, toolsSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, toolsSection)
+	
+	// RIGHT COLUMN - System prompt (takes up majority of space)
+	var rightColumn []string
+	
+	// System prompt
+	promptLabel := "System Prompt:"
+	if m.focusedField == AgentFieldPrompt {
+		promptLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("System Prompt:")
+	}
+	promptSection := lipgloss.JoinVertical(lipgloss.Left, promptLabel, m.promptArea.View())
+	rightColumn = append(rightColumn, promptSection)
+	
+	// Combine columns
+	leftColumnContent := lipgloss.JoinVertical(lipgloss.Left, leftColumn...)
+	rightColumnContent := lipgloss.JoinVertical(lipgloss.Left, rightColumn...)
+	
+	// Style columns with appropriate widths
+	leftColumnStyled := lipgloss.NewStyle().
+		Width(50).  // Left column: ~50 chars
+		Render(leftColumnContent)
+	
+	rightColumnStyled := lipgloss.NewStyle().
+		Width(85).  // Right column: ~85 chars (majority of space)
+		Render(rightColumnContent)
+	
+	// Join columns horizontally
+	columnsContent := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		leftColumnStyled,
+		"  ", // Small gap between columns
+		rightColumnStyled,
+	)
 	
 	// Help text
 	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: save • esc: auto-save & exit")
-	sections = append(sections, helpText)
 	
-	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+	// Combine all sections
+	return lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		"",
+		columnsContent,
+		"",
+		helpText,
+	)
 }
 
-// Render edit agent form (same as create but with different header and save text)
+// Render edit agent form with two-column layout (same as create but with different header)
 func (m AgentsModel) renderEditAgentForm() string {
-	var sections []string
-	
 	// Header
 	header := components.RenderSectionHeader("Edit Agent")
-	sections = append(sections, header)
-	sections = append(sections, "")
+	
+	// LEFT COLUMN - Basic fields and tools
+	var leftColumn []string
 	
 	// Name field
 	nameLabel := "Name:"
@@ -779,8 +859,8 @@ func (m AgentsModel) renderEditAgentForm() string {
 		nameLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Name:")
 	}
 	nameSection := lipgloss.JoinVertical(lipgloss.Left, nameLabel, m.nameInput.View())
-	sections = append(sections, nameSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, nameSection)
+	leftColumn = append(leftColumn, "")
 	
 	// Description field
 	descLabel := "Description:"
@@ -788,8 +868,8 @@ func (m AgentsModel) renderEditAgentForm() string {
 		descLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Description:")
 	}
 	descSection := lipgloss.JoinVertical(lipgloss.Left, descLabel, m.descInput.View())
-	sections = append(sections, descSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, descSection)
+	leftColumn = append(leftColumn, "")
 	
 	// Environment selection
 	envLabel := "Environment:"
@@ -806,17 +886,8 @@ func (m AgentsModel) renderEditAgentForm() string {
 		}
 	}
 	envSection := lipgloss.JoinVertical(lipgloss.Left, envLabel, styles.BaseStyle.Render("▶ "+envName))
-	sections = append(sections, envSection)
-	sections = append(sections, "")
-	
-	// System prompt
-	promptLabel := "System Prompt:"
-	if m.focusedField == AgentFieldPrompt {
-		promptLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("System Prompt:")
-	}
-	promptSection := lipgloss.JoinVertical(lipgloss.Left, promptLabel, m.promptArea.View())
-	sections = append(sections, promptSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, envSection)
+	leftColumn = append(leftColumn, "")
 	
 	// Tools selection
 	toolsLabel := "Available Tools:"
@@ -824,63 +895,169 @@ func (m AgentsModel) renderEditAgentForm() string {
 		toolsLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Available Tools:")
 	}
 	toolsSection := m.renderToolsSelection(toolsLabel)
-	sections = append(sections, toolsSection)
-	sections = append(sections, "")
+	leftColumn = append(leftColumn, toolsSection)
+	
+	// RIGHT COLUMN - System prompt (takes up majority of space)
+	var rightColumn []string
+	
+	// System prompt
+	promptLabel := "System Prompt:"
+	if m.focusedField == AgentFieldPrompt {
+		promptLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("System Prompt:")
+	}
+	promptSection := lipgloss.JoinVertical(lipgloss.Left, promptLabel, m.promptArea.View())
+	rightColumn = append(rightColumn, promptSection)
+	
+	// Combine columns
+	leftColumnContent := lipgloss.JoinVertical(lipgloss.Left, leftColumn...)
+	rightColumnContent := lipgloss.JoinVertical(lipgloss.Left, rightColumn...)
+	
+	// Style columns with appropriate widths
+	leftColumnStyled := lipgloss.NewStyle().
+		Width(50).  // Left column: ~50 chars
+		Render(leftColumnContent)
+	
+	rightColumnStyled := lipgloss.NewStyle().
+		Width(85).  // Right column: ~85 chars (majority of space)
+		Render(rightColumnContent)
+	
+	// Join columns horizontally
+	columnsContent := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		leftColumnStyled,
+		"  ", // Small gap between columns
+		rightColumnStyled,
+	)
 	
 	// Help text (different for edit)
 	helpText := styles.HelpStyle.Render("• tab: next field • ↑/↓: navigate • space: select tools • ctrl+s: update • esc: auto-save & exit")
-	sections = append(sections, helpText)
 	
-	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+	// Combine all sections
+	return lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		"",
+		columnsContent,
+		"",
+		helpText,
+	)
 }
 
-// Render tools selection section
+// Render tools selection section with scrolling, filtering, and environment info
 func (m AgentsModel) renderToolsSelection(label string) string {
 	var toolsList []string
 	toolsList = append(toolsList, label)
 	toolsList = append(toolsList, "")
 	
+	// Show filter input if in filtering mode
+	if m.isFiltering {
+		filterLabel := lipgloss.NewStyle().Foreground(styles.Primary).Render("Filter: /" + m.toolsFilter)
+		toolsList = append(toolsList, filterLabel)
+		toolsList = append(toolsList, "")
+	}
+	
 	if len(m.availableTools) == 0 {
 		toolsList = append(toolsList, styles.BaseStyle.Render("No tools available"))
 	} else {
-		// Show first few tools with selection status
-		maxShow := 5
-		for i, tool := range m.availableTools {
-			if i >= maxShow {
-				remaining := len(m.availableTools) - maxShow
-				toolsList = append(toolsList, styles.BaseStyle.Render(fmt.Sprintf("... and %d more tools", remaining)))
-				break
+		// Filter tools based on search text
+		filteredTools := m.getFilteredTools()
+		
+		if len(filteredTools) == 0 {
+			toolsList = append(toolsList, styles.BaseStyle.Render("No tools match filter"))
+		} else {
+			// Calculate visible range with scrolling
+			maxShow := 4  // Reduced to fit in left column properly
+			start := m.toolsOffset
+			end := start + maxShow
+			if end > len(filteredTools) {
+				end = len(filteredTools)
 			}
 			
-			// Check if tool is selected
-			selected := false
-			for _, selectedID := range m.selectedToolIDs {
-				if selectedID == tool.ID {
-					selected = true
-					break
+			// Show scroll indicator at top if needed
+			if start > 0 {
+				toolsList = append(toolsList, styles.BaseStyle.Render("↑ ... more tools above"))
+			}
+			
+			// Show visible tools
+			for i := start; i < end; i++ {
+				tool := filteredTools[i]
+				
+				// Check if tool is selected
+				selected := false
+				for _, selectedID := range m.selectedToolIDs {
+					if selectedID == tool.ID {
+						selected = true
+						break
+					}
+				}
+				
+				prefix := "☐ "
+				if selected {
+					prefix = "☑ "
+				}
+				
+				// Enhanced display with MCP server, environment, and config info
+				serverInfo := fmt.Sprintf("server: %s", tool.ServerName)
+				envInfo := fmt.Sprintf("env: %s", tool.EnvironmentName)
+				configInfo := fmt.Sprintf("config: %s v%d", tool.ConfigName, tool.ConfigVersion)
+				
+				toolLine := fmt.Sprintf("%s%s", prefix, tool.Name)
+				
+				// Two line format: tool name + server info on first line, env/config on second
+				line1 := fmt.Sprintf("%s - %s", toolLine, serverInfo) 
+				line2 := fmt.Sprintf("   %s | %s", styles.BaseStyle.Foreground(styles.TextMuted).Render(envInfo), styles.BaseStyle.Foreground(styles.TextMuted).Render(configInfo))
+				
+				// Highlight current cursor position when in tools field
+				if m.focusedField == AgentFieldTools && m.toolCursor == i {
+					toolsList = append(toolsList, styles.ListItemSelectedStyle.Render("▶ "+line1))
+					toolsList = append(toolsList, styles.ListItemSelectedStyle.Render("  "+line2))
+				} else {
+					toolsList = append(toolsList, styles.BaseStyle.Render("  "+line1))
+					toolsList = append(toolsList, styles.BaseStyle.Render("  "+line2))
 				}
 			}
 			
-			prefix := "☐ "
-			if selected {
-				prefix = "☑ "
-			}
-			
-			toolLine := fmt.Sprintf("%s%s - %s", prefix, tool.Name, tool.Description)
-			if len(toolLine) > 50 {
-				toolLine = toolLine[:50] + "..."
-			}
-			
-			// Highlight current cursor position when in tools field
-			if m.focusedField == AgentFieldTools && i == m.toolCursor {
-				toolsList = append(toolsList, styles.ListItemSelectedStyle.Render("▶ "+toolLine))
-			} else {
-				toolsList = append(toolsList, styles.BaseStyle.Render("  "+toolLine))
+			// Show scroll indicator at bottom if needed
+			if end < len(filteredTools) {
+				remaining := len(filteredTools) - end
+				toolsList = append(toolsList, styles.BaseStyle.Render(fmt.Sprintf("↓ ... %d more tools below", remaining)))
 			}
 		}
 	}
 	
+	// Add filter help text
+	if !m.isFiltering {
+		filterHelp := styles.HelpStyle.Render("Press / to filter tools")
+		toolsList = append(toolsList, "")
+		toolsList = append(toolsList, filterHelp)
+	} else {
+		filterHelp := styles.HelpStyle.Render("Press ESC to clear filter")
+		toolsList = append(toolsList, "")
+		toolsList = append(toolsList, filterHelp)
+	}
+	
 	return lipgloss.JoinVertical(lipgloss.Left, toolsList...)
+}
+
+// Get filtered tools based on current filter text
+func (m AgentsModel) getFilteredTools() []models.MCPToolWithDetails {
+	if m.toolsFilter == "" {
+		return m.availableTools
+	}
+	
+	var filtered []models.MCPToolWithDetails
+	filterLower := strings.ToLower(m.toolsFilter)
+	
+	for _, tool := range m.availableTools {
+		// Search in tool name, description, environment name, and config name
+		if strings.Contains(strings.ToLower(tool.Name), filterLower) ||
+		   strings.Contains(strings.ToLower(tool.Description), filterLower) ||
+		   strings.Contains(strings.ToLower(tool.EnvironmentName), filterLower) ||
+		   strings.Contains(strings.ToLower(tool.ConfigName), filterLower) {
+			filtered = append(filtered, tool)
+		}
+	}
+	
+	return filtered
 }
 
 // Navigation interface implementation
@@ -935,20 +1112,15 @@ func (m AgentsModel) loadEnvironments() tea.Cmd {
 // Load available tools from database
 func (m AgentsModel) loadTools() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		var allTools []*models.MCPTool
-		
-		// Get tools from all environments
-		for _, env := range m.environments {
-			tools, err := m.repos.MCPTools.GetByEnvironmentID(env.ID)
-			if err != nil {
-				continue // Skip this environment on error
-			}
-			allTools = append(allTools, tools...)
+		// Get all tools with details (includes environment and config names)
+		toolsWithDetails, err := m.repos.MCPTools.GetAllWithDetails()
+		if err != nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("failed to load tools: %w", err)}
 		}
 		
-		// Convert from []*models.MCPTool to []models.MCPTool
-		var mcpTools []models.MCPTool
-		for _, tool := range allTools {
+		// Convert from []*models.MCPToolWithDetails to []models.MCPToolWithDetails
+		var mcpTools []models.MCPToolWithDetails
+		for _, tool := range toolsWithDetails {
 			mcpTools = append(mcpTools, *tool)
 		}
 		
@@ -996,7 +1168,21 @@ func (m *AgentsModel) populateEditForm() {
 	m.nameInput.SetValue(m.selectedAgent.Name)
 	m.descInput.SetValue(m.selectedAgent.Description)
 	m.promptArea.SetValue(m.selectedAgent.Prompt)
+	
+	// Set environment ID, but default to first available if agent's environment doesn't exist
 	m.selectedEnvID = m.selectedAgent.EnvironmentID
+	validEnv := false
+	for _, env := range m.environments {
+		if env.ID == m.selectedAgent.EnvironmentID {
+			validEnv = true
+			break
+		}
+	}
+	if !validEnv && len(m.environments) > 0 {
+		// Agent's environment doesn't exist, default to first available environment
+		m.selectedEnvID = m.environments[0].ID
+	}
+	
 	m.focusedField = AgentFieldName
 	m.toolCursor = 0
 	
@@ -1010,6 +1196,32 @@ func (m *AgentsModel) populateEditForm() {
 // Handle key events in create form
 func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	var cmds []tea.Cmd
+	
+	// Handle filter mode when in tools section first
+	if m.focusedField == AgentFieldTools && m.isFiltering {
+		switch msg.String() {
+		case "esc":
+			// Exit filter mode
+			m.isFiltering = false
+			m.toolsFilter = ""
+			m.toolCursor = 0 // Reset cursor when exiting filter
+			return m, nil
+		case "backspace":
+			// Remove last character from filter
+			if len(m.toolsFilter) > 0 {
+				m.toolsFilter = m.toolsFilter[:len(m.toolsFilter)-1]
+				m.toolCursor = 0 // Reset cursor when filter changes
+			}
+			return m, nil
+		default:
+			// Add character to filter (only printable characters)
+			if len(msg.String()) == 1 && msg.String() >= " " && msg.String() <= "~" {
+				m.toolsFilter += msg.String()
+				m.toolCursor = 0 // Reset cursor when filter changes
+				return m, nil
+			}
+		}
+	}
 	
 	switch msg.String() {
 	case "esc":
@@ -1052,9 +1264,14 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			}
 			return m, nil
 		} else if m.focusedField == AgentFieldTools {
-			// Navigate tool selection up
-			if len(m.availableTools) > 0 && m.toolCursor > 0 {
+			// Navigate tool selection up (work with filtered tools)
+			filteredTools := m.getFilteredTools()
+			if len(filteredTools) > 0 && m.toolCursor > 0 {
 				m.toolCursor--
+				// Update scroll offset if cursor goes above visible area
+				if m.toolCursor < m.toolsOffset {
+					m.toolsOffset = m.toolCursor
+				}
 			}
 			return m, nil
 		}
@@ -1070,18 +1287,25 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			}
 			return m, nil
 		} else if m.focusedField == AgentFieldTools {
-			// Navigate tool selection down
-			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools)-1 {
+			// Navigate tool selection down (work with filtered tools)
+			filteredTools := m.getFilteredTools()
+			if len(filteredTools) > 0 && m.toolCursor < len(filteredTools)-1 {
 				m.toolCursor++
+				// Update scroll offset if cursor goes below visible area
+				maxShow := 4  // Must match the display maxShow
+				if m.toolCursor >= m.toolsOffset + maxShow {
+					m.toolsOffset = m.toolCursor - maxShow + 1
+				}
 			}
 			return m, nil
 		}
 		
 	case " ":
 		if m.focusedField == AgentFieldTools {
-			// Toggle tool selection
-			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools) {
-				toolID := m.availableTools[m.toolCursor].ID
+			// Toggle tool selection (work with filtered tools)
+			filteredTools := m.getFilteredTools()
+			if len(filteredTools) > 0 && m.toolCursor < len(filteredTools) {
+				toolID := filteredTools[m.toolCursor].ID
 				
 				// Check if tool is already selected
 				found := false
@@ -1099,6 +1323,14 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 					m.selectedToolIDs = append(m.selectedToolIDs, toolID)
 				}
 			}
+			return m, nil
+		}
+		
+	case "/":
+		if m.focusedField == AgentFieldTools && !m.isFiltering {
+			// Enter filter mode
+			m.isFiltering = true
+			m.toolsFilter = ""
 			return m, nil
 		}
 	}
@@ -1123,6 +1355,92 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 // Handle key events in detail view
 func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	switch msg.String() {
+	case "up", "k":
+		// Scroll up in details view using viewport
+		m.detailsViewport.LineUp(1)
+		// Debug: Force content refresh
+		if m.selectedAgent != nil {
+			agent := m.selectedAgent
+			var sections []string
+			primaryStyle := lipgloss.NewStyle().Foreground(styles.Primary).Bold(true)
+			header := lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				styles.HeaderStyle.Render("Agent Details: "),
+				primaryStyle.Render(agent.Name),
+			)
+			sections = append(sections, header)
+			sections = append(sections, "")
+			info := m.renderAgentInfo(agent)
+			sections = append(sections, info)
+			prompt := m.renderPromptPreview(agent)
+			sections = append(sections, prompt)
+			assignedTools := m.renderAssignedTools()
+			sections = append(sections, assignedTools)
+			actions := m.renderAgentActions()
+			sections = append(sections, actions)
+			helpText := styles.HelpStyle.Render("• ↑/↓ or j/k: scroll • ←/→ or h/l: navigate buttons • enter: execute • r: run • d: delete • esc: back")
+			backText := styles.HelpStyle.Render("Press ESC to go back to list")
+			sections = append(sections, "")
+			sections = append(sections, helpText)
+			sections = append(sections, backText)
+			fullContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
+			m.detailsViewport.SetContent(fullContent)
+		}
+		return m, nil
+		
+	case "down", "j":
+		// Scroll down in details view using viewport
+		m.detailsViewport.LineDown(1)
+		// Debug: Force content refresh
+		if m.selectedAgent != nil {
+			agent := m.selectedAgent
+			var sections []string
+			primaryStyle := lipgloss.NewStyle().Foreground(styles.Primary).Bold(true)
+			header := lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				styles.HeaderStyle.Render("Agent Details: "),
+				primaryStyle.Render(agent.Name),
+			)
+			sections = append(sections, header)
+			sections = append(sections, "")
+			info := m.renderAgentInfo(agent)
+			sections = append(sections, info)
+			prompt := m.renderPromptPreview(agent)
+			sections = append(sections, prompt)
+			assignedTools := m.renderAssignedTools()
+			sections = append(sections, assignedTools)
+			actions := m.renderAgentActions()
+			sections = append(sections, actions)
+			helpText := styles.HelpStyle.Render("• ↑/↓ or j/k: scroll • ←/→ or h/l: navigate buttons • enter: execute • r: run • d: delete • esc: back")
+			backText := styles.HelpStyle.Render("Press ESC to go back to list")
+			sections = append(sections, "")
+			sections = append(sections, helpText)
+			sections = append(sections, backText)
+			fullContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
+			m.detailsViewport.SetContent(fullContent)
+		}
+		return m, nil
+		
+	case "pgup", "b":
+		// Scroll up one page
+		m.detailsViewport.HalfViewUp()
+		return m, nil
+		
+	case "pgdown", "f":
+		// Scroll down one page
+		m.detailsViewport.HalfViewDown()
+		return m, nil
+		
+	case "g":
+		// Go to top
+		m.detailsViewport.GotoTop()
+		return m, nil
+		
+	case "G":
+		// Go to bottom
+		m.detailsViewport.GotoBottom()
+		return m, nil
+		
 	case "left", "h":
 		// Navigate left through action buttons
 		if m.actionButtonIndex > 0 {
@@ -1171,6 +1489,15 @@ func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			return m, m.deleteAgent(m.selectedAgent.ID)
 		}
 		return m, nil
+		
+	case "esc":
+		// Go back to list view
+		if m.CanGoBack() {
+			m.GoBack()
+			m.selectedAgent = nil
+			m.actionButtonIndex = 0
+		}
+		return m, nil
 	}
 	
 	return m, nil
@@ -1179,6 +1506,32 @@ func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 // Handle key events in edit form (same as create form but saves updates)
 func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	var cmds []tea.Cmd
+	
+	// Handle filter mode when in tools section first
+	if m.focusedField == AgentFieldTools && m.isFiltering {
+		switch msg.String() {
+		case "esc":
+			// Exit filter mode
+			m.isFiltering = false
+			m.toolsFilter = ""
+			m.toolCursor = 0 // Reset cursor when exiting filter
+			return m, nil
+		case "backspace":
+			// Remove last character from filter
+			if len(m.toolsFilter) > 0 {
+				m.toolsFilter = m.toolsFilter[:len(m.toolsFilter)-1]
+				m.toolCursor = 0 // Reset cursor when filter changes
+			}
+			return m, nil
+		default:
+			// Add character to filter (only printable characters)
+			if len(msg.String()) == 1 && msg.String() >= " " && msg.String() <= "~" {
+				m.toolsFilter += msg.String()
+				m.toolCursor = 0 // Reset cursor when filter changes
+				return m, nil
+			}
+		}
+	}
 	
 	switch msg.String() {
 	case "esc":
@@ -1219,9 +1572,14 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			}
 			return m, nil
 		} else if m.focusedField == AgentFieldTools {
-			// Navigate tool selection up
-			if len(m.availableTools) > 0 && m.toolCursor > 0 {
+			// Navigate tool selection up (work with filtered tools)
+			filteredTools := m.getFilteredTools()
+			if len(filteredTools) > 0 && m.toolCursor > 0 {
 				m.toolCursor--
+				// Update scroll offset if cursor goes above visible area
+				if m.toolCursor < m.toolsOffset {
+					m.toolsOffset = m.toolCursor
+				}
 			}
 			return m, nil
 		}
@@ -1237,18 +1595,25 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			}
 			return m, nil
 		} else if m.focusedField == AgentFieldTools {
-			// Navigate tool selection down
-			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools)-1 {
+			// Navigate tool selection down (work with filtered tools)
+			filteredTools := m.getFilteredTools()
+			if len(filteredTools) > 0 && m.toolCursor < len(filteredTools)-1 {
 				m.toolCursor++
+				// Update scroll offset if cursor goes below visible area
+				maxShow := 4  // Must match the display maxShow
+				if m.toolCursor >= m.toolsOffset + maxShow {
+					m.toolsOffset = m.toolCursor - maxShow + 1
+				}
 			}
 			return m, nil
 		}
 		
 	case " ":
 		if m.focusedField == AgentFieldTools {
-			// Toggle tool selection
-			if len(m.availableTools) > 0 && m.toolCursor < len(m.availableTools) {
-				toolID := m.availableTools[m.toolCursor].ID
+			// Toggle tool selection (work with filtered tools)
+			filteredTools := m.getFilteredTools()
+			if len(filteredTools) > 0 && m.toolCursor < len(filteredTools) {
+				toolID := filteredTools[m.toolCursor].ID
 				
 				// Check if tool is already selected
 				found := false
@@ -1266,6 +1631,14 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 					m.selectedToolIDs = append(m.selectedToolIDs, toolID)
 				}
 			}
+			return m, nil
+		}
+		
+	case "/":
+		if m.focusedField == AgentFieldTools && !m.isFiltering {
+			// Enter filter mode
+			m.isFiltering = true
+			m.toolsFilter = ""
 			return m, nil
 		}
 	}

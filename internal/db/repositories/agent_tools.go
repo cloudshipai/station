@@ -84,12 +84,12 @@ func (r *AgentToolRepo) RemoveByToolIDsTx(tx *sql.Tx, toolIDs []int64) error {
 
 func (r *AgentToolRepo) List(agentID int64) ([]*models.AgentToolWithDetails, error) {
 	query := `SELECT at.id, at.agent_id, at.tool_id, at.created_at, 
-					 t.tool_name, t.tool_description, t.tool_schema, s.server_name
+					 t.name as tool_name, t.description as tool_description, t.input_schema as tool_schema, s.name as server_name
 			  FROM agent_tools at
 			  JOIN mcp_tools t ON at.tool_id = t.id
-			  JOIN mcp_servers s ON t.server_id = s.id
+			  JOIN mcp_servers s ON t.mcp_server_id = s.id
 			  WHERE at.agent_id = ?
-			  ORDER BY s.server_name, t.tool_name`
+			  ORDER BY s.name, t.name`
 	
 	rows, err := r.db.Query(query, agentID)
 	if err != nil {
