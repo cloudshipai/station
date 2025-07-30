@@ -7,12 +7,12 @@ RETURNING *;
 DELETE FROM agent_tools WHERE agent_id = ? AND tool_id = ?;
 
 -- name: ListAgentTools :many
-SELECT at.*, t.tool_name, t.tool_description, t.tool_schema, s.server_name
+SELECT at.*, t.name as tool_name, t.description as tool_description, t.input_schema as tool_schema, s.name as server_name
 FROM agent_tools at
 JOIN mcp_tools t ON at.tool_id = t.id
-JOIN mcp_servers s ON t.server_id = s.id
+JOIN mcp_servers s ON t.mcp_server_id = s.id
 WHERE at.agent_id = ?
-ORDER BY s.server_name, t.tool_name;
+ORDER BY s.name, t.name;
 
 -- name: ClearAgentTools :exec
 DELETE FROM agent_tools WHERE agent_id = ?;

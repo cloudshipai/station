@@ -1,5 +1,5 @@
 -- name: CreateMCPTool :one
-INSERT INTO mcp_tools (server_id, tool_name, tool_description, tool_schema)
+INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema)
 VALUES (?, ?, ?, ?)
 RETURNING *;
 
@@ -7,7 +7,7 @@ RETURNING *;
 SELECT * FROM mcp_tools WHERE id = ?;
 
 -- name: ListMCPToolsByServer :many
-SELECT * FROM mcp_tools WHERE server_id = ? ORDER BY tool_name;
+SELECT * FROM mcp_tools WHERE mcp_server_id = ? ORDER BY name;
 
 -- name: ListMCPToolsByEnvironment :many
 SELECT t.* FROM mcp_tools t
