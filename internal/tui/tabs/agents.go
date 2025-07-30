@@ -53,6 +53,7 @@ type AgentsModel struct {
 	// Detail view state
 	actionButtonIndex int  // Track which action button is selected (0=Run, 1=Edit, 2=Delete)
 	assignedTools     []models.AgentToolWithDetails  // Tools assigned to selected agent
+	detailsScrollOffset int // Manual scroll offset for agent details
 	detailsViewport   viewport.Model  // Viewport for scrollable agent details
 }
 
@@ -277,7 +278,7 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 						m.PushNavigation(item.agent.Name)
 						m.SetViewMode("detail")
 						m.actionButtonIndex = 0  // Start with first button selected
-						m.detailsViewport.GotoTop()  // Reset scroll position
+						m.detailsScrollOffset = 0  // Reset scroll position
 						return m, m.loadAgentTools(item.agent.ID)  // Load assigned tools
 					}
 				}
@@ -605,11 +606,40 @@ func (m *AgentsModel) renderAgentDetails() string {
 	sections = append(sections, helpText)
 	sections = append(sections, backText)
 	
-	// Simple vertical layout - return directly without viewport for now
+	// Simple vertical layout - return directly (viewport causes display issues)
 	fullContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	
-	// Return content directly (viewport causes display issues)
-	return fullContent
+	// Manual scrolling implementation
+	lines := strings.Split(fullContent, "\n")
+	
+	// Get terminal height and calculate available space for content
+	maxHeight := m.height - 4 // Account for borders and header
+	if maxHeight < 10 {
+		maxHeight = 10 // Minimum height
+	}
+	
+	// Apply scroll offset
+	startLine := m.detailsScrollOffset
+	endLine := startLine + maxHeight
+	
+	if startLine < 0 {
+		startLine = 0
+		m.detailsScrollOffset = 0
+	}
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+	if startLine >= len(lines) {
+		startLine = len(lines) - maxHeight
+		if startLine < 0 {
+			startLine = 0
+		}
+		m.detailsScrollOffset = startLine
+	}
+	
+	// Get visible lines
+	visibleLines := lines[startLine:endLine]
+	return strings.Join(visibleLines, "\n")
 }
 
 // Render agent basic information
@@ -1002,17 +1032,22 @@ func (m AgentsModel) renderToolsSelection(label string) string {
 				
 				toolLine := fmt.Sprintf("%s%s", prefix, tool.Name)
 				
-				// Two line format: tool name + server info on first line, env/config on second
-				line1 := fmt.Sprintf("%s - %s", toolLine, serverInfo) 
-				line2 := fmt.Sprintf("   %s | %s", styles.BaseStyle.Foreground(styles.TextMuted).Render(envInfo), styles.BaseStyle.Foreground(styles.TextMuted).Render(configInfo))
-				
 				// Highlight current cursor position when in tools field
-				if m.focusedField == AgentFieldTools && m.toolCursor == i {
-					toolsList = append(toolsList, styles.ListItemSelectedStyle.Render("▶ "+line1))
-					toolsList = append(toolsList, styles.ListItemSelectedStyle.Render("  "+line2))
+				// m.toolCursor is the absolute index in filteredTools, i is also absolute index
+				isCursorHere := m.focusedField == AgentFieldTools && m.toolCursor == i
+				
+				if isCursorHere {
+					// Full highlighting for selected item - apply style to entire lines with single arrow
+					line1 := fmt.Sprintf("▶ %s - %s", toolLine, serverInfo)
+					line2 := fmt.Sprintf("     %s | %s", envInfo, configInfo)
+					toolsList = append(toolsList, styles.ListItemSelectedStyle.Width(48).Render(line1))
+					toolsList = append(toolsList, styles.ListItemSelectedStyle.Width(48).Render(line2))
 				} else {
-					toolsList = append(toolsList, styles.BaseStyle.Render("  "+line1))
-					toolsList = append(toolsList, styles.BaseStyle.Render("  "+line2))
+					// Normal display with muted colors for metadata
+					line1 := fmt.Sprintf("  %s - %s", toolLine, serverInfo)
+					line2 := fmt.Sprintf("     %s | %s", styles.BaseStyle.Foreground(styles.TextMuted).Render(envInfo), styles.BaseStyle.Foreground(styles.TextMuted).Render(configInfo))
+					toolsList = append(toolsList, styles.BaseStyle.Render(line1))
+					toolsList = append(toolsList, styles.BaseStyle.Render(line2))
 				}
 			}
 			
@@ -1300,7 +1335,7 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			return m, nil
 		}
 		
-	case " ":
+	case " ", "enter":
 		if m.focusedField == AgentFieldTools {
 			// Toggle tool selection (work with filtered tools)
 			filteredTools := m.getFilteredTools()
@@ -1356,89 +1391,48 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
-		// Scroll up in details view using viewport
-		m.detailsViewport.LineUp(1)
-		// Debug: Force content refresh
-		if m.selectedAgent != nil {
-			agent := m.selectedAgent
-			var sections []string
-			primaryStyle := lipgloss.NewStyle().Foreground(styles.Primary).Bold(true)
-			header := lipgloss.JoinHorizontal(
-				lipgloss.Left,
-				styles.HeaderStyle.Render("Agent Details: "),
-				primaryStyle.Render(agent.Name),
-			)
-			sections = append(sections, header)
-			sections = append(sections, "")
-			info := m.renderAgentInfo(agent)
-			sections = append(sections, info)
-			prompt := m.renderPromptPreview(agent)
-			sections = append(sections, prompt)
-			assignedTools := m.renderAssignedTools()
-			sections = append(sections, assignedTools)
-			actions := m.renderAgentActions()
-			sections = append(sections, actions)
-			helpText := styles.HelpStyle.Render("• ↑/↓ or j/k: scroll • ←/→ or h/l: navigate buttons • enter: execute • r: run • d: delete • esc: back")
-			backText := styles.HelpStyle.Render("Press ESC to go back to list")
-			sections = append(sections, "")
-			sections = append(sections, helpText)
-			sections = append(sections, backText)
-			fullContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
-			m.detailsViewport.SetContent(fullContent)
+		// Scroll up in details view (simple manual scrolling)
+		if m.detailsScrollOffset > 0 {
+			m.detailsScrollOffset--
 		}
 		return m, nil
 		
 	case "down", "j":
-		// Scroll down in details view using viewport
-		m.detailsViewport.LineDown(1)
-		// Debug: Force content refresh
-		if m.selectedAgent != nil {
-			agent := m.selectedAgent
-			var sections []string
-			primaryStyle := lipgloss.NewStyle().Foreground(styles.Primary).Bold(true)
-			header := lipgloss.JoinHorizontal(
-				lipgloss.Left,
-				styles.HeaderStyle.Render("Agent Details: "),
-				primaryStyle.Render(agent.Name),
-			)
-			sections = append(sections, header)
-			sections = append(sections, "")
-			info := m.renderAgentInfo(agent)
-			sections = append(sections, info)
-			prompt := m.renderPromptPreview(agent)
-			sections = append(sections, prompt)
-			assignedTools := m.renderAssignedTools()
-			sections = append(sections, assignedTools)
-			actions := m.renderAgentActions()
-			sections = append(sections, actions)
-			helpText := styles.HelpStyle.Render("• ↑/↓ or j/k: scroll • ←/→ or h/l: navigate buttons • enter: execute • r: run • d: delete • esc: back")
-			backText := styles.HelpStyle.Render("Press ESC to go back to list")
-			sections = append(sections, "")
-			sections = append(sections, helpText)
-			sections = append(sections, backText)
-			fullContent := lipgloss.JoinVertical(lipgloss.Left, sections...)
-			m.detailsViewport.SetContent(fullContent)
-		}
+		// Scroll down in details view (simple manual scrolling)
+		m.detailsScrollOffset++
 		return m, nil
 		
 	case "pgup", "b":
-		// Scroll up one page
-		m.detailsViewport.HalfViewUp()
+		// Scroll up one page (half screen)
+		maxHeight := m.height - 4
+		if maxHeight < 10 {
+			maxHeight = 10
+		}
+		pageSize := maxHeight / 2
+		m.detailsScrollOffset -= pageSize
+		if m.detailsScrollOffset < 0 {
+			m.detailsScrollOffset = 0
+		}
 		return m, nil
 		
 	case "pgdown", "f":
-		// Scroll down one page
-		m.detailsViewport.HalfViewDown()
+		// Scroll down one page (half screen)
+		maxHeight := m.height - 4
+		if maxHeight < 10 {
+			maxHeight = 10
+		}
+		pageSize := maxHeight / 2
+		m.detailsScrollOffset += pageSize
 		return m, nil
 		
 	case "g":
 		// Go to top
-		m.detailsViewport.GotoTop()
+		m.detailsScrollOffset = 0
 		return m, nil
 		
 	case "G":
-		// Go to bottom
-		m.detailsViewport.GotoBottom()
+		// Go to bottom (will be clamped in render function)
+		m.detailsScrollOffset = 9999
 		return m, nil
 		
 	case "left", "h":
@@ -1608,7 +1602,7 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			return m, nil
 		}
 		
-	case " ":
+	case " ", "enter":
 		if m.focusedField == AgentFieldTools {
 			// Toggle tool selection (work with filtered tools)
 			filteredTools := m.getFilteredTools()
