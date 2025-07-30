@@ -186,7 +186,7 @@ func (m MCPModel) renderEditor() string {
 	sections = append(sections, m.configEditor.View())
 	
 	// Simple help text
-	helpText := styles.HelpStyle.Render("tab: switch • enter: save/load version • ctrl+s: save • ctrl+r: refresh tools • esc: cancel")
+	helpText := styles.HelpStyle.Render("tab: switch • enter: save/load version • ctrl+s: save • ctrl+r: refresh tools • esc: auto-save & exit")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 	
