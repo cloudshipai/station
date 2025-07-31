@@ -1,12 +1,15 @@
 package tabs
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	
@@ -14,6 +17,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
+	"station/pkg/models"
 )
 
 // RunsModel represents the agent runs history tab
@@ -21,15 +25,20 @@ type RunsModel struct {
 	BaseTabModel
 	
 	// UI components
-	table table.Model
+	list     list.Model
+	viewport viewport.Model
 	
 	// Data access
 	repos *repositories.Repositories
 	
 	// State
-	runs         []AgentRunDisplay
-	selectedRun  *AgentRunDisplay
-	viewMode     RunViewMode
+	runs           []AgentRunDisplay
+	selectedRun    *AgentRunDisplay
+	fullRunData    *models.AgentRunWithDetails  // Full data with tool calls
+	viewMode       RunViewMode
+	showToolCalls  bool
+	outputSelected bool
+	expandedScrollOffset int  // Scroll position for expanded output view
 }
 
 type RunViewMode int
@@ -37,6 +46,7 @@ type RunViewMode int
 const (
 	RunModeList RunViewMode = iota
 	RunModeDetails
+	RunModeExpandedOutput
 )
 
 type AgentRunDisplay struct {
@@ -49,6 +59,55 @@ type AgentRunDisplay struct {
 	Error       string
 	Output      string
 	StepsCount  int
+}
+
+// RunItem implements list.Item interface for bubbles list component
+type RunItem struct {
+	run AgentRunDisplay
+}
+
+// Required by list.Item interface
+func (i RunItem) FilterValue() string {
+	return strings.Join([]string{
+		i.run.ID,
+		i.run.AgentName,
+		i.run.Status,
+		i.run.User,
+	}, " ")
+}
+
+// Required by list.DefaultItem interface
+func (i RunItem) Title() string {
+	// Status indicator
+	statusStyle := styles.BaseStyle
+	switch i.run.Status {
+	case "completed":
+		statusStyle = styles.SuccessStyle
+	case "failed":
+		statusStyle = styles.ErrorStyle
+	case "running":
+		statusStyle = styles.BaseStyle.Foreground(lipgloss.Color("11")) // Yellow
+	case "cancelled":
+		statusStyle = styles.BaseStyle.Foreground(styles.TextMuted)
+	}
+	
+	return lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		statusStyle.Render("● "),
+		styles.BaseStyle.Render(fmt.Sprintf("%s - %s", i.run.ID, i.run.AgentName)),
+	)
+}
+
+func (i RunItem) Description() string {
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+	return lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		mutedStyle.Render(fmt.Sprintf("Status: %s • ", i.run.Status)),
+		mutedStyle.Render(fmt.Sprintf("Started: %s • ", i.run.StartedAt)),
+		mutedStyle.Render(fmt.Sprintf("Duration: %s • ", i.run.Duration)),
+		mutedStyle.Render(fmt.Sprintf("User: %s • ", i.run.User)),
+		mutedStyle.Render(fmt.Sprintf("Steps: %d", i.run.StepsCount)),
+	)
 }
 
 // Custom key bindings for runs
@@ -84,33 +143,35 @@ type RunCancelledMsg struct {
 	RunID string
 }
 
+type RunDataLoadedMsg struct {
+	RunData *models.AgentRunWithDetails
+}
+
 // NewRunsModel creates a new runs model
 func NewRunsModel(database db.Database) *RunsModel {
 	repos := repositories.New(database)
-	// Create table with columns
-	columns := []table.Column{
-		{Title: "ID", Width: 6},
-		{Title: "Agent", Width: 20},
-		{Title: "Status", Width: 12},
-		{Title: "Started", Width: 16},
-		{Title: "Duration", Width: 10},
-		{Title: "User", Width: 12},
-	}
 	
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithFocused(true),
-	)
+	// Create list with custom styling
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = styles.ListItemSelectedStyle
+	delegate.Styles.SelectedDesc = styles.ListItemSelectedStyle
+	delegate.Styles.NormalTitle = styles.ListItemStyle
+	delegate.Styles.NormalDesc = styles.ListItemStyle
 	
-	// Apply styling
-	s := table.DefaultStyles()
-	s.Header = styles.TableHeaderStyle
-	s.Selected = styles.TableSelectedStyle
-	t.SetStyles(s)
+	l := list.New([]list.Item{}, delegate, 0, 0)
+	l.Title = "Agent Runs"
+	l.Styles.Title = styles.HeaderStyle
+	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(styles.TextMuted)
+	l.Styles.HelpStyle = styles.HelpStyle
+	
+	// Create viewport for expanded output
+	vp := viewport.New(80, 20)
+	vp.Style = styles.WithBorder(lipgloss.NewStyle()).Padding(1)
 	
 	return &RunsModel{
 		BaseTabModel: NewBaseTabModel(database, "Runs"),
-		table:        t,
+		list:         l,
+		viewport:     vp,
 		repos:        repos,
 	}
 }
@@ -127,8 +188,9 @@ func (m *RunsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
-		m.table.SetWidth(msg.Width - 4)
-		m.table.SetHeight(msg.Height - 8)
+		// Update list size based on the content area dimensions calculated by TUI
+		// Reserve space for section header and help text (approximately 4 lines)
+		m.list.SetSize(m.width-4, m.height-4)
 		
 	case tea.KeyMsg:
 		switch m.viewMode {
@@ -136,11 +198,53 @@ func (m *RunsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 			return m.handleListKeys(msg)
 		case RunModeDetails:
 			return m.handleDetailsKeys(msg)
+		case RunModeExpandedOutput:
+			// Handle all keys for expanded output mode
+			switch msg.String() {
+			case "esc":
+				m.viewMode = RunModeDetails
+				m.expandedScrollOffset = 0 // Reset scroll position
+				return m, nil
+			case "t":
+				// Toggle tool calls display
+				m.showToolCalls = !m.showToolCalls
+				return m, nil
+			case "j", "down":
+				// Scroll down
+				m.expandedScrollOffset++
+				return m, nil
+			case "k", "up":
+				// Scroll up
+				if m.expandedScrollOffset > 0 {
+					m.expandedScrollOffset--
+				}
+				return m, nil
+			case "g":
+				// Go to top
+				m.expandedScrollOffset = 0
+				return m, nil
+			case "G":
+				// Go to bottom (will be adjusted in render function)
+				m.expandedScrollOffset = 9999
+				return m, nil
+			case "ctrl+d":
+				// Page down
+				m.expandedScrollOffset += 10
+				return m, nil
+			case "ctrl+u":
+				// Page up
+				m.expandedScrollOffset -= 10
+				if m.expandedScrollOffset < 0 {
+					m.expandedScrollOffset = 0
+				}
+				return m, nil
+			}
+			return m, nil
 		}
 		
 	case RunsLoadedMsg:
 		m.runs = msg.Runs
-		m.updateTableRows()
+		m.updateListItems()
 		m.SetLoading(false)
 		
 	case RunCancelledMsg:
@@ -151,16 +255,28 @@ func (m *RunsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				break
 			}
 		}
-		m.updateTableRows()
+		m.updateListItems()
+		
+	case RunDataLoadedMsg:
+		// Handle loaded run data
+		m.fullRunData = msg.RunData
+		// Update viewport content when entering expanded mode
+		if m.viewMode == RunModeExpandedOutput {
+			m.updateViewportContent()
+		}
 	}
 	
-	// Update table
+	// Update components based on current mode
 	var cmd tea.Cmd
-	m.table, cmd = m.table.Update(msg)
-	cmds = append(cmds, cmd)
+	if m.viewMode != RunModeExpandedOutput {
+		// Update list when not in expanded output mode (expanded uses manual scrolling)
+		m.list, cmd = m.list.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 	
 	return m, tea.Batch(cmds...)
 }
+
 
 // Handle key presses in list mode
 func (m *RunsModel) handleListKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
@@ -169,9 +285,8 @@ func (m *RunsModel) handleListKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keyMap.showDetails):
 		if len(m.runs) > 0 {
-			selectedIdx := m.table.Cursor()
-			if selectedIdx < len(m.runs) {
-				m.selectedRun = &m.runs[selectedIdx]
+			if item, ok := m.list.SelectedItem().(RunItem); ok {
+				m.selectedRun = &item.run
 				m.viewMode = RunModeDetails
 			}
 		}
@@ -182,27 +297,23 @@ func (m *RunsModel) handleListKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		
 	case key.Matches(msg, keyMap.cancel):
 		if len(m.runs) > 0 {
-			selectedIdx := m.table.Cursor()
-			if selectedIdx < len(m.runs) {
-				run := m.runs[selectedIdx]
-				if run.Status == "running" {
-					return m, m.cancelRun(run.ID)
+			if item, ok := m.list.SelectedItem().(RunItem); ok {
+				if item.run.Status == "running" {
+					return m, m.cancelRun(item.run.ID)
 				}
 			}
 		}
 		return m, nil
 		
-	// Add vim-style navigation keys
+	// Add vim-style navigation keys - let list handle them
 	case msg.String() == "j" || msg.String() == "down":
-		// Move down in the table
 		var cmd tea.Cmd
-		m.table, cmd = m.table.Update(msg)
+		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 		
 	case msg.String() == "k" || msg.String() == "up":
-		// Move up in the table
 		var cmd tea.Cmd
-		m.table, cmd = m.table.Update(msg)
+		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 	}
 	
@@ -212,9 +323,27 @@ func (m *RunsModel) handleListKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 // Handle key presses in details mode
 func (m *RunsModel) handleDetailsKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "enter":
+	case "esc":
 		m.viewMode = RunModeList
 		m.selectedRun = nil
+		m.outputSelected = false
+		return m, nil
+	case "enter":
+		if m.outputSelected {
+			// Enter expanded output view
+			m.viewMode = RunModeExpandedOutput
+			m.expandedScrollOffset = 0  // Reset scroll position
+			return m, m.loadFullRunData()
+		} else {
+			// Go back to list
+			m.viewMode = RunModeList
+			m.selectedRun = nil
+			m.outputSelected = false
+			return m, nil
+		}
+	case "tab":
+		// Toggle output selection
+		m.outputSelected = !m.outputSelected
 		return m, nil
 	}
 	return m, nil
@@ -229,6 +358,8 @@ func (m RunsModel) View() string {
 	switch m.viewMode {
 	case RunModeDetails:
 		return m.renderRunDetails()
+	case RunModeExpandedOutput:
+		return m.renderExpandedOutput()
 	default:
 		return m.renderRunsList()
 	}
@@ -237,13 +368,13 @@ func (m RunsModel) View() string {
 // Render runs list view
 func (m RunsModel) renderRunsList() string {
 	header := components.RenderSectionHeader(fmt.Sprintf("Agent Execution History (%d runs)", len(m.runs)))
-	tableView := m.table.View()
+	listView := m.list.View()
 	helpText := styles.HelpStyle.Render("• ↑/↓: navigate • enter: view details • r: refresh • d: cancel running")
 	
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		tableView,
+		listView,
 		"",
 		helpText,
 	)
@@ -285,7 +416,13 @@ func (m RunsModel) renderRunDetails() string {
 	}
 	
 	// Back instruction
-	backText := styles.HelpStyle.Render("Press enter or esc to go back to list")
+	var helpText string
+	if m.outputSelected {
+		helpText = "• enter: expand output • tab: deselect • esc: back to list"
+	} else {
+		helpText = "• tab: select output • enter/esc: back to list"
+	}
+	backText := styles.HelpStyle.Render(helpText)
 	sections = append(sections, "")
 	sections = append(sections, backText)
 	
@@ -314,20 +451,53 @@ func (m RunsModel) renderRunInfo(run *AgentRunDisplay) string {
 
 // Render run output preview
 func (m RunsModel) renderRunOutput(run *AgentRunDisplay) string {
-	output := run.Output
-	if len(output) > 300 {
-		output = output[:300] + "..."
+	// Create header with selection indicator
+	headerText := "Output Preview:"
+	if m.outputSelected {
+		headerText = "► Output Preview: (press enter to expand)"
+	} else {
+		headerText = "Output Preview: (press tab to select)"
 	}
 	
+	// Calculate available lines for output content within the box
+	// Box height is 10, minus padding (2), border (2), header (1), spacing (1) = 4 lines for content
+	availableLines := 4
+	
+	// Split output into lines and truncate to fit
+	output := run.Output
+	lines := strings.Split(output, "\n")
+	
+	if len(lines) > availableLines {
+		lines = lines[:availableLines]
+		// Add truncation indicator on the last line
+		if len(lines) > 0 {
+			lines[len(lines)-1] += "..."
+		}
+	}
+	
+	truncatedOutput := strings.Join(lines, "\n")
+	
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+	
+	// Apply selection styling
+	outputStyle := mutedStyle
+	if m.outputSelected {
+		outputStyle = mutedStyle.Background(lipgloss.Color("235"))
+	}
+	
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
-		styles.HeaderStyle.Render("Output Preview:"),
+		styles.HeaderStyle.Render(headerText),
 		"",
-		mutedStyle.Render(output),
+		outputStyle.Render(truncatedOutput),
 	)
 	
-	return styles.WithBorder(lipgloss.NewStyle()).
+	borderStyle := styles.WithBorder(lipgloss.NewStyle())
+	if m.outputSelected {
+		borderStyle = borderStyle.BorderForeground(styles.Primary)
+	}
+	
+	return borderStyle.
 		Width(60).
 		Height(10).
 		Padding(1).
@@ -416,20 +586,15 @@ func calculateDuration(startedAt time.Time, completedAt *time.Time) string {
 	}
 }
 
-// Update table rows from runs data
-func (m *RunsModel) updateTableRows() {
-	rows := make([]table.Row, len(m.runs))
+// Update list items from runs data
+func (m *RunsModel) updateListItems() {
+	items := make([]list.Item, len(m.runs))
 	for i, run := range m.runs {
-		rows[i] = table.Row{
-			run.ID,
-			run.AgentName,
-			run.Status,
-			run.StartedAt,
-			run.Duration,
-			run.User,
-		}
+		items[i] = RunItem{run: run}
 	}
-	m.table.SetRows(rows)
+	// Debug: log list items count
+	log.Printf("DEBUG: Setting %d items in runs list", len(items))
+	m.list.SetItems(items)
 }
 
 // Cancel/stop a running agent
@@ -441,8 +606,175 @@ func (m RunsModel) cancelRun(runID string) tea.Cmd {
 	})
 }
 
+// Load full run data with tool calls and execution steps
+func (m *RunsModel) loadFullRunData() tea.Cmd {
+	if m.selectedRun == nil {
+		return nil
+	}
+	
+	return tea.Cmd(func() tea.Msg {
+		// Extract run ID from the display ID (e.g., "run-123" -> 123)
+		var runID int64
+		fmt.Sscanf(m.selectedRun.ID, "run-%d", &runID)
+		
+		// Get full run data from database
+		run, err := m.repos.AgentRuns.GetByIDWithDetails(runID)
+		if err != nil {
+			return nil
+		}
+		
+		return RunDataLoadedMsg{RunData: run}
+	})
+}
+
+// updateViewportContent updates the viewport with current content
+func (m *RunsModel) updateViewportContent() {
+	if m.fullRunData == nil {
+		m.viewport.SetContent("Loading run data...\n\nPlease wait while we fetch the complete run information from the database.")
+		return
+	}
+	
+	// Build full content without truncation
+	var content strings.Builder
+	
+	content.WriteString("=== Final Response ===\n\n")
+	if m.fullRunData.FinalResponse != "" {
+		content.WriteString(m.fullRunData.FinalResponse)
+	} else {
+		content.WriteString("[No response content]")
+	}
+	
+	// Add tool calls info if enabled
+	if m.showToolCalls && m.fullRunData.ToolCalls != nil {
+		content.WriteString("\n\n=== Tool Calls ===\n\n")
+		// Parse tool calls JSON
+		var toolCalls []models.ToolCall
+		if m.fullRunData.ToolCalls != nil {
+			for _, item := range *m.fullRunData.ToolCalls {
+				if toolCallData, err := json.Marshal(item); err == nil {
+					var toolCall models.ToolCall
+					if json.Unmarshal(toolCallData, &toolCall) == nil {
+						toolCalls = append(toolCalls, toolCall)
+					}
+				}
+			}
+		}
+		
+		for i, toolCall := range toolCalls {
+			content.WriteString(fmt.Sprintf("%d. %s_%s\n", i+1, toolCall.ServerName, toolCall.ToolName))
+			if toolCall.Error != "" {
+				content.WriteString(fmt.Sprintf("   Error: %s\n", toolCall.Error))
+			}
+		}
+	}
+	
+	m.viewport.SetContent(content.String())
+}
+
+// Render expanded output view using manual scrolling (viewport causes display issues)
+func (m *RunsModel) renderExpandedOutput() string {
+	if m.selectedRun == nil {
+		return styles.ErrorStyle.Render("No run selected")
+	}
+	
+	run := m.selectedRun
+	
+	// Build header
+	primaryStyle := lipgloss.NewStyle().Foreground(styles.Primary).Bold(true)
+	header := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		styles.HeaderStyle.Render("Full Output: "),
+		primaryStyle.Render(run.ID),
+	)
+	
+	// Build content
+	var content strings.Builder
+	content.WriteString("=== Final Response ===\n\n")
+	if m.fullRunData != nil && m.fullRunData.FinalResponse != "" {
+		content.WriteString(m.fullRunData.FinalResponse)
+	} else {
+		content.WriteString("Loading run data...\n\nPlease wait while we fetch the complete run information from the database.")
+	}
+	
+	// Add tool calls info if enabled
+	if m.showToolCalls && m.fullRunData != nil && m.fullRunData.ToolCalls != nil {
+		content.WriteString("\n\n=== Tool Calls ===\n\n")
+		// Parse tool calls JSON (same logic as before)
+		var toolCalls []models.ToolCall
+		if m.fullRunData.ToolCalls != nil {
+			for _, item := range *m.fullRunData.ToolCalls {
+				if toolCallData, err := json.Marshal(item); err == nil {
+					var toolCall models.ToolCall
+					if json.Unmarshal(toolCallData, &toolCall) == nil {
+						toolCalls = append(toolCalls, toolCall)
+					}
+				}
+			}
+		}
+		
+		for i, toolCall := range toolCalls {
+			content.WriteString(fmt.Sprintf("%d. %s_%s\n", i+1, toolCall.ServerName, toolCall.ToolName))
+			if toolCall.Error != "" {
+				content.WriteString(fmt.Sprintf("   Error: %s\n", toolCall.Error))
+			}
+		}
+	}
+	
+	// Build help text
+	var helpText string
+	if m.showToolCalls {
+		helpText = "• j/k/↑↓: scroll • t: hide tool calls • g/G: top/bottom • esc: back to details"
+	} else {
+		helpText = "• j/k/↑↓: scroll • t: show tool calls • g/G: top/bottom • esc: back to details"
+	}
+	footer := styles.HelpStyle.Render(helpText)
+	
+	// Simple vertical layout - manual scrolling implementation (following agents tab pattern)
+	fullContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		"", // spacing
+		content.String(),
+		"", // spacing  
+		footer,
+	)
+	
+	// Manual scrolling implementation
+	lines := strings.Split(fullContent, "\n")
+	
+	// Get available height and calculate scrollable area
+	maxHeight := m.height - 2 // Account for minimal padding
+	if maxHeight < 5 {
+		maxHeight = 5 // Minimum height
+	}
+	
+	// Apply scroll offset
+	startLine := m.expandedScrollOffset
+	endLine := startLine + maxHeight
+	
+	if startLine < 0 {
+		startLine = 0
+		m.expandedScrollOffset = 0
+	}
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+	if startLine >= len(lines) {
+		startLine = len(lines) - maxHeight
+		if startLine < 0 {
+			startLine = 0
+		}
+		m.expandedScrollOffset = startLine
+	}
+	
+	// Return scrolled content
+	visibleLines := lines[startLine:endLine]
+	return strings.Join(visibleLines, "\n")
+}
+
 // IsMainView returns true if in main list view
 func (m RunsModel) IsMainView() bool {
-	// Use the base implementation for reliable navigation
-	return m.BaseTabModel.IsMainView()
+	// Only return true if we're in the main list view
+	// This prevents global tab navigation from consuming tab keys in detail views
+	return m.viewMode == RunModeList
 }
