@@ -146,7 +146,7 @@ func (s *MCPConfigService) RotateEncryptionKeys() error {
 }
 
 // processConfig extracts servers and tools from the config and stores them
-func (s *MCPConfigService) processConfig(configID int64, configData *models.MCPConfigData) error {
+func (s *MCPConfigService) processConfig(configID int64, environmentID int64, configData *models.MCPConfigData) error {
 	// Clear existing servers and tools for this config (in case of update)
 	if err := s.clearConfigServersAndTools(configID); err != nil {
 		return fmt.Errorf("failed to clear existing servers: %w", err)
@@ -156,7 +156,7 @@ func (s *MCPConfigService) processConfig(configID int64, configData *models.MCPC
 	for serverName, serverConfig := range configData.Servers {
 		// Create server record
 		mcpServer := &models.MCPServer{
-			MCPConfigID: configID,
+			EnvironmentID: environmentID,
 			Name:        serverName,
 			Command:     serverConfig.Command,
 			Args:        serverConfig.Args,
@@ -182,7 +182,7 @@ func (s *MCPConfigService) processConfig(configID int64, configData *models.MCPC
 // clearConfigServersAndTools removes existing servers and tools for a config
 func (s *MCPConfigService) clearConfigServersAndTools(configID int64) error {
 	// Get all servers for this config
-	servers, err := s.repos.MCPServers.GetByConfigID(configID)
+	servers, err := s.repos.MCPServers.GetByEnvironmentID(configID)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (s *MCPConfigService) clearConfigServersAndTools(configID int64) error {
 	}
 
 	// Delete the servers
-	return s.repos.MCPServers.DeleteByConfigID(configID)
+	return s.repos.MCPServers.DeleteByEnvironmentID(configID)
 }
 
 // discoverAndStoreTools connects to an MCP server and discovers its tools

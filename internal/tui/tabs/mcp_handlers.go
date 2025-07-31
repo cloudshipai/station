@@ -256,7 +256,7 @@ func (m *MCPModel) handleSaveConfig() (TabModel, tea.Cmd) {
 		errorMsg := fmt.Sprintf("Invalid JSON: %v", err)
 		m.SetError(errorMsg)
 		// Return error to prevent saving
-		return m, tea.Printf("❌ " + errorMsg)
+		return m, tea.Printf("❌ %s", errorMsg)
 	}
 	
 	// Validate that the JSON contains the required structure
@@ -269,7 +269,7 @@ func (m *MCPModel) handleSaveConfig() (TabModel, tea.Cmd) {
 		errorMsg := "Invalid config format: must contain 'mcpServers' or 'servers' field"
 		log.Printf("DEBUG: Config structure validation failed: %s", errorMsg)
 		m.SetError(errorMsg)
-		return m, tea.Printf("❌ " + errorMsg)
+		return m, tea.Printf("❌ %s", errorMsg)
 	}
 	
 	// Validate that there's at least one server
@@ -277,7 +277,7 @@ func (m *MCPModel) handleSaveConfig() (TabModel, tea.Cmd) {
 		errorMsg := "Configuration must contain at least one server"
 		log.Printf("DEBUG: Server count validation failed: %s", errorMsg)
 		m.SetError(errorMsg)
-		return m, tea.Printf("❌ " + errorMsg)
+		return m, tea.Printf("❌ %s", errorMsg)
 	}
 	
 	log.Printf("DEBUG: JSON validation passed")
@@ -652,7 +652,7 @@ func (m *MCPModel) handleConfigSavedMsg(msg MCPConfigSavedMsg) (TabModel, tea.Cm
 		m.focusedField = MCPFieldName
 		m.nameInput.SetValue("")
 		m.configEditor.SetValue("")
-		return m, tea.Printf(msg.Message)
+		return m, tea.Printf("%s", msg.Message)
 	}
 }
 
@@ -694,7 +694,7 @@ func (m *MCPModel) handleConfigDeletedMsg(msg MCPConfigDeletedMsg) (TabModel, te
 	}
 	
 	log.Printf("DEBUG: Config deleted successfully, %d configs remaining", len(m.configs))
-	return m, tea.Printf(msg.Message)
+	return m, tea.Printf("%s", msg.Message)
 }
 
 // Handle config versions loaded message
