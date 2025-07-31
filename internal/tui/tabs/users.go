@@ -137,7 +137,16 @@ func (m *UsersModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
-		m.userList.SetSize(msg.Width-4, msg.Height-10)
+		listWidth := msg.Width - 4
+		m.userList.SetSize(listWidth, msg.Height-10)
+		
+		// Update delegate styles to use full width for proper selection highlighting
+		delegate := list.NewDefaultDelegate()
+		delegate.Styles.SelectedTitle = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.SelectedDesc = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.NormalTitle = styles.GetListItemStyle(msg.Width)
+		delegate.Styles.NormalDesc = styles.GetListItemStyle(msg.Width)
+		m.userList.SetDelegate(delegate)
 
 	case tea.KeyMsg:
 		// Clear error message on any key press when there's an error

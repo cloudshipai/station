@@ -3,6 +3,8 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 )
@@ -12,6 +14,14 @@ type DB struct {
 }
 
 func New(databaseURL string) (*DB, error) {
+	// Ensure the directory exists before creating the database
+	dbDir := filepath.Dir(databaseURL)
+	if dbDir != "." && dbDir != "" {
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create database directory %s: %w", dbDir, err)
+		}
+	}
+
 	conn, err := sql.Open("sqlite", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)

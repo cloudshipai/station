@@ -82,24 +82,19 @@ func (i EnvironmentItem) Title() string {
 }
 
 func (i EnvironmentItem) Description() string {
-	createdAt := i.env.CreatedAt.Format("Jan 2, 2006")
-	updatedAt := i.env.UpdatedAt.Format("Jan 2, 2006")
+	createdAt := i.env.CreatedAt.Format("Jan 2")
+	updatedAt := i.env.UpdatedAt.Format("Jan 2")
 	
 	desc := ""
 	if i.env.Description != nil {
 		desc = *i.env.Description
-		if len(desc) > 40 {
-			desc = desc[:40] + "..."
+		if len(desc) > 50 {
+			desc = desc[:50] + "..."
 		}
 	}
 
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		mutedStyle.Render(desc+" • "),
-		mutedStyle.Render("Created: "+createdAt+" • "),
-		mutedStyle.Render("Updated: "+updatedAt),
-	)
+	return mutedStyle.Render(desc + " • " + createdAt + " • " + updatedAt)
 }
 
 // Custom key bindings for environments list
@@ -160,13 +155,8 @@ type EnvironmentDeletedMsg struct {
 func NewEnvironmentsModel(database db.Database) *EnvironmentsModel {
 	repos := repositories.New(database)
 	
-	// Create list with custom styling
+	// Create list - styles will be set dynamically in WindowSizeMsg handler
 	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = styles.ListItemSelectedStyle
-	delegate.Styles.SelectedDesc = styles.ListItemSelectedStyle
-	delegate.Styles.NormalTitle = styles.ListItemStyle
-	delegate.Styles.NormalDesc = styles.ListItemStyle
-
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "Station Environments"
 	l.Styles.Title = styles.HeaderStyle
@@ -208,7 +198,16 @@ func (m *EnvironmentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
-		m.list.SetSize(msg.Width-4, msg.Height-8) // Account for borders and header
+		listWidth := msg.Width - 4
+		m.list.SetSize(listWidth, msg.Height-8) // Account for borders and header
+		
+		// Update delegate styles to use full width for proper selection highlighting
+		delegate := list.NewDefaultDelegate()
+		delegate.Styles.SelectedTitle = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.SelectedDesc = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.NormalTitle = styles.GetListItemStyle(msg.Width)
+		delegate.Styles.NormalDesc = styles.GetListItemStyle(msg.Width)
+		m.list.SetDelegate(delegate)
 
 	case tea.KeyMsg:
 		// Clear error message on any key press when there's an error

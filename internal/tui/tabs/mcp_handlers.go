@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	
+	"station/internal/tui/styles"
 	"station/pkg/models"
 )
 
@@ -40,6 +41,24 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 		m.configEditor.SetWidth(msg.Width - 10)
+		
+		// Update list delegates to use full width for proper selection highlighting
+		
+		// Update environment list delegate
+		envDelegate := list.NewDefaultDelegate()
+		envDelegate.Styles.SelectedTitle = styles.GetListItemSelectedStyle(msg.Width)
+		envDelegate.Styles.SelectedDesc = styles.GetListItemSelectedStyle(msg.Width)
+		envDelegate.Styles.NormalTitle = styles.GetListItemStyle(msg.Width)
+		envDelegate.Styles.NormalDesc = styles.GetListItemStyle(msg.Width)
+		m.environmentList.SetDelegate(envDelegate)
+		
+		// Update version list delegate
+		versionDelegate := list.NewDefaultDelegate()
+		versionDelegate.Styles.SelectedTitle = styles.GetListItemSelectedStyle(msg.Width)
+		versionDelegate.Styles.SelectedDesc = styles.GetListItemSelectedStyle(msg.Width)
+		versionDelegate.Styles.NormalTitle = styles.GetListItemStyle(msg.Width)
+		versionDelegate.Styles.NormalDesc = styles.GetListItemStyle(msg.Width)
+		m.versionList.SetDelegate(versionDelegate)
 		
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg, cmds)
