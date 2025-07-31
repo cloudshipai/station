@@ -2,7 +2,7 @@
 .PHONY: build clean install dev test lint kill-ports stop-station
 
 # Build configuration
-BINARY_NAME=station
+BINARY_NAME=stn
 BUILD_DIR=./bin
 MAIN_PACKAGE=./cmd/main
 
@@ -25,7 +25,7 @@ build:
 install:
 	@echo "📦 Installing Station $(VERSION) to $$GOPATH/bin..."
 	go install $(LDFLAGS) $(MAIN_PACKAGE)
-	@echo "✅ Station installed! Run 'station --help' to get started"
+	@echo "✅ Station installed! Run 'stn --help' to get started"
 
 # Development build (faster, no optimizations)
 dev:
@@ -54,7 +54,7 @@ lint:
 setup:
 	@echo "🚀 Setting up Station..."
 	@$(MAKE) dev
-	@echo "✅ Setup complete! Run './station init' to initialize configuration"
+	@echo "✅ Setup complete! Run './stn init' to initialize configuration"
 
 # Kill processes on Station ports
 kill-ports:
@@ -67,8 +67,8 @@ kill-ports:
 # Stop station processes
 stop-station:
 	@echo "🛑 Stopping Station processes..."
-	-@pkill -f "./station" || true
-	-@pkill -f "station serve" || true
+	-@pkill -f "./stn" || true
+	-@pkill -f "stn serve" || true
 	@$(MAKE) kill-ports
 	@echo "✅ Station stopped"
 
@@ -80,8 +80,8 @@ version:
 # Show usage help
 help:
 	@echo "Station Build Commands:"
-	@echo "  make build      - Build optimized binary to ./bin/station"
-	@echo "  make dev        - Build development binary to ./station"  
+	@echo "  make build      - Build optimized binary to ./bin/stn"
+	@echo "  make dev        - Build development binary to ./stn"  
 	@echo "  make install    - Install to $$GOPATH/bin"
 	@echo "  make clean      - Remove build artifacts"
 	@echo "  make test       - Run tests"
