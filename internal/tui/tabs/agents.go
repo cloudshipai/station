@@ -2,6 +2,7 @@ package tabs
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	
@@ -46,13 +47,15 @@ type AgentsModel struct {
 	// Create form state
 	environments    []models.Environment
 	availableTools  []models.MCPToolWithDetails  // Changed to include environment/config info
-	selectedEnvID   int64
+	selectedEnvIDs  []int64  // Changed to support multiple environments
 	selectedToolIDs []int64
 	focusedField    AgentFormField
 	toolCursor      int    // Track which tool is currently highlighted
 	toolsOffset     int    // Track scroll position in tools list
 	toolsFilter     string // Filter text for tools
 	isFiltering     bool   // Whether we're in filter mode
+	envCursor       int    // Track which environment is currently highlighted in multi-select
+	envOffset       int    // Track scroll position in environments list
 	
 	// Detail view state
 	actionButtonIndex int  // Track which action button is selected (0=Run, 1=Edit, 2=Delete)
@@ -66,11 +69,11 @@ type AgentFormField int
 const (
 	AgentFieldName AgentFormField = iota
 	AgentFieldDesc
-	AgentFieldEnvironment
+	AgentFieldEnvironments  // Changed to plural for multi-selection
+	AgentFieldScheduleEnabled
 	AgentFieldPrompt
 	AgentFieldTools
 	AgentFieldSchedule
-	AgentFieldScheduleEnabled
 )
 
 // AgentItem implements list.Item interface for bubbles list component
@@ -255,10 +258,12 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
-		m.list.SetSize(msg.Width-4, msg.Height-8) // Account for borders and header
-		// Update viewport size for details view
-		m.detailsViewport.Width = msg.Width - 4
-		m.detailsViewport.Height = msg.Height - 8
+		// Update list size based on the content area dimensions calculated by TUI
+		// Reserve space for section header and help text (approximately 4 lines)
+		m.list.SetSize(m.width-4, m.height-4)
+		// Update viewport size for details view (also use content area)
+		m.detailsViewport.Width = m.width - 4
+		m.detailsViewport.Height = m.height - 4
 		
 	case tea.KeyMsg:
 		
@@ -304,7 +309,8 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				// Reset form and focus first field
 				m.resetCreateForm()
 				m.nameInput.Focus()
-				return m, nil
+				// Refresh available tools to ensure we have the latest data
+				return m, m.loadTools()
 				
 			case "d":
 				// Delete agent
@@ -325,6 +331,17 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 					return m, m.runAgent(item.agent)
 				}
 				return m, nil
+				
+			// Add vim-style navigation keys - let list handle them
+			case "j":
+				var cmd tea.Cmd
+				m.list, cmd = m.list.Update(tea.KeyMsg{Type: tea.KeyDown})
+				return m, cmd
+				
+			case "k":
+				var cmd tea.Cmd
+				m.list, cmd = m.list.Update(tea.KeyMsg{Type: tea.KeyUp})
+				return m, cmd
 			}
 			
 			// List updates handled at end of Update method to avoid duplication
@@ -354,7 +371,8 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	case AgentsEnvironmentsLoadedMsg:
 		m.environments = msg.Environments
 		if len(m.environments) > 0 {
-			m.selectedEnvID = m.environments[0].ID
+			// Select first environment by default for new agents
+		m.selectedEnvIDs = []int64{m.environments[0].ID}
 		}
 		// Load tools after environments are loaded
 		return m, m.loadTools()
@@ -442,10 +460,13 @@ func (m AgentsModel) View() string {
 	return content
 }
 
-// RefreshData reloads agents from database
+// RefreshData reloads agents and tools from database
 func (m AgentsModel) RefreshData() tea.Cmd {
 	m.SetLoading(true)
-	return m.loadAgents()
+	return tea.Batch(
+		m.loadAgents(),
+		m.loadTools(),
+	)
 }
 
 // Get key map for custom bindings
@@ -600,6 +621,10 @@ func (m *AgentsModel) renderAgentDetails() string {
 	info := m.renderAgentInfo(agent)
 	sections = append(sections, info)
 	
+	// Agent environments (cross-environment access)
+	agentEnvs := m.renderAgentEnvironments(agent)
+	sections = append(sections, agentEnvs)
+	
 	// System prompt
 	prompt := m.renderFullPrompt(agent)
 	sections = append(sections, prompt)
@@ -733,10 +758,35 @@ func (m AgentsModel) renderAssignedTools() string {
 	toolsList = append(toolsList, styles.HeaderStyle.Render("Assigned Tools:"))
 	toolsList = append(toolsList, "")
 	
-	if len(m.assignedTools) == 0 {
-		toolsList = append(toolsList, styles.BaseStyle.Render("No tools assigned"))
+	// Filter out orphaned tool assignments (tools that no longer exist in MCP configs)
+	var validTools []models.AgentToolWithDetails
+	var orphanedCount int
+	
+	for _, assignedTool := range m.assignedTools {
+		// Check if this assigned tool still exists in available tools
+		toolExists := false
+		for _, availableTool := range m.availableTools {
+			if availableTool.Name == assignedTool.ToolName && availableTool.EnvironmentID == assignedTool.EnvironmentID {
+				toolExists = true
+				break
+			}
+		}
+		
+		if toolExists {
+			validTools = append(validTools, assignedTool)
+		} else {
+			orphanedCount++
+		}
+	}
+	
+	if len(validTools) == 0 {
+		if orphanedCount > 0 {
+			toolsList = append(toolsList, styles.BaseStyle.Render(fmt.Sprintf("No valid tools assigned (%d orphaned tools hidden)", orphanedCount)))
+		} else {
+			toolsList = append(toolsList, styles.BaseStyle.Render("No tools assigned"))
+		}
 	} else {
-		for _, tool := range m.assignedTools {
+		for _, tool := range validTools {
 			// Get environment name from tool's environment info
 			envInfo := fmt.Sprintf("(Environment: %s)", tool.EnvironmentName)
 			
@@ -752,6 +802,13 @@ func (m AgentsModel) renderAssignedTools() string {
 				mutedStyle.Render("  "+envInfo),
 			)
 			toolsList = append(toolsList, content)
+		}
+		
+		// Show warning about orphaned tools if any
+		if orphanedCount > 0 {
+			toolsList = append(toolsList, "")
+			warningMsg := fmt.Sprintf("⚠️  %d orphaned tool assignment(s) hidden (tools no longer exist)", orphanedCount)
+			toolsList = append(toolsList, styles.BaseStyle.Foreground(styles.Secondary).Render(warningMsg))
 		}
 	}
 	
@@ -817,21 +874,8 @@ func (m AgentsModel) renderCreateAgentForm() string {
 	leftColumn = append(leftColumn, descSection)
 	leftColumn = append(leftColumn, "")
 	
-	// Environment selection
-	envLabel := "Environment:"
-	if m.focusedField == AgentFieldEnvironment {
-		envLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Environment:")
-	}
-	envName := "No environments available"
-	if len(m.environments) > 0 {
-		for _, env := range m.environments {
-			if env.ID == m.selectedEnvID {
-				envName = env.Name
-				break
-			}
-		}
-	}
-	envSection := lipgloss.JoinVertical(lipgloss.Left, envLabel, styles.BaseStyle.Render("▶ "+envName))
+	// Environment selection (multi-select)
+	envSection := m.renderEnvironmentSelection()
 	leftColumn = append(leftColumn, envSection)
 	leftColumn = append(leftColumn, "")
 	
@@ -938,21 +982,8 @@ func (m AgentsModel) renderEditAgentForm() string {
 	leftColumn = append(leftColumn, descSection)
 	leftColumn = append(leftColumn, "")
 	
-	// Environment selection
-	envLabel := "Environment:"
-	if m.focusedField == AgentFieldEnvironment {
-		envLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Environment:")
-	}
-	envName := "No environments available"
-	if len(m.environments) > 0 {
-		for _, env := range m.environments {
-			if env.ID == m.selectedEnvID {
-				envName = env.Name
-				break
-			}
-		}
-	}
-	envSection := lipgloss.JoinVertical(lipgloss.Left, envLabel, styles.BaseStyle.Render("▶ "+envName))
+	// Environment selection (multi-select)
+	envSection := m.renderEnvironmentSelection()
 	leftColumn = append(leftColumn, envSection)
 	leftColumn = append(leftColumn, "")
 	
@@ -1136,11 +1167,15 @@ func (m AgentsModel) renderToolsSelection(label string) string {
 
 // Get filtered tools based on selected environment and current filter text
 func (m AgentsModel) getFilteredTools() []models.MCPToolWithDetails {
-	// First filter by selected environment
+	// First filter by selected environments (show tools from all selected environments)
 	var envFilteredTools []models.MCPToolWithDetails
 	for _, tool := range m.availableTools {
-		if tool.EnvironmentID == m.selectedEnvID {
-			envFilteredTools = append(envFilteredTools, tool)
+		// Check if tool's environment is in the selected environments list
+		for _, selectedEnvID := range m.selectedEnvIDs {
+			if tool.EnvironmentID == selectedEnvID {
+				envFilteredTools = append(envFilteredTools, tool)
+				break
+			}
 		}
 	}
 	
@@ -1261,8 +1296,12 @@ func (m *AgentsModel) resetCreateForm() {
 	m.selectedToolIDs = []int64{}
 	m.focusedField = AgentFieldName
 	m.toolCursor = 0
+	m.envCursor = 0
+	m.envOffset = 0
 	if len(m.environments) > 0 {
-		m.selectedEnvID = m.environments[0].ID
+		m.selectedEnvIDs = []int64{m.environments[0].ID}
+	} else {
+		m.selectedEnvIDs = []int64{}
 	}
 }
 
@@ -1284,8 +1323,9 @@ func (m *AgentsModel) populateEditForm() {
 	}
 	m.scheduleEnabled = m.selectedAgent.ScheduleEnabled
 	
-	// Set environment ID, but default to first available if agent's environment doesn't exist
-	m.selectedEnvID = m.selectedAgent.EnvironmentID
+	// Load agent's environments from database (for now, use primary environment as fallback)
+	// TODO: Load actual agent environments using AgentEnvironmentRepo.ListByAgent()
+	m.selectedEnvIDs = []int64{m.selectedAgent.EnvironmentID}
 	validEnv := false
 	for _, env := range m.environments {
 		if env.ID == m.selectedAgent.EnvironmentID {
@@ -1295,7 +1335,7 @@ func (m *AgentsModel) populateEditForm() {
 	}
 	if !validEnv && len(m.environments) > 0 {
 		// Agent's environment doesn't exist, default to first available environment
-		m.selectedEnvID = m.environments[0].ID
+		m.selectedEnvIDs = []int64{m.environments[0].ID}
 	}
 	
 	m.focusedField = AgentFieldName
@@ -1303,11 +1343,14 @@ func (m *AgentsModel) populateEditForm() {
 	
 	// Populate selected tools from assigned tools
 	m.selectedToolIDs = []int64{}
-	for _, tool := range m.assignedTools {
-		// Use a combination of environment ID and tool name hash as pseudo-ID for compatibility
-		// This is temporary until we properly implement cross-environment tool selection
-		pseudoID := tool.EnvironmentID
-		m.selectedToolIDs = append(m.selectedToolIDs, pseudoID)
+	for _, assignedTool := range m.assignedTools {
+		// Find the matching tool in the available tools list to get the correct ID
+		for _, availableTool := range m.availableTools {
+			if availableTool.Name == assignedTool.ToolName && availableTool.EnvironmentID == assignedTool.EnvironmentID {
+				m.selectedToolIDs = append(m.selectedToolIDs, availableTool.ID)
+				break
+			}
+		}
 	}
 }
 
@@ -1372,12 +1415,13 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		return m, m.createAgent()
 		
 	case "up", "k":
-		if m.focusedField == AgentFieldEnvironment {
-			// Navigate environment selection
-			for i, env := range m.environments {
-				if env.ID == m.selectedEnvID && i > 0 {
-					m.selectedEnvID = m.environments[i-1].ID
-					break
+		if m.focusedField == AgentFieldEnvironments {
+			// Navigate environment selection up
+			if len(m.environments) > 0 && m.envCursor > 0 {
+				m.envCursor--
+				// Update scroll offset if cursor goes above visible area
+				if m.envCursor < m.envOffset {
+					m.envOffset = m.envCursor
 				}
 			}
 			return m, nil
@@ -1395,12 +1439,14 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		}
 		
 	case "down", "j":
-		if m.focusedField == AgentFieldEnvironment {
-			// Navigate environment selection
-			for i, env := range m.environments {
-				if env.ID == m.selectedEnvID && i < len(m.environments)-1 {
-					m.selectedEnvID = m.environments[i+1].ID
-					break
+		if m.focusedField == AgentFieldEnvironments {
+			// Navigate environment selection down
+			if len(m.environments) > 0 && m.envCursor < len(m.environments)-1 {
+				m.envCursor++
+				// Update scroll offset if cursor goes below visible area
+				maxShow := 3  // Must match the display maxShow
+				if m.envCursor >= m.envOffset + maxShow {
+					m.envOffset = m.envCursor - maxShow + 1
 				}
 			}
 			return m, nil
@@ -1419,7 +1465,29 @@ func (m *AgentsModel) handleCreateFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		}
 		
 	case " ", "enter":
-		if m.focusedField == AgentFieldScheduleEnabled {
+		if m.focusedField == AgentFieldEnvironments {
+			// Toggle environment selection
+			if len(m.environments) > 0 && m.envCursor < len(m.environments) {
+				envID := m.environments[m.envCursor].ID
+				
+				// Check if environment is already selected
+				found := false
+				for i, selectedID := range m.selectedEnvIDs {
+					if selectedID == envID {
+						// Remove from selection
+						m.selectedEnvIDs = append(m.selectedEnvIDs[:i], m.selectedEnvIDs[i+1:]...)
+						found = true
+						break
+					}
+				}
+				
+				// If not found, add to selection
+				if !found {
+					m.selectedEnvIDs = append(m.selectedEnvIDs, envID)
+				}
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldScheduleEnabled {
 			// Toggle schedule enabled
 			m.scheduleEnabled = !m.scheduleEnabled
 			// Clear schedule input if disabling
@@ -1558,7 +1626,8 @@ func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			m.SetViewMode("edit")
 			m.populateEditForm()
 			m.nameInput.Focus()
-			return m, nil
+			// Refresh available tools to ensure we have the latest data
+			return m, m.loadTools()
 		case 2: // Delete
 			return m, m.deleteAgent(m.selectedAgent.ID)
 		}
@@ -1650,12 +1719,13 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		return m, m.updateAgent()
 		
 	case "up", "k":
-		if m.focusedField == AgentFieldEnvironment {
-			// Navigate environment selection
-			for i, env := range m.environments {
-				if env.ID == m.selectedEnvID && i > 0 {
-					m.selectedEnvID = m.environments[i-1].ID
-					break
+		if m.focusedField == AgentFieldEnvironments {
+			// Navigate environment selection up
+			if len(m.environments) > 0 && m.envCursor > 0 {
+				m.envCursor--
+				// Update scroll offset if cursor goes above visible area
+				if m.envCursor < m.envOffset {
+					m.envOffset = m.envCursor
 				}
 			}
 			return m, nil
@@ -1673,12 +1743,14 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		}
 		
 	case "down", "j":
-		if m.focusedField == AgentFieldEnvironment {
-			// Navigate environment selection
-			for i, env := range m.environments {
-				if env.ID == m.selectedEnvID && i < len(m.environments)-1 {
-					m.selectedEnvID = m.environments[i+1].ID
-					break
+		if m.focusedField == AgentFieldEnvironments {
+			// Navigate environment selection down
+			if len(m.environments) > 0 && m.envCursor < len(m.environments)-1 {
+				m.envCursor++
+				// Update scroll offset if cursor goes below visible area
+				maxShow := 3  // Must match the display maxShow
+				if m.envCursor >= m.envOffset + maxShow {
+					m.envOffset = m.envCursor - maxShow + 1
 				}
 			}
 			return m, nil
@@ -1697,7 +1769,29 @@ func (m *AgentsModel) handleEditFormKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		}
 		
 	case " ", "enter":
-		if m.focusedField == AgentFieldScheduleEnabled {
+		if m.focusedField == AgentFieldEnvironments {
+			// Toggle environment selection
+			if len(m.environments) > 0 && m.envCursor < len(m.environments) {
+				envID := m.environments[m.envCursor].ID
+				
+				// Check if environment is already selected
+				found := false
+				for i, selectedID := range m.selectedEnvIDs {
+					if selectedID == envID {
+						// Remove from selection
+						m.selectedEnvIDs = append(m.selectedEnvIDs[:i], m.selectedEnvIDs[i+1:]...)
+						found = true
+						break
+					}
+				}
+				
+				// If not found, add to selection
+				if !found {
+					m.selectedEnvIDs = append(m.selectedEnvIDs, envID)
+				}
+			}
+			return m, nil
+		} else if m.focusedField == AgentFieldScheduleEnabled {
 			// Toggle schedule enabled
 			m.scheduleEnabled = !m.scheduleEnabled
 			// Clear schedule input if disabling
@@ -1824,16 +1918,23 @@ func (m AgentsModel) createAgent() tea.Cmd {
 			return AgentsErrorMsg{Err: fmt.Errorf("system prompt too long (max 5000 characters)")}
 		}
 		
-		// Validate environment exists
-		validEnv := false
-		for _, env := range m.environments {
-			if env.ID == m.selectedEnvID {
-				validEnv = true
-				break
+		// Validate at least one environment is selected
+		if len(m.selectedEnvIDs) == 0 {
+			return AgentsErrorMsg{Err: fmt.Errorf("at least one environment must be selected")}
+		}
+		
+		// Validate all selected environments exist
+		var validEnvIDs []int64
+		for _, selectedID := range m.selectedEnvIDs {
+			for _, env := range m.environments {
+				if env.ID == selectedID {
+					validEnvIDs = append(validEnvIDs, selectedID)
+					break
+				}
 			}
 		}
-		if !validEnv {
-			return AgentsErrorMsg{Err: fmt.Errorf("selected environment does not exist")}
+		if len(validEnvIDs) == 0 {
+			return AgentsErrorMsg{Err: fmt.Errorf("no valid environments selected")}
 		}
 		
 		// Validate and prepare schedule fields
@@ -1846,21 +1947,50 @@ func (m AgentsModel) createAgent() tea.Cmd {
 			}
 		}
 		
-		// Create agent in database
-		agent, err := m.repos.Agents.Create(name, description, prompt, 10, m.selectedEnvID, 1, cronSchedule, m.scheduleEnabled) // Default to user ID 1
+		// Create agent in database (use first selected environment as primary)
+		primaryEnvID := validEnvIDs[0]
+		agent, err := m.repos.Agents.Create(name, description, prompt, 10, primaryEnvID, 1, cronSchedule, m.scheduleEnabled) // Default to user ID 1
 		if err != nil {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to create agent: %w", err)}
 		}
 		
-		// TODO: Associate selected tools with agent - requires cross-environment tool selection implementation
-		// The new Add method signature is: Add(agentID, toolName, environmentID)
-		// This will be properly implemented in the cross-environment TUI task
-		var failedTools []int64
-		for _, toolID := range m.selectedToolIDs {
-			// if _, err := m.repos.AgentTools.Add(agent.ID, toolName, environmentID); err != nil {
-			//     failedTools = append(failedTools, toolID)
-			// }
-			_ = toolID // Prevent unused variable error
+		// Associate selected tools with agent using cross-environment tool assignment
+		var failedTools []string  // Track failed tool names instead of IDs
+		log.Printf("DEBUG: Associating %d selected tools with new agent %d", len(m.selectedToolIDs), agent.ID)
+		log.Printf("DEBUG: Available tools count: %d", len(m.availableTools))
+		
+		for i, toolID := range m.selectedToolIDs {
+			log.Printf("DEBUG: Processing tool %d/%d with ID %d", i+1, len(m.selectedToolIDs), toolID)
+			
+			// Find the tool details by ID to get tool name and environment ID
+			var toolName string
+			var envID int64
+			found := false
+			
+			for _, tool := range m.availableTools {
+				if tool.ID == toolID {
+					toolName = tool.Name
+					envID = tool.EnvironmentID
+					found = true
+					log.Printf("DEBUG: Found tool '%s' (ID:%d) in environment %d", toolName, toolID, envID)
+					break
+				}
+			}
+			
+			if !found {
+				log.Printf("DEBUG: Tool ID %d not found in available tools list", toolID)
+				failedTools = append(failedTools, fmt.Sprintf("ID:%d", toolID))
+				continue
+			}
+			
+			// Add the tool assignment
+			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', env=%d", agent.ID, toolName, envID)
+			if _, err := m.repos.AgentTools.Add(agent.ID, toolName, envID); err != nil {
+				log.Printf("DEBUG: Failed to add tool assignment: %v", err)
+				failedTools = append(failedTools, toolName)
+			} else {
+				log.Printf("DEBUG: Successfully added tool assignment: agent=%d, tool='%s', env=%d", agent.ID, toolName, envID)
+			}
 		}
 		
 		// Show warning if some tools failed to associate
@@ -1904,16 +2034,23 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 			return AgentsErrorMsg{Err: fmt.Errorf("system prompt too long (max 5000 characters)")}
 		}
 		
-		// Validate environment exists
-		validEnv := false
-		for _, env := range m.environments {
-			if env.ID == m.selectedEnvID {
-				validEnv = true
-				break
+		// Validate at least one environment is selected
+		if len(m.selectedEnvIDs) == 0 {
+			return AgentsErrorMsg{Err: fmt.Errorf("at least one environment must be selected")}
+		}
+		
+		// Validate all selected environments exist
+		var validEnvIDs []int64
+		for _, selectedID := range m.selectedEnvIDs {
+			for _, env := range m.environments {
+				if env.ID == selectedID {
+					validEnvIDs = append(validEnvIDs, selectedID)
+					break
+				}
 			}
 		}
-		if !validEnv {
-			return AgentsErrorMsg{Err: fmt.Errorf("selected environment does not exist")}
+		if len(validEnvIDs) == 0 {
+			return AgentsErrorMsg{Err: fmt.Errorf("no valid environments selected")}
 		}
 		
 		// Validate and prepare schedule fields
@@ -1931,14 +2068,15 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to update agent: %w", err)}
 		}
 		
-		// Create updated agent model for return
+		// Create updated agent model for return (use first selected environment as primary)
+		primaryEnvID := validEnvIDs[0]
 		updatedAgent := &models.Agent{
 			ID:              m.selectedAgent.ID,
 			Name:            name,
 			Description:     description,
 			Prompt:          prompt,
 			MaxSteps:        m.selectedAgent.MaxSteps,
-			EnvironmentID:   m.selectedEnvID,
+			EnvironmentID:   primaryEnvID,
 			CreatedBy:       m.selectedAgent.CreatedBy,
 			CronSchedule:    cronSchedule,
 			IsScheduled:     cronSchedule != nil && *cronSchedule != "" && m.scheduleEnabled,
@@ -1951,15 +2089,43 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to clear agent tools: %w", err)}
 		}
 		
-		// TODO: Associate selected tools with agent - requires cross-environment tool selection implementation
-		// The new Add method signature is: Add(agentID, toolName, environmentID)
-		// This will be properly implemented in the cross-environment TUI task
-		var failedTools []int64
-		for _, toolID := range m.selectedToolIDs {
-			// if _, err := m.repos.AgentTools.Add(m.selectedAgent.ID, toolName, environmentID); err != nil {
-			//     failedTools = append(failedTools, toolID)
-			// }
-			_ = toolID // Prevent unused variable error
+		// Associate selected tools with agent using cross-environment tool assignment
+		var failedTools []string  // Track failed tool names instead of IDs
+		log.Printf("DEBUG: Associating %d selected tools with agent %d", len(m.selectedToolIDs), m.selectedAgent.ID)
+		log.Printf("DEBUG: Available tools count: %d", len(m.availableTools))
+		
+		for i, toolID := range m.selectedToolIDs {
+			log.Printf("DEBUG: Processing tool %d/%d with ID %d", i+1, len(m.selectedToolIDs), toolID)
+			
+			// Find the tool details by ID to get tool name and environment ID
+			var toolName string
+			var envID int64
+			found := false
+			
+			for _, tool := range m.availableTools {
+				if tool.ID == toolID {
+					toolName = tool.Name
+					envID = tool.EnvironmentID
+					found = true
+					log.Printf("DEBUG: Found tool '%s' (ID:%d) in environment %d", toolName, toolID, envID)
+					break
+				}
+			}
+			
+			if !found {
+				log.Printf("DEBUG: Tool ID %d not found in available tools list", toolID)
+				failedTools = append(failedTools, fmt.Sprintf("ID:%d", toolID))
+				continue
+			}
+			
+			// Add the tool assignment
+			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', env=%d", m.selectedAgent.ID, toolName, envID)
+			if _, err := m.repos.AgentTools.Add(m.selectedAgent.ID, toolName, envID); err != nil {
+				log.Printf("DEBUG: Failed to add tool assignment: %v", err)
+				failedTools = append(failedTools, toolName)
+			} else {
+				log.Printf("DEBUG: Successfully added tool assignment: agent=%d, tool='%s', env=%d", m.selectedAgent.ID, toolName, envID)
+			}
 		}
 		
 		// Show warning if some tools failed to associate
@@ -2006,4 +2172,109 @@ func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
 	}
 	
 	return tea.Printf("🚀 Agent '%s' queued for execution - check Runs tab for progress", agent.Name)
+}
+
+// renderEnvironmentSelection renders the multi-environment selection interface
+func (m AgentsModel) renderEnvironmentSelection() string {
+	envLabel := "Environments:"
+	if m.focusedField == AgentFieldEnvironments {
+		envLabel = lipgloss.NewStyle().Foreground(styles.Primary).Render("Environments:")
+	}
+	
+	var envList []string
+	envList = append(envList, envLabel)
+	envList = append(envList, "")
+	
+	if len(m.environments) == 0 {
+		envList = append(envList, styles.BaseStyle.Render("No environments available"))
+	} else {
+		// Show environments with checkboxes
+		maxShow := 3  // Show up to 3 environments in the form
+		start := m.envOffset
+		end := start + maxShow
+		if end > len(m.environments) {
+			end = len(m.environments)
+		}
+		
+		// Show scroll indicator at top if needed
+		if start > 0 {
+			envList = append(envList, styles.BaseStyle.Render("↑ ... more environments above"))
+		}
+		
+		// Show visible environments
+		for i := start; i < end; i++ {
+			env := m.environments[i]
+			
+			// Check if environment is selected
+			selected := false
+			for _, selectedID := range m.selectedEnvIDs {
+				if selectedID == env.ID {
+					selected = true
+					break
+				}
+			}
+			
+			prefix := "☐ "
+			if selected {
+				prefix = "☑ "
+			}
+			
+			envLine := fmt.Sprintf("%s%s", prefix, env.Name)
+			
+			// Highlight current cursor position when in environments field
+			isCursorHere := m.focusedField == AgentFieldEnvironments && m.envCursor == i
+			
+			if isCursorHere {
+				// Full highlighting for selected item
+				envList = append(envList, styles.ListItemSelectedStyle.Width(48).Render("▶ "+envLine))
+			} else {
+				// Normal display
+				envList = append(envList, styles.BaseStyle.Render("  "+envLine))
+			}
+		}
+		
+		// Show scroll indicator at bottom if needed
+		if end < len(m.environments) {
+			remaining := len(m.environments) - end
+			envList = append(envList, styles.BaseStyle.Render(fmt.Sprintf("↓ ... %d more environments below", remaining)))
+		}
+	}
+	
+	// Add help text
+	if m.focusedField == AgentFieldEnvironments {
+		helpText := styles.HelpStyle.Render("Press space to toggle selection")
+		envList = append(envList, "")
+		envList = append(envList, helpText)
+	}
+	
+	return lipgloss.JoinVertical(lipgloss.Left, envList...)
+}
+
+// renderAgentEnvironments shows all environments the agent has access to
+func (m AgentsModel) renderAgentEnvironments(agent *models.Agent) string {
+	var envList []string
+	
+	envList = append(envList, styles.HeaderStyle.Render("Accessible Environments:"))
+	envList = append(envList, "")
+	
+	// For now, show primary environment (backward compatibility)
+	// TODO: Load actual agent environments using AgentEnvironmentRepo.ListByAgent()
+	primaryEnvName := "Unknown"
+	for _, env := range m.environments {
+		if env.ID == agent.EnvironmentID {
+			primaryEnvName = env.Name
+			break
+		}
+	}
+	
+	envList = append(envList, fmt.Sprintf("• %s (primary)", primaryEnvName))
+	
+	// TODO: Once cross-environment relationships are loaded, show additional environments:
+	// for _, agentEnv := range agentEnvironments {
+	//     if agentEnv.EnvironmentID != agent.EnvironmentID {
+	//         envList = append(envList, fmt.Sprintf("• %s", agentEnv.EnvironmentName))
+	//     }
+	// }
+	
+	return lipgloss.JoinVertical(lipgloss.Left, envList...)
 }
