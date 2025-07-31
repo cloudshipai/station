@@ -79,21 +79,21 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 	// Get model from OpenAI plugin
 	model := g.openaiPlugin.Model(g.genkit, "gpt-4o-mini")
 	
-	// Use Genkit to analyze the GitHub Repository with GPT-4o-mini model
+	// Use Genkit to analyze the GitHub Repository with structured JSON output
 	response, err := genkit.Generate(ctx, g.genkit,
 		ai.WithModel(model),
 		ai.WithPrompt(prompt),
+		ai.WithOutputType(MCPServerDiscovery{}),
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze GitHub repository: %w", err)
 	}
 
-	// For now, we'll parse the response as JSON manually
-	// TODO: Implement proper structured output parsing  
+	// Parse the structured JSON response
 	var discovery MCPServerDiscovery
 	if err := json.Unmarshal([]byte(response.Text()), &discovery); err != nil {
-		return nil, fmt.Errorf("failed to parse AI response as JSON: %w", err)
+		return nil, fmt.Errorf("failed to parse structured JSON response: %w\nResponse: %s", err, response.Text())
 	}
 
 	// Post-process and validate the discovery
@@ -113,56 +113,31 @@ func (g *GitHubDiscoveryService) convertToRawURL(githubURL string) string {
 
 // buildAnalysisPrompt creates the prompt for analyzing GitHub repositories
 func (g *GitHubDiscoveryService) buildAnalysisPrompt(githubURL, rawURL string) string {
-	return fmt.Sprintf(`You are an expert at analyzing GitHub repositories for MCP (Model Context Protocol) servers and creating configuration wizards.
+	return fmt.Sprintf(`You are an expert at analyzing GitHub repositories for MCP (Model Context Protocol) servers.
 
-Your task is to analyze the GitHub repository at: %s
+Analyze the GitHub repository at: %s
 
-Please fetch and analyze the repository contents, particularly looking for:
+Please examine the repository contents, particularly:
 1. README files and documentation
 2. Package.json, Dockerfile, or other build files
-3. Example configurations
+3. Example configurations and installation instructions
 4. Environment variable requirements
-5. Installation instructions
 
-Based on your analysis, provide a structured JSON response that will be used to create a configuration wizard for users.
+Based on your analysis, provide:
+- serverName: The name of the MCP server (e.g., "filesystem", "github")
+- description: Brief explanation of what this server does
+- type: Usually "stdio" for MCP servers
+- configurations: Array of different installation methods with command, args, and descriptions
+- requiredEnv: Array of environment variables needed, if any
+- installNotes: Any additional setup notes
 
-IMPORTANT ANALYSIS GUIDELINES:
-- Look for multiple installation methods (npx, docker, local build, etc.)
-- Identify all required and optional environment variables
-- Extract example configurations from README or docs
-- Determine the transport type (stdio is most common, some use sse or streamable-http)
-- Note any special setup requirements or dependencies
-- Identify the most recommended/easiest installation method
+Look for common patterns:
+- NPX installations: "@modelcontextprotocol/server-*" packages
+- Docker installations: docker run commands
+- Python packages: uvx commands
+- Environment variables: API keys, database URLs, service endpoints
 
-COMMON PATTERNS TO LOOK FOR:
-
-NPX Installation:
-- Look for "@modelcontextprotocol/server-*" packages
-- Args typically include the package name and paths/options
-- Example: npx -y @modelcontextprotocol/server-filesystem /path/to/directory
-
-Docker Installation:
-- Look for Dockerfile or docker build instructions
-- Args for docker run commands including volume mounts
-- Example: docker run -i --rm --mount type=bind,src=/path,dst=/projects
-
-UVX Installation (for Python packages):
-- Look for uvx commands
-- Often used for AWS or official packages
-- Example: uvx awslabs.cfn-mcp-server@latest
-
-Environment Variables:
-- AWS services: AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, etc.
-- Database connections: DATABASE_URL, DB_HOST, etc.
-- API keys: API_KEY, TOKEN, etc.
-- Service endpoints: NOMAD_ADDR, API_ENDPOINT, etc.
-
-Please provide comprehensive configuration options that would allow a user to easily set up this MCP server.
-
-Repository URL: %s
-Raw Content URL: %s
-
-Analyze the repository and return a structured JSON response following the MCPServerDiscovery schema.`, githubURL, githubURL, rawURL)
+Focus on practical installation methods that users can easily follow.`, githubURL)
 }
 
 // validateAndEnhanceDiscovery validates and enhances the discovery response
