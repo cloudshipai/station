@@ -102,18 +102,16 @@ func (i AgentItem) Title() string {
 }
 
 func (i AgentItem) Description() string {
-	createdAt := i.agent.CreatedAt.Format("Jan 2, 2006")
-	env := fmt.Sprintf("Env: %d", i.agent.EnvironmentID)
-	steps := fmt.Sprintf("Max steps: %d", i.agent.MaxSteps)
+	desc := i.agent.Description
+	if len(desc) > 40 {
+		desc = desc[:40] + "..."
+	}
+	
+	createdAt := i.agent.CreatedAt.Format("Jan 2")
+	steps := fmt.Sprintf("max %d steps", i.agent.MaxSteps)
 	
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		mutedStyle.Render(i.agent.Description+" • "),
-		mutedStyle.Render(createdAt+" • "),
-		mutedStyle.Render(env+" • "),
-		mutedStyle.Render(steps),
-	)
+	return mutedStyle.Render(desc + " • " + createdAt + " • " + steps)
 }
 
 // Custom key bindings for agents list
@@ -186,13 +184,8 @@ type AgentToolsLoadedMsg struct {
 // NewAgentsModel creates a new agents model
 func NewAgentsModel(database db.Database, executionQueue *services.ExecutionQueueService) *AgentsModel {
 	repos := repositories.New(database)
-	// Create list with custom styling
+	// Create list - styles will be set dynamically in WindowSizeMsg handler
 	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = styles.ListItemSelectedStyle
-	delegate.Styles.SelectedDesc = styles.ListItemSelectedStyle
-	delegate.Styles.NormalTitle = styles.ListItemStyle
-	delegate.Styles.NormalDesc = styles.ListItemStyle
-	
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "Station Agents"
 	l.Styles.Title = styles.HeaderStyle
@@ -260,7 +253,16 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.SetSize(msg.Width, msg.Height)
 		// Update list size based on the content area dimensions calculated by TUI
 		// Reserve space for section header and help text (approximately 4 lines)
-		m.list.SetSize(m.width-4, m.height-4)
+		listWidth := msg.Width - 4
+		m.list.SetSize(listWidth, msg.Height-4)
+		
+		// Update delegate styles to use full width for proper selection highlighting
+		delegate := list.NewDefaultDelegate()
+		delegate.Styles.SelectedTitle = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.SelectedDesc = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.NormalTitle = styles.GetListItemStyle(msg.Width)
+		delegate.Styles.NormalDesc = styles.GetListItemStyle(msg.Width)
+		m.list.SetDelegate(delegate)
 		// Update viewport size for details view (also use content area)
 		m.detailsViewport.Width = m.width - 4
 		m.detailsViewport.Height = m.height - 4

@@ -70,8 +70,8 @@ var (
 		Padding(0, 2)
 	
 	ListItemSelectedStyle = lipgloss.NewStyle().
-		Background(lipgloss.Color("#bb9af7")). // Tokyo Night purple for selection
-		Foreground(lipgloss.Color("#1a1b26")). // Dark background for contrast
+		Background(lipgloss.Color("#bb9af7")). // Tokyo Night purple background
+		Foreground(lipgloss.Color("#1a1b26")). // Dark foreground for contrast
 		Padding(0, 2).
 		Bold(true)
 	
@@ -158,4 +158,15 @@ func WithPadding(style lipgloss.Style, vertical, horizontal int) lipgloss.Style 
 
 func WithMargin(style lipgloss.Style, vertical, horizontal int) lipgloss.Style {
 	return style.Margin(vertical, horizontal)
+}
+
+// GetListItemSelectedStyle returns a list item selected style with the specified width
+func GetListItemSelectedStyle(width int) lipgloss.Style {
+	// Try unsetting width first, then applying a large width
+	return ListItemSelectedStyle.UnsetWidth().Width(width * 2)
+}
+
+// GetListItemStyle returns a list item style with the specified width  
+func GetListItemStyle(width int) lipgloss.Style {
+	return ListItemStyle.UnsetWidth().Width(width * 2)
 }

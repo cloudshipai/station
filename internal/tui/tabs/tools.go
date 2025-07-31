@@ -64,26 +64,15 @@ func (i ToolItem) Title() string {
 
 func (i ToolItem) Description() string {
 	desc := i.tool.Description
-	if len(desc) > 30 {
-		desc = desc[:30] + "..."
+	if len(desc) > 60 {
+		desc = desc[:60] + "..."
 	}
 	
-	// Create config, server and environment info
-	configInfo := fmt.Sprintf("Config: %s v%d", i.tool.ConfigName, i.tool.ConfigVersion)
-	serverInfo := fmt.Sprintf("Server: %s", i.tool.ServerName)
-	envInfo := fmt.Sprintf("Env: %s", i.tool.EnvironmentName)
+	// Create much more concise metadata - just essential info
+	configInfo := fmt.Sprintf("%s v%d", i.tool.ConfigName, i.tool.ConfigVersion)
 	
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		mutedStyle.Render(desc),
-		mutedStyle.Render(" • "),
-		mutedStyle.Render(configInfo),
-		mutedStyle.Render(" • "),
-		mutedStyle.Render(serverInfo),
-		mutedStyle.Render(" • "),
-		mutedStyle.Render(envInfo),
-	)
+	return mutedStyle.Render(desc + " • " + configInfo)
 }
 
 // Messages for async operations
@@ -99,13 +88,8 @@ type ToolsErrorMsg struct {
 func NewToolsModel(database db.Database) *ToolsModel {
 	repos := repositories.New(database)
 
-	// Create list with custom styling
+	// Create list - styles will be set dynamically in WindowSizeMsg handler
 	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = styles.ListItemSelectedStyle
-	delegate.Styles.SelectedDesc = styles.ListItemSelectedStyle
-	delegate.Styles.NormalTitle = styles.ListItemStyle
-	delegate.Styles.NormalDesc = styles.ListItemStyle
-
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "Available Tools"
 	l.Styles.Title = styles.HeaderStyle
@@ -137,7 +121,16 @@ func (m *ToolsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.SetSize(msg.Width, msg.Height)
 		// Update list size based on the content area dimensions calculated by TUI
 		// Reserve space for section header and help text (approximately 4 lines)
-		m.list.SetSize(m.width-4, m.height-4)
+		listWidth := msg.Width - 4
+		m.list.SetSize(listWidth, msg.Height-4)
+		
+		// Update delegate styles to use full width for proper selection highlighting
+		delegate := list.NewDefaultDelegate()
+		delegate.Styles.SelectedTitle = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.SelectedDesc = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.NormalTitle = styles.GetListItemStyle(msg.Width)
+		delegate.Styles.NormalDesc = styles.GetListItemStyle(msg.Width)
+		m.list.SetDelegate(delegate)
 
 	case tea.KeyMsg:
 		// Handle filter mode first

@@ -69,17 +69,9 @@ func getConfigFilePath() string {
 		return configPath
 	}
 
-	// Check XDG_CONFIG_HOME
-	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
-		return filepath.Join(xdgConfigHome, "station", "config.yaml")
-	}
-
-	// Fallback to ~/.config/station/config.yaml
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(homeDir, ".config", "station", "config.yaml")
-	}
-
-	return "config.yaml" // Fallback to current directory
+	// Use the same directory logic as database
+	configDir := getConfigDirectory()
+	return filepath.Join(configDir, "config.yaml")
 }
 
 // getDatabasePath returns the path to the database file
@@ -89,8 +81,25 @@ func getDatabasePath() string {
 		return dbPath
 	}
 
-	// Default database path
-	return "station.db"
+	// Default to same directory as config file
+	configDir := getConfigDirectory()
+	return filepath.Join(configDir, "station.db")
+}
+
+// getConfigDirectory returns the directory where configuration should be stored
+func getConfigDirectory() string {
+	// Check XDG_CONFIG_HOME first
+	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
+		return filepath.Join(xdgConfigHome, "station")
+	}
+
+	// Fallback to ~/.config/station
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(homeDir, ".config", "station")
+	}
+
+	// Last resort: current directory
+	return "."
 }
 
 // isLocalMode detects if the application is running in local development mode
@@ -168,4 +177,14 @@ func GetLoadedConfigs() map[string]interface{} {
 	configs["database_connected"] = fileExists(getDatabasePath())
 	
 	return configs
+}
+
+// GetDatabasePath returns the database path (exported for external use)
+func GetDatabasePath() string {
+	return getDatabasePath()
+}
+
+// GetConfigDirectory returns the config directory path (exported for external use)
+func GetConfigDirectory() string {
+	return getConfigDirectory()
 }
