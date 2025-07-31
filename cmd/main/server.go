@@ -39,8 +39,6 @@ func runMainServer() error {
 	}
 
 	var wg sync.WaitGroup
-
-	sshServer := ssh.New(cfg, database)
 	
 	// Create repositories and services
 	repos := repositories.New(database)
@@ -68,16 +66,27 @@ func runMainServer() error {
 
 	toolDiscoverySvc := services.NewToolDiscoveryService(repos, mcpConfigSvc)
 	mcpClientSvc := services.NewMCPClientService(repos, mcpConfigSvc, toolDiscoverySvc)
-	agentSvc := services.NewEinoAgentService(repos, mcpClientSvc, toolDiscoverySvc)
+	agentSvc := services.NewEinoAgentService(repos, mcpClientSvc, toolDiscoverySvc, mcpConfigSvc)
+	
+	// Initialize execution queue service for async agent execution
+	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, 5) // 5 workers
+	
+	// Start execution queue service
+	if err := executionQueueSvc.Start(); err != nil {
+		return fmt.Errorf("failed to start execution queue service: %w", err)
+	}
+	defer executionQueueSvc.Stop()
 	
 	// Initialize scheduler service for cron-based agent execution
-	schedulerSvc := services.NewSchedulerService(database)
+	schedulerSvc := services.NewSchedulerService(database, executionQueueSvc)
 	
 	// Start scheduler service
 	if err := schedulerSvc.Start(); err != nil {
 		return fmt.Errorf("failed to start scheduler service: %w", err)
 	}
 	defer schedulerSvc.Stop()
+
+	sshServer := ssh.New(cfg, database, executionQueueSvc)
 	
 	mcpServer := mcp.NewServer(database, mcpConfigSvc, agentSvc, repos)
 	apiServer := api.New(cfg, database)

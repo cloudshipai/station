@@ -15,20 +15,22 @@ import (
 
 // SchedulerService manages cron-based agent scheduling
 type SchedulerService struct {
-	cron   *cron.Cron
-	db     db.Database
-	agents map[int64]cron.EntryID // Track scheduled agents
+	cron          *cron.Cron
+	db            db.Database
+	agents        map[int64]cron.EntryID // Track scheduled agents
+	executionQueue *ExecutionQueueService // Queue for async agent execution
 }
 
 // NewSchedulerService creates a new scheduler service
-func NewSchedulerService(database db.Database) *SchedulerService {
+func NewSchedulerService(database db.Database, executionQueue *ExecutionQueueService) *SchedulerService {
 	// Create cron with seconds precision and logging
 	c := cron.New(cron.WithSeconds(), cron.WithLogger(cron.VerbosePrintfLogger(log.New(log.Writer(), "CRON: ", log.LstdFlags))))
 	
 	return &SchedulerService{
-		cron:   c,
-		db:     database,
-		agents: make(map[int64]cron.EntryID),
+		cron:           c,
+		db:             database,
+		agents:         make(map[int64]cron.EntryID),
+		executionQueue: executionQueue,
 	}
 }
 
@@ -153,7 +155,7 @@ func (s *SchedulerService) updateNextRunTime(agentID int64, cronExpr string) err
 	return err
 }
 
-// executeScheduledAgent executes a scheduled agent
+// executeScheduledAgent executes a scheduled agent via the execution queue
 func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 	log.Printf("Executing scheduled agent %d", agentID)
 	
@@ -178,20 +180,34 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 		}
 	}
 	
-	// TODO: Fix struct reference issue - implement direct SQL for now
+	// Update schedule times in database
 	if err := s.updateScheduleTimes(ctx, agentID, now, nextRun.Time); err != nil {
 		log.Printf("Warning: failed to update schedule times for agent %d: %v", agentID, err)
 	}
 
-	// TODO: Integrate with agent execution service
-	// For now, just log that the agent would be executed
-	log.Printf("Would execute agent %d (%s) with prompt: %.50s...", agent.ID, agent.Name, agent.Prompt)
+	// Queue the agent execution
+	metadata := map[string]interface{}{
+		"source":      "cron_scheduler",
+		"cron_schedule": agent.CronSchedule.String,
+		"scheduled_at": now,
+	}
 	
-	// In a real implementation, this would:
-	// 1. Create an agent run record
-	// 2. Execute the agent with appropriate context/input
-	// 3. Handle the execution result
-	// 4. Update the run status
+	// Use the agent's prompt as the task to execute
+	task := agent.Prompt
+	if task == "" {
+		task = "Execute scheduled agent task"
+	}
+	
+	// For scheduled agents, we use a system user ID (0) since there's no specific user triggering this
+	// System user was created in migration 010
+	systemUserID := int64(0)
+	
+	if err := s.executionQueue.QueueExecution(agentID, systemUserID, task, metadata); err != nil {
+		log.Printf("Error: failed to queue execution for scheduled agent %d: %v", agentID, err)
+		return
+	}
+	
+	log.Printf("Queued execution for scheduled agent %d (%s)", agent.ID, agent.Name)
 }
 
 // GetScheduledAgents returns all currently scheduled agents

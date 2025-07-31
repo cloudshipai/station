@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/cloudwego/eino/components/model"
-	"github.com/cloudwego/eino/schema"
+	"github.com/cloudwego/eino-ext/components/model/openai"
 )
 
 // ModelProvider represents a model provider configuration
@@ -139,7 +138,7 @@ func (s *ModelProviderService) detectProvidersFromEnv() {
 	}
 }
 
-// CreateChatModel creates a chat model for the given provider and model ID
+// CreateChatModel creates a chat model for the given provider and model ID using proper Eino implementations
 func (s *ModelProviderService) CreateChatModel(providerName, modelID string) (model.ToolCallingChatModel, error) {
 	provider, exists := s.config.Providers[providerName]
 	if !exists {
@@ -155,13 +154,29 @@ func (s *ModelProviderService) CreateChatModel(providerName, modelID string) (mo
 		return nil, fmt.Errorf("model %s not found in provider %s", modelID, providerName)
 	}
 	
-	// Create the appropriate chat model based on provider
+	ctx := context.Background()
+	
+	// Create the appropriate chat model based on provider using Eino implementations
 	switch providerName {
+	case "openai", "openrouter":
+		// Use Eino's OpenAI implementation
+		return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+			BaseURL: provider.BaseURL,
+			APIKey:  provider.APIKey,
+			Model:   modelConfig.ID,
+		})
 	case "anthropic":
-		return NewAnthropicChatModel(provider, modelConfig), nil
+		// For now, return an error as we need Anthropic implementation from eino-ext
+		return nil, fmt.Errorf("Anthropic provider not yet implemented with Eino - use OpenAI for now")
+	case "ollama":
+		// Ollama uses OpenAI-compatible API, so use the OpenAI implementation
+		return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+			BaseURL: provider.BaseURL,
+			APIKey:  provider.APIKey, // Empty for Ollama
+			Model:   modelConfig.ID,
+		})
 	default:
-		// All other providers use OpenAI-compatible API
-		return NewOpenAICompatibleChatModel(provider, modelConfig), nil
+		return nil, fmt.Errorf("unsupported provider: %s", providerName)
 	}
 }
 
@@ -296,207 +311,4 @@ func getEnvWithDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-}
-
-// OpenAICompatibleChatModel implements Eino's ToolCallingChatModel for OpenAI-compatible APIs
-type OpenAICompatibleChatModel struct {
-	provider *ModelProvider
-	model    Model
-}
-
-// NewOpenAICompatibleChatModel creates a new OpenAI-compatible chat model
-func NewOpenAICompatibleChatModel(provider *ModelProvider, model Model) *OpenAICompatibleChatModel {
-	return &OpenAICompatibleChatModel{
-		provider: provider,
-		model:    model,
-	}
-}
-
-// Generate implements the chat model generation
-func (m *OpenAICompatibleChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	// Convert Eino messages to OpenAI format
-	messages := make([]map[string]interface{}, len(input))
-	for i, msg := range input {
-		messages[i] = map[string]interface{}{
-			"role":    strings.ToLower(string(msg.Role)),
-			"content": msg.Content,
-		}
-		
-		// Add tool calls if present
-		if len(msg.ToolCalls) > 0 {
-			toolCalls := make([]map[string]interface{}, len(msg.ToolCalls))
-			for j, tc := range msg.ToolCalls {
-				toolCalls[j] = map[string]interface{}{
-					"id":   tc.ID,
-					"type": "function",
-					"function": map[string]interface{}{
-						"name":      tc.Function.Name,
-						"arguments": tc.Function.Arguments,
-					},
-				}
-			}
-			messages[i]["tool_calls"] = toolCalls
-		}
-		
-		// Add tool call ID for tool messages
-		if msg.ToolCallID != "" {
-			messages[i]["tool_call_id"] = msg.ToolCallID
-		}
-	}
-	
-	requestBody := map[string]interface{}{
-		"model":       m.model.ID,
-		"messages":    messages,
-		"max_tokens":  m.model.MaxTokens,
-		"temperature": 0.7,
-	}
-	
-	// Make HTTP request
-	response, err := m.makeRequest(ctx, requestBody)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Parse response
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("no response from model")
-	}
-	
-	choice := response.Choices[0]
-	result := &schema.Message{
-		Role:    schema.RoleType(choice.Message.Role),
-		Content: choice.Message.Content,
-	}
-	
-	// Parse tool calls if present
-	if len(choice.Message.ToolCalls) > 0 {
-		result.ToolCalls = make([]schema.ToolCall, len(choice.Message.ToolCalls))
-		for i, tc := range choice.Message.ToolCalls {
-			result.ToolCalls[i] = schema.ToolCall{
-				ID: tc.ID,
-				Type: "function",
-				Function: schema.FunctionCall{
-					Name:      tc.Function.Name,
-					Arguments: tc.Function.Arguments,
-				},
-			}
-		}
-	}
-	
-	return result, nil
-}
-
-// Stream implements streaming generation
-func (m *OpenAICompatibleChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	// For now, return a simple implementation that just calls Generate
-	// In a full implementation, this would handle Server-Sent Events streaming
-	result, err := m.Generate(ctx, input, opts...)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Create a stream reader from array with single result
-	return schema.StreamReaderFromArray([]*schema.Message{result}), nil
-}
-
-// WithTools returns a new model instance with tools bound
-func (m *OpenAICompatibleChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
-	// Create a new instance with the same configuration
-	// In a full implementation, this would store the tools for use in requests
-	return &OpenAICompatibleChatModel{
-		provider: m.provider,
-		model:    m.model,
-	}, nil
-}
-
-// makeRequest makes an HTTP request to the model provider
-func (m *OpenAICompatibleChatModel) makeRequest(ctx context.Context, requestBody map[string]interface{}) (*OpenAIResponse, error) {
-	// This is a simplified implementation
-	// In a full implementation, you would:
-	// 1. Marshal the request body to JSON
-	// 2. Create HTTP request with proper headers
-	// 3. Add authentication (API key)
-	// 4. Handle the HTTP response
-	// 5. Parse the JSON response
-	
-	// For now, return a mock response
-	return &OpenAIResponse{
-		Choices: []OpenAIChoice{
-			{
-				Message: OpenAIMessage{
-					Role:    "assistant",
-					Content: "This is a mock response. Implement proper HTTP client for production use.",
-				},
-			},
-		},
-	}, nil
-}
-
-// OpenAI API response structures
-type OpenAIResponse struct {
-	Choices []OpenAIChoice `json:"choices"`
-}
-
-type OpenAIChoice struct {
-	Message OpenAIMessage `json:"message"`
-}
-
-type OpenAIMessage struct {
-	Role      string          `json:"role"`
-	Content   string          `json:"content"`
-	ToolCalls []OpenAIToolCall `json:"tool_calls,omitempty"`
-}
-
-type OpenAIToolCall struct {
-	ID       string             `json:"id"`
-	Type     string             `json:"type"`
-	Function OpenAIFunctionCall `json:"function"`
-}
-
-type OpenAIFunctionCall struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-}
-
-// AnthropicChatModel implements Eino's ToolCallingChatModel for Anthropic's API
-type AnthropicChatModel struct {
-	provider *ModelProvider
-	model    Model
-}
-
-// NewAnthropicChatModel creates a new Anthropic chat model
-func NewAnthropicChatModel(provider *ModelProvider, model Model) *AnthropicChatModel {
-	return &AnthropicChatModel{
-		provider: provider,
-		model:    model,
-	}
-}
-
-// Generate implements the chat model generation for Anthropic
-func (m *AnthropicChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	// Anthropic has a different API format than OpenAI
-	// This would need to be implemented with proper Anthropic API calls
-	return &schema.Message{
-		Role:    schema.Assistant,
-		Content: "This is a mock Anthropic response. Implement proper Anthropic API client for production use.",
-	}, nil
-}
-
-// Stream implements streaming for Anthropic
-func (m *AnthropicChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	result, err := m.Generate(ctx, input, opts...)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Create a stream reader from array with single result  
-	return schema.StreamReaderFromArray([]*schema.Message{result}), nil
-}
-
-// WithTools returns a new Anthropic model instance with tools bound
-func (m *AnthropicChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
-	return &AnthropicChatModel{
-		provider: m.provider,
-		model:    m.model,
-	}, nil
 }
