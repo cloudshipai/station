@@ -9,21 +9,21 @@ import (
 )
 
 type Agent struct {
-	ID                int64          `json:"id"`
-	Name              string         `json:"name"`
-	Description       string         `json:"description"`
-	Prompt            string         `json:"prompt"`
-	MaxSteps          int64          `json:"max_steps"`
-	EnvironmentID     int64          `json:"environment_id"`
-	CreatedBy         int64          `json:"created_by"`
-	ModelID           sql.NullInt64  `json:"model_id"`
-	CronSchedule      sql.NullString `json:"cron_schedule"`
-	IsScheduled       bool           `json:"is_scheduled"`
-	LastScheduledRun  sql.NullTime   `json:"last_scheduled_run"`
-	NextScheduledRun  sql.NullTime   `json:"next_scheduled_run"`
-	ScheduleEnabled   bool           `json:"schedule_enabled"`
-	CreatedAt         sql.NullTime   `json:"created_at"`
-	UpdatedAt         sql.NullTime   `json:"updated_at"`
+	ID               int64          `json:"id"`
+	Name             string         `json:"name"`
+	Description      string         `json:"description"`
+	Prompt           string         `json:"prompt"`
+	MaxSteps         int64          `json:"max_steps"`
+	EnvironmentID    int64          `json:"environment_id"`
+	CreatedBy        int64          `json:"created_by"`
+	ModelID          sql.NullInt64  `json:"model_id"`
+	CronSchedule     sql.NullString `json:"cron_schedule"`
+	IsScheduled      sql.NullBool   `json:"is_scheduled"`
+	LastScheduledRun sql.NullTime   `json:"last_scheduled_run"`
+	NextScheduledRun sql.NullTime   `json:"next_scheduled_run"`
+	ScheduleEnabled  sql.NullBool   `json:"schedule_enabled"`
+	CreatedAt        sql.NullTime   `json:"created_at"`
+	UpdatedAt        sql.NullTime   `json:"updated_at"`
 }
 
 type AgentRun struct {
@@ -56,31 +56,37 @@ type Environment struct {
 }
 
 type McpConfig struct {
-	ID              int64        `json:"id"`
-	EnvironmentID   int64        `json:"environment_id"`
-	Version         int64        `json:"version"`
-	ConfigJson      string       `json:"config_json"`
-	EncryptionKeyID string       `json:"encryption_key_id"`
-	CreatedAt       sql.NullTime `json:"created_at"`
-	UpdatedAt       sql.NullTime `json:"updated_at"`
+	ID              int64          `json:"id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	ConfigName      string         `json:"config_name"`
+	Version         int64          `json:"version"`
+	ConfigJson      string         `json:"config_json"`
+	EncryptionKeyID sql.NullString `json:"encryption_key_id"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
+	UpdatedAt       sql.NullTime   `json:"updated_at"`
 }
 
 type McpServer struct {
-	ID         int64        `json:"id"`
-	ConfigID   int64        `json:"config_id"`
-	ServerName string       `json:"server_name"`
-	ServerUrl  string       `json:"server_url"`
-	CreatedAt  sql.NullTime `json:"created_at"`
+	ID             int64          `json:"id"`
+	Name           string         `json:"name"`
+	Command        string         `json:"command"`
+	Args           sql.NullString `json:"args"`
+	Env            sql.NullString `json:"env"`
+	WorkingDir     sql.NullString `json:"working_dir"`
+	TimeoutSeconds sql.NullInt64  `json:"timeout_seconds"`
+	AutoRestart    sql.NullBool   `json:"auto_restart"`
+	EnvironmentID  int64          `json:"environment_id"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
 }
 
 type McpTool struct {
-	ID            int64          `json:"id"`
-	McpServerID   int64          `json:"mcp_server_id"`
-	Name          string         `json:"name"`
-	Description   sql.NullString `json:"description"`
-	InputSchema   sql.NullString `json:"input_schema"`
-	CreatedAt     sql.NullTime   `json:"created_at"`
-	UpdatedAt     sql.NullTime   `json:"updated_at"`
+	ID          int64          `json:"id"`
+	McpServerID int64          `json:"mcp_server_id"`
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	InputSchema sql.NullString `json:"input_schema"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
 type Model struct {

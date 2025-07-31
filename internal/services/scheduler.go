@@ -120,11 +120,11 @@ func (s *SchedulerService) loadScheduledAgents() error {
 			Name:            agent.Name,
 			Description:     agent.Description,
 			CronSchedule:    &agent.CronSchedule.String,
-			IsScheduled:     agent.IsScheduled,
-			ScheduleEnabled: agent.ScheduleEnabled,
+			IsScheduled:     agent.IsScheduled.Bool,
+			ScheduleEnabled: agent.ScheduleEnabled.Bool,
 		}
 
-		if agent.CronSchedule.Valid && agent.ScheduleEnabled {
+		if agent.CronSchedule.Valid && agent.ScheduleEnabled.Bool {
 			if err := s.ScheduleAgent(modelAgent); err != nil {
 				log.Printf("Warning: failed to schedule agent %d (%s): %v", agent.ID, agent.Name, err)
 				continue

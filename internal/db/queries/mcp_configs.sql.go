@@ -7,19 +7,20 @@ package queries
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createMCPConfig = `-- name: CreateMCPConfig :one
 INSERT INTO mcp_configs (environment_id, version, config_json, encryption_key_id)
 VALUES (?, ?, ?, ?)
-RETURNING id, environment_id, version, config_json, encryption_key_id, created_at, updated_at
+RETURNING id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at
 `
 
 type CreateMCPConfigParams struct {
-	EnvironmentID   int64  `json:"environment_id"`
-	Version         int64  `json:"version"`
-	ConfigJson      string `json:"config_json"`
-	EncryptionKeyID string `json:"encryption_key_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Version         int64          `json:"version"`
+	ConfigJson      string         `json:"config_json"`
+	EncryptionKeyID sql.NullString `json:"encryption_key_id"`
 }
 
 func (q *Queries) CreateMCPConfig(ctx context.Context, arg CreateMCPConfigParams) (McpConfig, error) {
@@ -33,6 +34,7 @@ func (q *Queries) CreateMCPConfig(ctx context.Context, arg CreateMCPConfigParams
 	err := row.Scan(
 		&i.ID,
 		&i.EnvironmentID,
+		&i.ConfigName,
 		&i.Version,
 		&i.ConfigJson,
 		&i.EncryptionKeyID,
@@ -43,7 +45,7 @@ func (q *Queries) CreateMCPConfig(ctx context.Context, arg CreateMCPConfigParams
 }
 
 const getLatestMCPConfig = `-- name: GetLatestMCPConfig :one
-SELECT id, environment_id, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs 
+SELECT id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs 
 WHERE environment_id = ? 
 ORDER BY version DESC 
 LIMIT 1
@@ -55,6 +57,7 @@ func (q *Queries) GetLatestMCPConfig(ctx context.Context, environmentID int64) (
 	err := row.Scan(
 		&i.ID,
 		&i.EnvironmentID,
+		&i.ConfigName,
 		&i.Version,
 		&i.ConfigJson,
 		&i.EncryptionKeyID,
@@ -65,7 +68,7 @@ func (q *Queries) GetLatestMCPConfig(ctx context.Context, environmentID int64) (
 }
 
 const getMCPConfig = `-- name: GetMCPConfig :one
-SELECT id, environment_id, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs WHERE id = ?
+SELECT id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs WHERE id = ?
 `
 
 func (q *Queries) GetMCPConfig(ctx context.Context, id int64) (McpConfig, error) {
@@ -74,6 +77,7 @@ func (q *Queries) GetMCPConfig(ctx context.Context, id int64) (McpConfig, error)
 	err := row.Scan(
 		&i.ID,
 		&i.EnvironmentID,
+		&i.ConfigName,
 		&i.Version,
 		&i.ConfigJson,
 		&i.EncryptionKeyID,
@@ -84,7 +88,7 @@ func (q *Queries) GetMCPConfig(ctx context.Context, id int64) (McpConfig, error)
 }
 
 const getMCPConfigByVersion = `-- name: GetMCPConfigByVersion :one
-SELECT id, environment_id, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs 
+SELECT id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs 
 WHERE environment_id = ? AND version = ?
 `
 
@@ -99,6 +103,7 @@ func (q *Queries) GetMCPConfigByVersion(ctx context.Context, arg GetMCPConfigByV
 	err := row.Scan(
 		&i.ID,
 		&i.EnvironmentID,
+		&i.ConfigName,
 		&i.Version,
 		&i.ConfigJson,
 		&i.EncryptionKeyID,
@@ -122,7 +127,7 @@ func (q *Queries) GetNextMCPConfigVersion(ctx context.Context, environmentID int
 }
 
 const listMCPConfigsByEnvironment = `-- name: ListMCPConfigsByEnvironment :many
-SELECT id, environment_id, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs 
+SELECT id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at FROM mcp_configs 
 WHERE environment_id = ? 
 ORDER BY version DESC
 `
@@ -139,6 +144,7 @@ func (q *Queries) ListMCPConfigsByEnvironment(ctx context.Context, environmentID
 		if err := rows.Scan(
 			&i.ID,
 			&i.EnvironmentID,
+			&i.ConfigName,
 			&i.Version,
 			&i.ConfigJson,
 			&i.EncryptionKeyID,
