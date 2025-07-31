@@ -52,3 +52,4 @@ ssh_host_key*
 
 # Test files (in root - move to tests/ for permanent tests)
 test_*.go
+stn

@@ -131,10 +131,10 @@ func runMainServer() error {
 	}
 	defer schedulerSvc.Stop()
 
-	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc)
-	
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
+	
+	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc, localMode)
 	mcpServer := mcp.NewServer(database, mcpConfigSvc, agentSvc, repos, localMode)
 	apiServer := api.New(cfg, database, localMode)
 	

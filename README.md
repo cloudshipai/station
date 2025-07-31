@@ -1,256 +1,349 @@
-# Station 🚂
+# Station (stn) 🚂
 
-**Station** is a secure, self-hosted platform for managing AI agents and Model Context Protocol (MCP) servers. It provides a unified interface for deploying, configuring, and executing AI agents across multiple environments with enterprise-grade security and encryption.
+**Station** is a revolutionary AI infrastructure platform that makes MCP (Model Context Protocol) servers as easy to discover, configure, and deploy as Docker containers. Think of it as the "package manager for AI agents" - transforming complex MCP server setup from hours of configuration into a 30-second guided wizard.
 
-## 🎯 Features
+## 🎯 Why Station?
 
-- **🤖 AI Agent Management**: Create, deploy, and execute AI agents with customizable prompts and tool access
-- **🔒 MCP Server Integration**: Secure management of Model Context Protocol servers with encrypted configuration storage
-- **🛡️ Enterprise Security**: API key authentication, encrypted data storage, and secure agent execution
-- **🌍 Multi-Environment Support**: Isolated environments for different projects, teams, or use cases  
-- **📡 SSH Admin Interface**: Terminal-based administration with intuitive menus and real-time monitoring
-- **🔧 Multi-LLM Support**: Compatible with OpenAI, Anthropic, and other leading AI model providers
-- **📊 Execution Tracking**: Detailed logging and monitoring of agent runs and tool usage
+**The Problem**: MCP servers are powerful but painful to set up. Each repository has different installation methods, environment variables, and configuration requirements. Teams waste hours reading documentation, debugging configs, and managing scattered MCP server deployments.
 
-## 🚀 Quick Start
-
-### For Users (MCP Client)
-
-Station acts as an MCP server that you can connect to from any MCP-compatible client:
-
-1. **Get your API key** from your Station administrator
-2. **Configure your MCP client** to connect to Station:
-
-```json
-{
-  "mcpServers": {
-    "station": {
-      "command": "curl",
-      "args": [
-        "-X", "POST",
-        "-H", "Authorization: Bearer YOUR_API_KEY_HERE",
-        "-H", "Content-Type: application/json",
-        "http://your-station-host:3000/mcp"
-      ]
-    }
-  }
-}
-```
-
-3. **Available MCP Tools**:
-   - `create_agent`: Create new AI agents with custom configurations
-   - `call_agent`: Execute agents with specific tasks
-   - `list_mcp_configs`: View available MCP server configurations
-   - `discover_tools`: Find tools from configured MCP servers
-   - `call_mcp_tool`: Execute tools from external MCP servers
-
-### For Administrators
-
-#### Installation
+**Station's Solution**: AI-powered discovery + guided wizards + seamless deployment. Point Station at any GitHub MCP server repository, and it automatically analyzes the code, presents configuration options, and sets up everything for you.
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/station.git
-cd station
+# Instead of reading docs, copying configs, debugging environment variables...
+stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
 
-# Install dependencies
-go mod download
-
-# Set up environment
-cp .env.example .env
-# Edit .env with your configuration (see Configuration section)
-
-# Build and run
-go build -o station cmd/main.go
-./station
+# Station analyzes the repo, shows you options, guides setup, and deploys automatically
+# ✨ From GitHub URL to running MCP server in 30 seconds
 ```
 
-#### Initial Setup
+## 🚀 Value in 5 Minutes (3 Steps)
 
-1. **Generate encryption key**:
-   ```bash
-   openssl rand -hex 32
-   ```
+### Step 1: Initialize Station (1 minute)
+```bash
+# Download and initialize Station
+curl -sSL https://get-station.dev | bash  # (hypothetical installer)
+cd ~/my-project
+stn init  # Creates config, generates encryption keys
+```
 
-2. **Configure environment** (`.env`):
-   ```bash
-   ENCRYPTION_KEY=your-64-character-hex-key-here
-   DATABASE_URL=station.db
-   SSH_PORT=2222
-   MCP_PORT=3000
-   API_PORT=8080
-   ```
+### Step 2: Discover & Deploy MCP Server (2 minutes)
+```bash
+# AI-powered discovery from any GitHub repo
+stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
 
-3. **Start Station**:
-   ```bash
-   ./station
-   ```
+# 🧙 Interactive wizard guides you through:
+# - Configuration options (NPX, Docker, local build)  
+# - Environment variables (with examples and validation)
+# - Automatic deployment and tool discovery
+```
 
-4. **Access admin interface**:
-   ```bash
-   ssh admin@localhost -p 2222
-   ```
+### Step 3: Use Your MCP Server (2 minutes)
+```bash
+# Access admin interface
+ssh admin@localhost -p 2222
 
-## 📋 Configuration
+# Or integrate with any MCP client
+# Station exposes all discovered tools through MCP protocol
+# Your filesystem tools are now available to Claude, Cody, etc.
+```
 
-### Environment Variables
+**Result**: You now have a fully configured MCP server with filesystem tools, automatically discovered and deployed from a GitHub URL. No documentation reading, no configuration debugging, no manual setup.
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `ENCRYPTION_KEY` | 32-byte hex key for encrypting sensitive data | - | ✅ |
-| `DATABASE_URL` | SQLite database file path | `station.db` | ❌ |
-| `SSH_PORT` | SSH admin interface port | `2222` | ❌ |
-| `MCP_PORT` | MCP server port | `3000` | ❌ |
-| `API_PORT` | HTTP API port | `8080` | ❌ |
-| `SSH_HOST_KEY_PATH` | SSH host key file path | `./ssh_host_key` | ❌ |
-| `ADMIN_USERNAME` | Default admin username | `admin` | ❌ |
+## 🏠 Local Mode vs 🌐 Remote Mode
 
-### Model Providers
+Station supports two deployment modes to fit different use cases:
 
-Station supports multiple AI model providers. Configure them through the admin interface:
+### 🏠 Local Mode (Developer/Personal)
+**Perfect for**: Solo developers, experimentation, local AI workflows
 
-- **OpenAI**: GPT-3.5, GPT-4, GPT-4 Turbo models
-- **Anthropic**: Claude 3 family models  
-- **Local/Custom**: Any OpenAI-compatible API endpoint
+```bash
+# Everything runs locally on your machine
+stn init                    # Local database, local SSH
+stn serve --local          # Starts all services locally
+ssh admin@localhost -p 2222  # Admin interface
+```
+
+**Features**:
+- ✅ Single-user operation
+- ✅ Local SQLite database  
+- ✅ No authentication required
+- ✅ Perfect for development and testing
+- ✅ All data stays on your machine
+
+### 🌐 Remote Mode (Team/Enterprise)
+**Perfect for**: Teams, production deployments, multi-user environments
+
+```bash
+# Deploy Station as a shared service
+stn serve --remote --host 0.0.0.0 --port 8080
+```
+
+**Features**:
+- ✅ Multi-user authentication with API keys
+- ✅ Role-based access control (admin vs user)
+- ✅ SSH authentication via system users
+- ✅ Shared MCP server configurations
+- ✅ Team collaboration and environment isolation
+- ✅ Production-ready deployment
+
+**Usage Examples**:
+
+```bash
+# Local development
+stn load https://github.com/awesome/mcp-server  # Deploy locally
+
+# Remote deployment  
+stn load https://github.com/awesome/mcp-server --endpoint https://station.company.com
+
+# Team member usage
+stn load --endpoint https://station.company.com  # Uses team configurations
+```
+
+## 🛠️ Setup Examples
+
+### Local Development Setup
+```bash
+# Quick local setup for development
+stn init
+echo 'local_mode: true' >> ~/.config/station/config.yaml
+stn serve
+```
+
+### Team/Enterprise Setup
+```bash
+# Server setup
+stn init --production
+stn serve --remote --host 0.0.0.0
+
+# Team member setup
+stn config set endpoint https://your-station-server.com
+stn config set api_key your-api-key-here
+```
+
+### MCP Server Discovery Examples
+```bash
+# Popular MCP servers - just paste GitHub URLs
+stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+stn load https://github.com/awslabs/mcp/tree/main/src/cfn-mcp-server  
+stn load https://github.com/kocierik/mcp-nomad
+
+# Station automatically:
+# 1. Analyzes repository structure and documentation
+# 2. Extracts configuration options (NPX, Docker, local build)
+# 3. Identifies required environment variables
+# 4. Presents guided wizard for setup
+# 5. Deploys and enables tools automatically
+```
 
 ## 🏗️ Architecture
 
-Station is built with a modular architecture:
+Station bridges MCP clients and MCP servers with intelligent orchestration:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   MCP Clients   │────│   Station MCP   │────│   External MCP  │
-│   (Claude, etc) │    │     Server      │    │     Servers     │
+│   MCP Clients   │────│   Station Hub   │────│  GitHub Repos   │
+│ (Claude, Cody)  │    │  (stn serve)    │    │ (MCP Servers)   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                │
                     ┌─────────────────┐
-                    │   Agent Engine  │
-                    │   (Eino/ReAct)  │
+                    │  AI Discovery   │  🧠 Analyzes repos
+                    │   & Wizard      │     Guides setup
                     └─────────────────┘
                                │
                     ┌─────────────────┐    ┌─────────────────┐
-                    │  Encrypted DB   │    │  SSH Admin UI   │
-                    │   (SQLite)      │    │  (Bubble Tea)   │
+                    │  Deployed MCP   │    │  Admin Control  │
+                    │    Servers      │    │  (SSH + Web)    │
                     └─────────────────┘    └─────────────────┘
 ```
 
-### Key Components
+### Key Innovation: AI-Powered MCP Discovery
 
-- **MCP Server**: Secure HTTP server implementing MCP protocol
-- **Agent Engine**: ReAct-based agent execution with tool integration
-- **Configuration Manager**: Encrypted storage for MCP server configs and API keys
-- **Authentication System**: API key-based auth with role-based access
-- **SSH Admin Interface**: Terminal UI for system administration
+Station uses AI to understand GitHub repositories and automatically extract:
+- **Server capabilities** (what tools it provides)
+- **Installation methods** (NPX, Docker, local build)
+- **Environment requirements** (API keys, endpoints, configs)
+- **Best practices** (recommended setups, common patterns)
 
-## 🔐 Security
+This eliminates the manual work of reading documentation and figuring out configurations.
 
-Station implements enterprise-grade security practices:
+## 🎯 Core Features
 
-- **🔑 API Key Authentication**: All MCP requests require valid API keys
-- **🔒 Encryption at Rest**: Sensitive data encrypted using NaCl secretbox
-- **🛡️ Secure Contexts**: User identity inferred from authenticated context
-- **🚫 No Hardcoded Secrets**: All keys managed through environment variables
-- **🔍 Audit Logging**: Comprehensive tracking of agent executions and tool usage
+- **🧙 AI-Powered Discovery**: Analyze any GitHub MCP server repository automatically
+- **📋 Guided Configuration**: Interactive wizards with validation and examples
+- **🚀 One-Command Deploy**: From GitHub URL to running server in seconds
+- **🔒 Enterprise Security**: API keys, encryption, role-based access control
+- **🌍 Multi-Environment**: Isolated configs for dev/staging/prod
+- **📡 Dual-Mode SSH**: Local admin access + remote user authentication
+- **🔧 Universal MCP Hub**: Connects any MCP client to any MCP server
 
-## 🛠️ Development
+## 🛡️ Security & Authentication
 
-### Prerequisites
+### Local Mode Security
+- No authentication required (single-user)
+- Local SSH access only
+- Data encrypted at rest with generated keys
 
-- Go 1.21+
-- SQLite3
-- OpenSSL (for key generation)
+### Remote Mode Security  
+- **API Key Authentication**: Each user gets secure API keys
+- **Role-Based Access**: Admin vs user permissions
+- **SSH Integration**: Authenticates against system users  
+- **Encrypted Storage**: All sensitive data encrypted with NaCl
+- **Audit Logging**: Track all operations and access
 
-### Building from Source
+## 🚀 Installation & Quick Start
+
+## 🤖 Revolutionary AI Agent Platform
+
+Station isn't just an MCP server manager - it's the **easiest way to create background agents** that revolutionize how you work with AI:
+
+### 🏆 Why Station for AI Agents?
+
+**1. Background Agent Excellence**
+- Create agents that run automatically on schedules
+- Perfect for monitoring, data processing, content generation
+- Seamless integration with your development workflow
+
+**2. Environment-Based Tool Organization**  
+- Organize tools by environments (dev/staging/prod)
+- No more cluttered personal MCP configurations
+- Clean separation of concerns for different projects
+
+**3. Smart Context Management**
+- Filter subtools, not just servers  
+- Agents get exactly the tools they need
+- No context poisoning from MCP servers with hundreds of tools
+
+**4. Team AI Infrastructure**
+- Share agents across teams
+- Centralized management and monitoring
+- Production-ready deployment and scaling
+
+### 🧙 AI-Assisted Agent Creation
+
+Station includes MCP prompts that guide your main AI (Claude, etc.) to create well-structured agents:
 
 ```bash
-# Clone and build
-git clone https://github.com/your-org/station.git
-cd station
-go build -o station cmd/main.go
+# Connect your Claude/AI client to Station's MCP server
+# Then use the create_comprehensive_agent prompt:
 
-# Run tests
-go test ./...
+"I need an agent that monitors our GitHub issues and 
+creates daily summaries for the team Slack channel"
 
-# Or use the test script
-./scripts/run_tests.sh
+# Station's AI prompt helps Claude understand:
+# - Which tools are needed (GitHub API, Slack, scheduling)
+# - Optimal environment setup
+# - Smart filtering to avoid tool overload  
+# - Proper error handling and validation
+# - Scheduling and automation patterns
 ```
 
-### Contributing
+**Example Agent Creation Flow:**
+1. **Intent**: "Monitor website uptime and send alerts"
+2. **Station Analysis**: Recommends HTTP monitoring tools + Slack notifications
+3. **Smart Filtering**: Only assigns essential tools (http-client, slack-api) 
+4. **Environment**: Selects monitoring environment with proper credentials
+5. **Deployment**: Creates scheduled agent with error handling
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Option 1: Quick Install (Recommended)
+```bash
+# Install Station
+curl -sSL https://get-station.dev | bash
+stn init
 
-## 📚 API Reference
+# Discover and deploy MCP server
+stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
 
-### MCP Tools
+# Start using immediately
+ssh admin@localhost -p 2222
+```
 
-#### `create_agent`
+### Option 2: Build from Source
+```bash
+git clone https://github.com/your-org/station.git
+cd station
+make build
+./stn init
+```
 
-Create a new AI agent with specified configuration.
+## 📚 Commands Reference
 
-**Parameters:**
-- `name` (string, required): Agent name
-- `description` (string, required): Agent description  
-- `prompt` (string, required): System prompt for the agent
-- `environment_id` (string, required): Environment ID where agent operates
-- `max_steps` (number, optional): Maximum execution steps (default: 5)
-- `assigned_tools` (array, optional): List of tool names to assign
+### Core Commands
+```bash
+stn init                    # Initialize Station configuration
+stn serve                   # Start Station services (local mode)
+stn serve --remote          # Start in remote/team mode
+stn load <github-url>       # Discover and deploy MCP server
+stn load                    # Load from local mcp.json/.mcp.json
+```
 
-#### `call_agent`
+### Configuration
+```bash
+stn config show             # View current configuration
+stn config set key value    # Update configuration
+stn key generate            # Generate new encryption key
+```
 
-Execute an AI agent with a given task.
+### Environment Management
+```bash
+stn env create <name>       # Create new environment
+stn env list                # List environments
+stn env switch <name>       # Switch active environment
+```
 
-**Parameters:**
-- `agent_id` (string, required): ID of the agent to execute
-- `task` (string, required): Task or input for the agent
+## 🤝 SSH Integration (Remote Mode)
 
-### REST API
+In remote mode, Station integrates with your system's SSH configuration for user authentication:
 
-Station also exposes a REST API for programmatic access:
+```bash
+# Server reads from system SSH config
+# Users authenticate with their system credentials
+ssh user@station-server -p 2222
 
-- `GET /api/agents` - List all agents
-- `POST /api/agents` - Create new agent
-- `GET /api/agents/{id}/runs` - Get agent execution history
-- `POST /api/environments` - Create new environment
+# Supports:
+# - SSH key authentication
+# - System user validation  
+# - Host-based authentication
+# - All standard SSH auth methods
+```
+
+Station's SSH server in remote mode leverages the host system's SSH configuration, making it seamless to integrate with existing user management and authentication systems.
 
 ## 🔧 Troubleshooting
 
 ### Common Issues
 
-**Connection Refused (MCP)**
-- Check that Station is running on the configured MCP port
-- Verify API key is correctly formatted in Authorization header
-
-**Authentication Failed**
-- Ensure API key is valid and not expired
-- Check that user account is active in the admin interface
-
-**Agent Execution Timeout**
-- Increase `max_steps` parameter for complex tasks
-- Check that required tools are properly configured
-
-### Debug Mode
-
-Enable debug logging:
+**"No MCP configuration found"**
 ```bash
-STATION_DEBUG=true ./station
+# Ensure you have mcp.json or .mcp.json in current directory
+# Or use GitHub URL discovery instead
+stn load https://github.com/some/mcp-server
+```
+
+**"GitHub analysis failed"**
+```bash
+# Check internet connection and GitHub URL format
+# Ensure repository contains MCP server code
+```
+
+**"SSH connection refused"**
+```bash
+# Check Station is running and SSH port is correct
+stn serve  # Start Station if not running
+ssh admin@localhost -p 2222  # Default SSH port
 ```
 
 ## 📄 License
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the [LICENSE](LICENSE) file for details.
+AGPL-3.0 - Open source with copyleft provisions for service deployments.
 
-The AGPL-3.0 ensures that any modifications or improvements to Station remain open source, even when deployed as a web service. For commercial licensing options and enterprise support, please contact us.
+## 🌟 Contributing
 
-## 🤝 Support
+Station is built for the community. Contributions welcome!
 
-- **Documentation**: [Wiki](https://github.com/your-org/station/wiki)
-- **Issues**: [GitHub Issues](https://github.com/your-org/station/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/station/discussions)
+1. Fork and create feature branch
+2. Add tests and documentation  
+3. Submit pull request
 
 ---
 
-**Station** - Secure AI Agent Management Platform • Built with ❤️ in Go
+**Station** - Making MCP servers as easy as `npm install` • Built with ❤️ for the AI community

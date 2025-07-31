@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"station/internal/auth"
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -23,19 +24,22 @@ type Server struct {
 	toolDiscoverySvc *ToolDiscoveryService
 	agentService     services.AgentServiceInterface
 	authService      *auth.AuthService
+	repos            *repositories.Repositories
 	localMode        bool
 }
 
 type ToolDiscoveryService struct {
 	db              db.Database
 	mcpConfigSvc    *services.MCPConfigService
+	repos           *repositories.Repositories
 	discoveredTools map[string][]mcp.Tool // configID -> tools
 }
 
-func NewToolDiscoveryService(database db.Database, mcpConfigSvc *services.MCPConfigService) *ToolDiscoveryService {
+func NewToolDiscoveryService(database db.Database, mcpConfigSvc *services.MCPConfigService, repos *repositories.Repositories) *ToolDiscoveryService {
 	return &ToolDiscoveryService{
 		db:              database,
 		mcpConfigSvc:    mcpConfigSvc,
+		repos:           repos,
 		discoveredTools: make(map[string][]mcp.Tool),
 	}
 }
@@ -47,20 +51,32 @@ func (t *ToolDiscoveryService) DiscoverTools(ctx context.Context, configID int64
 		return fmt.Errorf("failed to get MCP config: %w", err)
 	}
 
-	// TODO: Connect to external MCP server and discover tools
-	// For now, create mock tools based on config
+	// Get tools from database for this config
 	configIDStr := fmt.Sprintf("%d", configID)
-	mockTools := []mcp.Tool{
-		mcp.NewTool(fmt.Sprintf("tool_%s_1", configIDStr),
-			mcp.WithDescription(fmt.Sprintf("Tool from config %s", configIDStr)),
-		),
-		mcp.NewTool(fmt.Sprintf("tool_%s_2", configIDStr),
-			mcp.WithDescription(fmt.Sprintf("Another tool from config %s", configIDStr)),
-		),
+	
+	// Get config first to get environment info
+	config, err := t.repos.MCPConfigs.GetByID(configID)
+	if err != nil {
+		return fmt.Errorf("failed to get config: %w", err)
 	}
-
-	t.discoveredTools[configIDStr] = mockTools
-	log.Printf("Discovered %d tools for config %d", len(mockTools), configID)
+	
+	// Get tools for this config's environment
+	dbTools, err := t.repos.MCPTools.GetByEnvironmentID(config.EnvironmentID)
+	if err != nil {
+		log.Printf("Failed to get tools for config %d: %v", configID, err)
+		t.discoveredTools[configIDStr] = []mcp.Tool{}
+		return nil
+	}
+	
+	// Convert database tools to MCP tools
+	var mcpTools []mcp.Tool
+	for _, tool := range dbTools {
+		mcpTool := mcp.NewTool(tool.Name, mcp.WithDescription(tool.Description))
+		mcpTools = append(mcpTools, mcpTool)
+	}
+	
+	t.discoveredTools[configIDStr] = mcpTools
+	log.Printf("Discovered %d tools for config %d", len(mcpTools), configID)
 	return nil
 }
 
@@ -78,7 +94,7 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 		server.WithRecovery(),
 	)
 
-	toolDiscoverySvc := NewToolDiscoveryService(database, mcpConfigSvc)
+	toolDiscoverySvc := NewToolDiscoveryService(database, mcpConfigSvc, repos)
 	authService := auth.NewAuthService(repos)
 
 	// Create custom HTTP server with conditional authentication middleware
@@ -108,6 +124,7 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 		toolDiscoverySvc: toolDiscoverySvc,
 		agentService:     agentService,
 		authService:      authService,
+		repos:            repos,
 		localMode:        localMode,
 	}
 
@@ -139,23 +156,8 @@ func (s *Server) setupTools() {
 
 	s.mcpServer.AddTool(discoverTool, s.handleDiscoverTools)
 
-	// Add a tool to call tools from discovered MCP servers
-	callToolTool := mcp.NewTool("call_mcp_tool",
-		mcp.WithDescription("Call a tool from a discovered MCP server"),
-		mcp.WithString("config_id",
-			mcp.Required(),
-			mcp.Description("ID of the MCP configuration"),
-		),
-		mcp.WithString("tool_name",
-			mcp.Required(),
-			mcp.Description("Name of the tool to call"),
-		),
-		mcp.WithObject("arguments",
-			mcp.Description("Arguments to pass to the tool"),
-		),
-	)
-
-	s.mcpServer.AddTool(callToolTool, s.handleCallMCPTool)
+	// TODO: Add external MCP tool calling when MCP client is implemented
+	// For now, we only support Station's native tools
 
 	// Add a tool to create AI agents
 	createAgentTool := mcp.NewTool("create_agent",
@@ -208,10 +210,22 @@ func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolR
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	
-	// TODO: Get list of MCP configs from database
-	configs := []string{"config1", "config2", "config3"} // Mock data
+	// Get actual MCP configs from database
+	configs, err := s.repos.MCPConfigs.GetAllLatestConfigs()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get MCP configs: %v", err)), nil
+	}
 	
-	return mcp.NewToolResultText(fmt.Sprintf("Available MCP configs: %v", configs)), nil
+	if len(configs) == 0 {
+		return mcp.NewToolResultText("No MCP configurations found"), nil
+	}
+	
+	var configNames []string
+	for _, config := range configs {
+		configNames = append(configNames, fmt.Sprintf("%s (ID: %d, Env: %d)", config.ConfigName, config.ID, config.EnvironmentID))
+	}
+	
+	return mcp.NewToolResultText(fmt.Sprintf("Available MCP configs:\n%s", strings.Join(configNames, "\n"))), nil
 }
 
 func (s *Server) handleDiscoverTools(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -246,26 +260,7 @@ func (s *Server) handleDiscoverTools(ctx context.Context, request mcp.CallToolRe
 	return mcp.NewToolResultText(fmt.Sprintf("Discovered tools from config %s: %v", configIDStr, toolNames)), nil
 }
 
-func (s *Server) handleCallMCPTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// In server mode, only admin users can call MCP tools
-	if err := s.requireAdminInServerMode(ctx); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	
-	configID, err := request.RequireString("config_id")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	toolName, err := request.RequireString("tool_name")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	// TODO: Create dynamic MCP client and call the external tool
-	// For now, return mock response
-	return mcp.NewToolResultText(fmt.Sprintf("Called tool %s from config %s", toolName, configID)), nil
-}
+// handleCallMCPTool removed - external MCP tool calling not yet implemented
 
 func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// In server mode, only admin users can create agents

@@ -58,6 +58,11 @@ func NewGenkitService(
 	}
 }
 
+// GetGenkitApp returns the underlying Genkit application instance
+func (s *GenkitService) GetGenkitApp() *genkit.Genkit {
+	return s.genkitApp
+}
+
 // InitializeMCP sets up MCP manager with configured servers for ALL environments
 // This enables cross-environment agent tool access with environment namespacing
 func (s *GenkitService) InitializeMCP(ctx context.Context) error {
