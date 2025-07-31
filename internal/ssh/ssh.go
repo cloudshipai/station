@@ -14,19 +14,22 @@ import (
 
 	"station/internal/config"
 	"station/internal/db"
+	"station/internal/services"
 	"station/internal/tui"
 )
 
 type Server struct {
-	cfg *config.Config
-	db  *db.DB
-	srv *ssh.Server
+	cfg            *config.Config
+	db             *db.DB
+	executionQueue *services.ExecutionQueueService
+	srv            *ssh.Server
 }
 
-func New(cfg *config.Config, database *db.DB) *Server {
+func New(cfg *config.Config, database *db.DB, executionQueue *services.ExecutionQueueService) *Server {
 	s := &Server{
-		cfg: cfg,
-		db:  database,
+		cfg:            cfg,
+		db:             database,
+		executionQueue: executionQueue,
 	}
 
 	s.srv = s.createSSHServer()
@@ -57,8 +60,8 @@ func (s *Server) createSSHServer() *ssh.Server {
 }
 
 func (s *Server) teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
-	// Create the new TUI model with database access
-	tuiModel := tui.NewModel(s.db)
+	// Create the new TUI model with database access and execution queue
+	tuiModel := tui.NewModel(s.db, s.executionQueue)
 	
 	return tuiModel, []tea.ProgramOption{
 		tea.WithAltScreen(),

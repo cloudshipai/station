@@ -112,6 +112,15 @@ func convertJSONSchemaToOpenAPI(schemaData map[string]interface{}) (*openapi3.Sc
 		}
 	}
 	
+	// Handle array items
+	if items, ok := schemaData["items"].(map[string]interface{}); ok {
+		itemSchema, err := convertJSONSchemaToOpenAPI(items)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert array items schema: %w", err)
+		}
+		schema.Items = &openapi3.SchemaRef{Value: itemSchema}
+	}
+	
 	return schema, nil
 }
 

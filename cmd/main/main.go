@@ -86,6 +86,13 @@ It provides a retro terminal interface for system administration and agent manag
 		Long:  "Show current encryption key status and rotation state",
 		RunE:  runKeyStatus,
 	}
+
+	keyFinishRotationCmd = &cobra.Command{
+		Use:   "finish-rotation",
+		Short: "Complete encryption key rotation",
+		Long:  "Complete the encryption key rotation by re-encrypting all data with the new key",
+		RunE:  runKeyFinishRotation,
+	}
 )
 
 func init() {
@@ -107,6 +114,7 @@ func init() {
 	keyCmd.AddCommand(keySetCmd)
 	keyCmd.AddCommand(keyRotateCmd)
 	keyCmd.AddCommand(keyStatusCmd)
+	keyCmd.AddCommand(keyFinishRotationCmd)
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
@@ -442,6 +450,66 @@ func runKeyStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   - Model provider API keys\n")
 	fmt.Printf("   - Agent system prompts (if sensitive)\n")
 	fmt.Printf("   - User SSH keys and tokens\n")
+	
+	return nil
+}
+
+func runKeyFinishRotation(cmd *cobra.Command, args []string) error {
+	fmt.Printf("🔄 Completing encryption key rotation...\n")
+	
+	// Load current config
+	configDir := getXDGConfigDir()
+	configFile := filepath.Join(configDir, "config.yaml")
+	
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return fmt.Errorf("configuration not found. Please run 'station init' first")
+	}
+	
+	currentKey := viper.GetString("encryption_key")
+	previousKey := viper.GetString("previous_encryption_key")
+	rotationStarted := viper.GetBool("key_rotation_started")
+	
+	if !rotationStarted {
+		fmt.Printf("✅ No key rotation in progress\n")
+		return nil
+	}
+	
+	if previousKey == "" {
+		return fmt.Errorf("no previous encryption key found - rotation state is invalid")
+	}
+	
+	if currentKey == "" {
+		return fmt.Errorf("no current encryption key found - rotation state is invalid")
+	}
+	
+	fmt.Printf("Previous Key: %s...%s\n", previousKey[:8], previousKey[56:])
+	fmt.Printf("Current Key:  %s...%s\n", currentKey[:8], currentKey[56:])
+	fmt.Printf("\n🔐 Re-encrypting all data with new key...\n")
+	
+	// Set environment variables for the rotation process
+	os.Setenv("ENCRYPTION_KEY", currentKey)
+	os.Setenv("PREVIOUS_ENCRYPTION_KEY", previousKey)
+	os.Setenv("DATABASE_URL", viper.GetString("database_url"))
+	
+	// Call the rotation function
+	if err := runEncryptionRotation(); err != nil {
+		return fmt.Errorf("failed to complete rotation: %w", err)
+	}
+	
+	// Clear rotation flags
+	viper.Set("key_rotation_started", false)
+	viper.Set("previous_encryption_key", "")
+	
+	// Write config
+	if err := viper.WriteConfig(); err != nil {
+		fmt.Printf("⚠️  Data rotation completed, but failed to clear rotation flags: %v\n", err)
+		fmt.Printf("   You may need to manually edit the config file: %s\n", configFile)
+		return nil
+	}
+	
+	fmt.Printf("✅ Encryption key rotation completed successfully!\n")
+	fmt.Printf("📁 Config file updated: %s\n", configFile)
+	fmt.Printf("🔐 All data is now encrypted with the new key\n")
 	
 	return nil
 }

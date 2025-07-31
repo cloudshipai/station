@@ -250,3 +250,43 @@ func (r *MCPConfigRepo) Delete(id int64) error {
 	_, err := r.db.Exec(query, id)
 	return err
 }
+
+// DeleteTx deletes a config within a transaction
+func (r *MCPConfigRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	query := `DELETE FROM mcp_configs WHERE id = ?`
+	_, err := tx.Exec(query, id)
+	return err
+}
+
+// UpdateEncryption updates the encryption details for a specific config
+func (r *MCPConfigRepo) UpdateEncryption(id int64, configJSON, encryptionKeyID string) error {
+	query := `UPDATE mcp_configs SET config_json = ?, encryption_key_id = ? WHERE id = ?`
+	_, err := r.db.Exec(query, configJSON, encryptionKeyID, id)
+	return err
+}
+
+// ListAll returns all MCP configs across all environments (used for key rotation)
+func (r *MCPConfigRepo) ListAll() ([]*models.MCPConfig, error) {
+	query := `SELECT id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at 
+			  FROM mcp_configs 
+			  ORDER BY environment_id, config_name, version DESC`
+	
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var configs []*models.MCPConfig
+	for rows.Next() {
+		var config models.MCPConfig
+		err := rows.Scan(&config.ID, &config.EnvironmentID, &config.ConfigName, &config.Version, &config.ConfigJSON,
+			&config.EncryptionKeyID, &config.CreatedAt, &config.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		configs = append(configs, &config)
+	}
+	
+	return configs, rows.Err()
+}

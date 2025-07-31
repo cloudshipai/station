@@ -161,6 +161,16 @@ func (m *ToolsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	case ToolsErrorMsg:
 		m.SetError(msg.Err.Error())
 		m.SetLoading(false)
+
+	case MCPToolDiscoveryCompletedMsg:
+		// When tool discovery completes in MCP tab, refresh our tools list
+		if msg.Success {
+			return m, m.loadTools()
+		}
+
+	case MCPConfigDeletedMsg:
+		// When MCP config is deleted, refresh our tools list to remove orphaned tools
+		return m, m.loadTools()
 	}
 
 	// Update list component
