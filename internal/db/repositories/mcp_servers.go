@@ -1,178 +1,156 @@
 package repositories
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"station/internal/db/queries"
 	"station/pkg/models"
 )
 
 type MCPServerRepo struct {
-	db *sql.DB
+	db      *sql.DB
+	queries *queries.Queries
 }
 
 func NewMCPServerRepo(db *sql.DB) *MCPServerRepo {
-	return &MCPServerRepo{db: db}
+	return &MCPServerRepo{
+		db:      db,
+		queries: queries.New(db),
+	}
+}
+
+// convertMCPServerFromSQLc converts sqlc McpServer to models.MCPServer
+func convertMCPServerFromSQLc(server queries.McpServer) *models.MCPServer {
+	result := &models.MCPServer{
+		ID:            server.ID,
+		Name:          server.Name,
+		Command:       server.Command,
+		EnvironmentID: server.EnvironmentID,
+	}
+	
+	// Handle JSON fields
+	if server.Args.Valid {
+		if err := json.Unmarshal([]byte(server.Args.String), &result.Args); err != nil {
+			result.Args = []string{}
+		}
+	} else {
+		result.Args = []string{}
+	}
+	
+	if server.Env.Valid {
+		if err := json.Unmarshal([]byte(server.Env.String), &result.Env); err != nil {
+			result.Env = map[string]string{}
+		}
+	} else {
+		result.Env = map[string]string{}
+	}
+	
+	if server.WorkingDir.Valid {
+		result.WorkingDir = &server.WorkingDir.String
+	}
+	
+	if server.TimeoutSeconds.Valid {
+		result.TimeoutSeconds = &server.TimeoutSeconds.Int64
+	}
+	
+	if server.AutoRestart.Valid {
+		result.AutoRestart = &server.AutoRestart.Bool
+	}
+	
+	if server.CreatedAt.Valid {
+		result.CreatedAt = server.CreatedAt.Time
+	}
+	
+	return result
+}
+
+// convertMCPServerToSQLc converts models.MCPServer to sqlc CreateMCPServerParams
+func convertMCPServerToSQLc(server *models.MCPServer) queries.CreateMCPServerParams {
+	params := queries.CreateMCPServerParams{
+		Name:          server.Name,
+		Command:       server.Command,
+		EnvironmentID: server.EnvironmentID,
+	}
+	
+	// Handle JSON fields
+	if argsJSON, err := json.Marshal(server.Args); err == nil {
+		params.Args = sql.NullString{String: string(argsJSON), Valid: true}
+	}
+	
+	if envJSON, err := json.Marshal(server.Env); err == nil {
+		params.Env = sql.NullString{String: string(envJSON), Valid: true}
+	}
+	
+	if server.WorkingDir != nil {
+		params.WorkingDir = sql.NullString{String: *server.WorkingDir, Valid: true}
+	}
+	
+	if server.TimeoutSeconds != nil {
+		params.TimeoutSeconds = sql.NullInt64{Int64: *server.TimeoutSeconds, Valid: true}
+	}
+	
+	if server.AutoRestart != nil {
+		params.AutoRestart = sql.NullBool{Bool: *server.AutoRestart, Valid: true}
+	}
+	
+	return params
 }
 
 func (r *MCPServerRepo) Create(server *models.MCPServer) (int64, error) {
-	// Marshal env map to JSON
-	envJSON, err := json.Marshal(server.Env)
-	if err != nil {
-		envJSON = []byte("{}")
-	}
-	
-	// Marshal args to JSON
-	argsJSON, err := json.Marshal(server.Args)
-	if err != nil {
-		argsJSON = []byte("[]")
-	}
-	
-	query := `INSERT INTO mcp_servers (mcp_config_id, name, command, args, env) 
-			  VALUES (?, ?, ?, ?, ?) 
-			  RETURNING id`
-	
-	var id int64
-	err = r.db.QueryRow(query, server.MCPConfigID, server.Name, server.Command, string(argsJSON), string(envJSON)).Scan(&id)
+	params := convertMCPServerToSQLc(server)
+	created, err := r.queries.CreateMCPServer(context.Background(), params)
 	if err != nil {
 		return 0, err
 	}
-	
-	return id, nil
+	return created.ID, nil
 }
 
 func (r *MCPServerRepo) CreateTx(tx *sql.Tx, server *models.MCPServer) (int64, error) {
-	// Marshal env map to JSON
-	envJSON, err := json.Marshal(server.Env)
-	if err != nil {
-		envJSON = []byte("{}")
-	}
-	
-	// Marshal args to JSON
-	argsJSON, err := json.Marshal(server.Args)
-	if err != nil {
-		argsJSON = []byte("[]")
-	}
-	
-	query := `INSERT INTO mcp_servers (mcp_config_id, name, command, args, env) 
-			  VALUES (?, ?, ?, ?, ?) 
-			  RETURNING id`
-	
-	var id int64
-	err = tx.QueryRow(query, server.MCPConfigID, server.Name, server.Command, string(argsJSON), string(envJSON)).Scan(&id)
+	params := convertMCPServerToSQLc(server)
+	txQueries := r.queries.WithTx(tx)
+	created, err := txQueries.CreateMCPServer(context.Background(), params)
 	if err != nil {
 		return 0, err
 	}
-	
-	return id, nil
+	return created.ID, nil
 }
 
 func (r *MCPServerRepo) GetByID(id int64) (*models.MCPServer, error) {
-	query := `SELECT id, mcp_config_id, name, command, args, env, created_at FROM mcp_servers WHERE id = ?`
-	
-	var server models.MCPServer
-	var argsJSON, envJSON string
-	err := r.db.QueryRow(query, id).Scan(
-		&server.ID, &server.MCPConfigID, &server.Name, &server.Command, &argsJSON, &envJSON, &server.CreatedAt,
-	)
+	server, err := r.queries.GetMCPServer(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
-	
-	// Unmarshal JSON fields
-	if err := json.Unmarshal([]byte(argsJSON), &server.Args); err != nil {
-		server.Args = []string{}
-	}
-	if err := json.Unmarshal([]byte(envJSON), &server.Env); err != nil {
-		server.Env = map[string]string{}
-	}
-	
-	return &server, nil
-}
-
-func (r *MCPServerRepo) GetByConfigID(configID int64) ([]*models.MCPServer, error) {
-	query := `SELECT id, mcp_config_id, name, command, args, env, created_at 
-			  FROM mcp_servers WHERE mcp_config_id = ? ORDER BY name`
-	
-	rows, err := r.db.Query(query, configID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	
-	var servers []*models.MCPServer
-	for rows.Next() {
-		var server models.MCPServer
-		var argsJSON, envJSON string
-		err := rows.Scan(&server.ID, &server.MCPConfigID, &server.Name, &server.Command, &argsJSON, &envJSON, &server.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		
-		// Unmarshal JSON fields
-		if err := json.Unmarshal([]byte(argsJSON), &server.Args); err != nil {
-			server.Args = []string{}
-		}
-		if err := json.Unmarshal([]byte(envJSON), &server.Env); err != nil {
-			server.Env = map[string]string{}
-		}
-		
-		servers = append(servers, &server)
-	}
-	
-	return servers, rows.Err()
+	return convertMCPServerFromSQLc(server), nil
 }
 
 func (r *MCPServerRepo) GetByEnvironmentID(environmentID int64) ([]*models.MCPServer, error) {
-	query := `SELECT s.id, s.mcp_config_id, s.name, s.command, s.args, s.env, s.created_at 
-			  FROM mcp_servers s
-			  JOIN mcp_configs c ON s.mcp_config_id = c.id
-			  WHERE c.environment_id = ? AND c.version = (
-				  SELECT MAX(version) FROM mcp_configs WHERE environment_id = ?
-			  )
-			  ORDER BY s.name`
-	
-	rows, err := r.db.Query(query, environmentID, environmentID)
+	servers, err := r.queries.ListMCPServersByEnvironment(context.Background(), environmentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	var servers []*models.MCPServer
-	for rows.Next() {
-		var server models.MCPServer
-		var argsJSON, envJSON string
-		err := rows.Scan(&server.ID, &server.MCPConfigID, &server.Name, &server.Command, &argsJSON, &envJSON, &server.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		
-		// Unmarshal JSON fields
-		if err := json.Unmarshal([]byte(argsJSON), &server.Args); err != nil {
-			server.Args = []string{}
-		}
-		if err := json.Unmarshal([]byte(envJSON), &server.Env); err != nil {
-			server.Env = map[string]string{}
-		}
-		
-		servers = append(servers, &server)
+	var result []*models.MCPServer
+	for _, server := range servers {
+		result = append(result, convertMCPServerFromSQLc(server))
 	}
 	
-	return servers, rows.Err()
+	return result, nil
 }
 
-func (r *MCPServerRepo) DeleteByConfigID(configID int64) error {
-	return r.DeleteByConfigIDTx(nil, configID)
+func (r *MCPServerRepo) Delete(id int64) error {
+	return r.queries.DeleteMCPServer(context.Background(), id)
 }
 
-func (r *MCPServerRepo) DeleteByConfigIDTx(tx *sql.Tx, configID int64) error {
-	query := `DELETE FROM mcp_servers WHERE mcp_config_id = ?`
-	
-	// Use transaction if provided, otherwise use regular db connection
+func (r *MCPServerRepo) DeleteByEnvironmentID(environmentID int64) error {
+	return r.DeleteByEnvironmentIDTx(nil, environmentID)
+}
+
+func (r *MCPServerRepo) DeleteByEnvironmentIDTx(tx *sql.Tx, environmentID int64) error {
 	if tx != nil {
-		_, err := tx.Exec(query, configID)
-		return err
+		txQueries := r.queries.WithTx(tx)
+		return txQueries.DeleteMCPServersByEnvironment(context.Background(), environmentID)
 	} else {
-		_, err := r.db.Exec(query, configID)
-		return err
+		return r.queries.DeleteMCPServersByEnvironment(context.Background(), environmentID)
 	}
 }
