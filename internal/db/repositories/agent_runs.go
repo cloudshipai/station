@@ -47,6 +47,28 @@ func (r *AgentRunRepo) GetByID(id int64) (*models.AgentRun, error) {
 	return &run, nil
 }
 
+func (r *AgentRunRepo) GetByIDWithDetails(id int64) (*models.AgentRunWithDetails, error) {
+	query := `SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken, 
+					 ar.tool_calls, ar.execution_steps, ar.status, ar.started_at, ar.completed_at,
+					 a.name as agent_name, u.username
+			  FROM agent_runs ar
+			  JOIN agents a ON ar.agent_id = a.id
+			  JOIN users u ON ar.user_id = u.id
+			  WHERE ar.id = ?`
+	
+	var run models.AgentRunWithDetails
+	err := r.db.QueryRow(query, id).Scan(
+		&run.ID, &run.AgentID, &run.UserID, &run.Task, &run.FinalResponse, &run.StepsTaken,
+		&run.ToolCalls, &run.ExecutionSteps, &run.Status, &run.StartedAt, &run.CompletedAt,
+		&run.AgentName, &run.Username,
+	)
+	if err != nil {
+		return nil, err
+	}
+	
+	return &run, nil
+}
+
 func (r *AgentRunRepo) List() ([]*models.AgentRun, error) {
 	query := `SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at 
 			  FROM agent_runs ORDER BY started_at DESC`
@@ -148,4 +170,14 @@ func (r *AgentRunRepo) ListRecent(limit int64) ([]*models.AgentRunWithDetails, e
 	}
 	
 	return runs, rows.Err()
+}
+
+// UpdateCompletion updates an existing run record with completion data
+func (r *AgentRunRepo) UpdateCompletion(id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) error {
+	query := `UPDATE agent_runs 
+			  SET final_response = ?, steps_taken = ?, tool_calls = ?, execution_steps = ?, status = ?, completed_at = ?
+			  WHERE id = ?`
+	
+	_, err := r.db.Exec(query, finalResponse, stepsTaken, toolCalls, executionSteps, status, completedAt, id)
+	return err
 }

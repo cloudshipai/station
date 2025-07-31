@@ -26,6 +26,11 @@ func NewMCPConfigService(repos *repositories.Repositories, keyManager *crypto.Ke
 
 // UploadConfig encrypts and stores an MCP configuration
 func (s *MCPConfigService) UploadConfig(environmentID int64, configData *models.MCPConfigData) (*models.MCPConfig, error) {
+	// Validate tool name lengths before proceeding
+	if err := s.validateToolNameLengths(environmentID, configData); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
 	// Use the config name from the data, fallback to default if empty
 	configName := configData.Name
 	if configName == "" {
@@ -277,4 +282,39 @@ func (s *MCPConfigService) DecryptConfig(encryptedConfig string) (*models.MCPCon
 	}
 	
 	return s.DecryptConfigWithKeyID(encryptedConfig, activeKey.ID)
+}
+
+// validateToolNameLengths checks if any tool names would exceed OpenAI's 40-character limit
+// when combined with environment and server prefixes
+func (s *MCPConfigService) validateToolNameLengths(environmentID int64, configData *models.MCPConfigData) error {
+	// Get the environment name
+	env, err := s.repos.Environments.GetByID(environmentID)
+	if err != nil {
+		return fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// Check each server and its potential tool names
+	for serverName := range configData.Servers {
+		// Calculate the prefix length: environment_id + "_" + server_name + "_"
+		envIDStr := fmt.Sprintf("%d", env.ID)
+		prefixLength := len(envIDStr) + 1 + len(serverName) + 1
+		
+		// For validation purposes, we assume typical MCP tool names
+		// Since we don't know the actual tool names until we connect to the server,
+		// we'll validate against common patterns and warn about potential issues
+		
+		// Check if the prefix alone is too long (leaving no room for tool names)
+		if prefixLength >= 40 {
+			return fmt.Errorf("environment ID %d and server '%s' combination is %d characters, leaving no room for tool names (OpenAI limit: 40 characters total)", 
+				env.ID, serverName, prefixLength)
+		}
+		
+		// Warn if prefix is very long (leaving little room for tool names)
+		if prefixLength > 30 {
+			return fmt.Errorf("environment ID %d and server '%s' combination is %d characters, leaving only %d characters for tool names (OpenAI limit: 40 characters total). Consider using shorter server names", 
+				env.ID, serverName, prefixLength, 40-prefixLength)
+		}
+	}
+	
+	return nil
 }

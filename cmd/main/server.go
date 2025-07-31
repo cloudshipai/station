@@ -103,6 +103,7 @@ func runMainServer() error {
 		repos.MCPConfigs,
 		repos.AgentTools,
 		repos.AgentEnvironments,
+		repos.Environments,
 		mcpConfigSvc,
 	)
 	
@@ -129,7 +130,7 @@ func runMainServer() error {
 	}
 	defer schedulerSvc.Stop()
 
-	sshServer := ssh.New(cfg, database, executionQueueSvc)
+	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc)
 	
 	mcpServer := mcp.NewServer(database, mcpConfigSvc, agentSvc, repos)
 	apiServer := api.New(cfg, database)

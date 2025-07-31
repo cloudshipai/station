@@ -140,6 +140,12 @@ func (m *UsersModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.userList.SetSize(msg.Width-4, msg.Height-10)
 
 	case tea.KeyMsg:
+		// Clear error message on any key press when there's an error
+		if m.GetError() != "" {
+			m.SetError("")
+			// Still process the key press normally after clearing error
+		}
+		
 		// For create view, handle text input first, then navigation
 		if m.viewMode == UsersViewCreate {
 			return m.handleCreateUserKeysNew(msg)
@@ -398,10 +404,6 @@ func (m UsersModel) View() string {
 		return components.RenderLoadingIndicator(0)
 	}
 
-	if m.GetError() != "" {
-		return styles.ErrorStyle.Render("Error: " + m.GetError())
-	}
-
 	switch m.viewMode {
 	case UsersViewList:
 		return m.renderUsersList()
@@ -533,7 +535,15 @@ func (m UsersModel) renderUsersList() string {
 	// Header
 	header := components.RenderSectionHeader("User Management")
 	sections = append(sections, header)
-	sections = append(sections, "")
+
+	// Show error message if there is one
+	if m.GetError() != "" {
+		errorMsg := styles.ErrorStyle.Render("⚠ " + m.GetError())
+		sections = append(sections, errorMsg)
+		sections = append(sections, "")
+	} else {
+		sections = append(sections, "")
+	}
 
 	// User list
 	userListView := m.userList.View()
@@ -541,6 +551,9 @@ func (m UsersModel) renderUsersList() string {
 
 	// Help text
 	helpText := styles.HelpStyle.Render("• ↑↓: navigate • n: new user • enter: details • d: delete")
+	if m.GetError() != "" {
+		helpText = styles.HelpStyle.Render("• ↑↓: navigate • n: new user • enter: details • d: delete • any key: dismiss error")
+	}
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 

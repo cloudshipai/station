@@ -352,6 +352,20 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.updateListItems()
 		m.SetLoading(false)
 		
+		// Check if a specific agent was pre-selected (e.g., from dashboard navigation)
+		if selectedID := m.GetSelectedID(); selectedID != "" {
+			for _, agent := range m.agents {
+				if fmt.Sprintf("%d", agent.ID) == selectedID {
+					m.selectedAgent = &agent
+					m.PushNavigation(agent.Name)
+					m.SetViewMode("detail")
+					m.actionButtonIndex = 0  // Start with first button selected
+					m.SetSelectedID("") // Clear the selected ID after using it
+					break
+				}
+			}
+		}
+		
 	case AgentsErrorMsg:
 		m.SetError(msg.Err.Error())
 		m.SetLoading(false)
@@ -2140,7 +2154,10 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 // runAgent queues an agent for execution using the execution queue service
 func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
 	if m.executionQueue == nil {
-		return tea.Printf("❌ Execution queue service not available")
+		return tea.Sequence(
+			tea.Printf("❌ ERROR: Execution queue service not available!"),
+			tea.Printf("🔧 This indicates a configuration or initialization problem"),
+		)
 	}
 	
 	// Use a default task prompt for manual agent execution
@@ -2167,11 +2184,18 @@ func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
 	}
 	
 	// Queue the execution
-	if err := m.executionQueue.QueueExecution(agent.ID, consoleUser.ID, task, metadata); err != nil {
+	runID, err := m.executionQueue.QueueExecution(agent.ID, consoleUser.ID, task, metadata)
+	if err != nil {
 		return tea.Printf("❌ Failed to queue agent execution: %v", err)
 	}
 	
-	return tea.Printf("🚀 Agent '%s' queued for execution - check Runs tab for progress", agent.Name)
+	return tea.Sequence(
+		tea.Printf("🚀 Agent '%s' has been queued for execution!", agent.Name),
+		tea.Printf("📊 Run ID: %d - Check the Runs tab to monitor progress", runID),
+		func() tea.Msg {
+			return RunCreatedMsg{RunID: runID, AgentID: agent.ID}
+		},
+	)
 }
 
 // renderEnvironmentSelection renders the multi-environment selection interface

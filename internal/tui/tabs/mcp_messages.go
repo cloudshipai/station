@@ -1,5 +1,7 @@
 package tabs
 
+import "station/pkg/models"
+
 // Message types for MCP configuration management
 
 type MCPConfigSavedMsg struct {
@@ -39,4 +41,10 @@ type MCPToolDiscoveryCompletedMsg struct {
 	Success    bool
 	ToolCount  int
 	Error      error
+}
+
+// Message for environments loaded
+type MCPEnvironmentsLoadedMsg struct {
+	Environments []*models.Environment
+	Error        error
 }

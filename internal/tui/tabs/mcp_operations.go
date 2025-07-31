@@ -1,11 +1,11 @@
 package tabs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	
 	"station/pkg/models"
@@ -141,24 +141,10 @@ func (m *MCPModel) loadEnvironments() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
 		envs, err := m.repos.Environments.List()
 		if err != nil {
-			return err
+			return MCPEnvironmentsLoadedMsg{Error: err}
 		}
 		
-		m.envs = envs
-		
-		// Convert to list items
-		items := make([]list.Item, len(envs))
-		for i, env := range envs {
-			items[i] = EnvironmentItem{env: *env}
-		}
-		m.environmentList.SetItems(items)
-		
-		// Set default selection to first environment
-		if len(envs) > 0 {
-			m.selectedEnvID = envs[0].ID
-		}
-		
-		return nil
+		return MCPEnvironmentsLoadedMsg{Environments: envs}
 	})
 }
 
@@ -293,6 +279,14 @@ func (m MCPModel) deleteConfig(configID int64) tea.Cmd {
 				log.Printf("DEBUG: Deleted tools for server %s (ID: %d)", server.Name, server.ID)
 			}
 			
+			// Clean up orphaned agent tool assignments that reference tools from this config
+			// This ensures data consistency when MCP configs are deleted
+			if err := m.cleanupOrphanedAgentTools(config.EnvironmentID); err != nil {
+				log.Printf("DEBUG: Failed to cleanup orphaned agent tools for environment %d: %v", config.EnvironmentID, err)
+				// Don't fail the deletion if cleanup fails, just log the warning
+				// The main deletion should still succeed
+			}
+			
 			// Delete the servers
 			if err := m.repos.MCPServers.DeleteByConfigID(config.ID); err != nil {
 				log.Printf("DEBUG: Failed to delete servers for config %d: %v", config.ID, err)
@@ -317,6 +311,19 @@ func (m MCPModel) deleteConfig(configID int64) tea.Cmd {
 		}
 		
 		log.Printf("DEBUG: Successfully deleted all %d versions of config '%s'", len(configsToDelete), configName)
+		
+		// Trigger async MCP manager reinitialization to remove cached tools
+		if m.genkitService != nil {
+			go func() {
+				log.Printf("DEBUG: Reinitializing MCP manager after config deletion")
+				if err := m.genkitService.ReinitializeMCP(context.Background()); err != nil {
+					log.Printf("ERROR: Failed to reinitialize MCP manager: %v", err)
+				} else {
+					log.Printf("DEBUG: MCP manager reinitialized successfully")
+				}
+			}()
+		}
+		
 		return MCPConfigDeletedMsg{
 			ConfigID: configID,
 			Message:  fmt.Sprintf("Configuration '%s' (all %d versions) deleted successfully", configName, len(configsToDelete)),
@@ -491,4 +498,56 @@ func (m MCPModel) getToolExtractionStatus(configID int64) (ToolExtractionStatus,
 		// Some servers have tools, some don't
 		return ToolStatusPartial, totalTools
 	}
+}
+
+// cleanupOrphanedAgentTools removes agent tool assignments that reference tools which no longer exist
+// This ensures data consistency when MCP configs are deleted
+func (m MCPModel) cleanupOrphanedAgentTools(environmentID int64) error {
+	// Get all available MCP tools for this environment to check against
+	availableTools, err := m.repos.MCPTools.GetByEnvironmentID(environmentID)
+	if err != nil {
+		return fmt.Errorf("failed to get available tools for environment %d: %w", environmentID, err)
+	}
+	
+	// Create a map of available tools for quick lookup
+	availableToolsMap := make(map[string]bool)
+	for _, tool := range availableTools {
+		availableToolsMap[tool.Name] = true
+	}
+	
+	// Get all agents to check their tool assignments in this environment
+	agents, err := m.repos.Agents.ListByEnvironment(environmentID)
+	if err != nil {
+		return fmt.Errorf("failed to get agents for environment %d: %w", environmentID, err)
+	}
+	
+	// Check each agent's tool assignments in this environment
+	var orphanedCount int
+	for _, agent := range agents {
+		// Get agent tools for this specific agent and environment
+		agentTools, err := m.repos.AgentTools.ListByEnvironment(agent.ID, environmentID)
+		if err != nil {
+			log.Printf("Failed to get agent tools for agent %d in environment %d: %v", agent.ID, environmentID, err)
+			continue
+		}
+		
+		// Remove agent tool assignments that reference non-existent tools
+		for _, agentTool := range agentTools {
+			if !availableToolsMap[agentTool.ToolName] {
+				// This agent tool references a tool that no longer exists - remove it
+				if err := m.repos.AgentTools.Remove(agent.ID, agentTool.ToolName, environmentID); err != nil {
+					log.Printf("Failed to remove orphaned agent tool assignment (agent: %d, tool: %s, env: %d): %v", agent.ID, agentTool.ToolName, environmentID, err)
+					continue
+				}
+				orphanedCount++
+				log.Printf("DEBUG: Cleaned up orphaned agent tool assignment: agent %d, tool '%s', environment %d", agent.ID, agentTool.ToolName, environmentID)
+			}
+		}
+	}
+	
+	if orphanedCount > 0 {
+		log.Printf("DEBUG: Cleaned up %d orphaned agent tool assignments for environment %d", orphanedCount, environmentID)
+	}
+	
+	return nil
 }
