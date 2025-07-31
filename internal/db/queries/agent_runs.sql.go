@@ -80,6 +80,53 @@ func (q *Queries) GetAgentRun(ctx context.Context, id int64) (AgentRun, error) {
 	return i, err
 }
 
+const getAgentRunWithDetails = `-- name: GetAgentRunWithDetails :one
+SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken, 
+       ar.tool_calls, ar.execution_steps, ar.status, ar.started_at, ar.completed_at,
+       a.name as agent_name, u.username
+FROM agent_runs ar
+JOIN agents a ON ar.agent_id = a.id
+JOIN users u ON ar.user_id = u.id
+WHERE ar.id = ?
+`
+
+type GetAgentRunWithDetailsRow struct {
+	ID             int64          `json:"id"`
+	AgentID        int64          `json:"agent_id"`
+	UserID         int64          `json:"user_id"`
+	Task           string         `json:"task"`
+	FinalResponse  string         `json:"final_response"`
+	StepsTaken     int64          `json:"steps_taken"`
+	ToolCalls      sql.NullString `json:"tool_calls"`
+	ExecutionSteps sql.NullString `json:"execution_steps"`
+	Status         string         `json:"status"`
+	StartedAt      sql.NullTime   `json:"started_at"`
+	CompletedAt    sql.NullTime   `json:"completed_at"`
+	AgentName      string         `json:"agent_name"`
+	Username       string         `json:"username"`
+}
+
+func (q *Queries) GetAgentRunWithDetails(ctx context.Context, id int64) (GetAgentRunWithDetailsRow, error) {
+	row := q.db.QueryRowContext(ctx, getAgentRunWithDetails, id)
+	var i GetAgentRunWithDetailsRow
+	err := row.Scan(
+		&i.ID,
+		&i.AgentID,
+		&i.UserID,
+		&i.Task,
+		&i.FinalResponse,
+		&i.StepsTaken,
+		&i.ToolCalls,
+		&i.ExecutionSteps,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.AgentName,
+		&i.Username,
+	)
+	return i, err
+}
+
 const listAgentRuns = `-- name: ListAgentRuns :many
 SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at FROM agent_runs ORDER BY started_at DESC
 `
@@ -257,4 +304,33 @@ func (q *Queries) ListRecentAgentRuns(ctx context.Context, limit int64) ([]ListR
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateAgentRunCompletion = `-- name: UpdateAgentRunCompletion :exec
+UPDATE agent_runs 
+SET final_response = ?, steps_taken = ?, tool_calls = ?, execution_steps = ?, status = ?, completed_at = ?
+WHERE id = ?
+`
+
+type UpdateAgentRunCompletionParams struct {
+	FinalResponse  string         `json:"final_response"`
+	StepsTaken     int64          `json:"steps_taken"`
+	ToolCalls      sql.NullString `json:"tool_calls"`
+	ExecutionSteps sql.NullString `json:"execution_steps"`
+	Status         string         `json:"status"`
+	CompletedAt    sql.NullTime   `json:"completed_at"`
+	ID             int64          `json:"id"`
+}
+
+func (q *Queries) UpdateAgentRunCompletion(ctx context.Context, arg UpdateAgentRunCompletionParams) error {
+	_, err := q.db.ExecContext(ctx, updateAgentRunCompletion,
+		arg.FinalResponse,
+		arg.StepsTaken,
+		arg.ToolCalls,
+		arg.ExecutionSteps,
+		arg.Status,
+		arg.CompletedAt,
+		arg.ID,
+	)
+	return err
 }

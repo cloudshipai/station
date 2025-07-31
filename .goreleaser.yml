@@ -1,0 +1,218 @@
+# GoReleaser configuration for Station
+# See https://goreleaser.com for documentation
+
+version: 2
+
+project_name: station
+
+env:
+  - GO111MODULE=on
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: station
+    binary: stn
+    main: ./cmd/main
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+    goarm:
+      - "7"
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: windows
+        goarch: "386"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+
+archives:
+  - id: station
+    builds:
+      - station
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - CONTRIBUTING.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+  groups:
+    - title: "🚀 Features"
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "🐛 Bug fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: "📚 Documentation"
+      regexp: "^.*docs[(\\w)]*:+.*$"
+      order: 2
+    - title: "🧪 Tests"
+      regexp: "^.*test[(\\w)]*:+.*$"
+      order: 3
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: cloudshipai
+    name: station
+  name_template: "Station {{.Version}}"
+  header: |
+    ## Station {{.Version}} 🚂
+    
+    Welcome to Station {{.Version}}! This release includes improvements to the AI infrastructure platform that makes MCP servers as easy to discover, configure, and deploy as Docker containers.
+    
+    ### Installation
+    
+    **One-liner install:**
+    ```bash
+    curl -sSL https://getstation.cloudshipai.com | bash
+    ```
+    
+    **Manual download:**
+    Download the appropriate binary for your platform from the assets below.
+    
+    **Go install:**
+    ```bash
+    go install github.com/cloudshipai/station/cmd/main@{{.Tag}}
+    ```
+  footer: |
+    ### What's Station?
+    
+    Station transforms complex MCP server setup from hours of configuration into a 30-second guided wizard. Think of it as the "package manager for AI agents."
+    
+    **Key Features:**
+    - 🧙 AI-powered MCP server discovery from GitHub URLs
+    - 📋 Interactive configuration wizards with validation
+    - 🚀 One-command deployment from repo to running server
+    - 🤖 Revolutionary AI agent platform with smart context management
+    - 🔒 Enterprise security with local and remote deployment modes
+    
+    ### Getting Started
+    
+    ```bash
+    # Initialize Station
+    stn init
+    
+    # Discover and deploy any MCP server from GitHub
+    stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+    
+    # Access admin interface
+    ssh admin@localhost -p 2222
+    ```
+    
+    **Full Changelog**: https://github.com/cloudshipai/station/compare/{{.PreviousTag}}...{{.Tag}}
+
+# Docker configuration (optional)
+dockers:
+  - id: station
+    image_templates:
+      - "ghcr.io/cloudshipai/station:{{ .Version }}"
+      - "ghcr.io/cloudshipai/station:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+# Package repositories (for advanced users)
+# brews:
+#   - name: station
+#     repository:
+#       owner: cloudshipai
+#       name: homebrew-tap
+#     folder: Formula
+#     homepage: "https://github.com/cloudshipai/station"
+#     description: "AI Infrastructure Platform - Secure background agents for your infrastructure"
+#     license: "AGPL-3.0"
+#     test: |
+#       system "#{bin}/stn --version"
+#     install: |
+#       bin.install "stn"
+
+# nfpms:
+#   - id: station
+#     package_name: station
+#     vendor: Your Organization
+#     homepage: https://github.com/cloudshipai/station
+#     maintainer: Your Name <your.email@example.com>
+#     description: "AI Infrastructure Platform - Secure background agents for your infrastructure"
+#     license: AGPL-3.0
+#     formats:
+#       - apk
+#       - deb
+#       - rpm
+#     bindir: /usr/bin
+#     contents:
+#       - src: ./systemd/station.service
+#         dst: /usr/lib/systemd/system/station.service
+#         type: config
+#       - src: ./LICENSE
+#         dst: /usr/share/doc/station/LICENSE
+#         type: doc
+
+publishers:
+  - name: fury.io
+    ids:
+      - station
+    env:
+      - FURY_TOKEN={{ .Env.FURY_TOKEN }}
+    cmd: curl -F package=@{{ .ArtifactPath }} https://push.fury.io/cloudshipai/
+
+# Snapcraft (Ubuntu Store)
+snapcrafts:
+  - name: station
+    summary: AI Infrastructure Platform
+    description: |
+      Station transforms complex MCP server setup from hours of configuration 
+      into a 30-second guided wizard. Making MCP servers as easy as Docker containers.
+    grade: stable
+    confinement: strict
+    publish: true
+    license: AGPL-3.0
+    base: core20
+    apps:
+      stn:
+        command: stn
+        plugs: ["home", "network", "network-bind"]
+
+# Announcement (optional - configure webhooks/notifications)
+announce:
+  discord:
+    enabled: "{{ .Env.DISCORD_WEBHOOK_ID }}"
+    message_template: "Station {{.Tag}} is out! Check it out: {{ .ReleaseURL }}"

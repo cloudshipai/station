@@ -100,6 +100,11 @@ type AgentTool struct {
 // AgentToolWithDetails includes environment information for cross-environment context
 type AgentToolWithDetails struct {
 	AgentTool
+	ToolName        string `json:"tool_name" db:"tool_name"`
+	ToolDescription string `json:"tool_description" db:"tool_description"`
+	ToolSchema      string `json:"tool_schema" db:"tool_schema"`
+	ServerName      string `json:"server_name" db:"server_name"`
+	EnvironmentID   int64  `json:"environment_id" db:"environment_id"`
 	EnvironmentName string `json:"environment_name" db:"environment_name"`
 }
 

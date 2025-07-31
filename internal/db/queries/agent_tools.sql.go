@@ -43,7 +43,7 @@ func (q *Queries) ClearAgentTools(ctx context.Context, agentID int64) error {
 }
 
 const listAgentTools = `-- name: ListAgentTools :many
-SELECT at.id, at.agent_id, at.tool_id, at.created_at, t.name as tool_name, t.description as tool_description, t.input_schema as tool_schema, s.name as server_name
+SELECT at.id, at.agent_id, at.tool_id, at.created_at, t.name as tool_name, t.description as tool_description, t.input_schema as tool_schema, s.name as server_name, s.environment_id
 FROM agent_tools at
 JOIN mcp_tools t ON at.tool_id = t.id
 JOIN mcp_servers s ON t.mcp_server_id = s.id
@@ -60,6 +60,7 @@ type ListAgentToolsRow struct {
 	ToolDescription sql.NullString `json:"tool_description"`
 	ToolSchema      sql.NullString `json:"tool_schema"`
 	ServerName      string         `json:"server_name"`
+	EnvironmentID   int64          `json:"environment_id"`
 }
 
 func (q *Queries) ListAgentTools(ctx context.Context, agentID int64) ([]ListAgentToolsRow, error) {
@@ -80,6 +81,7 @@ func (q *Queries) ListAgentTools(ctx context.Context, agentID int64) ([]ListAgen
 			&i.ToolDescription,
 			&i.ToolSchema,
 			&i.ServerName,
+			&i.EnvironmentID,
 		); err != nil {
 			return nil, err
 		}

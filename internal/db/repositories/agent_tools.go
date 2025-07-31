@@ -34,6 +34,34 @@ func convertAgentToolFromSQLc(agentTool queries.AgentTool) *models.AgentTool {
 	return result
 }
 
+// convertAgentToolWithDetailsFromSQLc converts sqlc ListAgentToolsRow to models.AgentToolWithDetails
+func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.AgentToolWithDetails {
+	result := &models.AgentToolWithDetails{
+		AgentTool: models.AgentTool{
+			ID:      row.ID,
+			AgentID: row.AgentID,
+			ToolID:  row.ToolID,
+		},
+		ToolName:      row.ToolName,
+		ServerName:    row.ServerName,
+		EnvironmentID: row.EnvironmentID,
+	}
+	
+	if row.CreatedAt.Valid {
+		result.CreatedAt = row.CreatedAt.Time
+	}
+	
+	if row.ToolDescription.Valid {
+		result.ToolDescription = row.ToolDescription.String
+	}
+	
+	if row.ToolSchema.Valid {
+		result.ToolSchema = row.ToolSchema.String
+	}
+	
+	return result
+}
+
 // Add creates a new agent-tool assignment 
 func (r *AgentToolRepo) Add(agentID, toolID int64) (*models.AgentTool, error) {
 	params := queries.AddAgentToolParams{
@@ -59,8 +87,18 @@ func (r *AgentToolRepo) Remove(agentID, toolID int64) error {
 }
 
 // List returns all tools assigned to an agent with details
-func (r *AgentToolRepo) List(agentID int64) ([]queries.ListAgentToolsRow, error) {
-	return r.queries.ListAgentTools(context.Background(), agentID)
+func (r *AgentToolRepo) List(agentID int64) ([]*models.AgentToolWithDetails, error) {
+	rows, err := r.queries.ListAgentTools(context.Background(), agentID)
+	if err != nil {
+		return nil, err
+	}
+	
+	var result []*models.AgentToolWithDetails
+	for _, row := range rows {
+		result = append(result, convertAgentToolWithDetailsFromSQLc(row))
+	}
+	
+	return result, nil
 }
 
 // Clear removes all tool assignments for an agent
