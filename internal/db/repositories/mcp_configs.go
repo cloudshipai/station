@@ -163,6 +163,39 @@ func (r *MCPConfigRepo) GetLatestConfigs(environmentID int64) ([]*models.MCPConf
 	return configs, rows.Err()
 }
 
+// GetAllLatestConfigs returns the latest version of each named config across ALL environments
+// This is used for cross-environment MCP initialization
+func (r *MCPConfigRepo) GetAllLatestConfigs() ([]*models.MCPConfig, error) {
+	query := `SELECT id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at 
+			  FROM mcp_configs c1
+			  WHERE version = (
+				  SELECT MAX(version) 
+				  FROM mcp_configs c2 
+				  WHERE c2.environment_id = c1.environment_id 
+				  AND c2.config_name = c1.config_name
+			  )
+			  ORDER BY environment_id, config_name, version DESC`
+	
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var configs []*models.MCPConfig
+	for rows.Next() {
+		var config models.MCPConfig
+		err := rows.Scan(&config.ID, &config.EnvironmentID, &config.ConfigName, &config.Version, &config.ConfigJSON,
+			&config.EncryptionKeyID, &config.CreatedAt, &config.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		configs = append(configs, &config)
+	}
+	
+	return configs, rows.Err()
+}
+
 func (r *MCPConfigRepo) GetByVersion(environmentID int64, configName string, version int64) (*models.MCPConfig, error) {
 	query := `SELECT id, environment_id, config_name, version, config_json, encryption_key_id, created_at, updated_at 
 			  FROM mcp_configs 

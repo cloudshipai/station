@@ -27,6 +27,7 @@ func setupTestDBForServices(t *testing.T) *sql.DB {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL UNIQUE,
 		description TEXT,
+		created_by INTEGER NOT NULL DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -122,18 +123,18 @@ func TestMCPConfigService_UploadConfig(t *testing.T) {
 		t.Errorf("Expected environment ID %d, got %d", env.ID, config.EnvironmentID)
 	}
 
-	// Verify servers were created
-	servers, err := repos.MCPServers.GetByConfigID(config.ID)
+	// Verify the config can be decrypted correctly
+	decryptedConfig, err := service.GetDecryptedConfig(config.ID)
 	if err != nil {
-		t.Fatalf("Failed to list servers: %v", err)
+		t.Fatalf("Failed to decrypt config: %v", err)
 	}
 
-	if len(servers) != 1 {
-		t.Errorf("Expected 1 server, got %d", len(servers))
+	if len(decryptedConfig.Servers) != 1 {
+		t.Errorf("Expected 1 server in config, got %d", len(decryptedConfig.Servers))
 	}
 
-	if servers[0].Name != "test-server" {
-		t.Errorf("Expected server name 'test-server', got '%s'", servers[0].Name)
+	if _, exists := decryptedConfig.Servers["test-server"]; !exists {
+		t.Error("Expected 'test-server' to exist in decrypted config")
 	}
 }
 
@@ -364,20 +365,6 @@ func TestMCPConfigService_FilesystemConfig(t *testing.T) {
 
 	if config.EnvironmentID != env.ID {
 		t.Errorf("Expected environment ID %d, got %d", env.ID, config.EnvironmentID)
-	}
-
-	// Verify the filesystem server was created
-	servers, err := repos.MCPServers.GetByConfigID(config.ID)
-	if err != nil {
-		t.Fatalf("Failed to list servers: %v", err)
-	}
-
-	if len(servers) != 1 {
-		t.Errorf("Expected 1 server, got %d", len(servers))
-	}
-
-	if servers[0].Name != "filesystem" {
-		t.Errorf("Expected server name 'filesystem', got '%s'", servers[0].Name)
 	}
 
 	// Retrieve and verify the decrypted config
