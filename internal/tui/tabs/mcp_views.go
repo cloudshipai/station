@@ -104,7 +104,8 @@ func (m MCPModel) renderEditor() string {
 	nameSection := lipgloss.JoinHorizontal(lipgloss.Top, 
 		nameLabel, " ", m.nameInput.View())
 	
-	// Environment selection - simple inline
+	// Environment selection - show as scrollable list when focused
+	var envSection string
 	envName := "default"
 	if len(m.envs) > 0 {
 		for _, env := range m.envs {
@@ -114,8 +115,61 @@ func (m MCPModel) renderEditor() string {
 			}
 		}
 	}
-	envSection := lipgloss.JoinHorizontal(lipgloss.Top,
-		envLabel, " ", envName)
+	
+	if m.focusedField == MCPFieldEnvironment {
+		// Show scrollable list of environments when focused
+		var envItems []string
+		if len(m.envs) == 0 {
+			envItems = append(envItems, "  Loading environments...")
+		} else {
+			for _, env := range m.envs {
+				prefix := "  "
+				if env.ID == m.selectedEnvID {
+					prefix = "▶ "
+				}
+				envItems = append(envItems, prefix+env.Name)
+			}
+		}
+		
+		// Limit to max 4 lines for environment list
+		maxLines := 4
+		startIdx := 0
+		selectedIdx := 0
+		for i, env := range m.envs {
+			if env.ID == m.selectedEnvID {
+				selectedIdx = i
+				break
+			}
+		}
+		
+		if len(envItems) > maxLines && selectedIdx >= maxLines/2 {
+			startIdx = selectedIdx - maxLines/2
+			if startIdx+maxLines > len(envItems) {
+				startIdx = len(envItems) - maxLines
+			}
+		}
+		
+		endIdx := startIdx + maxLines
+		if endIdx > len(envItems) {
+			endIdx = len(envItems)
+		}
+		
+		visibleEnvs := envItems[startIdx:endIdx]
+		envList := strings.Join(visibleEnvs, "\n")
+		
+		envSection = lipgloss.JoinVertical(lipgloss.Left,
+			envLabel,
+			envList)
+		
+		if len(envItems) > maxLines {
+			scrollInfo := fmt.Sprintf("    (%d more environments - use ↑/↓)", len(envItems)-maxLines)
+			envSection += "\n" + styles.HelpStyle.Render(scrollInfo)
+		}
+	} else {
+		// Show simple inline when not focused
+		envSection = lipgloss.JoinHorizontal(lipgloss.Top,
+			envLabel, " ", envName)
+	}
 	
 	sections = append(sections, nameSection)
 	sections = append(sections, envSection)
@@ -185,8 +239,14 @@ func (m MCPModel) renderEditor() string {
 	sections = append(sections, configLabel)
 	sections = append(sections, m.configEditor.View())
 	
-	// Simple help text
-	helpText := styles.HelpStyle.Render("tab: switch • enter: save/load version • ctrl+s: save • ctrl+r: refresh tools • esc: auto-save & exit")
+	// Simple help text - include environment navigation when focused
+	var helpText string
+	if m.focusedField == MCPFieldEnvironment {
+		helpText = "tab: switch • ↑/↓: select environment • enter: save • ctrl+s: save • esc: auto-save & exit"
+	} else {
+		helpText = "tab: switch • enter: save/load version • ctrl+s: save • ctrl+r: refresh tools • esc: auto-save & exit"
+	}
+	helpText = styles.HelpStyle.Render(helpText)
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 	

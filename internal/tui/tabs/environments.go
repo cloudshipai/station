@@ -211,6 +211,11 @@ func (m *EnvironmentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.list.SetSize(msg.Width-4, msg.Height-8) // Account for borders and header
 
 	case tea.KeyMsg:
+		// Clear error message on any key press when there's an error
+		if m.GetError() != "" {
+			m.SetError("")
+			// Still process the key press normally after clearing error
+		}
 		
 		// Handle navigation between modes
 		log.Printf("DEBUG: Environment received key '%s', current editMode: %d", msg.String(), m.editMode)
@@ -422,10 +427,6 @@ func (m EnvironmentsModel) View() string {
 		return components.RenderLoadingIndicator(0)
 	}
 
-	if m.GetError() != "" {
-		return styles.ErrorStyle.Render("Error loading environments: " + m.GetError())
-	}
-
 	switch m.editMode {
 	case EnvModeDetails:
 		return m.renderEnvironmentDetails()
@@ -482,22 +483,32 @@ func (m *EnvironmentsModel) updateListItems() {
 
 // Render environments list view
 func (m EnvironmentsModel) renderEnvironmentsList() string {
+	var sections []string
+
 	// Header with stats
 	header := components.RenderSectionHeader(fmt.Sprintf("Environments (%d total)", len(m.environments)))
+	sections = append(sections, header)
+
+	// Show error message if there is one
+	if m.GetError() != "" {
+		errorMsg := styles.ErrorStyle.Render("⚠ " + m.GetError())
+		sections = append(sections, errorMsg)
+		sections = append(sections, "")
+	}
 
 	// List component
 	listView := m.list.View()
+	sections = append(sections, listView)
 
 	// Help text
 	helpText := styles.HelpStyle.Render("• enter: view details • n: new environment • e: edit • d: delete")
+	if m.GetError() != "" {
+		helpText = styles.HelpStyle.Render("• enter: view details • n: new environment • e: edit • d: delete • any key: dismiss error")
+	}
+	sections = append(sections, "")
+	sections = append(sections, helpText)
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		listView,
-		"",
-		helpText,
-	)
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
 // Render environment details view

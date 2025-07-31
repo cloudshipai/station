@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -42,6 +43,7 @@ type Model struct {
 	// Core data
 	db             db.Database
 	executionQueue *services.ExecutionQueueService
+	genkitService  *services.GenkitService
 	
 	// UI state
 	width       int
@@ -64,7 +66,8 @@ type Model struct {
 	keyMap   KeyMap
 	
 	// State
-	initialized bool
+	initialized   bool
+	showSplash    bool
 	loading     bool
 	error       string
 }
@@ -105,16 +108,18 @@ func DefaultKeyMap() KeyMap {
 }
 
 // NewModel creates a new TUI model
-func NewModel(database db.Database, executionQueue *services.ExecutionQueueService) *Model {
+func NewModel(database db.Database, executionQueue *services.ExecutionQueueService, genkitService *services.GenkitService) *Model {
 	
 	return &Model{
 		db:             database,
 		executionQueue: executionQueue,
+		genkitService:  genkitService,
 		tabs:           []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Users", "Settings"},
 		activeTab:      0,
 		keyMap:         DefaultKeyMap(),
 		help:           help.New(),
 		loading:        true,
+		showSplash:     true,
 	}
 }
 
@@ -135,7 +140,7 @@ func (m *Model) initializeTabModels() tea.Cmd {
 	m.dashboardModel = tabs.NewDashboardModel(m.db)
 	m.agentsModel = tabs.NewAgentsModel(m.db, m.executionQueue)
 	m.runsModel = tabs.NewRunsModel(m.db)
-	m.mcpModel = tabs.NewMCPModel(m.db)
+	m.mcpModel = tabs.NewMCPModel(m.db, m.genkitService)
 	m.toolsModel = tabs.NewToolsModel(m.db)
 	m.envModel = tabs.NewEnvironmentsModel(m.db)
 	m.usersModel = tabs.NewUsersModel(m.db)
@@ -192,6 +197,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 		
 	case tea.KeyMsg:
+		// Handle splash screen first
+		if m.showSplash {
+			if msg.String() == "enter" || msg.String() == " " || msg.String() == "q" {
+				m.showSplash = false
+				return m, nil
+			}
+			return m, nil // Consume all other keys in splash mode
+		}
 		
 		// Handle global keys first - but check conditions before consuming keys
 		switch {
@@ -236,6 +249,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		
+	// Handle navigation messages from dashboard
+	case tabs.NavigateToRunMsg:
+		// Navigate to runs tab and set selected run
+		m.activeTab = 2 // Runs tab index
+		if runsModel, ok := m.runsModel.(*tabs.RunsModel); ok {
+			runsModel.SetSelectedID(fmt.Sprintf("%d", msg.RunID))
+		}
+		return m, nil
+		
+	case tabs.NavigateToAgentMsg:
+		// Navigate to agents tab and set selected agent  
+		m.activeTab = 1 // Agents tab index
+		if agentsModel, ok := m.agentsModel.(*tabs.AgentsModel); ok {
+			agentsModel.SetSelectedID(fmt.Sprintf("%d", msg.AgentID))
+		}
+		return m, nil
+		
 	default:
 		// Forward all other messages to all tab models
 		// This ensures custom messages like MCPConfigsLoadedMsg reach their handlers
@@ -277,6 +307,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Waiting for terminal size..."
+	}
+	
+	// Show splash screen if enabled
+	if m.showSplash {
+		return m.renderSplashScreen()
 	}
 	
 	// Create retro banner with ASCII art
@@ -636,9 +671,98 @@ func (m Model) getActiveTabModel() tabs.TabModel {
 	}
 }
 
+// renderSplashScreen renders the initial splash screen with Station ASCII art
+func (m *Model) renderSplashScreen() string {
+	// Station ASCII art - using the same as the banner but larger
+	asciiArt := []string{
+		"  ███████╗████████╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗ ",
+		"  ██╔════╝╚══██╔══╝██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║ ",
+		"  ███████╗   ██║   ███████║   ██║   ██║██║   ██║██╔██╗ ██║ ",
+		"  ╚════██║   ██║   ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║ ",
+		"  ███████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║ ",
+		"  ╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ ",
+	}
+	
+	// Color the ASCII art with gradient
+	var coloredLines []string
+	colors := []lipgloss.Color{
+		lipgloss.Color("#4169E1"), // Royal blue
+		lipgloss.Color("#00BFFF"), // Deep sky blue
+		lipgloss.Color("#87CEEB"), // Sky blue
+		lipgloss.Color("#B0E0E6"), // Powder blue
+		lipgloss.Color("#ADD8E6"), // Light blue
+		lipgloss.Color("#87CEFA"), // Light sky blue
+	}
+	
+	for i, line := range asciiArt {
+		style := lipgloss.NewStyle().
+			Foreground(colors[i%len(colors)]).
+			Bold(true)
+		coloredLines = append(coloredLines, style.Render(line))
+	}
+	
+	// Build the splash content
+	var sections []string
+	
+	// Add some spacing at the top
+	sections = append(sections, "")
+	sections = append(sections, "")
+	sections = append(sections, "")
+	
+	// ASCII art
+	sections = append(sections, coloredLines...)
+	
+	// Spacing
+	sections = append(sections, "")
+	sections = append(sections, "")
+	
+	// Subtitle - by CloudshipAI team
+	subtitleStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		Italic(true)
+	subtitle := subtitleStyle.Render("AI Agent Management Platform")
+	sections = append(sections, subtitle)
+	
+	// Spacing
+	sections = append(sections, "")
+	
+	// Author credit
+	creditStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		Faint(true)
+	credit := creditStyle.Render("by the CloudshipAI team")
+	sections = append(sections, credit)
+	
+	// More spacing
+	sections = append(sections, "")
+	sections = append(sections, "")
+	sections = append(sections, "")
+	
+	// Enter prompt
+	promptStyle := lipgloss.NewStyle().
+		Foreground(styles.Primary).
+		Bold(true).
+		Background(lipgloss.Color("#1a1a1a")).
+		Padding(0, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Primary)
+	prompt := promptStyle.Render("Press ENTER to continue")
+	sections = append(sections, prompt)
+	
+	// Join all sections
+	content := lipgloss.JoinVertical(lipgloss.Center, sections...)
+	
+	// Center the entire splash screen
+	return lipgloss.Place(
+		m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
+}
+
 // Program creates a new Bubble Tea program
-func NewProgram(database db.Database, executionQueue *services.ExecutionQueueService) *tea.Program {
-	model := NewModel(database, executionQueue)
+func NewProgram(database db.Database, executionQueue *services.ExecutionQueueService, genkitService *services.GenkitService) *tea.Program {
+	model := NewModel(database, executionQueue, genkitService)
 	return tea.NewProgram(
 		model,
 		tea.WithAltScreen(),

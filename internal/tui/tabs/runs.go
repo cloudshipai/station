@@ -247,6 +247,18 @@ func (m *RunsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.updateListItems()
 		m.SetLoading(false)
 		
+		// Check if a specific run was pre-selected (e.g., from dashboard navigation)
+		if selectedID := m.GetSelectedID(); selectedID != "" {
+			for _, run := range m.runs {
+				if fmt.Sprintf("%d", run.ID) == selectedID {
+					m.selectedRun = &run
+					m.SetViewMode("detail")
+					m.SetSelectedID("") // Clear the selected ID after using it
+					return m, m.loadFullRunData()
+				}
+			}
+		}
+		
 	case RunCancelledMsg:
 		// Update run status to cancelled
 		for i, run := range m.runs {
@@ -264,6 +276,10 @@ func (m *RunsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		if m.viewMode == RunModeExpandedOutput {
 			m.updateViewportContent()
 		}
+		
+	case RunCreatedMsg:
+		// A new run was created, refresh the runs list
+		return m, m.loadRuns()
 	}
 	
 	// Update components based on current mode

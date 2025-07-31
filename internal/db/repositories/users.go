@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"database/sql"
+	"fmt"
 	"station/pkg/models"
 )
 
@@ -104,7 +105,18 @@ func (r *UserRepo) UpdateAPIKey(id int64, apiKey *string) error {
 }
 
 func (r *UserRepo) Delete(id int64) error {
+	// Check if this is a system user that should not be deleted
+	user, err := r.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+	
+	// Prevent deletion of system users
+	if user.Username == "console" || user.Username == "system" {
+		return fmt.Errorf("cannot delete system user '%s'", user.Username)
+	}
+	
 	query := `DELETE FROM users WHERE id = ?`
-	_, err := r.db.Exec(query, id)
+	_, err = r.db.Exec(query, id)
 	return err
 }

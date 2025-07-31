@@ -202,7 +202,7 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 	// System user was created in migration 010
 	systemUserID := int64(0)
 	
-	if err := s.executionQueue.QueueExecution(agentID, systemUserID, task, metadata); err != nil {
+	if _, err := s.executionQueue.QueueExecution(agentID, systemUserID, task, metadata); err != nil {
 		log.Printf("Error: failed to queue execution for scheduled agent %d: %v", agentID, err)
 		return
 	}

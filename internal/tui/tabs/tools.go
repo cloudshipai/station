@@ -28,9 +28,11 @@ type ToolsModel struct {
 	selectedEnv  int64
 
 	// State
-	selectedIdx  int
-	showDetails  bool
-	selectedTool *models.MCPToolWithDetails
+	selectedIdx   int
+	showDetails   bool
+	selectedTool  *models.MCPToolWithDetails
+	filterText    string // Custom filter text
+	isFiltering   bool   // Whether we're in filter mode
 }
 
 // ToolItem implements list.Item interface for bubbles list component
@@ -109,6 +111,8 @@ func NewToolsModel(database db.Database) *ToolsModel {
 	l.Styles.Title = styles.HeaderStyle
 	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(styles.TextMuted)
 	l.Styles.HelpStyle = styles.HelpStyle
+	// Disable built-in filtering to avoid character encoding issues
+	l.SetFilteringEnabled(false)
 
 	return &ToolsModel{
 		BaseTabModel: NewBaseTabModel(database, "Tools"),
@@ -131,11 +135,44 @@ func (m *ToolsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
-		m.list.SetSize(msg.Width-4, msg.Height-8) // Account for borders and header
+		// Update list size based on the content area dimensions calculated by TUI
+		// Reserve space for section header and help text (approximately 4 lines)
+		m.list.SetSize(m.width-4, m.height-4)
 
 	case tea.KeyMsg:
+		// Handle filter mode first
+		if m.isFiltering {
+			switch msg.String() {
+			case "esc":
+				// Exit filter mode
+				m.isFiltering = false
+				m.filterText = ""
+				m.updateFilteredItems()
+				return m, nil
+			case "backspace":
+				// Remove last character from filter
+				if len(m.filterText) > 0 {
+					m.filterText = m.filterText[:len(m.filterText)-1]
+					m.updateFilteredItems()
+				}
+				return m, nil
+			case "enter":
+				// Exit filter mode and accept current filter
+				m.isFiltering = false
+				return m, nil
+			default:
+				// Add character to filter (only printable characters)
+				if len(msg.String()) == 1 && msg.String() >= " " && msg.String() <= "~" {
+					m.filterText += msg.String()
+					m.updateFilteredItems()
+				}
+				return m, nil
+			}
+		}
+
 		switch msg.String() {
 		case "enter":
+			// Handle tool selection
 			if len(m.tools) > 0 {
 				if item, ok := m.list.SelectedItem().(ToolItem); ok {
 					m.selectedTool = item.tool
@@ -148,6 +185,10 @@ func (m *ToolsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				m.showDetails = false
 				return m, nil
 			}
+		case "/":
+			// Enter filter mode
+			m.isFiltering = true
+			return m, nil
 		case "r":
 			// Refresh tools
 			return m, m.loadTools()
@@ -179,6 +220,40 @@ func (m *ToolsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+// updateFilteredItems filters the tools list based on current filter text
+func (m *ToolsModel) updateFilteredItems() {
+	if m.filterText == "" {
+		// No filter, show all tools
+		items := make([]list.Item, len(m.tools))
+		for i, tool := range m.tools {
+			items[i] = ToolItem{tool: tool}
+		}
+		m.list.SetItems(items)
+		return
+	}
+
+	// Filter tools based on text
+	var filtered []*models.MCPToolWithDetails
+	filterLower := strings.ToLower(m.filterText)
+	
+	for _, tool := range m.tools {
+		if strings.Contains(strings.ToLower(tool.Name), filterLower) ||
+		   strings.Contains(strings.ToLower(tool.Description), filterLower) ||
+		   strings.Contains(strings.ToLower(tool.ServerName), filterLower) ||
+		   strings.Contains(strings.ToLower(tool.ConfigName), filterLower) ||
+		   strings.Contains(strings.ToLower(tool.EnvironmentName), filterLower) {
+			filtered = append(filtered, tool)
+		}
+	}
+	
+	// Update list items
+	items := make([]list.Item, len(filtered))
+	for i, tool := range filtered {
+		items[i] = ToolItem{tool: tool}
+	}
+	m.list.SetItems(items)
 }
 
 // View renders the tools tab
@@ -217,11 +292,8 @@ func (m ToolsModel) loadTools() tea.Cmd {
 
 // Update list items from tools data
 func (m *ToolsModel) updateListItems() {
-	items := make([]list.Item, len(m.tools))
-	for i, tool := range m.tools {
-		items[i] = ToolItem{tool: tool}
-	}
-	m.list.SetItems(items)
+	// Use the filtered items method to respect any active filter
+	m.updateFilteredItems()
 }
 
 // Render tools list view
@@ -229,19 +301,30 @@ func (m ToolsModel) renderToolsList() string {
 	// Header with stats
 	header := components.RenderSectionHeader(fmt.Sprintf("Available Tools (%d total)", len(m.tools)))
 
+	var sections []string
+	sections = append(sections, header)
+
+	// Show filter if active
+	if m.isFiltering {
+		filterLabel := lipgloss.NewStyle().Foreground(styles.Primary).Render("Filter: /" + m.filterText)
+		sections = append(sections, filterLabel)
+	}
+
 	// List component
 	listView := m.list.View()
+	sections = append(sections, listView)
+	sections = append(sections, "")
 
 	// Help text
-	helpText := styles.HelpStyle.Render("• enter: view details • r: refresh tools • Environment: default")
+	var helpText string
+	if m.isFiltering {
+		helpText = "• enter: accept filter • esc: clear filter • backspace: delete char"
+	} else {
+		helpText = "• enter: view details • /: filter • r: refresh tools"
+	}
+	sections = append(sections, styles.HelpStyle.Render(helpText))
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		listView,
-		"",
-		helpText,
-	)
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
 // Render tool details view
