@@ -256,7 +256,7 @@ func (m MCPModel) deleteConfig(configID int64) tea.Cmd {
 			log.Printf("DEBUG: Deleting config version %d (ID: %d)", config.Version, config.ID)
 			
 			// Get all servers for this config to cascade delete tools
-			servers, err := m.repos.MCPServers.GetByConfigID(config.ID)
+			servers, err := m.repos.MCPServers.GetByEnvironmentID(config.EnvironmentID)
 			if err != nil {
 				log.Printf("DEBUG: Failed to get servers for config %d: %v", config.ID, err)
 				return MCPConfigDeletedMsg{
@@ -288,7 +288,7 @@ func (m MCPModel) deleteConfig(configID int64) tea.Cmd {
 			}
 			
 			// Delete the servers
-			if err := m.repos.MCPServers.DeleteByConfigID(config.ID); err != nil {
+			if err := m.repos.MCPServers.DeleteByEnvironmentID(config.EnvironmentID); err != nil {
 				log.Printf("DEBUG: Failed to delete servers for config %d: %v", config.ID, err)
 				return MCPConfigDeletedMsg{
 					ConfigID: configID,
@@ -455,8 +455,15 @@ func (m MCPModel) loadVersionIntoForm(configID int64) tea.Cmd {
 
 // getToolExtractionStatus checks the tool extraction status for a given config
 func (m MCPModel) getToolExtractionStatus(configID int64) (ToolExtractionStatus, int) {
-	// Get all servers for this config
-	servers, err := m.repos.MCPServers.GetByConfigID(configID)
+	// First get the config to get the environment ID
+	config, err := m.repos.MCPConfigs.GetByID(configID)
+	if err != nil {
+		log.Printf("DEBUG: Failed to get config %d: %v", configID, err)
+		return ToolStatusUnknown, 0
+	}
+	
+	// Get all servers for this environment
+	servers, err := m.repos.MCPServers.GetByEnvironmentID(config.EnvironmentID)
 	if err != nil {
 		log.Printf("DEBUG: Failed to get servers for config %d: %v", configID, err)
 		return ToolStatusUnknown, 0
@@ -524,8 +531,8 @@ func (m MCPModel) cleanupOrphanedAgentTools(environmentID int64) error {
 	// Check each agent's tool assignments in this environment
 	var orphanedCount int
 	for _, agent := range agents {
-		// Get agent tools for this specific agent and environment
-		agentTools, err := m.repos.AgentTools.ListByEnvironment(agent.ID, environmentID)
+		// Get agent tools for this specific agent
+		agentTools, err := m.repos.AgentTools.List(agent.ID)
 		if err != nil {
 			log.Printf("Failed to get agent tools for agent %d in environment %d: %v", agent.ID, environmentID, err)
 			continue
@@ -535,8 +542,8 @@ func (m MCPModel) cleanupOrphanedAgentTools(environmentID int64) error {
 		for _, agentTool := range agentTools {
 			if !availableToolsMap[agentTool.ToolName] {
 				// This agent tool references a tool that no longer exists - remove it
-				if err := m.repos.AgentTools.Remove(agent.ID, agentTool.ToolName, environmentID); err != nil {
-					log.Printf("Failed to remove orphaned agent tool assignment (agent: %d, tool: %s, env: %d): %v", agent.ID, agentTool.ToolName, environmentID, err)
+				if err := m.repos.AgentTools.Remove(agent.ID, agentTool.ToolID); err != nil {
+					log.Printf("Failed to remove orphaned agent tool assignment (agent: %d, tool: %s, toolID: %d): %v", agent.ID, agentTool.ToolName, agentTool.ToolID, err)
 					continue
 				}
 				orphanedCount++

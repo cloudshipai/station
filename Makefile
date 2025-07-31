@@ -43,7 +43,27 @@ clean:
 # Run tests
 test:
 	@echo "🧪 Running tests..."
-	go test -v ./...
+	go test -v -race -coverprofile=coverage.out ./...
+	@echo "✅ Tests completed"
+
+# Test with coverage report
+test-coverage:
+	@echo "🧪 Running tests with coverage..."
+	go test -v -race -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "✅ Coverage report generated: coverage.html"
+
+# Integration tests
+test-integration:
+	@echo "🧪 Running integration tests..."
+	go test -v -race -tags=integration ./...
+	@echo "✅ Integration tests completed"
+
+# Benchmark tests
+test-bench:
+	@echo "🧪 Running benchmarks..."
+	go test -bench=. -benchmem ./...
+	@echo "✅ Benchmarks completed"
 
 # Run linting
 lint:

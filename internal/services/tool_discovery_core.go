@@ -92,7 +92,7 @@ func (s *ToolDiscoveryService) DiscoverTools(environmentID int64) (*ToolDiscover
 		
 		// Store the server in database
 		mcpServer := &models.MCPServer{
-			MCPConfigID: config.ID,
+			EnvironmentID: config.EnvironmentID,
 			Name:        serverName,
 			Command:     serverConfig.Command,
 			Args:        serverConfig.Args,
@@ -211,7 +211,7 @@ func (s *ToolDiscoveryService) clearExistingData(mcpConfigID int64) error {
 
 func (s *ToolDiscoveryService) clearExistingDataTx(tx *sql.Tx, mcpConfigID int64) error {
 	// Get all servers for this config
-	servers, err := s.repos.MCPServers.GetByConfigID(mcpConfigID)
+	servers, err := s.repos.MCPServers.GetByEnvironmentID(mcpConfigID)
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func (s *ToolDiscoveryService) clearExistingDataTx(tx *sql.Tx, mcpConfigID int64
 	}
 
 	// Delete servers
-	return s.repos.MCPServers.DeleteByConfigIDTx(tx, mcpConfigID)
+	return s.repos.MCPServers.DeleteByEnvironmentIDTx(tx, mcpConfigID)
 }
 
 // GetToolsByEnvironment returns all tools available in an environment
@@ -236,7 +236,7 @@ func (s *ToolDiscoveryService) GetToolsByEnvironment(environmentID int64) ([]*mo
 	}
 
 	// Get all servers for this config
-	servers, err := s.repos.MCPServers.GetByConfigID(config.ID)
+	servers, err := s.repos.MCPServers.GetByEnvironmentID(config.EnvironmentID)
 	if err != nil {
 		return nil, err
 	}

@@ -6,10 +6,11 @@
 *.dylib
 station
 station-cli
-
+stn
 # Test binary, built with `go test -c`
 *.test
-
+main
+coverage.out
 # Output of the go build command
 /bin/
 /tmp/

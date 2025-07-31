@@ -254,7 +254,7 @@ func (m *RunsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		// Check if a specific run was pre-selected (e.g., from dashboard navigation)
 		if selectedID := m.GetSelectedID(); selectedID != "" {
 			for _, run := range m.runs {
-				if fmt.Sprintf("%d", run.ID) == selectedID {
+				if run.ID == selectedID {
 					m.selectedRun = &run
 					m.SetViewMode("detail")
 					m.SetSelectedID("") // Clear the selected ID after using it

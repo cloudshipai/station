@@ -1,53 +1,60 @@
-# Station (stn) 🚂
+![](./image.png)
+# Station (stn)
 
-**Station** is a revolutionary AI infrastructure platform that makes MCP (Model Context Protocol) servers as easy to discover, configure, and deploy as Docker containers. Think of it as the "package manager for AI agents" - transforming complex MCP server setup from hours of configuration into a 30-second guided wizard.
+**Station** is a secure, self-hosted platform for creating intelligent multi-environment MCP agents. Build AI agents with Claude that understand your development workflow, securely manage sensitive tools across environments, and run automated background tasks with your private infrastructure.
 
 ## 🎯 Why Station?
 
-**The Problem**: MCP servers are powerful but painful to set up. Each repository has different installation methods, environment variables, and configuration requirements. Teams waste hours reading documentation, debugging configs, and managing scattered MCP server deployments.
+### 🧠 **Intelligent Multi-Environment MCP Agents**
+Create Claude-powered agents that understand your development workflow across environments. Station agents automatically select the right tools for dev/staging/prod, understand context from your codebase, and make intelligent decisions about tool usage.
 
-**Station's Solution**: AI-powered discovery + guided wizards + seamless deployment. Point Station at any GitHub MCP server repository, and it automatically analyzes the code, presents configuration options, and sets up everything for you.
+### 🔒 **Secure Self-Hosted Background Agents**  
+Run sensitive automation securely on your infrastructure. Station agents can access your private repositories, internal APIs, and sensitive tools while maintaining strict environment isolation and audit logging.
 
-```bash
-# Instead of reading docs, copying configs, debugging environment variables...
-stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
-
-# Station analyzes the repo, shows you options, guides setup, and deploys automatically
-# ✨ From GitHub URL to running MCP server in 30 seconds
-```
+**Key Capabilities:**
+- 🧙 **AI-Powered Discovery**: Automatically analyze and configure GitHub MCP servers
+- 🌍 **Multi-Environment Aware**: Agents understand dev/staging/prod contexts  
+- 🔐 **Self-Hosted Security**: Keep sensitive tools and data on your infrastructure
+- 🤖 **Claude Integration**: Purpose-built for Claude's advanced reasoning capabilities
+- ⚡ **Background Automation**: Run scheduled tasks and monitoring securely
 
 ## 🚀 Value in 5 Minutes (3 Steps)
 
 ### Step 1: Initialize Station (1 minute)
 ```bash
 # Download and initialize Station
-curl -sSL https://get-station.dev | bash  # (hypothetical installer)
+curl -sSL https://raw.githubusercontent.com/cloudshipai/station/main/install | bash
 cd ~/my-project
 stn init  # Creates config, generates encryption keys
 ```
 
-### Step 2: Discover & Deploy MCP Server (2 minutes)
+### Step 2: Create Intelligent Agent (2 minutes)
 ```bash
-# AI-powered discovery from any GitHub repo
+# Use Claude to create a deployment monitoring agent
 stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
 
-# 🧙 Interactive wizard guides you through:
-# - Configuration options (NPX, Docker, local build)  
-# - Environment variables (with examples and validation)
-# - Automatic deployment and tool discovery
+# Connect Claude to Station's MCP server (localhost:3000)
+# Ask Claude: "Create an agent that monitors my staging deployments 
+# and automatically creates GitHub issues for failed builds"
+
+# Station's AI prompt guides Claude to create a sophisticated agent with:
+# - Environment-aware tool selection (staging vs prod)
+# - Smart context management (no tool overload)
+# - Secure background execution
 ```
 
-### Step 3: Use Your MCP Server (2 minutes)
+### Step 3: Deploy & Monitor (2 minutes)
 ```bash
-# Access admin interface
+# Access admin interface to monitor agents
 ssh admin@localhost -p 2222
 
-# Or integrate with any MCP client
-# Station exposes all discovered tools through MCP protocol
-# Your filesystem tools are now available to Claude, Cody, etc.
+# Your intelligent agent now runs in background:
+# - Monitors staging environment automatically
+# - Creates GitHub issues with context and logs
+# - Respects environment boundaries and security
 ```
 
-**Result**: You now have a fully configured MCP server with filesystem tools, automatically discovered and deployed from a GitHub URL. No documentation reading, no configuration debugging, no manual setup.
+**Result**: You now have a Claude-powered agent running securely on your infrastructure, intelligently managing your development workflow with full access to sensitive tools and environments.
 
 ## 🏠 Local Mode vs 🌐 Remote Mode
 
@@ -192,31 +199,31 @@ This eliminates the manual work of reading documentation and figuring out config
 
 ## 🚀 Installation & Quick Start
 
-## 🤖 Revolutionary AI Agent Platform
+## 🤖 Intelligent Multi-Environment AI Platform
 
-Station isn't just an MCP server manager - it's the **easiest way to create background agents** that revolutionize how you work with AI:
+Station is purpose-built for **Claude-powered agents** that understand your development workflow:
 
-### 🏆 Why Station for AI Agents?
+### 🏆 Why Station for Intelligent Agents?
 
-**1. Background Agent Excellence**
-- Create agents that run automatically on schedules
-- Perfect for monitoring, data processing, content generation
-- Seamless integration with your development workflow
+**1. Multi-Environment Intelligence**
+- Agents understand dev/staging/prod contexts automatically
+- Smart tool selection based on environment and task
+- Context-aware decision making across your infrastructure
 
-**2. Environment-Based Tool Organization**  
-- Organize tools by environments (dev/staging/prod)
-- No more cluttered personal MCP configurations
-- Clean separation of concerns for different projects
+**2. Secure Self-Hosted Automation**  
+- Run sensitive automation on your infrastructure
+- Access private repositories, internal APIs, and sensitive tools
+- Strict environment isolation with comprehensive audit logging
 
-**3. Smart Context Management**
-- Filter subtools, not just servers  
-- Agents get exactly the tools they need
-- No context poisoning from MCP servers with hundreds of tools
+**3. Claude-Optimized Agent Creation**
+- Purpose-built prompts that guide Claude to create sophisticated agents
+- Smart context management prevents tool overload and confusion
+- Environment-aware tool filtering for optimal performance
 
-**4. Team AI Infrastructure**
-- Share agents across teams
-- Centralized management and monitoring
-- Production-ready deployment and scaling
+**4. Enterprise-Ready AI Infrastructure**
+- Team collaboration with role-based access control
+- Production-ready deployment with monitoring and logging
+- Scales from personal automation to enterprise AI workflows
 
 ### 🧙 AI-Assisted Agent Creation
 
