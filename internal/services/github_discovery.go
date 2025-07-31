@@ -10,6 +10,7 @@ import (
 
 	"github.com/firebase/genkit/go/ai" 
 	"github.com/firebase/genkit/go/genkit"
+	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
 )
 
 // MCPServerDiscovery represents the structured output from GitHub analysis
@@ -45,13 +46,15 @@ type EnvVariable struct {
 
 // GitHubDiscoveryService handles GitHub MCP server discovery
 type GitHubDiscoveryService struct {
-	genkit *genkit.Genkit
+	genkit       *genkit.Genkit
+	openaiPlugin *oai.OpenAI
 }
 
 // NewGitHubDiscoveryService creates a new GitHub discovery service
-func NewGitHubDiscoveryService(genkitApp *genkit.Genkit) *GitHubDiscoveryService {
+func NewGitHubDiscoveryService(genkitApp *genkit.Genkit, openaiPlugin *oai.OpenAI) *GitHubDiscoveryService {
 	return &GitHubDiscoveryService{
-		genkit: genkitApp,
+		genkit:       genkitApp,
+		openaiPlugin: openaiPlugin,
 	}
 }
 
@@ -73,8 +76,12 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 	// Create the analysis prompt
 	prompt := g.buildAnalysisPrompt(githubURL, rawURL)
 
-	// Use Genkit to analyze the GitHub Repository
+	// Get model from OpenAI plugin
+	model := g.openaiPlugin.Model(g.genkit, "gpt-4o-mini")
+	
+	// Use Genkit to analyze the GitHub Repository with GPT-4o-mini model
 	response, err := genkit.Generate(ctx, g.genkit,
+		ai.WithModel(model),
 		ai.WithPrompt(prompt),
 	)
 
