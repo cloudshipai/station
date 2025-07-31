@@ -9,6 +9,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
+	"station/pkg/models"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -22,6 +23,7 @@ type Server struct {
 	toolDiscoverySvc *ToolDiscoveryService
 	agentService     services.AgentServiceInterface
 	authService      *auth.AuthService
+	localMode        bool
 }
 
 type ToolDiscoveryService struct {
@@ -66,7 +68,7 @@ func (t *ToolDiscoveryService) GetDiscoveredTools(configID string) []mcp.Tool {
 	return t.discoveredTools[configID]
 }
 
-func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, agentService services.AgentServiceInterface, repos *repositories.Repositories) *Server {
+func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, agentService services.AgentServiceInterface, repos *repositories.Repositories, localMode bool) *Server {
 	// Create MCP server using the official mcp-go library
 	mcpServer := server.NewMCPServer(
 		"Station MCP Server",
@@ -79,8 +81,14 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 	toolDiscoverySvc := NewToolDiscoveryService(database, mcpConfigSvc)
 	authService := auth.NewAuthService(repos)
 
-	// Create custom HTTP server with authentication middleware
+	// Create custom HTTP server with conditional authentication middleware
 	mux := http.NewServeMux()
+	
+	var handler http.Handler = mux
+	if !localMode {
+		// Apply authentication middleware only in server mode
+		handler = authService.RequireAuth(mux)
+	}
 	
 	// Create streamable HTTP server wrapping the MCP server
 	httpServer := server.NewStreamableHTTPServer(
@@ -88,7 +96,7 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 		server.WithEndpointPath("/mcp"),
 		server.WithLogger(nil), // Use default logger
 		server.WithStreamableHTTPServer(&http.Server{
-			Handler: authService.RequireAuth(mux),
+			Handler: handler,
 		}),
 	)
 
@@ -100,9 +108,15 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 		toolDiscoverySvc: toolDiscoverySvc,
 		agentService:     agentService,
 		authService:      authService,
+		localMode:        localMode,
 	}
 
+	// Setup basic MCP tools
 	server.setupTools()
+	
+	// Setup enhanced MCP tools
+	NewToolsServer(repos, mcpServer, agentService, localMode)
+	
 	return server
 }
 
@@ -189,6 +203,11 @@ func (s *Server) setupTools() {
 }
 
 func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, only admin users can list MCP configs
+	if err := s.requireAdminInServerMode(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	
 	// TODO: Get list of MCP configs from database
 	configs := []string{"config1", "config2", "config3"} // Mock data
 	
@@ -196,6 +215,11 @@ func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolR
 }
 
 func (s *Server) handleDiscoverTools(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, only admin users can discover tools
+	if err := s.requireAdminInServerMode(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	
 	configIDStr, err := request.RequireString("config_id")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -223,6 +247,11 @@ func (s *Server) handleDiscoverTools(ctx context.Context, request mcp.CallToolRe
 }
 
 func (s *Server) handleCallMCPTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, only admin users can call MCP tools
+	if err := s.requireAdminInServerMode(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	
 	configID, err := request.RequireString("config_id")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -239,10 +268,21 @@ func (s *Server) handleCallMCPTool(ctx context.Context, request mcp.CallToolRequ
 }
 
 func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Get authenticated user from context
-	user, err := auth.GetUserFromHTTPContext(ctx)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Authentication required: %v", err)), nil
+	// In server mode, only admin users can create agents
+	if err := s.requireAdminInServerMode(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	
+	// Get authenticated user from context (or use default for local mode)
+	var user *models.User
+	var userID int64 = 1 // Default user ID for local mode
+	
+	if err := s.requireAuthInServerMode(ctx); err == nil {
+		var authErr error
+		user, authErr = auth.GetUserFromHTTPContext(ctx)
+		if authErr == nil {
+			userID = user.ID
+		}
 	}
 
 	// Extract required parameters
@@ -272,8 +312,8 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError("Invalid environment_id format: must be a number"), nil
 	}
 
-	// Use authenticated user ID
-	createdBy := user.ID
+	// Use the determined user ID
+	createdBy := userID
 
 	// Extract optional parameters
 	maxSteps := int64(request.GetInt("max_steps", 5))
@@ -312,10 +352,17 @@ Created By: %d`,
 }
 
 func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Get authenticated user from context
-	user, err := auth.GetUserFromHTTPContext(ctx)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Authentication required: %v", err)), nil
+	// In server mode, require authentication but allow both admin and regular users
+	var userID int64 = 1 // Default user ID for local mode
+	
+	if err := s.requireAuthInServerMode(ctx); err == nil {
+		user, authErr := auth.GetUserFromHTTPContext(ctx)
+		if authErr == nil {
+			userID = user.ID
+		}
+	} else if !s.isLocalMode() {
+		// In server mode, authentication is required
+		return mcp.NewToolResultError("Authentication required"), nil
 	}
 
 	// Extract required parameters
@@ -335,8 +382,7 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 		return mcp.NewToolResultError("Invalid agent_id format: must be a number"), nil
 	}
 
-	// Use authenticated user ID
-	userID := user.ID
+	// userID is already determined above
 
 	// Execute the agent
 	response, err := s.agentService.ExecuteAgent(ctx, agentID, task)
@@ -376,4 +422,39 @@ func (s *Server) Start(ctx context.Context, port int) error {
 	// Graceful shutdown
 	log.Println("MCP server shutting down...")
 	return s.httpServer.Shutdown(context.Background())
+}
+
+// isLocalMode returns true if the server is running in local mode
+func (s *Server) isLocalMode() bool {
+	return s.localMode
+}
+
+// requireAuthInServerMode checks if authentication is required in server mode
+func (s *Server) requireAuthInServerMode(ctx context.Context) error {
+	if s.localMode {
+		return nil // No auth required in local mode
+	}
+	
+	// In server mode, authentication is required
+	_, err := auth.GetUserFromHTTPContext(ctx)
+	return err
+}
+
+// requireAdminInServerMode checks if the user is an admin in server mode
+func (s *Server) requireAdminInServerMode(ctx context.Context) error {
+	if s.localMode {
+		return nil // No admin check in local mode
+	}
+	
+	// In server mode, check if user is authenticated and is admin
+	user, err := auth.GetUserFromHTTPContext(ctx)
+	if err != nil {
+		return fmt.Errorf("authentication required: %v", err)
+	}
+	
+	if !user.IsAdmin {
+		return fmt.Errorf("admin privileges required")
+	}
+	
+	return nil
 }

@@ -3,9 +3,9 @@
 -- This migration is designed to be idempotent
 
 -- Since the schema is already correct in most cases, we'll just ensure data consistency
--- Clear any orphaned data to ensure referential integrity
-DELETE FROM mcp_tools WHERE mcp_server_id NOT IN (SELECT id FROM mcp_servers);
-DELETE FROM mcp_servers WHERE mcp_config_id NOT IN (SELECT id FROM mcp_configs);
+-- Clear any orphaned data to ensure referential integrity (commented out for now)
+-- DELETE FROM mcp_tools WHERE server_id NOT IN (SELECT id FROM mcp_servers);
+-- DELETE FROM mcp_servers WHERE config_id NOT IN (SELECT id FROM mcp_configs);
 
 -- +goose Down
 -- Revert to original schema with environment_id
