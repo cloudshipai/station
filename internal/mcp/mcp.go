@@ -20,7 +20,7 @@ type Server struct {
 	db               db.Database
 	mcpConfigSvc     *services.MCPConfigService
 	toolDiscoverySvc *ToolDiscoveryService
-	agentService     *services.EinoAgentService
+	agentService     services.AgentServiceInterface
 	authService      *auth.AuthService
 }
 
@@ -66,7 +66,7 @@ func (t *ToolDiscoveryService) GetDiscoveredTools(configID string) []mcp.Tool {
 	return t.discoveredTools[configID]
 }
 
-func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, agentService *services.EinoAgentService, repos *repositories.Repositories) *Server {
+func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, agentService services.AgentServiceInterface, repos *repositories.Repositories) *Server {
 	// Create MCP server using the official mcp-go library
 	mcpServer := server.NewMCPServer(
 		"Station MCP Server",

@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudwego/eino/schema"
 	"station/internal/db/repositories"
 	"station/pkg/models"
 )
@@ -24,7 +23,7 @@ type ExecutionRequest struct {
 // ExecutionResult represents the result of an agent execution
 type ExecutionResult struct {
 	Request       *ExecutionRequest
-	Response      *schema.Message
+	Response      *Message
 	StepsTaken    int64
 	ToolCalls     []interface{}
 	ExecutionSteps []interface{}
@@ -38,7 +37,7 @@ type ExecutionResult struct {
 type ExecutionQueueService struct {
 	// Core dependencies
 	repos            *repositories.Repositories
-	einoAgentService *EinoAgentService
+	agentService     AgentServiceInterface
 	
 	// Queue management
 	requestQueue     chan *ExecutionRequest
@@ -57,14 +56,14 @@ type ExecutionQueueService struct {
 // Worker represents a worker goroutine that processes execution requests
 type Worker struct {
 	ID               int
-	ExecutionService *EinoAgentService
+	ExecutionService AgentServiceInterface
 	RequestQueue     <-chan *ExecutionRequest
 	ResultQueue      chan<- *ExecutionResult
 	ctx              context.Context
 }
 
 // NewExecutionQueueService creates a new execution queue service
-func NewExecutionQueueService(repos *repositories.Repositories, einoAgentService *EinoAgentService, numWorkers int) *ExecutionQueueService {
+func NewExecutionQueueService(repos *repositories.Repositories, agentService AgentServiceInterface, numWorkers int) *ExecutionQueueService {
 	if numWorkers <= 0 {
 		numWorkers = 5 // Default to 5 workers
 	}
@@ -73,7 +72,7 @@ func NewExecutionQueueService(repos *repositories.Repositories, einoAgentService
 	
 	return &ExecutionQueueService{
 		repos:            repos,
-		einoAgentService: einoAgentService,
+		agentService:     agentService,
 		requestQueue:     make(chan *ExecutionRequest, 100), // Buffered channel for 100 pending requests
 		resultQueue:      make(chan *ExecutionResult, 100),  // Buffered channel for 100 pending results
 		numWorkers:       numWorkers,
@@ -99,7 +98,7 @@ func (eq *ExecutionQueueService) Start() error {
 	for i := 0; i < eq.numWorkers; i++ {
 		worker := Worker{
 			ID:               i + 1,
-			ExecutionService: eq.einoAgentService,
+			ExecutionService: eq.agentService,
 			RequestQueue:     eq.requestQueue,
 			ResultQueue:      eq.resultQueue,
 			ctx:              eq.ctx,
@@ -236,7 +235,7 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 	ctx, cancel := context.WithTimeout(worker.ctx, 10*time.Minute) // 10-minute timeout
 	defer cancel()
 	
-	// Execute the agent using EinoAgentService
+	// Execute the agent using AgentServiceInterface
 	response, err := worker.ExecutionService.ExecuteAgent(ctx, request.AgentID, request.Task)
 	
 	endTime := time.Now()

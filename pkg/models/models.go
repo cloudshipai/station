@@ -72,19 +72,34 @@ type Agent struct {
 	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 }
 
-type AgentTool struct {
-	ID        int64     `json:"id" db:"id"`
-	AgentID   int64     `json:"agent_id" db:"agent_id"`
-	ToolID    int64     `json:"tool_id" db:"tool_id"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+// AgentEnvironment represents the many-to-many relationship between agents and environments
+type AgentEnvironment struct {
+	ID            int64     `json:"id" db:"id"`
+	AgentID       int64     `json:"agent_id" db:"agent_id"`
+	EnvironmentID int64     `json:"environment_id" db:"environment_id"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
 }
 
+// AgentEnvironmentWithDetails includes environment details
+type AgentEnvironmentWithDetails struct {
+	AgentEnvironment
+	EnvironmentName        string `json:"environment_name" db:"environment_name"`
+	EnvironmentDescription string `json:"environment_description" db:"environment_description"`
+}
+
+// AgentTool now stores tool_name directly and includes environment context
+type AgentTool struct {
+	ID            int64     `json:"id" db:"id"`
+	AgentID       int64     `json:"agent_id" db:"agent_id"`
+	ToolName      string    `json:"tool_name" db:"tool_name"`
+	EnvironmentID int64     `json:"environment_id" db:"environment_id"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+}
+
+// AgentToolWithDetails includes environment information for cross-environment context
 type AgentToolWithDetails struct {
 	AgentTool
-	ToolName        string          `json:"tool_name" db:"tool_name"`
-	ToolDescription string          `json:"tool_description" db:"tool_description"`
-	ToolSchema      json.RawMessage `json:"tool_schema" db:"tool_schema"`
-	ServerName      string          `json:"server_name" db:"server_name"`
+	EnvironmentName string `json:"environment_name" db:"environment_name"`
 }
 
 type MCPToolWithDetails struct {

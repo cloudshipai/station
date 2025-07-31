@@ -14,14 +14,15 @@ func NewAgentToolRepo(db *sql.DB) *AgentToolRepo {
 	return &AgentToolRepo{db: db}
 }
 
-func (r *AgentToolRepo) Add(agentID, toolID int64) (*models.AgentTool, error) {
-	query := `INSERT INTO agent_tools (agent_id, tool_id) 
-			  VALUES (?, ?) 
-			  RETURNING id, agent_id, tool_id, created_at`
+// Add creates a new agent-tool assignment with environment context
+func (r *AgentToolRepo) Add(agentID int64, toolName string, environmentID int64) (*models.AgentTool, error) {
+	query := `INSERT INTO agent_tools (agent_id, tool_name, environment_id) 
+			  VALUES (?, ?, ?) 
+			  RETURNING id, agent_id, tool_name, environment_id, created_at`
 	
 	var agentTool models.AgentTool
-	err := r.db.QueryRow(query, agentID, toolID).Scan(
-		&agentTool.ID, &agentTool.AgentID, &agentTool.ToolID, &agentTool.CreatedAt,
+	err := r.db.QueryRow(query, agentID, toolName, environmentID).Scan(
+		&agentTool.ID, &agentTool.AgentID, &agentTool.ToolName, &agentTool.EnvironmentID, &agentTool.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -30,66 +31,52 @@ func (r *AgentToolRepo) Add(agentID, toolID int64) (*models.AgentTool, error) {
 	return &agentTool, nil
 }
 
-func (r *AgentToolRepo) Remove(agentID, toolID int64) error {
-	query := `DELETE FROM agent_tools WHERE agent_id = ? AND tool_id = ?`
-	_, err := r.db.Exec(query, agentID, toolID)
+// Remove removes a specific agent-tool assignment for a specific environment
+func (r *AgentToolRepo) Remove(agentID int64, toolName string, environmentID int64) error {
+	query := `DELETE FROM agent_tools WHERE agent_id = ? AND tool_name = ? AND environment_id = ?`
+	_, err := r.db.Exec(query, agentID, toolName, environmentID)
 	return err
 }
 
-// RemoveByToolID removes all agent-tool associations for a specific tool
-func (r *AgentToolRepo) RemoveByToolID(toolID int64) error {
-	query := `DELETE FROM agent_tools WHERE tool_id = ?`
-	_, err := r.db.Exec(query, toolID)
+// RemoveByToolName removes all agent-tool associations for a specific tool name across all environments
+func (r *AgentToolRepo) RemoveByToolName(toolName string) error {
+	query := `DELETE FROM agent_tools WHERE tool_name = ?`
+	_, err := r.db.Exec(query, toolName)
 	return err
 }
 
-// RemoveByToolIDs removes all agent-tool associations for multiple tools
-func (r *AgentToolRepo) RemoveByToolIDs(toolIDs []int64) error {
-	return r.RemoveByToolIDsTx(nil, toolIDs)
-}
-
-// RemoveByToolIDsTx removes all agent-tool associations for multiple tools within a transaction
-func (r *AgentToolRepo) RemoveByToolIDsTx(tx *sql.Tx, toolIDs []int64) error {
-	if len(toolIDs) == 0 {
+// RemoveByToolNames removes all agent-tool associations for multiple tool names
+func (r *AgentToolRepo) RemoveByToolNames(toolNames []string) error {
+	if len(toolNames) == 0 {
 		return nil
 	}
 	
 	// Build the IN clause with placeholders
-	placeholders := make([]string, len(toolIDs))
-	args := make([]interface{}, len(toolIDs))
-	for i, id := range toolIDs {
+	placeholders := make([]string, len(toolNames))
+	args := make([]interface{}, len(toolNames))
+	for i, name := range toolNames {
 		placeholders[i] = "?"
-		args[i] = id
+		args[i] = name
 	}
 	
-	query := `DELETE FROM agent_tools WHERE tool_id IN (` + strings.Join(placeholders, ",") + `)`
+	query := `DELETE FROM agent_tools WHERE tool_name IN (` + strings.Join(placeholders, ",") + `)`
 	
-	// Use transaction if provided, otherwise use regular db connection
-	if tx != nil {
-		_, err := tx.Exec(query, args...)
-		// Ignore "no such table" errors gracefully for test environments
-		if err != nil && strings.Contains(err.Error(), "no such table: agent_tools") {
-			return nil
-		}
-		return err
-	} else {
-		_, err := r.db.Exec(query, args...)
-		// Ignore "no such table" errors gracefully for test environments
-		if err != nil && strings.Contains(err.Error(), "no such table: agent_tools") {
-			return nil
-		}
-		return err
+	_, err := r.db.Exec(query, args...)
+	// Ignore "no such table" errors gracefully for test environments
+	if err != nil && strings.Contains(err.Error(), "no such table: agent_tools") {
+		return nil
 	}
+	return err
 }
 
+// List returns all tools assigned to an agent across all environments
 func (r *AgentToolRepo) List(agentID int64) ([]*models.AgentToolWithDetails, error) {
-	query := `SELECT at.id, at.agent_id, at.tool_id, at.created_at, 
-					 t.name as tool_name, t.description as tool_description, t.input_schema as tool_schema, s.name as server_name
+	query := `SELECT at.id, at.agent_id, at.tool_name, at.environment_id, at.created_at,
+					 e.name as environment_name
 			  FROM agent_tools at
-			  JOIN mcp_tools t ON at.tool_id = t.id
-			  JOIN mcp_servers s ON t.mcp_server_id = s.id
+			  JOIN environments e ON at.environment_id = e.id
 			  WHERE at.agent_id = ?
-			  ORDER BY s.name, t.name`
+			  ORDER BY e.name, at.tool_name`
 	
 	rows, err := r.db.Query(query, agentID)
 	if err != nil {
@@ -100,8 +87,8 @@ func (r *AgentToolRepo) List(agentID int64) ([]*models.AgentToolWithDetails, err
 	var agentTools []*models.AgentToolWithDetails
 	for rows.Next() {
 		var at models.AgentToolWithDetails
-		err := rows.Scan(&at.ID, &at.AgentID, &at.ToolID, &at.CreatedAt,
-			&at.ToolName, &at.ToolDescription, &at.ToolSchema, &at.ServerName)
+		err := rows.Scan(&at.ID, &at.AgentID, &at.ToolName, &at.EnvironmentID, &at.CreatedAt,
+			&at.EnvironmentName)
 		if err != nil {
 			return nil, err
 		}
@@ -111,8 +98,125 @@ func (r *AgentToolRepo) List(agentID int64) ([]*models.AgentToolWithDetails, err
 	return agentTools, rows.Err()
 }
 
+// ListByEnvironment returns all tools assigned to an agent in a specific environment
+func (r *AgentToolRepo) ListByEnvironment(agentID, environmentID int64) ([]*models.AgentToolWithDetails, error) {
+	query := `SELECT at.id, at.agent_id, at.tool_name, at.environment_id, at.created_at,
+					 e.name as environment_name
+			  FROM agent_tools at
+			  JOIN environments e ON at.environment_id = e.id
+			  WHERE at.agent_id = ? AND at.environment_id = ?
+			  ORDER BY at.tool_name`
+	
+	rows, err := r.db.Query(query, agentID, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var agentTools []*models.AgentToolWithDetails
+	for rows.Next() {
+		var at models.AgentToolWithDetails
+		err := rows.Scan(&at.ID, &at.AgentID, &at.ToolName, &at.EnvironmentID, &at.CreatedAt,
+			&at.EnvironmentName)
+		if err != nil {
+			return nil, err
+		}
+		agentTools = append(agentTools, &at)
+	}
+	
+	return agentTools, rows.Err()
+}
+
+// Clear removes all tool assignments for an agent across all environments
 func (r *AgentToolRepo) Clear(agentID int64) error {
 	query := `DELETE FROM agent_tools WHERE agent_id = ?`
 	_, err := r.db.Exec(query, agentID)
 	return err
+}
+
+// ClearEnvironment removes all tool assignments for an agent in a specific environment
+func (r *AgentToolRepo) ClearEnvironment(agentID, environmentID int64) error {
+	query := `DELETE FROM agent_tools WHERE agent_id = ? AND environment_id = ?`
+	_, err := r.db.Exec(query, agentID, environmentID)
+	return err
+}
+
+// SetToolsForEnvironment replaces all tool assignments for an agent in a specific environment
+func (r *AgentToolRepo) SetToolsForEnvironment(agentID, environmentID int64, toolNames []string) error {
+	// Start transaction
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Clear existing assignments for this agent in this environment
+	_, err = tx.Exec(`DELETE FROM agent_tools WHERE agent_id = ? AND environment_id = ?`, 
+		agentID, environmentID)
+	if err != nil {
+		return err
+	}
+
+	// Add new assignments
+	for _, toolName := range toolNames {
+		_, err = tx.Exec(`INSERT INTO agent_tools (agent_id, tool_name, environment_id) VALUES (?, ?, ?)`, 
+			agentID, toolName, environmentID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// HasTool checks if an agent has access to a specific tool in a specific environment
+func (r *AgentToolRepo) HasTool(agentID int64, toolName string, environmentID int64) (bool, error) {
+	query := `SELECT COUNT(*) FROM agent_tools WHERE agent_id = ? AND tool_name = ? AND environment_id = ?`
+	
+	var count int
+	err := r.db.QueryRow(query, agentID, toolName, environmentID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	
+	return count > 0, nil
+}
+
+// GetToolNamesByEnvironment returns just the tool names for an agent in a specific environment
+// This is useful for filtering in the GenkitService
+func (r *AgentToolRepo) GetToolNamesByEnvironment(agentID, environmentID int64) ([]string, error) {
+	query := `SELECT tool_name FROM agent_tools WHERE agent_id = ? AND environment_id = ? ORDER BY tool_name`
+	
+	rows, err := r.db.Query(query, agentID, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var toolNames []string
+	for rows.Next() {
+		var toolName string
+		err := rows.Scan(&toolName)
+		if err != nil {
+			return nil, err
+		}
+		toolNames = append(toolNames, toolName)
+	}
+	
+	return toolNames, rows.Err()
+}
+
+// --- Legacy compatibility methods for backward compatibility ---
+
+// AddLegacy maintains compatibility with old tool_id based API (deprecated)
+func (r *AgentToolRepo) AddLegacy(agentID, toolID int64) (*models.AgentTool, error) {
+	// This method is deprecated and should not be used in new code
+	// For now, return an error indicating the method is no longer supported
+	return nil, sql.ErrNoRows
+}
+
+// RemoveLegacy maintains compatibility with old tool_id based API (deprecated)
+func (r *AgentToolRepo) RemoveLegacy(agentID, toolID int64) error {
+	// This method is deprecated and should not be used in new code
+	return sql.ErrNoRows
 }

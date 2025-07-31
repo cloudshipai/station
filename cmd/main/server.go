@@ -17,7 +17,33 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/firebase/genkit/go/genkit"
+	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
 )
+
+// genkitSetup holds the initialized Genkit components
+type genkitSetup struct {
+	app          *genkit.Genkit
+	openaiPlugin *oai.OpenAI
+}
+
+// initializeGenkit initializes Genkit with OpenAI plugin
+func initializeGenkit(ctx context.Context, apiKey string) (*genkitSetup, error) {
+	// Initialize OpenAI plugin
+	openaiPlugin := &oai.OpenAI{APIKey: apiKey}
+	
+	// Initialize Genkit with OpenAI plugin
+	app, err := genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize Genkit: %w", err)
+	}
+	
+	return &genkitSetup{
+		app:          app,
+		openaiPlugin: openaiPlugin,
+	}, nil
+}
 
 func runMainServer() error {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -49,24 +75,41 @@ func runMainServer() error {
 
 	// Initialize all required services
 	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
-	modelProviderSvc, err := services.NewModelProviderBootService(repos, keyManager)
-	if err != nil {
-		return fmt.Errorf("failed to initialize model provider service: %w", err)
-	}
-
-	// Load model providers on startup
-	if err := modelProviderSvc.LoadAndSyncProvidersOnBoot(ctx); err != nil {
-		log.Printf("Warning: Failed to load model providers: %v", err)
-	}
 	
 	// Create default environment if none exists
 	if err := ensureDefaultEnvironment(ctx, repos); err != nil {
 		log.Printf("Warning: Failed to create default environment: %v", err)
 	}
 
-	toolDiscoverySvc := services.NewToolDiscoveryService(repos, mcpConfigSvc)
-	mcpClientSvc := services.NewMCPClientService(repos, mcpConfigSvc, toolDiscoverySvc)
-	agentSvc := services.NewEinoAgentService(repos, mcpClientSvc, toolDiscoverySvc, mcpConfigSvc)
+	
+	// Create GenkitService with OpenAI plugin
+	// TODO: Make API key configurable
+	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+	if openaiAPIKey == "" {
+		log.Printf("Warning: OPENAI_API_KEY not set, agent execution may fail")
+	}
+	
+	// Initialize Genkit with OpenAI plugin
+	genkit, err := initializeGenkit(ctx, openaiAPIKey)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Genkit: %w", err)
+	}
+	
+	agentSvc := services.NewGenkitService(
+		genkit.app,
+		genkit.openaiPlugin,
+		repos.Agents,
+		repos.AgentRuns,
+		repos.MCPConfigs,
+		repos.AgentTools,
+		repos.AgentEnvironments,
+		mcpConfigSvc,
+	)
+	
+	// Initialize MCP for the agent service
+	if err := agentSvc.InitializeMCP(ctx); err != nil {
+		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
+	}
 	
 	// Initialize execution queue service for async agent execution
 	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, 5) // 5 workers
