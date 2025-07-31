@@ -18,6 +18,7 @@ type ExecutionRequest struct {
 	Task      string
 	Metadata  map[string]interface{} // Additional metadata like source (cron/manual)
 	Timestamp time.Time
+	RunID     int64 // ID of the run record created when queued
 }
 
 // ExecutionResult represents the result of an agent execution
@@ -147,12 +148,28 @@ func (eq *ExecutionQueueService) Stop() {
 }
 
 // QueueExecution adds an execution request to the queue
-func (eq *ExecutionQueueService) QueueExecution(agentID, userID int64, task string, metadata map[string]interface{}) error {
+func (eq *ExecutionQueueService) QueueExecution(agentID, userID int64, task string, metadata map[string]interface{}) (int64, error) {
 	eq.mu.RLock()
 	defer eq.mu.RUnlock()
 	
 	if !eq.running {
-		return fmt.Errorf("execution queue service is not running")
+		return 0, fmt.Errorf("execution queue service is not running")
+	}
+	
+	// Create a run record immediately when queuing (with "queued" status)
+	agentRun, err := eq.repos.AgentRuns.Create(
+		agentID,
+		userID,
+		task,
+		"", // finalResponse - empty until execution completes
+		0,  // stepsTaken - 0 until execution completes
+		nil, // toolCalls - empty until execution completes
+		nil, // executionSteps - empty until execution completes
+		"queued", // status - queued until execution starts
+		nil, // completedAt - nil until execution completes
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create run record: %w", err)
 	}
 	
 	request := &ExecutionRequest{
@@ -161,16 +178,17 @@ func (eq *ExecutionQueueService) QueueExecution(agentID, userID int64, task stri
 		Task:      task,
 		Metadata:  metadata,
 		Timestamp: time.Now(),
+		RunID:     agentRun.ID, // Include the run ID in the request
 	}
 	
 	select {
 	case eq.requestQueue <- request:
-		log.Printf("Queued execution request for agent %d, user %d", agentID, userID)
-		return nil
+		log.Printf("Queued execution request for agent %d, user %d, run ID %d", agentID, userID, agentRun.ID)
+		return agentRun.ID, nil
 	case <-eq.ctx.Done():
-		return fmt.Errorf("execution queue service is shutting down")
+		return 0, fmt.Errorf("execution queue service is shutting down")
 	default:
-		return fmt.Errorf("execution queue is full, please try again later")
+		return 0, fmt.Errorf("execution queue is full, please try again later")
 	}
 }
 
@@ -330,11 +348,10 @@ func (eq *ExecutionQueueService) storeExecutionResult(result *ExecutionResult) e
 		executionSteps = &jsonArray
 	}
 	
-	// Create agent run record
-	agentRun, err := eq.repos.AgentRuns.Create(
-		result.Request.AgentID,
-		result.Request.UserID,
-		result.Request.Task,
+	// Update the existing agent run record (created when queued)
+	runID := result.Request.RunID
+	err := eq.repos.AgentRuns.UpdateCompletion(
+		runID,
 		finalResponse,
 		result.StepsTaken,
 		toolCalls,
@@ -344,9 +361,9 @@ func (eq *ExecutionQueueService) storeExecutionResult(result *ExecutionResult) e
 	)
 	
 	if err != nil {
-		return fmt.Errorf("failed to create agent run record: %w", err)
+		return fmt.Errorf("failed to update agent run record %d: %w", runID, err)
 	}
 	
-	log.Printf("Created agent run record with ID %d for agent %d", agentRun.ID, result.Request.AgentID)
+	log.Printf("Updated agent run record with ID %d for agent %d", runID, result.Request.AgentID)
 	return nil
 }

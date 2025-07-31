@@ -34,6 +34,7 @@ type MCPModel struct {
 	// Services - shared instances to avoid key ID mismatches
 	mcpConfigSvc    *services.MCPConfigService
 	toolDiscoverySvc *services.ToolDiscoveryService
+	genkitService   *services.GenkitService
 	
 	// State
 	mode         MCPMode
@@ -107,7 +108,7 @@ func (i VersionItem) Description() string {
 }
 
 // NewMCPModel creates a new MCP model
-func NewMCPModel(database db.Database) *MCPModel {
+func NewMCPModel(database db.Database, genkitService *services.GenkitService) *MCPModel {
 	repos := repositories.New(database)
 	
 	// Create textarea for config editing - scrollable
@@ -160,21 +161,19 @@ func NewMCPModel(database db.Database) *MCPModel {
 		database:           database,
 		mcpConfigSvc:       mcpConfigSvc,
 		toolDiscoverySvc:   toolDiscoverySvc,
+		genkitService:      genkitService,
 		mode:               MCPModeList,
 		configs:            []MCPConfigDisplay{},
 		configVersions:     []MCPConfigDisplay{},
 		selectedIdx:        0,
 		showEditor:         false,
-		selectedEnvID:      1, // Default to first environment
+		selectedEnvID:      0, // Will be set when environments load
 		focusedField:       MCPFieldName,
 		selectedVersionIdx: 0,
 		currentConfigName:  "",
 		originalName:       "",
 		originalConfig:     "",
 	}
-	
-	// Load environments
-	m.loadEnvironments()
 	
 	return m
 }
@@ -183,6 +182,7 @@ func NewMCPModel(database db.Database) *MCPModel {
 func (m MCPModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.loadConfigs(),
+		m.loadEnvironments(),
 		m.configEditor.Cursor.BlinkCmd(),
 	)
 }

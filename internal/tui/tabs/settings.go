@@ -1,15 +1,18 @@
 package tabs
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"station/internal/config"
 	"station/internal/db"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
+	"station/internal/version"
 )
 
 // SettingsModel represents the system settings tab
@@ -24,6 +27,11 @@ type SettingsModel struct {
 	settings      map[string]string
 	editMode      bool
 	settingFields []SettingField
+	
+	// Cached data to prevent flickering
+	configInfo    config.ConfigInfo
+	buildInfo     version.BuildInfo
+	loadedConfigs map[string]interface{}
 }
 
 
@@ -49,17 +57,35 @@ type SettingsErrorMsg struct {
 
 type SettingsSavedMsg struct{}
 
+type ConfigInfoRefreshedMsg struct {
+	ConfigInfo    config.ConfigInfo
+	LoadedConfigs map[string]interface{}
+}
+
 // NewSettingsModel creates a new settings model
 func NewSettingsModel(database db.Database) *SettingsModel {
+	// Get real version and config information (cached to prevent flickering)
+	buildInfo := version.GetBuildInfo()
+	configInfo := config.GetConfigInfo()
+	loadedConfigs := config.GetLoadedConfigs()
+	
 	// Create input fields for common settings
 	var inputs []textinput.Model
 
 	settingFields := []SettingField{
-		// System Information (Read-Only)
-		{"version", "Station Version", "v1.0", "Current Station version", false, true, "System"},
-		{"build_time", "Build Time", "2024-01-15 12:00:00", "When this build was created", false, true, "System"},
-		{"db_path", "Database Path", "./station.db", "Path to SQLite database", false, true, "System"},
-		{"uptime", "System Uptime", "2 days, 14 hours", "How long the system has been running", false, true, "System"},
+		// Version Information (Read-Only)
+		{"version", "Station Version", version.GetVersionString(), "Current Station version", false, true, "Version"},
+		{"build_time", "Build Time", buildInfo.BuildTime, "When this build was created", false, true, "Version"},
+		{"go_version", "Go Version", buildInfo.GoVersion, "Go compiler version", false, true, "Version"},
+		{"go_arch", "Architecture", buildInfo.GoArch, "Target architecture", false, true, "Version"},
+		{"go_os", "Operating System", buildInfo.GoOS, "Target operating system", false, true, "Version"},
+		
+		// Configuration Paths (Read-Only)  
+		{"config_file", "Config File", configInfo.ConfigFile, "Path to configuration file", false, true, "Configuration"},
+		{"database_path", "Database Path", configInfo.DatabasePath, "Path to SQLite database", false, true, "Configuration"},
+		{"local_mode", "Local Mode", fmt.Sprintf("%t", configInfo.IsLocalMode), "Running in local development mode", false, true, "Configuration"},
+		{"config_exists", "Config Exists", fmt.Sprintf("%t", configInfo.ConfigExists), "Configuration file exists", false, true, "Configuration"},
+		{"database_exists", "Database Exists", fmt.Sprintf("%t", configInfo.DatabaseExists), "Database file exists", false, true, "Configuration"},
 		
 		// Server Configuration (Editable)
 		{"log_level", "Log Level", "info", "Logging level (debug, info, warn, error)", false, false, "Server"},
@@ -97,6 +123,9 @@ func NewSettingsModel(database db.Database) *SettingsModel {
 		focusedInput:  0,
 		settings:      make(map[string]string),
 		settingFields: settingFields,
+		configInfo:    configInfo,
+		buildInfo:     buildInfo,
+		loadedConfigs: loadedConfigs,
 	}
 }
 
@@ -128,6 +157,11 @@ func (m *SettingsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 	case SettingsSavedMsg:
 		// Settings saved successfully
 		m.editMode = false
+		
+	case ConfigInfoRefreshedMsg:
+		// Update cached config info with fresh environment variables
+		m.configInfo = msg.ConfigInfo
+		m.loadedConfigs = msg.LoadedConfigs
 	}
 
 	// Update focused input for system settings
@@ -177,8 +211,8 @@ func (m *SettingsModel) handleSystemKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		return m, m.saveSettings()
 
 	case "ctrl+r":
-		// Reset to defaults
-		return m, m.resetSettings()
+		// Refresh cached config info and environment variables
+		return m, m.refreshConfigInfo()
 
 	case "esc":
 		// Auto-save settings if any have changed, then exit edit mode
@@ -266,7 +300,7 @@ func (m SettingsModel) renderSettingsForm() string {
 	sections = append(sections, sysInfo)
 
 	// Help text
-	helpText := styles.HelpStyle.Render("• tab/↑↓: navigate • ctrl+s: save • ctrl+r: reset • esc: auto-save & exit")
+	helpText := styles.HelpStyle.Render("• tab/↑↓: navigate • ctrl+s: save • ctrl+r: refresh env vars • esc: auto-save & exit")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 
@@ -287,7 +321,7 @@ func (m SettingsModel) renderForm() string {
 	}
 	
 	// Render each category
-	for _, category := range []string{"System", "Server"} {
+	for _, category := range []string{"Version", "Configuration", "Server"} {
 		if fieldIndices, exists := categories[category]; exists {
 			// Category header
 			categoryHeader := styles.HeaderStyle.Render(category + " Configuration")
@@ -342,29 +376,70 @@ func (m SettingsModel) renderForm() string {
 
 // Render system information
 func (m SettingsModel) renderSystemInfo() string {
-	info := []string{
-		"Station Admin Interface v1.0",
-		"Built with Bubble Tea and Lipgloss",
-		"Database: SQLite",
-		"Authentication: SSH Keys + API Tokens",
-		"",
-		"Status: System running normally",
-		"Uptime: 2 days, 14 hours",
-		"Connected users: 3",
+	// Use cached configInfo to prevent flickering
+	configInfo := m.configInfo
+	
+	var sections []string
+	
+	
+	// Configuration Directories Section (Compact)
+	sections = append(sections, styles.HeaderStyle.Render("Configuration Paths"))
+	sections = append(sections, "")
+	
+	var configDirs []string
+	// Only show first 3 directories to save space
+	maxDirs := 3
+	if len(configInfo.ConfigDirs) < maxDirs {
+		maxDirs = len(configInfo.ConfigDirs)
+	}
+	
+	for i := 0; i < maxDirs; i++ {
+		dir := configInfo.ConfigDirs[i]
+		status := "?"
+		// Truncate long paths
+		displayDir := dir
+		if len(displayDir) > 40 {
+			displayDir = "..." + displayDir[len(displayDir)-37:]
+		}
+		configDirs = append(configDirs, fmt.Sprintf("%s %s", status, displayDir))
+	}
+	
+	if len(configInfo.ConfigDirs) > maxDirs {
+		configDirs = append(configDirs, fmt.Sprintf("... and %d more", len(configInfo.ConfigDirs)-maxDirs))
+	}
+	
+	configContent := strings.Join(configDirs, "\n")
+	configBox := styles.WithBorder(lipgloss.NewStyle()).
+		Width(58).
+		Padding(1).
+		Render(configContent)
+	sections = append(sections, configBox)
+	
+	// Loaded Configs Section (Compact) - use cached data
+	loadedConfigs := m.loadedConfigs
+	if len(loadedConfigs) > 0 {
+		sections = append(sections, "")
+		sections = append(sections, styles.HeaderStyle.Render("Config Status"))
+		sections = append(sections, "")
+		
+		var configStatus []string
+		for key, value := range loadedConfigs {
+			status := "✗"
+			if v, ok := value.(bool); ok && v {
+				status = "✓"
+			}
+			configStatus = append(configStatus, fmt.Sprintf("%s %s", status, strings.Replace(key, "_", " ", -1)))
+		}
+		
+		statusContent := strings.Join(configStatus, "\n")
+		statusBox := styles.WithBorder(lipgloss.NewStyle()).
+			Width(58).
+			Padding(1).
+			Render(statusContent)
+		sections = append(sections, statusBox)
 	}
 
-	content := strings.Join(info, "\n")
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		"",
-		styles.HeaderStyle.Render("System Information"),
-		"",
-		styles.WithBorder(lipgloss.NewStyle()).
-			Width(60).
-			Padding(1).
-			Render(content),
-	)
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
 // renderSystemSettings renders the system settings view
@@ -376,20 +451,121 @@ func (m SettingsModel) renderSystemSettings() string {
 	sections = append(sections, header)
 	sections = append(sections, "")
 
-	// Settings form
-	form := m.renderForm()
-	sections = append(sections, form)
-
-	// System info section
-	sysInfo := m.renderSystemInfo()
-	sections = append(sections, sysInfo)
+	// Two-column layout
+	leftColumn := m.renderLeftColumn()
+	rightColumn := m.renderRightColumn()
+	
+	// Join columns horizontally
+	columns := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		leftColumn,
+		"  ", // Small gap between columns
+		rightColumn,
+	)
+	sections = append(sections, columns)
 
 	// Help text
-	helpText := styles.HelpStyle.Render("• tab/↑↓: navigate • ctrl+s: save • ctrl+r: reset • esc: auto-save & exit")
+	helpText := styles.HelpStyle.Render("• tab/↑↓: navigate • ctrl+s: save • ctrl+r: refresh env vars • esc: auto-save & exit")
 	sections = append(sections, "")
 	sections = append(sections, helpText)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+// renderLeftColumn renders the left column with configuration forms
+func (m SettingsModel) renderLeftColumn() string {
+	var sections []string
+	
+	// Render Version and Configuration categories
+	sections = append(sections, m.renderCategoryForm([]string{"Version", "Configuration"}))
+	
+	return lipgloss.NewStyle().
+		Width(60).
+		Render(strings.Join(sections, "\n"))
+}
+
+// renderRightColumn renders the right column with system info and server settings
+func (m SettingsModel) renderRightColumn() string {
+	var sections []string
+	
+	// Server Configuration
+	sections = append(sections, m.renderCategoryForm([]string{"Server"}))
+	sections = append(sections, "")
+	
+	// System Information
+	sysInfo := m.renderSystemInfo()
+	sections = append(sections, sysInfo)
+	
+	return lipgloss.NewStyle().
+		Width(60).
+		Render(strings.Join(sections, "\n"))
+}
+
+// renderCategoryForm renders specific categories
+func (m SettingsModel) renderCategoryForm(categoriesToShow []string) string {
+	var formSections []string
+
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+	readOnlyStyle := lipgloss.NewStyle().Foreground(styles.TextMuted).Italic(true)
+	
+	// Group fields by category
+	categories := make(map[string][]int)
+	for i, field := range m.settingFields {
+		categories[field.Category] = append(categories[field.Category], i)
+	}
+	
+	// Render only specified categories
+	for _, category := range categoriesToShow {
+		if fieldIndices, exists := categories[category]; exists {
+			// Category header
+			categoryHeader := styles.HeaderStyle.Render(category + " Configuration")
+			formSections = append(formSections, categoryHeader)
+			formSections = append(formSections, "")
+			
+			// Fields in this category
+			for _, i := range fieldIndices {
+				field := m.settingFields[i]
+				input := m.inputs[i]
+				
+				// Field label
+				label := field.Label + ":"
+				if field.ReadOnly {
+					label = readOnlyStyle.Render(label + " (read-only)")
+				} else if i == m.focusedInput {
+					label = styles.HeaderStyle.Render(label)
+				} else {
+					label = mutedStyle.Render(label)
+				}
+
+				// Field input/display
+				var inputView string
+				if field.ReadOnly {
+					// Display as read-only text
+					inputView = readOnlyStyle.Render(field.Value)
+				} else {
+					// Display as editable input
+					inputView = input.View()
+				}
+				
+				fieldSection := lipgloss.JoinVertical(
+					lipgloss.Left,
+					label,
+					inputView,
+				)
+
+				formSections = append(formSections, fieldSection)
+			}
+			
+			formSections = append(formSections, "") // Space between categories
+		}
+	}
+
+	form := strings.Join(formSections, "\n")
+
+	return styles.WithBorder(lipgloss.NewStyle()).
+		Width(58).
+		Padding(1).
+		Render(form)
 }
 
 
@@ -402,20 +578,16 @@ func (m SettingsModel) saveSettings() tea.Cmd {
 	})
 }
 
-// Reset settings to defaults command
-func (m SettingsModel) resetSettings() tea.Cmd {
+// Refresh config info and environment variables command
+func (m SettingsModel) refreshConfigInfo() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		// Reset inputs to default values
-		defaults := map[string]string{
-			"server_host":     "localhost",
-			"server_port":     "2222",
-			"db_path":         "./station.db",
-			"log_level":       "info",
-			"max_agents":      "10",
-			"session_timeout": "24h",
+		// Get fresh config info with updated environment variables
+		freshConfigInfo := config.GetConfigInfo()
+		freshLoadedConfigs := config.GetLoadedConfigs()
+		return ConfigInfoRefreshedMsg{
+			ConfigInfo:    freshConfigInfo,
+			LoadedConfigs: freshLoadedConfigs,
 		}
-
-		return SettingsLoadedMsg{Settings: defaults}
 	})
 }
 

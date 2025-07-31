@@ -6,23 +6,31 @@ BINARY_NAME=station
 BUILD_DIR=./bin
 MAIN_PACKAGE=./cmd/main
 
+# Version information
+VERSION ?= v0.1.0
+BUILD_TIME := $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+# Build flags for version info
+LDFLAGS := -ldflags "-X 'station/internal/version.Version=$(VERSION)' \
+                    -X 'station/internal/version.BuildTime=$(BUILD_TIME)'"
+
 # Build the station binary
 build:
-	@echo "🔨 Building Station..."
+	@echo "🔨 Building Station $(VERSION)..."
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME)"
 
 # Build and install to $GOPATH/bin
 install:
-	@echo "📦 Installing Station to $$GOPATH/bin..."
-	go install $(MAIN_PACKAGE)
+	@echo "📦 Installing Station $(VERSION) to $$GOPATH/bin..."
+	go install $(LDFLAGS) $(MAIN_PACKAGE)
 	@echo "✅ Station installed! Run 'station --help' to get started"
 
 # Development build (faster, no optimizations)
 dev:
-	@echo "🔨 Building Station (development)..."
-	go build -o $(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "🔨 Building Station $(VERSION) (development)..."
+	go build $(LDFLAGS) -o $(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "✅ Built ./$(BINARY_NAME)"
 
 # Clean build artifacts
@@ -64,6 +72,11 @@ stop-station:
 	@$(MAKE) kill-ports
 	@echo "✅ Station stopped"
 
+# Show version information
+version:
+	@echo "Station Version: $(VERSION)"
+	@echo "Build Time: $(BUILD_TIME)"
+
 # Show usage help
 help:
 	@echo "Station Build Commands:"
@@ -74,8 +87,12 @@ help:
 	@echo "  make test       - Run tests"
 	@echo "  make lint       - Run linter"
 	@echo "  make setup      - Quick setup for development"
+	@echo "  make version    - Show version information"
 	@echo "  make kill-ports - Kill processes on ports 2222, 3000, 8080"
 	@echo "  make stop-station - Stop all Station processes and clear ports"
+	@echo ""
+	@echo "Version Control:"
+	@echo "  make build VERSION=v1.2.3 - Build with custom version"
 
 # Default target
 all: build

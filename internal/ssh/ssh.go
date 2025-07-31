@@ -22,14 +22,16 @@ type Server struct {
 	cfg            *config.Config
 	db             *db.DB
 	executionQueue *services.ExecutionQueueService
+	genkitService  *services.GenkitService
 	srv            *ssh.Server
 }
 
-func New(cfg *config.Config, database *db.DB, executionQueue *services.ExecutionQueueService) *Server {
+func New(cfg *config.Config, database *db.DB, executionQueue *services.ExecutionQueueService, genkitService *services.GenkitService) *Server {
 	s := &Server{
 		cfg:            cfg,
 		db:             database,
 		executionQueue: executionQueue,
+		genkitService:  genkitService,
 	}
 
 	s.srv = s.createSSHServer()
@@ -60,8 +62,8 @@ func (s *Server) createSSHServer() *ssh.Server {
 }
 
 func (s *Server) teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
-	// Create the new TUI model with database access and execution queue
-	tuiModel := tui.NewModel(s.db, s.executionQueue)
+	// Create the new TUI model with database access, execution queue, and genkit service
+	tuiModel := tui.NewModel(s.db, s.executionQueue, s.genkitService)
 	
 	return tuiModel, []tea.ProgramOption{
 		tea.WithAltScreen(),

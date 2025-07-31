@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/firebase/genkit/go/ai"
@@ -14,6 +15,8 @@ import (
 	"station/internal/db/repositories"
 	"station/pkg/models"
 )
+
+
 
 // GenkitService provides Genkit-based AI agent execution integrated with Station
 // Now supports cross-environment agents with tool namespacing
@@ -26,6 +29,7 @@ type GenkitService struct {
 	mcpConfigRepo        *repositories.MCPConfigRepo
 	agentToolRepo        *repositories.AgentToolRepo
 	agentEnvironmentRepo *repositories.AgentEnvironmentRepo
+	environmentRepo      *repositories.EnvironmentRepo
 	mcpConfigService     *MCPConfigService
 }
 
@@ -38,6 +42,7 @@ func NewGenkitService(
 	mcpConfigRepo *repositories.MCPConfigRepo,
 	agentToolRepo *repositories.AgentToolRepo,
 	agentEnvironmentRepo *repositories.AgentEnvironmentRepo,
+	environmentRepo *repositories.EnvironmentRepo,
 	mcpConfigService *MCPConfigService,
 ) *GenkitService {
 	return &GenkitService{
@@ -48,6 +53,7 @@ func NewGenkitService(
 		mcpConfigRepo:        mcpConfigRepo,
 		agentToolRepo:        agentToolRepo,
 		agentEnvironmentRepo: agentEnvironmentRepo,
+		environmentRepo:      environmentRepo,
 		mcpConfigService:     mcpConfigService,
 	}
 }
@@ -61,12 +67,50 @@ func (s *GenkitService) InitializeMCP(ctx context.Context) error {
 		return fmt.Errorf("failed to get all MCP configs: %w", err)
 	}
 
-	// For now, initialize with empty config to keep it simple
-	// This can be extended later to load actual cross-environment MCP configs
+	// Convert Station MCP configs to Genkit MCP server configs
+	var mcpServers []mcp.MCPServerConfig
+	for _, config := range allConfigs {
+		// Decrypt the config to get server details
+		decryptedData, err := s.mcpConfigService.DecryptConfigWithKeyID(config.ConfigJSON, config.EncryptionKeyID)
+		if err != nil {
+			log.Printf("Failed to decrypt MCP config %d: %v", config.ID, err)
+			continue
+		}
+		
+		// Get environment name for prefixing
+		env, err := s.environmentRepo.GetByID(config.EnvironmentID)
+		if err != nil {
+			log.Printf("Failed to get environment %d for config %d: %v", config.EnvironmentID, config.ID, err)
+			continue
+		}
+		
+		// Convert each server in the config
+		for serverName, serverConfig := range decryptedData.Servers {
+			// Convert environment map to slice format
+			var envVars []string
+			for key, value := range serverConfig.Env {
+				envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
+			}
+			
+			mcpServers = append(mcpServers, mcp.MCPServerConfig{
+				Name: fmt.Sprintf("%d_%s", env.ID, serverName), // Environment ID-prefixed server name
+				Config: mcp.MCPClientOptions{
+					Name:    fmt.Sprintf("%d_%s", env.ID, serverName),
+					Version: "1.0.0",
+					Stdio: &mcp.StdioConfig{
+						Command: serverConfig.Command,
+						Args:    serverConfig.Args,
+						Env:     envVars,
+					},
+				},
+			})
+		}
+	}
+	
 	manager, err := mcp.NewMCPManager(mcp.MCPManagerOptions{
 		Name:       "station-cross-environment",
 		Version:    "1.0.0",
-		MCPServers: []mcp.MCPServerConfig{}, // Empty for now
+		MCPServers: mcpServers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create MCP manager: %w", err)
@@ -121,14 +165,63 @@ func (s *GenkitService) executeAgentInternal(ctx context.Context, agentID, userI
 	// Get model for the agent (defaulting to gpt-4o-mini)
 	model := s.openaiPlugin.Model(s.genkitApp, "gpt-4o-mini")
 
-	// Get available MCP tools (empty for now, can be extended)
+	// Get tools assigned to this agent across all environments it has access to
 	var tools []ai.Tool
 	if s.mcpManager != nil {
-		mcpTools, err := s.mcpManager.GetActiveTools(ctx, s.genkitApp)
+		// Get all available MCP tools
+		allMcpTools, err := s.mcpManager.GetActiveTools(ctx, s.genkitApp)
 		if err != nil {
 			log.Printf("Failed to get MCP tools: %v", err)
 		} else {
-			tools = mcpTools
+			// Filter tools based on agent's cross-environment tool assignments
+			assignedTools, err := s.agentToolRepo.List(agentID)
+			if err != nil {
+				log.Printf("Failed to get agent tool assignments: %v", err)
+			} else {
+				// Create a map of assigned tool names for quick lookup
+				assignedToolNames := make(map[string]bool)
+				log.Printf("DEBUG: Agent %d assigned tools:", agentID)
+				for _, assignedTool := range assignedTools {
+					assignedToolNames[assignedTool.ToolName] = true
+					log.Printf("  - '%s' (env: %d)", assignedTool.ToolName, assignedTool.EnvironmentID)
+				}
+				
+				// Log available MCP tools for comparison
+				log.Printf("DEBUG: Available MCP tools from manager:")
+				for _, mcpTool := range allMcpTools {
+					log.Printf("  - '%s'", mcpTool.Name())
+				}
+				
+				// Filter MCP tools to only include those assigned to the agent
+				for _, mcpTool := range allMcpTools {
+					toolName := mcpTool.Name()
+					
+					// Check if this MCP tool matches any assigned tool
+					// MCP tools are prefixed with environment_server_, but database stores bare names
+					matched := false
+					var matchedAssignedTool string
+					
+					for assignedTool := range assignedToolNames {
+						// Check if the MCP tool name ends with the assigned tool name
+						// The assigned tool name already includes server prefixes (e.g., "aws___read_documentation")
+						// So we need to match either:
+						// 1. Exact match: toolName == assignedTool  
+						// 2. Suffix match: toolName ends with "_" + assignedTool (for environment-prefixed tools)
+						if toolName == assignedTool || strings.HasSuffix(toolName, "_"+assignedTool) {
+							matched = true
+							matchedAssignedTool = assignedTool
+							break
+						}
+					}
+					
+					if matched {
+						tools = append(tools, mcpTool)
+						log.Printf("DEBUG: Matched MCP tool '%s' to assigned tool '%s' for agent %d", toolName, matchedAssignedTool, agentID)
+					}
+				}
+				
+				log.Printf("Agent %d has %d assigned tools, filtered to %d available MCP tools", agentID, len(assignedTools), len(tools))
+			}
 		}
 	}
 
@@ -246,6 +339,20 @@ func (s *GenkitService) GetAvailableTools(ctx context.Context) ([]ai.Tool, error
 	}
 
 	return s.mcpManager.GetActiveTools(ctx, s.genkitApp)
+}
+
+// ReinitializeMCP reinitializes the MCP manager with current configs from database
+// This should be called after MCP config changes (add/delete/update)
+func (s *GenkitService) ReinitializeMCP(ctx context.Context) error {
+	log.Printf("Reinitializing MCP manager with current configs from database")
+	
+	// Close existing MCP manager if it exists
+	// Note: The Genkit MCP manager doesn't expose a direct Close method
+	// so we'll replace it with a new instance
+	s.mcpManager = nil
+	
+	// Reinitialize with current configs
+	return s.InitializeMCP(ctx)
 }
 
 // Close cleans up the Genkit service

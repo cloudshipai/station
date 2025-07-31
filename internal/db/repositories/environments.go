@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"database/sql"
+	"fmt"
 	"station/pkg/models"
 )
 
@@ -88,7 +89,18 @@ func (r *EnvironmentRepo) Update(id int64, name string, description *string) err
 }
 
 func (r *EnvironmentRepo) Delete(id int64) error {
+	// Check if this is the default environment
+	env, err := r.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("failed to get environment: %w", err)
+	}
+	
+	// Prevent deletion of the default environment
+	if env.Name == "default" {
+		return fmt.Errorf("cannot delete the default environment")
+	}
+	
 	query := `DELETE FROM environments WHERE id = ?`
-	_, err := r.db.Exec(query, id)
+	_, err = r.db.Exec(query, id)
 	return err
 }

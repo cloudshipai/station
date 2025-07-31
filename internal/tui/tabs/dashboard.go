@@ -2,10 +2,10 @@ package tabs
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -14,6 +14,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
+	"station/pkg/models"
 )
 
 // DashboardModel represents the dashboard tab
@@ -22,8 +23,6 @@ type DashboardModel struct {
 	
 	// UI components
 	spinner      spinner.Model
-	cpuProgress  progress.Model
-	memProgress  progress.Model
 	
 	// Simple navigation state
 	activeSection    string // "runs" or "agents" or ""
@@ -50,9 +49,7 @@ type SystemStats struct {
 	Environments     int
 	TotalUsers       int
 	
-	// System metrics
-	CPUUsage         float64
-	MemoryUsage      float64
+	// System info
 	DatabaseSize     string
 	Uptime           time.Duration
 	
@@ -85,6 +82,21 @@ type StatsErrorMsg struct {
 	Err error
 }
 
+// Navigation messages for cross-tab navigation
+type NavigateToRunMsg struct {
+	RunID int64
+}
+
+type NavigateToAgentMsg struct {
+	AgentID int64
+}
+
+// Message to notify when a new run is created
+type RunCreatedMsg struct {
+	RunID   int64
+	AgentID int64
+}
+
 // NewDashboardModel creates a new dashboard model
 func NewDashboardModel(database db.Database) *DashboardModel {
 	repos := repositories.New(database)
@@ -92,14 +104,9 @@ func NewDashboardModel(database db.Database) *DashboardModel {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(styles.Primary)
 	
-	cpuProg := progress.New(progress.WithDefaultGradient())
-	memProg := progress.New(progress.WithDefaultGradient())
-	
 	return &DashboardModel{
 		BaseTabModel:       NewBaseTabModel(database, "Dashboard"),
 		spinner:            s,
-		cpuProgress:        cpuProg,
-		memProgress:        memProg,
 		repos:              repos,
 		activeSection:      "", // No active section initially
 		selectedRunIndex:   0,
@@ -182,11 +189,23 @@ func (m *DashboardModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 				m.selectedRunIndex = 0
 			}
 		case "enter":
-			// Handle selection - could navigate to details page
+			// Handle selection - navigate to details page
 			if m.activeSection == "runs" {
-				// TODO: Navigate to run details
+				// Navigate to run details
+				if len(m.stats.RecentRuns) > 0 && m.selectedRunIndex < len(m.stats.RecentRuns) {
+					selectedRun := m.stats.RecentRuns[m.selectedRunIndex]
+					return m, func() tea.Msg {
+						return NavigateToRunMsg{RunID: selectedRun.ID}
+					}
+				}
 			} else if m.activeSection == "agents" {
-				// TODO: Navigate to agent details
+				// Navigate to agent details
+				if len(m.stats.RecentAgents) > 0 && m.selectedAgentIndex < len(m.stats.RecentAgents) {
+					selectedAgent := m.stats.RecentAgents[m.selectedAgentIndex]
+					return m, func() tea.Msg {
+						return NavigateToAgentMsg{AgentID: selectedAgent.ID}
+					}
+				}
 			}
 		case "esc":
 			// Clear active section
@@ -220,16 +239,7 @@ func (m *DashboardModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.SetLoading(false)
 		
 	default:
-		// Update progress bars if needed
-		var cmd tea.Cmd
-		var model tea.Model
-		model, cmd = m.cpuProgress.Update(msg)
-		m.cpuProgress = model.(progress.Model)
-		cmds = append(cmds, cmd)
-		
-		model, cmd = m.memProgress.Update(msg)
-		m.memProgress = model.(progress.Model)
-		cmds = append(cmds, cmd)
+		// No additional processing needed
 	}
 	
 	return m, tea.Batch(cmds...)
@@ -256,9 +266,6 @@ func (m DashboardModel) View() string {
 	statsGrid := m.renderStatsGrid()
 	sections = append(sections, statsGrid)
 	
-	// System metrics
-	metrics := m.renderSystemMetrics()
-	sections = append(sections, metrics)
 	
 	// Recent activity
 	recentHeader := components.RenderSectionHeader("Recent Activity")
@@ -326,9 +333,7 @@ func (m DashboardModel) loadStats() tea.Cmd {
 			stats.TotalUsers = 3
 		}
 		
-		// System metrics (simplified for now)
-		stats.CPUUsage = 0.35      // Could integrate with system metrics
-		stats.MemoryUsage = 0.52   // Could integrate with system metrics 
+		// System info (simplified for now)
 		stats.DatabaseSize = "1.2 MB" // Could calculate actual DB size
 		stats.Uptime = time.Hour * 24 * 3 // Could track actual uptime
 		
@@ -338,9 +343,9 @@ func (m DashboardModel) loadStats() tea.Cmd {
 		
 		// Get recent runs (with fallback sample data)
 		if len(runs) > 0 {
-			// Sort runs by StartedAt desc and take first 3
+			// Take first 3 runs (already ordered by started_at DESC from database)
 			for i := 0; i < len(runs) && i < 3; i++ {
-				run := runs[len(runs)-1-i] // Get latest first
+				run := runs[i] // Database already returns latest first
 				status := "completed"
 				if run.Status == "running" {
 					status = "running"
@@ -348,9 +353,16 @@ func (m DashboardModel) loadStats() tea.Cmd {
 					status = "failed"
 				}
 				
+				// Get real agent name from database
+				agent, err := m.repos.Agents.GetByID(run.AgentID)
+				agentName := fmt.Sprintf("Agent %d", run.AgentID) // fallback
+				if err == nil {
+					agentName = agent.Name
+				}
+				
 				stats.RecentRuns = append(stats.RecentRuns, RecentRun{
 					ID:        run.ID,
-					AgentName: fmt.Sprintf("Agent %d", run.AgentID),
+					AgentName: agentName,
 					Status:    status,
 					StartedAt: run.StartedAt,
 				})
@@ -366,8 +378,18 @@ func (m DashboardModel) loadStats() tea.Cmd {
 		
 		// Get recent agents (with fallback sample data)
 		if len(agents) > 0 {
-			for i := 0; i < len(agents) && i < 3; i++ {
-				agent := agents[len(agents)-1-i] // Get latest first
+			// Since agents are ordered by name, we need to sort by created_at
+			// to get the most recent ones first
+			sortedAgents := make([]*models.Agent, len(agents))
+			copy(sortedAgents, agents)
+			
+			// Sort by CreatedAt descending (most recent first)
+			sort.Slice(sortedAgents, func(i, j int) bool {
+				return sortedAgents[i].CreatedAt.After(sortedAgents[j].CreatedAt)
+			})
+			
+			for i := 0; i < len(sortedAgents) && i < 3; i++ {
+				agent := sortedAgents[i] // Get latest first
 				stats.RecentAgents = append(stats.RecentAgents, RecentAgent{
 					ID:          agent.ID,
 					Name:        agent.Name,
@@ -459,33 +481,6 @@ func (m DashboardModel) renderStatCard(title, value, subtitle string) string {
 		Render(content)
 }
 
-// Render system metrics with progress bars
-func (m DashboardModel) renderSystemMetrics() string {
-	cpuBar := fmt.Sprintf("CPU Usage: %s %.1f%%",
-		m.cpuProgress.ViewAs(m.stats.CPUUsage),
-		m.stats.CPUUsage*100)
-	
-	memBar := fmt.Sprintf("Memory Usage: %s %.1f%%",
-		m.memProgress.ViewAs(m.stats.MemoryUsage),
-		m.stats.MemoryUsage*100)
-	
-	uptime := fmt.Sprintf("Uptime: %s", formatDuration(m.stats.Uptime))
-	dbSize := fmt.Sprintf("Database Size: %s", m.stats.DatabaseSize)
-	
-	metrics := lipgloss.JoinVertical(
-		lipgloss.Left,
-		cpuBar,
-		memBar,
-		"",
-		uptime,
-		dbSize,
-	)
-	
-	return styles.WithBorder(lipgloss.NewStyle()).
-		Width(50).
-		Padding(1).
-		Render(metrics)
-}
 
 // Render recent activity section with keyboard navigation
 func (m DashboardModel) renderRecentActivity() string {
@@ -547,9 +542,10 @@ func (m DashboardModel) renderRecentActivity() string {
 				statusStyle = statusStyle.Background(lipgloss.Color("#0000FF"))
 			}
 			
-			line := fmt.Sprintf("%s %s", 
+			line := fmt.Sprintf("%s %s (ID: %d)", 
 				statusStyle.Render("●"), 
-				nameStyle.Render(run.AgentName))
+				nameStyle.Render(run.AgentName),
+				run.ID)
 			runLines = append(runLines, line)
 		}
 		runsContent = strings.Join(runLines, "\n")
@@ -559,7 +555,7 @@ func (m DashboardModel) renderRecentActivity() string {
 		for i, run := range recentRuns {
 			if i >= 3 { break }
 			statusStyle := getStatusStyle(run.Status)
-			runItems = append(runItems, fmt.Sprintf("%s %s", statusStyle.Render("●"), run.AgentName))
+			runItems = append(runItems, fmt.Sprintf("%s %s (ID: %d)", statusStyle.Render("●"), run.AgentName, run.ID))
 		}
 		runsContent = strings.Join(runItems, ", ")
 	}

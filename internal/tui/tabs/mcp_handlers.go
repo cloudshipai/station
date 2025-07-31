@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -60,6 +61,9 @@ func (m *MCPModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		
 	case MCPToolDiscoveryCompletedMsg:
 		return m.handleToolDiscoveryCompletedMsg(msg)
+		
+	case MCPEnvironmentsLoadedMsg:
+		return m.handleEnvironmentsLoadedMsg(msg)
 	}
 	
 	return m, tea.Batch(cmds...)
@@ -99,15 +103,15 @@ func (m *MCPModel) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) (TabModel, tea.C
 		}
 		
 	case "up", "k":
-		// Let components handle up/down keys when config or versions field is focused
-		if m.mode == MCPModeEdit && (m.focusedField == MCPFieldConfig || m.focusedField == MCPFieldVersions) {
+		// Let components handle up/down keys when config, versions, or environment field is focused
+		if m.mode == MCPModeEdit && (m.focusedField == MCPFieldConfig || m.focusedField == MCPFieldVersions || m.focusedField == MCPFieldEnvironment) {
 			return m.handleFieldInput(msg, cmds)
 		}
 		return m.handleUpKey()
 		
 	case "down", "j":
-		// Let components handle up/down keys when config or versions field is focused
-		if m.mode == MCPModeEdit && (m.focusedField == MCPFieldConfig || m.focusedField == MCPFieldVersions) {
+		// Let components handle up/down keys when config, versions, or environment field is focused
+		if m.mode == MCPModeEdit && (m.focusedField == MCPFieldConfig || m.focusedField == MCPFieldVersions || m.focusedField == MCPFieldEnvironment) {
 			return m.handleFieldInput(msg, cmds)
 		}
 		return m.handleDownKey()
@@ -326,6 +330,18 @@ func (m *MCPModel) handleSaveConfig() (TabModel, tea.Cmd) {
 				configName, result.TotalTools, result.SuccessfulServers, result.TotalServers)
 		}
 	}()
+
+	// Trigger async MCP manager reinitialization to refresh available tools
+	if m.genkitService != nil {
+		go func() {
+			log.Printf("DEBUG: Reinitializing MCP manager after config upload")
+			if err := m.genkitService.ReinitializeMCP(context.Background()); err != nil {
+				log.Printf("ERROR: Failed to reinitialize MCP manager: %v", err)
+			} else {
+				log.Printf("DEBUG: MCP manager reinitialized successfully")
+			}
+		}()
+	}
 	
 	// Stay in editor mode and show success toast
 	log.Printf("DEBUG: Staying in editor mode, showing success toast")
@@ -506,6 +522,18 @@ func (m *MCPModel) handleEscKey() (TabModel, tea.Cmd) {
 						// Skip tool replacement on auto-save to avoid UI freeze
 						// Tools will be discovered when user manually saves or refreshes
 						log.Printf("DEBUG: Skipping tool replacement on auto-save to prevent UI freeze")
+						
+						// Trigger async MCP manager reinitialization for auto-saves too
+						if m.genkitService != nil {
+							go func() {
+								log.Printf("DEBUG: Reinitializing MCP manager after auto-save")
+								if err := m.genkitService.ReinitializeMCP(context.Background()); err != nil {
+									log.Printf("ERROR: Failed to reinitialize MCP manager: %v", err)
+								} else {
+									log.Printf("DEBUG: MCP manager reinitialized successfully")
+								}
+							}()
+						}
 					}
 				}
 			}
@@ -711,4 +739,32 @@ func (m *MCPModel) handleToolDiscoveryCompletedMsg(msg MCPToolDiscoveryCompleted
 		tea.Printf("✅ Discovered %d tools for '%s'", msg.ToolCount, msg.ConfigName),
 		m.loadConfigs(), // Reload to update status indicators
 	)
+}
+
+// Handle environments loaded message
+func (m *MCPModel) handleEnvironmentsLoadedMsg(msg MCPEnvironmentsLoadedMsg) (TabModel, tea.Cmd) {
+	log.Printf("DEBUG: Received MCPEnvironmentsLoadedMsg with %d environments", len(msg.Environments))
+	
+	if msg.Error != nil {
+		log.Printf("DEBUG: Error loading environments: %v", msg.Error)
+		return m, tea.Printf("Error loading environments: %v", msg.Error)
+	}
+	
+	// Update environments and set up the list
+	m.envs = msg.Environments
+	
+	// Convert to list items
+	items := make([]list.Item, len(msg.Environments))
+	for i, env := range msg.Environments {
+		items[i] = EnvironmentItem{env: *env}
+	}
+	m.environmentList.SetItems(items)
+	
+	// Set default selection to first environment if none selected
+	if len(msg.Environments) > 0 && m.selectedEnvID == 0 {
+		m.selectedEnvID = msg.Environments[0].ID
+	}
+	
+	log.Printf("DEBUG: Environments loaded successfully, selectedEnvID: %d", m.selectedEnvID)
+	return m, nil
 }
