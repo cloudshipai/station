@@ -21,36 +21,43 @@ CREATE TABLE environments (
 CREATE TABLE mcp_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     environment_id INTEGER NOT NULL,
+    config_name TEXT NOT NULL DEFAULT 'default',
     version INTEGER NOT NULL DEFAULT 1,
-    config_json TEXT NOT NULL, -- encrypted JSON blob
-    encryption_key_id TEXT NOT NULL, -- reference to encryption key used
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (environment_id) REFERENCES environments (id),
-    UNIQUE (environment_id, version)
+    config_json TEXT NOT NULL, -- Raw JSON configuration
+    encryption_key_id TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE,
+    UNIQUE(environment_id, config_name, version)
 );
 
 -- MCP servers
 CREATE TABLE mcp_servers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    config_id INTEGER NOT NULL,
-    server_name TEXT NOT NULL,
-    server_url TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (config_id) REFERENCES mcp_configs (id),
-    UNIQUE (config_id, server_name)
+    name TEXT NOT NULL,
+    command TEXT NOT NULL,
+    args TEXT, -- JSON array of arguments
+    env TEXT,  -- JSON object of environment variables
+    working_dir TEXT,
+    timeout_seconds INTEGER DEFAULT 30,
+    auto_restart BOOLEAN DEFAULT true,
+    environment_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE,
+    UNIQUE(name, environment_id)
 );
 
 -- Tools discovered from MCP servers
 CREATE TABLE mcp_tools (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    server_id INTEGER NOT NULL,
-    tool_name TEXT NOT NULL,
-    tool_description TEXT,
-    tool_schema TEXT, -- JSON schema for the tool
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (server_id) REFERENCES mcp_servers (id),
-    UNIQUE (server_id, tool_name)
+    mcp_server_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    input_schema TEXT, -- JSON schema for tool inputs
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    UNIQUE(name, mcp_server_id)
 );
 
 -- Model providers table

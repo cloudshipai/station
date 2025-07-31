@@ -13,7 +13,7 @@ import (
 const createMCPTool = `-- name: CreateMCPTool :one
 INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema)
 VALUES (?, ?, ?, ?)
-RETURNING id, mcp_server_id, name, description, input_schema, created_at
+RETURNING id, mcp_server_id, name, description, input_schema, created_at, updated_at
 `
 
 type CreateMCPToolParams struct {
@@ -38,6 +38,7 @@ func (q *Queries) CreateMCPTool(ctx context.Context, arg CreateMCPToolParams) (M
 		&i.Description,
 		&i.InputSchema,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -46,8 +47,8 @@ const deleteMCPToolsByServer = `-- name: DeleteMCPToolsByServer :exec
 DELETE FROM mcp_tools WHERE mcp_server_id = ?
 `
 
-func (q *Queries) DeleteMCPToolsByServer(ctx context.Context, serverID int64) error {
-	_, err := q.db.ExecContext(ctx, deleteMCPToolsByServer, serverID)
+func (q *Queries) DeleteMCPToolsByServer(ctx context.Context, mcpServerID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteMCPToolsByServer, mcpServerID)
 	return err
 }
 
@@ -73,10 +74,7 @@ func (q *Queries) GetMCPTool(ctx context.Context, id int64) (McpTool, error) {
 const listMCPToolsByEnvironment = `-- name: ListMCPToolsByEnvironment :many
 SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
 JOIN mcp_servers s ON t.mcp_server_id = s.id
-JOIN mcp_configs c ON s.config_id = c.id
-WHERE c.environment_id = ? AND c.version = (
-    SELECT MAX(mc.version) FROM mcp_configs mc WHERE mc.environment_id = c.environment_id
-)
+WHERE s.environment_id = ?
 ORDER BY s.name, t.name
 `
 
@@ -115,8 +113,8 @@ const listMCPToolsByServer = `-- name: ListMCPToolsByServer :many
 SELECT id, mcp_server_id, name, description, input_schema, created_at, updated_at FROM mcp_tools WHERE mcp_server_id = ? ORDER BY name
 `
 
-func (q *Queries) ListMCPToolsByServer(ctx context.Context, serverID int64) ([]McpTool, error) {
-	rows, err := q.db.QueryContext(ctx, listMCPToolsByServer, serverID)
+func (q *Queries) ListMCPToolsByServer(ctx context.Context, mcpServerID int64) ([]McpTool, error) {
+	rows, err := q.db.QueryContext(ctx, listMCPToolsByServer, mcpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -149,20 +147,17 @@ func (q *Queries) ListMCPToolsByServer(ctx context.Context, serverID int64) ([]M
 const listMCPToolsByServerInEnvironment = `-- name: ListMCPToolsByServerInEnvironment :many
 SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
 JOIN mcp_servers s ON t.mcp_server_id = s.id
-JOIN mcp_configs c ON s.config_id = c.id
-WHERE c.environment_id = ? AND s.server_name = ? AND c.version = (
-    SELECT MAX(mc.version) FROM mcp_configs mc WHERE mc.environment_id = c.environment_id
-)
+WHERE s.environment_id = ? AND s.name = ?
 ORDER BY t.name
 `
 
 type ListMCPToolsByServerInEnvironmentParams struct {
 	EnvironmentID int64  `json:"environment_id"`
-	ServerName    string `json:"server_name"`
+	Name          string `json:"name"`
 }
 
 func (q *Queries) ListMCPToolsByServerInEnvironment(ctx context.Context, arg ListMCPToolsByServerInEnvironmentParams) ([]McpTool, error) {
-	rows, err := q.db.QueryContext(ctx, listMCPToolsByServerInEnvironment, arg.EnvironmentID, arg.ServerName)
+	rows, err := q.db.QueryContext(ctx, listMCPToolsByServerInEnvironment, arg.EnvironmentID, arg.Name)
 	if err != nil {
 		return nil, err
 	}
