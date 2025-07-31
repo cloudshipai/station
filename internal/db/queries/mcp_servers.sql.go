@@ -7,44 +7,73 @@ package queries
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createMCPServer = `-- name: CreateMCPServer :one
-INSERT INTO mcp_servers (config_id, server_name, server_url)
-VALUES (?, ?, ?)
-RETURNING id, config_id, server_name, server_url, created_at
+INSERT INTO mcp_servers (name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at
 `
 
 type CreateMCPServerParams struct {
-	ConfigID   int64  `json:"config_id"`
-	ServerName string `json:"server_name"`
-	ServerUrl  string `json:"server_url"`
+	Name           string         `json:"name"`
+	Command        string         `json:"command"`
+	Args           sql.NullString `json:"args"`
+	Env            sql.NullString `json:"env"`
+	WorkingDir     sql.NullString `json:"working_dir"`
+	TimeoutSeconds sql.NullInt64  `json:"timeout_seconds"`
+	AutoRestart    sql.NullBool   `json:"auto_restart"`
+	EnvironmentID  int64          `json:"environment_id"`
 }
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
-	row := q.db.QueryRowContext(ctx, createMCPServer, arg.ConfigID, arg.ServerName, arg.ServerUrl)
+	row := q.db.QueryRowContext(ctx, createMCPServer,
+		arg.Name,
+		arg.Command,
+		arg.Args,
+		arg.Env,
+		arg.WorkingDir,
+		arg.TimeoutSeconds,
+		arg.AutoRestart,
+		arg.EnvironmentID,
+	)
 	var i McpServer
 	err := row.Scan(
 		&i.ID,
-		&i.ConfigID,
-		&i.ServerName,
-		&i.ServerUrl,
+		&i.Name,
+		&i.Command,
+		&i.Args,
+		&i.Env,
+		&i.WorkingDir,
+		&i.TimeoutSeconds,
+		&i.AutoRestart,
+		&i.EnvironmentID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const deleteMCPServersByConfig = `-- name: DeleteMCPServersByConfig :exec
-DELETE FROM mcp_servers WHERE config_id = ?
+const deleteMCPServer = `-- name: DeleteMCPServer :exec
+DELETE FROM mcp_servers WHERE id = ?
 `
 
-func (q *Queries) DeleteMCPServersByConfig(ctx context.Context, configID int64) error {
-	_, err := q.db.ExecContext(ctx, deleteMCPServersByConfig, configID)
+func (q *Queries) DeleteMCPServer(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteMCPServer, id)
+	return err
+}
+
+const deleteMCPServersByEnvironment = `-- name: DeleteMCPServersByEnvironment :exec
+DELETE FROM mcp_servers WHERE environment_id = ?
+`
+
+func (q *Queries) DeleteMCPServersByEnvironment(ctx context.Context, environmentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteMCPServersByEnvironment, environmentID)
 	return err
 }
 
 const getMCPServer = `-- name: GetMCPServer :one
-SELECT id, config_id, server_name, server_url, created_at FROM mcp_servers WHERE id = ?
+SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at FROM mcp_servers WHERE id = ?
 `
 
 func (q *Queries) GetMCPServer(ctx context.Context, id int64) (McpServer, error) {
@@ -52,54 +81,21 @@ func (q *Queries) GetMCPServer(ctx context.Context, id int64) (McpServer, error)
 	var i McpServer
 	err := row.Scan(
 		&i.ID,
-		&i.ConfigID,
-		&i.ServerName,
-		&i.ServerUrl,
+		&i.Name,
+		&i.Command,
+		&i.Args,
+		&i.Env,
+		&i.WorkingDir,
+		&i.TimeoutSeconds,
+		&i.AutoRestart,
+		&i.EnvironmentID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const listMCPServersByConfig = `-- name: ListMCPServersByConfig :many
-SELECT id, config_id, server_name, server_url, created_at FROM mcp_servers WHERE config_id = ? ORDER BY server_name
-`
-
-func (q *Queries) ListMCPServersByConfig(ctx context.Context, configID int64) ([]McpServer, error) {
-	rows, err := q.db.QueryContext(ctx, listMCPServersByConfig, configID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []McpServer
-	for rows.Next() {
-		var i McpServer
-		if err := rows.Scan(
-			&i.ID,
-			&i.ConfigID,
-			&i.ServerName,
-			&i.ServerUrl,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMCPServersByEnvironment = `-- name: ListMCPServersByEnvironment :many
-SELECT s.id, s.config_id, s.server_name, s.server_url, s.created_at FROM mcp_servers s
-JOIN mcp_configs c ON s.config_id = c.id
-WHERE c.environment_id = ? AND c.version = (
-    SELECT MAX(mc.version) FROM mcp_configs mc WHERE mc.environment_id = c.environment_id
-)
-ORDER BY s.server_name
+SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at FROM mcp_servers WHERE environment_id = ? ORDER BY name
 `
 
 func (q *Queries) ListMCPServersByEnvironment(ctx context.Context, environmentID int64) ([]McpServer, error) {
@@ -113,9 +109,14 @@ func (q *Queries) ListMCPServersByEnvironment(ctx context.Context, environmentID
 		var i McpServer
 		if err := rows.Scan(
 			&i.ID,
-			&i.ConfigID,
-			&i.ServerName,
-			&i.ServerUrl,
+			&i.Name,
+			&i.Command,
+			&i.Args,
+			&i.Env,
+			&i.WorkingDir,
+			&i.TimeoutSeconds,
+			&i.AutoRestart,
+			&i.EnvironmentID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -129,4 +130,49 @@ func (q *Queries) ListMCPServersByEnvironment(ctx context.Context, environmentID
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMCPServer = `-- name: UpdateMCPServer :one
+UPDATE mcp_servers 
+SET name = ?, command = ?, args = ?, env = ?, working_dir = ?, timeout_seconds = ?, auto_restart = ?
+WHERE id = ?
+RETURNING id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at
+`
+
+type UpdateMCPServerParams struct {
+	Name           string         `json:"name"`
+	Command        string         `json:"command"`
+	Args           sql.NullString `json:"args"`
+	Env            sql.NullString `json:"env"`
+	WorkingDir     sql.NullString `json:"working_dir"`
+	TimeoutSeconds sql.NullInt64  `json:"timeout_seconds"`
+	AutoRestart    sql.NullBool   `json:"auto_restart"`
+	ID             int64          `json:"id"`
+}
+
+func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
+	row := q.db.QueryRowContext(ctx, updateMCPServer,
+		arg.Name,
+		arg.Command,
+		arg.Args,
+		arg.Env,
+		arg.WorkingDir,
+		arg.TimeoutSeconds,
+		arg.AutoRestart,
+		arg.ID,
+	)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Command,
+		&i.Args,
+		&i.Env,
+		&i.WorkingDir,
+		&i.TimeoutSeconds,
+		&i.AutoRestart,
+		&i.EnvironmentID,
+		&i.CreatedAt,
+	)
+	return i, err
 }

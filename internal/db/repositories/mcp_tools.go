@@ -1,140 +1,131 @@
 package repositories
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
+	"station/internal/db/queries"
 	"station/pkg/models"
 )
 
 type MCPToolRepo struct {
-	db *sql.DB
+	db      *sql.DB
+	queries *queries.Queries
 }
 
 func NewMCPToolRepo(db *sql.DB) *MCPToolRepo {
-	return &MCPToolRepo{db: db}
+	return &MCPToolRepo{
+		db:      db,
+		queries: queries.New(db),
+	}
+}
+
+// convertMCPToolFromSQLc converts sqlc McpTool to models.MCPTool
+func convertMCPToolFromSQLc(tool queries.McpTool) *models.MCPTool {
+	result := &models.MCPTool{
+		ID:          tool.ID,
+		MCPServerID: tool.McpServerID,
+		Name:        tool.Name,
+		Description: tool.Description.String,
+	}
+	
+	if tool.CreatedAt.Valid {
+		result.CreatedAt = tool.CreatedAt.Time
+	}
+	
+	if tool.InputSchema.Valid {
+		result.Schema = json.RawMessage(tool.InputSchema.String)
+	}
+	
+	return result
+}
+
+// convertMCPToolToSQLc converts models.MCPTool to sqlc CreateMCPToolParams
+func convertMCPToolToSQLc(tool *models.MCPTool) queries.CreateMCPToolParams {
+	params := queries.CreateMCPToolParams{
+		McpServerID: tool.MCPServerID,
+		Name:        tool.Name,
+		Description: sql.NullString{String: tool.Description, Valid: tool.Description != ""},
+	}
+	
+	if tool.Schema != nil {
+		params.InputSchema = sql.NullString{String: string(tool.Schema), Valid: true}
+	}
+	
+	return params
 }
 
 func (r *MCPToolRepo) Create(tool *models.MCPTool) (int64, error) {
-	query := `INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema) 
-			  VALUES (?, ?, ?, ?) 
-			  RETURNING id`
-	
-	var id int64
-	err := r.db.QueryRow(query, tool.MCPServerID, tool.Name, tool.Description, tool.Schema).Scan(&id)
+	params := convertMCPToolToSQLc(tool)
+	created, err := r.queries.CreateMCPTool(context.Background(), params)
 	if err != nil {
 		return 0, err
 	}
-	
-	return id, nil
+	return created.ID, nil
 }
 
 func (r *MCPToolRepo) CreateTx(tx *sql.Tx, tool *models.MCPTool) (int64, error) {
-	query := `INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema) 
-			  VALUES (?, ?, ?, ?) 
-			  RETURNING id`
-	
-	var id int64
-	err := tx.QueryRow(query, tool.MCPServerID, tool.Name, tool.Description, tool.Schema).Scan(&id)
+	params := convertMCPToolToSQLc(tool)
+	txQueries := r.queries.WithTx(tx)
+	created, err := txQueries.CreateMCPTool(context.Background(), params)
 	if err != nil {
 		return 0, err
 	}
-	
-	return id, nil
+	return created.ID, nil
 }
 
 func (r *MCPToolRepo) GetByID(id int64) (*models.MCPTool, error) {
-	query := `SELECT id, mcp_server_id, name, description, input_schema, created_at 
-			  FROM mcp_tools WHERE id = ?`
-	
-	var tool models.MCPTool
-	err := r.db.QueryRow(query, id).Scan(
-		&tool.ID, &tool.MCPServerID, &tool.Name, &tool.Description, &tool.Schema, &tool.CreatedAt,
-	)
+	tool, err := r.queries.GetMCPTool(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
-	
-	return &tool, nil
+	return convertMCPToolFromSQLc(tool), nil
 }
 
 func (r *MCPToolRepo) GetByServerID(serverID int64) ([]*models.MCPTool, error) {
-	query := `SELECT id, mcp_server_id, name, description, input_schema, created_at 
-			  FROM mcp_tools WHERE mcp_server_id = ? ORDER BY name`
-	
-	rows, err := r.db.Query(query, serverID)
+	tools, err := r.queries.ListMCPToolsByServer(context.Background(), serverID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	var tools []*models.MCPTool
-	for rows.Next() {
-		var tool models.MCPTool
-		err := rows.Scan(&tool.ID, &tool.MCPServerID, &tool.Name, &tool.Description, &tool.Schema, &tool.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		tools = append(tools, &tool)
+	var result []*models.MCPTool
+	for _, tool := range tools {
+		result = append(result, convertMCPToolFromSQLc(tool))
 	}
 	
-	return tools, rows.Err()
+	return result, nil
 }
 
 func (r *MCPToolRepo) GetByEnvironmentID(environmentID int64) ([]*models.MCPTool, error) {
-	query := `SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at 
-			  FROM mcp_tools t
-			  JOIN mcp_servers s ON t.mcp_server_id = s.id
-			  JOIN mcp_configs c ON s.mcp_config_id = c.id
-			  WHERE c.environment_id = ? AND c.version = (
-				  SELECT MAX(version) FROM mcp_configs WHERE environment_id = ?
-			  )
-			  ORDER BY s.name, t.name`
-	
-	rows, err := r.db.Query(query, environmentID, environmentID)
+	tools, err := r.queries.ListMCPToolsByEnvironment(context.Background(), environmentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	var tools []*models.MCPTool
-	for rows.Next() {
-		var tool models.MCPTool
-		err := rows.Scan(&tool.ID, &tool.MCPServerID, &tool.Name, &tool.Description, &tool.Schema, &tool.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		tools = append(tools, &tool)
+	var result []*models.MCPTool
+	for _, tool := range tools {
+		result = append(result, convertMCPToolFromSQLc(tool))
 	}
 	
-	return tools, rows.Err()
+	return result, nil
 }
 
 func (r *MCPToolRepo) GetByServerInEnvironment(environmentID int64, serverName string) ([]*models.MCPTool, error) {
-	query := `SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at 
-			  FROM mcp_tools t
-			  JOIN mcp_servers s ON t.mcp_server_id = s.id
-			  JOIN mcp_configs c ON s.mcp_config_id = c.id
-			  WHERE c.environment_id = ? AND s.name = ? AND c.version = (
-				  SELECT MAX(version) FROM mcp_configs WHERE environment_id = ?
-			  )
-			  ORDER BY t.name`
-	
-	rows, err := r.db.Query(query, environmentID, serverName, environmentID)
+	params := queries.ListMCPToolsByServerInEnvironmentParams{
+		EnvironmentID: environmentID,
+		Name:          serverName,
+	}
+	tools, err := r.queries.ListMCPToolsByServerInEnvironment(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	var tools []*models.MCPTool
-	for rows.Next() {
-		var tool models.MCPTool
-		err := rows.Scan(&tool.ID, &tool.MCPServerID, &tool.Name, &tool.Description, &tool.Schema, &tool.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		tools = append(tools, &tool)
+	var result []*models.MCPTool
+	for _, tool := range tools {
+		result = append(result, convertMCPToolFromSQLc(tool))
 	}
 	
-	return tools, rows.Err()
+	return result, nil
 }
 
 func (r *MCPToolRepo) DeleteByServerID(serverID int64) error {
@@ -142,46 +133,38 @@ func (r *MCPToolRepo) DeleteByServerID(serverID int64) error {
 }
 
 func (r *MCPToolRepo) DeleteByServerIDTx(tx *sql.Tx, serverID int64) error {
-	query := `DELETE FROM mcp_tools WHERE mcp_server_id = ?`
-	
-	// Use transaction if provided, otherwise use regular db connection
 	if tx != nil {
-		_, err := tx.Exec(query, serverID)
-		return err
+		txQueries := r.queries.WithTx(tx)
+		return txQueries.DeleteMCPToolsByServer(context.Background(), serverID)
 	} else {
-		_, err := r.db.Exec(query, serverID)
-		return err
+		return r.queries.DeleteMCPToolsByServer(context.Background(), serverID)
 	}
 }
 
 func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) {
-	// First check if there are any configs at all to avoid JSON extraction errors
-	var configCount int
-	countQuery := `SELECT COUNT(*) FROM mcp_configs`
-	if err := r.db.QueryRow(countQuery).Scan(&configCount); err != nil {
+	// First check if there are any servers at all
+	var serverCount int
+	countQuery := `SELECT COUNT(*) FROM mcp_servers`
+	if err := r.db.QueryRow(countQuery).Scan(&serverCount); err != nil {
 		return nil, err
 	}
 	
-	// If no configs exist, return empty slice
-	if configCount == 0 {
+	// If no servers exist, return empty slice
+	if serverCount == 0 {
 		return []*models.MCPToolWithDetails{}, nil
 	}
 	
 	query := `SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at,
 			         s.name as server_name,
-			         c.id as config_id,
-			         COALESCE(c.config_name, 'config-' || c.id) as config_name,
-			         c.version as config_version,
-			         e.id as environment_id,
+			         0 as config_id,
+			         'server-' || s.name as config_name,
+			         1 as config_version,
+			         s.environment_id as environment_id,
 			         e.name as environment_name
 			  FROM mcp_tools t
 			  JOIN mcp_servers s ON t.mcp_server_id = s.id
-			  JOIN mcp_configs c ON s.mcp_config_id = c.id
-			  JOIN environments e ON c.environment_id = e.id
-			  WHERE c.version = (
-				  SELECT MAX(version) FROM mcp_configs mc WHERE mc.config_name = c.config_name AND mc.environment_id = c.environment_id
-			  )
-			  ORDER BY e.name, c.version DESC, s.name, t.name`
+			  JOIN environments e ON s.environment_id = e.id
+			  ORDER BY e.name, s.name, t.name`
 	
 	rows, err := r.db.Query(query)
 	if err != nil {
