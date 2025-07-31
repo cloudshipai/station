@@ -15,33 +15,43 @@ import (
 
 // MCPServerDiscovery represents the structured output from GitHub analysis
 type MCPServerDiscovery struct {
-	ServerName     string            `json:"serverName"`     // e.g. "filesystem", "cfn-mcp-server"
-	Description    string            `json:"description"`    // What this server does
-	Configurations []MCPConfigOption `json:"configurations"` // Multiple setup options
-	RequiredEnv    []EnvVariable     `json:"requiredEnv"`    // Environment variables needed
-	Type           string            `json:"type"`           // "stdio", "sse", "streamable-http", "docker"
-	Repository     string            `json:"repository"`     // GitHub repository URL
-	InstallNotes   string            `json:"installNotes"`   // Additional installation notes
+	ServerName     string            `json:"serverName"`               // e.g. "filesystem", "cfn-mcp-server"
+	Description    string            `json:"description"`              // What this server does
+	Configurations []MCPConfigOption `json:"configurations"`           // Multiple setup options
+	RequiredEnv    []EnvVariable     `json:"requiredEnv,omitempty"`    // Environment variables needed
+	Type           string            `json:"type,omitempty"`           // "stdio", "sse", "streamable-http", "docker"
+	Repository     string            `json:"repository,omitempty"`     // GitHub repository URL (set manually)
+	InstallNotes   string            `json:"installNotes,omitempty"`   // Additional installation notes
+}
+
+// AIDiscoveryResponse represents the response structure expected from AI (without repository field)
+type AIDiscoveryResponse struct {
+	ServerName     string            `json:"serverName"`               // e.g. "filesystem", "cfn-mcp-server"
+	Description    string            `json:"description"`              // What this server does
+	Configurations []MCPConfigOption `json:"configurations"`           // Multiple setup options
+	RequiredEnv    []EnvVariable     `json:"requiredEnv,omitempty"`    // Environment variables needed
+	Type           string            `json:"type,omitempty"`           // "stdio", "sse", "streamable-http", "docker"
+	InstallNotes   string            `json:"installNotes,omitempty"`   // Additional installation notes
 }
 
 // MCPConfigOption represents different ways to configure an MCP server
 type MCPConfigOption struct {
-	Name        string            `json:"name"`        // "NPX Install", "Docker", "Local Build"
-	Command     string            `json:"command"`     // "npx", "docker", "node"
-	Args        []string          `json:"args"`        // ["@modelcontextprotocol/server-filesystem", "/path"]
-	WorkingDir  string            `json:"workingDir"`  // Optional working directory
-	Env         map[string]string `json:"env"`         // Environment variables
-	Description string            `json:"description"` // How this option works
-	Recommended bool              `json:"recommended"` // Is this the recommended approach?
+	Name        string            `json:"name"`                   // "NPX Install", "Docker", "Local Build"
+	Command     string            `json:"command"`                // "npx", "docker", "node"
+	Args        []string          `json:"args,omitempty"`         // ["@modelcontextprotocol/server-filesystem", "/path"]
+	WorkingDir  string            `json:"workingDir,omitempty"`   // Optional working directory
+	Env         map[string]string `json:"env,omitempty"`          // Environment variables
+	Description string            `json:"description,omitempty"`  // How this option works
+	Recommended bool              `json:"recommended,omitempty"`  // Is this the recommended approach?
 }
 
 // EnvVariable represents an environment variable requirement
 type EnvVariable struct {
-	Name        string `json:"name"`        // "AWS_REGION"
-	Description string `json:"description"` // "AWS region for CloudFormation"
-	Required    bool   `json:"required"`    // Is this env var required?
-	Default     string `json:"default"`     // Default value if any
-	Example     string `json:"example"`     // Example value
+	Name        string `json:"name"`                   // "AWS_REGION"
+	Description string `json:"description,omitempty"`  // "AWS region for CloudFormation"
+	Required    bool   `json:"required,omitempty"`     // Is this env var required?
+	Default     string `json:"default,omitempty"`      // Default value if any
+	Example     string `json:"example,omitempty"`      // Example value
 }
 
 // GitHubDiscoveryService handles GitHub MCP server discovery
@@ -83,7 +93,7 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 	response, err := genkit.Generate(ctx, g.genkit,
 		ai.WithModel(model),
 		ai.WithPrompt(prompt),
-		ai.WithOutputType(MCPServerDiscovery{}),
+		ai.WithOutputType(AIDiscoveryResponse{}),
 	)
 
 	if err != nil {
@@ -91,13 +101,23 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 	}
 
 	// Parse the structured JSON response
-	var discovery MCPServerDiscovery
-	if err := json.Unmarshal([]byte(response.Text()), &discovery); err != nil {
+	var aiResponse AIDiscoveryResponse
+	if err := json.Unmarshal([]byte(response.Text()), &aiResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse structured JSON response: %w\nResponse: %s", err, response.Text())
 	}
 
+	// Convert to full discovery struct
+	discovery := MCPServerDiscovery{
+		ServerName:     aiResponse.ServerName,
+		Description:    aiResponse.Description,
+		Configurations: aiResponse.Configurations,
+		RequiredEnv:    aiResponse.RequiredEnv,
+		Type:           aiResponse.Type,
+		Repository:     githubURL, // Set manually
+		InstallNotes:   aiResponse.InstallNotes,
+	}
+
 	// Post-process and validate the discovery
-	discovery.Repository = githubURL
 	g.validateAndEnhanceDiscovery(&discovery)
 
 	return &discovery, nil
