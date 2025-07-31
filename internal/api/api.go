@@ -4,23 +4,48 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"station/internal/api/v1"
 	"station/internal/config"
 	"station/internal/db"
+	"station/internal/db/repositories"
+	"station/internal/services"
+	"station/pkg/crypto"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
-	cfg        *config.Config
-	db         db.Database
-	httpServer *http.Server
+	cfg                  *config.Config
+	db                   db.Database
+	httpServer           *http.Server
+	repos                *repositories.Repositories
+	mcpConfigService     *services.MCPConfigService
+	toolDiscoveryService *services.ToolDiscoveryService
+	genkitService        *services.GenkitService
+	localMode            bool
 }
 
-func New(cfg *config.Config, database db.Database) *Server {
-	return &Server{
-		cfg: cfg,
-		db:  database,
+func New(cfg *config.Config, database db.Database, localMode bool) *Server {
+	repos := repositories.New(database)
+	keyManager, err := crypto.NewKeyManagerFromEnv()
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize key manager: %w", err))
 	}
+	mcpConfigService := services.NewMCPConfigService(repos, keyManager)
+	
+	return &Server{
+		cfg:              cfg,
+		db:               database,
+		repos:            repos,
+		mcpConfigService: mcpConfigService,
+		localMode:        localMode,
+	}
+}
+
+// SetServices allows setting optional services after creation
+func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService, genkitService *services.GenkitService) {
+	s.toolDiscoveryService = toolDiscoveryService
+	s.genkitService = genkitService
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -31,8 +56,33 @@ func (s *Server) Start(ctx context.Context) error {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	
-	// Health check endpoint only
+	// Enable CORS for API endpoints
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+		
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		
+		c.Next()
+	})
+	
+	// Health check endpoint
 	router.GET("/health", s.healthCheck)
+	
+	// API v1 routes
+	v1Group := router.Group("/api/v1")
+	apiHandlers := v1.NewAPIHandlers(
+		s.repos,
+		s.mcpConfigService,
+		s.toolDiscoveryService,
+		s.genkitService,
+		s.localMode,
+	)
+	apiHandlers.RegisterRoutes(v1Group)
 	
 	// Create HTTP server
 	s.httpServer = &http.Server{
