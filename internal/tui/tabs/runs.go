@@ -99,15 +99,14 @@ func (i RunItem) Title() string {
 }
 
 func (i RunItem) Description() string {
+	user := i.run.User
+	if len(user) > 12 {
+		user = user[:12] + "..."
+	}
+	
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		mutedStyle.Render(fmt.Sprintf("Status: %s • ", i.run.Status)),
-		mutedStyle.Render(fmt.Sprintf("Started: %s • ", i.run.StartedAt)),
-		mutedStyle.Render(fmt.Sprintf("Duration: %s • ", i.run.Duration)),
-		mutedStyle.Render(fmt.Sprintf("User: %s • ", i.run.User)),
-		mutedStyle.Render(fmt.Sprintf("Steps: %d", i.run.StepsCount)),
-	)
+	return mutedStyle.Render(fmt.Sprintf("%s • %s • %s • %d steps", 
+		i.run.Status, i.run.StartedAt, user, i.run.StepsCount))
 }
 
 // Custom key bindings for runs
@@ -151,13 +150,8 @@ type RunDataLoadedMsg struct {
 func NewRunsModel(database db.Database) *RunsModel {
 	repos := repositories.New(database)
 	
-	// Create list with custom styling
+	// Create list - styles will be set dynamically in WindowSizeMsg handler
 	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = styles.ListItemSelectedStyle
-	delegate.Styles.SelectedDesc = styles.ListItemSelectedStyle
-	delegate.Styles.NormalTitle = styles.ListItemStyle
-	delegate.Styles.NormalDesc = styles.ListItemStyle
-	
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "Agent Runs"
 	l.Styles.Title = styles.HeaderStyle
@@ -190,7 +184,17 @@ func (m *RunsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		m.SetSize(msg.Width, msg.Height)
 		// Update list size based on the content area dimensions calculated by TUI
 		// Reserve space for section header and help text (approximately 4 lines)
-		m.list.SetSize(m.width-4, m.height-4)
+		listWidth := msg.Width - 4
+		m.list.SetSize(listWidth, msg.Height-4)
+		
+		// Update delegate styles to use full width for proper selection highlighting
+		// Use the full available width to ensure highlighting spans the entire width
+		delegate := list.NewDefaultDelegate()
+		delegate.Styles.SelectedTitle = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.SelectedDesc = styles.GetListItemSelectedStyle(msg.Width)
+		delegate.Styles.NormalTitle = styles.GetListItemStyle(msg.Width)
+		delegate.Styles.NormalDesc = styles.GetListItemStyle(msg.Width)
+		m.list.SetDelegate(delegate)
 		
 	case tea.KeyMsg:
 		switch m.viewMode {

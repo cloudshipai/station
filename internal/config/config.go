@@ -18,7 +18,7 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		DatabaseURL:    getEnvOrDefault("DATABASE_URL", "station.db"),
+		DatabaseURL:    getEnvOrDefault("DATABASE_URL", GetDatabasePath()),
 		SSHPort:        getEnvIntOrDefault("SSH_PORT", 2222),
 		MCPPort:        getEnvIntOrDefault("MCP_PORT", 3000),
 		APIPort:        getEnvIntOrDefault("API_PORT", 8080),
