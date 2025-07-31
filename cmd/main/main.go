@@ -93,6 +93,49 @@ It provides a retro terminal interface for system administration and agent manag
 		Long:  "Complete the encryption key rotation by re-encrypting all data with the new key",
 		RunE:  runKeyFinishRotation,
 	}
+
+	// New CLI commands for MCP operations
+	loadCmd = &cobra.Command{
+		Use:   "load",
+		Short: "Load MCP configuration from current directory",
+		Long:  "Discover and upload MCP configuration from mcp.json or .mcp.json in current directory",
+		RunE:  runLoad,
+	}
+
+	mcpAddCmd = &cobra.Command{
+		Use:   "add",
+		Short: "Add a single MCP server to an existing configuration",
+		Long:  "Add a single MCP server to an existing configuration by specifying config ID or name",
+		RunE:  runMCPAdd,
+	}
+
+	blastoffCmd = &cobra.Command{
+		Use:    "blastoff",
+		Short:  "🚀 Epic retro station blastoff animation",
+		Long:   "Watch an amazing retro ASCII animation of Station blasting off into space!",
+		RunE:   runBlastoff,
+		Hidden: true, // Hidden easter egg command
+	}
+
+	mcpCmd = &cobra.Command{
+		Use:   "mcp",
+		Short: "MCP management commands",
+		Long:  "Manage MCP configurations and tools",
+	}
+
+	mcpListCmd = &cobra.Command{
+		Use:   "list",
+		Short: "List MCP configurations",
+		Long:  "List all MCP configurations for the specified environment",
+		RunE:  runMCPList,
+	}
+
+	mcpToolsCmd = &cobra.Command{
+		Use:   "tools",
+		Short: "List available MCP tools",
+		Long:  "List all available MCP tools, optionally filtered",
+		RunE:  runMCPTools,
+	}
 )
 
 func init() {
@@ -106,6 +149,9 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(keyCmd)
+	rootCmd.AddCommand(loadCmd)
+	rootCmd.AddCommand(mcpCmd)
+	rootCmd.AddCommand(blastoffCmd)
 	
 	configCmd.AddCommand(configShowCmd)
 	configCmd.AddCommand(configEditCmd)
@@ -115,6 +161,10 @@ func init() {
 	keyCmd.AddCommand(keyRotateCmd)
 	keyCmd.AddCommand(keyStatusCmd)
 	keyCmd.AddCommand(keyFinishRotationCmd)
+
+	mcpCmd.AddCommand(mcpListCmd)
+	mcpCmd.AddCommand(mcpToolsCmd)
+	mcpCmd.AddCommand(mcpAddCmd)
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
@@ -122,6 +172,34 @@ func init() {
 	serveCmd.Flags().Int("api-port", 8080, "API server port")
 	serveCmd.Flags().String("database", "station.db", "Database file path")
 	serveCmd.Flags().Bool("debug", false, "Enable debug logging")
+	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
+	
+	// Load command flags
+	loadCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	loadCmd.Flags().String("environment", "default", "Environment name to upload to")
+	loadCmd.Flags().String("config-name", "", "Name for the MCP configuration")
+	
+	// MCP Add command flags
+	mcpAddCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	mcpAddCmd.Flags().String("environment", "default", "Environment name")
+	mcpAddCmd.Flags().String("config-id", "", "Config ID to add server to (format: id or configname)")
+	mcpAddCmd.Flags().String("server-name", "", "Name for the new MCP server")
+	mcpAddCmd.Flags().String("command", "", "Command to run the MCP server")
+	mcpAddCmd.Flags().StringSlice("args", []string{}, "Arguments for the MCP server command")
+	mcpAddCmd.Flags().StringToString("env", map[string]string{}, "Environment variables (key=value)")
+	mcpAddCmd.Flags().BoolP("interactive", "i", false, "Interactive mode with forms")
+	// Only require flags when not in interactive mode (we'll check this in the RunE function)
+	// mcpAddCmd.MarkFlagRequired("config-id")
+	// mcpAddCmd.MarkFlagRequired("server-name") 
+	// mcpAddCmd.MarkFlagRequired("command")
+	
+	// MCP command flags
+	mcpListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	mcpListCmd.Flags().String("environment", "default", "Environment to list configs from")
+	
+	mcpToolsCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	mcpToolsCmd.Flags().String("environment", "default", "Environment to list tools from")
+	mcpToolsCmd.Flags().String("filter", "", "Filter tools by name or description")
 	
 	// Bind flags to viper
 	viper.BindPFlag("ssh_port", serveCmd.Flags().Lookup("ssh-port"))
@@ -129,6 +207,7 @@ func init() {
 	viper.BindPFlag("api_port", serveCmd.Flags().Lookup("api-port"))
 	viper.BindPFlag("database_url", serveCmd.Flags().Lookup("database"))
 	viper.BindPFlag("debug", serveCmd.Flags().Lookup("debug"))
+	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
 }
 
 func initConfig() {
@@ -227,6 +306,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	viper.Set("ssh_host_key_path", "./ssh_host_key")
 	viper.Set("admin_username", "admin")
 	viper.Set("debug", false)
+	viper.Set("local_mode", true) // Default to local mode
 
 	// Write configuration file
 	viper.SetConfigFile(configFile)

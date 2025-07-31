@@ -20,6 +20,7 @@ import (
 
 	"github.com/firebase/genkit/go/genkit"
 	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	"github.com/spf13/viper"
 )
 
 // genkitSetup holds the initialized Genkit components
@@ -132,8 +133,16 @@ func runMainServer() error {
 
 	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc)
 	
-	mcpServer := mcp.NewServer(database, mcpConfigSvc, agentSvc, repos)
-	apiServer := api.New(cfg, database)
+	// Check if we're in local mode
+	localMode := viper.GetBool("local_mode")
+	mcpServer := mcp.NewServer(database, mcpConfigSvc, agentSvc, repos, localMode)
+	apiServer := api.New(cfg, database, localMode)
+	
+	// Initialize ToolDiscoveryService for API config uploads
+	toolDiscoveryService := services.NewToolDiscoveryService(repos, mcpConfigSvc)
+	
+	// Set services for the API server
+	apiServer.SetServices(toolDiscoveryService, agentSvc)
 
 	wg.Add(3)
 
