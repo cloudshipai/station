@@ -119,5 +119,5 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.40.0
-	modernc.org/sqlite v1.38.1
+	modernc.org/sqlite v1.38.2
 )
