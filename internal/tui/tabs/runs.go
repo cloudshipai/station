@@ -3,6 +3,7 @@ package tabs
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	
 	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
 )
@@ -20,6 +22,9 @@ type RunsModel struct {
 	
 	// UI components
 	table table.Model
+	
+	// Data access
+	repos *repositories.Repositories
 	
 	// State
 	runs         []AgentRunDisplay
@@ -81,6 +86,7 @@ type RunCancelledMsg struct {
 
 // NewRunsModel creates a new runs model
 func NewRunsModel(database db.Database) *RunsModel {
+	repos := repositories.New(database)
 	// Create table with columns
 	columns := []table.Column{
 		{Title: "ID", Width: 6},
@@ -105,6 +111,7 @@ func NewRunsModel(database db.Database) *RunsModel {
 	return &RunsModel{
 		BaseTabModel: NewBaseTabModel(database, "Runs"),
 		table:        t,
+		repos:        repos,
 	}
 }
 
@@ -184,6 +191,19 @@ func (m *RunsModel) handleListKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 			}
 		}
 		return m, nil
+		
+	// Add vim-style navigation keys
+	case msg.String() == "j" || msg.String() == "down":
+		// Move down in the table
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
+		return m, cmd
+		
+	case msg.String() == "k" || msg.String() == "up":
+		// Move up in the table
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
+		return m, cmd
 	}
 	
 	return m, nil
@@ -336,56 +356,64 @@ func (m RunsModel) RefreshData() tea.Cmd {
 	return m.loadRuns()
 }
 
-// Load runs from database (stub implementation)
+// Load runs from database
 func (m RunsModel) loadRuns() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		// TODO: Load real runs from database
-		// Mock data for now
-		runs := []AgentRunDisplay{
-			{
-				ID:          "run-001",
-				AgentName:   "Code Reviewer",
-				Status:      "completed",
-				StartedAt:   "2024-01-15 14:30",
-				Duration:    "2m 15s",
-				User:        "admin",
-				Output:      "Successfully reviewed 15 files. Found 3 minor issues and 1 optimization opportunity.",
-				StepsCount:  8,
-			},
-			{
-				ID:          "run-002",
-				AgentName:   "Data Analyzer",
-				Status:      "running",
-				StartedAt:   "2024-01-15 14:35",
-				Duration:    "1m 45s",
-				User:        "user1",
-				Output:      "Processing dataset... Current progress: 67%",
-				StepsCount:  5,
-			},
-			{
-				ID:          "run-003",
-				AgentName:   "Log Processor",
-				Status:      "failed",
-				StartedAt:   "2024-01-15 14:20",
-				Duration:    "0m 30s",
-				User:        "admin",
-				Error:       "Connection timeout: Unable to connect to log source after 3 retries",
-				StepsCount:  2,
-			},
-			{
-				ID:          "run-004",
-				AgentName:   "Security Scanner",
-				Status:      "completed",
-				StartedAt:   "2024-01-15 14:10",
-				Duration:    "5m 22s",
-				User:        "user2",
-				Output:      "Security scan completed. No critical vulnerabilities found. 2 medium-risk issues detected.",
-				StepsCount:  12,
-			},
+		// Load recent runs from database with agent and user details
+		dbRuns, err := m.repos.AgentRuns.ListRecent(50) // Get last 50 runs
+		if err != nil {
+			// Return empty list on error (could also return error message)
+			return RunsLoadedMsg{Runs: []AgentRunDisplay{}}
+		}
+		
+		// Convert database models to display models
+		runs := make([]AgentRunDisplay, len(dbRuns))
+		for i, dbRun := range dbRuns {
+			runs[i] = AgentRunDisplay{
+				ID:          fmt.Sprintf("run-%d", dbRun.ID),
+				AgentName:   dbRun.AgentName,
+				Status:      dbRun.Status,
+				StartedAt:   formatTime(dbRun.StartedAt),
+				Duration:    calculateDuration(dbRun.StartedAt, dbRun.CompletedAt),
+				User:        dbRun.Username,
+				Output:      dbRun.FinalResponse,
+				StepsCount:  int(dbRun.StepsTaken),
+				Error:       "", // Could extract from output if status is failed
+			}
 		}
 		
 		return RunsLoadedMsg{Runs: runs}
 	})
+}
+
+// formatTime formats a time.Time for display
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return "Unknown"
+	}
+	return t.Format("2006-01-02 15:04")
+}
+
+// calculateDuration calculates the duration between start and end times
+func calculateDuration(startedAt time.Time, completedAt *time.Time) string {
+	if startedAt.IsZero() {
+		return "Unknown"
+	}
+	
+	endTime := time.Now()
+	if completedAt != nil && !completedAt.IsZero() {
+		endTime = *completedAt
+	}
+	
+	duration := endTime.Sub(startedAt)
+	
+	if duration < time.Minute {
+		return fmt.Sprintf("%ds", int(duration.Seconds()))
+	} else if duration < time.Hour {
+		return fmt.Sprintf("%dm %ds", int(duration.Minutes()), int(duration.Seconds())%60)
+	} else {
+		return fmt.Sprintf("%dh %dm", int(duration.Hours()), int(duration.Minutes())%60)
+	}
 }
 
 // Update table rows from runs data

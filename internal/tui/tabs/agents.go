@@ -15,6 +15,7 @@ import (
 	
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
 	"station/pkg/models"
@@ -35,7 +36,8 @@ type AgentsModel struct {
 	scheduleEnabled   bool
 	
 	// Data access
-	repos        *repositories.Repositories
+	repos          *repositories.Repositories
+	executionQueue *services.ExecutionQueueService
 	
 	// State
 	agents        []models.Agent
@@ -179,7 +181,7 @@ type AgentToolsLoadedMsg struct {
 }
 
 // NewAgentsModel creates a new agents model
-func NewAgentsModel(database db.Database) *AgentsModel {
+func NewAgentsModel(database db.Database, executionQueue *services.ExecutionQueueService) *AgentsModel {
 	repos := repositories.New(database)
 	// Create list with custom styling
 	delegate := list.NewDefaultDelegate()
@@ -226,6 +228,7 @@ func NewAgentsModel(database db.Database) *AgentsModel {
 		BaseTabModel:    NewBaseTabModel(database, "Agents"),
 		list:            l,
 		repos:           repos,
+		executionQueue:  executionQueue,
 		nameInput:       nameInput,
 		descInput:       descInput,
 		promptArea:      promptArea,
@@ -319,7 +322,7 @@ func (m *AgentsModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 					return m, tea.Printf("No agents to run")
 				}
 				if item, ok := m.list.SelectedItem().(AgentItem); ok {
-					return m, tea.Printf("Running agent: %s", item.agent.Name)
+					return m, m.runAgent(item.agent)
 				}
 				return m, nil
 			}
@@ -1131,16 +1134,25 @@ func (m AgentsModel) renderToolsSelection(label string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, toolsList...)
 }
 
-// Get filtered tools based on current filter text
+// Get filtered tools based on selected environment and current filter text
 func (m AgentsModel) getFilteredTools() []models.MCPToolWithDetails {
+	// First filter by selected environment
+	var envFilteredTools []models.MCPToolWithDetails
+	for _, tool := range m.availableTools {
+		if tool.EnvironmentID == m.selectedEnvID {
+			envFilteredTools = append(envFilteredTools, tool)
+		}
+	}
+	
+	// Then filter by search text if any
 	if m.toolsFilter == "" {
-		return m.availableTools
+		return envFilteredTools
 	}
 	
 	var filtered []models.MCPToolWithDetails
 	filterLower := strings.ToLower(m.toolsFilter)
 	
-	for _, tool := range m.availableTools {
+	for _, tool := range envFilteredTools {
 		// Search in tool name, description, environment name, and config name
 		if strings.Contains(strings.ToLower(tool.Name), filterLower) ||
 		   strings.Contains(strings.ToLower(tool.Description), filterLower) ||
@@ -1536,7 +1548,7 @@ func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 		
 		switch m.actionButtonIndex {
 		case 0: // Run Agent
-			return m, tea.Printf("Running agent: %s", m.selectedAgent.Name)
+			return m, m.runAgent(*m.selectedAgent)
 		case 1: // Edit
 			// Switch to edit mode - populate form with current agent data
 			m.PushNavigation("Edit Agent")
@@ -1552,7 +1564,7 @@ func (m *AgentsModel) handleDetailViewKeys(msg tea.KeyMsg) (TabModel, tea.Cmd) {
 	case "r":
 		// Quick run with 'r' key
 		if m.selectedAgent != nil {
-			return m, tea.Printf("Running agent: %s", m.selectedAgent.Name)
+			return m, m.runAgent(*m.selectedAgent)
 		}
 		return m, nil
 		
@@ -1948,4 +1960,41 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 		
 		return AgentUpdatedMsg{Agent: *updatedAgent}
 	})
+}
+
+// runAgent queues an agent for execution using the execution queue service
+func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
+	if m.executionQueue == nil {
+		return tea.Printf("❌ Execution queue service not available")
+	}
+	
+	// Use a default task prompt for manual agent execution
+	task := "Execute agent manually from TUI"
+	if agent.Prompt != "" {
+		task = agent.Prompt
+	}
+	
+	// Create metadata to indicate this was a manual execution
+	metadata := map[string]interface{}{
+		"source":       "manual_tui",
+		"triggered_at": time.Now(),
+	}
+	
+	// For manual executions via SSH console, get the console user ID
+	// TODO: Get actual user ID from session when authentication is implemented
+	consoleUser, err := m.repos.Users.GetByUsername("console")
+	if err != nil {
+		// Fallback to system user if console user not found
+		consoleUser, err = m.repos.Users.GetByUsername("system")
+		if err != nil {
+			return tea.Printf("❌ Could not find console or system user for execution tracking")
+		}
+	}
+	
+	// Queue the execution
+	if err := m.executionQueue.QueueExecution(agent.ID, consoleUser.ID, task, metadata); err != nil {
+		return tea.Printf("❌ Failed to queue agent execution: %v", err)
+	}
+	
+	return tea.Printf("🚀 Agent '%s' queued for execution - check Runs tab for progress", agent.Name)
 }

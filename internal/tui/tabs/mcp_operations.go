@@ -76,8 +76,8 @@ func (m MCPModel) loadConfigs() tea.Cmd {
 					decryptedData, err := m.mcpConfigSvc.DecryptConfigWithKeyID(config.ConfigJSON, config.EncryptionKeyID)
 					if err != nil {
 						log.Printf("DEBUG: Failed to decrypt config %d: %v", config.ID, err)
-						configName = fmt.Sprintf("config-%d (encrypted)", config.ID)
-						configJSON = "{\"error\": \"failed to decrypt\"}"
+						configName = fmt.Sprintf("config-%d (encrypted - keys missing)", config.ID)
+						configJSON = "{\"error\": \"Encryption keys not found. MCP config is encrypted but keys are missing from ~/.station/\"}"
 					} else {
 						// Use the name from the decrypted data if available
 						if decryptedData.Name != "" {
@@ -390,7 +390,7 @@ func (m MCPModel) loadConfigVersions(configName string, environmentID int64) tea
 					decryptedData, err := m.mcpConfigSvc.DecryptConfigWithKeyID(config.ConfigJSON, config.EncryptionKeyID)
 					if err != nil {
 						log.Printf("DEBUG: Failed to decrypt config %d: %v", config.ID, err)
-						configJSON = "{\"error\": \"failed to decrypt\"}"
+						configJSON = "{\"error\": \"Encryption keys not found. MCP config is encrypted but keys are missing from ~/.station/\"}"
 					} else {
 						uiFormat := map[string]interface{}{"mcpServers": decryptedData.Servers}
 						if decryptedJSON, err := json.MarshalIndent(uiFormat, "", "  "); err == nil {

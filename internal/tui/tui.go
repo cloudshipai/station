@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	
 	"station/internal/db"
+	"station/internal/services"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
 	"station/internal/tui/tabs"
@@ -39,7 +40,8 @@ type LayoutDimensions struct {
 // Main TUI model for Station admin interface
 type Model struct {
 	// Core data
-	db db.Database
+	db             db.Database
+	executionQueue *services.ExecutionQueueService
 	
 	// UI state
 	width       int
@@ -103,15 +105,16 @@ func DefaultKeyMap() KeyMap {
 }
 
 // NewModel creates a new TUI model
-func NewModel(database db.Database) *Model {
+func NewModel(database db.Database, executionQueue *services.ExecutionQueueService) *Model {
 	
 	return &Model{
-		db:        database,
-		tabs:      []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Users", "Settings"},
-		activeTab: 0,
-		keyMap:    DefaultKeyMap(),
-		help:      help.New(),
-		loading:   true,
+		db:             database,
+		executionQueue: executionQueue,
+		tabs:           []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Users", "Settings"},
+		activeTab:      0,
+		keyMap:         DefaultKeyMap(),
+		help:           help.New(),
+		loading:        true,
 	}
 }
 
@@ -130,7 +133,7 @@ func (m *Model) initializeTabModels() tea.Cmd {
 	
 	// Initialize each tab model
 	m.dashboardModel = tabs.NewDashboardModel(m.db)
-	m.agentsModel = tabs.NewAgentsModel(m.db)
+	m.agentsModel = tabs.NewAgentsModel(m.db, m.executionQueue)
 	m.runsModel = tabs.NewRunsModel(m.db)
 	m.mcpModel = tabs.NewMCPModel(m.db)
 	m.toolsModel = tabs.NewToolsModel(m.db)
@@ -634,8 +637,8 @@ func (m Model) getActiveTabModel() tabs.TabModel {
 }
 
 // Program creates a new Bubble Tea program
-func NewProgram(database db.Database) *tea.Program {
-	model := NewModel(database)
+func NewProgram(database db.Database, executionQueue *services.ExecutionQueueService) *tea.Program {
+	model := NewModel(database, executionQueue)
 	return tea.NewProgram(
 		model,
 		tea.WithAltScreen(),

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/cloudwego/eino/components/model"
-	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
 	"github.com/cloudwego/eino/schema"
@@ -19,7 +18,9 @@ type EinoAgentService struct {
 	repos                *repositories.Repositories
 	mcpClientService     *MCPClientService
 	toolDiscoveryService *ToolDiscoveryService
-	mcpToolsLoader       *MCPToolsLoader
+	mcpToolsLoader       *MCPToolsLoader       // Deprecated: keeping for backward compatibility
+	mcpProxyService      *MCPProxyService      // Deprecated: keeping for backward compatibility
+	nativeMCPService     *EinoNativeMCPService // New: Native Eino MCP integration (no schema conversion!)
 	modelProvider        *ModelProviderService
 }
 
@@ -28,12 +29,15 @@ func NewEinoAgentService(
 	repos *repositories.Repositories,
 	mcpClientService *MCPClientService,
 	toolDiscoveryService *ToolDiscoveryService,
+	mcpConfigService *MCPConfigService,
 ) *EinoAgentService {
 	return &EinoAgentService{
 		repos:                repos,
 		mcpClientService:     mcpClientService,
 		toolDiscoveryService: toolDiscoveryService,
-		mcpToolsLoader:       NewMCPToolsLoader(mcpClientService, toolDiscoveryService),
+		mcpToolsLoader:       NewMCPToolsLoader(mcpClientService, toolDiscoveryService), // Keep for compatibility
+		mcpProxyService:      NewMCPProxyService(repos, toolDiscoveryService, mcpConfigService), // Keep for compatibility
+		nativeMCPService:     NewEinoNativeMCPService(repos, toolDiscoveryService, mcpConfigService), // Native approach - no schema conversion!
 		modelProvider:        NewModelProviderService(),
 	}
 }
@@ -125,16 +129,10 @@ func (s *EinoAgentService) ExecuteAgent(ctx context.Context, agentID int64, inpu
 		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
 	}
 
-	// Get the assigned tool names for this agent
-	assignedToolNames, err := s.getAssignedToolNames(agentID)
+	// Use Eino's native MCP integration - NO SCHEMA CONVERSION!
+	einoTools, err := s.nativeMCPService.LoadToolsForAgent(ctx, agentID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get assigned tools for agent %d: %w", agentID, err)
-	}
-
-	// Load the assigned MCP tools for this agent
-	einoTools, err := s.mcpToolsLoader.LoadSpecificTools(agent.EnvironmentID, assignedToolNames)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load tools for agent %d: %w", agentID, err)
+		return nil, fmt.Errorf("failed to load tools using native MCP integration for agent %d: %w", agentID, err)
 	}
 
 	// Create the chat model based on agent configuration or default
@@ -149,16 +147,10 @@ func (s *EinoAgentService) ExecuteAgent(ctx context.Context, agentID int64, inpu
 		maxSteps = 12 // default from Eino
 	}
 
-	// Convert InvokableTool slice to BaseTool slice (all InvokableTool implement BaseTool)
-	baseTools := make([]tool.BaseTool, len(einoTools))
-	for i, einoTool := range einoTools {
-		baseTools[i] = einoTool
-	}
-
 	agentConfig := &react.AgentConfig{
-		ToolCallingModel: chatModel,
+		ToolCallingModel: chatModel, // Need ToolCallingModel for MCP tools
 		ToolsConfig: compose.ToolsNodeConfig{
-			Tools: baseTools,
+			Tools: einoTools, // einoTools is []tool.BaseTool from native MCP integration
 		},
 		MessageModifier: func(ctx context.Context, input []*schema.Message) []*schema.Message {
 			// Add system prompt if provided

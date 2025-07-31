@@ -321,9 +321,30 @@ func (s *ToolDiscoveryService) ReplaceToolsWithTransaction(environmentID int64, 
 		log.Printf("Removed %d agent-tool associations for config %s", len(oldToolIDs), configName)
 	}
 
-	// Step 3: Clear existing servers and tools for the latest config
-	if err := s.clearExistingDataTx(tx, latestConfig.ID); err != nil {
-		return nil, fmt.Errorf("failed to clear existing data: %w", err)
+	// Step 3: Clear existing servers and tools for ALL versions of this config name
+	allConfigs, err := s.repos.MCPConfigs.ListByConfigName(environmentID, configName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all config versions: %w", err)
+	}
+	
+	for _, config := range allConfigs {
+		if err := s.clearExistingDataTx(tx, config.ID); err != nil {
+			log.Printf("Failed to clear data for config version %d: %v", config.ID, err)
+			// Continue with other configs rather than failing completely
+		}
+	}
+	
+	// Step 3.5: Remove old config versions, keeping only the latest
+	if len(allConfigs) > 1 {
+		for _, config := range allConfigs {
+			if config.ID != latestConfig.ID {
+				if err := s.repos.MCPConfigs.DeleteTx(tx, config.ID); err != nil {
+					log.Printf("Failed to delete old config version %d: %v", config.ID, err)
+				} else {
+					log.Printf("Deleted old config version %d (v%d) for config %s", config.ID, config.Version, configName)
+				}
+			}
+		}
 	}
 
 	// Step 4: Discover new tools from the latest config
