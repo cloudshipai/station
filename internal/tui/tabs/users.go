@@ -477,9 +477,8 @@ func (m UsersModel) createUser(username string, isAdmin bool) tea.Cmd {
 		// Generate API key
 		apiKey := generateUserAPIKey()
 		
-		// Create user (using a dummy public key for now)
-		publicKey := "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..." // Placeholder
-		user, err := m.repos.Users.Create(username, publicKey, isAdmin, &apiKey)
+		// Create user
+		user, err := m.repos.Users.Create(username, isAdmin, &apiKey)
 		if err != nil {
 			log.Printf("Error creating user: %v", err)
 			return UsersErrorMsg{Err: err}

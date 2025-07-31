@@ -1,91 +1,105 @@
 package repositories
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"station/internal/db/queries"
 	"station/pkg/models"
 )
 
 type EnvironmentRepo struct {
-	db *sql.DB
+	db      *sql.DB
+	queries *queries.Queries
 }
 
 func NewEnvironmentRepo(db *sql.DB) *EnvironmentRepo {
-	return &EnvironmentRepo{db: db}
+	return &EnvironmentRepo{
+		db:      db,
+		queries: queries.New(db),
+	}
+}
+
+// convertEnvironmentFromSQLc converts sqlc Environment to models.Environment
+func convertEnvironmentFromSQLc(env queries.Environment) *models.Environment {
+	result := &models.Environment{
+		ID:   env.ID,
+		Name: env.Name,
+	}
+	
+	if env.Description.Valid {
+		result.Description = &env.Description.String
+	}
+	
+	if env.CreatedAt.Valid {
+		result.CreatedAt = env.CreatedAt.Time
+	}
+	
+	if env.UpdatedAt.Valid {
+		result.UpdatedAt = env.UpdatedAt.Time
+	}
+	
+	return result
 }
 
 func (r *EnvironmentRepo) Create(name string, description *string) (*models.Environment, error) {
-	// For now, use user ID 1 (test_mcp_user) as the creator
-	// TODO: Pass actual user ID from authentication context
-	createdBy := int64(1)
+	params := queries.CreateEnvironmentParams{
+		Name: name,
+	}
 	
-	query := `INSERT INTO environments (name, description, created_by) VALUES (?, ?, ?) RETURNING id, name, description, created_at, updated_at`
+	if description != nil {
+		params.Description = sql.NullString{String: *description, Valid: true}
+	}
 	
-	var env models.Environment
-	err := r.db.QueryRow(query, name, description, createdBy).Scan(
-		&env.ID, &env.Name, &env.Description, &env.CreatedAt, &env.UpdatedAt,
-	)
+	created, err := r.queries.CreateEnvironment(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
 	
-	return &env, nil
+	return convertEnvironmentFromSQLc(created), nil
 }
 
 func (r *EnvironmentRepo) GetByID(id int64) (*models.Environment, error) {
-	query := `SELECT id, name, description, created_at, updated_at FROM environments WHERE id = ?`
-	
-	var env models.Environment
-	err := r.db.QueryRow(query, id).Scan(
-		&env.ID, &env.Name, &env.Description, &env.CreatedAt, &env.UpdatedAt,
-	)
+	env, err := r.queries.GetEnvironment(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
-	
-	return &env, nil
+	return convertEnvironmentFromSQLc(env), nil
 }
 
 func (r *EnvironmentRepo) GetByName(name string) (*models.Environment, error) {
-	query := `SELECT id, name, description, created_at, updated_at FROM environments WHERE name = ?`
-	
-	var env models.Environment
-	err := r.db.QueryRow(query, name).Scan(
-		&env.ID, &env.Name, &env.Description, &env.CreatedAt, &env.UpdatedAt,
-	)
+	env, err := r.queries.GetEnvironmentByName(context.Background(), name)
 	if err != nil {
 		return nil, err
 	}
-	
-	return &env, nil
+	return convertEnvironmentFromSQLc(env), nil
 }
 
 func (r *EnvironmentRepo) List() ([]*models.Environment, error) {
-	query := `SELECT id, name, description, created_at, updated_at FROM environments ORDER BY name`
-	
-	rows, err := r.db.Query(query)
+	environments, err := r.queries.ListEnvironments(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	var environments []*models.Environment
-	for rows.Next() {
-		var env models.Environment
-		err := rows.Scan(&env.ID, &env.Name, &env.Description, &env.CreatedAt, &env.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-		environments = append(environments, &env)
+	var result []*models.Environment
+	for _, env := range environments {
+		result = append(result, convertEnvironmentFromSQLc(env))
 	}
 	
-	return environments, rows.Err()
+	return result, nil
 }
 
 func (r *EnvironmentRepo) Update(id int64, name string, description *string) error {
-	query := `UPDATE environments SET name = ?, description = ? WHERE id = ?`
-	_, err := r.db.Exec(query, name, description, id)
-	return err
+	params := queries.UpdateEnvironmentParams{
+		Name: name,
+		ID:   id,
+	}
+	
+	if description != nil {
+		params.Description = sql.NullString{String: *description, Valid: true}
+	}
+	
+	return r.queries.UpdateEnvironment(context.Background(), params)
 }
 
 func (r *EnvironmentRepo) Delete(id int64) error {
@@ -100,7 +114,5 @@ func (r *EnvironmentRepo) Delete(id int64) error {
 		return fmt.Errorf("cannot delete the default environment")
 	}
 	
-	query := `DELETE FROM environments WHERE id = ?`
-	_, err = r.db.Exec(query, id)
-	return err
+	return r.queries.DeleteEnvironment(context.Background(), id)
 }
