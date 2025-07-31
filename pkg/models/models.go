@@ -17,7 +17,6 @@ type Environment struct {
 type User struct {
 	ID        int64     `json:"id" db:"id"`
 	Username  string    `json:"username" db:"username"`
-	PublicKey string    `json:"public_key" db:"public_key"`
 	IsAdmin   bool      `json:"is_admin" db:"is_admin"`
 	APIKey    *string   `json:"api_key,omitempty" db:"api_key"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
@@ -37,13 +36,16 @@ type MCPConfig struct {
 }
 
 type MCPServer struct {
-	ID          int64             `json:"id" db:"id"`
-	MCPConfigID int64             `json:"mcp_config_id" db:"mcp_config_id"`
-	Name        string            `json:"name" db:"name"`
-	Command     string            `json:"command" db:"command"`
-	Args        []string          `json:"args" db:"args"`
-	Env         map[string]string `json:"env" db:"env"`
-	CreatedAt   time.Time         `json:"created_at" db:"created_at"`
+	ID             int64             `json:"id" db:"id"`
+	Name           string            `json:"name" db:"name"`
+	Command        string            `json:"command" db:"command"`
+	Args           []string          `json:"args" db:"args"`
+	Env            map[string]string `json:"env" db:"env"`
+	WorkingDir     *string           `json:"working_dir" db:"working_dir"`
+	TimeoutSeconds *int64            `json:"timeout_seconds" db:"timeout_seconds"`
+	AutoRestart    *bool             `json:"auto_restart" db:"auto_restart"`
+	EnvironmentID  int64             `json:"environment_id" db:"environment_id"`
+	CreatedAt      time.Time         `json:"created_at" db:"created_at"`
 }
 
 type MCPTool struct {
@@ -87,13 +89,12 @@ type AgentEnvironmentWithDetails struct {
 	EnvironmentDescription string `json:"environment_description" db:"environment_description"`
 }
 
-// AgentTool now stores tool_name directly and includes environment context
+// AgentTool represents the many-to-many relationship between agents and tools
 type AgentTool struct {
-	ID            int64     `json:"id" db:"id"`
-	AgentID       int64     `json:"agent_id" db:"agent_id"`
-	ToolName      string    `json:"tool_name" db:"tool_name"`
-	EnvironmentID int64     `json:"environment_id" db:"environment_id"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	ID        int64     `json:"id" db:"id"`
+	AgentID   int64     `json:"agent_id" db:"agent_id"`
+	ToolID    int64     `json:"tool_id" db:"tool_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 // AgentToolWithDetails includes environment information for cross-environment context
