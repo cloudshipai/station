@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/firebase/genkit/go/genkit"
+	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	tea "github.com/charmbracelet/bubbletea"
 	
 	"station/internal/db"
@@ -434,14 +435,22 @@ func runGitHubDiscoveryFlow(githubURL, environment, endpoint string) error {
 	}
 	defer database.Close()
 
-	// For discovery, we just need a basic Genkit app with web search
-	genkitApp, err := genkit.Init(context.Background())
+	// Initialize OpenAI plugin for AI model access
+	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+	if openaiAPIKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable is required for GitHub discovery")
+	}
+	
+	openaiPlugin := &oai.OpenAI{APIKey: openaiAPIKey}
+	
+	// Initialize Genkit with OpenAI plugin for AI analysis
+	genkitApp, err := genkit.Init(context.Background(), genkit.WithPlugins(openaiPlugin))
 	if err != nil {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
 	
 	// Initialize GitHub discovery service and register web search tool
-	discoveryService := services.NewGitHubDiscoveryService(genkitApp)
+	discoveryService := services.NewGitHubDiscoveryService(genkitApp, openaiPlugin)
 	webSearchTool := discoveryService.WebSearchTool()
 	
 	// Register the tool with Genkit (tool is already created with the genkit app instance)
