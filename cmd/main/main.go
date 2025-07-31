@@ -14,7 +14,7 @@ import (
 var (
 	cfgFile string
 	rootCmd = &cobra.Command{
-		Use:   "station",
+		Use:   "stn",
 		Short: "Station - AI Agent Management Platform",
 		Long: `Station is a secure, self-hosted platform for managing AI agents with MCP tool integration.
 It provides a retro terminal interface for system administration and agent management.`,
