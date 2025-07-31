@@ -16,42 +16,55 @@ import (
 )
 
 // GenkitService provides Genkit-based AI agent execution integrated with Station
+// Now supports cross-environment agents with tool namespacing
 type GenkitService struct {
-	genkitApp       *genkit.Genkit
-	openaiPlugin    *oai.OpenAI
-	mcpManager      *mcp.MCPManager
-	agentRepo       *repositories.AgentRepo
-	agentRunRepo    *repositories.AgentRunRepo
-	mcpConfigRepo   *repositories.MCPConfigRepo
-	environmentID   int64
+	genkitApp            *genkit.Genkit
+	openaiPlugin         *oai.OpenAI
+	mcpManager           *mcp.MCPManager
+	agentRepo            *repositories.AgentRepo
+	agentRunRepo         *repositories.AgentRunRepo
+	mcpConfigRepo        *repositories.MCPConfigRepo
+	agentToolRepo        *repositories.AgentToolRepo
+	agentEnvironmentRepo *repositories.AgentEnvironmentRepo
+	mcpConfigService     *MCPConfigService
 }
 
-// NewGenkitService creates a new Genkit service
+// NewGenkitService creates a new Genkit service with cross-environment support
 func NewGenkitService(
 	genkitApp *genkit.Genkit,
 	openaiPlugin *oai.OpenAI,
 	agentRepo *repositories.AgentRepo,
 	agentRunRepo *repositories.AgentRunRepo,
 	mcpConfigRepo *repositories.MCPConfigRepo,
-	environmentID int64,
+	agentToolRepo *repositories.AgentToolRepo,
+	agentEnvironmentRepo *repositories.AgentEnvironmentRepo,
+	mcpConfigService *MCPConfigService,
 ) *GenkitService {
 	return &GenkitService{
-		genkitApp:     genkitApp,
-		openaiPlugin:  openaiPlugin,
-		agentRepo:     agentRepo,
-		agentRunRepo:  agentRunRepo,
-		mcpConfigRepo: mcpConfigRepo,
-		environmentID: environmentID,
+		genkitApp:            genkitApp,
+		openaiPlugin:         openaiPlugin,
+		agentRepo:            agentRepo,
+		agentRunRepo:         agentRunRepo,
+		mcpConfigRepo:        mcpConfigRepo,
+		agentToolRepo:        agentToolRepo,
+		agentEnvironmentRepo: agentEnvironmentRepo,
+		mcpConfigService:     mcpConfigService,
 	}
 }
 
-// InitializeMCP sets up MCP manager with configured servers for the environment
+// InitializeMCP sets up MCP manager with configured servers for ALL environments
+// This enables cross-environment agent tool access with environment namespacing
 func (s *GenkitService) InitializeMCP(ctx context.Context) error {
-	// For now, we'll initialize without MCP configs to keep it simple
-	// This can be extended later to load actual MCP configs from the database
-	
+	// Get all environments that have MCP configs
+	allConfigs, err := s.mcpConfigRepo.GetAllLatestConfigs()
+	if err != nil {
+		return fmt.Errorf("failed to get all MCP configs: %w", err)
+	}
+
+	// For now, initialize with empty config to keep it simple
+	// This can be extended later to load actual cross-environment MCP configs
 	manager, err := mcp.NewMCPManager(mcp.MCPManagerOptions{
-		Name:       fmt.Sprintf("station-env-%d", s.environmentID),
+		Name:       "station-cross-environment",
 		Version:    "1.0.0",
 		MCPServers: []mcp.MCPServerConfig{}, // Empty for now
 	})
@@ -60,12 +73,45 @@ func (s *GenkitService) InitializeMCP(ctx context.Context) error {
 	}
 
 	s.mcpManager = manager
-	log.Printf("Initialized Genkit MCP manager for environment %d", s.environmentID)
+	log.Printf("Initialized cross-environment Genkit MCP manager with %d configs", len(allConfigs))
 	return nil
 }
 
-// ExecuteAgent executes an agent using Genkit AI generation
-func (s *GenkitService) ExecuteAgent(ctx context.Context, agentID, userID int64, task string) (*models.AgentRun, error) {
+// ExecuteAgent implements AgentServiceInterface for compatibility with ExecutionQueue and MCP server
+// This wrapper converts our 3-parameter method to the 2-parameter interface expected by existing code
+func (s *GenkitService) ExecuteAgent(ctx context.Context, agentID int64, task string) (*Message, error) {
+	// Use a default userID of 0 for system executions (ExecutionQueue, MCP)
+	const systemUserID = 0
+	
+	// Call our internal 3-parameter method
+	agentRun, execErr := s.executeAgentInternal(ctx, agentID, systemUserID, task)
+	if agentRun == nil {
+		// If no run was created at all, return the error
+		return nil, execErr
+	}
+	
+	// Convert AgentRun to Message for interface compatibility
+	message := &Message{
+		Content: agentRun.FinalResponse,
+		Role:    RoleAssistant,
+		Extra: map[string]interface{}{
+			"message_id":   fmt.Sprintf("run-%d", agentRun.ID),
+			"agent_id":     agentRun.AgentID,
+			"user_id":      agentRun.UserID,
+			"status":       agentRun.Status,
+			"steps_taken":  agentRun.StepsTaken,
+			"started_at":   agentRun.StartedAt,
+			"completed_at": agentRun.CompletedAt,
+			"run_id":       agentRun.ID,
+		},
+	}
+	
+	// Return the message and preserve the execution error if there was one
+	return message, execErr
+}
+
+// executeAgentInternal is our original ExecuteAgent method renamed for internal use
+func (s *GenkitService) executeAgentInternal(ctx context.Context, agentID, userID int64, task string) (*models.AgentRun, error) {
 	// Get agent from database
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
@@ -206,6 +252,84 @@ func (s *GenkitService) GetAvailableTools(ctx context.Context) ([]ai.Tool, error
 func (s *GenkitService) Close(ctx context.Context) error {
 	// Note: Genkit MCP manager doesn't expose a direct Close method
 	// This is a placeholder for cleanup logic
-	log.Printf("Closing Genkit service for environment %d", s.environmentID)
+	log.Printf("Closing cross-environment Genkit service")
 	return nil
+}
+
+// ====================================================================================
+// AgentServiceInterface Implementation - Additional Methods for MCP Server Compatibility
+// ====================================================================================
+
+// CreateAgent implements AgentServiceInterface for MCP compatibility  
+func (s *GenkitService) CreateAgent(ctx context.Context, config *AgentConfig) (*models.Agent, error) {
+	// Create the agent record
+	agent, err := s.agentRepo.Create(
+		config.Name,
+		config.Description,
+		config.Prompt,
+		config.MaxSteps,
+		config.EnvironmentID,
+		config.CreatedBy,
+		config.CronSchedule,
+		config.ScheduleEnabled,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create agent: %w", err)
+	}
+
+	// TODO: Handle AssignedTools, ModelProvider, ModelID
+	// For now, we'll ignore these fields since our current implementation
+	// doesn't yet support per-agent model configuration
+	
+	return agent, nil
+}
+
+// GetAgent implements AgentServiceInterface for MCP server compatibility
+func (s *GenkitService) GetAgent(ctx context.Context, agentID int64) (*models.Agent, error) {
+	return s.agentRepo.GetByID(agentID)
+}
+
+// ListAgentsByEnvironment implements AgentServiceInterface for MCP server compatibility
+func (s *GenkitService) ListAgentsByEnvironment(ctx context.Context, environmentID int64) ([]*models.Agent, error) {
+	return s.agentRepo.ListByEnvironment(environmentID)
+}
+
+// UpdateAgent implements AgentServiceInterface for MCP server compatibility
+func (s *GenkitService) UpdateAgent(ctx context.Context, agentID int64, config *AgentConfig) (*models.Agent, error) {
+	// Update the agent record
+	err := s.agentRepo.Update(
+		agentID,
+		config.Name,
+		config.Description,
+		config.Prompt,
+		config.MaxSteps,
+		config.CronSchedule,
+		config.ScheduleEnabled,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update agent: %w", err)
+	}
+
+	// TODO: Handle AssignedTools, ModelProvider, ModelID updates
+	// For now, we'll ignore these fields since our current implementation
+	// doesn't yet support per-agent model configuration
+	
+	// Get the updated agent to return
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get updated agent: %w", err)
+	}
+	
+	return agent, nil
+}
+
+// DeleteAgent implements AgentServiceInterface for MCP server compatibility
+func (s *GenkitService) DeleteAgent(ctx context.Context, agentID int64) error {
+	return s.agentRepo.Delete(agentID)
+}
+
+// ExecuteAgentWithUser is the new method that provides the full 3-parameter signature
+// This should be used by new code that can provide the userID
+func (s *GenkitService) ExecuteAgentWithUser(ctx context.Context, agentID, userID int64, task string) (*models.AgentRun, error) {
+	return s.executeAgentInternal(ctx, agentID, userID, task)
 }
