@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -125,7 +126,9 @@ func uploadConfigLocalLoad(mcpConfig LoadMCPConfig, configName, environment stri
 	defer database.Close()
 
 	repos := repositories.New(database)
-	keyManager, err := crypto.NewKeyManagerFromEnv()
+	
+	// Create key manager from config file encryption key
+	keyManager, err := createKeyManagerFromConfig()
 	if err != nil {
 		return fmt.Errorf("failed to initialize key manager: %w", err)
 	}
@@ -320,7 +323,9 @@ func uploadConfigLocalWizard(configData *models.MCPConfigData, environment strin
 	defer database.Close()
 
 	repos := repositories.New(database)
-	keyManager, err := crypto.NewKeyManagerFromEnv()
+	
+	// Create key manager from config file encryption key
+	keyManager, err := createKeyManagerFromConfig()
 	if err != nil {
 		return fmt.Errorf("failed to initialize key manager: %w", err)
 	}
@@ -504,4 +509,27 @@ func runGitHubDiscoveryFlow(githubURL, environment, endpoint string) error {
 	
 	// Upload the configuration
 	return uploadGeneratedConfig(finalConfig, environment, endpoint)
+}
+
+// createKeyManagerFromConfig creates a key manager using the encryption key from config file
+func createKeyManagerFromConfig() (*crypto.KeyManager, error) {
+	// Get encryption key from viper (config file)
+	encryptionKey := viper.GetString("encryption_key")
+	if encryptionKey == "" {
+		return nil, fmt.Errorf("encryption_key is required in config file")
+	}
+	
+	keyBytes, err := hex.DecodeString(encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode encryption_key from config: %w", err)
+	}
+	
+	if len(keyBytes) != 32 {
+		return nil, fmt.Errorf("encryption_key in config must be 32 bytes (64 hex characters), got %d bytes", len(keyBytes))
+	}
+	
+	key := &crypto.Key{}
+	copy(key[:], keyBytes)
+	
+	return crypto.NewKeyManager(key), nil
 }
