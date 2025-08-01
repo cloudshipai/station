@@ -1,0 +1,27 @@
+{
+  "name": "Kubernetes kubectl",
+  "description": "MCP server for Kubernetes that enables AI assistants to interact with clusters",
+  "mcpServers": {
+    "kubectl": {
+      "command": "npx",
+      "args": ["-y", "kubectl-mcp-server"],
+      "env": {
+        "KUBECONFIG": "{{KUBECONFIG}}",
+        "KUBECTL_CONTEXT": "{{KUBECTL_CONTEXT}}"
+      }
+    }
+  },
+  "templates": {
+    "KUBECONFIG": {
+      "description": "Path to your Kubernetes config file",
+      "type": "string",
+      "required": false,
+      "default": "~/.kube/config"
+    },
+    "KUBECTL_CONTEXT": {
+      "description": "Kubernetes context to use (leave empty for current context)",
+      "type": "string",
+      "required": false
+    }
+  }
+}
