@@ -1,0 +1,10 @@
+{
+  "name": "File System Tools",
+  "description": "Basic file system operations for local development",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    }
+  }
+}

@@ -20,6 +20,12 @@ func runMCPTools(cmd *cobra.Command, args []string) error {
 	return mcpHandler.RunMCPTools(cmd, args)
 }
 
+// runMCPDelete implements the "station mcp delete" command
+func runMCPDelete(cmd *cobra.Command, args []string) error {
+	mcpHandler := handlers.NewMCPHandler(themeManager)
+	return mcpHandler.RunMCPDelete(cmd, args)
+}
+
 // runMCPAdd implements the "station mcp add" command
 func runMCPAdd(cmd *cobra.Command, args []string) error {
 	// Check if interactive mode is requested
