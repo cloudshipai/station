@@ -5,7 +5,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"station/cmd/main/handlers"
+	"station/internal/db"
+	"station/internal/tui"
 )
 
 // runMCPList implements the "station mcp list" command
@@ -24,6 +27,37 @@ func runMCPTools(cmd *cobra.Command, args []string) error {
 func runMCPDelete(cmd *cobra.Command, args []string) error {
 	mcpHandler := handlers.NewMCPHandler(themeManager)
 	return mcpHandler.RunMCPDelete(cmd, args)
+}
+
+// runUI implements the "station ui" command
+func runUI(cmd *cobra.Command, args []string) error {
+	// Check if configuration exists
+	databasePath := viper.GetString("database_url")
+	if databasePath == "" {
+		return fmt.Errorf("database path not configured. Please run 'stn init' first")
+	}
+
+	// Initialize database
+	database, err := db.New(databasePath)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	// For the UI command, we'll create a minimal setup
+	// The TUI can work with nil services for basic functionality
+	
+	// Create TUI model with minimal services (nil is acceptable for basic UI)
+	tuiModel := tui.NewModel(database, nil, nil)
+	
+	// Launch the TUI with same options as SSH
+	program := tea.NewProgram(tuiModel, 
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
+	
+	_, err = program.Run()
+	return err
 }
 
 // runMCPAdd implements the "station mcp add" command
