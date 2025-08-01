@@ -69,8 +69,34 @@ func (ts *ToolsServer) setupSpecializedPrompts() {
 		mcp.WithArgument("urgency_criteria", mcp.ArgumentDescription("What makes a log entry urgent or high priority")),
 		mcp.WithArgument("analysis_depth", mcp.ArgumentDescription("Level of analysis needed (summary, detailed, root-cause)")),
 	)
-	
 	ts.mcpServer.AddPrompt(logsAnalysisPrompt, ts.handleLogsAnalysisPrompt)
+
+	// DevOps monitoring agent prompt
+	devopsMonitorPrompt := mcp.NewPrompt("create_devops_monitor_agent",
+		mcp.WithPromptDescription("Guide for creating an agent that monitors infrastructure and deployment health"),
+		mcp.WithArgument("infrastructure_type", mcp.ArgumentDescription("Type of infrastructure (kubernetes, docker, ec2, etc.)")),
+		mcp.WithArgument("monitoring_scope", mcp.ArgumentDescription("What to monitor (performance, availability, errors, etc.)")),
+		mcp.WithArgument("alert_thresholds", mcp.ArgumentDescription("When to alert (critical, warning, info levels)")),
+	)
+	ts.mcpServer.AddPrompt(devopsMonitorPrompt, ts.handleDevOpsMonitorPrompt)
+
+	// Security scanning agent prompt
+	securityScanPrompt := mcp.NewPrompt("create_security_scan_agent",
+		mcp.WithPromptDescription("Guide for creating an agent that performs security scans and vulnerability assessments"),
+		mcp.WithArgument("scan_targets", mcp.ArgumentDescription("What to scan (repositories, infrastructure, applications)")),
+		mcp.WithArgument("scan_types", mcp.ArgumentDescription("Types of scans (vulnerability, compliance, code analysis)")),
+		mcp.WithArgument("compliance_frameworks", mcp.ArgumentDescription("Compliance requirements (SOC2, GDPR, HIPAA, etc.)")),
+	)
+	ts.mcpServer.AddPrompt(securityScanPrompt, ts.handleSecurityScanPrompt)
+
+	// Data processing agent prompt
+	dataProcessingPrompt := mcp.NewPrompt("create_data_processing_agent",
+		mcp.WithPromptDescription("Guide for creating an agent that processes, transforms, and analyzes data"),
+		mcp.WithArgument("data_sources", mcp.ArgumentDescription("Where data comes from (APIs, files, databases, etc.)")),
+		mcp.WithArgument("processing_type", mcp.ArgumentDescription("Type of processing (ETL, analysis, reporting, etc.)")),
+		mcp.WithArgument("output_format", mcp.ArgumentDescription("Desired output format (reports, alerts, dashboards, etc.)")),
+	)
+	ts.mcpServer.AddPrompt(dataProcessingPrompt, ts.handleDataProcessingPrompt)
 }
 
 // setupAgentCreationPrompts adds prompts that guide AI clients in creating agents
@@ -410,6 +436,317 @@ Ready to create this agent? Use the 'create_agent' tool with these specification
 `, logSources, urgencyCriteria, analysisDepth)
 
 	return mcp.NewGetPromptResult("AWS Logs Analysis Agent Creator", []mcp.PromptMessage{
+		{
+			Role: mcp.RoleUser,
+			Content: mcp.TextContent{
+				Type: "text",
+				Text: promptContent,
+			},
+		},
+	}), nil
+}
+
+// handleDevOpsMonitorPrompt provides specialized guidance for DevOps monitoring agent creation
+func (ts *ToolsServer) handleDevOpsMonitorPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	infrastructureType := ""
+	monitoringScope := ""
+	alertThresholds := ""
+	
+	// Extract arguments if provided
+	if args := request.Params.Arguments; args != nil {
+		if infra, ok := args["infrastructure_type"]; ok {
+			infrastructureType = infra
+		}
+		if scope, ok := args["monitoring_scope"]; ok {
+			monitoringScope = scope
+		}
+		if thresholds, ok := args["alert_thresholds"]; ok {
+			alertThresholds = thresholds
+		}
+	}
+	
+	promptContent := fmt.Sprintf(`# DevOps Infrastructure Monitoring Agent Guide
+
+## Specialized Agent Configuration
+
+**Agent Purpose**: Continuous monitoring of infrastructure health and deployment status
+
+### Recommended Configuration
+
+**Agent Name**: "devops-monitor"
+**Description**: "Monitors infrastructure health, deployment status, and system performance metrics"
+
+### Tool Requirements for DevOps Monitoring
+
+**Essential Tools** (select from available MCP tools):
+- docker or kubernetes tools for container monitoring
+- http-client or curl tools for health check endpoints
+- file operations for log file monitoring
+- json parsing tools for metrics analysis
+- notification tools for alert delivery
+
+### System Prompt Template
+
+You are a DevOps Infrastructure Monitoring Agent specialized in maintaining system health and deployment visibility.
+
+Your Mission:
+1. Infrastructure Type: %s
+2. Monitoring Scope: %s
+3. Alert Thresholds: %s
+
+Workflow:
+1. Health Checks: Verify service endpoints, container status, resource utilization
+2. Performance Monitoring: Track response times, error rates, resource consumption
+3. Deployment Tracking: Monitor deployment status, rollback capabilities, version consistency
+4. Alert Classification:
+   - CRITICAL: Service down, deployment failed, resource exhausted
+   - HIGH: Performance degradation, high error rates, capacity warnings
+   - MEDIUM: Configuration drift, deprecated API usage, minor performance issues
+   - LOW: Informational updates, successful deployments, routine maintenance
+
+5. Automated Actions: Restart unhealthy services, scale resources, trigger rollbacks
+6. Reporting: Generate status dashboards, trend analysis, incident summaries
+
+Output Format:
+- System health overview with color-coded status
+- Critical issues requiring immediate attention
+- Performance trends and capacity planning insights
+- Deployment status and rollback recommendations
+
+Error Handling: If monitoring tools fail, switch to backup monitoring methods and alert on monitoring system health.
+
+### Execution Configuration
+- Max Steps: 8 (comprehensive infrastructure analysis)
+- Schedule: Every 15 minutes (continuous monitoring) or on-demand
+- Environment: Production environment with infrastructure access
+
+### Success Criteria
+- Detects critical issues within 2 minutes of occurrence
+- Maintains <5%% false positive rate on alerts
+- Provides actionable remediation steps for all alerts
+- Tracks deployment success rates and rollback metrics
+
+Ready to create this monitoring agent? Use the 'create_agent' tool with these specifications.
+`, infrastructureType, monitoringScope, alertThresholds)
+
+	return mcp.NewGetPromptResult("DevOps Monitoring Agent Creator", []mcp.PromptMessage{
+		{
+			Role: mcp.RoleUser,
+			Content: mcp.TextContent{
+				Type: "text",
+				Text: promptContent,
+			},
+		},
+	}), nil
+}
+
+// handleSecurityScanPrompt provides specialized guidance for security scanning agent creation
+func (ts *ToolsServer) handleSecurityScanPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	scanTargets := ""
+	scanTypes := ""
+	complianceFrameworks := ""
+	
+	// Extract arguments if provided
+	if args := request.Params.Arguments; args != nil {
+		if targets, ok := args["scan_targets"]; ok {
+			scanTargets = targets
+		}
+		if types, ok := args["scan_types"]; ok {
+			scanTypes = types
+		}
+		if frameworks, ok := args["compliance_frameworks"]; ok {
+			complianceFrameworks = frameworks
+		}
+	}
+	
+	promptContent := fmt.Sprintf(`# Security Scanning Agent Creation Guide
+
+## Specialized Agent Configuration
+
+**Agent Purpose**: Comprehensive security scanning and vulnerability assessment across infrastructure and applications
+
+### Recommended Configuration
+
+**Agent Name**: "security-scanner"
+**Description**: "Performs automated security scans, vulnerability assessments, and compliance checks"
+
+### Tool Requirements for Security Scanning
+
+**Essential Tools** (select from available MCP tools):
+- git or repository tools for code scanning
+- file operations for configuration analysis
+- http-client tools for web application scanning
+- json/yaml parsing for configuration assessment
+- search tools for secret/credential detection
+
+### System Prompt Template
+
+You are a Security Scanning Agent specialized in identifying vulnerabilities and ensuring compliance across systems.
+
+Your Mission:
+1. Scan Targets: %s
+2. Scan Types: %s
+3. Compliance Frameworks: %s
+
+Workflow:
+1. Target Discovery: Identify repositories, applications, infrastructure components
+2. Vulnerability Scanning:
+   - Static code analysis for security flaws
+   - Dependency vulnerability checking
+   - Configuration security assessment
+   - Infrastructure security posture review
+
+3. Compliance Verification:
+   - SOC2 controls validation
+   - GDPR data protection measures
+   - HIPAA security requirements
+   - Industry-specific standards
+
+4. Risk Classification:
+   - CRITICAL: Active exploits, exposed credentials, unpatched vulnerabilities
+   - HIGH: Known vulnerabilities, misconfigurations, weak authentication
+   - MEDIUM: Security warnings, outdated dependencies, policy violations
+   - LOW: Best practice recommendations, informational findings
+
+5. Remediation Guidance: Provide specific fix instructions and timeline recommendations
+6. Compliance Reporting: Generate audit-ready reports with evidence and controls mapping
+
+Output Format:
+- Executive summary with risk metrics
+- Critical vulnerabilities requiring immediate patching
+- Compliance status with control mappings
+- Remediation roadmap with prioritized actions
+- Trend analysis and security posture improvements
+
+Error Handling: If scan tools fail, document the limitation and suggest manual verification steps.
+
+### Execution Configuration
+- Max Steps: 10 (thorough security analysis across multiple vectors)
+- Schedule: Weekly (regular assessment) or on-demand (incident response)
+- Environment: Security environment with appropriate scanning permissions
+
+### Success Criteria
+- Identifies critical vulnerabilities within scan scope
+- Provides clear remediation steps for all findings
+- Maps findings to compliance requirements
+- Maintains low false positive rate (<10%%)
+- Generates audit-ready compliance reports
+
+Ready to create this security agent? Use the 'create_agent' tool with these specifications.
+`, scanTargets, scanTypes, complianceFrameworks)
+
+	return mcp.NewGetPromptResult("Security Scanning Agent Creator", []mcp.PromptMessage{
+		{
+			Role: mcp.RoleUser,
+			Content: mcp.TextContent{
+				Type: "text",
+				Text: promptContent,
+			},
+		},
+	}), nil
+}
+
+// handleDataProcessingPrompt provides specialized guidance for data processing agent creation
+func (ts *ToolsServer) handleDataProcessingPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	dataSources := ""
+	processingType := ""
+	outputFormat := ""
+	
+	// Extract arguments if provided
+	if args := request.Params.Arguments; args != nil {
+		if sources, ok := args["data_sources"]; ok {
+			dataSources = sources
+		}
+		if pType, ok := args["processing_type"]; ok {
+			processingType = pType
+		}
+		if format, ok := args["output_format"]; ok {
+			outputFormat = format
+		}
+	}
+	
+	promptContent := fmt.Sprintf(`# Data Processing Agent Creation Guide
+
+## Specialized Agent Configuration
+
+**Agent Purpose**: Intelligent data processing, transformation, and analysis pipeline automation
+
+### Recommended Configuration
+
+**Agent Name**: "data-processor"
+**Description**: "Processes, transforms, and analyzes data from multiple sources with intelligent insights"
+
+### Tool Requirements for Data Processing
+
+**Essential Tools** (select from available MCP tools):
+- file operations for data file access
+- json/csv parsing tools for structured data
+- http-client tools for API data sources
+- search tools for data discovery and filtering
+- database tools if available for data storage
+
+### System Prompt Template
+
+You are a Data Processing Agent specialized in ETL operations, data analysis, and intelligent reporting.
+
+Your Mission:
+1. Data Sources: %s
+2. Processing Type: %s
+3. Output Format: %s
+
+Workflow:
+1. Data Ingestion: Collect data from specified sources (APIs, files, databases)
+2. Data Validation: Check data quality, completeness, and format consistency
+3. Data Transformation:
+   - Clean and normalize data formats
+   - Handle missing or invalid data points
+   - Apply business rules and transformations
+   - Merge and enrich data from multiple sources
+
+4. Analysis Operations:
+   - Statistical analysis and trend identification
+   - Anomaly detection in data patterns  
+   - Key metrics calculation and aggregation
+   - Data correlation and relationship analysis
+
+5. Quality Assurance:
+   - Data accuracy validation
+   - Completeness verification
+   - Consistency checks across sources
+   - Error rate monitoring and reporting
+
+6. Output Generation: Create reports, dashboards, alerts, or processed datasets
+
+Quality Gates:
+- Validate data completeness (>95%% coverage expected)
+- Check for data anomalies and outliers
+- Verify processing accuracy against known benchmarks
+- Ensure output format meets specifications
+
+Output Format Options:
+- Reports: Executive summaries with key insights and recommendations
+- Dashboards: Real-time metrics and trend visualizations
+- Alerts: Automated notifications for threshold breaches or anomalies
+- Datasets: Cleaned and transformed data for downstream systems
+
+Error Handling: Log data quality issues, skip corrupted records with reporting, implement fallback data sources when possible.
+
+### Execution Configuration
+- Max Steps: 12 (comprehensive data pipeline processing)
+- Schedule: Hourly (real-time processing) or daily (batch processing)
+- Environment: Data environment with access to required data sources
+
+### Success Criteria
+- Processes data within defined SLA timeframes
+- Maintains data quality standards (>95%% accuracy)
+- Provides actionable insights and trend analysis
+- Generates timely alerts for critical data patterns
+- Produces consistent, reliable output formats
+
+Ready to create this data processing agent? Use the 'create_agent' tool with these specifications.
+`, dataSources, processingType, outputFormat)
+
+	return mcp.NewGetPromptResult("Data Processing Agent Creator", []mcp.PromptMessage{
 		{
 			Role: mcp.RoleUser,
 			Content: mcp.TextContent{
