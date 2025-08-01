@@ -2,8 +2,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"station/internal/auth"
@@ -250,14 +253,115 @@ func (s *Server) setupTools() {
 	)
 
 	s.mcpServer.AddTool(listAgentRunsTool, s.handleListAgentRuns)
+
+	// Add environment management tools
+	listEnvironmentsTool := mcp.NewTool("list_environments",
+		mcp.WithDescription("List all available environments with their tool counts"),
+		mcp.WithBoolean("include_tool_counts", mcp.Description("Include number of tools per environment (default: true)")),
+	)
+
+	s.mcpServer.AddTool(listEnvironmentsTool, s.handleListEnvironments)
+
+	// Add agent management tools
+	listAgentsTool := mcp.NewTool("list_agents",
+		mcp.WithDescription("List all agents with their status and configuration"),
+		mcp.WithString("environment_id", mcp.Description("Filter agents by environment (optional)")),
+		mcp.WithBoolean("include_details", mcp.Description("Include detailed configuration (default: false)")),
+	)
+
+	s.mcpServer.AddTool(listAgentsTool, s.handleListAgents)
+
+	getAgentDetailsTool := mcp.NewTool("get_agent_details",
+		mcp.WithDescription("Get detailed information about a specific agent including assigned tools"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to get details for")),
+	)
+
+	s.mcpServer.AddTool(getAgentDetailsTool, s.handleGetAgentDetails)
+
+	updateAgentTool := mcp.NewTool("update_agent",
+		mcp.WithDescription("Update agent configuration including tools, prompt, and schedule"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to update")),
+		mcp.WithString("name", mcp.Description("New name for the agent")),
+		mcp.WithString("description", mcp.Description("New description for the agent")),
+		mcp.WithString("prompt", mcp.Description("New system prompt for the agent")),
+		mcp.WithArray("tool_names", mcp.Description("New list of tool names to assign (replaces existing)")),
+		mcp.WithArray("add_tools", mcp.Description("Tool names to add to existing tools")),
+		mcp.WithArray("remove_tools", mcp.Description("Tool names to remove from existing tools")),
+		mcp.WithNumber("max_steps", mcp.Description("New maximum steps for execution")),
+		mcp.WithString("schedule", mcp.Description("New cron schedule (empty to disable scheduling)")),
+	)
+
+	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 }
 
 func (s *Server) setupResources() {
-	// TODO: Add agent runs resources
-	// The MCP-go library resource API needs to be investigated further
-	// For now, we can access runs through the existing tools and CLI commands
+	// Add static resources for read-only data access
+	s.setupStaticResources()
 	
-	log.Printf("MCP resources setup - runs resources will be added in future update")
+	// Add dynamic resource templates for parameterized access
+	s.setupResourceTemplates()
+	
+	log.Printf("MCP resources setup complete - read-only data access via Resources, operations via Tools")
+}
+
+// setupStaticResources adds static resources for Station data discovery
+func (s *Server) setupStaticResources() {
+	// Environments list resource
+	environmentsResource := mcp.NewResource(
+		"station://environments",
+		"Station Environments",
+		mcp.WithResourceDescription("List all available environments with their configurations"),
+		mcp.WithMIMEType("application/json"),
+	)
+	s.mcpServer.AddResource(environmentsResource, s.handleEnvironmentsResource)
+
+	// Agents list resource
+	agentsResource := mcp.NewResource(
+		"station://agents",
+		"Station Agents",
+		mcp.WithResourceDescription("List all available agents with basic information"),
+		mcp.WithMIMEType("application/json"),
+	)
+	s.mcpServer.AddResource(agentsResource, s.handleAgentsResource)
+
+	// MCP configs list resource
+	configsResource := mcp.NewResource(
+		"station://mcp-configs",
+		"MCP Configurations",
+		mcp.WithResourceDescription("List all MCP server configurations across environments"),
+		mcp.WithMIMEType("application/json"),
+	)
+	s.mcpServer.AddResource(configsResource, s.handleMCPConfigsResource)
+}
+
+// setupResourceTemplates adds dynamic resource templates for parameterized access
+func (s *Server) setupResourceTemplates() {
+	// Agent details by ID
+	agentDetailsTemplate := mcp.NewResourceTemplate(
+		"station://agents/{id}",
+		"Agent Details",
+		mcp.WithTemplateDescription("Detailed information about a specific agent including tools and configuration"),
+		mcp.WithTemplateMIMEType("application/json"),
+	)
+	s.mcpServer.AddResourceTemplate(agentDetailsTemplate, s.handleAgentDetailsResource)
+
+	// Environment tools by environment ID
+	environmentToolsTemplate := mcp.NewResourceTemplate(
+		"station://environments/{id}/tools",
+		"Environment Tools",
+		mcp.WithTemplateDescription("List all available MCP tools in a specific environment"),
+		mcp.WithTemplateMIMEType("application/json"),
+	)
+	s.mcpServer.AddResourceTemplate(environmentToolsTemplate, s.handleEnvironmentToolsResource)
+
+	// Agent runs by agent ID
+	agentRunsTemplate := mcp.NewResourceTemplate(
+		"station://agents/{id}/runs",
+		"Agent Runs",
+		mcp.WithTemplateDescription("Execution history for a specific agent"),
+		mcp.WithTemplateMIMEType("application/json"),
+	)
+	s.mcpServer.AddResourceTemplate(agentRunsTemplate, s.handleAgentRunsResource)
 }
 
 func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -883,4 +987,706 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// Environment management handlers
+
+func (s *Server) handleListEnvironments(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, require authentication but allow all users
+	if err := s.requireAuthInServerMode(ctx); err != nil && !s.isLocalMode() {
+		return mcp.NewToolResultError("Authentication required"), nil
+	}
+
+	includeToolCounts := request.GetBool("include_tool_counts", true)
+
+	// Get all environments from database
+	environments, err := s.repos.Environments.List()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get environments: %v", err)), nil
+	}
+
+	if len(environments) == 0 {
+		return mcp.NewToolResultText("No environments found"), nil
+	}
+
+	// Build response
+	var result strings.Builder
+	result.WriteString("📁 Available Environments:\n\n")
+
+	for _, env := range environments {
+		result.WriteString(fmt.Sprintf("🌍 **%s** (ID: %d)\n", env.Name, env.ID))
+		if env.Description != nil {
+			result.WriteString(fmt.Sprintf("   Description: %s\n", *env.Description))
+		}
+		result.WriteString(fmt.Sprintf("   Created: %s\n", env.CreatedAt.Format("Jan 2, 2006")))
+
+		if includeToolCounts {
+			// Get tool count for this environment
+			tools, err := s.repos.MCPTools.GetByEnvironmentID(env.ID)
+			if err != nil {
+				result.WriteString("   Tools: Error getting count\n")
+			} else {
+				result.WriteString(fmt.Sprintf("   Tools: %d available\n", len(tools)))
+			}
+		}
+		result.WriteString("\n")
+	}
+
+	result.WriteString("💡 Use environment IDs when creating agents or filtering tools\n")
+
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+// Agent management handlers
+
+func (s *Server) handleListAgents(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, require authentication but allow all users
+	if err := s.requireAuthInServerMode(ctx); err != nil && !s.isLocalMode() {
+		return mcp.NewToolResultError("Authentication required"), nil
+	}
+
+	environmentIDStr := request.GetString("environment_id", "")
+	includeDetails := request.GetBool("include_details", false)
+
+	// Get agents from database
+	var agents []*models.Agent
+	var err error
+
+	if environmentIDStr != "" {
+		var environmentID int64
+		if _, err := fmt.Sscanf(environmentIDStr, "%d", &environmentID); err != nil {
+			return mcp.NewToolResultError("Invalid environment_id format: must be a number"), nil
+		}
+		agents, err = s.repos.Agents.ListByEnvironment(environmentID)
+	} else {
+		agents, err = s.repos.Agents.List()
+	}
+
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get agents: %v", err)), nil
+	}
+
+	if len(agents) == 0 {
+		if environmentIDStr != "" {
+			return mcp.NewToolResultText(fmt.Sprintf("No agents found in environment %s", environmentIDStr)), nil
+		}
+		return mcp.NewToolResultText("No agents found"), nil
+	}
+
+	// Build response
+	var result strings.Builder
+	if environmentIDStr != "" {
+		result.WriteString(fmt.Sprintf("🤖 Agents in Environment %s:\n\n", environmentIDStr))
+	} else {
+		result.WriteString(fmt.Sprintf("🤖 All Agents (%d total):\n\n", len(agents)))
+	}
+
+	for _, agent := range agents {
+		status := "🟢 Active"
+		if agent.CronSchedule != nil && *agent.CronSchedule != "" {
+			if agent.ScheduleEnabled {
+				status = "⏰ Scheduled"
+			} else {
+				status = "⏸️ Paused"
+			}
+		}
+
+		result.WriteString(fmt.Sprintf("%s **%s** (ID: %d)\n", status, agent.Name, agent.ID))
+		result.WriteString(fmt.Sprintf("   Environment: %d\n", agent.EnvironmentID))
+		result.WriteString(fmt.Sprintf("   Description: %s\n", agent.Description))
+
+		if includeDetails {
+			result.WriteString(fmt.Sprintf("   Max Steps: %d\n", agent.MaxSteps))
+			if agent.CronSchedule != nil && *agent.CronSchedule != "" {
+				result.WriteString(fmt.Sprintf("   Schedule: %s\n", *agent.CronSchedule))
+			}
+			result.WriteString(fmt.Sprintf("   Created: %s\n", agent.CreatedAt.Format("Jan 2, 2006")))
+			result.WriteString(fmt.Sprintf("   Prompt: %s\n", truncateString(agent.Prompt, 100)))
+		}
+		result.WriteString("\n")
+	}
+
+	result.WriteString("💡 Use 'get_agent_details' to see full configuration including assigned tools\n")
+
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+func (s *Server) handleGetAgentDetails(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, require authentication but allow all users
+	if err := s.requireAuthInServerMode(ctx); err != nil && !s.isLocalMode() {
+		return mcp.NewToolResultError("Authentication required"), nil
+	}
+
+	// Get agent ID parameter
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+
+	var agentID int64
+	if _, err := fmt.Sscanf(agentIDStr, "%d", &agentID); err != nil {
+		return mcp.NewToolResultError("Invalid agent_id format: must be a number"), nil
+	}
+
+	// Get agent from database
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+	}
+
+	// Get assigned tools for this agent
+	assignedTools, err := s.repos.AgentTools.List(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get agent tools: %v", err)), nil
+	}
+
+	// Get environment details
+	environment, err := s.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get environment: %v", err)), nil
+	}
+
+	// Build detailed response
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("🤖 **%s** (ID: %d) - Detailed Configuration\n\n", agent.Name, agent.ID))
+
+	// Basic info
+	result.WriteString("📋 **Basic Information:**\n")
+	result.WriteString(fmt.Sprintf("   Description: %s\n", agent.Description))
+	result.WriteString(fmt.Sprintf("   Environment: %s (ID: %d)\n", environment.Name, environment.ID))
+	result.WriteString(fmt.Sprintf("   Max Steps: %d\n", agent.MaxSteps))
+	result.WriteString(fmt.Sprintf("   Created: %s\n", agent.CreatedAt.Format("Jan 2, 2006 15:04")))
+	result.WriteString("\n")
+
+	// Schedule info
+	result.WriteString("⏰ **Scheduling:**\n")
+	if agent.CronSchedule != nil && *agent.CronSchedule != "" {
+		status := "Enabled"
+		if !agent.ScheduleEnabled {
+			status = "Disabled"
+		}
+		result.WriteString(fmt.Sprintf("   Schedule: %s (%s)\n", *agent.CronSchedule, status))
+	} else {
+		result.WriteString("   Schedule: On-demand only\n")
+	}
+	result.WriteString("\n")
+
+	// Tools info
+	result.WriteString("🔧 **Assigned Tools:**\n")
+	if len(assignedTools) == 0 {
+		result.WriteString("   No tools assigned\n")
+	} else {
+		// Group tools by environment for clarity
+		envToolsMap := make(map[int64][]models.AgentTool)
+		for _, tool := range assignedTools {
+			envToolsMap[tool.EnvironmentID] = append(envToolsMap[tool.EnvironmentID], tool.AgentTool)
+		}
+
+		for envID, tools := range envToolsMap {
+			env, _ := s.repos.Environments.GetByID(envID)
+			envName := fmt.Sprintf("Environment %d", envID)
+			if env != nil {
+				envName = env.Name
+			}
+
+			result.WriteString(fmt.Sprintf("   📁 %s:\n", envName))
+			for _, tool := range tools {
+				result.WriteString(fmt.Sprintf("     • %s\n", tool.ToolName))
+			}
+		}
+	}
+	result.WriteString("\n")
+
+	// System prompt
+	result.WriteString("💭 **System Prompt:**\n")
+	result.WriteString(fmt.Sprintf("   %s\n", agent.Prompt))
+	result.WriteString("\n")
+
+	result.WriteString("💡 Use 'update_agent' to modify configuration or 'call_agent' to execute\n")
+
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, only admin users can update agents
+	if err := s.requireAdminInServerMode(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// Get agent ID parameter
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+
+	var agentID int64
+	if _, err := fmt.Sscanf(agentIDStr, "%d", &agentID); err != nil {
+		return mcp.NewToolResultError("Invalid agent_id format: must be a number"), nil
+	}
+
+	// Get existing agent
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+	}
+
+	// Extract optional parameters
+	name := request.GetString("name", "")
+	description := request.GetString("description", "")
+	prompt := request.GetString("prompt", "")
+	maxSteps := int64(request.GetInt("max_steps", 0))
+	schedule := request.GetString("schedule", "")
+	
+	toolNames := request.GetStringSlice("tool_names", []string{})
+	addTools := request.GetStringSlice("add_tools", []string{})
+	removeTools := request.GetStringSlice("remove_tools", []string{})
+
+	// Update basic agent properties if provided
+	updateName := name
+	if updateName == "" {
+		updateName = agent.Name
+	}
+	
+	updateDescription := description
+	if updateDescription == "" {
+		updateDescription = agent.Description
+	}
+	
+	updatePrompt := prompt
+	if updatePrompt == "" {
+		updatePrompt = agent.Prompt
+	}
+	
+	updateMaxSteps := maxSteps
+	if updateMaxSteps == 0 {
+		updateMaxSteps = agent.MaxSteps
+	}
+
+	var updateSchedule *string
+	if schedule != "" {
+		updateSchedule = &schedule
+	} else {
+		updateSchedule = agent.CronSchedule
+	}
+
+	// Update agent in database
+	err = s.repos.Agents.Update(agentID, updateName, updateDescription, updatePrompt, updateMaxSteps, updateSchedule, agent.ScheduleEnabled)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent: %v", err)), nil
+	}
+
+	// Handle tool updates
+	var changes []string
+	
+	if len(toolNames) > 0 {
+		// Replace all tools
+		// First, remove all existing tools
+		existingTools, err := s.repos.AgentTools.List(agentID)
+		if err == nil {
+			for _, tool := range existingTools {
+				s.repos.AgentTools.Remove(agentID, tool.ToolName, tool.EnvironmentID)
+			}
+		}
+		
+		// Add new tools
+		for _, toolName := range toolNames {
+			_, err := s.repos.AgentTools.Add(agentID, toolName, agent.EnvironmentID)
+			if err != nil {
+				log.Printf("Failed to assign tool %s to agent %d: %v", toolName, agentID, err)
+			}
+		}
+		changes = append(changes, fmt.Sprintf("Replaced all tools with: %v", toolNames))
+	}
+
+	if len(addTools) > 0 {
+		// Add specific tools
+		for _, toolName := range addTools {
+			_, err := s.repos.AgentTools.Add(agentID, toolName, agent.EnvironmentID)
+			if err != nil {
+				log.Printf("Failed to add tool %s to agent %d: %v", toolName, agentID, err)
+			}
+		}
+		changes = append(changes, fmt.Sprintf("Added tools: %v", addTools))
+	}
+
+	if len(removeTools) > 0 {
+		// Remove specific tools
+		for _, toolName := range removeTools {
+			err := s.repos.AgentTools.Remove(agentID, toolName, agent.EnvironmentID)
+			if err != nil {
+				log.Printf("Failed to remove tool %s from agent %d: %v", toolName, agentID, err)
+			}
+		}
+		changes = append(changes, fmt.Sprintf("Removed tools: %v", removeTools))
+	}
+
+	// Build response
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("✅ Agent %d (%s) updated successfully\n\n", agentID, updateName))
+	
+	result.WriteString("📝 **Changes Made:**\n")
+	if name != "" {
+		result.WriteString(fmt.Sprintf("   • Name: %s\n", name))
+	}
+	if description != "" {
+		result.WriteString(fmt.Sprintf("   • Description: %s\n", description))
+	}
+	if prompt != "" {
+		result.WriteString(fmt.Sprintf("   • Prompt: Updated\n"))
+	}
+	if maxSteps > 0 {
+		result.WriteString(fmt.Sprintf("   • Max Steps: %d\n", maxSteps))
+	}
+	if schedule != "" {
+		result.WriteString(fmt.Sprintf("   • Schedule: %s\n", schedule))
+	}
+	
+	for _, change := range changes {
+		result.WriteString(fmt.Sprintf("   • %s\n", change))
+	}
+
+	result.WriteString("\n💡 Use 'get_agent_details' to see the updated configuration\n")
+
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+// Resource handlers for read-only data access
+
+func (s *Server) handleEnvironmentsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	environments, err := s.repos.Environments.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list environments: %w", err)
+	}
+
+	// Convert to a more readable format for LLM context
+	envData := make([]map[string]interface{}, len(environments))
+	for i, env := range environments {
+		envData[i] = map[string]interface{}{
+			"id":          env.ID,
+			"name":        env.Name,
+			"description": env.Description,
+			"created_at":  env.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+
+	result := map[string]interface{}{
+		"environments": envData,
+		"total_count":  len(environments),
+		"description":  "Available Station environments for organizing MCP tools and agents",
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal environments data: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
+		},
+	}, nil
+}
+
+func (s *Server) handleAgentsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	agents, err := s.repos.Agents.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list agents: %w", err)
+	}
+
+	// Convert to a more readable format for LLM context
+	agentData := make([]map[string]interface{}, len(agents))
+	for i, agent := range agents {
+		schedule := ""
+		if agent.CronSchedule != nil {
+			schedule = *agent.CronSchedule
+		}
+		
+		agentData[i] = map[string]interface{}{
+			"id":             agent.ID,
+			"name":           agent.Name,
+			"description":    agent.Description,
+			"environment_id": agent.EnvironmentID,
+			"max_steps":      agent.MaxSteps,
+			"schedule":       schedule,
+			"enabled":        agent.ScheduleEnabled,
+			"created_at":     agent.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+
+	result := map[string]interface{}{
+		"agents":      agentData,
+		"total_count": len(agents),
+		"description": "Available Station agents for automated task execution",
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal agents data: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
+		},
+	}, nil
+}
+
+func (s *Server) handleMCPConfigsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	configs, err := s.repos.MCPConfigs.ListAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list MCP configs: %w", err)
+	}
+
+	// Convert to a more readable format for LLM context
+	configData := make([]map[string]interface{}, len(configs))
+	for i, config := range configs {
+		configData[i] = map[string]interface{}{
+			"id":             config.ID,
+			"config_name":    config.ConfigName,
+			"version":        config.Version,
+			"environment_id": config.EnvironmentID,
+			"created_at":     config.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+
+	result := map[string]interface{}{
+		"mcp_configs": configData,
+		"total_count": len(configs),
+		"description": "MCP server configurations for tool discovery and execution",
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal MCP configs data: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
+		},
+	}, nil
+}
+
+func (s *Server) handleAgentDetailsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	// Extract agent ID from URI using regex
+	agentID, err := s.extractIDFromURI(request.Params.URI, `station://agents/(\d+)`)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID in URI: %w", err)
+	}
+
+	// Get agent details
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
+	}
+
+	// Get assigned tools
+	assignedTools, err := s.repos.AgentTools.List(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent tools: %w", err)
+	}
+
+	// Get environment details
+	environment, err := s.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// Format tools data
+	toolsData := make([]map[string]interface{}, len(assignedTools))
+	for i, tool := range assignedTools {
+		toolsData[i] = map[string]interface{}{
+			"name":        tool.ToolName,
+			"description": tool.ToolDescription,
+			"server_name": tool.ServerName,
+		}
+	}
+
+	schedule := ""
+	if agent.CronSchedule != nil {
+		schedule = *agent.CronSchedule
+	}
+
+	result := map[string]interface{}{
+		"agent": map[string]interface{}{
+			"id":          agent.ID,
+			"name":        agent.Name,
+			"description": agent.Description,
+			"prompt":      agent.Prompt,
+			"max_steps":   agent.MaxSteps,
+			"schedule":    schedule,
+			"enabled":     agent.ScheduleEnabled,
+			"created_at":  agent.CreatedAt.Format("2006-01-02 15:04:05"),
+		},
+		"environment": map[string]interface{}{
+			"id":          environment.ID,
+			"name":        environment.Name,
+			"description": environment.Description,
+		},
+		"assigned_tools": toolsData,
+		"tools_count":    len(assignedTools),
+		"description":    fmt.Sprintf("Complete configuration and details for agent '%s'", agent.Name),
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal agent details: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
+		},
+	}, nil
+}
+
+func (s *Server) handleEnvironmentToolsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	// Extract environment ID from URI using regex
+	envID, err := s.extractIDFromURI(request.Params.URI, `station://environments/(\d+)/tools`)
+	if err != nil {
+		return nil, fmt.Errorf("invalid environment ID in URI: %w", err)
+	}
+
+	// Get environment details
+	environment, err := s.repos.Environments.GetByID(envID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment %d: %w", envID, err)
+	}
+
+	// Get available tools in this environment
+	tools, err := s.repos.MCPTools.GetByEnvironmentID(envID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tools for environment %d: %w", envID, err)
+	}
+
+	// Format tools data
+	toolsData := make([]map[string]interface{}, len(tools))
+	for i, tool := range tools {
+		toolsData[i] = map[string]interface{}{
+			"name":        tool.Name,
+			"description": tool.Description,
+			"schema":      string(tool.Schema),
+		}
+	}
+
+	result := map[string]interface{}{
+		"environment": map[string]interface{}{
+			"id":          environment.ID,
+			"name":        environment.Name,
+			"description": environment.Description,
+		},
+		"tools":       toolsData,
+		"tools_count": len(tools),
+		"description": fmt.Sprintf("All MCP tools available in the '%s' environment", environment.Name),
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal environment tools: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
+		},
+	}, nil
+}
+
+func (s *Server) handleAgentRunsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	// Extract agent ID from URI using regex
+	agentID, err := s.extractIDFromURI(request.Params.URI, `station://agents/(\d+)/runs`)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID in URI: %w", err)
+	}
+
+	// Get agent details for context
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
+	}
+
+	// Get recent runs for this agent - use List method with filtering
+	allRuns, err := s.repos.AgentRuns.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get runs for agent %d: %w", agentID, err)
+	}
+
+	// Filter runs for this specific agent and limit to last 50
+	var agentRuns []*models.AgentRun
+	for _, run := range allRuns {
+		if run.AgentID == agentID {
+			agentRuns = append(agentRuns, run)
+		}
+		if len(agentRuns) >= 50 {
+			break
+		}
+	}
+
+	// Format runs data
+	runsData := make([]map[string]interface{}, len(agentRuns))
+	for i, run := range agentRuns {
+		completedAt := ""
+		if run.CompletedAt != nil {
+			completedAt = run.CompletedAt.Format("2006-01-02 15:04:05")
+		}
+		
+		runsData[i] = map[string]interface{}{
+			"id":           run.ID,
+			"status":       run.Status,
+			"task":         run.Task,
+			"response":     run.FinalResponse,
+			"steps_taken":  run.StepsTaken,
+			"started_at":   run.StartedAt.Format("2006-01-02 15:04:05"),
+			"completed_at": completedAt,
+		}
+	}
+
+	result := map[string]interface{}{
+		"agent": map[string]interface{}{
+			"id":   agent.ID,
+			"name": agent.Name,
+		},
+		"runs":        runsData,
+		"runs_count":  len(agentRuns),
+		"description": fmt.Sprintf("Recent execution history for agent '%s'", agent.Name),
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal agent runs: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(jsonData),
+		},
+	}, nil
+}
+
+// Helper method to extract ID from URI using regex
+func (s *Server) extractIDFromURI(uri, pattern string) (int64, error) {
+	re := regexp.MustCompile(pattern)
+	matches := re.FindStringSubmatch(uri)
+	if len(matches) < 2 {
+		return 0, fmt.Errorf("no ID found in URI: %s", uri)
+	}
+	
+	id, err := strconv.ParseInt(matches[1], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid ID format: %s", matches[1])
+	}
+	
+	return id, nil
 }
