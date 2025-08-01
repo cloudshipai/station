@@ -5,17 +5,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"station/internal/config"
 	"station/internal/db"
+	"station/internal/telemetry"
 	"station/internal/theme"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile      string
-	themeManager *theme.ThemeManager
-	rootCmd      = &cobra.Command{
+	cfgFile          string
+	themeManager     *theme.ThemeManager
+	telemetryService *telemetry.TelemetryService
+	rootCmd          = &cobra.Command{
 		Use:   "stn",
 		Short: "Station - AI Agent Management Platform",
 		Long: `Station is a secure, self-hosted platform for managing AI agents with MCP tool integration.
@@ -26,6 +30,7 @@ It provides a retro terminal interface for system administration and agent manag
 func init() {
 	cobra.OnInitialize(initConfig)
 	cobra.OnInitialize(initTheme)
+	cobra.OnInitialize(initTelemetry)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/station/config.yaml)")
@@ -177,6 +182,9 @@ func init() {
 	viper.BindPFlag("database_url", serveCmd.Flags().Lookup("database"))
 	viper.BindPFlag("debug", serveCmd.Flags().Lookup("debug"))
 	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
+	
+	// Set default values
+	viper.SetDefault("telemetry_enabled", true)
 }
 
 func initConfig() {
@@ -223,6 +231,19 @@ func initTheme() {
 	// If themeManager is still nil, commands will use fallback themes
 }
 
+func initTelemetry() {
+	// Load config to check telemetry settings
+	cfg, err := config.Load()
+	if err != nil {
+		// If config fails to load, default to telemetry disabled for safety
+		telemetryService = telemetry.NewTelemetryService(false)
+		return
+	}
+	
+	// Initialize telemetry service based on config
+	telemetryService = telemetry.NewTelemetryService(cfg.TelemetryEnabled)
+}
+
 func getXDGConfigDir() string {
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
@@ -233,8 +254,42 @@ func getXDGConfigDir() string {
 }
 
 func main() {
+	// Track CLI execution
+	startTime := time.Now()
+	var commandName, subcommandName string
+	success := true
+	
+	// Capture command info
+	if len(os.Args) > 1 {
+		commandName = os.Args[1]
+		if len(os.Args) > 2 {
+			subcommandName = os.Args[2]
+		}
+	}
+	
 	if err := rootCmd.Execute(); err != nil {
+		success = false
 		fmt.Printf("Error: %v\n", err)
+		
+		// Track error
+		if telemetryService != nil {
+			telemetryService.TrackError("cli_execution", err.Error(), map[string]interface{}{
+				"command":    commandName,
+				"subcommand": subcommandName,
+			})
+		}
+		
 		os.Exit(1)
+	}
+	
+	// Track successful command execution
+	if telemetryService != nil {
+		duration := time.Since(startTime).Milliseconds()
+		telemetryService.TrackCLICommand(commandName, subcommandName, success, duration)
+	}
+	
+	// Cleanup telemetry
+	if telemetryService != nil {
+		telemetryService.Close()
 	}
 }
