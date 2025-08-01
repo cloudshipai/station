@@ -306,3 +306,4 @@ func (s *Server) handleGetAgentDetails(ctx context.Context, request mcp.CallTool
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
+

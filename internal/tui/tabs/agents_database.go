@@ -368,11 +368,7 @@ func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
 	// TODO: Get actual user ID from session when authentication is implemented
 	consoleUser, err := m.repos.Users.GetByUsername("console")
 	if err != nil {
-		// Fallback to system user if console user not found
-		consoleUser, err = m.repos.Users.GetByUsername("system")
-		if err != nil {
-			return tea.Printf("❌ Could not find console or system user for execution tracking")
-		}
+		return tea.Printf("❌ Could not find console user for execution tracking")
 	}
 	
 	// Queue the execution

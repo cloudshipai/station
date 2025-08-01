@@ -17,7 +17,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("environment_id", mcp.Required(), mcp.Description("Environment ID where the agent will run")),
 		mcp.WithNumber("max_steps", mcp.Description("Maximum steps the agent can take (default: 5)")),
 		mcp.WithBoolean("enabled", mcp.Description("Whether the agent is enabled (default: true)")),
-		mcp.WithArray("tool_names", mcp.Description("List of tool names to assign to the agent")),
+		mcp.WithArray("tool_names", mcp.Description("List of tool names to assign to the agent"), mcp.WithStringItems()),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
@@ -30,7 +30,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("prompt", mcp.Description("New system prompt for the agent")),
 		mcp.WithNumber("max_steps", mcp.Description("New maximum steps for the agent")),
 		mcp.WithBoolean("enabled", mcp.Description("Whether the agent should be enabled")),
-		mcp.WithArray("tool_names", mcp.Description("New list of tool names to assign to the agent")),
+		mcp.WithArray("tool_names", mcp.Description("New list of tool names to assign to the agent"), mcp.WithStringItems()),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 

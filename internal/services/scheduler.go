@@ -124,9 +124,9 @@ func (s *SchedulerService) UnscheduleAgent(agentID int64) {
 // loadScheduledAgents loads all scheduled agents from the database
 func (s *SchedulerService) loadScheduledAgents() error {
 	ctx := context.Background()
-	queries := queries.New(s.db.Conn())
+	dbQueries := queries.New(s.db.Conn())
 	
-	agents, err := queries.ListScheduledAgents(ctx)
+	agents, err := dbQueries.ListScheduledAgents(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query scheduled agents: %w", err)
 	}
@@ -180,10 +180,10 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 	log.Printf("Executing scheduled agent %d", agentID)
 	
 	ctx := context.Background()
-	queries := queries.New(s.db.Conn())
+	dbQueries := queries.New(s.db.Conn())
 	
 	// Get agent details
-	agent, err := queries.GetAgentBySchedule(ctx, agentID)
+	agent, err := dbQueries.GetAgentBySchedule(ctx, agentID)
 	if err != nil {
 		log.Printf("Error: failed to get scheduled agent %d: %v", agentID, err)
 		return
@@ -218,11 +218,16 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 		task = "Execute scheduled agent task"
 	}
 	
-	// For scheduled agents, we use a system user ID (0) since there's no specific user triggering this
-	// System user was created in migration 010
-	systemUserID := int64(0)
+	// For scheduled agents, we use the console user since there's no specific user triggering this
+	// Look up console user ID dynamically
+	consoleUser, err := dbQueries.GetUserByUsername(context.Background(), "console")
+	if err != nil {
+		log.Printf("Error: failed to get console user for scheduled agent %d: %v", agentID, err)
+		return
+	}
+	consoleUserID := consoleUser.ID
 	
-	if _, err := s.executionQueue.QueueExecution(agentID, systemUserID, task, metadata); err != nil {
+	if _, err := s.executionQueue.QueueExecution(agentID, consoleUserID, task, metadata); err != nil {
 		log.Printf("Error: failed to queue execution for scheduled agent %d: %v", agentID, err)
 		return
 	}

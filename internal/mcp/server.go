@@ -83,6 +83,18 @@ func (s *Server) Start(ctx context.Context, port int) error {
 	return nil
 }
 
+// StartStdio starts the MCP server using stdio transport
+func (s *Server) StartStdio(ctx context.Context) error {
+	log.Printf("Starting MCP server using stdio transport")
+	
+	// Use the mcp-go ServeStdio convenience function
+	if err := server.ServeStdio(s.mcpServer); err != nil {
+		return fmt.Errorf("MCP stdio server error: %w", err)
+	}
+	
+	return nil
+}
+
 func (s *Server) Shutdown(ctx context.Context) error {
 	log.Println("MCP server shutting down...")
 	
