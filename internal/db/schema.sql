@@ -153,3 +153,39 @@ CREATE TABLE agent_runs (
     FOREIGN KEY (agent_id) REFERENCES agents (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
+
+-- Themes for UI customization
+CREATE TABLE themes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    description TEXT,
+    is_built_in BOOLEAN DEFAULT FALSE,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_by INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Theme color definitions
+CREATE TABLE theme_colors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    theme_id INTEGER NOT NULL,
+    color_key TEXT NOT NULL, -- e.g., 'primary', 'secondary', 'background', etc.
+    color_value TEXT NOT NULL, -- hex color code
+    description TEXT,
+    FOREIGN KEY (theme_id) REFERENCES themes(id) ON DELETE CASCADE,
+    UNIQUE(theme_id, color_key)
+);
+
+-- User theme preferences
+CREATE TABLE user_theme_preferences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    theme_id INTEGER NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (theme_id) REFERENCES themes(id),
+    UNIQUE(user_id)
+);

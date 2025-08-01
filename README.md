@@ -1,356 +1,270 @@
 ![](./image.png)
-# Station (stn)
 
-**Station** is a secure, self-hosted platform for creating intelligent multi-environment MCP agents. Build AI agents with Claude that understand your development workflow, securely manage sensitive tools across environments, and run automated background tasks with your private infrastructure.
+# Station - Self-Hosted MCP Agent Runtime
 
-## 🎯 Why Station?
+**Station** is a lightweight, self-hosted runtime for executing background AI agents within your infrastructure. Deploy a single 40MB binary to run scheduled Claude/LLM agents that can access your internal tools, APIs, and environments without exposing credentials to third-party services.
 
-### 🧠 **Intelligent Multi-Environment MCP Agents**
-Create Claude-powered agents that understand your development workflow across environments. Station agents automatically select the right tools for dev/staging/prod, understand context from your codebase, and make intelligent decisions about tool usage.
+## Problem
 
-### 🔒 **Secure Self-Hosted Background Agents**  
-Run sensitive automation securely on your infrastructure. Station agents can access your private repositories, internal APIs, and sensitive tools while maintaining strict environment isolation and audit logging.
+Engineering teams want to leverage AI agents for operational tasks (monitoring, automation, alerting) but face a critical blocker: there's no secure way to give AI agents access to production infrastructure without handing over the keys to external services.
 
-**Key Capabilities:**
-- 🧙 **AI-Powered Discovery**: Automatically analyze and configure GitHub MCP servers
-- 🌍 **Multi-Environment Aware**: Agents understand dev/staging/prod contexts  
-- 🔐 **Self-Hosted Security**: Keep sensitive tools and data on your infrastructure
-- 🤖 **Claude Integration**: Purpose-built for Claude's advanced reasoning capabilities
-- ⚡ **Background Automation**: Run scheduled tasks and monitoring securely
+## Solution
 
-## 🚀 Value in 5 Minutes (3 Steps)
+Station acts as a secure bridge between your AI (Claude, GPT, etc.) and your infrastructure. You deploy Station inside your network, configure it with your tools and credentials, then use natural language to create agents that run on your schedule with your permissions.
 
-### Step 1: Initialize Station (1 minute)
-```bash
-# Download and initialize Station
-curl -sSL https://raw.githubusercontent.com/cloudshipai/station/main/install | bash
-cd ~/my-project
-stn init  # Creates config, generates encryption keys
+## How It Works
+
+```
+Your LLM (Claude) → MCP Protocol → Station (in your infra) → Your Tools
+                                         ↓
+                                  Background Agents
+                                  (scheduled tasks)
 ```
 
-### Step 2: Create Intelligent Agent (2 minutes)
+1. **Deploy Station** in your infrastructure (single binary, 40MB)
+2. **Load MCP tools** for your environments (AWS, GitHub, Slack, etc.)
+3. **Connect Claude** to Station via MCP
+4. **Describe agents** in natural language - Claude creates them automatically
+5. **Agents run** on schedule with access to your configured tools
+
+## Quick Start
+
+### 1. Install Station (30 seconds)
 ```bash
-# Use Claude to create a deployment monitoring agent
-stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+# Download and install
+curl -sSL https://getstation.cloudshipai.com | bash
 
-# Connect Claude to Station's MCP server (localhost:3000)
-# Ask Claude: "Create an agent that monitors my staging deployments 
-# and automatically creates GitHub issues for failed builds"
-
-# Station's AI prompt guides Claude to create a sophisticated agent with:
-# - Environment-aware tool selection (staging vs prod)
-# - Smart context management (no tool overload)
-# - Secure background execution
-```
-
-### Step 3: Deploy & Monitor (2 minutes)
-```bash
-# Access admin interface to monitor agents
-ssh admin@localhost -p 2222
-
-# Your intelligent agent now runs in background:
-# - Monitors staging environment automatically
-# - Creates GitHub issues with context and logs
-# - Respects environment boundaries and security
-```
-
-**Result**: You now have a Claude-powered agent running securely on your infrastructure, intelligently managing your development workflow with full access to sensitive tools and environments.
-
-## 🏠 Local Mode vs 🌐 Remote Mode
-
-Station supports two deployment modes to fit different use cases:
-
-### 🏠 Local Mode (Developer/Personal)
-**Perfect for**: Solo developers, experimentation, local AI workflows
-
-```bash
-# Everything runs locally on your machine
-stn init                    # Local database, local SSH
-stn serve --local          # Starts all services locally
-ssh admin@localhost -p 2222  # Admin interface
-```
-
-**Features**:
-- ✅ Single-user operation
-- ✅ Local SQLite database  
-- ✅ No authentication required
-- ✅ Perfect for development and testing
-- ✅ All data stays on your machine
-
-### 🌐 Remote Mode (Team/Enterprise)
-**Perfect for**: Teams, production deployments, multi-user environments
-
-```bash
-# Deploy Station as a shared service
-stn serve --remote --host 0.0.0.0 --port 8080
-```
-
-**Features**:
-- ✅ Multi-user authentication with API keys
-- ✅ Role-based access control (admin vs user)
-- ✅ SSH authentication via system users
-- ✅ Shared MCP server configurations
-- ✅ Team collaboration and environment isolation
-- ✅ Production-ready deployment
-
-**Usage Examples**:
-
-```bash
-# Local development
-stn load https://github.com/awesome/mcp-server  # Deploy locally
-
-# Remote deployment  
-stn load https://github.com/awesome/mcp-server --endpoint https://station.company.com
-
-# Team member usage
-stn load --endpoint https://station.company.com  # Uses team configurations
-```
-
-## 🛠️ Setup Examples
-
-### Local Development Setup
-```bash
-# Quick local setup for development
+# Initialize with encryption keys
 stn init
-echo 'local_mode: true' >> ~/.config/station/config.yaml
+```
+
+### 2. Load Your Tools (2 minutes)
+```bash
+# Load AWS tools for three environments
+stn env create dev
+stn load https://github.com/awslabs/mcp-server-aws --env dev
+
+stn env create staging  
+stn load https://github.com/awslabs/mcp-server-aws --env staging
+
+stn env create prod
+stn load https://github.com/awslabs/mcp-server-aws --env prod
+```
+
+### 3. Create an Agent (1 minute)
+```bash
+# Start Station
 stn serve
+
+# Connect Claude to localhost:3000 (Station's MCP endpoint)
+# Ask Claude: "Create an agent that checks CloudWatch logs every 6 hours 
+# across all environments for errors and posts summaries to Slack"
 ```
 
-### Team/Enterprise Setup
-```bash
-# Server setup
-stn init --production
-stn serve --remote --host 0.0.0.0
+Station automatically:
+- Parses your request
+- Selects appropriate tools (CloudWatch logs reader, Slack poster)  
+- Sets up the schedule
+- Configures environment access
+- Deploys the agent
 
-# Team member setup
-stn config set endpoint https://your-station-server.com
-stn config set api_key your-api-key-here
+## Key Features
+
+### 🔐 Security First
+- **Zero credential exposure**: All secrets stay in your infrastructure
+- **Encrypted storage**: MCP configs encrypted at rest with NaCl
+- **Fine-grained permissions**: Control exactly which sub-tools agents can access
+- **Environment isolation**: Separate configs for dev/staging/prod
+
+### 🎯 Practical Design
+- **Single binary**: 40MB, no dependencies, runs anywhere
+- **Natural language**: Describe agents to Claude, it handles the rest
+- **Tool discovery**: Analyzes GitHub repos to auto-configure MCP servers
+- **Observability**: OpenTelemetry compatible for standard monitoring
+
+### 🚀 Real Use Cases
+
+**Multi-Environment Monitoring**
+```
+"Every 6 hours, check Grafana dashboards for anomalies. If found, 
+analyze CloudWatch logs and EC2 metrics across dev/staging/prod 
+to identify the root cause and create a GitHub issue."
 ```
 
-### MCP Server Discovery Examples
-```bash
-# Popular MCP servers - just paste GitHub URLs
-stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
-stn load https://github.com/awslabs/mcp/tree/main/src/cfn-mcp-server  
-stn load https://github.com/kocierik/mcp-nomad
-
-# Station automatically:
-# 1. Analyzes repository structure and documentation
-# 2. Extracts configuration options (NPX, Docker, local build)
-# 3. Identifies required environment variables
-# 4. Presents guided wizard for setup
-# 5. Deploys and enables tools automatically
+**Resource Optimization**
+```
+"Every 10 minutes, run Ansible commands on dev clusters to check 
+resource usage. Scale down idle instances automatically."
 ```
 
-## 🏗️ Architecture
-
-Station bridges MCP clients and MCP servers with intelligent orchestration:
-
+**Deployment Verification**  
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   MCP Clients   │────│   Station Hub   │────│  GitHub Repos   │
-│ (Claude, Cody)  │    │  (stn serve)    │    │ (MCP Servers)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                               │
-                    ┌─────────────────┐
-                    │  AI Discovery   │  🧠 Analyzes repos
-                    │   & Wizard      │     Guides setup
-                    └─────────────────┘
-                               │
-                    ┌─────────────────┐    ┌─────────────────┐
-                    │  Deployed MCP   │    │  Admin Control  │
-                    │    Servers      │    │  (SSH + Web)    │
-                    └─────────────────┘    └─────────────────┘
+"After each staging deployment, run test suites and check error rates.
+If issues detected, rollback and notify the team on Slack."
 ```
 
-### Key Innovation: AI-Powered MCP Discovery
+## Architecture
 
-Station uses AI to understand GitHub repositories and automatically extract:
-- **Server capabilities** (what tools it provides)
-- **Installation methods** (NPX, Docker, local build)
-- **Environment requirements** (API keys, endpoints, configs)
-- **Best practices** (recommended setups, common patterns)
-
-This eliminates the manual work of reading documentation and figuring out configurations.
-
-## 🎯 Core Features
-
-- **🧙 AI-Powered Discovery**: Analyze any GitHub MCP server repository automatically
-- **📋 Guided Configuration**: Interactive wizards with validation and examples
-- **🚀 One-Command Deploy**: From GitHub URL to running server in seconds
-- **🔒 Enterprise Security**: API keys, encryption, role-based access control
-- **🌍 Multi-Environment**: Isolated configs for dev/staging/prod
-- **📡 Dual-Mode SSH**: Local admin access + remote user authentication
-- **🔧 Universal MCP Hub**: Connects any MCP client to any MCP server
-
-## 🛡️ Security & Authentication
-
-### Local Mode Security
-- No authentication required (single-user)
-- Local SSH access only
-- Data encrypted at rest with generated keys
-
-### Remote Mode Security  
-- **API Key Authentication**: Each user gets secure API keys
-- **Role-Based Access**: Admin vs user permissions
-- **SSH Integration**: Authenticates against system users  
-- **Encrypted Storage**: All sensitive data encrypted with NaCl
-- **Audit Logging**: Track all operations and access
-
-## 🚀 Installation & Quick Start
-
-## 🤖 Intelligent Multi-Environment AI Platform
-
-Station is purpose-built for **Claude-powered agents** that understand your development workflow:
-
-### 🏆 Why Station for Intelligent Agents?
-
-**1. Multi-Environment Intelligence**
-- Agents understand dev/staging/prod contexts automatically
-- Smart tool selection based on environment and task
-- Context-aware decision making across your infrastructure
-
-**2. Secure Self-Hosted Automation**  
-- Run sensitive automation on your infrastructure
-- Access private repositories, internal APIs, and sensitive tools
-- Strict environment isolation with comprehensive audit logging
-
-**3. Claude-Optimized Agent Creation**
-- Purpose-built prompts that guide Claude to create sophisticated agents
-- Smart context management prevents tool overload and confusion
-- Environment-aware tool filtering for optimal performance
-
-**4. Enterprise-Ready AI Infrastructure**
-- Team collaboration with role-based access control
-- Production-ready deployment with monitoring and logging
-- Scales from personal automation to enterprise AI workflows
-
-### 🧙 AI-Assisted Agent Creation
-
-Station includes MCP prompts that guide your main AI (Claude, etc.) to create well-structured agents:
-
-```bash
-# Connect your Claude/AI client to Station's MCP server
-# Then use the create_comprehensive_agent prompt:
-
-"I need an agent that monitors our GitHub issues and 
-creates daily summaries for the team Slack channel"
-
-# Station's AI prompt helps Claude understand:
-# - Which tools are needed (GitHub API, Slack, scheduling)
-# - Optimal environment setup
-# - Smart filtering to avoid tool overload  
-# - Proper error handling and validation
-# - Scheduling and automation patterns
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│   Claude    │────▶│   Station    │────▶│   Your Tools    │
+│ (MCP Client)│ MCP │  (Runtime)   │     │ AWS, GH, Slack  │
+└─────────────┘     └──────────────┘     └─────────────────┘
+                           │
+                    ┌──────▼───────┐
+                    │ Agent Queue  │ 
+                    │ (Scheduled)  │
+                    └──────────────┘
 ```
 
-**Example Agent Creation Flow:**
-1. **Intent**: "Monitor website uptime and send alerts"
-2. **Station Analysis**: Recommends HTTP monitoring tools + Slack notifications
-3. **Smart Filtering**: Only assigns essential tools (http-client, slack-api) 
-4. **Environment**: Selects monitoring environment with proper credentials
-5. **Deployment**: Creates scheduled agent with error handling
-
-### Option 1: Quick Install (Recommended)
-```bash
-# Install Station
-curl -sSL https://get-station.dev | bash
-stn init
-
-# Discover and deploy MCP server
-stn load https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
-
-# Start using immediately
-ssh admin@localhost -p 2222
-```
-
-### Option 2: Build from Source
-```bash
-git clone https://github.com/your-org/station.git
-cd station
-make build
-./stn init
-```
-
-## 📚 Commands Reference
-
-### Core Commands
-```bash
-stn init                    # Initialize Station configuration
-stn serve                   # Start Station services (local mode)
-stn serve --remote          # Start in remote/team mode
-stn load <github-url>       # Discover and deploy MCP server
-stn load                    # Load from local mcp.json/.mcp.json
-```
-
-### Configuration
-```bash
-stn config show             # View current configuration
-stn config set key value    # Update configuration
-stn key generate            # Generate new encryption key
-```
+## Advanced Configuration
 
 ### Environment Management
 ```bash
-stn env create <name>       # Create new environment
-stn env list                # List environments
-stn env switch <name>       # Switch active environment
+# Create isolated environments
+stn env create production --encrypted
+
+# Load multiple configs per environment
+stn load aws-config.json --env production
+stn load github-config.json --env production
+stn load pagerduty-config.json --env production
 ```
 
-## 🤝 SSH Integration (Remote Mode)
+### Team Access
+```bash
+# Enable team mode
+stn serve --remote --host 0.0.0.0
 
-In remote mode, Station integrates with your system's SSH configuration for user authentication:
+# Create team members
+stn user create alice --role admin
+stn user create bob --role user
+
+# Team members connect with API keys
+export STATION_API_KEY=xxx
+stn agent list --endpoint https://station.internal
+```
+
+### Tool Permissions
+```yaml
+# Fine-grained tool control in agent config
+agent:
+  name: "CloudWatch Monitor"
+  tools:
+    - server: "aws-mcp"
+      environment: "production"
+      allowed_tools: ["logs:GetLogEvents", "cloudwatch:GetMetricData"]
+      denied_tools: ["ec2:TerminateInstances"]
+```
+
+## Installation Options
+
+### Quick Install (Recommended)
+```bash
+curl -sSL https://getstation.cloudshipai.com | bash
+```
+
+### Docker
+```bash
+docker run -d \
+  -v ~/.config/station:/config \
+  -p 3000:3000 \
+  -p 2222:2222 \
+  ghcr.io/cloudshipai/station:latest
+```
+
+### From Source
+```bash
+git clone https://github.com/cloudshipai/station
+cd station
+go build -o stn cmd/stn/main.go
+```
+
+## Why Station?
+
+**For Security Teams**: Agents run inside your network with your IAM roles. No external service ever sees your credentials.
+
+**For DevOps**: Deploy once, create unlimited agents. Observability built-in. Single binary means trivial deployment.
+
+**For Developers**: Natural language agent creation. No complex frameworks. Just describe what you want.
+
+## Common Patterns
+
+### Multi-Environment Sync
+```bash
+# Load same tool across environments with different credentials
+for env in dev stage prod; do
+  stn load github-mcp.json --env $env
+done
+```
+
+### Monitoring Pipeline
+```bash
+# Chain multiple tools for complex workflows
+"Monitor Datadog → Analyze with AWS → Create Jira ticket → Notify Slack"
+```
+
+### Scheduled Reports
+```bash
+# Daily/weekly operational intelligence
+"Every Monday at 9am, gather metrics from all environments and 
+create an executive summary with trends and recommendations"
+```
+
+## Troubleshooting
+
+**Agent not running?**
+```bash
+stn agent status my-agent
+stn agent logs my-agent --tail 50
+```
+
+**Tool permission denied?**
+```bash
+# Check agent's allowed tools
+stn agent inspect my-agent | jq .tools
+```
+
+**Can't connect Claude?**
+```bash
+# Verify Station is serving MCP
+curl http://localhost:3000/mcp/describe
+```
+
+## CloudshipAI Integration
+
+Station integrates with [CloudshipAI](https://cloudship.ai) for fleet management:
 
 ```bash
-# Server reads from system SSH config
-# Users authenticate with their system credentials
-ssh user@station-server -p 2222
+# Connect Station to Cloudship fleet
+stn cloudship connect --fleet-id xxx
 
-# Supports:
-# - SSH key authentication
-# - System user validation  
-# - Host-based authentication
-# - All standard SSH auth methods
+# Cloudship can now orchestrate agents across all your Stations
+# Perfect for multi-region, multi-cloud, edge deployments
 ```
 
-Station's SSH server in remote mode leverages the host system's SSH configuration, making it seamless to integrate with existing user management and authentication systems.
+## Requirements
 
-## 🔧 Troubleshooting
+- Linux, macOS, or Windows
+- 256MB RAM
+- 100MB disk space
+- Network access to your tools/APIs
 
-### Common Issues
+## License
 
-**"No MCP configuration found"**
-```bash
-# Ensure you have mcp.json or .mcp.json in current directory
-# Or use GitHub URL discovery instead
-stn load https://github.com/some/mcp-server
-```
+AGPL-3.0 - See [LICENSE](LICENSE) for details.
 
-**"GitHub analysis failed"**
-```bash
-# Check internet connection and GitHub URL format
-# Ensure repository contains MCP server code
-```
+## Contributing
 
-**"SSH connection refused"**
-```bash
-# Check Station is running and SSH port is correct
-stn serve  # Start Station if not running
-ssh admin@localhost -p 2222  # Default SSH port
-```
+Station is open source. We welcome contributions:
 
-## 📄 License
-
-AGPL-3.0 - Open source with copyleft provisions for service deployments.
-
-## 🌟 Contributing
-
-Station is built for the community. Contributions welcome!
-
-1. Fork and create feature branch
-2. Add tests and documentation  
-3. Submit pull request
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing`)
+5. Open a Pull Request
 
 ---
 
-**Station** - Making MCP servers as easy as `npm install` • Built with ❤️ for the AI community
+**Station** - Run AI agents where they're needed, not where they're allowed.
+
+Built by engineers who were tired of choosing between AI capabilities and infrastructure security.
