@@ -464,6 +464,9 @@ Execute the task now:`,
 		ai.WithPrompt(executionPrompt),
 		ai.WithTools(toolRefs...),
 		ai.WithToolChoice(ai.ToolChoiceAuto),
+		ai.WithConfig(map[string]interface{}{
+			"maxIterations": 25, // Increase from default 5 to handle complex tasks
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
