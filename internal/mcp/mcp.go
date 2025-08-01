@@ -117,6 +117,9 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 	// Setup basic MCP tools
 	server.setupTools()
 	
+	// Setup resources
+	server.setupResources()
+	
 	// Setup enhanced MCP tools
 	NewToolsServer(repos, mcpServer, agentService, localMode)
 	
@@ -225,6 +228,36 @@ func (s *Server) setupTools() {
 	)
 
 	s.mcpServer.AddTool(listPromptsTool, s.handleListPrompts)
+
+	// Add tools for accessing runs
+	listRunsTool := mcp.NewTool("list_runs",
+		mcp.WithDescription("List recent agent execution runs"),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of runs to return (default: 50)")),
+	)
+
+	s.mcpServer.AddTool(listRunsTool, s.handleListRuns)
+
+	getRunTool := mcp.NewTool("get_run",
+		mcp.WithDescription("Get detailed information about a specific agent run"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("ID of the run to retrieve")),
+	)
+
+	s.mcpServer.AddTool(getRunTool, s.handleGetRun)
+
+	listAgentRunsTool := mcp.NewTool("list_agent_runs",
+		mcp.WithDescription("List all runs for a specific agent"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to get runs for")),
+	)
+
+	s.mcpServer.AddTool(listAgentRunsTool, s.handleListAgentRuns)
+}
+
+func (s *Server) setupResources() {
+	// TODO: Add agent runs resources
+	// The MCP-go library resource API needs to be investigated further
+	// For now, we can access runs through the existing tools and CLI commands
+	
+	log.Printf("MCP resources setup - runs resources will be added in future update")
 }
 
 func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -668,4 +701,186 @@ func (s *Server) requireAdminInServerMode(ctx context.Context) error {
 	}
 	
 	return nil
+}
+
+// Runs tool handlers
+
+func (s *Server) handleListRuns(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, require authentication but allow all users
+	if err := s.requireAuthInServerMode(ctx); err != nil && !s.isLocalMode() {
+		return mcp.NewToolResultError("Authentication required"), nil
+	}
+	
+	// Get limit parameter
+	limit := int64(request.GetInt("limit", 50))
+	if limit <= 0 || limit > 200 {
+		limit = 50 // Reasonable default
+	}
+	
+	// Get recent runs from database
+	runs, err := s.repos.AgentRuns.ListRecent(limit)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get runs: %v", err)), nil
+	}
+	
+	if len(runs) == 0 {
+		return mcp.NewToolResultText("No runs found"), nil
+	}
+	
+	// Format response
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("Recent agent runs (showing %d):\n\n", len(runs)))
+	
+	for _, run := range runs {
+		status := "🟢"
+		switch run.Status {
+		case "failed":
+			status = "🔴"
+		case "running":
+			status = "🟡"
+		case "pending":
+			status = "⏳"
+		}
+		
+		result.WriteString(fmt.Sprintf("%s Run %d: %s\n", status, run.ID, run.AgentName))
+		result.WriteString(fmt.Sprintf("   Status: %s\n", run.Status))
+		result.WriteString(fmt.Sprintf("   Started: %s\n", run.StartedAt.Format("Jan 2, 2006 15:04")))
+		if run.CompletedAt != nil {
+			duration := run.CompletedAt.Sub(run.StartedAt)
+			result.WriteString(fmt.Sprintf("   Duration: %.1fs\n", duration.Seconds()))
+		}
+		result.WriteString(fmt.Sprintf("   Task: %s\n", truncateString(run.Task, 80)))
+		result.WriteString("\n")
+	}
+	
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+func (s *Server) handleGetRun(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, require authentication but allow all users
+	if err := s.requireAuthInServerMode(ctx); err != nil && !s.isLocalMode() {
+		return mcp.NewToolResultError("Authentication required"), nil
+	}
+	
+	// Get run ID parameter
+	runIDStr, err := request.RequireString("run_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'run_id' parameter: %v", err)), nil
+	}
+	
+	var runID int64
+	if _, err := fmt.Sscanf(runIDStr, "%d", &runID); err != nil {
+		return mcp.NewToolResultError("Invalid run_id format: must be a number"), nil
+	}
+	
+	// Get run details from database
+	run, err := s.repos.AgentRuns.GetByIDWithDetails(runID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Run not found: %v", err)), nil
+	}
+	
+	// Format detailed response
+	var result strings.Builder
+	status := "🟢"
+	switch run.Status {
+	case "failed":
+		status = "🔴"
+	case "running":
+		status = "🟡"
+	case "pending":
+		status = "⏳"
+	}
+	
+	result.WriteString(fmt.Sprintf("%s Run %d Details\n\n", status, run.ID))
+	result.WriteString(fmt.Sprintf("Agent: %s (ID: %d)\n", run.AgentName, run.AgentID))
+	result.WriteString(fmt.Sprintf("Status: %s\n", run.Status))
+	result.WriteString(fmt.Sprintf("Task: %s\n", run.Task))
+	result.WriteString(fmt.Sprintf("Started: %s\n", run.StartedAt.Format("Jan 2, 2006 15:04:05")))
+	
+	if run.CompletedAt != nil {
+		duration := run.CompletedAt.Sub(run.StartedAt)
+		result.WriteString(fmt.Sprintf("Completed: %s (Duration: %.1fs)\n", run.CompletedAt.Format("Jan 2, 2006 15:04:05"), duration.Seconds()))
+	}
+	
+	result.WriteString(fmt.Sprintf("Steps Taken: %d\n", run.StepsTaken))
+	
+	if run.FinalResponse != "" {
+		result.WriteString(fmt.Sprintf("\nResponse:\n%s\n", run.FinalResponse))
+	}
+	
+	if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
+		result.WriteString(fmt.Sprintf("\nTool Calls (%d):\n", len(*run.ToolCalls)))
+		for i, toolCall := range *run.ToolCalls {
+			if i >= 5 { // Limit to first 5 tool calls for readability
+				result.WriteString(fmt.Sprintf("... and %d more\n", len(*run.ToolCalls)-5))
+				break
+			}
+			result.WriteString(fmt.Sprintf("  %d. %v\n", i+1, toolCall))
+		}
+	}
+	
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+func (s *Server) handleListAgentRuns(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// In server mode, require authentication but allow all users
+	if err := s.requireAuthInServerMode(ctx); err != nil && !s.isLocalMode() {
+		return mcp.NewToolResultError("Authentication required"), nil
+	}
+	
+	// Get agent ID parameter
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+	
+	var agentID int64
+	if _, err := fmt.Sscanf(agentIDStr, "%d", &agentID); err != nil {
+		return mcp.NewToolResultError("Invalid agent_id format: must be a number"), nil
+	}
+	
+	// Get runs for the agent from database
+	runs, err := s.repos.AgentRuns.ListByAgent(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get runs for agent: %v", err)), nil
+	}
+	
+	if len(runs) == 0 {
+		return mcp.NewToolResultText(fmt.Sprintf("No runs found for agent %d", agentID)), nil
+	}
+	
+	// Format response
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("Runs for Agent %d (showing %d):\n\n", agentID, len(runs)))
+	
+	for _, run := range runs {
+		status := "🟢"
+		switch run.Status {
+		case "failed":
+			status = "🔴"
+		case "running":
+			status = "🟡"
+		case "pending":
+			status = "⏳"
+		}
+		
+		result.WriteString(fmt.Sprintf("%s Run %d: %s\n", status, run.ID, run.Status))
+		result.WriteString(fmt.Sprintf("   Started: %s\n", run.StartedAt.Format("Jan 2, 2006 15:04")))
+		if run.CompletedAt != nil {
+			duration := run.CompletedAt.Sub(run.StartedAt)
+			result.WriteString(fmt.Sprintf("   Duration: %.1fs\n", duration.Seconds()))
+		}
+		result.WriteString(fmt.Sprintf("   Task: %s\n", truncateString(run.Task, 80)))
+		result.WriteString("\n")
+	}
+	
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+// Helper function for truncating strings
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }

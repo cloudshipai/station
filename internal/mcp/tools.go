@@ -209,11 +209,23 @@ Please provide your agent creation plan in this structure:
 
 ## Next Steps
 
-After you provide this plan, I'll help you:
-1. Validate tool availability in the selected environment
-2. Refine the system prompt based on Station's capabilities
-3. Create the agent using Station's enhanced MCP tools
-4. Set up monitoring and scheduling if needed
+After you provide this plan, I'll:
+1. Present the complete agent configuration for your review
+2. Ask for your explicit confirmation before creating the agent
+3. Validate tool availability in the selected environment
+4. Create the agent using Station's enhanced MCP tools
+5. Set up monitoring and scheduling if needed
+
+## ⚠️ Important: User Confirmation Required
+
+**I will NOT create any agent without your explicit approval.** After analyzing your requirements and presenting the plan above, I will:
+
+1. **Show you the complete agent details** including name, description, system prompt, environment, tools, and configuration
+2. **Ask: "Do you want me to create this agent with these exact specifications?"**
+3. **Wait for your "yes" or confirmation** before proceeding with agent creation
+4. **Allow you to modify** any aspect of the agent before creation
+
+This ensures you have full control over what agents are created in your Station environment.
 
 Remember: Station's power comes from smart agent design, not tool proliferation. Focus on solving the specific user problem efficiently!`, 
 		userIntent, domain, schedulePreference, environmentNames, toolCategories)
