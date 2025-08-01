@@ -47,6 +47,7 @@ func init() {
 	rootCmd.AddCommand(runsCmd)
 	rootCmd.AddCommand(webhookCmd)
 	rootCmd.AddCommand(settingsCmd)
+	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(bannerCmd)
 	
