@@ -128,7 +128,7 @@ func (r *UserRepo) Delete(id int64) error {
 	}
 	
 	// Prevent deletion of system users
-	if user.Username == "console" || user.Username == "system" {
+	if user.Username == "console" {
 		return fmt.Errorf("cannot delete system user '%s'", user.Username)
 	}
 	

@@ -44,6 +44,7 @@ func loadStationConfig() (*config.Config, error) {
 		APIPort:       viper.GetInt("api_port"),
 		SSHPort:       viper.GetInt("ssh_port"),
 		MCPPort:       viper.GetInt("mcp_port"),
+		EncryptionKey: encryptionKey,
 	}, nil
 }
 

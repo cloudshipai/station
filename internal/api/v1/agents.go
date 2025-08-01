@@ -5,9 +5,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"station/internal/auth"
 	"station/internal/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 // registerAgentAdminRoutes registers admin-only agent management routes
@@ -69,6 +70,62 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 	})
 }
 
+func (h *APIHandlers) queueAgent(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	var req struct {
+		Task string `json:"task" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Check if execution queue service is available
+	if h.executionQueueSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Execution queue service not available"})
+		return
+	}
+
+	// Get user ID for tracking (use console user for local mode)
+	var userID int64 = 1 // Default console user
+	if !h.localMode {
+		user, exists := auth.GetUserFromContext(c)
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			return
+		}
+		userID = user.ID
+	}
+
+	// Create metadata for the execution
+	metadata := map[string]interface{}{
+		"source":       "api_execution",
+		"triggered_by": "cli",
+		"api_endpoint": c.Request.URL.Path,
+	}
+
+	// Queue the execution
+	runID, err := h.executionQueueSvc.QueueExecution(agentID, userID, req.Task, metadata)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to queue execution: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"agent_id": agentID,
+		"task":     req.Task,
+		"run_id":   runID,
+		"status":   "queued",
+		"message":  "Agent execution queued successfully",
+	})
+}
+
 func (h *APIHandlers) createAgent(c *gin.Context) {
 	var req struct {
 		Name          string   `json:"name" binding:"required"`
@@ -97,7 +154,7 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 
 	// Set default max steps if not provided
 	if req.MaxSteps == 0 {
-		req.MaxSteps = 5
+		req.MaxSteps = 25
 	}
 
 	// Create agent using genkit service
