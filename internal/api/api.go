@@ -23,6 +23,7 @@ type Server struct {
 	mcpConfigService     *services.MCPConfigService
 	toolDiscoveryService *services.ToolDiscoveryService
 	genkitService        *services.GenkitService
+	webhookService       *services.WebhookService
 	localMode            bool
 }
 
@@ -33,12 +34,14 @@ func New(cfg *config.Config, database db.Database, localMode bool) *Server {
 		panic(fmt.Errorf("failed to initialize key manager: %w", err))
 	}
 	mcpConfigService := services.NewMCPConfigService(repos, keyManager)
+	webhookService := services.NewWebhookService(repos)
 	
 	return &Server{
 		cfg:              cfg,
 		db:               database,
 		repos:            repos,
 		mcpConfigService: mcpConfigService,
+		webhookService:   webhookService,
 		localMode:        localMode,
 	}
 }
@@ -81,6 +84,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.mcpConfigService,
 		s.toolDiscoveryService,
 		s.genkitService,
+		s.webhookService,
 		s.localMode,
 	)
 	apiHandlers.RegisterRoutes(v1Group)

@@ -193,3 +193,47 @@ type ExecutionStep struct {
 	Response   string    `json:"response"`
 	Timestamp  time.Time `json:"timestamp"`
 }
+
+// Setting represents a system setting
+type Setting struct {
+	ID          int64     `json:"id" db:"id"`
+	Key         string    `json:"key" db:"key"`
+	Value       string    `json:"value" db:"value"`
+	Description *string   `json:"description" db:"description"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// Webhook represents a webhook endpoint configuration
+type Webhook struct {
+	ID             int64     `json:"id" db:"id"`
+	Name           string    `json:"name" db:"name"`
+	URL            string    `json:"url" db:"url"`
+	Secret         string    `json:"secret,omitempty" db:"secret"`
+	Enabled        bool      `json:"enabled" db:"enabled"`
+	Events         string    `json:"events" db:"events"` // JSON array of event types
+	Headers        string    `json:"headers,omitempty" db:"headers"` // JSON object of custom headers
+	TimeoutSeconds int       `json:"timeout_seconds" db:"timeout_seconds"`
+	RetryAttempts  int       `json:"retry_attempts" db:"retry_attempts"`
+	CreatedBy      int64     `json:"created_by" db:"created_by"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// WebhookDelivery represents a webhook delivery attempt
+type WebhookDelivery struct {
+	ID              int64      `json:"id" db:"id"`
+	WebhookID       int64      `json:"webhook_id" db:"webhook_id"`
+	EventType       string     `json:"event_type" db:"event_type"`
+	Payload         string     `json:"payload" db:"payload"`
+	Status          string     `json:"status" db:"status"` // pending, success, failed
+	HTTPStatusCode  *int       `json:"http_status_code,omitempty" db:"http_status_code"`
+	ResponseBody    *string    `json:"response_body,omitempty" db:"response_body"`
+	ResponseHeaders *string    `json:"response_headers,omitempty" db:"response_headers"`
+	ErrorMessage    *string    `json:"error_message,omitempty" db:"error_message"`
+	AttemptCount    int        `json:"attempt_count" db:"attempt_count"`
+	LastAttemptAt   *time.Time `json:"last_attempt_at,omitempty" db:"last_attempt_at"`
+	NextRetryAt     *time.Time `json:"next_retry_at,omitempty" db:"next_retry_at"`
+	DeliveredAt     *time.Time `json:"delivered_at,omitempty" db:"delivered_at"`
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+}

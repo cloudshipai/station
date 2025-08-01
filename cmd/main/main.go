@@ -40,6 +40,8 @@ func init() {
 	rootCmd.AddCommand(envCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(runsCmd)
+	rootCmd.AddCommand(webhookCmd)
+	rootCmd.AddCommand(settingsCmd)
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(bannerCmd)
 	
@@ -75,6 +77,18 @@ func init() {
 	
 	runsCmd.AddCommand(runsListCmd)
 	runsCmd.AddCommand(runsInspectCmd)
+	
+	webhookCmd.AddCommand(webhookListCmd)
+	webhookCmd.AddCommand(webhookCreateCmd)
+	webhookCmd.AddCommand(webhookDeleteCmd)
+	webhookCmd.AddCommand(webhookShowCmd)
+	webhookCmd.AddCommand(webhookEnableCmd)
+	webhookCmd.AddCommand(webhookDisableCmd)
+	webhookCmd.AddCommand(webhookDeliveriesCmd)
+	
+	settingsCmd.AddCommand(settingsListCmd)
+	settingsCmd.AddCommand(settingsGetCmd)
+	settingsCmd.AddCommand(settingsSetCmd)
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
@@ -130,6 +144,31 @@ func init() {
 	runsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	runsListCmd.Flags().Int("limit", 50, "Maximum number of runs to display")
 	runsInspectCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	
+	// Webhook command flags
+	webhookListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	webhookCreateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	webhookCreateCmd.Flags().String("name", "", "Webhook name (required)")
+	webhookCreateCmd.Flags().String("url", "", "Webhook URL (required)")
+	webhookCreateCmd.Flags().String("secret", "", "Webhook secret for signature validation")
+	webhookCreateCmd.Flags().StringSlice("events", []string{"agent_run_completed"}, "Events to subscribe to")
+	webhookCreateCmd.Flags().StringToString("headers", map[string]string{}, "Custom headers (key=value)")
+	webhookCreateCmd.Flags().Int("timeout", 30, "Timeout in seconds")
+	webhookCreateCmd.Flags().Int("retries", 3, "Number of retry attempts")
+	webhookCreateCmd.Flags().BoolP("interactive", "i", false, "Interactive mode with forms")
+	webhookDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	webhookDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
+	webhookShowCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	webhookEnableCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	webhookDisableCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	webhookDeliveriesCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	webhookDeliveriesCmd.Flags().Int("limit", 50, "Maximum number of deliveries to display")
+	
+	// Settings command flags
+	settingsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	settingsGetCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	settingsSetCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	settingsSetCmd.Flags().String("description", "", "Description for the setting")
 	
 	// Bind flags to viper
 	viper.BindPFlag("ssh_port", serveCmd.Flags().Lookup("ssh-port"))

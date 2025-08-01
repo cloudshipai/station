@@ -189,3 +189,50 @@ CREATE TABLE user_theme_preferences (
     FOREIGN KEY (theme_id) REFERENCES themes(id),
     UNIQUE(user_id)
 );
+
+-- System settings table
+CREATE TABLE settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    value TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Webhook endpoints table
+CREATE TABLE webhooks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT, -- Optional webhook secret for security
+    enabled BOOLEAN DEFAULT TRUE,
+    events TEXT NOT NULL DEFAULT 'agent_run_completed', -- JSON array of event types
+    headers TEXT, -- JSON object of custom headers
+    timeout_seconds INTEGER DEFAULT 30,
+    retry_attempts INTEGER DEFAULT 3,
+    created_by INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id),
+    UNIQUE(name)
+);
+
+-- Webhook delivery tracking table
+CREATE TABLE webhook_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    webhook_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    payload TEXT NOT NULL, -- JSON payload sent
+    status TEXT NOT NULL DEFAULT 'pending', -- pending, success, failed
+    http_status_code INTEGER,
+    response_body TEXT,
+    response_headers TEXT, -- JSON object
+    error_message TEXT,
+    attempt_count INTEGER DEFAULT 0,
+    last_attempt_at DATETIME,
+    next_retry_at DATETIME,
+    delivered_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
+);
