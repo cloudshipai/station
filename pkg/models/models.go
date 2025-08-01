@@ -171,8 +171,9 @@ type MCPConfigData struct {
 }
 
 type MCPServerConfig struct {
-	Command string            `json:"command"`
+	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 }
 

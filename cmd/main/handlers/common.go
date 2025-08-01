@@ -1,9 +1,18 @@
-package main
+package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"station/internal/theme"
+	"io"
+	"net/http"
+	"strconv"
+
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/viper"
+	"station/internal/config"
+	"station/internal/theme"
+	"station/pkg/models"
 )
 
 // CLIStyles contains all styled components for the CLI
@@ -19,6 +28,23 @@ type CLIStyles struct {
 	No       lipgloss.Style
 	Help     lipgloss.Style
 	Form     lipgloss.Style
+}
+
+// Common functions used across handlers
+
+// loadStationConfig loads the Station configuration
+func loadStationConfig() (*config.Config, error) {
+	encryptionKey := viper.GetString("encryption_key")
+	if encryptionKey == "" {
+		return nil, fmt.Errorf("no encryption key found. Run 'station init' first")
+	}
+
+	return &config.Config{
+		DatabaseURL:   viper.GetString("database_url"),
+		APIPort:       viper.GetInt("api_port"),
+		SSHPort:       viper.GetInt("ssh_port"),
+		MCPPort:       viper.GetInt("mcp_port"),
+	}, nil
 }
 
 // getCLIStyles returns theme-aware CLI styles
@@ -111,4 +137,77 @@ func showSuccessBanner(message string, themeManager *theme.ThemeManager) {
 		confetti))
 	
 	fmt.Println(banner)
+}
+
+// getEnvironmentID gets or creates an environment and returns its ID
+func getEnvironmentID(endpoint, environment string) (int64, error) {
+	// First try to get the environment by name
+	url := fmt.Sprintf("%s/api/v1/environments", endpoint)
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("failed to list environments: status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Environments []*models.Environment `json:"environments"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+
+	// Look for existing environment
+	for _, env := range result.Environments {
+		if env.Name == environment {
+			return env.ID, nil
+		}
+	}
+
+	// Environment doesn't exist, create it
+	payload := map[string]interface{}{
+		"name": environment,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err = http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("failed to create environment: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var createResult struct {
+		Environment *models.Environment `json:"environment"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&createResult); err != nil {
+		return 0, err
+	}
+
+	return createResult.Environment.ID, nil
+}
+
+// findConfigByIDOrName finds a config by ID or name
+func findConfigByIDOrName(repos interface{}, envID int64, configID string) (*models.MCPConfig, error) {
+	// This would need to be implemented with proper repository interface
+	// For now, return nil to avoid compilation errors
+	return nil, fmt.Errorf("not implemented")
+}
+
+// parseConfigID parses a config ID that could be either numeric or string
+func parseConfigID(configID string) (int64, error) {
+	return strconv.ParseInt(configID, 10, 64)
 }

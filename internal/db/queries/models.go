@@ -126,6 +126,26 @@ type ModelProvider struct {
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
+type Theme struct {
+	ID          int64          `json:"id"`
+	Name        string         `json:"name"`
+	DisplayName string         `json:"display_name"`
+	Description sql.NullString `json:"description"`
+	IsBuiltIn   sql.NullBool   `json:"is_built_in"`
+	IsDefault   sql.NullBool   `json:"is_default"`
+	CreatedBy   sql.NullInt64  `json:"created_by"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+type ThemeColor struct {
+	ID          int64          `json:"id"`
+	ThemeID     int64          `json:"theme_id"`
+	ColorKey    string         `json:"color_key"`
+	ColorValue  string         `json:"color_value"`
+	Description sql.NullString `json:"description"`
+}
+
 type User struct {
 	ID        int64          `json:"id"`
 	Username  string         `json:"username"`
@@ -133,4 +153,11 @@ type User struct {
 	ApiKey    sql.NullString `json:"api_key"`
 	CreatedAt sql.NullTime   `json:"created_at"`
 	UpdatedAt sql.NullTime   `json:"updated_at"`
+}
+
+type UserThemePreference struct {
+	ID        int64        `json:"id"`
+	UserID    int64        `json:"user_id"`
+	ThemeID   int64        `json:"theme_id"`
+	AppliedAt sql.NullTime `json:"applied_at"`
 }
