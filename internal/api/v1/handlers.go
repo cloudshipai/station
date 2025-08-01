@@ -89,6 +89,12 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	agentAdminGroup.GET("/:id", h.getAgent)
 	agentAdminGroup.PUT("/:id", h.updateAgent)
 	agentAdminGroup.DELETE("/:id", h.deleteAgent)
+	
+	// Agent runs routes - accessible to regular users in server mode
+	runsGroup := router.Group("/runs")
+	runsGroup.GET("", h.listRuns)              // Users can list runs
+	runsGroup.GET("/:id", h.getRun)            // Users can get run details
+	runsGroup.GET("/agent/:agent_id", h.listRunsByAgent) // Users can list runs by agent
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode
@@ -287,6 +293,66 @@ func (h *APIHandlers) deleteAgent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Agent deleted successfully"})
+}
+
+// Agent runs handlers
+
+func (h *APIHandlers) listRuns(c *gin.Context) {
+	// Get limit parameter, default to 50
+	limit := int64(50)
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	runs, err := h.repos.AgentRuns.ListRecent(limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list runs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"runs":  runs,
+		"count": len(runs),
+		"limit": limit,
+	})
+}
+
+func (h *APIHandlers) getRun(c *gin.Context) {
+	runID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid run ID"})
+		return
+	}
+
+	run, err := h.repos.AgentRuns.GetByIDWithDetails(runID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Run not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"run": run})
+}
+
+func (h *APIHandlers) listRunsByAgent(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("agent_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	runs, err := h.repos.AgentRuns.ListByAgent(agentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list runs for agent"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"runs":     runs,
+		"count":    len(runs),
+		"agent_id": agentID,
+	})
 }
 
 // Environment handlers

@@ -38,6 +38,8 @@ func init() {
 	rootCmd.AddCommand(loadCmd)
 	rootCmd.AddCommand(mcpCmd)
 	rootCmd.AddCommand(envCmd)
+	rootCmd.AddCommand(agentCmd)
+	rootCmd.AddCommand(runsCmd)
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(bannerCmd)
 	
@@ -65,6 +67,14 @@ func init() {
 	envCmd.AddCommand(envGetCmd)
 	envCmd.AddCommand(envUpdateCmd)
 	envCmd.AddCommand(envDeleteCmd)
+	
+	agentCmd.AddCommand(agentListCmd)
+	agentCmd.AddCommand(agentShowCmd)
+	agentCmd.AddCommand(agentRunCmd)
+	agentCmd.AddCommand(agentDeleteCmd)
+	
+	runsCmd.AddCommand(runsListCmd)
+	runsCmd.AddCommand(runsInspectCmd)
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
@@ -107,6 +117,19 @@ func init() {
 	envUpdateCmd.Flags().String("description", "", "New description for the environment")
 	envDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	envDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
+	
+	// Agent command flags
+	agentListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentShowCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentRunCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentRunCmd.Flags().Bool("tail", false, "Follow the agent execution with real-time output")
+	agentDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
+	
+	// Runs command flags
+	runsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	runsListCmd.Flags().Int("limit", 50, "Maximum number of runs to display")
+	runsInspectCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	
 	// Bind flags to viper
 	viper.BindPFlag("ssh_port", serveCmd.Flags().Lookup("ssh-port"))
