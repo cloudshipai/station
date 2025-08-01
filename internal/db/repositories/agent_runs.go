@@ -273,3 +273,10 @@ func (r *AgentRunRepo) UpdateCompletion(id int64, finalResponse string, stepsTak
 	_, err := r.db.Exec(query, finalResponse, stepsTaken, toolCalls, executionSteps, status, completedAt, id)
 	return err
 }
+
+// UpdateStatus updates only the status of an agent run
+func (r *AgentRunRepo) UpdateStatus(id int64, status string) error {
+	query := `UPDATE agent_runs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	_, err := r.db.Exec(query, status, id)
+	return err
+}
