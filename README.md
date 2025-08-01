@@ -80,6 +80,7 @@ Station automatically:
 - **Single binary**: 40MB, no dependencies, runs anywhere
 - **Natural language**: Describe agents to Claude, it handles the rest
 - **Tool discovery**: Analyzes GitHub repos to auto-configure MCP servers
+- **Webhook notifications**: Real-time notifications when agents complete tasks
 - **Observability**: OpenTelemetry compatible for standard monitoring
 
 ### 🚀 Real Use Cases
@@ -90,18 +91,21 @@ Station automatically:
 analyze CloudWatch logs and EC2 metrics across dev/staging/prod 
 to identify the root cause and create a GitHub issue."
 ```
+*→ Webhook notifications alert your team in Slack when issues are detected*
 
 **Resource Optimization**
 ```
 "Every 10 minutes, run Ansible commands on dev clusters to check 
 resource usage. Scale down idle instances automatically."
 ```
+*→ Webhooks trigger cost reporting dashboards when optimizations occur*
 
 **Deployment Verification**  
 ```
 "After each staging deployment, run test suites and check error rates.
 If issues detected, rollback and notify the team on Slack."
 ```
+*→ Webhook integration with your CI/CD pipeline for automated responses*
 
 ## Architecture
 
@@ -155,6 +159,50 @@ agent:
       allowed_tools: ["logs:GetLogEvents", "cloudwatch:GetMetricData"]
       denied_tools: ["ec2:TerminateInstances"]
 ```
+
+### Webhook Notifications
+
+Get real-time notifications when your agents complete tasks. Perfect for integrating Station with your existing alerting and monitoring systems.
+
+```bash
+# Enable webhook notifications
+stn settings set notifications_enabled true
+
+# Create a webhook for Slack notifications
+stn webhook create --name "Slack Alerts" \
+  --url "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK" \
+  --events "agent_run_completed" \
+  --secret "your-webhook-secret"
+
+# List and manage webhooks
+stn webhook list
+stn webhook show <webhook-id>
+stn webhook deliveries  # View delivery history
+```
+
+**Webhook Payload Example:**
+```json
+{
+  "event": "agent_run_completed",
+  "timestamp": "2024-01-15T10:30:45Z",
+  "agent": {
+    "id": 1,
+    "name": "CloudWatch Monitor",
+    "environment_id": 1
+  },
+  "run": {
+    "id": 123,
+    "task": "Check error rates",
+    "final_response": "No critical errors found",
+    "status": "completed",
+    "steps_taken": 3
+  }
+}
+```
+
+**Integrations:** Works with Slack, Discord, Microsoft Teams, PagerDuty, custom endpoints, and any HTTP webhook receiver.
+
+**Security:** All webhooks include HMAC-SHA256 signatures for payload verification and support custom headers for authentication.
 
 ## Installation Options
 
@@ -210,6 +258,17 @@ done
 create an executive summary with trends and recommendations"
 ```
 
+### Webhook Integration Patterns
+```bash
+# Connect Station to your existing tools
+stn webhook create --name "PagerDuty" --url "https://events.pagerduty.com/integration/xxx/enqueue"
+stn webhook create --name "DataDog" --url "https://webhooks.datadoghq.com/v1/webhooks/xxx"
+stn webhook create --name "Custom Dashboard" --url "https://dashboard.company.com/api/station-events"
+
+# Chain webhooks for complex workflows
+# Agent completes → Webhook → Triggers deployment → Another agent validates
+```
+
 ## Troubleshooting
 
 **Agent not running?**
@@ -228,6 +287,14 @@ stn agent inspect my-agent | jq .tools
 ```bash
 # Verify Station is serving MCP
 curl http://localhost:3000/mcp/describe
+```
+
+**Webhooks not firing?**
+```bash
+# Check notification settings and webhook status
+stn settings get notifications_enabled
+stn webhook list
+stn webhook deliveries --limit 10
 ```
 
 ## CloudshipAI Integration

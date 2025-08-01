@@ -126,6 +126,15 @@ type ModelProvider struct {
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
+type Setting struct {
+	ID          int64          `json:"id"`
+	Key         string         `json:"key"`
+	Value       string         `json:"value"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
 type Theme struct {
 	ID          int64          `json:"id"`
 	Name        string         `json:"name"`
@@ -160,4 +169,36 @@ type UserThemePreference struct {
 	UserID    int64        `json:"user_id"`
 	ThemeID   int64        `json:"theme_id"`
 	AppliedAt sql.NullTime `json:"applied_at"`
+}
+
+type Webhook struct {
+	ID             int64          `json:"id"`
+	Name           string         `json:"name"`
+	Url            string         `json:"url"`
+	Secret         sql.NullString `json:"secret"`
+	Enabled        sql.NullBool   `json:"enabled"`
+	Events         string         `json:"events"`
+	Headers        sql.NullString `json:"headers"`
+	TimeoutSeconds sql.NullInt64  `json:"timeout_seconds"`
+	RetryAttempts  sql.NullInt64  `json:"retry_attempts"`
+	CreatedBy      int64          `json:"created_by"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+	UpdatedAt      sql.NullTime   `json:"updated_at"`
+}
+
+type WebhookDelivery struct {
+	ID              int64          `json:"id"`
+	WebhookID       int64          `json:"webhook_id"`
+	EventType       string         `json:"event_type"`
+	Payload         string         `json:"payload"`
+	Status          string         `json:"status"`
+	HttpStatusCode  sql.NullInt64  `json:"http_status_code"`
+	ResponseBody    sql.NullString `json:"response_body"`
+	ResponseHeaders sql.NullString `json:"response_headers"`
+	ErrorMessage    sql.NullString `json:"error_message"`
+	AttemptCount    sql.NullInt64  `json:"attempt_count"`
+	LastAttemptAt   sql.NullTime   `json:"last_attempt_at"`
+	NextRetryAt     sql.NullTime   `json:"next_retry_at"`
+	DeliveredAt     sql.NullTime   `json:"delivered_at"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
 }

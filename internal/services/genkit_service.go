@@ -31,6 +31,7 @@ type GenkitService struct {
 	agentEnvironmentRepo *repositories.AgentEnvironmentRepo
 	environmentRepo      *repositories.EnvironmentRepo
 	mcpConfigService     *MCPConfigService
+	webhookService       *WebhookService
 }
 
 // NewGenkitService creates a new Genkit service with cross-environment support
@@ -44,6 +45,7 @@ func NewGenkitService(
 	agentEnvironmentRepo *repositories.AgentEnvironmentRepo,
 	environmentRepo *repositories.EnvironmentRepo,
 	mcpConfigService *MCPConfigService,
+	webhookService *WebhookService,
 ) *GenkitService {
 	return &GenkitService{
 		genkitApp:            genkitApp,
@@ -55,6 +57,7 @@ func NewGenkitService(
 		agentEnvironmentRepo: agentEnvironmentRepo,
 		environmentRepo:      environmentRepo,
 		mcpConfigService:     mcpConfigService,
+		webhookService:       webhookService,
 	}
 }
 
@@ -315,6 +318,12 @@ func (s *GenkitService) executeAgentInternal(ctx context.Context, agentID, userI
 	}
 
 	log.Printf("Agent %d execution completed successfully", agentID)
+	
+	// Send webhook notifications for successful completions if webhook service is available
+	if s.webhookService != nil && status == "completed" {
+		go s.sendWebhookNotification(agentID, run)
+	}
+	
 	return run, nil
 }
 
@@ -471,4 +480,24 @@ func (s *GenkitService) DeleteAgent(ctx context.Context, agentID int64) error {
 // This should be used by new code that can provide the userID
 func (s *GenkitService) ExecuteAgentWithUser(ctx context.Context, agentID, userID int64, task string) (*models.AgentRun, error) {
 	return s.executeAgentInternal(ctx, agentID, userID, task)
+}
+
+// sendWebhookNotification sends webhook notifications for completed agent runs
+func (s *GenkitService) sendWebhookNotification(agentID int64, agentRun *models.AgentRun) {
+	// Get the agent details
+	agent, err := s.agentRepo.GetByID(agentID)
+	if err != nil {
+		log.Printf("Failed to get agent %d for webhook notification: %v", agentID, err)
+		return
+	}
+	
+	// Send webhook notification
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	if err := s.webhookService.NotifyAgentRunCompleted(ctx, agentRun, agent); err != nil {
+		log.Printf("Failed to send webhook notification for agent run %d: %v", agentRun.ID, err)
+	} else {
+		log.Printf("Webhook notifications sent for agent run %d", agentRun.ID)
+	}
 }

@@ -39,6 +39,7 @@ type ExecutionQueueService struct {
 	// Core dependencies
 	repos            *repositories.Repositories
 	agentService     AgentServiceInterface
+	webhookService   *WebhookService
 	
 	// Queue management
 	requestQueue     chan *ExecutionRequest
@@ -64,7 +65,7 @@ type Worker struct {
 }
 
 // NewExecutionQueueService creates a new execution queue service
-func NewExecutionQueueService(repos *repositories.Repositories, agentService AgentServiceInterface, numWorkers int) *ExecutionQueueService {
+func NewExecutionQueueService(repos *repositories.Repositories, agentService AgentServiceInterface, webhookService *WebhookService, numWorkers int) *ExecutionQueueService {
 	if numWorkers <= 0 {
 		numWorkers = 5 // Default to 5 workers
 	}
@@ -74,6 +75,7 @@ func NewExecutionQueueService(repos *repositories.Repositories, agentService Age
 	return &ExecutionQueueService{
 		repos:            repos,
 		agentService:     agentService,
+		webhookService:   webhookService,
 		requestQueue:     make(chan *ExecutionRequest, 100), // Buffered channel for 100 pending requests
 		resultQueue:      make(chan *ExecutionResult, 100),  // Buffered channel for 100 pending results
 		numWorkers:       numWorkers,
@@ -325,6 +327,11 @@ func (eq *ExecutionQueueService) runResultProcessor() {
 				log.Printf("Failed to store execution result for agent %d: %v", result.Request.AgentID, err)
 			} else {
 				log.Printf("Stored execution result for agent %d, status: %s", result.Request.AgentID, result.Status)
+				
+				// Send webhook notifications for completed executions if webhook service is available
+				if eq.webhookService != nil && result.Status == "completed" {
+					go eq.sendWebhookNotification(result)
+				}
 			}
 			
 		case <-eq.ctx.Done():
@@ -378,4 +385,31 @@ func (eq *ExecutionQueueService) storeExecutionResult(result *ExecutionResult) e
 	
 	log.Printf("Updated agent run record with ID %d for agent %d", runID, result.Request.AgentID)
 	return nil
+}
+
+// sendWebhookNotification sends webhook notifications for completed agent runs
+func (eq *ExecutionQueueService) sendWebhookNotification(result *ExecutionResult) {
+	// Get the updated agent run record from database
+	agentRun, err := eq.repos.AgentRuns.GetByID(result.Request.RunID)
+	if err != nil {
+		log.Printf("Failed to get agent run %d for webhook notification: %v", result.Request.RunID, err)
+		return
+	}
+	
+	// Get the agent details
+	agent, err := eq.repos.Agents.GetByID(result.Request.AgentID)
+	if err != nil {
+		log.Printf("Failed to get agent %d for webhook notification: %v", result.Request.AgentID, err)
+		return
+	}
+	
+	// Send webhook notification
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	if err := eq.webhookService.NotifyAgentRunCompleted(ctx, agentRun, agent); err != nil {
+		log.Printf("Failed to send webhook notification for agent run %d: %v", agentRun.ID, err)
+	} else {
+		log.Printf("Webhook notifications sent for agent run %d", agentRun.ID)
+	}
 }
