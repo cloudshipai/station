@@ -10,6 +10,7 @@ type Environment struct {
 	ID          int64     `json:"id" db:"id"`
 	Name        string    `json:"name" db:"name"`
 	Description *string   `json:"description" db:"description"`
+	CreatedBy   int64     `json:"created_by" db:"created_by"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
 }
@@ -91,10 +92,11 @@ type AgentEnvironmentWithDetails struct {
 
 // AgentTool represents the many-to-many relationship between agents and tools
 type AgentTool struct {
-	ID        int64     `json:"id" db:"id"`
-	AgentID   int64     `json:"agent_id" db:"agent_id"`
-	ToolID    int64     `json:"tool_id" db:"tool_id"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ID            int64     `json:"id" db:"id"`
+	AgentID       int64     `json:"agent_id" db:"agent_id"`
+	ToolName      string    `json:"tool_name" db:"tool_name"`
+	EnvironmentID int64     `json:"environment_id" db:"environment_id"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
 }
 
 // AgentToolWithDetails includes environment information for cross-environment context

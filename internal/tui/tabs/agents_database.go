@@ -14,61 +14,18 @@ import (
 // Load agents from database
 func (m AgentsModel) loadAgents() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		// Try to load real agents from database first
+		// Load real agents from database
 		agents, err := m.repos.Agents.List()
-		if err != nil || len(agents) == 0 {
-			// Fallback to sample data if database is empty
-			sampleAgents := []*models.Agent{
-				{
-					ID:            1,
-					Name:          "Code Reviewer",
-					Description:   "Reviews code for quality and security issues",
-					Prompt:        "You are a code reviewer...",
-					MaxSteps:      10,
-					EnvironmentID: 1,
-					CreatedBy:     1,
-					CreatedAt:     time.Now().Add(-time.Hour * 24),
-					UpdatedAt:     time.Now().Add(-time.Hour * 12),
-				},
-				{
-					ID:            2,
-					Name:          "Security Scanner",
-					Description:   "Scans for security vulnerabilities",
-					Prompt:        "You are a security expert...",
-					MaxSteps:      12,
-					EnvironmentID: 1,
-					CreatedBy:     1,
-					CreatedAt:     time.Now().Add(-time.Hour * 48),
-					UpdatedAt:     time.Now().Add(-time.Hour * 24),
-				},
-				{
-					ID:            3,
-					Name:          "Performance Monitor",
-					Description:   "Monitors system performance metrics",
-					Prompt:        "You are a performance monitoring expert...",
-					MaxSteps:      8,
-					EnvironmentID: 1,
-					CreatedBy:     1,
-					CreatedAt:     time.Now().Add(-time.Hour * 72),
-					UpdatedAt:     time.Now().Add(-time.Hour * 36),
-				},
-			}
-			
-			// Convert to the expected format
-			var convertedAgents []models.Agent
-			for _, agent := range sampleAgents {
-				convertedAgents = append(convertedAgents, *agent)
-			}
-			
-			return AgentsLoadedMsg{Agents: convertedAgents}
-		} else {
-			// Convert from []*models.Agent to []models.Agent
-			var convertedAgents []models.Agent
-			for _, agent := range agents {
-				convertedAgents = append(convertedAgents, *agent)
-			}
-			return AgentsLoadedMsg{Agents: convertedAgents}
+		if err != nil {
+			return AgentsErrorMsg{Err: fmt.Errorf("failed to load agents: %w", err)}
 		}
+		
+		// Convert from []*models.Agent to []models.Agent
+		var convertedAgents []models.Agent
+		for _, agent := range agents {
+			convertedAgents = append(convertedAgents, *agent)
+		}
+		return AgentsLoadedMsg{Agents: convertedAgents}
 	})
 }
 
@@ -233,8 +190,8 @@ func (m AgentsModel) createAgent() tea.Cmd {
 			}
 			
 			// Add the tool assignment
-			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', toolID=%d", agent.ID, toolName, toolID)
-			if _, err := m.repos.AgentTools.Add(agent.ID, toolID); err != nil {
+			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', environment=%d", agent.ID, toolName, envID)
+			if _, err := m.repos.AgentTools.Add(agent.ID, toolName, envID); err != nil {
 				log.Printf("DEBUG: Failed to add tool assignment: %v", err)
 				failedTools = append(failedTools, toolName)
 			} else {
@@ -368,8 +325,8 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 			}
 			
 			// Add the tool assignment
-			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', toolID=%d", m.selectedAgent.ID, toolName, toolID)
-			if _, err := m.repos.AgentTools.Add(m.selectedAgent.ID, toolID); err != nil {
+			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', environment=%d", m.selectedAgent.ID, toolName, envID)
+			if _, err := m.repos.AgentTools.Add(m.selectedAgent.ID, toolName, envID); err != nil {
 				log.Printf("DEBUG: Failed to add tool assignment: %v", err)
 				failedTools = append(failedTools, toolName)
 			} else {

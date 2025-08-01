@@ -1,6 +1,6 @@
 -- name: CreateEnvironment :one
-INSERT INTO environments (name, description)
-VALUES (?, ?)
+INSERT INTO environments (name, description, created_by)
+VALUES (?, ?, ?)
 RETURNING *;
 
 -- name: GetEnvironment :one

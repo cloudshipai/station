@@ -23,8 +23,9 @@ func NewEnvironmentRepo(db *sql.DB) *EnvironmentRepo {
 // convertEnvironmentFromSQLc converts sqlc Environment to models.Environment
 func convertEnvironmentFromSQLc(env queries.Environment) *models.Environment {
 	result := &models.Environment{
-		ID:   env.ID,
-		Name: env.Name,
+		ID:        env.ID,
+		Name:      env.Name,
+		CreatedBy: env.CreatedBy,
 	}
 	
 	if env.Description.Valid {
@@ -44,7 +45,8 @@ func convertEnvironmentFromSQLc(env queries.Environment) *models.Environment {
 
 func (r *EnvironmentRepo) Create(name string, description *string) (*models.Environment, error) {
 	params := queries.CreateEnvironmentParams{
-		Name: name,
+		Name:      name,
+		CreatedBy: 1, // Default to user ID 1 (admin)
 	}
 	
 	if description != nil {

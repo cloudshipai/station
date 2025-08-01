@@ -135,25 +135,24 @@ func (m *DashboardModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		switch msg.String() {
 		case "j", "down":
 			if m.activeSection == "" {
-				// Start navigation in runs section
-				m.activeSection = "runs"
-				m.selectedRunIndex = 0
-			} else if m.activeSection == "runs" {
-				// Navigate down in runs list - use sample data if empty
-				maxRuns := len(m.stats.RecentRuns)
-				if maxRuns == 0 {
-					maxRuns = 3 // Sample data count
+				// Start navigation in runs section if it has data
+				if len(m.stats.RecentRuns) > 0 {
+					m.activeSection = "runs"
+					m.selectedRunIndex = 0
+				} else if len(m.stats.RecentAgents) > 0 {
+					m.activeSection = "agents"
+					m.selectedAgentIndex = 0
 				}
-				if m.selectedRunIndex < maxRuns-1 {
+			} else if m.activeSection == "runs" {
+				// Navigate down in runs list
+				maxRuns := len(m.stats.RecentRuns)
+				if maxRuns > 0 && m.selectedRunIndex < maxRuns-1 {
 					m.selectedRunIndex++
 				}
 			} else if m.activeSection == "agents" {
-				// Navigate down in agents list - use sample data if empty
+				// Navigate down in agents list
 				maxAgents := len(m.stats.RecentAgents)
-				if maxAgents == 0 {
-					maxAgents = 3 // Sample data count
-				}
-				if m.selectedAgentIndex < maxAgents-1 {
+				if maxAgents > 0 && m.selectedAgentIndex < maxAgents-1 {
 					m.selectedAgentIndex++
 				}
 			}
@@ -178,15 +177,24 @@ func (m *DashboardModel) Update(msg tea.Msg) (TabModel, tea.Cmd) {
 		case " ", "space":
 			// Switch between runs and agents sections
 			if m.activeSection == "runs" {
-				m.activeSection = "agents"
-				m.selectedAgentIndex = 0
+				if len(m.stats.RecentAgents) > 0 {
+					m.activeSection = "agents"
+					m.selectedAgentIndex = 0
+				}
 			} else if m.activeSection == "agents" {
-				m.activeSection = "runs"
-				m.selectedRunIndex = 0
+				if len(m.stats.RecentRuns) > 0 {
+					m.activeSection = "runs"
+					m.selectedRunIndex = 0
+				}
 			} else {
-				// Start navigation in runs section
-				m.activeSection = "runs"
-				m.selectedRunIndex = 0
+				// Start navigation in runs or agents section (whichever has data)
+				if len(m.stats.RecentRuns) > 0 {
+					m.activeSection = "runs"
+					m.selectedRunIndex = 0
+				} else if len(m.stats.RecentAgents) > 0 {
+					m.activeSection = "agents"
+					m.selectedAgentIndex = 0
+				}
 			}
 		case "enter":
 			// Handle selection - navigate to details page
@@ -294,10 +302,6 @@ func (m DashboardModel) loadStats() tea.Cmd {
 		if err == nil {
 			stats.TotalAgents = len(agents)
 			stats.ActiveAgents = len(agents) // All agents are considered active for now
-		} else {
-			// Fallback values if database is empty
-			stats.TotalAgents = 4
-			stats.ActiveAgents = 3
 		}
 		
 		// Count runs
@@ -311,35 +315,30 @@ func (m DashboardModel) loadStats() tea.Cmd {
 					stats.RunsToday++
 				}
 			}
-		} else {
-			// Fallback values
-			stats.TotalRuns = 23
-			stats.RunsToday = 7
 		}
 		
 		// Count environments  
 		envs, err := m.repos.Environments.List()
 		if err == nil {
 			stats.Environments = len(envs)
-		} else {
-			stats.Environments = 2
 		}
 		
 		// Count users
 		users, err := m.repos.Users.List()
 		if err == nil {
 			stats.TotalUsers = len(users)
-		} else {
-			stats.TotalUsers = 3
 		}
 		
 		// System info (simplified for now)
 		stats.DatabaseSize = "1.2 MB" // Could calculate actual DB size
 		stats.Uptime = time.Hour * 24 * 3 // Could track actual uptime
 		
-		// MCP Servers (placeholder - no DB table yet)
-		stats.MCPServers = 2
-		stats.ActiveServers = 2
+		// Count MCP Servers from configs 
+		configs, err := m.repos.MCPConfigs.GetAllLatestConfigs()
+		if err == nil {
+			stats.MCPServers = len(configs)
+			stats.ActiveServers = len(configs) // Assume all configs are active
+		}
 		
 		// Get recent runs (with fallback sample data)
 		if len(runs) > 0 {
@@ -367,13 +366,6 @@ func (m DashboardModel) loadStats() tea.Cmd {
 					StartedAt: run.StartedAt,
 				})
 			}
-		} else {
-			// Sample recent runs for empty database
-			stats.RecentRuns = []RecentRun{
-				{ID: 1, AgentName: "Code Reviewer", Status: "completed", StartedAt: time.Now().Add(-time.Minute * 5)},
-				{ID: 2, AgentName: "Security Scanner", Status: "running", StartedAt: time.Now().Add(-time.Minute * 12)},
-				{ID: 3, AgentName: "Performance Monitor", Status: "completed", StartedAt: time.Now().Add(-time.Minute * 25)},
-			}
 		}
 		
 		// Get recent agents (with fallback sample data)
@@ -396,13 +388,6 @@ func (m DashboardModel) loadStats() tea.Cmd {
 					Description: agent.Description,
 					CreatedAt:   agent.CreatedAt,
 				})
-			}
-		} else {
-			// Sample recent agents for empty database
-			stats.RecentAgents = []RecentAgent{
-				{ID: 1, Name: "Code Reviewer", Description: "Reviews code for quality and security", CreatedAt: time.Now().Add(-time.Hour * 2)},
-				{ID: 2, Name: "Security Scanner", Description: "Scans for vulnerabilities and threats", CreatedAt: time.Now().Add(-time.Hour * 6)},
-				{ID: 3, Name: "Performance Monitor", Description: "Monitors system performance metrics", CreatedAt: time.Now().Add(-time.Hour * 12)},
 			}
 		}
 		
@@ -484,26 +469,8 @@ func (m DashboardModel) renderStatCard(title, value, subtitle string) string {
 
 // Render recent activity section with keyboard navigation
 func (m DashboardModel) renderRecentActivity() string {
-	// Show sample data if empty (for demo purposes)
 	recentRuns := m.stats.RecentRuns
-	if len(recentRuns) == 0 {
-		// Sample data for empty database
-		recentRuns = []RecentRun{
-			{ID: 1, AgentName: "Code Reviewer", Status: "completed"},
-			{ID: 2, AgentName: "Security Scanner", Status: "running"}, 
-			{ID: 3, AgentName: "Performance Monitor", Status: "completed"},
-		}
-	}
-	
 	recentAgents := m.stats.RecentAgents
-	if len(recentAgents) == 0 {
-		// Sample data for empty database
-		recentAgents = []RecentAgent{
-			{ID: 1, Name: "Documentation Bot"},
-			{ID: 2, Name: "Code Assistant"},
-			{ID: 3, Name: "Test Generator"},
-		}
-	}
 	
 	// Recent runs - navigable list following soft-serve pattern
 	runsHeaderStyle := styles.HeaderStyle
@@ -524,7 +491,9 @@ func (m DashboardModel) renderRecentActivity() string {
 	// Render sections with custom navigation highlighting
 	var runsContent, agentsContent string
 	
-	if m.activeSection == "runs" {
+	if len(recentRuns) == 0 {
+		runsContent = lipgloss.NewStyle().Foreground(styles.TextMuted).Render("No runs yet")
+	} else if m.activeSection == "runs" {
 		// Show runs as vertical list with selection highlight
 		runLines := []string{}
 		for i, run := range recentRuns {
@@ -560,7 +529,9 @@ func (m DashboardModel) renderRecentActivity() string {
 		runsContent = strings.Join(runItems, ", ")
 	}
 	
-	if m.activeSection == "agents" {
+	if len(recentAgents) == 0 {
+		agentsContent = lipgloss.NewStyle().Foreground(styles.TextMuted).Render("No agents yet")
+	} else if m.activeSection == "agents" {
 		// Show agents as vertical list with selection highlight
 		agentLines := []string{}
 		for i, agent := range recentAgents {

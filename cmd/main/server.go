@@ -160,6 +160,20 @@ func runMainServer() error {
 		if err := mcpServer.Start(ctx, cfg.MCPPort); err != nil {
 			log.Printf("MCP server error: %v", err)
 		}
+		
+		// Wait for context cancellation, then shutdown fast
+		<-ctx.Done()
+		
+		// Very aggressive timeout - 1s for MCP shutdown
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer shutdownCancel()
+		
+		log.Printf("🔧 Shutting down MCP server...")
+		if err := mcpServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("MCP server shutdown error: %v", err)
+		} else {
+			log.Printf("🔧 MCP server stopped gracefully")
+		}
 	}()
 
 	go func() {
@@ -182,11 +196,14 @@ func runMainServer() error {
 	<-c
 	fmt.Println("\n🛑 Received shutdown signal, gracefully shutting down...")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Much faster timeout - 3s for clean shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer shutdownCancel()
 
+	// Signal all goroutines to start shutdown immediately
 	cancel()
 
+	// Create done channel with aggressive timeout handling
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -197,7 +214,13 @@ func runMainServer() error {
 	case <-done:
 		fmt.Println("✅ All servers stopped gracefully")
 	case <-shutdownCtx.Done():
-		fmt.Println("⏰ Shutdown timeout exceeded, forcing exit")
+		fmt.Println("⏰ Shutdown timeout exceeded (3s), forcing exit")
+		// Force cleanup critical resources immediately
+		if agentSvc != nil {
+			forcedCtx, forceCancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			agentSvc.Close(forcedCtx)
+			forceCancel()
+		}
 	}
 
 	return nil

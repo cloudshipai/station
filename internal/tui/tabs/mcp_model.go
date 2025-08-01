@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -137,7 +138,16 @@ func NewMCPModel(database db.Database, genkitService *services.GenkitService) *M
 	versionList.SetFilteringEnabled(false)
 	
 	// Initialize shared services to avoid key ID mismatches
-	keyManager, err := crypto.NewKeyManagerFromEnv()
+	// Try to create key manager from config file first, fallback to environment variable
+	encryptionKey := viper.GetString("encryption_key")
+	keyManager, err := crypto.NewKeyManagerFromConfig(encryptionKey)
+	
+	if err != nil {
+		// Fallback to environment variable approach
+		log.Printf("WARNING: Failed to create key manager from config: %v, trying environment variable", err)
+		keyManager, err = crypto.NewKeyManagerFromEnv()
+	}
+	
 	var mcpConfigSvc *services.MCPConfigService
 	var toolDiscoverySvc *services.ToolDiscoveryService
 	

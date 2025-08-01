@@ -11,23 +11,25 @@ import (
 )
 
 const addAgentTool = `-- name: AddAgentTool :one
-INSERT INTO agent_tools (agent_id, tool_id)
-VALUES (?, ?)
-RETURNING id, agent_id, tool_id, created_at
+INSERT INTO agent_tools (agent_id, tool_name, environment_id)
+VALUES (?, ?, ?)
+RETURNING id, agent_id, tool_name, environment_id, created_at
 `
 
 type AddAgentToolParams struct {
-	AgentID int64 `json:"agent_id"`
-	ToolID  int64 `json:"tool_id"`
+	AgentID       int64  `json:"agent_id"`
+	ToolName      string `json:"tool_name"`
+	EnvironmentID int64  `json:"environment_id"`
 }
 
 func (q *Queries) AddAgentTool(ctx context.Context, arg AddAgentToolParams) (AgentTool, error) {
-	row := q.db.QueryRowContext(ctx, addAgentTool, arg.AgentID, arg.ToolID)
+	row := q.db.QueryRowContext(ctx, addAgentTool, arg.AgentID, arg.ToolName, arg.EnvironmentID)
 	var i AgentTool
 	err := row.Scan(
 		&i.ID,
 		&i.AgentID,
-		&i.ToolID,
+		&i.ToolName,
+		&i.EnvironmentID,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -43,10 +45,12 @@ func (q *Queries) ClearAgentTools(ctx context.Context, agentID int64) error {
 }
 
 const listAgentTools = `-- name: ListAgentTools :many
-SELECT at.id, at.agent_id, at.tool_id, at.created_at, t.name as tool_name, t.description as tool_description, t.input_schema as tool_schema, s.name as server_name, s.environment_id
+SELECT at.id, at.agent_id, at.tool_name, at.environment_id, at.created_at, 
+       t.description as tool_description, t.input_schema as tool_schema, 
+       s.name as server_name
 FROM agent_tools at
-JOIN mcp_tools t ON at.tool_id = t.id
-JOIN mcp_servers s ON t.mcp_server_id = s.id
+JOIN mcp_tools t ON at.tool_name = t.name 
+JOIN mcp_servers s ON t.mcp_server_id = s.id AND at.environment_id = s.environment_id
 WHERE at.agent_id = ?
 ORDER BY s.name, t.name
 `
@@ -54,13 +58,12 @@ ORDER BY s.name, t.name
 type ListAgentToolsRow struct {
 	ID              int64          `json:"id"`
 	AgentID         int64          `json:"agent_id"`
-	ToolID          int64          `json:"tool_id"`
-	CreatedAt       sql.NullTime   `json:"created_at"`
 	ToolName        string         `json:"tool_name"`
+	EnvironmentID   int64          `json:"environment_id"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
 	ToolDescription sql.NullString `json:"tool_description"`
 	ToolSchema      sql.NullString `json:"tool_schema"`
 	ServerName      string         `json:"server_name"`
-	EnvironmentID   int64          `json:"environment_id"`
 }
 
 func (q *Queries) ListAgentTools(ctx context.Context, agentID int64) ([]ListAgentToolsRow, error) {
@@ -75,13 +78,12 @@ func (q *Queries) ListAgentTools(ctx context.Context, agentID int64) ([]ListAgen
 		if err := rows.Scan(
 			&i.ID,
 			&i.AgentID,
-			&i.ToolID,
-			&i.CreatedAt,
 			&i.ToolName,
+			&i.EnvironmentID,
+			&i.CreatedAt,
 			&i.ToolDescription,
 			&i.ToolSchema,
 			&i.ServerName,
-			&i.EnvironmentID,
 		); err != nil {
 			return nil, err
 		}
@@ -97,15 +99,16 @@ func (q *Queries) ListAgentTools(ctx context.Context, agentID int64) ([]ListAgen
 }
 
 const removeAgentTool = `-- name: RemoveAgentTool :exec
-DELETE FROM agent_tools WHERE agent_id = ? AND tool_id = ?
+DELETE FROM agent_tools WHERE agent_id = ? AND tool_name = ? AND environment_id = ?
 `
 
 type RemoveAgentToolParams struct {
-	AgentID int64 `json:"agent_id"`
-	ToolID  int64 `json:"tool_id"`
+	AgentID       int64  `json:"agent_id"`
+	ToolName      string `json:"tool_name"`
+	EnvironmentID int64  `json:"environment_id"`
 }
 
 func (q *Queries) RemoveAgentTool(ctx context.Context, arg RemoveAgentToolParams) error {
-	_, err := q.db.ExecContext(ctx, removeAgentTool, arg.AgentID, arg.ToolID)
+	_, err := q.db.ExecContext(ctx, removeAgentTool, arg.AgentID, arg.ToolName, arg.EnvironmentID)
 	return err
 }
