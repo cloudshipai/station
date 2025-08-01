@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 	"station/internal/api/v1"
 	"station/internal/config"
 	"station/internal/db"
@@ -101,9 +102,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// Wait for context cancellation
 	<-ctx.Done()
 	
-	// Graceful shutdown
+	// Graceful shutdown with aggressive timeout
 	fmt.Println("🛑 Shutting down API server...")
-	return s.httpServer.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	return s.httpServer.Shutdown(shutdownCtx)
 }
 
 // Health check endpoint

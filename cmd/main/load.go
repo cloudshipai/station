@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -45,7 +44,13 @@ func runLoad(cmd *cobra.Command, args []string) error {
 	environment, _ := cmd.Flags().GetString("environment")
 	configName, _ := cmd.Flags().GetString("config-name")
 
-	// Check if we have a GitHub URL as argument
+	// Check if we have a direct README URL as argument
+	if len(args) > 0 && isDirectReadmeURL(args[0]) {
+		fmt.Println(infoStyle.Render("📄 README URL detected, starting TurboTax-style flow..."))
+		return runTurboTaxMCPFlow(args[0], environment, endpoint)
+	}
+
+	// Check if we have a GitHub URL as argument (legacy flow)
 	if len(args) > 0 && isGitHubURL(args[0]) {
 		fmt.Println(infoStyle.Render("🔍 GitHub URL detected, starting discovery flow..."))
 		return runGitHubDiscoveryFlow(args[0], environment, endpoint)
@@ -424,6 +429,101 @@ func isGitHubURL(url string) bool {
 	return strings.HasPrefix(url, "https://github.com/") || strings.HasPrefix(url, "http://github.com/")
 }
 
+// isDirectReadmeURL checks if the provided URL is a direct README URL
+func isDirectReadmeURL(url string) bool {
+	return strings.Contains(url, "README.md") && 
+		   (strings.HasPrefix(url, "https://raw.githubusercontent.com/") || 
+		    strings.HasPrefix(url, "https://github.com/") ||
+		    strings.HasPrefix(url, "http://"))
+}
+
+// runTurboTaxMCPFlow handles the TurboTax-style MCP configuration flow
+func runTurboTaxMCPFlow(readmeURL, environment, endpoint string) error {
+	fmt.Printf("📄 Analyzing README file: %s\n", readmeURL)
+	
+	// Initialize Genkit service for discovery
+	cfg, err := loadStationConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	// Initialize OpenAI plugin for AI model access
+	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+	if openaiAPIKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable is required for README analysis")
+	}
+	
+	openaiPlugin := &oai.OpenAI{APIKey: openaiAPIKey}
+	
+	// Initialize Genkit with OpenAI plugin for AI analysis
+	genkitApp, err := genkit.Init(context.Background(), genkit.WithPlugins(openaiPlugin))
+	if err != nil {
+		return fmt.Errorf("failed to initialize Genkit: %w", err)
+	}
+	
+	// Initialize GitHub discovery service
+	discoveryService := services.NewGitHubDiscoveryService(genkitApp, openaiPlugin)
+	
+	fmt.Println(infoStyle.Render("🤖 Extracting MCP server blocks from README..."))
+	
+	// Extract all MCP server blocks from the README
+	blocks, err := discoveryService.DiscoverMCPServerBlocks(context.Background(), readmeURL)
+	if err != nil {
+		return fmt.Errorf("failed to extract MCP server blocks: %w", err)
+	}
+
+	if len(blocks) == 0 {
+		fmt.Println(infoStyle.Render("No MCP server configurations found in the README"))
+		return nil
+	}
+
+	fmt.Printf("✅ Found %d MCP server configuration(s)\n", len(blocks))
+	
+	// Launch TurboTax-style wizard
+	fmt.Println("\n" + infoStyle.Render("🧙 Launching TurboTax-style configuration wizard..."))
+	
+	wizard := services.NewTurboWizardModel(blocks)
+	p := tea.NewProgram(wizard, tea.WithAltScreen())
+	
+	finalModel, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run TurboTax wizard: %w", err)
+	}
+	
+	// Check if wizard was completed successfully
+	wizardModel, ok := finalModel.(*services.TurboWizardModel)
+	if !ok {
+		return fmt.Errorf("unexpected model type from wizard")
+	}
+	
+	if wizardModel.IsCancelled() {
+		fmt.Println(infoStyle.Render("Configuration wizard cancelled"))
+		return nil
+	}
+	
+	if !wizardModel.IsCompleted() {
+		fmt.Println(infoStyle.Render("Configuration wizard not completed"))
+		return nil
+	}
+	
+	// Get the final configuration
+	finalConfig := wizardModel.GetFinalMCPConfig()
+	if finalConfig == nil {
+		return fmt.Errorf("no configuration generated from wizard")
+	}
+	
+	fmt.Printf("✅ Configuration generated with %d server(s)\n", len(finalConfig.Servers))
+	
+	// Upload the configuration
+	return uploadGeneratedConfig(finalConfig, environment, endpoint)
+}
+
 // runGitHubDiscoveryFlow handles the GitHub MCP server discovery flow
 func runGitHubDiscoveryFlow(githubURL, environment, endpoint string) error {
 	fmt.Printf("🔍 Analyzing GitHub repository: %s\n", githubURL)
@@ -454,12 +554,8 @@ func runGitHubDiscoveryFlow(githubURL, environment, endpoint string) error {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
 	
-	// Initialize GitHub discovery service and register web search tool
+	// Initialize GitHub discovery service
 	discoveryService := services.NewGitHubDiscoveryService(genkitApp, openaiPlugin)
-	webSearchTool := discoveryService.WebSearchTool()
-	
-	// Register the tool with Genkit (tool is already created with the genkit app instance)
-	_ = webSearchTool // Tool is registered during creation
 	
 	fmt.Println(infoStyle.Render("🤖 Starting AI analysis of repository..."))
 	
@@ -515,21 +611,5 @@ func runGitHubDiscoveryFlow(githubURL, environment, endpoint string) error {
 func createKeyManagerFromConfig() (*crypto.KeyManager, error) {
 	// Get encryption key from viper (config file)
 	encryptionKey := viper.GetString("encryption_key")
-	if encryptionKey == "" {
-		return nil, fmt.Errorf("encryption_key is required in config file")
-	}
-	
-	keyBytes, err := hex.DecodeString(encryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode encryption_key from config: %w", err)
-	}
-	
-	if len(keyBytes) != 32 {
-		return nil, fmt.Errorf("encryption_key in config must be 32 bytes (64 hex characters), got %d bytes", len(keyBytes))
-	}
-	
-	key := &crypto.Key{}
-	copy(key[:], keyBytes)
-	
-	return crypto.NewKeyManager(key), nil
+	return crypto.NewKeyManagerFromConfig(encryptionKey)
 }

@@ -54,6 +54,19 @@ type EnvVariable struct {
 	Example     string `json:"example,omitempty"`      // Example value
 }
 
+// MCPServerBlock represents a raw MCP server configuration block found in README
+type MCPServerBlock struct {
+	ServerName  string `json:"serverName"`  // Extracted server name
+	RawBlock    string `json:"rawBlock"`    // The actual JSON/configuration block
+	Description string `json:"description"` // Brief description of what this server does
+	Context     string `json:"context"`     // Surrounding context from README
+}
+
+// MCPBlocksResponse represents the response from AI analysis of README
+type MCPBlocksResponse struct {
+	Blocks []MCPServerBlock `json:"blocks"`
+}
+
 // GitHubDiscoveryService handles GitHub MCP server discovery
 type GitHubDiscoveryService struct {
 	genkit       *genkit.Genkit
@@ -68,6 +81,43 @@ func NewGitHubDiscoveryService(genkitApp *genkit.Genkit, openaiPlugin *oai.OpenA
 	}
 }
 
+// DiscoverMCPServerBlocks extracts all MCP server configuration blocks from a README
+func (g *GitHubDiscoveryService) DiscoverMCPServerBlocks(ctx context.Context, readmeURL string) ([]MCPServerBlock, error) {
+	// Fetch the README content directly from the provided URL
+	readmeContent, err := g.fetchDirectURL(readmeURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch README content: %w", err)
+	}
+
+	// Create prompt to identify all MCP server blocks
+	prompt := g.buildMCPBlockExtractionPrompt(readmeContent)
+
+	// Get model from OpenAI plugin - use GPT-4o for better analysis
+	model := g.openaiPlugin.Model(g.genkit, "gpt-4o")
+	
+	// Use Genkit to extract all MCP server blocks
+	response, err := genkit.Generate(ctx, g.genkit,
+		ai.WithModel(model),
+		ai.WithPrompt(prompt),
+		ai.WithOutputType(MCPBlocksResponse{}),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze README for MCP blocks: %w", err)
+	}
+
+	// Get the structured output
+	var blocksResponse MCPBlocksResponse
+	if err := response.Output(&blocksResponse); err != nil {
+		// Fallback: try to parse as JSON if structured output fails
+		if jsonErr := json.Unmarshal([]byte(response.Text()), &blocksResponse); jsonErr != nil {
+			return nil, fmt.Errorf("failed to parse structured output: %w\nFallback JSON parse error: %v\nResponse: %s", err, jsonErr, response.Text())
+		}
+	}
+
+	return blocksResponse.Blocks, nil
+}
+
 // DiscoverMCPServer analyzes a GitHub URL to extract MCP server configuration options
 func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubURL string) (*MCPServerDiscovery, error) {
 	// Validate and normalize GitHub URL
@@ -80,14 +130,17 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 		return nil, fmt.Errorf("URL must be a GitHub repository")
 	}
 
-	// Convert to raw GitHub content URLs for better analysis
-	rawURL := g.convertToRawURL(githubURL)
-	
-	// Create the analysis prompt
-	prompt := g.buildAnalysisPrompt(githubURL, rawURL)
+	// Fetch the GitHub page content directly
+	pageContent, err := g.fetchGitHubContent(githubURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch GitHub content: %w", err)
+	}
 
-	// Get model from OpenAI plugin
-	model := g.openaiPlugin.Model(g.genkit, "gpt-4o-mini")
+	// Create enhanced analysis prompt with repository context
+	prompt := g.buildEnhancedAnalysisPrompt(githubURL, pageContent)
+
+	// Get model from OpenAI plugin - use GPT-4o for better analysis
+	model := g.openaiPlugin.Model(g.genkit, "gpt-4o")
 	
 	// Use Genkit to analyze the GitHub Repository with structured JSON output
 	response, err := genkit.Generate(ctx, g.genkit,
@@ -100,10 +153,13 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 		return nil, fmt.Errorf("failed to analyze GitHub repository: %w", err)
 	}
 
-	// Parse the structured JSON response
+	// Get the structured output directly from Genkit
 	var aiResponse AIDiscoveryResponse
-	if err := json.Unmarshal([]byte(response.Text()), &aiResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse structured JSON response: %w\nResponse: %s", err, response.Text())
+	if err := response.Output(&aiResponse); err != nil {
+		// Fallback: try to parse as JSON if structured output fails
+		if jsonErr := json.Unmarshal([]byte(response.Text()), &aiResponse); jsonErr != nil {
+			return nil, fmt.Errorf("failed to parse structured output: %w\nFallback JSON parse error: %v\nResponse: %s", err, jsonErr, response.Text())
+		}
 	}
 
 	// Convert to full discovery struct
@@ -123,42 +179,206 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 	return &discovery, nil
 }
 
-// convertToRawURL converts GitHub tree URLs to raw content URLs
-func (g *GitHubDiscoveryService) convertToRawURL(githubURL string) string {
-	// Convert https://github.com/user/repo/tree/main/path to https://raw.githubusercontent.com/user/repo/main/path
-	rawURL := strings.Replace(githubURL, "github.com", "raw.githubusercontent.com", 1)
+
+// fetchDirectURL fetches content from any direct URL (including raw GitHub URLs)
+func (g *GitHubDiscoveryService) fetchDirectURL(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch content from %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP error %d fetching content from %s", resp.StatusCode, url)
+	}
+
+	// Read response body (limit to reasonable size for README files)
+	body := make([]byte, 500*1024) // 500KB limit for README files
+	n, _ := resp.Body.Read(body)
+	return string(body[:n]), nil
+}
+
+// fetchGitHubContent fetches GitHub README content from raw.githubusercontent.com
+func (g *GitHubDiscoveryService) fetchGitHubContent(githubURL string) (string, error) {
+	// Convert GitHub URL to raw README URL
+	// https://github.com/awslabs/mcp/tree/main/src/aws-knowledge-mcp-server -> 
+	// https://raw.githubusercontent.com/awslabs/mcp/main/src/aws-knowledge-mcp-server/README.md
+	
+	rawURL := g.convertGitHubToRawReadme(githubURL)
+	
+	resp, err := http.Get(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch README from %s: %w", rawURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP error %d fetching README from %s", resp.StatusCode, rawURL)
+	}
+
+	// Read response body (limit to reasonable size)
+	body := make([]byte, 100*1024) // 100KB limit for README files
+	n, _ := resp.Body.Read(body)
+	return string(body[:n]), nil
+}
+
+// convertGitHubToRawReadme converts GitHub tree URLs to raw README URLs
+func (g *GitHubDiscoveryService) convertGitHubToRawReadme(githubURL string) string {
+	// Convert https://github.com/awslabs/mcp/tree/main/src/aws-knowledge-mcp-server to
+	// https://raw.githubusercontent.com/awslabs/mcp/main/src/aws-knowledge-mcp-server/README.md
+	
+	rawURL := githubURL + "/README.md"
+	rawURL = strings.Replace(rawURL, "github.com", "raw.githubusercontent.com", 1)
 	rawURL = strings.Replace(rawURL, "/tree/", "/", 1)
+	
 	return rawURL
 }
 
-// buildAnalysisPrompt creates the prompt for analyzing GitHub repositories
-func (g *GitHubDiscoveryService) buildAnalysisPrompt(githubURL, rawURL string) string {
-	return fmt.Sprintf(`You are an expert at analyzing GitHub repositories for MCP (Model Context Protocol) servers.
+// buildMCPBlockExtractionPrompt creates a prompt to extract all MCP server configuration blocks
+func (g *GitHubDiscoveryService) buildMCPBlockExtractionPrompt(readmeContent string) string {
+	return fmt.Sprintf(`You are an expert at identifying MCP (Model Context Protocol) server configuration blocks in documentation.
 
-Analyze the GitHub repository at: %s
+TASK: Identify ALL distinct MCP server configuration blocks in the provided README content.
 
-Please examine the repository contents, particularly:
-1. README files and documentation
-2. Package.json, Dockerfile, or other build files
-3. Example configurations and installation instructions
-4. Environment variable requirements
+README CONTENT:
+%s
 
-Based on your analysis, provide:
-- serverName: The name of the MCP server (e.g., "filesystem", "github")
-- description: Brief explanation of what this server does
-- type: Usually "stdio" for MCP servers
-- configurations: Array of different installation methods with command, args, and descriptions
-- requiredEnv: Array of environment variables needed, if any
-- installNotes: Any additional setup notes
-
-Look for common patterns:
-- NPX installations: "@modelcontextprotocol/server-*" packages
-- Docker installations: docker run commands
-- Python packages: uvx commands
-- Environment variables: API keys, database URLs, service endpoints
-
-Focus on practical installation methods that users can easily follow.`, githubURL)
+Look for JSON configuration blocks that follow the MCP server pattern:
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "...",
+      "args": [...],
+      "env": {...}
+    }
+  }
 }
+
+Or individual server configurations like:
+"server-name": {
+  "command": "...",
+  "args": [...],
+  "env": {...}  
+}
+
+IMPORTANT INSTRUCTIONS:
+1. Find ALL distinct server configurations (not just the first one)
+2. Extract the complete JSON block for each server
+3. Identify the server name from the JSON key
+4. Include surrounding context (the paragraph or section where you found it)
+5. Provide a brief description of what each server does based on the documentation
+
+You MUST respond with ONLY valid JSON in exactly this structure:
+
+{
+  "blocks": [
+    {
+      "serverName": "exact-server-name-from-json",
+      "rawBlock": "the complete JSON configuration block as a string",
+      "description": "brief description of what this server provides",
+      "context": "surrounding text/section from README that provides context"
+    }
+  ]
+}
+
+Find ALL MCP server blocks, not just one. Each distinct server configuration should be a separate block.`, readmeContent)
+}
+
+// buildEnhancedAnalysisPrompt creates an enhanced prompt for analyzing GitHub repositories
+func (g *GitHubDiscoveryService) buildEnhancedAnalysisPrompt(githubURL string, pageContent string) string {
+	return fmt.Sprintf(`You are an expert at analyzing GitHub repositories for MCP (Model Context Protocol) servers and understanding their proper configuration structures.
+
+TASK: Analyze the GitHub repository at %s to extract complete MCP server configuration information.
+
+REPOSITORY CONTENT:
+%s
+
+Based on the actual repository content provided above, determine the correct server name, installation methods, and configuration options. DO NOT generate generic responses.
+
+MCP SERVER CONFIGURATION STRUCTURE:
+MCP servers are configured in mcpServers object:
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "npx|docker|python|uvx|node|...",
+      "args": ["array", "of", "arguments"],  // CRITICAL: Include ALL needed args
+      "env": {
+        "ENV_VAR": "value"  // Optional environment variables
+      }
+    }
+  }
+}
+
+DEPLOYMENT METHOD PATTERNS:
+
+1. NPX (most common):
+   - Command: "npx"
+   - Args: ["-y", "@modelcontextprotocol/server-{name}", ...required-args]
+   - Look for exact NPX package name in package.json or README
+
+2. UVX (Python):
+   - Command: "uvx"  
+   - Args: ["mcp-server-{name}", ...args]
+   - Look for Python package name
+
+3. Docker:
+   - Command: "docker"
+   - Args: ["run", "-i", "--rm", "--mount", "type=bind,src=path,dst=/container/path", "image:tag", ...server-args]
+   - Include necessary volume mounts
+
+4. Direct execution:
+   - Command: "node" or "python"
+   - Args: ["path/to/executable", ...args]
+
+CONNECTION PROTOCOLS:
+- "stdio": Standard input/output (most common)
+- "sse": Server-Sent Events over HTTP (needs port)
+- "http": HTTP API (needs port)
+
+CRITICAL ANALYSIS POINTS:
+- Extract EXACT package names from npm/PyPI
+- Find ALL required arguments (paths, API endpoints, etc.)
+- Identify environment variables with examples
+- Note port numbers if SSE/HTTP server
+- Determine connection protocol type
+- Look for multiple deployment options
+- Find prerequisite setup steps
+
+CRITICAL: You MUST respond with ONLY valid JSON in exactly this structure. Do NOT include null values:
+
+{
+  "serverName": "exact-server-identifier",
+  "description": "what tools/capabilities it provides",
+  "type": "stdio",
+  "configurations": [
+    {
+      "name": "NPX Install",
+      "command": "npx",
+      "args": ["-y", "@exact/package-name"],
+      "description": "how this option works",
+      "recommended": true
+    }
+  ],
+  "requiredEnv": [
+    {
+      "name": "ENV_VAR_NAME",
+      "description": "what this variable does",
+      "required": true,
+      "example": "example-value"
+    }
+  ],
+  "installNotes": "prerequisites and setup steps"
+}
+
+IMPORTANT: 
+- command field must be a string like "npx", "docker", "python", etc - NEVER null
+- args field must be an array of strings - NEVER null, use empty array [] if no args
+- If this is a remote MCP server (like AWS), use type "sse" and include the endpoint URL in args
+
+Analyze the repository content provided and respond with ONLY the JSON structure above.`, 
+		githubURL, pageContent)
+}
+
 
 // validateAndEnhanceDiscovery validates and enhances the discovery response
 func (g *GitHubDiscoveryService) validateAndEnhanceDiscovery(discovery *MCPServerDiscovery) {
@@ -167,16 +387,42 @@ func (g *GitHubDiscoveryService) validateAndEnhanceDiscovery(discovery *MCPServe
 		discovery.Type = "stdio" // Most MCP servers use stdio
 	}
 
-	// Ensure at least one configuration option exists
+	// Ensure at least one configuration option exists and clean up invalid ones
+	validConfigs := []MCPConfigOption{}
+	for _, config := range discovery.Configurations {
+		// Skip configurations with empty command
+		if config.Command == "" {
+			continue
+		}
+		// Ensure args is not nil
+		if config.Args == nil {
+			config.Args = []string{}
+		}
+		validConfigs = append(validConfigs, config)
+	}
+	
+	discovery.Configurations = validConfigs
+	
 	if len(discovery.Configurations) == 0 {
 		// Create a basic configuration based on common patterns
-		discovery.Configurations = append(discovery.Configurations, MCPConfigOption{
-			Name:        "Basic Setup",
-			Command:     "npx",
-			Args:        []string{"-y", discovery.ServerName},
-			Description: "Standard NPX installation",
-			Recommended: true,
-		})
+		if strings.Contains(discovery.ServerName, "aws") {
+			// AWS servers are typically remote HTTPS servers
+			discovery.Configurations = append(discovery.Configurations, MCPConfigOption{
+				Name:        "Remote HTTPS Server",
+				Command:     "npx",
+				Args:        []string{"-y", "@aws/mcp-client", "https://aws-knowledge-mcp-server.amazonaws.com"},
+				Description: "Connect to AWS Knowledge MCP Server",
+				Recommended: true,
+			})
+		} else {
+			discovery.Configurations = append(discovery.Configurations, MCPConfigOption{
+				Name:        "NPX Install",
+				Command:     "npx",
+				Args:        []string{"-y", "@modelcontextprotocol/server-" + discovery.ServerName},
+				Description: "Standard NPX installation",
+				Recommended: true,
+			})
+		}
 	}
 
 	// Mark first config as recommended if none are marked
@@ -214,50 +460,3 @@ func (g *GitHubDiscoveryService) validateAndEnhanceDiscovery(discovery *MCPServe
 	}
 }
 
-// WebSearchTool creates a web search tool for Genkit
-func (g *GitHubDiscoveryService) WebSearchTool() ai.Tool {
-	return genkit.DefineTool(g.genkit, "web_search", "Search the web and fetch content from URLs",
-		func(ctx *ai.ToolContext, input struct {
-			URL   string `json:"url"`
-			Query string `json:"query,omitempty"`
-		}) (struct {
-			Content    string `json:"content"`
-			StatusCode int    `json:"status_code"`
-			URL        string `json:"url"`
-		}, error) {
-			// Fetch content from URL
-			resp, err := http.Get(input.URL)
-			if err != nil {
-				return struct {
-					Content    string `json:"content"`
-					StatusCode int    `json:"status_code"`
-					URL        string `json:"url"`
-				}{}, fmt.Errorf("failed to fetch URL: %w", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				return struct {
-					Content    string `json:"content"`
-					StatusCode int    `json:"status_code"`
-					URL        string `json:"url"`
-				}{}, fmt.Errorf("HTTP error: %d", resp.StatusCode)
-			}
-
-			// Read response body (limit to reasonable size)
-			body := make([]byte, 100*1024) // 100KB limit
-			n, _ := resp.Body.Read(body)
-			content := string(body[:n])
-
-			return struct {
-				Content    string `json:"content"`
-				StatusCode int    `json:"status_code"`
-				URL        string `json:"url"`
-			}{
-				Content:    content,
-				StatusCode: resp.StatusCode,
-				URL:        input.URL,
-			}, nil
-		},
-	)
-}

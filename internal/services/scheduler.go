@@ -50,11 +50,31 @@ func (s *SchedulerService) Start() error {
 	return nil
 }
 
-// Stop stops the cron scheduler
+// Stop stops the cron scheduler with timeout
 func (s *SchedulerService) Stop() {
 	log.Println("Stopping agent scheduler service...")
-	s.cron.Stop()
-	log.Println("Agent scheduler service stopped")
+	
+	// Create context with timeout for graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	
+	// Stop scheduler in goroutine
+	done := make(chan struct{})
+	go func() {
+		s.cron.Stop()
+		close(done)
+	}()
+	
+	// Wait for shutdown or timeout
+	select {
+	case <-done:
+		log.Println("Agent scheduler service stopped gracefully")
+	case <-ctx.Done():
+		log.Println("Agent scheduler service stop timeout - forcing close")
+	}
+	
+	// Clear agent tracking
+	s.agents = make(map[int64]cron.EntryID)
 }
 
 // ScheduleAgent adds or updates a scheduled agent

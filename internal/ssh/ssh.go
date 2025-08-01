@@ -115,9 +115,26 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		log.Println("Shutting down SSH server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// Very aggressive timeout - 1s for SSH shutdown
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		return s.srv.Shutdown(shutdownCtx)
+		
+		// Start shutdown immediately
+		done := make(chan error, 1)
+		go func() {
+			done <- s.srv.Shutdown(shutdownCtx)
+		}()
+		
+		// Wait for shutdown or force close
+		select {
+		case err := <-done:
+			log.Println("SSH server stopped gracefully")
+			return err
+		case <-shutdownCtx.Done():
+			log.Println("SSH server shutdown timeout - forcing close")
+			// Force immediate close
+			return s.srv.Close()
+		}
 	}
 }
 

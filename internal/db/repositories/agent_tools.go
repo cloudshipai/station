@@ -22,9 +22,10 @@ func NewAgentToolRepo(db *sql.DB) *AgentToolRepo {
 // convertAgentToolFromSQLc converts sqlc AgentTool to models.AgentTool
 func convertAgentToolFromSQLc(agentTool queries.AgentTool) *models.AgentTool {
 	result := &models.AgentTool{
-		ID:      agentTool.ID,
-		AgentID: agentTool.AgentID,
-		ToolID:  agentTool.ToolID,
+		ID:            agentTool.ID,
+		AgentID:       agentTool.AgentID,
+		ToolName:      agentTool.ToolName,
+		EnvironmentID: agentTool.EnvironmentID,
 	}
 	
 	if agentTool.CreatedAt.Valid {
@@ -38,9 +39,10 @@ func convertAgentToolFromSQLc(agentTool queries.AgentTool) *models.AgentTool {
 func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.AgentToolWithDetails {
 	result := &models.AgentToolWithDetails{
 		AgentTool: models.AgentTool{
-			ID:      row.ID,
-			AgentID: row.AgentID,
-			ToolID:  row.ToolID,
+			ID:            row.ID,
+			AgentID:       row.AgentID,
+			ToolName:      row.ToolName,
+			EnvironmentID: row.EnvironmentID,
 		},
 		ToolName:      row.ToolName,
 		ServerName:    row.ServerName,
@@ -63,10 +65,11 @@ func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.
 }
 
 // Add creates a new agent-tool assignment 
-func (r *AgentToolRepo) Add(agentID, toolID int64) (*models.AgentTool, error) {
+func (r *AgentToolRepo) Add(agentID int64, toolName string, environmentID int64) (*models.AgentTool, error) {
 	params := queries.AddAgentToolParams{
-		AgentID: agentID,
-		ToolID:  toolID,
+		AgentID:       agentID,
+		ToolName:      toolName,
+		EnvironmentID: environmentID,
 	}
 	
 	created, err := r.queries.AddAgentTool(context.Background(), params)
@@ -78,10 +81,11 @@ func (r *AgentToolRepo) Add(agentID, toolID int64) (*models.AgentTool, error) {
 }
 
 // Remove removes a specific agent-tool assignment
-func (r *AgentToolRepo) Remove(agentID, toolID int64) error {
+func (r *AgentToolRepo) Remove(agentID int64, toolName string, environmentID int64) error {
 	params := queries.RemoveAgentToolParams{
-		AgentID: agentID,
-		ToolID:  toolID,
+		AgentID:       agentID,
+		ToolName:      toolName,
+		EnvironmentID: environmentID,
 	}
 	return r.queries.RemoveAgentTool(context.Background(), params)
 }

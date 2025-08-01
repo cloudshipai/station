@@ -175,13 +175,22 @@ func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) 
 	var tools []*models.MCPToolWithDetails
 	for rows.Next() {
 		var tool models.MCPToolWithDetails
+		var schemaStr sql.NullString // Use NullString to handle NULL values
 		err := rows.Scan(
-			&tool.ID, &tool.MCPServerID, &tool.Name, &tool.Description, &tool.Schema, &tool.CreatedAt,
+			&tool.ID, &tool.MCPServerID, &tool.Name, &tool.Description, &schemaStr, &tool.CreatedAt,
 			&tool.ServerName, &tool.ConfigID, &tool.ConfigName, &tool.ConfigVersion, &tool.EnvironmentID, &tool.EnvironmentName,
 		)
 		if err != nil {
 			return nil, err
 		}
+		
+		// Convert NullString to json.RawMessage
+		if schemaStr.Valid && schemaStr.String != "" {
+			tool.Schema = json.RawMessage(schemaStr.String)
+		} else {
+			tool.Schema = json.RawMessage("null")
+		}
+		
 		tools = append(tools, &tool)
 	}
 	

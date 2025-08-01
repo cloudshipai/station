@@ -120,7 +120,7 @@ func (eq *ExecutionQueueService) Start() error {
 	return nil
 }
 
-// Stop gracefully stops the execution queue service
+// Stop gracefully stops the execution queue service with timeout
 func (eq *ExecutionQueueService) Stop() {
 	eq.mu.Lock()
 	defer eq.mu.Unlock()
@@ -131,14 +131,26 @@ func (eq *ExecutionQueueService) Stop() {
 	
 	log.Println("Stopping execution queue service...")
 	
-	// Cancel context to signal workers to stop
+	// Cancel context to signal workers to stop immediately
 	eq.cancel()
 	
 	// Close request queue to signal no more requests
 	close(eq.requestQueue)
 	
-	// Wait for all workers and result processor to finish
-	eq.wg.Wait()
+	// Wait for workers with aggressive timeout
+	done := make(chan struct{})
+	go func() {
+		eq.wg.Wait()
+		close(done)
+	}()
+	
+	// 1 second timeout for worker shutdown
+	select {
+	case <-done:
+		log.Println("All workers stopped gracefully")
+	case <-time.After(1 * time.Second):
+		log.Println("Worker shutdown timeout - forcing stop")
+	}
 	
 	// Close result queue
 	close(eq.resultQueue)

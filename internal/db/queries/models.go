@@ -26,6 +26,13 @@ type Agent struct {
 	UpdatedAt        sql.NullTime   `json:"updated_at"`
 }
 
+type AgentEnvironment struct {
+	ID            int64        `json:"id"`
+	AgentID       int64        `json:"agent_id"`
+	EnvironmentID int64        `json:"environment_id"`
+	CreatedAt     sql.NullTime `json:"created_at"`
+}
+
 type AgentRun struct {
 	ID             int64          `json:"id"`
 	AgentID        int64          `json:"agent_id"`
@@ -41,16 +48,18 @@ type AgentRun struct {
 }
 
 type AgentTool struct {
-	ID        int64        `json:"id"`
-	AgentID   int64        `json:"agent_id"`
-	ToolID    int64        `json:"tool_id"`
-	CreatedAt sql.NullTime `json:"created_at"`
+	ID            int64        `json:"id"`
+	AgentID       int64        `json:"agent_id"`
+	ToolName      string       `json:"tool_name"`
+	EnvironmentID int64        `json:"environment_id"`
+	CreatedAt     sql.NullTime `json:"created_at"`
 }
 
 type Environment struct {
 	ID          int64          `json:"id"`
 	Name        string         `json:"name"`
 	Description sql.NullString `json:"description"`
+	CreatedBy   int64          `json:"created_by"`
 	CreatedAt   sql.NullTime   `json:"created_at"`
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
