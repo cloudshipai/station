@@ -11,23 +11,25 @@ import (
 )
 
 const createEnvironment = `-- name: CreateEnvironment :one
-INSERT INTO environments (name, description)
-VALUES (?, ?)
-RETURNING id, name, description, created_at, updated_at
+INSERT INTO environments (name, description, created_by)
+VALUES (?, ?, ?)
+RETURNING id, name, description, created_by, created_at, updated_at
 `
 
 type CreateEnvironmentParams struct {
 	Name        string         `json:"name"`
 	Description sql.NullString `json:"description"`
+	CreatedBy   int64          `json:"created_by"`
 }
 
 func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (Environment, error) {
-	row := q.db.QueryRowContext(ctx, createEnvironment, arg.Name, arg.Description)
+	row := q.db.QueryRowContext(ctx, createEnvironment, arg.Name, arg.Description, arg.CreatedBy)
 	var i Environment
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Description,
+		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -44,7 +46,7 @@ func (q *Queries) DeleteEnvironment(ctx context.Context, id int64) error {
 }
 
 const getEnvironment = `-- name: GetEnvironment :one
-SELECT id, name, description, created_at, updated_at FROM environments WHERE id = ?
+SELECT id, name, description, created_by, created_at, updated_at FROM environments WHERE id = ?
 `
 
 func (q *Queries) GetEnvironment(ctx context.Context, id int64) (Environment, error) {
@@ -54,6 +56,7 @@ func (q *Queries) GetEnvironment(ctx context.Context, id int64) (Environment, er
 		&i.ID,
 		&i.Name,
 		&i.Description,
+		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -61,7 +64,7 @@ func (q *Queries) GetEnvironment(ctx context.Context, id int64) (Environment, er
 }
 
 const getEnvironmentByName = `-- name: GetEnvironmentByName :one
-SELECT id, name, description, created_at, updated_at FROM environments WHERE name = ?
+SELECT id, name, description, created_by, created_at, updated_at FROM environments WHERE name = ?
 `
 
 func (q *Queries) GetEnvironmentByName(ctx context.Context, name string) (Environment, error) {
@@ -71,6 +74,7 @@ func (q *Queries) GetEnvironmentByName(ctx context.Context, name string) (Enviro
 		&i.ID,
 		&i.Name,
 		&i.Description,
+		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -78,7 +82,7 @@ func (q *Queries) GetEnvironmentByName(ctx context.Context, name string) (Enviro
 }
 
 const listEnvironments = `-- name: ListEnvironments :many
-SELECT id, name, description, created_at, updated_at FROM environments ORDER BY name
+SELECT id, name, description, created_by, created_at, updated_at FROM environments ORDER BY name
 `
 
 func (q *Queries) ListEnvironments(ctx context.Context) ([]Environment, error) {
@@ -94,6 +98,7 @@ func (q *Queries) ListEnvironments(ctx context.Context) ([]Environment, error) {
 			&i.ID,
 			&i.Name,
 			&i.Description,
+			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

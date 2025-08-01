@@ -62,6 +62,27 @@ func NewKeyManagerFromEnv() (*KeyManager, error) {
 	return NewKeyManager(key), nil
 }
 
+// NewKeyManagerFromConfig creates a new key manager using the encryption key from viper config
+func NewKeyManagerFromConfig(encryptionKey string) (*KeyManager, error) {
+	if encryptionKey == "" {
+		return nil, fmt.Errorf("encryption_key is required in config file")
+	}
+	
+	keyBytes, err := hex.DecodeString(encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode encryption_key from config: %w", err)
+	}
+	
+	if len(keyBytes) != 32 {
+		return nil, fmt.Errorf("encryption_key in config must be 32 bytes (64 hex characters), got %d bytes", len(keyBytes))
+	}
+	
+	key := &Key{}
+	copy(key[:], keyBytes)
+	
+	return NewKeyManager(key), nil
+}
+
 // GetActiveKey returns the currently active encryption key
 func (km *KeyManager) GetActiveKey() *KeyVersion {
 	return km.activeKey

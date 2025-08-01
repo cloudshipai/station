@@ -1,4 +1,4 @@
-# Contributing to Station 🚂
+# Contributing to Station 
 
 Thank you for your interest in contributing to Station! This guide will help you get started with contributing to our revolutionary AI infrastructure platform.
 

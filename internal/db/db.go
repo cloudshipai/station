@@ -35,6 +35,11 @@ func New(databaseURL string) (*DB, error) {
 }
 
 func (db *DB) Close() error {
+	// Set connection limits for faster shutdown
+	db.conn.SetMaxOpenConns(0)
+	db.conn.SetMaxIdleConns(0)
+	db.conn.SetConnMaxLifetime(0)
+	
 	return db.conn.Close()
 }
 
