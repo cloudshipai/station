@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	_ "fmt" // Remove unused import
 	"io"
 	"log"
 	"net/http"

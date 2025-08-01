@@ -1,3 +1,4 @@
+-- +goose Up
 -- Migration: Add notifications and webhooks system
 -- Version: 012
 -- Description: Add system settings, webhooks configuration, and webhook delivery tracking
@@ -58,3 +59,8 @@ CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status);
 CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhook_deliveries_event_type ON webhook_deliveries(event_type);
 CREATE INDEX idx_webhook_deliveries_next_retry ON webhook_deliveries(next_retry_at) WHERE status = 'failed' AND next_retry_at IS NOT NULL;
+
+-- +goose Down
+DROP TABLE webhook_deliveries;
+DROP TABLE webhooks;
+DROP TABLE settings;

@@ -55,6 +55,22 @@ func (ts *ToolsServer) setupEnhancedTools() {
 	
 	// Add prompts for AI-assisted agent creation
 	ts.setupAgentCreationPrompts()
+	
+	// Add specialized prompts for common use cases 
+	ts.setupSpecializedPrompts()
+}
+
+// setupSpecializedPrompts adds prompts for common agent creation use cases
+func (ts *ToolsServer) setupSpecializedPrompts() {
+	// AWS logs analysis agent prompt
+	logsAnalysisPrompt := mcp.NewPrompt("create_logs_analysis_agent",
+		mcp.WithPromptDescription("Guide for creating an agent that searches and analyzes AWS logs for urgent issues"),
+		mcp.WithArgument("log_sources", mcp.ArgumentDescription("AWS log sources to analyze (CloudWatch, S3, etc.)")),
+		mcp.WithArgument("urgency_criteria", mcp.ArgumentDescription("What makes a log entry urgent or high priority")),
+		mcp.WithArgument("analysis_depth", mcp.ArgumentDescription("Level of analysis needed (summary, detailed, root-cause)")),
+	)
+	
+	ts.mcpServer.AddPrompt(logsAnalysisPrompt, ts.handleLogsAnalysisPrompt)
 }
 
 // setupAgentCreationPrompts adds prompts that guide AI clients in creating agents
@@ -309,4 +325,97 @@ func (ts *ToolsServer) handleCallAgentAdvanced(ctx context.Context, request mcp.
 	
 	resultJSON, _ := json.MarshalIndent(result, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+// handleLogsAnalysisPrompt provides specialized guidance for AWS logs analysis agent creation
+func (ts *ToolsServer) handleLogsAnalysisPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	logSources := ""
+	urgencyCriteria := ""
+	analysisDepth := ""
+	
+	// Extract arguments if provided
+	if args := request.Params.Arguments; args != nil {
+		if sources, ok := args["log_sources"]; ok {
+			logSources = sources
+		}
+		if criteria, ok := args["urgency_criteria"]; ok {
+			urgencyCriteria = criteria
+		}
+		if depth, ok := args["analysis_depth"]; ok {
+			analysisDepth = depth
+		}
+	}
+	
+	promptContent := fmt.Sprintf(`# AWS Logs Analysis Agent Creation Guide
+
+## Specialized Agent Configuration
+
+**Agent Purpose**: Intelligent AWS log analysis and urgent issue prioritization
+
+### Recommended Configuration
+
+**Agent Name**: "aws-logs-analyzer"
+**Description**: "Analyzes AWS logs across multiple sources and prioritizes urgent issues for immediate attention"
+
+### Tool Requirements for AWS Logs Analysis
+
+**Essential Tools** (select from available MCP tools):
+- aws-cli or aws-sdk tools for accessing CloudWatch, S3, ECS logs
+- search or grep tools for pattern matching in log files
+- json parsing tools for structured log analysis
+- file operations for log file access
+- notification tools for urgent issue alerts
+
+### System Prompt Template
+
+You are an AWS Logs Analysis Agent specialized in searching and prioritizing urgent issues across AWS infrastructure.
+
+Your Mission: 
+1. Search specified AWS log sources: %s
+2. Identify urgent issues based on: %s
+3. Provide analysis depth: %s
+
+Workflow:
+1. Log Collection: Access logs from CloudWatch, S3 buckets, ECS containers, Lambda functions
+2. Pattern Recognition: Look for error patterns, performance anomalies, security alerts
+3. Urgency Classification: 
+   - CRITICAL: Service outages, security breaches, data loss
+   - HIGH: Performance degradation, failed deployments, resource exhaustion
+   - MEDIUM: Warnings, deprecated API usage, configuration issues
+   - LOW: Info messages, debug traces, routine operations
+
+4. Prioritization: Rank issues by business impact and time sensitivity
+5. Summary Report: Provide actionable insights with timestamps and affected resources
+
+Output Format:
+- CRITICAL issues (immediate action required)
+- HIGH priority issues (address within hours)
+- Summary of patterns and trends
+- Recommended next steps
+
+Error Handling: If log access fails, report the specific AWS service/region and suggest troubleshooting steps.
+
+### Execution Configuration
+- Max Steps: 7 (allows thorough log analysis across multiple sources)
+- Schedule: On-demand (for immediate analysis) or hourly (for continuous monitoring)
+- Environment: Production environment with AWS credentials
+
+### Success Criteria
+- Identifies critical issues within 5 minutes of execution
+- Provides clear priority ranking of all discovered issues
+- Includes specific log entries and timestamps for evidence
+- Suggests concrete remediation steps
+
+Ready to create this agent? Use the 'create_agent' tool with these specifications.
+`, logSources, urgencyCriteria, analysisDepth)
+
+	return mcp.NewGetPromptResult("AWS Logs Analysis Agent Creator", []mcp.PromptMessage{
+		{
+			Role: mcp.RoleUser,
+			Content: mcp.TextContent{
+				Type: "text",
+				Text: promptContent,
+			},
+		},
+	}), nil
 }
