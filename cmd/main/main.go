@@ -68,6 +68,7 @@ func init() {
 	mcpCmd.AddCommand(mcpListCmd)
 	mcpCmd.AddCommand(mcpToolsCmd)
 	mcpCmd.AddCommand(mcpAddCmd)
+	mcpCmd.AddCommand(mcpDeleteCmd)
 	
 	envCmd.AddCommand(envListCmd)
 	envCmd.AddCommand(envCreateCmd)
@@ -125,6 +126,10 @@ func init() {
 	mcpToolsCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpToolsCmd.Flags().String("environment", "default", "Environment to list tools from")
 	mcpToolsCmd.Flags().String("filter", "", "Filter tools by name or description")
+	
+	mcpDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	mcpDeleteCmd.Flags().String("environment", "default", "Environment to delete from")
+	mcpDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
 	
 	// Environment command flags
 	envListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")

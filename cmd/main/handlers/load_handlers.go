@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -29,13 +30,25 @@ import (
 
 // LoadMCPConfig configuration structure for load command
 type LoadMCPConfig struct {
-	MCPServers map[string]LoadMCPServerConfig `json:"mcpServers"`
+	Name        string                        `json:"name,omitempty"`
+	Description string                        `json:"description,omitempty"`
+	MCPServers  map[string]LoadMCPServerConfig `json:"mcpServers"`
+	Templates   map[string]TemplateField      `json:"templates,omitempty"`
 }
 
 type LoadMCPServerConfig struct {
 	Command string            `json:"command"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+}
+
+type TemplateField struct {
+	Description string `json:"description"`
+	Type        string `json:"type"`
+	Required    bool   `json:"required"`
+	Sensitive   bool   `json:"sensitive"`
+	Default     string `json:"default,omitempty"`
+	Help        string `json:"help,omitempty"`
 }
 
 // LoadHandler handles the "stn load" command
@@ -55,6 +68,9 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 	environment, _ := cmd.Flags().GetString("environment")
 	configName, _ := cmd.Flags().GetString("config-name")
 
+	var configFile string
+	var found bool
+
 	// Check if we have a direct README URL as argument
 	if len(args) > 0 && isDirectReadmeURL(args[0]) {
 		fmt.Println(getCLIStyles(h.themeManager).Info.Render("📄 README URL detected, starting TurboTax-style flow..."))
@@ -67,21 +83,29 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 		return h.runGitHubDiscoveryFlow(args[0], environment, endpoint)
 	}
 
-	// Look for MCP configuration file
-	configFiles := []string{"mcp.json", ".mcp.json"}
-	var configFile string
-	var found bool
-
-	for _, file := range configFiles {
-		if _, err := os.Stat(file); err == nil {
-			configFile = file
+	// Check if we have a direct file argument
+	if len(args) > 0 {
+		if _, err := os.Stat(args[0]); err == nil {
+			configFile = args[0]
 			found = true
-			break
+		} else {
+			return fmt.Errorf("file not found: %s", args[0])
 		}
-	}
+	} else {
+		// Look for MCP configuration file in current directory
+		configFiles := []string{"mcp.json", ".mcp.json"}
+		
+		for _, file := range configFiles {
+			if _, err := os.Stat(file); err == nil {
+				configFile = file
+				found = true
+				break
+			}
+		}
 
-	if !found {
-		return fmt.Errorf("no MCP configuration file found. Looking for: %s", configFiles)
+		if !found {
+			return fmt.Errorf("no MCP configuration file found. Looking for: %s", configFiles)
+		}
 	}
 
 	fmt.Printf("📄 Found config file: %s\n", configFile)
@@ -103,13 +127,39 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("🔧 Found %d MCP server(s)\n", len(mcpConfig.MCPServers))
 
+	// Check if this is a template configuration and handle it
+	if hasTemplates, missingValues := h.detectTemplates(&mcpConfig); hasTemplates {
+		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🧩 Template configuration detected"))
+		
+		// Show credential form for missing values
+		processedConfig, err := h.processTemplateConfig(&mcpConfig, missingValues)
+		if err != nil {
+			return fmt.Errorf("failed to process template: %w", err)
+		}
+		
+		if processedConfig == nil {
+			fmt.Println(getCLIStyles(h.themeManager).Info.Render("Template configuration cancelled"))
+			return nil
+		}
+		
+		// Use the processed config
+		mcpConfig = *processedConfig
+	}
+
 	// Use filename as default config name if not provided
 	if configName == "" {
-		configName = filepath.Base(configFile)
-		if ext := filepath.Ext(configName); ext != "" {
-			configName = configName[:len(configName)-len(ext)]
+		if mcpConfig.Name != "" {
+			configName = mcpConfig.Name
+		} else {
+			configName = filepath.Base(configFile)
+			if ext := filepath.Ext(configName); ext != "" {
+				configName = configName[:len(configName)-len(ext)]
+			}
 		}
 	}
+
+	// Add unique ID suffix to prevent duplicates
+	configName = h.generateUniqueConfigName(configName)
 
 	fmt.Printf("📝 Config name: %s\n", configName)
 	fmt.Printf("🌍 Environment: %s\n", environment)
@@ -759,6 +809,124 @@ func extractMCPBlocksFromContent(content string) []services.MCPServerBlock {
 	}
 	
 	return blocks
+}
+
+// detectTemplates checks if the configuration has template placeholders
+func (h *LoadHandler) detectTemplates(config *LoadMCPConfig) (bool, []string) {
+	var missingValues []string
+	hasTemplates := false
+	
+	// Check if there's a templates section
+	if len(config.Templates) > 0 {
+		hasTemplates = true
+	}
+	
+	// Scan all environment variables for template placeholders
+	templatePattern := regexp.MustCompile(`\{\{([^}]+)\}\}`)
+	
+	for _, serverConfig := range config.MCPServers {
+		for key, value := range serverConfig.Env {
+			matches := templatePattern.FindAllStringSubmatch(value, -1)
+			for _, match := range matches {
+				if len(match) > 1 {
+					placeholder := match[1]
+					hasTemplates = true
+					
+					// Check if we have a template definition for this placeholder
+					if _, exists := config.Templates[placeholder]; exists {
+						missingValues = append(missingValues, placeholder)
+					} else {
+						// Create a basic template for unknown placeholders
+						if config.Templates == nil {
+							config.Templates = make(map[string]TemplateField)
+						}
+						config.Templates[placeholder] = TemplateField{
+							Description: fmt.Sprintf("Value for %s in %s", placeholder, key),
+							Type:        "string",
+							Required:    true,
+						}
+						missingValues = append(missingValues, placeholder)
+					}
+				}
+			}
+		}
+	}
+	
+	return hasTemplates, missingValues
+}
+
+// processTemplateConfig shows credential forms and processes templates
+func (h *LoadHandler) processTemplateConfig(config *LoadMCPConfig, missingValues []string) (*LoadMCPConfig, error) {
+	if len(missingValues) == 0 {
+		return config, nil
+	}
+	
+	fmt.Printf("🔑 Configuration requires %d credential(s):\n", len(missingValues))
+	
+	// Collect values from user
+	values := make(map[string]string)
+	
+	for _, placeholder := range missingValues {
+		template := config.Templates[placeholder]
+		
+		fmt.Printf("\n📝 %s\n", template.Description)
+		if template.Help != "" {
+			fmt.Printf("💡 %s\n", template.Help)
+		}
+		
+		var value string
+		if template.Default != "" {
+			fmt.Printf("Enter value (default: %s): ", template.Default)
+		} else if template.Required {
+			fmt.Printf("Enter value (required): ")
+		} else {
+			fmt.Printf("Enter value (optional): ")
+		}
+		
+		// Read input
+		var input string
+		if _, err := fmt.Scanln(&input); err != nil && template.Required {
+			return nil, fmt.Errorf("input required for %s", placeholder)
+		}
+		
+		if input == "" && template.Default != "" {
+			value = template.Default
+		} else if input == "" && template.Required {
+			return nil, fmt.Errorf("value required for %s", placeholder)
+		} else {
+			value = input
+		}
+		
+		values[placeholder] = value
+		
+		if template.Sensitive {
+			fmt.Printf("✅ Secured credential for %s\n", placeholder)
+		} else {
+			fmt.Printf("✅ Set %s = %s\n", placeholder, value)
+		}
+	}
+	
+	// Process templates by replacing placeholders
+	processedConfig := *config
+	
+	for serverName, serverConfig := range processedConfig.MCPServers {
+		for envKey, envValue := range serverConfig.Env {
+			processedValue := envValue
+			for placeholder, value := range values {
+				processedValue = strings.ReplaceAll(processedValue, fmt.Sprintf("{{%s}}", placeholder), value)
+			}
+			serverConfig.Env[envKey] = processedValue
+		}
+		processedConfig.MCPServers[serverName] = serverConfig
+	}
+	
+	return &processedConfig, nil
+}
+
+// generateUniqueConfigName adds a timestamp suffix to prevent duplicates
+func (h *LoadHandler) generateUniqueConfigName(baseName string) string {
+	timestamp := time.Now().Format("20060102-150405")
+	return fmt.Sprintf("%s-%s", baseName, timestamp)
 }
 
 // Helper functions are now in common.go
