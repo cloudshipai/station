@@ -17,6 +17,9 @@ type Repositories struct {
 	AgentEnvironments  *AgentEnvironmentRepo
 	AgentTools         *AgentToolRepo
 	AgentRuns          *AgentRunRepo
+	Settings           *SettingsRepo
+	Webhooks           *WebhooksRepo
+	WebhookDeliveries  *WebhookDeliveriesRepo
 	db                 db.Database // Store reference to database for transactions
 }
 
@@ -35,6 +38,9 @@ func New(database db.Database) *Repositories {
 		AgentEnvironments: NewAgentEnvironmentRepo(conn),
 		AgentTools:        NewAgentToolRepo(conn),
 		AgentRuns:         NewAgentRunRepo(conn),
+		Settings:          NewSettingsRepo(conn),
+		Webhooks:          NewWebhooksRepo(conn),
+		WebhookDeliveries: NewWebhookDeliveriesRepo(conn),
 		db:                database,
 	}
 }

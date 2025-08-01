@@ -76,6 +76,7 @@ func runMainServer() error {
 
 	// Initialize all required services
 	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
+	webhookSvc := services.NewWebhookService(repos)
 	
 	// Create default environment if none exists
 	if err := ensureDefaultEnvironment(ctx, repos); err != nil {
@@ -106,6 +107,7 @@ func runMainServer() error {
 		repos.AgentEnvironments,
 		repos.Environments,
 		mcpConfigSvc,
+		webhookSvc,
 	)
 	
 	// Initialize MCP for the agent service
@@ -114,7 +116,7 @@ func runMainServer() error {
 	}
 	
 	// Initialize execution queue service for async agent execution
-	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, 5) // 5 workers
+	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, webhookSvc, 5) // 5 workers
 	
 	// Start execution queue service
 	if err := executionQueueSvc.Start(); err != nil {
@@ -130,6 +132,28 @@ func runMainServer() error {
 		return fmt.Errorf("failed to start scheduler service: %w", err)
 	}
 	defer schedulerSvc.Stop()
+	
+	// Start webhook retry processor
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Printf("🪝 Starting webhook retry processor...")
+		
+		ticker := time.NewTicker(1 * time.Minute) // Process retries every minute
+		defer ticker.Stop()
+		
+		for {
+			select {
+			case <-ticker.C:
+				if err := webhookSvc.ProcessRetries(ctx); err != nil {
+					log.Printf("Webhook retry processing error: %v", err)
+				}
+			case <-ctx.Done():
+				log.Printf("🪝 Webhook retry processor stopping...")
+				return
+			}
+		}
+	}()
 
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
@@ -144,7 +168,7 @@ func runMainServer() error {
 	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService, agentSvc)
 
-	wg.Add(3)
+	wg.Add(4) // SSH, MCP, API, and webhook retry processor
 
 	go func() {
 		defer wg.Done()
