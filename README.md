@@ -316,6 +316,37 @@ stn cloudship connect --fleet-id xxx
 - 100MB disk space
 - Network access to your tools/APIs
 
+## Privacy & Telemetry
+
+Station collects **anonymous usage telemetry** to help improve the product. All data is anonymized and no sensitive information is transmitted.
+
+### What We Collect
+- **System info**: OS, architecture, Go version
+- **Usage metrics**: Agent creation, execution success/failure, CLI commands
+- **Performance data**: Execution times, step counts, error types
+- **Feature usage**: MCP server loading, environment creation
+
+### What We DON'T Collect
+- Your credentials, API keys, or secrets
+- Agent configurations or tool parameters  
+- File contents, command outputs, or any sensitive data
+- Personal information or identifiable data
+
+### Anonymous Identifiers
+- **User ID**: Hash of hostname + system info (`anon_abc12345`)
+- **Machine ID**: Hash of hostname for grouping (`machine_def678`)
+
+### Opt-Out
+```bash
+# Disable telemetry completely
+stn settings set telemetry_enabled false
+
+# Check current status
+stn settings get telemetry_enabled
+```
+
+Telemetry helps us understand which features are used and where Station needs improvement. Your privacy is important to us - we only collect what's necessary to make Station better.
+
 ## License
 
 AGPL-3.0 - See [LICENSE](LICENSE) for details.
