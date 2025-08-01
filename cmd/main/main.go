@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"station/internal/db"
+	"station/internal/theme"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile string
-	rootCmd = &cobra.Command{
+	cfgFile      string
+	themeManager *theme.ThemeManager
+	rootCmd      = &cobra.Command{
 		Use:   "stn",
 		Short: "Station - AI Agent Management Platform",
 		Long: `Station is a secure, self-hosted platform for managing AI agents with MCP tool integration.
@@ -21,6 +25,7 @@ It provides a retro terminal interface for system administration and agent manag
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initTheme)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/station/config.yaml)")
@@ -37,6 +42,12 @@ func init() {
 	
 	configCmd.AddCommand(configShowCmd)
 	configCmd.AddCommand(configEditCmd)
+	configCmd.AddCommand(themeCmd)
+	
+	themeCmd.AddCommand(themeListCmd)
+	themeCmd.AddCommand(themeSetCmd)
+	themeCmd.AddCommand(themePreviewCmd)
+	themeCmd.AddCommand(themeSelectCmd)
 	
 	keyCmd.AddCommand(keyGenerateCmd)
 	keyCmd.AddCommand(keySetCmd)
@@ -107,6 +118,29 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Printf("Using config file: %s\n", viper.ConfigFileUsed())
 	}
+}
+
+func initTheme() {
+	// Try to initialize theme manager with database
+	// For CLI commands, we'll use fallback themes if database is not available
+	databasePath := viper.GetString("database_url")
+	if databasePath == "" {
+		databasePath = "station.db"
+	}
+	
+	// Check if database file exists and is accessible
+	if _, err := os.Stat(databasePath); err == nil {
+		// Database exists, try to connect
+		if database, err := db.New(databasePath); err == nil {
+			themeManager = theme.NewThemeManager(database)
+			// Try to initialize built-in themes and load default theme
+			ctx := context.Background()
+			themeManager.InitializeBuiltInThemes(ctx)
+			themeManager.LoadDefaultTheme(ctx)
+		}
+	}
+	
+	// If themeManager is still nil, commands will use fallback themes
 }
 
 func getXDGConfigDir() string {
