@@ -18,6 +18,14 @@ import (
 	"station/internal/theme"
 )
 
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
 // MCPHandler handles MCP-related commands
 type MCPHandler struct {
 	themeManager *theme.ThemeManager
@@ -82,12 +90,24 @@ func (h *MCPHandler) listMCPConfigsLocal(environment string) error {
 		return nil
 	}
 
-	fmt.Printf("Found %d configuration(s):\n", len(configs))
+	fmt.Printf("Found %d configuration(s):\n\n", len(configs))
+	
+	// Print table header
+	fmt.Printf("┌──────────────────────────────────────────────────────────────────────┐\n")
+	fmt.Printf("│ %-4s │ %-40s │ %-8s │ %-14s │\n", 
+		"ID", "Configuration Name", "Version", "Created")
+	fmt.Printf("├──────────────────────────────────────────────────────────────────────┤\n")
+	
+	// Print each config
 	for _, config := range configs {
-		fmt.Printf("• %s v%d (ID: %d) - %s\n", 
-			config.ConfigName, config.Version, config.ID, 
-			config.CreatedAt.Format("Jan 2, 2006 15:04"))
+		fmt.Printf("│ %-4d │ %-40s │ v%-7d │ %-14s │\n", 
+			config.ID, 
+			truncateString(config.ConfigName, 40),
+			config.Version, 
+			config.CreatedAt.Format("Jan 2 15:04"))
 	}
+	
+	fmt.Printf("└──────────────────────────────────────────────────────────────────────┘\n")
 
 	return nil
 }
@@ -208,11 +228,30 @@ func (h *MCPHandler) listMCPToolsLocal(environment, filter string) error {
 		return nil
 	}
 
-	fmt.Printf("Found %d tool(s):\n", len(tools))
+	fmt.Printf("Found %d tool(s):\n\n", len(tools))
 	styles := getCLIStyles(h.themeManager)
+	
+	// Group tools by server
+	serverTools := make(map[int64][]*models.MCPTool)
 	for _, tool := range tools {
-		fmt.Printf("• %s - %s\n", styles.Success.Render(tool.Name), tool.Description)
-		fmt.Printf("  Server ID: %d\n", tool.MCPServerID)
+		serverTools[tool.MCPServerID] = append(serverTools[tool.MCPServerID], tool)
+	}
+	
+	// Display tools grouped by server
+	for serverID, toolList := range serverTools {
+		// Get server details
+		server, err := repos.MCPServers.GetByID(serverID)
+		if err != nil {
+			fmt.Printf("🔧 Server ID %d (Unknown)\n", serverID)
+		} else {
+			fmt.Printf("🔧 %s (Server ID: %d)\n", styles.Info.Render(server.Name), serverID)
+		}
+		
+		// Display tools for this server
+		for _, tool := range toolList {
+			fmt.Printf("  • %s - %s\n", styles.Success.Render(tool.Name), tool.Description)
+		}
+		fmt.Println() // Empty line between servers
 	}
 
 	return nil

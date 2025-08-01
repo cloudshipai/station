@@ -16,6 +16,7 @@ type APIHandlers struct {
 	toolDiscoveryService *services.ToolDiscoveryService
 	genkitService        *services.GenkitService
 	webhookService       *services.WebhookService
+	executionQueueSvc    *services.ExecutionQueueService
 	localMode            bool
 }
 
@@ -26,6 +27,7 @@ func NewAPIHandlers(
 	toolDiscoveryService *services.ToolDiscoveryService,
 	genkitService *services.GenkitService,
 	webhookService *services.WebhookService,
+	executionQueueSvc *services.ExecutionQueueService,
 	localMode bool,
 ) *APIHandlers {
 	return &APIHandlers{
@@ -34,6 +36,7 @@ func NewAPIHandlers(
 		toolDiscoveryService: toolDiscoveryService,
 		genkitService:        genkitService,
 		webhookService:       webhookService,
+		executionQueueSvc:    executionQueueSvc,
 		localMode:            localMode,
 	}
 }
@@ -69,7 +72,8 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Agent routes - accessible to regular users in server mode
 	agentGroup := router.Group("/agents")
 	agentGroup.GET("", h.listAgents)           // Users can list agents
-	agentGroup.POST("/:id/execute", h.callAgent) // Users can call agents
+	agentGroup.POST("/:id/execute", h.callAgent) // Users can call agents (direct execution)
+	agentGroup.POST("/:id/queue", h.queueAgent)  // Users can queue agents (via execution queue)
 	
 	// Admin-only agent management routes
 	agentAdminGroup := router.Group("/agents")

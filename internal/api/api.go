@@ -24,6 +24,7 @@ type Server struct {
 	toolDiscoveryService *services.ToolDiscoveryService
 	genkitService        *services.GenkitService
 	webhookService       *services.WebhookService
+	executionQueueSvc    *services.ExecutionQueueService
 	localMode            bool
 }
 
@@ -47,9 +48,10 @@ func New(cfg *config.Config, database db.Database, localMode bool) *Server {
 }
 
 // SetServices allows setting optional services after creation
-func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService, genkitService *services.GenkitService) {
+func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService, genkitService *services.GenkitService, executionQueueSvc *services.ExecutionQueueService) {
 	s.toolDiscoveryService = toolDiscoveryService
 	s.genkitService = genkitService
+	s.executionQueueSvc = executionQueueSvc
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -85,6 +87,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.toolDiscoveryService,
 		s.genkitService,
 		s.webhookService,
+		s.executionQueueSvc,
 		s.localMode,
 	)
 	apiHandlers.RegisterRoutes(v1Group)

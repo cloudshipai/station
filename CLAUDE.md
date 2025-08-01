@@ -10,6 +10,13 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - Likely causes: hanging MCP connections, database locks, resource cleanup delays
   - Needs investigation of timeout settings and connection pooling
 
+- **CLI Agent Execution**: ✅ Implemented with clean server/fallback architecture
+  - **Server Mode**: Uses `POST /api/v1/agents/:id/queue` with ExecutionQueueService for full execution
+  - **Fallback Mode**: Provides simplified execution when server not available
+  - **Clean DRY**: Reuses existing execution architecture, no code duplication
+  - **Webhook Support**: Full webhook notifications work in server mode
+  - **Graceful Degradation**: Clear messaging about mode limitations
+
 ### Active Agents
 - **Home Directory Scanner** (ID: 2): Scheduled daily at midnight to scan home directory structure
   - Tools: list_directory, directory_tree, read_text_file, get_file_info, search_files

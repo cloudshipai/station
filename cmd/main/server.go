@@ -14,12 +14,14 @@ import (
 	"station/internal/services"
 	"station/internal/ssh"
 	"station/pkg/crypto"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/firebase/genkit/go/genkit"
 	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	"github.com/openai/openai-go/option"
 	"github.com/spf13/viper"
 )
 
@@ -29,19 +31,48 @@ type genkitSetup struct {
 	openaiPlugin *oai.OpenAI
 }
 
-// initializeGenkit initializes Genkit with OpenAI plugin
-func initializeGenkit(ctx context.Context, apiKey string) (*genkitSetup, error) {
-	// Initialize OpenAI plugin
-	openaiPlugin := &oai.OpenAI{APIKey: apiKey}
+// initializeGenkit initializes Genkit with configured AI provider
+func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, error) {
+	// Initialize AI provider plugin based on configuration
+	var genkitApp *genkit.Genkit
+	var openaiPlugin *oai.OpenAI
+	var err error
 	
-	// Initialize Genkit with OpenAI plugin
-	app, err := genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize Genkit: %w", err)
+	switch strings.ToLower(cfg.AIProvider) {
+	case "openai":
+		// Validate API key for OpenAI
+		if cfg.AIAPIKey == "" {
+			return nil, fmt.Errorf("STN_AI_API_KEY is required for OpenAI provider")
+		}
+		openaiPlugin = &oai.OpenAI{
+			APIKey: cfg.AIAPIKey,
+		}
+		// Set custom base URL if provided
+		if cfg.AIBaseURL != "" {
+			openaiPlugin.Opts = []option.RequestOption{
+				option.WithBaseURL(cfg.AIBaseURL),
+			}
+		}
+		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize Genkit with OpenAI: %w", err)
+		}
+	case "gemini":
+		// Validate API key for Gemini
+		if cfg.AIAPIKey == "" {
+			return nil, fmt.Errorf("STN_AI_API_KEY (or GOOGLE_API_KEY) is required for Gemini provider")
+		}
+		// For now, main server only supports OpenAI - Gemini support will be added
+		return nil, fmt.Errorf("Gemini provider not yet supported in main server (use OpenAI for now)")
+	case "ollama":
+		// For now, main server only supports OpenAI - Ollama support will be added
+		return nil, fmt.Errorf("Ollama provider not yet supported in main server (use OpenAI for now)")
+	default:
+		return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini, ollama)", cfg.AIProvider)
 	}
 	
 	return &genkitSetup{
-		app:          app,
+		app:          genkitApp,
 		openaiPlugin: openaiPlugin,
 	}, nil
 }
@@ -84,15 +115,8 @@ func runMainServer() error {
 	}
 
 	
-	// Create GenkitService with OpenAI plugin
-	// TODO: Make API key configurable
-	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
-	if openaiAPIKey == "" {
-		log.Printf("Warning: OPENAI_API_KEY not set, agent execution may fail")
-	}
-	
-	// Initialize Genkit with OpenAI plugin
-	genkit, err := initializeGenkit(ctx, openaiAPIKey)
+	// Initialize Genkit with configured AI provider
+	genkit, err := initializeGenkit(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
@@ -167,7 +191,7 @@ func runMainServer() error {
 	toolDiscoveryService := services.NewToolDiscoveryService(repos, mcpConfigSvc)
 	
 	// Set services for the API server
-	apiServer.SetServices(toolDiscoveryService, agentSvc)
+	apiServer.SetServices(toolDiscoveryService, agentSvc, executionQueueSvc)
 
 	wg.Add(4) // SSH, MCP, API, and webhook retry processor
 
@@ -252,7 +276,7 @@ func runMainServer() error {
 }
 
 // ensureDefaultEnvironment creates a default environment if none exists
-func ensureDefaultEnvironment(ctx context.Context, repos *repositories.Repositories) error {
+func ensureDefaultEnvironment(_ context.Context, repos *repositories.Repositories) error {
 	// Check if any environments exist
 	envs, err := repos.Environments.List()
 	if err != nil {

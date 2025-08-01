@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -31,6 +33,9 @@ func runMCPDelete(cmd *cobra.Command, args []string) error {
 
 // runUI implements the "station ui" command
 func runUI(cmd *cobra.Command, args []string) error {
+	// Disable all logging for clean TUI experience
+	log.SetOutput(io.Discard)
+	
 	// Check if configuration exists
 	databasePath := viper.GetString("database_url")
 	if databasePath == "" {
