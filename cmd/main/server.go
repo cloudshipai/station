@@ -108,6 +108,7 @@ func runMainServer() error {
 		repos.Environments,
 		mcpConfigSvc,
 		webhookSvc,
+		telemetryService,
 	)
 	
 	// Initialize MCP for the agent service

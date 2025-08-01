@@ -13,6 +13,7 @@ import (
 	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
 
 	"station/internal/db/repositories"
+	"station/internal/telemetry"
 	"station/pkg/models"
 )
 
@@ -32,6 +33,7 @@ type GenkitService struct {
 	environmentRepo      *repositories.EnvironmentRepo
 	mcpConfigService     *MCPConfigService
 	webhookService       *WebhookService
+	telemetryService     *telemetry.TelemetryService
 }
 
 // NewGenkitService creates a new Genkit service with cross-environment support
@@ -46,6 +48,7 @@ func NewGenkitService(
 	environmentRepo *repositories.EnvironmentRepo,
 	mcpConfigService *MCPConfigService,
 	webhookService *WebhookService,
+	telemetryService *telemetry.TelemetryService,
 ) *GenkitService {
 	return &GenkitService{
 		genkitApp:            genkitApp,
@@ -58,6 +61,7 @@ func NewGenkitService(
 		environmentRepo:      environmentRepo,
 		mcpConfigService:     mcpConfigService,
 		webhookService:       webhookService,
+		telemetryService:     telemetryService,
 	}
 }
 
@@ -319,6 +323,12 @@ func (s *GenkitService) executeAgentInternal(ctx context.Context, agentID, userI
 
 	log.Printf("Agent %d execution completed successfully", agentID)
 	
+	// Track agent execution
+	if s.telemetryService != nil {
+		executionTimeMs := time.Since(startTime).Milliseconds()
+		s.telemetryService.TrackAgentExecuted(agentID, executionTimeMs, status == "completed", 1)
+	}
+	
 	// Send webhook notifications for successful completions if webhook service is available
 	if s.webhookService != nil && status == "completed" {
 		go s.sendWebhookNotification(agentID, run)
@@ -423,6 +433,11 @@ func (s *GenkitService) CreateAgent(ctx context.Context, config *AgentConfig) (*
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
+	}
+
+	// Track agent creation
+	if s.telemetryService != nil {
+		s.telemetryService.TrackAgentCreated(agent.ID, config.EnvironmentID, len(config.AssignedTools))
 	}
 
 	// TODO: Handle AssignedTools, ModelProvider, ModelID
