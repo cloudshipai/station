@@ -80,8 +80,8 @@ func (h *MCPHandler) listMCPConfigsLocal(environment string) error {
 		return fmt.Errorf("environment '%s' not found", environment)
 	}
 
-	// List configs
-	configs, err := repos.MCPConfigs.ListByEnvironment(env.ID)
+	// List file-based configs
+	configs, err := repos.FileMCPConfigs.ListByEnvironment(env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to list configurations: %w", err)
 	}
