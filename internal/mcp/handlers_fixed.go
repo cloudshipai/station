@@ -175,15 +175,34 @@ func (s *Server) handleDiscoverTools(ctx context.Context, request mcp.CallToolRe
 }
 
 func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	configs, err := s.repos.MCPConfigs.GetAllLatestConfigs()
+	// File-based configs: Get all file configs across all environments
+	environments, err := s.repos.Environments.List()
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to list MCP configs: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to list environments: %v", err)), nil
+	}
+	
+	var allConfigs []interface{}
+	for _, env := range environments {
+		fileConfigs, err := s.repos.FileMCPConfigs.ListByEnvironment(env.ID)
+		if err != nil {
+			continue // Skip environments with no configs
+		}
+		for _, fc := range fileConfigs {
+			allConfigs = append(allConfigs, map[string]interface{}{
+				"id":             fc.ID,
+				"name":           fc.ConfigName,
+				"environment_id": fc.EnvironmentID,
+				"path":           fc.TemplatePath,
+				"type":           "file",
+				"last_loaded":    fc.LastLoadedAt,
+			})
+		}
 	}
 
 	response := map[string]interface{}{
 		"success": true,
-		"configs": configs,
-		"count":   len(configs),
+		"configs": allConfigs,
+		"count":   len(allConfigs),
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")

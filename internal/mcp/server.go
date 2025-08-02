@@ -18,7 +18,7 @@ type Server struct {
 	mcpServer        *server.MCPServer
 	httpServer       *server.StreamableHTTPServer
 	db               db.Database
-	mcpConfigSvc     *services.MCPConfigService
+	// mcpConfigSvc removed - using file-based configs only
 	toolDiscoverySvc *ToolDiscoveryService
 	agentService     services.AgentServiceInterface
 	authService      *auth.AuthService
@@ -26,7 +26,7 @@ type Server struct {
 	localMode        bool
 }
 
-func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, agentService services.AgentServiceInterface, repos *repositories.Repositories, localMode bool) *Server {
+func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, localMode bool) *Server {
 	// Create MCP server using the official mcp-go library
 	mcpServer := server.NewMCPServer(
 		"Station MCP Server",
@@ -36,7 +36,7 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 		server.WithRecovery(),
 	)
 
-	toolDiscoverySvc := NewToolDiscoveryService(database, mcpConfigSvc, repos)
+	toolDiscoverySvc := NewToolDiscoveryService(database, repos)
 	authService := auth.NewAuthService(repos)
 
 	// Create streamable HTTP server
@@ -48,7 +48,7 @@ func NewServer(database db.Database, mcpConfigSvc *services.MCPConfigService, ag
 		mcpServer:        mcpServer,
 		httpServer:       httpServer,
 		db:               database,
-		mcpConfigSvc:     mcpConfigSvc,
+		// mcpConfigSvc removed
 		toolDiscoverySvc: toolDiscoverySvc,
 		agentService:     agentService,
 		authService:      authService,

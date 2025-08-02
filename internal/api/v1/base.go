@@ -12,9 +12,9 @@ import (
 // APIHandlers contains all the API handlers and their dependencies
 type APIHandlers struct {
 	repos                *repositories.Repositories
-	mcpConfigService     *services.MCPConfigService
+	// mcpConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService
-	genkitService        *services.GenkitService
+	// genkitService removed - service no longer exists
 	webhookService       *services.WebhookService
 	executionQueueSvc    *services.ExecutionQueueService
 	localMode            bool
@@ -23,18 +23,14 @@ type APIHandlers struct {
 // NewAPIHandlers creates a new API handlers instance
 func NewAPIHandlers(
 	repos *repositories.Repositories,
-	mcpConfigService *services.MCPConfigService,
 	toolDiscoveryService *services.ToolDiscoveryService,
-	genkitService *services.GenkitService,
 	webhookService *services.WebhookService,
 	executionQueueSvc *services.ExecutionQueueService,
 	localMode bool,
 ) *APIHandlers {
 	return &APIHandlers{
 		repos:                repos,
-		mcpConfigService:     mcpConfigService,
 		toolDiscoveryService: toolDiscoveryService,
-		genkitService:        genkitService,
 		webhookService:       webhookService,
 		executionQueueSvc:    executionQueueSvc,
 		localMode:            localMode,
@@ -59,10 +55,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	}
 	h.registerEnvironmentRoutes(envGroup)
 
-	// MCP Config routes (nested under environments)
-	mcpGroup := envGroup.Group("/:env_id/mcp-configs")
-	// Inherits admin-only restriction from envGroup
-	h.registerMCPConfigRoutes(mcpGroup)
+	// MCP Config routes temporarily disabled during config migration
+	_ = envGroup.Group("/:env_id/mcp-configs") // Unused during migration
+	// h.registerMCPConfigRoutes(mcpGroup) // Temporarily disabled during config migration
 
 	// Tools routes (nested under environments)
 	toolsGroup := envGroup.Group("/:env_id/tools")

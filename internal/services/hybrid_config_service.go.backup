@@ -3,53 +3,32 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"station/internal/db/repositories"
 )
 
-// HybridConfigService manages both database and file-based MCP configurations
-// This service provides a unified interface that can work with both config types
+// HybridConfigService manages file-based MCP configurations
+// Simplified to only handle file-based configs after removing database config support
 type HybridConfigService struct {
-	dbConfigService   *MCPConfigService
 	fileConfigService *FileConfigService
 	repos             *repositories.Repositories
 }
 
-// NewHybridConfigService creates a service that can handle both config types
+// NewHybridConfigService creates a service that handles file-based configs
 func NewHybridConfigService(
-	dbConfigService *MCPConfigService,
 	fileConfigService *FileConfigService,
 	repos *repositories.Repositories,
 ) *HybridConfigService {
 	return &HybridConfigService{
-		dbConfigService:   dbConfigService,
 		fileConfigService: fileConfigService,
 		repos:             repos,
 	}
 }
 
-// ListAllConfigs returns both database and file configs in a unified format
+// ListAllConfigs returns file-based configs
 func (s *HybridConfigService) ListAllConfigs(ctx context.Context, envID int64) ([]ConfigSummary, error) {
 	var allConfigs []ConfigSummary
-
-	// Get database configs
-	dbConfigs, err := s.repos.MCPConfigs.ListByEnvironment(envID)
-	if err != nil {
-		log.Printf("Warning: failed to get database configs: %v", err)
-	} else {
-		for _, dbConfig := range dbConfigs {
-			allConfigs = append(allConfigs, ConfigSummary{
-				Name:         dbConfig.ConfigName,
-				Type:         "database",
-				Version:      dbConfig.Version,
-				LastUpdated:  &dbConfig.UpdatedAt,
-				Source:       "database",
-				EnvironmentID: envID,
-			})
-		}
-	}
 
 	// Get file configs
 	fileConfigs, err := s.fileConfigService.ListFileConfigs(ctx, envID)
