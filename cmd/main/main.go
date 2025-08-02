@@ -110,6 +110,8 @@ func init() {
 	loadCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	loadCmd.Flags().String("environment", "default", "Environment name to upload to")
 	loadCmd.Flags().String("config-name", "", "Name for the MCP configuration")
+	loadCmd.Flags().Bool("detect", false, "Use AI to intelligently detect and generate forms for placeholders")
+	loadCmd.Flags().BoolP("editor", "e", false, "Open editor to paste template configuration")
 	
 	// MCP Add command flags
 	mcpAddCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
