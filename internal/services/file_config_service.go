@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
+	"gopkg.in/yaml.v3"
+	"io/ioutil"
 	"station/internal/db/repositories"
 	"station/pkg/config"
 	"station/pkg/models"
@@ -262,9 +265,42 @@ func (s *FileConfigService) saveTemplateVariables(ctx context.Context, envID int
 }
 
 func (s *FileConfigService) loadTemplateVariables(ctx context.Context, envID int64, configName string) (map[string]interface{}, error) {
-	// This would load template-specific variables from environments/{env}/template-vars/{configName}.env
-	// Implementation would use the VariableStore interface
-	return make(map[string]interface{}), nil // TODO: Implement
+	envName, err := s.getEnvironmentName(envID)
+	if err != nil {
+		return make(map[string]interface{}), nil // Return empty if we can't get env name
+	}
+	
+	// Load template-specific variables from environments/{env}/{configName}.vars.yml
+	templateVarsPath := fmt.Sprintf("./config/environments/%s/%s.vars.yml", envName, configName)
+	
+	// Check if template-specific variables file exists
+	if _, err := os.Stat(templateVarsPath); err != nil {
+		// File doesn't exist, return empty map (not an error)
+		return make(map[string]interface{}), nil
+	}
+	
+	// Load template-specific variables using a simple YAML loader
+	variables, err := s.loadYAMLVariables(templateVarsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load template variables from %s: %w", templateVarsPath, err)
+	}
+	
+	return variables, nil
+}
+
+func (s *FileConfigService) loadYAMLVariables(filePath string) (map[string]interface{}, error) {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	
+	var variables map[string]interface{}
+	err = yaml.Unmarshal(data, &variables)
+	if err != nil {
+		return nil, err
+	}
+	
+	return variables, nil
 }
 
 func (s *FileConfigService) mergeVariables(global, templateSpecific map[string]interface{}) map[string]interface{} {
@@ -295,31 +331,51 @@ func (s *FileConfigService) calculateVariablesHash(variables map[string]interfac
 	return fmt.Sprintf("%x", hash)
 }
 
-func (s *FileConfigService) updateFileConfigRecord(envID int64, configName, templateHash, variablesHash string) (*FileConfigRecord, error) {
+func (s *FileConfigService) updateFileConfigRecord(envID int64, configName, templateHash, variablesHash string) (*repositories.FileConfigRecord, error) {
 	// This would update the file_mcp_configs table
 	// TODO: Implement when we have the repository methods
-	return &FileConfigRecord{
+	return &repositories.FileConfigRecord{
 		ID:              1,
 		EnvironmentID:   envID,
 		ConfigName:      configName,
 		TemplateHash:    templateHash,
 		VariablesHash:   variablesHash,
-		LastRenderedAt:  time.Now(),
 	}, nil
 }
 
-func (s *FileConfigService) getFileConfigRecord(envID int64, configName string) (*FileConfigRecord, error) {
-	// This would get from file_mcp_configs table
-	// TODO: Implement when we have the repository methods
-	return &FileConfigRecord{
-		ID:              1,
-		EnvironmentID:   envID,
-		ConfigName:      configName,
-		LastRenderedAt:  time.Now(),
-	}, nil
+func (s *FileConfigService) getFileConfigRecord(envID int64, configName string) (*repositories.FileConfigRecord, error) {
+	// Try to get existing record
+	record, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
+	if err == nil {
+		return record, nil
+	}
+	
+	// Record doesn't exist, create it
+	envName, err := s.getEnvironmentName(envID)
+	if err != nil {
+		envName = "default"
+	}
+	templatePath := fmt.Sprintf("config/environments/%s/%s.json", envName, configName)
+	variablesPath := fmt.Sprintf("config/environments/%s/variables.yml", envName)
+	
+	record = &repositories.FileConfigRecord{
+		EnvironmentID:     envID,
+		ConfigName:        configName,
+		TemplatePath:      templatePath,
+		VariablesPath:     variablesPath,
+	}
+	
+	id, err := s.repos.FileMCPConfigs.Create(record)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file config record: %w", err)
+	}
+	
+	record.ID = id
+	return record, nil
 }
 
-func (s *FileConfigService) discoverAndStoreTools(ctx context.Context, fileConfig *FileConfigRecord) error {
+
+func (s *FileConfigService) discoverAndStoreTools(ctx context.Context, fileConfig *repositories.FileConfigRecord) error {
 	// This would call the existing tool discovery but link tools to file config
 	_, err := s.DiscoverToolsForConfig(ctx, fileConfig.EnvironmentID, fileConfig.ConfigName)
 	return err

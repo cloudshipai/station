@@ -176,3 +176,15 @@ func runMCPAddInteractive(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Result: %s\n", result)
 	return nil
 }
+
+// runMCPSync implements the "station mcp sync" command
+func runMCPSync(cmd *cobra.Command, args []string) error {
+	mcpHandler := handlers.NewMCPHandler(themeManager)
+	return mcpHandler.RunMCPSync(cmd, args)
+}
+
+// runMCPStatus implements the "station mcp status" command
+func runMCPStatus(cmd *cobra.Command, args []string) error {
+	mcpHandler := handlers.NewMCPHandler(themeManager)
+	return mcpHandler.RunMCPStatus(cmd, args)
+}

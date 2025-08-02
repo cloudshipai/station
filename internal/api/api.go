@@ -69,6 +69,7 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Serv
 		templateEngine, 
 		variableStore,
 		fileConfigOptions,
+		repos.Environments,
 	)
 	
 	// Initialize tool discovery service
