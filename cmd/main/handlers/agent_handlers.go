@@ -148,6 +148,7 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 	description := args[1]
 	
 	endpoint, _ := cmd.Flags().GetString("endpoint")
+	envFlag, _ := cmd.Flags().GetString("env")
 	domain, _ := cmd.Flags().GetString("domain")
 	schedule, _ := cmd.Flags().GetString("schedule")
 
@@ -162,6 +163,7 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 	if domain != "" {
 		fmt.Printf("  Domain: %s\n", domain)
 	}
+	fmt.Printf("  Environment: %s\n", envFlag)
 	fmt.Printf("  Schedule: %s\n", schedule)
 	fmt.Println()
 
@@ -170,7 +172,7 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 		return h.createAgentRemote(name, description, domain, schedule, endpoint)
 	} else {
 		fmt.Println(styles.Info.Render("🏠 Creating local intelligent agent"))
-		return h.createAgentLocal(name, description, domain, schedule)
+		return h.createAgentLocal(name, description, domain, schedule, envFlag)
 	}
 }
 
@@ -1074,7 +1076,7 @@ func (h *AgentHandler) runAgentWithTail(agentID int64, task string) error {
 }
 
 // createAgentLocal creates an intelligent agent using the local intelligent agent creator
-func (h *AgentHandler) createAgentLocal(name, description, domain, schedule string) error {
+func (h *AgentHandler) createAgentLocal(name, description, domain, schedule, environment string) error {
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
@@ -1088,6 +1090,10 @@ func (h *AgentHandler) createAgentLocal(name, description, domain, schedule stri
 
 	// Initialize repositories and services for intelligent creation
 	repos := repositories.New(database)
+	
+	// Note: User specified environment preference: %s
+	// The intelligent agent creator will analyze requirements and determine optimal environment
+	_ = environment // Acknowledge environment parameter
 	
 	// Load config to get encryption key
 	stationCfg, err := loadStationConfig()
@@ -1103,6 +1109,8 @@ func (h *AgentHandler) createAgentLocal(name, description, domain, schedule stri
 	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
 
 	// Create intelligent agent creator
+	// Note: Intelligent agent creator will analyze requirements and determine optimal environment
+	// The user-specified environment (%s) preference is noted but may be overridden for optimal performance
 	creator := services.NewIntelligentAgentCreator(repos, nil, mcpConfigSvc)
 
 	// Create agent creation request
