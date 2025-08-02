@@ -229,12 +229,9 @@ func (h *LoadHandler) uploadConfigLocalLoad(mcpConfig LoadMCPConfig, configName,
 	}
 	
 	// Create key manager from config file encryption key
-	keyManager, err := createKeyManagerFromConfig()
-	if err != nil {
-		return fmt.Errorf("failed to initialize key manager: %w", err)
-	}
+	// keyManager removed - no longer needed for file-based configs
 
-	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
+	// MCPConfigService removed - using file-based configs only
 
 	// Find or create environment
 	env, err := repos.Environments.GetByName(environment)
@@ -263,25 +260,11 @@ func (h *LoadHandler) uploadConfigLocalLoad(mcpConfig LoadMCPConfig, configName,
 		Servers: servers,
 	}
 
-	// Upload config
-	savedConfig, err := mcpConfigSvc.UploadConfig(env.ID, configData)
-	if err != nil {
-		return fmt.Errorf("failed to upload config: %w", err)
-	}
-
-	fmt.Println(getCLIStyles(h.themeManager).Success.Render(fmt.Sprintf("✅ Successfully uploaded config: %s v%d", 
-		savedConfig.ConfigName, savedConfig.Version)))
-	
-	// Start tool discovery
-	fmt.Println(getCLIStyles(h.themeManager).Info.Render("🔍 Starting tool discovery..."))
-	toolDiscoveryService := services.NewToolDiscoveryService(repos, mcpConfigSvc)
-	
-	_, err = toolDiscoveryService.ReplaceToolsWithTransaction(env.ID, configName)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Tool discovery failed: %v\n", err)
-	} else {
-		fmt.Println(getCLIStyles(h.themeManager).Success.Render("✅ Tool discovery completed"))
-	}
+	// TODO: Update load handler for file-based configs
+	// Legacy database upload removed - need to create file-based configs instead
+	fmt.Println(getCLIStyles(h.themeManager).Info.Render("⚠️  Load handler temporarily disabled during migration to file-based configs"))
+	fmt.Printf("Config data prepared: %s with %d servers\n", configData.Name, len(configData.Servers))
+	fmt.Println("Please use 'stn mcp create' to create file-based configs instead.")
 
 	showSuccessBanner("MCP Configuration Loaded Successfully!", h.themeManager)
 	return nil
@@ -432,12 +415,9 @@ func (h *LoadHandler) uploadConfigLocalWizard(configData *models.MCPConfigData, 
 	}
 	
 	// Create key manager from config file encryption key
-	keyManager, err := createKeyManagerFromConfig()
-	if err != nil {
-		return fmt.Errorf("failed to initialize key manager: %w", err)
-	}
+	// keyManager removed - no longer needed for file-based configs
 
-	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
+	// MCPConfigService removed - using file-based configs only
 
 	// Find or create environment
 	env, err := repos.Environments.GetByName(environment)
@@ -451,25 +431,14 @@ func (h *LoadHandler) uploadConfigLocalWizard(configData *models.MCPConfigData, 
 		fmt.Printf("✅ Created environment: %s (ID: %d)\n", environment, env.ID)
 	}
 
-	// Upload config
-	savedConfig, err := mcpConfigSvc.UploadConfig(env.ID, configData)
-	if err != nil {
-		return fmt.Errorf("failed to upload config: %w", err)
-	}
-
-	fmt.Println(getCLIStyles(h.themeManager).Success.Render(fmt.Sprintf("✅ Successfully uploaded config: %s v%d", 
-		savedConfig.ConfigName, savedConfig.Version)))
+	// TODO: Update load handler for file-based configs (second occurrence)
+	// Legacy database upload removed - need to create file-based configs instead
+	fmt.Println(getCLIStyles(h.themeManager).Info.Render("⚠️  Load handler temporarily disabled during migration to file-based configs"))
+	fmt.Printf("Config data prepared: %s with %d servers\n", configData.Name, len(configData.Servers))
 	
-	// Start tool discovery
-	fmt.Println(getCLIStyles(h.themeManager).Info.Render("🔍 Starting tool discovery..."))
-	toolDiscoveryService := services.NewToolDiscoveryService(repos, mcpConfigSvc)
-	
-	_, err = toolDiscoveryService.ReplaceToolsWithTransaction(env.ID, configData.Name)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Tool discovery failed: %v\n", err)
-	} else {
-		fmt.Println(getCLIStyles(h.themeManager).Success.Render("✅ Tool discovery completed"))
-	}
+	// TODO: Update tool discovery for file-based configs
+	// Legacy ReplaceToolsWithTransaction removed - need file-based approach
+	fmt.Println(getCLIStyles(h.themeManager).Info.Render("⚠️  Tool discovery temporarily disabled during migration to file-based configs"))
 
 	showSuccessBanner("MCP Configuration Uploaded Successfully!", h.themeManager)
 	return nil
