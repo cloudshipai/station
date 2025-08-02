@@ -532,7 +532,7 @@ func (m MCPModel) cleanupOrphanedAgentTools(environmentID int64) error {
 	var orphanedCount int
 	for _, agent := range agents {
 		// Get agent tools for this specific agent
-		agentTools, err := m.repos.AgentTools.List(agent.ID)
+		agentTools, err := m.repos.AgentTools.ListAgentTools(agent.ID)
 		if err != nil {
 			log.Printf("Failed to get agent tools for agent %d in environment %d: %v", agent.ID, environmentID, err)
 			continue
@@ -542,8 +542,8 @@ func (m MCPModel) cleanupOrphanedAgentTools(environmentID int64) error {
 		for _, agentTool := range agentTools {
 			if !availableToolsMap[agentTool.ToolName] {
 				// This agent tool references a tool that no longer exists - remove it
-				if err := m.repos.AgentTools.Remove(agent.ID, agentTool.ToolName, agentTool.EnvironmentID); err != nil {
-					log.Printf("Failed to remove orphaned agent tool assignment (agent: %d, tool: %s, env: %d): %v", agent.ID, agentTool.ToolName, agentTool.EnvironmentID, err)
+				if err := m.repos.AgentTools.RemoveAgentTool(agent.ID, agentTool.ToolID); err != nil {
+					log.Printf("Failed to remove orphaned agent tool assignment (agent: %d, tool: %s, tool_id: %d): %v", agent.ID, agentTool.ToolName, agentTool.ToolID, err)
 					continue
 				}
 				orphanedCount++

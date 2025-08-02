@@ -281,7 +281,7 @@ func (s *Server) handleGetAgentDetails(ctx context.Context, request mcp.CallTool
 	}
 
 	// Get assigned tools
-	agentTools, err := s.repos.AgentTools.List(agentID)
+	agentTools, err := s.repos.AgentTools.ListAgentTools(agentID)
 	if err != nil {
 		agentTools = []*models.AgentToolWithDetails{}
 	}

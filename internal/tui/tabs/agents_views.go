@@ -505,31 +505,29 @@ func (m AgentsModel) renderEditAgentForm() string {
 	)
 }
 
-// renderAgentEnvironments shows all environments the agent has access to
+// renderAgentEnvironments shows the environment this agent belongs to
 func (m AgentsModel) renderAgentEnvironments(agent *models.Agent) string {
 	var envList []string
 	
-	envList = append(envList, styles.HeaderStyle.Render("Accessible Environments:"))
+	envList = append(envList, styles.HeaderStyle.Render("Environment:"))
 	envList = append(envList, "")
 	
-	// For now, show primary environment (backward compatibility)
-	// TODO: Load actual agent environments using AgentEnvironmentRepo.ListByAgent()
-	primaryEnvName := "Unknown"
+	// Find the environment name for this agent
+	envName := "Unknown"
 	for _, env := range m.environments {
 		if env.ID == agent.EnvironmentID {
-			primaryEnvName = env.Name
+			envName = env.Name
 			break
 		}
 	}
 	
-	envList = append(envList, fmt.Sprintf("• %s (primary)", primaryEnvName))
+	envList = append(envList, fmt.Sprintf("• %s (ID: %d)", envName, agent.EnvironmentID))
+	envList = append(envList, "")
 	
-	// TODO: Once cross-environment relationships are loaded, show additional environments:
-	// for _, agentEnv := range agentEnvironments {
-	//     if agentEnv.EnvironmentID != agent.EnvironmentID {
-	//         envList = append(envList, fmt.Sprintf("• %s", agentEnv.EnvironmentName))
-	//     }
-	// }
+	// Create muted text style for help text
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+	envList = append(envList, mutedStyle.Render("Agents are environment-specific and can only"))
+	envList = append(envList, mutedStyle.Render("access tools from their assigned environment."))
 	
 	return lipgloss.JoinVertical(lipgloss.Left, envList...)
 }

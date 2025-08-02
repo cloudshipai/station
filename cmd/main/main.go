@@ -148,12 +148,14 @@ func init() {
 	
 	// Agent command flags
 	agentListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentListCmd.Flags().String("env", "", "Filter agents by environment name or ID")
 	agentShowCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentRunCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentRunCmd.Flags().Bool("tail", false, "Follow the agent execution with real-time output")
 	agentDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
 	agentCreateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentCreateCmd.Flags().String("env", "default", "Environment name or ID for the agent")
 	agentCreateCmd.Flags().String("domain", "", "Domain context for the agent (e.g., devops, data-science)")
 	agentCreateCmd.Flags().String("schedule", "on-demand", "Schedule preference (on-demand, daily, weekly, custom)")
 	
