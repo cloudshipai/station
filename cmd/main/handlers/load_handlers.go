@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -53,11 +54,22 @@ type TemplateField struct {
 
 // LoadHandler handles the "stn load" command
 type LoadHandler struct {
-	themeManager *theme.ThemeManager
+	themeManager        *theme.ThemeManager
+	placeholderAnalyzer *services.PlaceholderAnalyzer
 }
 
 func NewLoadHandler(themeManager *theme.ThemeManager) *LoadHandler {
-	return &LoadHandler{themeManager: themeManager}
+	return &LoadHandler{
+		themeManager:        themeManager,
+		placeholderAnalyzer: nil, // Will be initialized when needed
+	}
+}
+
+func NewLoadHandlerWithAI(themeManager *theme.ThemeManager, placeholderAnalyzer *services.PlaceholderAnalyzer) *LoadHandler {
+	return &LoadHandler{
+		themeManager:        themeManager,
+		placeholderAnalyzer: placeholderAnalyzer,
+	}
 }
 
 func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
@@ -67,6 +79,18 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 	configName, _ := cmd.Flags().GetString("config-name")
+	detectMode, _ := cmd.Flags().GetBool("detect")
+	editorMode, _ := cmd.Flags().GetBool("editor")
+
+	// Initialize AI if detect mode is enabled
+	if detectMode {
+		h.initializeAI()
+	}
+
+	// Handle editor mode (-e flag)
+	if editorMode {
+		return h.handleEditorMode(endpoint, environment, configName)
+	}
 
 	var configFile string
 	var found bool
@@ -88,6 +112,11 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 		if _, err := os.Stat(args[0]); err == nil {
 			configFile = args[0]
 			found = true
+			
+			// Initialize AI if detect mode is enabled for file input
+			if detectMode {
+				h.initializeAI()
+			}
 		} else {
 			return fmt.Errorf("file not found: %s", args[0])
 		}
@@ -811,7 +840,7 @@ func extractMCPBlocksFromContent(content string) []services.MCPServerBlock {
 	return blocks
 }
 
-// detectTemplates checks if the configuration has template placeholders
+// detectTemplates checks if the configuration has template placeholders using AI analysis
 func (h *LoadHandler) detectTemplates(config *LoadMCPConfig) (bool, []string) {
 	var missingValues []string
 	hasTemplates := false
@@ -821,7 +850,45 @@ func (h *LoadHandler) detectTemplates(config *LoadMCPConfig) (bool, []string) {
 		hasTemplates = true
 	}
 	
-	// Scan all environment variables for template placeholders
+	// Try AI-powered intelligent placeholder detection only if enabled
+	if h.placeholderAnalyzer != nil {
+		configJSON, err := json.Marshal(config)
+		if err == nil {
+			ctx := context.Background()
+			analyses, err := h.placeholderAnalyzer.AnalyzeConfiguration(ctx, string(configJSON))
+			if err == nil && len(analyses) > 0 {
+				hasTemplates = true
+				
+				// Initialize templates map if needed
+				if config.Templates == nil {
+					config.Templates = make(map[string]TemplateField)
+				}
+				
+				// Convert AI analyses to template fields
+				for _, analysis := range analyses {
+					// Only add if not already defined
+					if _, exists := config.Templates[analysis.Placeholder]; !exists {
+						config.Templates[analysis.Placeholder] = TemplateField{
+							Description: analysis.Description,
+							Type:        analysis.Type,
+							Required:    analysis.Required,
+							Sensitive:   analysis.Sensitive,
+							Default:     analysis.Default,
+							Help:        analysis.Help,
+						}
+					}
+					missingValues = append(missingValues, analysis.Placeholder)
+				}
+				
+				// Replace the original placeholders in the configuration with template format
+				h.replaceDetectedPlaceholders(config, analyses)
+				
+				return hasTemplates, missingValues
+			}
+		}
+	}
+	
+	// Fallback to traditional regex-based detection
 	templatePattern := regexp.MustCompile(`\{\{([^}]+)\}\}`)
 	
 	for _, serverConfig := range config.MCPServers {
@@ -853,6 +920,268 @@ func (h *LoadHandler) detectTemplates(config *LoadMCPConfig) (bool, []string) {
 	}
 	
 	return hasTemplates, missingValues
+}
+
+// replaceDetectedPlaceholders replaces AI-detected placeholders with template format {{placeholder}}
+func (h *LoadHandler) replaceDetectedPlaceholders(config *LoadMCPConfig, analyses []services.PlaceholderAnalysis) {
+	for _, analysis := range analyses {
+		// Replace the original placeholder pattern with template format
+		templatePlaceholder := fmt.Sprintf("{{%s}}", analysis.Placeholder)
+		
+		// Search and replace in all server configurations
+		for _, serverConfig := range config.MCPServers {
+			// Replace in environment variables
+			for key, value := range serverConfig.Env {
+				if strings.Contains(value, analysis.Original) {
+					serverConfig.Env[key] = strings.ReplaceAll(value, analysis.Original, templatePlaceholder)
+				}
+			}
+			
+			// Replace in command arguments
+			for i, arg := range serverConfig.Args {
+				if strings.Contains(arg, analysis.Original) {
+					serverConfig.Args[i] = strings.ReplaceAll(arg, analysis.Original, templatePlaceholder)
+				}
+			}
+		}
+	}
+}
+
+// initializeAI initializes the AI placeholder analyzer if not already set
+func (h *LoadHandler) initializeAI() {
+	if h.placeholderAnalyzer != nil {
+		return // Already initialized
+	}
+
+	// Initialize Genkit and OpenAI plugin
+	genkitApp, err := genkit.Init(context.Background(), nil)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: Failed to initialize AI engine: %v\n", err)
+		return
+	}
+
+	// Initialize OpenAI plugin with API key
+	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+	if openaiAPIKey == "" {
+		fmt.Printf("⚠️  Warning: OPENAI_API_KEY not set, AI detection disabled\n")
+		return
+	}
+	
+	openaiPlugin := &oai.OpenAI{APIKey: openaiAPIKey}
+	h.placeholderAnalyzer = services.NewPlaceholderAnalyzer(genkitApp, openaiPlugin)
+	
+	fmt.Println(getCLIStyles(h.themeManager).Success.Render("🤖 AI placeholder detection enabled"))
+}
+
+// handleEditorMode opens an editor for the user to paste configuration
+func (h *LoadHandler) handleEditorMode(endpoint, environment, configName string) error {
+	styles := getCLIStyles(h.themeManager)
+	
+	fmt.Println(styles.Info.Render("📝 Opening editor for template configuration..."))
+	
+	// Import editor service
+	editorService := &EditorService{}
+	
+	// Open editor with template
+	content, err := editorService.OpenEditorWithTemplate()
+	if err != nil {
+		return fmt.Errorf("failed to open editor: %w", err)
+	}
+	
+	if strings.TrimSpace(content) == "" {
+		fmt.Println(styles.Info.Render("⚠️  No content provided. Operation cancelled."))
+		return nil
+	}
+	
+	// Clean up the content (remove instruction comments)
+	content = h.cleanEditorContent(content)
+	
+	// Validate JSON
+	if err := editorService.ValidateJSON(content); err != nil {
+		fmt.Printf("%s Invalid JSON format. Please check your configuration.\n", styles.Error.Render("❌"))
+		return err
+	}
+	
+	fmt.Println(styles.Success.Render("✅ Configuration received successfully!"))
+	
+	// Parse the configuration
+	var config LoadMCPConfig
+	if err := json.Unmarshal([]byte(content), &config); err != nil {
+		return fmt.Errorf("failed to parse configuration: %w", err)
+	}
+	
+	// Always use AI detection in editor mode
+	h.initializeAI()
+	
+	// Process with AI detection
+	hasTemplates, missingValues := h.detectTemplates(&config)
+	if hasTemplates {
+		fmt.Println(styles.Info.Render("🔍 AI detected placeholders, generating intelligent form..."))
+		processedConfig, err := h.processTemplateConfig(&config, missingValues)
+		if err != nil {
+			return fmt.Errorf("failed to process templates: %w", err)
+		}
+		config = *processedConfig
+	}
+	
+	// Upload the configuration
+	return h.uploadConfiguration(&config, endpoint, environment, configName)
+}
+
+// cleanEditorContent removes instruction comments from editor content
+func (h *LoadHandler) cleanEditorContent(content string) string {
+	lines := strings.Split(content, "\n")
+	var cleanLines []string
+	
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip instruction comments
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		cleanLines = append(cleanLines, line)
+	}
+	
+	return strings.Join(cleanLines, "\n")
+}
+
+// EditorService is a simple editor service for opening external editors
+type EditorService struct{}
+
+// OpenEditorWithTemplate opens editor with a helpful template
+func (e *EditorService) OpenEditorWithTemplate() (string, error) {
+	template := `{
+    "name": "My MCP Configuration",
+    "description": "Configuration with placeholders for AI detection",
+    "mcpServers": {
+        "SQLite Server": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-sqlite",
+                "<path-to-your-sqlite-database.db>"
+            ]
+        },
+        "API Server": {
+            "command": "node",
+            "args": ["/path/to/your/server.js"],
+            "env": {
+                "API_KEY": "YOUR_API_KEY",
+                "DATABASE_URL": "postgresql://user:password@localhost/db",
+                "PORT": "3000"
+            }
+        }
+    }
+}
+
+# Instructions:
+# 1. Replace example servers with your actual MCP configurations
+# 2. Use any placeholder format - AI will detect them:
+#    • <path-to-file>        → File paths with angle brackets
+#    • YOUR_API_KEY          → ALL CAPS environment variables  
+#    • [TOKEN]              → Square bracket tokens
+#    • your-username        → Hyphenated placeholders
+#    • /path/to/your/file   → Path-like placeholders
+# 3. Save and close to continue with AI form generation
+# 4. Delete these instruction lines before saving`
+
+	return e.openEditor(template, "json")
+}
+
+// ValidateJSON validates JSON content
+func (e *EditorService) ValidateJSON(content string) error {
+	var js json.RawMessage
+	return json.Unmarshal([]byte(content), &js)
+}
+
+// openEditor opens the default editor with content
+func (e *EditorService) openEditor(initialContent, extension string) (string, error) {
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", fmt.Sprintf("station-template-*.%s", extension))
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// Write initial content
+	if _, err := tmpFile.WriteString(initialContent); err != nil {
+		return "", fmt.Errorf("failed to write initial content: %w", err)
+	}
+	tmpFile.Close()
+
+	// Get editor
+	editor := e.getEditor()
+	
+	fmt.Printf("📝 Opening editor: %s\n", editor)
+	fmt.Printf("💡 Paste your MCP configuration template and save to continue...\n")
+	
+	// Open editor
+	cmd := exec.Command(editor, tmpFile.Name())
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("editor command failed: %w", err)
+	}
+
+	// Read content
+	content, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		return "", fmt.Errorf("failed to read edited content: %w", err)
+	}
+
+	return strings.TrimSpace(string(content)), nil
+}
+
+// getEditor determines which editor to use
+func (e *EditorService) getEditor() string {
+	// Check environment variables
+	if editor := os.Getenv("VISUAL"); editor != "" {
+		if _, err := exec.LookPath(editor); err == nil {
+			return editor
+		}
+	}
+	if editor := os.Getenv("EDITOR"); editor != "" {
+		if _, err := exec.LookPath(editor); err == nil {
+			return editor
+		}
+	}
+	
+	// Try common editors
+	editors := []string{"code", "nano", "vim", "vi"}
+	for _, editor := range editors {
+		if _, err := exec.LookPath(editor); err == nil {
+			return editor
+		}
+	}
+	
+	return "nano" // Fallback
+}
+
+// uploadConfiguration uploads the configuration using the same logic as the main load flow
+func (h *LoadHandler) uploadConfiguration(config *LoadMCPConfig, endpoint, environment, configName string) error {
+	// Use filename as default config name if not provided
+	if configName == "" {
+		if config.Name != "" {
+			configName = config.Name
+		} else {
+			configName = "editor-config"
+		}
+	}
+
+	// Upload the configuration using existing logic
+	localMode := viper.GetBool("local_mode")
+	
+	if localMode || endpoint == "" {
+		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🏠 Running in local mode"))
+		return h.uploadConfigLocalLoad(*config, configName, environment)
+	} else if endpoint != "" {
+		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🌐 Connecting to: " + endpoint))
+		return h.uploadConfigRemoteLoad(*config, configName, environment, endpoint)
+	} else {
+		return fmt.Errorf("no endpoint specified and local_mode is false in config. Use --endpoint flag or enable local_mode in config")
+	}
 }
 
 // processTemplateConfig shows credential forms and processes templates
