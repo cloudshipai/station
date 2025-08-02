@@ -7,6 +7,7 @@ import (
 
 	"station/internal/auth"
 	"station/internal/services"
+	"station/pkg/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,10 +23,49 @@ func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 // Agent handlers
 
 func (h *APIHandlers) listAgents(c *gin.Context) {
+	// Check for environment filter parameter
+	envFilter := c.Query("environment")
+	
 	agents, err := h.repos.Agents.List()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agents"})
 		return
+	}
+
+	// Filter by environment if specified
+	if envFilter != "" {
+		// Try to parse as environment ID or name
+		var targetEnvID int64 = -1
+		
+		// Try as ID first
+		if envID, err := strconv.ParseInt(envFilter, 10, 64); err == nil {
+			targetEnvID = envID
+		} else {
+			// Try as environment name
+			envs, err := h.repos.Environments.List()
+			if err == nil {
+				for _, env := range envs {
+					if env.Name == envFilter {
+						targetEnvID = env.ID
+						break
+					}
+				}
+			}
+		}
+		
+		if targetEnvID == -1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Environment '%s' not found", envFilter)})
+			return
+		}
+		
+		// Filter agents by environment
+		var filteredAgents []*models.Agent
+		for _, agent := range agents {
+			if agent.EnvironmentID == targetEnvID {
+				filteredAgents = append(filteredAgents, agent)
+			}
+		}
+		agents = filteredAgents
 	}
 
 	c.JSON(http.StatusOK, gin.H{

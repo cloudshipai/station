@@ -70,7 +70,7 @@ func (m AgentsModel) loadTools() tea.Cmd {
 // Load tools assigned to a specific agent
 func (m AgentsModel) loadAgentTools(agentID int64) tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
-		tools, err := m.repos.AgentTools.List(agentID)
+		tools, err := m.repos.AgentTools.ListAgentTools(agentID)
 		if err != nil {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to load agent tools: %w", err)}
 		}
@@ -189,13 +189,23 @@ func (m AgentsModel) createAgent() tea.Cmd {
 				continue
 			}
 			
-			// Add the tool assignment
+			// Add the tool assignment (environment-specific)
 			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', environment=%d", agent.ID, toolName, envID)
-			if _, err := m.repos.AgentTools.Add(agent.ID, toolName, envID); err != nil {
+			
+			// Find tool by name in environment
+			tool, err := m.repos.MCPTools.FindByNameInEnvironment(envID, toolName)
+			if err != nil {
+				log.Printf("DEBUG: Tool '%s' not found in environment %d: %v", toolName, envID, err)
+				failedTools = append(failedTools, toolName)
+				continue
+			}
+			
+			// Add tool to agent using tool ID
+			if _, err := m.repos.AgentTools.AddAgentTool(agent.ID, tool.ID); err != nil {
 				log.Printf("DEBUG: Failed to add tool assignment: %v", err)
 				failedTools = append(failedTools, toolName)
 			} else {
-				log.Printf("DEBUG: Successfully added tool assignment: agent=%d, tool='%s', env=%d", agent.ID, toolName, envID)
+				log.Printf("DEBUG: Successfully added tool assignment: agent=%d, tool='%s' (ID=%d), env=%d", agent.ID, toolName, tool.ID, envID)
 			}
 		}
 		
@@ -324,13 +334,23 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 				continue
 			}
 			
-			// Add the tool assignment
+			// Add the tool assignment (environment-specific)
 			log.Printf("DEBUG: Adding tool assignment: agent=%d, tool='%s', environment=%d", m.selectedAgent.ID, toolName, envID)
-			if _, err := m.repos.AgentTools.Add(m.selectedAgent.ID, toolName, envID); err != nil {
+			
+			// Find tool by name in environment
+			tool, err := m.repos.MCPTools.FindByNameInEnvironment(envID, toolName)
+			if err != nil {
+				log.Printf("DEBUG: Tool '%s' not found in environment %d: %v", toolName, envID, err)
+				failedTools = append(failedTools, toolName)
+				continue
+			}
+			
+			// Add tool to agent using tool ID
+			if _, err := m.repos.AgentTools.AddAgentTool(m.selectedAgent.ID, tool.ID); err != nil {
 				log.Printf("DEBUG: Failed to add tool assignment: %v", err)
 				failedTools = append(failedTools, toolName)
 			} else {
-				log.Printf("DEBUG: Successfully added tool assignment: agent=%d, tool='%s', env=%d", m.selectedAgent.ID, toolName, envID)
+				log.Printf("DEBUG: Successfully added tool assignment: agent=%d, tool='%s' (ID=%d), env=%d", m.selectedAgent.ID, toolName, tool.ID, envID)
 			}
 		}
 		

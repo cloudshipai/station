@@ -127,8 +127,8 @@ func runMainServer() error {
 		repos.Agents,
 		repos.AgentRuns,
 		repos.MCPConfigs,
+		repos.MCPTools,
 		repos.AgentTools,
-		repos.AgentEnvironments,
 		repos.Environments,
 		mcpConfigSvc,
 		webhookSvc,
@@ -291,7 +291,14 @@ func ensureDefaultEnvironment(_ context.Context, repos *repositories.Repositorie
 	
 	// Create default environment
 	description := "Default environment for MCP configurations"
-	defaultEnv, err := repos.Environments.Create("default", &description)
+	
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		return fmt.Errorf("failed to get console user: %w", err)
+	}
+	
+	defaultEnv, err := repos.Environments.Create("default", &description, consoleUser.ID)
 	if err != nil {
 		// Check if it's a unique constraint error (environment already exists)
 		if err.Error() == "UNIQUE constraint failed: environments.name" {

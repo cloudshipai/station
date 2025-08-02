@@ -23,13 +23,24 @@ func setupTestDBForServices(t *testing.T) *sql.DB {
 
 	// Create all necessary tables
 	schema := `
+	CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE,
+		public_key TEXT NOT NULL,
+		is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+		api_key TEXT UNIQUE,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE environments (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL UNIQUE,
 		description TEXT,
 		created_by INTEGER NOT NULL DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (created_by) REFERENCES users (id)
 	);
 
 	CREATE TABLE mcp_configs (
@@ -72,6 +83,12 @@ func setupTestDBForServices(t *testing.T) *sql.DB {
 		t.Fatalf("Failed to create test schema: %v", err)
 	}
 
+	// Create console user for tests
+	_, err = db.Exec("INSERT INTO users (username, public_key) VALUES (?, ?)", "console", "test-key")
+	if err != nil {
+		t.Fatalf("Failed to create console user: %v", err)
+	}
+
 	return db
 }
 
@@ -90,7 +107,12 @@ func TestMCPConfigService_UploadConfig(t *testing.T) {
 	service := NewMCPConfigService(repos, keyManager)
 
 	// Create an environment first
-	env, err := repos.Environments.Create("test-env", nil)
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
+	
+	env, err := repos.Environments.Create("test-env", nil, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -153,7 +175,12 @@ func TestMCPConfigService_GetDecryptedConfig(t *testing.T) {
 	service := NewMCPConfigService(repos, keyManager)
 
 	// Create environment and upload config
-	env, err := repos.Environments.Create("test-env", nil)
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
+	
+	env, err := repos.Environments.Create("test-env", nil, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -217,7 +244,12 @@ func TestMCPConfigService_RotateEncryptionKeys(t *testing.T) {
 	service := NewMCPConfigService(repos, keyManager)
 
 	// Create environment and upload config
-	env, err := repos.Environments.Create("test-env", nil)
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
+	
+	env, err := repos.Environments.Create("test-env", nil, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -328,7 +360,12 @@ func TestMCPConfigService_FilesystemConfig(t *testing.T) {
 	service := NewMCPConfigService(repos, keyManager)
 
 	// Create environment for filesystem config
-	env, err := repos.Environments.Create("filesystem-env", stringPtr("Environment for filesystem MCP server"))
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
+	
+	env, err := repos.Environments.Create("filesystem-env", stringPtr("Environment for filesystem MCP server"), consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
