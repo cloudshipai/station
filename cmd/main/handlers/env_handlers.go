@@ -220,12 +220,18 @@ func (h *EnvironmentHandler) createEnvironmentLocal(name, description string) er
 
 	repos := repositories.New(database)
 	
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		return fmt.Errorf("failed to get console user: %w", err)
+	}
+	
 	var desc *string
 	if description != "" {
 		desc = &description
 	}
 
-	env, err := repos.Environments.Create(name, desc)
+	env, err := repos.Environments.Create(name, desc, consoleUser.ID)
 	if err != nil {
 		return fmt.Errorf("failed to create environment: %w", err)
 	}

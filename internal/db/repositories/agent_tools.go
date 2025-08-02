@@ -42,9 +42,10 @@ func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.
 			AgentID: row.AgentID,
 			ToolID:  row.ToolID,
 		},
-		ToolName:      row.ToolName,
-		ServerName:    row.ServerName,
-		EnvironmentID: row.EnvironmentID,
+		ToolName:        row.ToolName,
+		ServerName:      row.ServerName,
+		EnvironmentID:   row.EnvironmentID,
+		EnvironmentName: row.EnvironmentName,
 	}
 	
 	if row.CreatedAt.Valid {

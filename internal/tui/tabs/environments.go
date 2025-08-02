@@ -681,7 +681,15 @@ func (m EnvironmentsModel) saveEnvironment() tea.Cmd {
 		} else {
 			// Create new environment
 			log.Printf("DEBUG: Creating new environment")
-			env, err := m.repos.Environments.Create(nameValue, description)
+			
+			// Get console user for created_by field
+			consoleUser, err := m.repos.Users.GetByUsername("console")
+			if err != nil {
+				log.Printf("ERROR: Failed to get console user: %v", err)
+				return tea.Printf("❌ Failed to get console user: %v", err)
+			}
+			
+			env, err := m.repos.Environments.Create(nameValue, description, consoleUser.ID)
 			if err != nil {
 				log.Printf("ERROR: Failed to create environment: %v", err)
 				return tea.Printf("❌ Failed to create environment: %v", err)

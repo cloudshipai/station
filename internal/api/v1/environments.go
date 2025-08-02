@@ -42,7 +42,14 @@ func (h *APIHandlers) createEnvironment(c *gin.Context) {
 		return
 	}
 
-	env, err := h.repos.Environments.Create(req.Name, req.Description)
+	// Get console user for created_by field
+	consoleUser, err := h.repos.Users.GetByUsername("console")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get console user"})
+		return
+	}
+	
+	env, err := h.repos.Environments.Create(req.Name, req.Description, consoleUser.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create environment"})
 		return

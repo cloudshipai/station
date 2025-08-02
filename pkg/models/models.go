@@ -92,6 +92,7 @@ type AgentToolWithDetails struct {
 	ToolSchema      string `json:"tool_schema" db:"tool_schema"`
 	ServerName      string `json:"server_name" db:"server_name"`
 	EnvironmentID   int64  `json:"environment_id" db:"environment_id"`
+	EnvironmentName string `json:"environment_name" db:"environment_name"`
 }
 
 type MCPToolWithDetails struct {
