@@ -18,7 +18,7 @@ import (
 	"station/internal/template"
 	"station/internal/variables"
 	"station/pkg/config"
-	"station/pkg/crypto"
+	// "station/pkg/crypto" // Removed - no longer needed for file-based configs
 )
 
 type Server struct {
@@ -26,11 +26,11 @@ type Server struct {
 	db                   db.Database
 	httpServer           *http.Server
 	repos                *repositories.Repositories
-	mcpConfigService     *services.MCPConfigService
+	// mcpConfigService removed - using file-based configs only
 	fileConfigService    *services.FileConfigService
-	hybridConfigService  *services.HybridConfigService
+	// hybridConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService
-	genkitService        *services.GenkitService
+	// genkitService removed - service no longer exists
 	webhookService       *services.WebhookService
 	executionQueueSvc    *services.ExecutionQueueService
 	localMode            bool
@@ -38,13 +38,9 @@ type Server struct {
 
 func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Server {
 	repos := repositories.New(database)
-	keyManager, err := crypto.NewKeyManagerFromEnv()
-	if err != nil {
-		panic(fmt.Errorf("failed to initialize key manager: %w", err))
-	}
+	// keyManager removed - no longer needed for file-based configs
 	
-	// Initialize services
-	mcpConfigService := services.NewMCPConfigService(repos, keyManager)
+	// Initialize services (MCPConfigService removed - using file-based configs only)
 	webhookService := services.NewWebhookService(repos)
 	
 	// Initialize file config components
@@ -72,8 +68,8 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Serv
 		repos.Environments,
 	)
 	
-	// Initialize tool discovery service
-	toolDiscoveryService := services.NewToolDiscoveryService(repos, mcpConfigService)
+	// Initialize tool discovery service (updated for file-based configs)
+	toolDiscoveryService := services.NewToolDiscoveryService(repos)
 	
 	// Initialize file config service
 	fileConfigService := services.NewFileConfigService(
@@ -82,30 +78,22 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Serv
 		repos,
 	)
 	
-	// Initialize hybrid config service
-	hybridConfigService := services.NewHybridConfigService(
-		mcpConfigService,
-		fileConfigService,
-		repos,
-	)
+	// Hybrid config service removed - using file-based configs only
 	
 	return &Server{
 		cfg:                  cfg,
 		db:                   database,
 		repos:                repos,
-		mcpConfigService:     mcpConfigService,
 		fileConfigService:    fileConfigService,
-		hybridConfigService:  hybridConfigService,
 		toolDiscoveryService: toolDiscoveryService,
 		webhookService:       webhookService,
 		localMode:            localMode,
 	}
 }
 
-// SetServices allows setting optional services after creation
-func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService, genkitService *services.GenkitService, executionQueueSvc *services.ExecutionQueueService) {
+// SetServices allows setting optional services after creation (simplified for file-based configs)
+func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService, executionQueueSvc *services.ExecutionQueueService) {
 	s.toolDiscoveryService = toolDiscoveryService
-	s.genkitService = genkitService
 	s.executionQueueSvc = executionQueueSvc
 }
 
@@ -138,9 +126,7 @@ func (s *Server) Start(ctx context.Context) error {
 	v1Group := router.Group("/api/v1")
 	apiHandlers := v1.NewAPIHandlers(
 		s.repos,
-		s.mcpConfigService,
 		s.toolDiscoveryService,
-		s.genkitService,
 		s.webhookService,
 		s.executionQueueSvc,
 		s.localMode,
