@@ -763,16 +763,11 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
 	
-	keyManager, err := crypto.NewKeyManagerFromConfig(stationCfg.EncryptionKey)
-	if err != nil {
-		return fmt.Errorf("failed to initialize key manager: %w", err)
-	}
+	// keyManager removed - no longer needed for file-based configs
 	
-	// Initialize services needed for stdio MCP execution
-	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
-	
-	// Create intelligent agent creator which uses our stdio MCP server
-	creator := services.NewIntelligentAgentCreator(repos, nil, mcpConfigSvc)
+	// Initialize services for file-based configs (MCPConfigService removed)
+	// Create intelligent agent creator (simplified for file-based system)
+	creator := services.NewIntelligentAgentCreator(repos, nil)
 	
 	// Get console user for execution tracking  
 	consoleUser, err := repos.Users.GetByUsername("console")
@@ -1101,17 +1096,14 @@ func (h *AgentHandler) createAgentLocal(name, description, domain, schedule, env
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
 	
-	keyManager, err := crypto.NewKeyManagerFromConfig(stationCfg.EncryptionKey)
-	if err != nil {
-		return fmt.Errorf("failed to initialize key manager: %w", err)
-	}
+	// keyManager removed - no longer needed for file-based configs
 
-	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
+	// MCPConfigService removed - using file-based configs only
 
-	// Create intelligent agent creator
+	// Create intelligent agent creator (simplified for file-based system)
 	// Note: Intelligent agent creator will analyze requirements and determine optimal environment
 	// The user-specified environment (%s) preference is noted but may be overridden for optimal performance
-	creator := services.NewIntelligentAgentCreator(repos, nil, mcpConfigSvc)
+	creator := services.NewIntelligentAgentCreator(repos, nil)
 
 	// Create agent creation request
 	req := services.AgentCreationRequest{
