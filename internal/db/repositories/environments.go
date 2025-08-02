@@ -43,10 +43,10 @@ func convertEnvironmentFromSQLc(env queries.Environment) *models.Environment {
 	return result
 }
 
-func (r *EnvironmentRepo) Create(name string, description *string) (*models.Environment, error) {
+func (r *EnvironmentRepo) Create(name string, description *string, createdBy int64) (*models.Environment, error) {
 	params := queries.CreateEnvironmentParams{
 		Name:      name,
-		CreatedBy: 1, // Default to user ID 1 (admin)
+		CreatedBy: createdBy,
 	}
 	
 	if description != nil {

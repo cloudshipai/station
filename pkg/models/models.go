@@ -18,6 +18,7 @@ type Environment struct {
 type User struct {
 	ID        int64     `json:"id" db:"id"`
 	Username  string    `json:"username" db:"username"`
+	PublicKey string    `json:"public_key" db:"public_key"`
 	IsAdmin   bool      `json:"is_admin" db:"is_admin"`
 	APIKey    *string   `json:"api_key,omitempty" db:"api_key"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
@@ -75,31 +76,15 @@ type Agent struct {
 	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 }
 
-// AgentEnvironment represents the many-to-many relationship between agents and environments
-type AgentEnvironment struct {
-	ID            int64     `json:"id" db:"id"`
-	AgentID       int64     `json:"agent_id" db:"agent_id"`
-	EnvironmentID int64     `json:"environment_id" db:"environment_id"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
-}
-
-// AgentEnvironmentWithDetails includes environment details
-type AgentEnvironmentWithDetails struct {
-	AgentEnvironment
-	EnvironmentName        string `json:"environment_name" db:"environment_name"`
-	EnvironmentDescription string `json:"environment_description" db:"environment_description"`
-}
-
-// AgentTool represents the many-to-many relationship between agents and tools
+// AgentTool represents the many-to-many relationship between agents and tools (environment-specific)
 type AgentTool struct {
-	ID            int64     `json:"id" db:"id"`
-	AgentID       int64     `json:"agent_id" db:"agent_id"`
-	ToolName      string    `json:"tool_name" db:"tool_name"`
-	EnvironmentID int64     `json:"environment_id" db:"environment_id"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	ID        int64     `json:"id" db:"id"`
+	AgentID   int64     `json:"agent_id" db:"agent_id"`
+	ToolID    int64     `json:"tool_id" db:"tool_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
-// AgentToolWithDetails includes environment information for cross-environment context
+// AgentToolWithDetails includes tool and server information with environment context
 type AgentToolWithDetails struct {
 	AgentTool
 	ToolName        string `json:"tool_name" db:"tool_name"`
@@ -107,7 +92,6 @@ type AgentToolWithDetails struct {
 	ToolSchema      string `json:"tool_schema" db:"tool_schema"`
 	ServerName      string `json:"server_name" db:"server_name"`
 	EnvironmentID   int64  `json:"environment_id" db:"environment_id"`
-	EnvironmentName string `json:"environment_name" db:"environment_name"`
 }
 
 type MCPToolWithDetails struct {

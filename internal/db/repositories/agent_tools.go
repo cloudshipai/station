@@ -22,10 +22,9 @@ func NewAgentToolRepo(db *sql.DB) *AgentToolRepo {
 // convertAgentToolFromSQLc converts sqlc AgentTool to models.AgentTool
 func convertAgentToolFromSQLc(agentTool queries.AgentTool) *models.AgentTool {
 	result := &models.AgentTool{
-		ID:            agentTool.ID,
-		AgentID:       agentTool.AgentID,
-		ToolName:      agentTool.ToolName,
-		EnvironmentID: agentTool.EnvironmentID,
+		ID:      agentTool.ID,
+		AgentID: agentTool.AgentID,
+		ToolID:  agentTool.ToolID,
 	}
 	
 	if agentTool.CreatedAt.Valid {
@@ -39,10 +38,9 @@ func convertAgentToolFromSQLc(agentTool queries.AgentTool) *models.AgentTool {
 func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.AgentToolWithDetails {
 	result := &models.AgentToolWithDetails{
 		AgentTool: models.AgentTool{
-			ID:            row.ID,
-			AgentID:       row.AgentID,
-			ToolName:      row.ToolName,
-			EnvironmentID: row.EnvironmentID,
+			ID:      row.ID,
+			AgentID: row.AgentID,
+			ToolID:  row.ToolID,
 		},
 		ToolName:      row.ToolName,
 		ServerName:    row.ServerName,
@@ -64,12 +62,11 @@ func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.
 	return result
 }
 
-// Add creates a new agent-tool assignment 
-func (r *AgentToolRepo) Add(agentID int64, toolName string, environmentID int64) (*models.AgentTool, error) {
+// AddAgentTool creates a new agent-tool assignment using tool ID
+func (r *AgentToolRepo) AddAgentTool(agentID int64, toolID int64) (*models.AgentTool, error) {
 	params := queries.AddAgentToolParams{
-		AgentID:       agentID,
-		ToolName:      toolName,
-		EnvironmentID: environmentID,
+		AgentID: agentID,
+		ToolID:  toolID,
 	}
 	
 	created, err := r.queries.AddAgentTool(context.Background(), params)
@@ -80,18 +77,17 @@ func (r *AgentToolRepo) Add(agentID int64, toolName string, environmentID int64)
 	return convertAgentToolFromSQLc(created), nil
 }
 
-// Remove removes a specific agent-tool assignment
-func (r *AgentToolRepo) Remove(agentID int64, toolName string, environmentID int64) error {
+// RemoveAgentTool removes a specific agent-tool assignment
+func (r *AgentToolRepo) RemoveAgentTool(agentID int64, toolID int64) error {
 	params := queries.RemoveAgentToolParams{
-		AgentID:       agentID,
-		ToolName:      toolName,
-		EnvironmentID: environmentID,
+		AgentID: agentID,
+		ToolID:  toolID,
 	}
 	return r.queries.RemoveAgentTool(context.Background(), params)
 }
 
-// List returns all tools assigned to an agent with details
-func (r *AgentToolRepo) List(agentID int64) ([]*models.AgentToolWithDetails, error) {
+// ListAgentTools returns all tools assigned to an agent with details (environment filtered)
+func (r *AgentToolRepo) ListAgentTools(agentID int64) ([]*models.AgentToolWithDetails, error) {
 	rows, err := r.queries.ListAgentTools(context.Background(), agentID)
 	if err != nil {
 		return nil, err
@@ -100,6 +96,40 @@ func (r *AgentToolRepo) List(agentID int64) ([]*models.AgentToolWithDetails, err
 	var result []*models.AgentToolWithDetails
 	for _, row := range rows {
 		result = append(result, convertAgentToolWithDetailsFromSQLc(row))
+	}
+	
+	return result, nil
+}
+
+// ListAvailableToolsForAgent returns tools available in the agent's environment that aren't assigned
+func (r *AgentToolRepo) ListAvailableToolsForAgent(agentID int64, agentIDParam int64) ([]*models.AgentToolWithDetails, error) {
+	params := queries.ListAvailableToolsForAgentParams{
+		ID:      agentID,
+		AgentID: agentIDParam,
+	}
+	
+	rows, err := r.queries.ListAvailableToolsForAgent(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+	
+	var result []*models.AgentToolWithDetails
+	for _, row := range rows {
+		// Convert ListAvailableToolsForAgentRow to AgentToolWithDetails
+		tool := &models.AgentToolWithDetails{
+			ToolName:    row.ToolName,
+			ServerName:  row.ServerName,
+		}
+		
+		if row.ToolDescription.Valid {
+			tool.ToolDescription = row.ToolDescription.String
+		}
+		
+		if row.ToolSchema.Valid {
+			tool.ToolSchema = row.ToolSchema.String
+		}
+		
+		result = append(result, tool)
 	}
 	
 	return result, nil

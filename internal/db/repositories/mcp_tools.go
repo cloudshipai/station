@@ -128,6 +128,21 @@ func (r *MCPToolRepo) GetByServerInEnvironment(environmentID int64, serverName s
 	return result, nil
 }
 
+// FindByNameInEnvironment finds a tool by name within a specific environment
+func (r *MCPToolRepo) FindByNameInEnvironment(environmentID int64, toolName string) (*models.MCPTool, error) {
+	params := queries.FindMCPToolByNameInEnvironmentParams{
+		EnvironmentID: environmentID,
+		Name:          toolName,
+	}
+	
+	tool, err := r.queries.FindMCPToolByNameInEnvironment(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+	
+	return convertMCPToolFromSQLc(tool), nil
+}
+
 func (r *MCPToolRepo) DeleteByServerID(serverID int64) error {
 	return r.DeleteByServerIDTx(nil, serverID)
 }
