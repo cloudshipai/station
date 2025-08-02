@@ -24,7 +24,7 @@ import (
 type IntelligentAgentCreator struct {
 	repos        *repositories.Repositories
 	agentService AgentServiceInterface
-	mcpConfigSvc *MCPConfigService
+	// mcpConfigSvc removed - using file-based configs only
 	genkitApp    *genkit.Genkit
 	mcpClient    *mcp.GenkitMCPClient
 }
@@ -51,11 +51,10 @@ type AgentCreationPlan struct {
 	SuccessCriteria  string   `json:"success_criteria"`
 }
 
-func NewIntelligentAgentCreator(repos *repositories.Repositories, agentService AgentServiceInterface, mcpConfigSvc *MCPConfigService) *IntelligentAgentCreator {
+func NewIntelligentAgentCreator(repos *repositories.Repositories, agentService AgentServiceInterface) *IntelligentAgentCreator {
 	return &IntelligentAgentCreator{
 		repos:        repos,
 		agentService: agentService,
-		mcpConfigSvc: mcpConfigSvc,
 	}
 }
 
