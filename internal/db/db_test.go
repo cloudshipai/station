@@ -51,7 +51,7 @@ func TestRunMigrations(t *testing.T) {
 	}
 
 	// Verify some expected tables were created from our embedded migrations
-	expectedTables := []string{"users", "environments", "mcp_configs", "agents"}
+	expectedTables := []string{"users", "environments", "file_mcp_configs", "agents"}
 	
 	for _, tableName := range expectedTables {
 		var name string
