@@ -1,0 +1,406 @@
+package services
+
+import (
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"log"
+	"time"
+
+	"station/internal/db/repositories"
+	"station/pkg/config"
+	"station/pkg/models"
+)
+
+// FileConfigService manages file-based MCP configurations integrated with tool discovery
+type FileConfigService struct {
+	configManager   config.ConfigManager
+	toolDiscovery   *ToolDiscoveryService
+	repos          *repositories.Repositories
+}
+
+// NewFileConfigService creates a new file-based config service
+func NewFileConfigService(
+	configManager config.ConfigManager,
+	toolDiscovery *ToolDiscoveryService,
+	repos *repositories.Repositories,
+) *FileConfigService {
+	return &FileConfigService{
+		configManager:   configManager,
+		toolDiscovery:   toolDiscovery,  
+		repos:          repos,
+	}
+}
+
+// CreateOrUpdateTemplate creates or updates a template with variables and triggers tool discovery
+func (s *FileConfigService) CreateOrUpdateTemplate(ctx context.Context, envID int64, configName string, template *config.MCPTemplate, variables map[string]interface{}) error {
+	log.Printf("Creating/updating template %s in environment %d", configName, envID)
+	
+	// 1. Save template file
+	if err := s.configManager.SaveTemplate(ctx, envID, configName, template); err != nil {
+		return fmt.Errorf("failed to save template: %w", err)
+	}
+	
+	// 2. Save variables file (template-specific)
+	if len(variables) > 0 {
+		if err := s.saveTemplateVariables(ctx, envID, configName, variables); err != nil {
+			return fmt.Errorf("failed to save variables: %w", err)
+		}
+	}
+	
+	// 3. Calculate hashes for change detection
+	templateHash := s.calculateTemplateHash(template.Content)
+	variablesHash := s.calculateVariablesHash(variables)
+	
+	// 4. Update or create file config record
+	fileConfig, err := s.updateFileConfigRecord(envID, configName, templateHash, variablesHash)
+	if err != nil {
+		return fmt.Errorf("failed to update file config record: %w", err)
+	}
+	
+	// 5. Trigger tool discovery with rendered config
+	if err := s.discoverAndStoreTools(ctx, fileConfig); err != nil {
+		return fmt.Errorf("failed to discover tools: %w", err)
+	}
+	
+	log.Printf("Successfully created/updated template %s", configName)
+	return nil
+}
+
+// LoadAndRenderConfig loads a template, renders it with variables, and returns the config
+func (s *FileConfigService) LoadAndRenderConfig(ctx context.Context, envID int64, configName string) (*models.MCPConfigData, error) {
+	// 1. Load template
+	template, err := s.configManager.LoadTemplate(ctx, envID, configName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load template: %w", err)
+	}
+	
+	// 2. Load template-specific variables
+	variables, err := s.loadTemplateVariables(ctx, envID, configName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load variables: %w", err)
+	}
+	
+	// 3. Load global variables and merge
+	globalVars, err := s.configManager.LoadVariables(ctx, envID)
+	if err != nil {
+		log.Printf("Warning: failed to load global variables: %v", err)
+		globalVars = make(map[string]interface{})
+	}
+	
+	// 4. Merge variables (template-specific takes precedence)
+	finalVars := s.mergeVariables(globalVars, variables)
+	
+	// 5. Render template
+	renderedConfig, err := s.configManager.RenderTemplate(ctx, template, finalVars)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render template: %w", err)
+	}
+	
+	return renderedConfig, nil
+}
+
+// UpdateTemplateVariables updates variables for a specific template and re-renders
+func (s *FileConfigService) UpdateTemplateVariables(ctx context.Context, envID int64, configName string, variables map[string]interface{}) error {
+	log.Printf("Updating variables for template %s in environment %d", configName, envID)
+	
+	// 1. Save updated variables
+	if err := s.saveTemplateVariables(ctx, envID, configName, variables); err != nil {
+		return fmt.Errorf("failed to save variables: %w", err)
+	}
+	
+	// 2. Update variables hash
+	variablesHash := s.calculateVariablesHash(variables)
+	if err := s.updateVariablesHash(envID, configName, variablesHash); err != nil {
+		return fmt.Errorf("failed to update variables hash: %w", err)
+	}
+	
+	// 3. Re-discover tools with new variables
+	fileConfig, err := s.getFileConfigRecord(envID, configName)
+	if err != nil {
+		return fmt.Errorf("failed to get file config record: %w", err)
+	}
+	
+	if err := s.discoverAndStoreTools(ctx, fileConfig); err != nil {
+		return fmt.Errorf("failed to re-discover tools: %w", err)
+	}
+	
+	log.Printf("Successfully updated variables for template %s", configName)
+	return nil
+}
+
+// DiscoverToolsForConfig discovers tools for a specific file-based config
+func (s *FileConfigService) DiscoverToolsForConfig(ctx context.Context, envID int64, configName string) (*ToolDiscoveryResult, error) {
+	log.Printf("Discovering tools for file config %s in environment %d", configName, envID)
+	
+	// 1. Load and render config
+	renderedConfig, err := s.LoadAndRenderConfig(ctx, envID, configName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load and render config: %w", err)
+	}
+	
+	// 2. Get file config record
+	fileConfig, err := s.getFileConfigRecord(envID, configName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file config record: %w", err)
+	}
+	
+	// 3. Clear existing tools for this file config
+	if err := s.clearExistingToolsForFileConfig(fileConfig.ID); err != nil {
+		return nil, fmt.Errorf("failed to clear existing tools: %w", err)
+	}
+	
+	// 4. Create a temporary MCPConfig for tool discovery
+	tempConfig := &models.MCPConfig{
+		ID:            fileConfig.ID,
+		EnvironmentID: envID,
+		ConfigName:    configName,
+	}
+	
+	// 5. Discover tools using the existing tool discovery service
+	result, err := s.discoverToolsFromRenderedConfig(tempConfig, renderedConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover tools: %w", err)
+	}
+	
+	// 6. Update last rendered timestamp
+	if err := s.updateLastRenderedTime(fileConfig.ID); err != nil {
+		log.Printf("Warning: failed to update last rendered time: %v", err)
+	}
+	
+	return result, nil
+}
+
+// ListFileConfigs lists all file-based configs for an environment
+func (s *FileConfigService) ListFileConfigs(ctx context.Context, envID int64) ([]config.ConfigInfo, error) {
+	// 1. Discover templates from filesystem
+	envName, err := s.getEnvironmentName(envID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment name: %w", err)
+	}
+	
+	templates, err := s.configManager.DiscoverTemplates(ctx, envName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover templates: %w", err)
+	}
+	
+	// 2. Get file config records from database
+	fileConfigs, err := s.getFileConfigsByEnvironment(envID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file config records: %w", err)
+	}
+	
+	// 3. Merge information
+	configMap := make(map[string]*config.ConfigInfo)
+	
+	// Add templates from filesystem
+	for _, template := range templates {
+		configInfo := config.ConfigInfo{
+			Name:        template.Name,
+			Type:        config.ConfigTypeFile,
+			Path:        template.Path,
+			Environment: envName,
+		}
+		configMap[template.Name] = &configInfo
+	}
+	
+	// Add database information
+	for _, fileConfig := range fileConfigs {
+		if configInfo, exists := configMap[fileConfig.ConfigName]; exists {
+			metadata := map[string]string{
+				"template_hash": fileConfig.TemplateHash,
+				"variables_hash": fileConfig.VariablesHash,
+			}
+			if fileConfig.LastLoadedAt != nil {
+				metadata["last_loaded"] = fileConfig.LastLoadedAt.Format(time.RFC3339)
+			}
+			configInfo.Metadata = metadata
+		}
+	}
+	
+	// Convert to slice
+	var result []config.ConfigInfo
+	for _, configInfo := range configMap {
+		result = append(result, *configInfo)
+	}
+	
+	return result, nil
+}
+
+// GeneratePlaceholders generates .env.example files for GitOps workflow
+func (s *FileConfigService) GeneratePlaceholders(ctx context.Context, envID int64, configName string) error {
+	// 1. Load template
+	template, err := s.configManager.LoadTemplate(ctx, envID, configName)
+	if err != nil {
+		return fmt.Errorf("failed to load template: %w", err)
+	}
+	
+	// 2. Generate placeholder content
+	placeholderContent := s.generatePlaceholderContent(template.Variables)
+	
+	// 3. Save placeholder file
+	envName, err := s.getEnvironmentName(envID)
+	if err != nil {
+		return fmt.Errorf("failed to get environment name: %w", err)
+	}
+	
+	placeholderPath := s.getPlaceholderPath(envName, configName)
+	if err := s.savePlaceholderFile(placeholderPath, placeholderContent); err != nil {
+		return fmt.Errorf("failed to save placeholder file: %w", err)
+	}
+	
+	log.Printf("Generated placeholder file: %s", placeholderPath)
+	return nil
+}
+
+// Private helper methods
+
+func (s *FileConfigService) saveTemplateVariables(ctx context.Context, envID int64, configName string, variables map[string]interface{}) error {
+	// This would save template-specific variables to environments/{env}/template-vars/{configName}.env
+	// Implementation would use the VariableStore interface
+	return nil // TODO: Implement
+}
+
+func (s *FileConfigService) loadTemplateVariables(ctx context.Context, envID int64, configName string) (map[string]interface{}, error) {
+	// This would load template-specific variables from environments/{env}/template-vars/{configName}.env
+	// Implementation would use the VariableStore interface
+	return make(map[string]interface{}), nil // TODO: Implement
+}
+
+func (s *FileConfigService) mergeVariables(global, templateSpecific map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	// Start with global variables
+	for k, v := range global {
+		result[k] = v
+	}
+	
+	// Override with template-specific variables
+	for k, v := range templateSpecific {
+		result[k] = v
+	}
+	
+	return result
+}
+
+func (s *FileConfigService) calculateTemplateHash(content string) string {
+	hash := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x", hash)
+}
+
+func (s *FileConfigService) calculateVariablesHash(variables map[string]interface{}) string {
+	// Serialize variables and hash
+	content := fmt.Sprintf("%v", variables) // Simple serialization
+	hash := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x", hash)
+}
+
+func (s *FileConfigService) updateFileConfigRecord(envID int64, configName, templateHash, variablesHash string) (*FileConfigRecord, error) {
+	// This would update the file_mcp_configs table
+	// TODO: Implement when we have the repository methods
+	return &FileConfigRecord{
+		ID:              1,
+		EnvironmentID:   envID,
+		ConfigName:      configName,
+		TemplateHash:    templateHash,
+		VariablesHash:   variablesHash,
+		LastRenderedAt:  time.Now(),
+	}, nil
+}
+
+func (s *FileConfigService) getFileConfigRecord(envID int64, configName string) (*FileConfigRecord, error) {
+	// This would get from file_mcp_configs table
+	// TODO: Implement when we have the repository methods
+	return &FileConfigRecord{
+		ID:              1,
+		EnvironmentID:   envID,
+		ConfigName:      configName,
+		LastRenderedAt:  time.Now(),
+	}, nil
+}
+
+func (s *FileConfigService) discoverAndStoreTools(ctx context.Context, fileConfig *FileConfigRecord) error {
+	// This would call the existing tool discovery but link tools to file config
+	_, err := s.DiscoverToolsForConfig(ctx, fileConfig.EnvironmentID, fileConfig.ConfigName)
+	return err
+}
+
+func (s *FileConfigService) discoverToolsFromRenderedConfig(tempConfig *models.MCPConfig, renderedConfig *models.MCPConfigData) (*ToolDiscoveryResult, error) {
+	// Use the updated ToolDiscoveryService to handle file config tool discovery
+	return s.toolDiscovery.DiscoverToolsFromFileConfig(tempConfig.EnvironmentID, tempConfig.ConfigName, renderedConfig)
+}
+
+func (s *FileConfigService) clearExistingToolsForFileConfig(fileConfigID int64) error {
+	// Clear tools linked to this file config using the extension methods
+	return s.repos.MCPTools.DeleteByFileConfigID(fileConfigID)
+}
+
+func (s *FileConfigService) updateLastRenderedTime(fileConfigID int64) error {
+	// Update the last_loaded_at timestamp in file_mcp_configs table
+	return s.repos.FileMCPConfigs.UpdateLastLoadedAt(fileConfigID)
+}
+
+func (s *FileConfigService) updateVariablesHash(envID int64, configName, variablesHash string) error {
+	// Get the file config record
+	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
+	if err != nil {
+		return fmt.Errorf("failed to get file config: %w", err)
+	}
+	// Update the variables hash
+	return s.repos.FileMCPConfigs.UpdateHashes(fileConfig.ID, fileConfig.TemplateHash, variablesHash, fileConfig.TemplateVarsHash)
+}
+
+func (s *FileConfigService) getFileConfigsByEnvironment(envID int64) ([]*repositories.FileConfigRecord, error) {
+	// Get all file configs for an environment from the repository
+	return s.repos.FileMCPConfigs.ListByEnvironment(envID)
+}
+
+func (s *FileConfigService) getEnvironmentName(envID int64) (string, error) {
+	env, err := s.repos.Environments.GetByID(envID)
+	if err != nil {
+		return "", err
+	}
+	return env.Name, nil
+}
+
+func (s *FileConfigService) generatePlaceholderContent(variables []config.TemplateVariable) string {
+	content := "# MCP Configuration Variables\n"
+	content += "# Copy this file to the appropriate template-vars directory and fill in the values\n\n"
+	
+	for _, variable := range variables {
+		if variable.Secret {
+			content += fmt.Sprintf("%s=# %s (required, secret)\n", variable.Name, variable.Description)
+		} else {
+			defaultVal := ""
+			if variable.Default != nil {
+				defaultVal = fmt.Sprintf("%v", variable.Default)
+			}
+			content += fmt.Sprintf("%s=%s # %s\n", variable.Name, defaultVal, variable.Description)
+		}
+	}
+	
+	return content
+}
+
+func (s *FileConfigService) getPlaceholderPath(envName, configName string) string {
+	// This would return the path for placeholder files
+	return fmt.Sprintf("placeholders/%s.env.example", configName)
+}
+
+func (s *FileConfigService) savePlaceholderFile(path, content string) error {
+	// This would save the placeholder file using the filesystem abstraction
+	// TODO: Implement using the FileSystem interface
+	return nil
+}
+
+// FileConfigRecord represents a file-based config record
+type FileConfigRecord struct {
+	ID              int64
+	EnvironmentID   int64
+	ConfigName      string
+	TemplatePath    string
+	VariablesPath   string
+	TemplateHash    string
+	VariablesHash   string
+	LastRenderedAt  time.Time
+}
