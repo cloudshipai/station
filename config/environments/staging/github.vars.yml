@@ -1,0 +1,4 @@
+# Template-specific variables for github config
+# These override global variables when rendering the github template
+github_token: "github-specific-token"
+github_repo: "specific-repo"

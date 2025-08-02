@@ -1,0 +1,13 @@
+{
+  "name": "github",
+  "servers": {
+    "github-server": {
+      "command": "node",
+      "args": ["/usr/local/lib/node_modules/@modelcontextprotocol/server-github/dist/index.js"],
+      "env": {
+        "GITHUB_TOKEN": "{{.GithubToken}}",
+        "GITHUB_REPO": "{{.GithubRepo}}"
+      }
+    }
+  }
+}
