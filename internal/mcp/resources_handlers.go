@@ -73,16 +73,35 @@ func (s *Server) handleAgentsResource(ctx context.Context, request mcp.ReadResou
 }
 
 func (s *Server) handleMCPConfigsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	// Get all MCP configs from database
-	configs, err := s.repos.MCPConfigs.GetAllLatestConfigs()
+	// Get all file-based MCP configs across environments
+	environments, err := s.repos.Environments.List()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list MCP configs: %w", err)
+		return nil, fmt.Errorf("failed to list environments: %w", err)
+	}
+	
+	var allConfigs []interface{}
+	for _, env := range environments {
+		fileConfigs, err := s.repos.FileMCPConfigs.ListByEnvironment(env.ID)
+		if err != nil {
+			continue // Skip environments with no configs
+		}
+		for _, fc := range fileConfigs {
+			allConfigs = append(allConfigs, map[string]interface{}{
+				"id":             fc.ID,
+				"name":           fc.ConfigName,
+				"environment_id": fc.EnvironmentID,
+				"environment":    env.Name,
+				"path":           fc.TemplatePath,
+				"type":           "file",
+				"last_loaded":    fc.LastLoadedAt,
+			})
+		}
 	}
 
 	// Format response optimized for LLM context loading
 	response := map[string]interface{}{
-		"total_count": len(configs),
-		"mcp_configs": configs,
+		"total_count": len(allConfigs),
+		"mcp_configs": allConfigs,
 		"resource_uri": "station://mcp-configs",
 		"timestamp":   time.Now(),
 	}

@@ -90,24 +90,12 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 		return
 	}
 
-	// Execute agent using the genkit service
-	if h.genkitService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Agent execution service not available"})
-		return
-	}
+	// TODO: Re-implement agent execution with new file-based system
+	// Legacy genkit service removed during migration to file-based configs
+	_ = agentID // Unused during migration
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Agent execution temporarily disabled during config migration"})
 
-	response, err := h.genkitService.ExecuteAgent(c.Request.Context(), agentID, req.Task)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to execute agent: %v", err)})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"agent_id": agentID,
-		"task":     req.Task,
-		"response": response.Content,
-		"success":  true,
-	})
+	// Response handled above
 }
 
 func (h *APIHandlers) queueAgent(c *gin.Context) {
@@ -197,13 +185,12 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		req.MaxSteps = 25
 	}
 
-	// Create agent using genkit service
-	if h.genkitService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Agent service not available"})
-		return
-	}
-
-	agentConfig := &services.AgentConfig{
+	// TODO: Re-implement agent creation
+	// Legacy genkit service removed during migration to file-based configs
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Agent creation temporarily disabled during config migration"})
+	return
+	
+	_ = &services.AgentConfig{ // Unused during migration
 		EnvironmentID: req.EnvironmentID,
 		Name:          req.Name,
 		Description:   req.Description,
@@ -213,13 +200,9 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		CreatedBy:     createdBy,
 	}
 
-	agent, err := h.genkitService.CreateAgent(c.Request.Context(), agentConfig)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create agent: %v", err)})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{"agent": agent})
+	// TODO: Re-implement agent creation with new file-based system
+	// Legacy genkit service removed during migration to file-based configs
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Agent creation temporarily disabled during config migration"})
 }
 
 func (h *APIHandlers) getAgent(c *gin.Context) {

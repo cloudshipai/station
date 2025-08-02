@@ -8,7 +8,6 @@ import (
 type Repositories struct {
 	Environments      *EnvironmentRepo
 	Users             *UserRepo
-	MCPConfigs        *MCPConfigRepo
 	FileMCPConfigs    *FileMCPConfigRepo
 	MCPServers        *MCPServerRepo
 	MCPTools          *MCPToolRepo
@@ -29,7 +28,6 @@ func New(database db.Database) *Repositories {
 	return &Repositories{
 		Environments:      NewEnvironmentRepo(conn),
 		Users:             NewUserRepo(conn),
-		MCPConfigs:        NewMCPConfigRepo(conn),
 		FileMCPConfigs:    NewFileMCPConfigRepo(conn),
 		MCPServers:        NewMCPServerRepo(conn),
 		MCPTools:          NewMCPToolRepo(conn),
