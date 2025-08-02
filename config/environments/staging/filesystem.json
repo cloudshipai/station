@@ -1,0 +1,10 @@
+{
+  "name": "filesystem",
+  "servers": {
+    "filesystem-server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "{{.AllowedPaths}}"],
+      "env": {}
+    }
+  }
+}

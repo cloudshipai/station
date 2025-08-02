@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+	"station/internal/db/repositories"
 	"station/pkg/config"
 	"station/pkg/models"
 )
@@ -18,15 +19,17 @@ type FileConfigManager struct {
 	templateEng  config.TemplateEngine
 	variableStore config.VariableStore
 	options      config.FileConfigOptions
+	envRepo      *repositories.EnvironmentRepo
 }
 
 // NewFileConfigManager creates a new file-based configuration manager
-func NewFileConfigManager(fs config.FileSystem, templateEng config.TemplateEngine, variableStore config.VariableStore, opts config.FileConfigOptions) *FileConfigManager {
+func NewFileConfigManager(fs config.FileSystem, templateEng config.TemplateEngine, variableStore config.VariableStore, opts config.FileConfigOptions, envRepo *repositories.EnvironmentRepo) *FileConfigManager {
 	return &FileConfigManager{
 		fs:           fs,
 		templateEng:  templateEng,
 		variableStore: variableStore,
 		options:      opts,
+		envRepo:      envRepo,
 	}
 }
 
@@ -270,9 +273,18 @@ func (m *FileConfigManager) parseRenderedConfig(rendered string) (*models.MCPCon
 }
 
 func (m *FileConfigManager) getEnvironmentName(envID int64) string {
-	// This would fetch the environment name from the database using envID
-	// For now, return a placeholder
-	return "default"
+	// If no envRepo provided, return default
+	if m.envRepo == nil {
+		return "default"
+	}
+	
+	// Fetch the environment name from the database using envID
+	env, err := m.envRepo.GetByID(envID)
+	if err != nil {
+		// If we can't find the environment, return default
+		return "default"
+	}
+	return env.Name
 }
 
 // SaveTemplate saves a template to the filesystem
