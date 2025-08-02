@@ -909,7 +909,7 @@ func (h *AgentHandler) monitorExecutionWithTail(runID int64, apiPort int) error 
 func (h *AgentHandler) displayExecutionResults(run *models.AgentRun) error {
 	styles := getCLIStyles(h.themeManager)
 	
-	fmt.Printf("\n" + styles.Banner.Render("🎉 Execution Results") + "\n\n")
+	fmt.Print("\n" + styles.Banner.Render("🎉 Execution Results") + "\n\n")
 	fmt.Printf("📊 Run ID: %d\n", run.ID)
 	fmt.Printf("⚡ Steps Taken: %d\n", run.StepsTaken)
 	if run.CompletedAt != nil {
