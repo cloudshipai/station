@@ -23,9 +23,10 @@ func NewUserRepo(db *sql.DB) *UserRepo {
 // convertUserFromSQLc converts sqlc User to models.User
 func convertUserFromSQLc(user queries.User) *models.User {
 	result := &models.User{
-		ID:       user.ID,
-		Username: user.Username,
-		IsAdmin:  user.IsAdmin,
+		ID:        user.ID,
+		Username:  user.Username,
+		PublicKey: user.PublicKey,
+		IsAdmin:   user.IsAdmin,
 	}
 	
 	if user.ApiKey.Valid {
@@ -43,10 +44,11 @@ func convertUserFromSQLc(user queries.User) *models.User {
 	return result
 }
 
-func (r *UserRepo) Create(username string, isAdmin bool, apiKey *string) (*models.User, error) {
+func (r *UserRepo) Create(username string, publicKey string, isAdmin bool, apiKey *string) (*models.User, error) {
 	params := queries.CreateUserParams{
-		Username: username,
-		IsAdmin:  isAdmin,
+		Username:  username,
+		PublicKey: publicKey,
+		IsAdmin:   isAdmin,
 	}
 	
 	if apiKey != nil {

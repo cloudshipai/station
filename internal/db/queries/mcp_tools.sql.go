@@ -52,6 +52,33 @@ func (q *Queries) DeleteMCPToolsByServer(ctx context.Context, mcpServerID int64)
 	return err
 }
 
+const findMCPToolByNameInEnvironment = `-- name: FindMCPToolByNameInEnvironment :one
+SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
+JOIN mcp_servers s ON t.mcp_server_id = s.id
+WHERE s.environment_id = ? AND t.name = ?
+LIMIT 1
+`
+
+type FindMCPToolByNameInEnvironmentParams struct {
+	EnvironmentID int64  `json:"environment_id"`
+	Name          string `json:"name"`
+}
+
+func (q *Queries) FindMCPToolByNameInEnvironment(ctx context.Context, arg FindMCPToolByNameInEnvironmentParams) (McpTool, error) {
+	row := q.db.QueryRowContext(ctx, findMCPToolByNameInEnvironment, arg.EnvironmentID, arg.Name)
+	var i McpTool
+	err := row.Scan(
+		&i.ID,
+		&i.McpServerID,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getMCPTool = `-- name: GetMCPTool :one
 SELECT id, mcp_server_id, name, description, input_schema, created_at, updated_at FROM mcp_tools WHERE id = ?
 `

@@ -6,21 +6,20 @@ import (
 )
 
 type Repositories struct {
-	Environments       *EnvironmentRepo
-	Users              *UserRepo
-	MCPConfigs         *MCPConfigRepo
-	MCPServers         *MCPServerRepo
-	MCPTools           *MCPToolRepo
-	ModelProviders     *ModelProviderRepository
-	Models             *ModelRepository
-	Agents             *AgentRepo
-	AgentEnvironments  *AgentEnvironmentRepo
-	AgentTools         *AgentToolRepo
-	AgentRuns          *AgentRunRepo
-	Settings           *SettingsRepo
-	Webhooks           *WebhooksRepo
-	WebhookDeliveries  *WebhookDeliveriesRepo
-	db                 db.Database // Store reference to database for transactions
+	Environments      *EnvironmentRepo
+	Users             *UserRepo
+	MCPConfigs        *MCPConfigRepo
+	MCPServers        *MCPServerRepo
+	MCPTools          *MCPToolRepo
+	ModelProviders    *ModelProviderRepository
+	Models            *ModelRepository
+	Agents            *AgentRepo
+	AgentTools        *AgentToolRepo
+	AgentRuns         *AgentRunRepo
+	Settings          *SettingsRepo
+	Webhooks          *WebhooksRepo
+	WebhookDeliveries *WebhookDeliveriesRepo
+	db                db.Database // Store reference to database for transactions
 }
 
 func New(database db.Database) *Repositories {
@@ -35,7 +34,6 @@ func New(database db.Database) *Repositories {
 		ModelProviders:    NewModelProviderRepository(conn),
 		Models:            NewModelRepository(conn),
 		Agents:            NewAgentRepo(conn),
-		AgentEnvironments: NewAgentEnvironmentRepo(conn),
 		AgentTools:        NewAgentToolRepo(conn),
 		AgentRuns:         NewAgentRunRepo(conn),
 		Settings:          NewSettingsRepo(conn),

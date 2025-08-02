@@ -26,13 +26,6 @@ type Agent struct {
 	UpdatedAt        sql.NullTime   `json:"updated_at"`
 }
 
-type AgentEnvironment struct {
-	ID            int64        `json:"id"`
-	AgentID       int64        `json:"agent_id"`
-	EnvironmentID int64        `json:"environment_id"`
-	CreatedAt     sql.NullTime `json:"created_at"`
-}
-
 type AgentRun struct {
 	ID             int64          `json:"id"`
 	AgentID        int64          `json:"agent_id"`
@@ -48,11 +41,10 @@ type AgentRun struct {
 }
 
 type AgentTool struct {
-	ID            int64        `json:"id"`
-	AgentID       int64        `json:"agent_id"`
-	ToolName      string       `json:"tool_name"`
-	EnvironmentID int64        `json:"environment_id"`
-	CreatedAt     sql.NullTime `json:"created_at"`
+	ID        int64        `json:"id"`
+	AgentID   int64        `json:"agent_id"`
+	ToolID    int64        `json:"tool_id"`
+	CreatedAt sql.NullTime `json:"created_at"`
 }
 
 type Environment struct {
@@ -158,6 +150,7 @@ type ThemeColor struct {
 type User struct {
 	ID        int64          `json:"id"`
 	Username  string         `json:"username"`
+	PublicKey string         `json:"public_key"`
 	IsAdmin   bool           `json:"is_admin"`
 	ApiKey    sql.NullString `json:"api_key"`
 	CreatedAt sql.NullTime   `json:"created_at"`

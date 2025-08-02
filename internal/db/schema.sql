@@ -2,6 +2,7 @@
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
+    public_key TEXT NOT NULL,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
     api_key TEXT UNIQUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -114,27 +115,15 @@ CREATE TABLE agents (
     FOREIGN KEY (created_by) REFERENCES users (id)
 );
 
--- Agent-Environment relationships (many-to-many for cross-environment access)
-CREATE TABLE agent_environments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id INTEGER NOT NULL,
-    environment_id INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
-    FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE,
-    UNIQUE(agent_id, environment_id)
-);
-
--- Agent-Tool relationships (many-to-many)
+-- Agent-Tool relationships (many-to-many) - environment-specific via tool reference
 CREATE TABLE agent_tools (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id INTEGER NOT NULL,
-    tool_name TEXT NOT NULL,
-    environment_id INTEGER NOT NULL,
+    tool_id INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
-    FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE,
-    UNIQUE(agent_id, tool_name, environment_id)
+    FOREIGN KEY (tool_id) REFERENCES mcp_tools(id) ON DELETE CASCADE,
+    UNIQUE(agent_id, tool_id)
 );
 
 -- Agent execution runs

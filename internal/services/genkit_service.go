@@ -22,18 +22,18 @@ import (
 // GenkitService provides Genkit-based AI agent execution integrated with Station
 // Now supports cross-environment agents with tool namespacing
 type GenkitService struct {
-	genkitApp            *genkit.Genkit
-	openaiPlugin         *oai.OpenAI
-	mcpManager           *mcp.MCPManager
-	agentRepo            *repositories.AgentRepo
-	agentRunRepo         *repositories.AgentRunRepo
-	mcpConfigRepo        *repositories.MCPConfigRepo
-	agentToolRepo        *repositories.AgentToolRepo
-	agentEnvironmentRepo *repositories.AgentEnvironmentRepo
-	environmentRepo      *repositories.EnvironmentRepo
-	mcpConfigService     *MCPConfigService
-	webhookService       *WebhookService
-	telemetryService     *telemetry.TelemetryService
+	genkitApp        *genkit.Genkit
+	openaiPlugin     *oai.OpenAI
+	mcpManager       *mcp.MCPManager
+	agentRepo        *repositories.AgentRepo
+	agentRunRepo     *repositories.AgentRunRepo
+	mcpConfigRepo    *repositories.MCPConfigRepo
+	mcpToolRepo      *repositories.MCPToolRepo
+	agentToolRepo    *repositories.AgentToolRepo
+	environmentRepo  *repositories.EnvironmentRepo
+	mcpConfigService *MCPConfigService
+	webhookService   *WebhookService
+	telemetryService *telemetry.TelemetryService
 }
 
 // NewGenkitService creates a new Genkit service with cross-environment support
@@ -43,24 +43,24 @@ func NewGenkitService(
 	agentRepo *repositories.AgentRepo,
 	agentRunRepo *repositories.AgentRunRepo,
 	mcpConfigRepo *repositories.MCPConfigRepo,
+	mcpToolRepo *repositories.MCPToolRepo,
 	agentToolRepo *repositories.AgentToolRepo,
-	agentEnvironmentRepo *repositories.AgentEnvironmentRepo,
 	environmentRepo *repositories.EnvironmentRepo,
 	mcpConfigService *MCPConfigService,
 	webhookService *WebhookService,
 	telemetryService *telemetry.TelemetryService,
 ) *GenkitService {
 	return &GenkitService{
-		genkitApp:            genkitApp,
-		openaiPlugin:         openaiPlugin,
-		agentRepo:            agentRepo,
-		agentRunRepo:         agentRunRepo,
-		mcpConfigRepo:        mcpConfigRepo,
-		agentToolRepo:        agentToolRepo,
-		agentEnvironmentRepo: agentEnvironmentRepo,
-		environmentRepo:      environmentRepo,
-		mcpConfigService:     mcpConfigService,
-		webhookService:       webhookService,
+		genkitApp:        genkitApp,
+		openaiPlugin:     openaiPlugin,
+		agentRepo:        agentRepo,
+		agentRunRepo:     agentRunRepo,
+		mcpConfigRepo:    mcpConfigRepo,
+		mcpToolRepo:      mcpToolRepo,
+		agentToolRepo:    agentToolRepo,
+		environmentRepo:  environmentRepo,
+		mcpConfigService: mcpConfigService,
+		webhookService:   webhookService,
 		telemetryService:     telemetryService,
 	}
 }
@@ -186,7 +186,7 @@ func (s *GenkitService) executeAgentInternal(ctx context.Context, agentID, userI
 			log.Printf("Failed to get MCP tools: %v", err)
 		} else {
 			// Filter tools based on agent's cross-environment tool assignments
-			assignedTools, err := s.agentToolRepo.List(agentID)
+			assignedTools, err := s.agentToolRepo.ListAgentTools(agentID)
 			if err != nil {
 				log.Printf("Failed to get agent tool assignments: %v", err)
 			} else {
@@ -440,11 +440,46 @@ func (s *GenkitService) CreateAgent(ctx context.Context, config *AgentConfig) (*
 		s.telemetryService.TrackAgentCreated(agent.ID, config.EnvironmentID, len(config.AssignedTools))
 	}
 
-	// TODO: Handle AssignedTools, ModelProvider, ModelID
+	// Handle AssignedTools - only assign tools from the agent's environment
+	if len(config.AssignedTools) > 0 {
+		err = s.assignToolsToAgent(ctx, agent.ID, config.EnvironmentID, config.AssignedTools)
+		if err != nil {
+			// If tool assignment fails, we could either delete the agent or continue
+			// For now, continue but log the error
+			log.Printf("Warning: Failed to assign some tools to agent %d: %v", agent.ID, err)
+		}
+	}
+
+	// TODO: Handle ModelProvider, ModelID
 	// For now, we'll ignore these fields since our current implementation
 	// doesn't yet support per-agent model configuration
 	
 	return agent, nil
+}
+
+// assignToolsToAgent assigns tools to an agent, filtering to only include tools from the agent's environment
+func (s *GenkitService) assignToolsToAgent(ctx context.Context, agentID int64, agentEnvironmentID int64, toolNames []string) error {
+	for _, toolName := range toolNames {
+		// Find the tool in the agent's environment
+		tool, err := s.findToolInEnvironment(agentEnvironmentID, toolName)
+		if err != nil {
+			log.Printf("Warning: Tool '%s' not found in environment %d for agent %d: %v", toolName, agentEnvironmentID, agentID, err)
+			continue // Skip tools that don't exist in the agent's environment
+		}
+
+		// Assign the tool to the agent
+		_, err = s.agentToolRepo.AddAgentTool(agentID, tool.ID)
+		if err != nil {
+			return fmt.Errorf("failed to assign tool '%s' (ID: %d) to agent %d: %w", toolName, tool.ID, agentID, err)
+		}
+	}
+	
+	return nil
+}
+
+// findToolInEnvironment finds a tool by name within a specific environment
+func (s *GenkitService) findToolInEnvironment(environmentID int64, toolName string) (*models.MCPTool, error) {
+	return s.mcpToolRepo.FindByNameInEnvironment(environmentID, toolName)
 }
 
 // GetAgent implements AgentServiceInterface for MCP server compatibility

@@ -1,6 +1,6 @@
 -- name: CreateUser :one
-INSERT INTO users (username, is_admin, api_key)
-VALUES (?, ?, ?)
+INSERT INTO users (username, public_key, is_admin, api_key)
+VALUES (?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetUser :one
