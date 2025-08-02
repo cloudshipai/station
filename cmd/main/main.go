@@ -9,6 +9,7 @@ import (
 	"station/internal/db"
 	"station/internal/telemetry"
 	"station/internal/theme"
+	"station/cmd/main/handlers"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -42,7 +43,6 @@ func init() {
 	rootCmd.AddCommand(keyCmd)
 	rootCmd.AddCommand(loadCmd)
 	rootCmd.AddCommand(mcpCmd)
-	rootCmd.AddCommand(envCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(runsCmd)
 	rootCmd.AddCommand(webhookCmd)
@@ -50,6 +50,10 @@ func init() {
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(bannerCmd)
+	
+	// Initialize file config handler and integrate with mcp commands
+	fileConfigHandler := handlers.NewFileConfigHandler()
+	fileConfigHandler.RegisterMCPCommands(mcpCmd)
 	
 	configCmd.AddCommand(configShowCmd)
 	configCmd.AddCommand(configEditCmd)
@@ -71,11 +75,6 @@ func init() {
 	mcpCmd.AddCommand(mcpAddCmd)
 	mcpCmd.AddCommand(mcpDeleteCmd)
 	
-	envCmd.AddCommand(envListCmd)
-	envCmd.AddCommand(envCreateCmd)
-	envCmd.AddCommand(envGetCmd)
-	envCmd.AddCommand(envUpdateCmd)
-	envCmd.AddCommand(envDeleteCmd)
 	
 	agentCmd.AddCommand(agentListCmd)
 	agentCmd.AddCommand(agentShowCmd)
@@ -135,16 +134,6 @@ func init() {
 	mcpDeleteCmd.Flags().String("environment", "default", "Environment to delete from")
 	mcpDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
 	
-	// Environment command flags
-	envListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	envCreateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	envCreateCmd.Flags().String("description", "", "Description for the environment")
-	envGetCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	envUpdateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	envUpdateCmd.Flags().String("name", "", "New name for the environment")
-	envUpdateCmd.Flags().String("description", "", "New description for the environment")
-	envDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	envDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
 	
 	// Agent command flags
 	agentListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")

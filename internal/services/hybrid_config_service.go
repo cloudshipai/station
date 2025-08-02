@@ -1,0 +1,178 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"station/internal/db/repositories"
+)
+
+// HybridConfigService manages both database and file-based MCP configurations
+// This service provides a unified interface that can work with both config types
+type HybridConfigService struct {
+	dbConfigService   *MCPConfigService
+	fileConfigService *FileConfigService
+	repos             *repositories.Repositories
+}
+
+// NewHybridConfigService creates a service that can handle both config types
+func NewHybridConfigService(
+	dbConfigService *MCPConfigService,
+	fileConfigService *FileConfigService,
+	repos *repositories.Repositories,
+) *HybridConfigService {
+	return &HybridConfigService{
+		dbConfigService:   dbConfigService,
+		fileConfigService: fileConfigService,
+		repos:             repos,
+	}
+}
+
+// ListAllConfigs returns both database and file configs in a unified format
+func (s *HybridConfigService) ListAllConfigs(ctx context.Context, envID int64) ([]ConfigSummary, error) {
+	var allConfigs []ConfigSummary
+
+	// Get database configs
+	dbConfigs, err := s.repos.MCPConfigs.ListByEnvironment(envID)
+	if err != nil {
+		log.Printf("Warning: failed to get database configs: %v", err)
+	} else {
+		for _, dbConfig := range dbConfigs {
+			allConfigs = append(allConfigs, ConfigSummary{
+				Name:         dbConfig.ConfigName,
+				Type:         "database",
+				Version:      dbConfig.Version,
+				LastUpdated:  &dbConfig.UpdatedAt,
+				Source:       "database",
+				EnvironmentID: envID,
+			})
+		}
+	}
+
+	// Get file configs
+	fileConfigs, err := s.fileConfigService.ListFileConfigs(ctx, envID)
+	if err != nil {
+		log.Printf("Warning: failed to get file configs: %v", err)
+	} else {
+		for _, fileConfig := range fileConfigs {
+			summary := ConfigSummary{
+				Name:          fileConfig.Name,
+				Type:          "file",
+				Version:       0, // File configs don't have versions
+				Source:        "file",
+				EnvironmentID: envID,
+				Path:          fileConfig.Path,
+			}
+			
+			// Add metadata if available
+			if fileConfig.Metadata != nil {
+				if lastLoaded, ok := fileConfig.Metadata["last_loaded"]; ok {
+					summary.Metadata = map[string]string{
+						"last_loaded": lastLoaded,
+					}
+				}
+			}
+			
+			allConfigs = append(allConfigs, summary)
+		}
+	}
+
+	return allConfigs, nil
+}
+
+// GetConfigInfo returns detailed information about a specific config
+func (s *HybridConfigService) GetConfigInfo(ctx context.Context, envID int64, configName string) (*DetailedConfigInfo, error) {
+	// First check if it's a file config
+	fileConfigs, err := s.fileConfigService.ListFileConfigs(ctx, envID)
+	if err == nil {
+		for _, fileConfig := range fileConfigs {
+			if fileConfig.Name == configName {
+				return &DetailedConfigInfo{
+					ConfigSummary: ConfigSummary{
+						Name:          configName,
+						Type:          "file",
+						Source:        "file",
+						EnvironmentID: envID,
+						Path:          fileConfig.Path,
+					},
+					TemplateContent: "", // Would need to load from file
+					Variables:       map[string]interface{}{}, // Would need to load
+					ToolCount:       0, // Would need to count linked tools
+				}, nil
+			}
+		}
+	}
+
+	// Check database configs
+	dbConfig, err := s.repos.MCPConfigs.GetLatestByName(envID, configName)
+	if err != nil {
+		return nil, fmt.Errorf("config not found: %w", err)
+	}
+
+	// Get tool count for database config
+	toolCount, err := s.getToolCountForDBConfig(dbConfig.ID)
+	if err != nil {
+		log.Printf("Warning: failed to get tool count: %v", err)
+	}
+
+	return &DetailedConfigInfo{
+		ConfigSummary: ConfigSummary{
+			Name:          configName,
+			Type:          "database",
+			Version:       dbConfig.Version,
+			LastUpdated:   &dbConfig.UpdatedAt,
+			Source:        "database",
+			EnvironmentID: envID,
+		},
+		TemplateContent: "", // Would need to decrypt
+		Variables:       map[string]interface{}{},
+		ToolCount:       toolCount,
+	}, nil
+}
+
+// DiscoverToolsForConfig discovers tools for either config type
+func (s *HybridConfigService) DiscoverToolsForConfig(ctx context.Context, envID int64, configName string) (*ToolDiscoveryResult, error) {
+	// Check if it's a file config first
+	fileConfigs, err := s.fileConfigService.ListFileConfigs(ctx, envID)
+	if err == nil {
+		for _, fileConfig := range fileConfigs {
+			if fileConfig.Name == configName {
+				// Use file config service
+				return s.fileConfigService.DiscoverToolsForConfig(ctx, envID, configName)
+			}
+		}
+	}
+
+	// Fall back to database config discovery
+	toolDiscovery := NewToolDiscoveryService(s.repos, s.dbConfigService)
+	return toolDiscovery.DiscoverTools(envID)
+}
+
+func (s *HybridConfigService) getToolCountForDBConfig(configID int64) (int, error) {
+	// This would need to count tools for a database config
+	// Implementation depends on how database config tools are tracked
+	return 0, nil
+}
+
+// ConfigSummary represents a unified view of both config types
+type ConfigSummary struct {
+	Name          string                 `json:"name"`
+	Type          string                 `json:"type"` // "database" or "file"
+	Version       int64                  `json:"version,omitempty"` // Only for database configs
+	LastUpdated   *time.Time             `json:"last_updated,omitempty"`
+	Source        string                 `json:"source"`
+	EnvironmentID int64                  `json:"environment_id"`
+	Path          string                 `json:"path,omitempty"` // Only for file configs
+	Metadata      map[string]string      `json:"metadata,omitempty"`
+}
+
+// DetailedConfigInfo provides comprehensive config information
+type DetailedConfigInfo struct {
+	ConfigSummary
+	TemplateContent string                 `json:"template_content,omitempty"`
+	Variables       map[string]interface{} `json:"variables,omitempty"`
+	ToolCount       int                    `json:"tool_count"`
+	Servers         []string               `json:"servers,omitempty"`
+}

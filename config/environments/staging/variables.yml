@@ -1,0 +1,3 @@
+# Global variables for environment: staging
+github_token: "your-github-token-here"
+github_org: "your-org"
