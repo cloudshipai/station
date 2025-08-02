@@ -5,22 +5,30 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	
+	"github.com/gin-gonic/gin"
+	"github.com/spf13/afero"
+	
 	"station/internal/api/v1"
-	"station/internal/config"
+	internalconfig "station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/filesystem"
 	"station/internal/services"
+	"station/internal/template"
+	"station/internal/variables"
+	"station/pkg/config"
 	"station/pkg/crypto"
-
-	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
-	cfg                  *config.Config
+	cfg                  *internalconfig.Config
 	db                   db.Database
 	httpServer           *http.Server
 	repos                *repositories.Repositories
 	mcpConfigService     *services.MCPConfigService
+	fileConfigService    *services.FileConfigService
+	hybridConfigService  *services.HybridConfigService
 	toolDiscoveryService *services.ToolDiscoveryService
 	genkitService        *services.GenkitService
 	webhookService       *services.WebhookService
@@ -28,22 +36,68 @@ type Server struct {
 	localMode            bool
 }
 
-func New(cfg *config.Config, database db.Database, localMode bool) *Server {
+func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Server {
 	repos := repositories.New(database)
 	keyManager, err := crypto.NewKeyManagerFromEnv()
 	if err != nil {
 		panic(fmt.Errorf("failed to initialize key manager: %w", err))
 	}
+	
+	// Initialize services
 	mcpConfigService := services.NewMCPConfigService(repos, keyManager)
 	webhookService := services.NewWebhookService(repos)
 	
+	// Initialize file config components
+	fs := afero.NewOsFs()
+	fileSystem := filesystem.NewConfigFileSystem(fs, "./config", "./config/vars")
+	templateEngine := template.NewGoTemplateEngine()
+	variableStore := variables.NewEnvVariableStore(fs)
+	
+	// Create file config options with default paths
+	fileConfigOptions := config.FileConfigOptions{
+		ConfigDir:       "./config",        // Default config directory
+		VariablesDir:    "./config/vars",   // Default variables directory
+		Strategy:        config.StrategyTemplateFirst,
+		AutoCreate:      true,
+		BackupOnChange:  false,
+		ValidateOnLoad:  true,
+	}
+	
+	// Create file config manager
+	fileConfigManager := internalconfig.NewFileConfigManager(
+		fileSystem,
+		templateEngine, 
+		variableStore,
+		fileConfigOptions,
+	)
+	
+	// Initialize tool discovery service
+	toolDiscoveryService := services.NewToolDiscoveryService(repos, mcpConfigService)
+	
+	// Initialize file config service
+	fileConfigService := services.NewFileConfigService(
+		fileConfigManager,
+		toolDiscoveryService,
+		repos,
+	)
+	
+	// Initialize hybrid config service
+	hybridConfigService := services.NewHybridConfigService(
+		mcpConfigService,
+		fileConfigService,
+		repos,
+	)
+	
 	return &Server{
-		cfg:              cfg,
-		db:               database,
-		repos:            repos,
-		mcpConfigService: mcpConfigService,
-		webhookService:   webhookService,
-		localMode:        localMode,
+		cfg:                  cfg,
+		db:                   database,
+		repos:                repos,
+		mcpConfigService:     mcpConfigService,
+		fileConfigService:    fileConfigService,
+		hybridConfigService:  hybridConfigService,
+		toolDiscoveryService: toolDiscoveryService,
+		webhookService:       webhookService,
+		localMode:            localMode,
 	}
 }
 
