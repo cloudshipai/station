@@ -11,23 +11,30 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (username, is_admin, api_key)
-VALUES (?, ?, ?)
-RETURNING id, username, is_admin, api_key, created_at, updated_at
+INSERT INTO users (username, public_key, is_admin, api_key)
+VALUES (?, ?, ?, ?)
+RETURNING id, username, public_key, is_admin, api_key, created_at, updated_at
 `
 
 type CreateUserParams struct {
-	Username string         `json:"username"`
-	IsAdmin  bool           `json:"is_admin"`
-	ApiKey   sql.NullString `json:"api_key"`
+	Username  string         `json:"username"`
+	PublicKey string         `json:"public_key"`
+	IsAdmin   bool           `json:"is_admin"`
+	ApiKey    sql.NullString `json:"api_key"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser, arg.Username, arg.IsAdmin, arg.ApiKey)
+	row := q.db.QueryRowContext(ctx, createUser,
+		arg.Username,
+		arg.PublicKey,
+		arg.IsAdmin,
+		arg.ApiKey,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
+		&i.PublicKey,
 		&i.IsAdmin,
 		&i.ApiKey,
 		&i.CreatedAt,
@@ -46,7 +53,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, is_admin, api_key, created_at, updated_at FROM users WHERE id = ?
+SELECT id, username, public_key, is_admin, api_key, created_at, updated_at FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -55,6 +62,7 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
+		&i.PublicKey,
 		&i.IsAdmin,
 		&i.ApiKey,
 		&i.CreatedAt,
@@ -64,7 +72,7 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 }
 
 const getUserByAPIKey = `-- name: GetUserByAPIKey :one
-SELECT id, username, is_admin, api_key, created_at, updated_at FROM users WHERE api_key = ?
+SELECT id, username, public_key, is_admin, api_key, created_at, updated_at FROM users WHERE api_key = ?
 `
 
 func (q *Queries) GetUserByAPIKey(ctx context.Context, apiKey sql.NullString) (User, error) {
@@ -73,6 +81,7 @@ func (q *Queries) GetUserByAPIKey(ctx context.Context, apiKey sql.NullString) (U
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
+		&i.PublicKey,
 		&i.IsAdmin,
 		&i.ApiKey,
 		&i.CreatedAt,
@@ -82,7 +91,7 @@ func (q *Queries) GetUserByAPIKey(ctx context.Context, apiKey sql.NullString) (U
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, is_admin, api_key, created_at, updated_at FROM users WHERE username = ?
+SELECT id, username, public_key, is_admin, api_key, created_at, updated_at FROM users WHERE username = ?
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -91,6 +100,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
+		&i.PublicKey,
 		&i.IsAdmin,
 		&i.ApiKey,
 		&i.CreatedAt,
@@ -100,7 +110,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, is_admin, api_key, created_at, updated_at FROM users ORDER BY username
+SELECT id, username, public_key, is_admin, api_key, created_at, updated_at FROM users ORDER BY username
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -115,6 +125,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Username,
+			&i.PublicKey,
 			&i.IsAdmin,
 			&i.ApiKey,
 			&i.CreatedAt,
