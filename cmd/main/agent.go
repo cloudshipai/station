@@ -16,7 +16,7 @@ var (
 	agentListCmd = &cobra.Command{
 		Use:   "list",
 		Short: "List agents",
-		Long:  "List all available agents",
+		Long:  "List all available agents, optionally filtered by environment",
 		RunE:  runAgentList,
 	}
 

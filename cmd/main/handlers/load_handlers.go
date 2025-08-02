@@ -222,6 +222,12 @@ func (h *LoadHandler) uploadConfigLocalLoad(mcpConfig LoadMCPConfig, configName,
 
 	repos := repositories.New(database)
 	
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		return fmt.Errorf("failed to get console user: %w", err)
+	}
+	
 	// Create key manager from config file encryption key
 	keyManager, err := createKeyManagerFromConfig()
 	if err != nil {
@@ -235,7 +241,7 @@ func (h *LoadHandler) uploadConfigLocalLoad(mcpConfig LoadMCPConfig, configName,
 	if err != nil {
 		// Create environment if it doesn't exist
 		description := fmt.Sprintf("Environment for %s", environment)
-		env, err = repos.Environments.Create(environment, &description)
+		env, err = repos.Environments.Create(environment, &description, consoleUser.ID)
 		if err != nil {
 			return fmt.Errorf("failed to create environment: %w", err)
 		}
@@ -419,6 +425,12 @@ func (h *LoadHandler) uploadConfigLocalWizard(configData *models.MCPConfigData, 
 
 	repos := repositories.New(database)
 	
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		return fmt.Errorf("failed to get console user: %w", err)
+	}
+	
 	// Create key manager from config file encryption key
 	keyManager, err := createKeyManagerFromConfig()
 	if err != nil {
@@ -432,7 +444,7 @@ func (h *LoadHandler) uploadConfigLocalWizard(configData *models.MCPConfigData, 
 	if err != nil {
 		// Create environment if it doesn't exist
 		description := fmt.Sprintf("Environment for %s", environment)
-		env, err = repos.Environments.Create(environment, &description)
+		env, err = repos.Environments.Create(environment, &description, consoleUser.ID)
 		if err != nil {
 			return fmt.Errorf("failed to create environment: %w", err)
 		}

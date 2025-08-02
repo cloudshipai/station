@@ -36,13 +36,18 @@ func (h *AgentHandler) RunAgentList(cmd *cobra.Command, args []string) error {
 	fmt.Println(banner)
 
 	endpoint, _ := cmd.Flags().GetString("endpoint")
+	envFilter, _ := cmd.Flags().GetString("env")
 
 	if endpoint != "" {
 		fmt.Println(styles.Info.Render("🌐 Listing agents from: " + endpoint))
 		return h.listAgentsRemote(endpoint)
 	} else {
-		fmt.Println(styles.Info.Render("🏠 Listing local agents"))
-		return h.listAgentsLocal()
+		if envFilter != "" {
+			fmt.Println(styles.Info.Render(fmt.Sprintf("🏠 Listing local agents (Environment: %s)", envFilter)))
+		} else {
+			fmt.Println(styles.Info.Render("🏠 Listing local agents"))
+		}
+		return h.listAgentsLocalWithFilter(envFilter)
 	}
 }
 
@@ -194,14 +199,117 @@ func (h *AgentHandler) listAgentsLocal() error {
 		return nil
 	}
 
+	// Get environment names for better display
+	environments := make(map[int64]string)
+	envs, err := repos.Environments.List()
+	if err == nil {
+		for _, env := range envs {
+			environments[env.ID] = env.Name
+		}
+	}
+
 	styles := getCLIStyles(h.themeManager)
 	fmt.Printf("Found %d agent(s):\n", len(agents))
 	for _, agent := range agents {
+		envName := environments[agent.EnvironmentID]
+		if envName == "" {
+			envName = fmt.Sprintf("ID:%d", agent.EnvironmentID)
+		}
+		
 		fmt.Printf("• %s (ID: %d)", styles.Success.Render(agent.Name), agent.ID)
 		if agent.Description != "" {
 			fmt.Printf(" - %s", agent.Description)
 		}
-		fmt.Printf(" [Environment: %d, Max Steps: %d]\n", agent.EnvironmentID, agent.MaxSteps)
+		fmt.Printf(" [Environment: %s, Max Steps: %d]\n", envName, agent.MaxSteps)
+	}
+
+	return nil
+}
+
+func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
+	cfg, err := loadStationConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	
+	// Get all agents
+	agents, err := repos.Agents.List()
+	if err != nil {
+		return fmt.Errorf("failed to list agents: %w", err)
+	}
+
+	// Get environment names for filtering and display
+	environments := make(map[int64]string)
+	envNameToID := make(map[string]int64)
+	envs, err := repos.Environments.List()
+	if err == nil {
+		for _, env := range envs {
+			environments[env.ID] = env.Name
+			envNameToID[env.Name] = env.ID
+		}
+	}
+
+	// Filter agents by environment if specified
+	var filteredAgents []*models.Agent
+	if envFilter != "" {
+		// Try to parse envFilter as environment ID or name
+		var targetEnvID int64 = -1
+		
+		// Try as ID first
+		if envID, err := strconv.ParseInt(envFilter, 10, 64); err == nil {
+			targetEnvID = envID
+		} else if envID, exists := envNameToID[envFilter]; exists {
+			// Try as environment name
+			targetEnvID = envID
+		} else {
+			return fmt.Errorf("environment '%s' not found", envFilter)
+		}
+		
+		// Filter agents by environment
+		for _, agent := range agents {
+			if agent.EnvironmentID == targetEnvID {
+				filteredAgents = append(filteredAgents, agent)
+			}
+		}
+	} else {
+		filteredAgents = agents
+	}
+
+	if len(filteredAgents) == 0 {
+		if envFilter != "" {
+			fmt.Printf("• No agents found in environment '%s'\n", envFilter)
+		} else {
+			fmt.Println("• No agents found")
+		}
+		return nil
+	}
+
+	styles := getCLIStyles(h.themeManager)
+	if envFilter != "" {
+		fmt.Printf("Found %d agent(s) in environment '%s':\n", len(filteredAgents), envFilter)
+	} else {
+		fmt.Printf("Found %d agent(s):\n", len(filteredAgents))
+	}
+	
+	for _, agent := range filteredAgents {
+		envName := environments[agent.EnvironmentID]
+		if envName == "" {
+			envName = fmt.Sprintf("ID:%d", agent.EnvironmentID)
+		}
+		
+		fmt.Printf("• %s (ID: %d)", styles.Success.Render(agent.Name), agent.ID)
+		if agent.Description != "" {
+			fmt.Printf(" - %s", agent.Description)
+		}
+		fmt.Printf(" [Environment: %s, Max Steps: %d]\n", envName, agent.MaxSteps)
 	}
 
 	return nil
@@ -1017,7 +1125,7 @@ func (h *AgentHandler) createAgentLocal(name, description, domain, schedule stri
 	}
 
 	// Get agent tools for display
-	agentTools, err := repos.AgentTools.List(agent.ID)
+	agentTools, err := repos.AgentTools.ListAgentTools(agent.ID)
 	if err != nil {
 		agentTools = []*models.AgentToolWithDetails{}
 	}

@@ -121,7 +121,7 @@ func (s *Server) handleAgentDetailsResource(ctx context.Context, request mcp.Rea
 	}
 
 	// Get assigned tools
-	agentTools, err := s.repos.AgentTools.List(agentID)
+	agentTools, err := s.repos.AgentTools.ListAgentTools(agentID)
 	if err != nil {
 		log.Printf("Warning: Could not get tools for agent %d: %v", agentID, err)
 		agentTools = []*models.AgentToolWithDetails{}

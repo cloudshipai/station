@@ -17,18 +17,36 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("Failed to open test database: %v", err)
 	}
 
-	// Create the environments table
+	// Create the test tables
 	schema := `
+	CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE,
+		public_key TEXT NOT NULL,
+		is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+		api_key TEXT UNIQUE,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE environments (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL UNIQUE,
 		description TEXT,
+		created_by INTEGER NOT NULL DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (created_by) REFERENCES users (id)
 	);`
 
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatalf("Failed to create test schema: %v", err)
+	}
+
+	// Create console user for tests
+	_, err = db.Exec("INSERT INTO users (username, public_key) VALUES (?, ?)", "console", "test-key")
+	if err != nil {
+		t.Fatalf("Failed to create console user: %v", err)
 	}
 
 	return db
@@ -38,12 +56,19 @@ func TestEnvironmentRepo_Create(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
+
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
 
 	name := "test-env"
 	description := "Test environment"
 
-	env, err := repo.Create(name, &description)
+	env, err := repo.Create(name, &description, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -69,11 +94,18 @@ func TestEnvironmentRepo_Create_WithoutDescription(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
+
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
 
 	name := "test-env-no-desc"
 
-	env, err := repo.Create(name, nil)
+	env, err := repo.Create(name, nil, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -87,12 +119,19 @@ func TestEnvironmentRepo_GetByID(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
+
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
 
 	// Create an environment first
 	name := "test-env"
 	description := "Test environment"
-	created, err := repo.Create(name, &description)
+	created, err := repo.Create(name, &description, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -115,7 +154,8 @@ func TestEnvironmentRepo_GetByID_NotFound(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
 
 	_, err := repo.GetByID(999)
 	if err != sql.ErrNoRows {
@@ -127,12 +167,19 @@ func TestEnvironmentRepo_GetByName(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
+
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
 
 	// Create an environment first
 	name := "test-env"
 	description := "Test environment"
-	created, err := repo.Create(name, &description)
+	created, err := repo.Create(name, &description, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -155,7 +202,14 @@ func TestEnvironmentRepo_List(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
+
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
 
 	// Create multiple environments
 	envs := []struct {
@@ -168,7 +222,7 @@ func TestEnvironmentRepo_List(t *testing.T) {
 	}
 
 	for _, env := range envs {
-		_, err := repo.Create(env.name, &env.desc)
+		_, err := repo.Create(env.name, &env.desc, consoleUser.ID)
 		if err != nil {
 			t.Fatalf("Failed to create environment %s: %v", env.name, err)
 		}
@@ -197,12 +251,19 @@ func TestEnvironmentRepo_Update(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
+
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
 
 	// Create an environment first
 	name := "test-env"
 	description := "Test environment"
-	created, err := repo.Create(name, &description)
+	created, err := repo.Create(name, &description, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -233,12 +294,19 @@ func TestEnvironmentRepo_Delete(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewEnvironmentRepo(db)
+	repos := New(&mockDB{conn: db})
+	repo := repos.Environments
+
+	// Get console user for created_by field
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		t.Fatalf("Failed to get console user: %v", err)
+	}
 
 	// Create an environment first
 	name := "test-env"
 	description := "Test environment"
-	created, err := repo.Create(name, &description)
+	created, err := repo.Create(name, &description, consoleUser.ID)
 	if err != nil {
 		t.Fatalf("Failed to create environment: %v", err)
 	}
@@ -254,4 +322,25 @@ func TestEnvironmentRepo_Delete(t *testing.T) {
 	if err != sql.ErrNoRows {
 		t.Errorf("Expected sql.ErrNoRows after deletion, got %v", err)
 	}
+}
+
+// mockDB is a simple wrapper to implement the DB interface for tests
+type mockDB struct {
+	conn *sql.DB
+}
+
+func (m *mockDB) Conn() *sql.DB {
+	return m.conn
+}
+
+func (m *mockDB) Close() error {
+	return m.conn.Close()
+}
+
+func (m *mockDB) Migrate() error {
+	return nil
+}
+
+func (m *mockDB) MigrateFromDir(dir string) error {
+	return nil
 }
