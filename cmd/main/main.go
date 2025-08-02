@@ -74,6 +74,8 @@ func init() {
 	mcpCmd.AddCommand(mcpToolsCmd)
 	mcpCmd.AddCommand(mcpAddCmd)
 	mcpCmd.AddCommand(mcpDeleteCmd)
+	mcpCmd.AddCommand(mcpSyncCmd)
+	mcpCmd.AddCommand(mcpStatusCmd)
 	
 	
 	agentCmd.AddCommand(agentListCmd)
@@ -133,6 +135,13 @@ func init() {
 	mcpDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpDeleteCmd.Flags().String("environment", "default", "Environment to delete from")
 	mcpDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
+	
+	mcpSyncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	mcpSyncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
+	mcpSyncCmd.Flags().Bool("force", false, "Force sync even if no changes detected")
+	
+	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")
 	
 	
 	// Agent command flags
