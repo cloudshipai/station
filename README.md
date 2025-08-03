@@ -100,7 +100,7 @@ Station's **Self-Bootstrapping Intelligence**:
 
 ### 🔐 Security First
 - **Zero credential exposure**: All secrets stay in your infrastructure
-- **Encrypted storage**: MCP configs encrypted at rest with NaCl
+- **File-based configuration**: GitOps-ready config management with template variables
 - **Fine-grained permissions**: Control exactly which sub-tools agents can access
 - **Environment isolation**: Separate configs for dev/staging/prod
 

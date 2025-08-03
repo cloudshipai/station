@@ -5,10 +5,17 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 
 ## Current System State
 
-### Known Issues
-- **SSH/MCP Shutdown Performance**: Graceful shutdown takes ~1m25s (should be <10s)
-  - Likely causes: hanging MCP connections, database locks, resource cleanup delays
-  - Needs investigation of timeout settings and connection pooling
+### ✅ Completed Major Architecture Overhaul
+- **Modular Handler Architecture**: ✅ Complete - Split 5 large files (5,777 lines) into 43 focused modules
+  - All handler modules now under 500 lines for maximum maintainability
+  - Clean separation of concerns with `agent/`, `file_config/`, `load/`, `mcp/`, `webhooks/` modules
+  - Shared utilities in `common/` module for DRY code organization
+
+- **File-Based Configuration System**: ✅ Fully Migrated from database-based to file-based MCP configs
+  - GitOps-ready configuration management with Go template support
+  - Template variable resolution for environment-specific deployments
+  - Removed old `mcp_configs`, `template_variables`, and related database tables
+  - Updated all services, handlers, and TUI components to use file-based system
 
 - **CLI Agent Execution**: ✅ Implemented with clean server/fallback architecture
   - **Server Mode**: Uses `POST /api/v1/agents/:id/queue` with ExecutionQueueService for full execution
@@ -16,6 +23,11 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - **Clean DRY**: Reuses existing execution architecture, no code duplication
   - **Webhook Support**: Full webhook notifications work in server mode
   - **Graceful Degradation**: Clear messaging about mode limitations
+
+### Known Issues
+- **SSH/MCP Shutdown Performance**: Graceful shutdown takes ~1m25s (should be <10s)
+  - Likely causes: hanging MCP connections, database locks, resource cleanup delays
+  - Needs investigation of timeout settings and connection pooling
 
 ### Active Agents
 - **Home Directory Scanner** (ID: 2): Scheduled daily at midnight to scan home directory structure
@@ -28,7 +40,8 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 - **MCP Server**: Handles tool discovery and agent communication
 - **Agent Management**: Scheduling, execution, and monitoring system  
 - **Environment Management**: Multi-environment tool isolation (dev/staging/prod)
-- **Security Layer**: Encryption, audit logging, access controls
+- **File Configuration System**: GitOps-ready config management with template variables
+- **Security Layer**: Audit logging, access controls, secure file-based configuration
 
 ### Key Directories
 - `/station/` - Main project directory
