@@ -1,0 +1,21 @@
+{
+  "name": "SQLite Database Operations",
+  "description": "Work with SQLite databases for lightweight data storage and analysis",
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-sqlite", "{{DATABASE_PATH}}"],
+      "env": {
+        "SQLITE_DATABASE_PATH": "{{DATABASE_PATH}}"
+      }
+    }
+  },
+  "templates": {
+    "DATABASE_PATH": {
+      "description": "Path to SQLite database file",
+      "type": "path",
+      "required": true,
+      "help": "Example: /path/to/database.db or ./data/app.sqlite3"
+    }
+  }
+}

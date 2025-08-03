@@ -1,0 +1,38 @@
+{
+  "name": "Slack Integration",
+  "description": "Send messages, manage channels, and interact with Slack workspaces",
+  "mcpServers": {
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-slack"],
+      "env": {
+        "SLACK_BOT_TOKEN": "{{SLACK_BOT_TOKEN}}",
+        "SLACK_APP_TOKEN": "{{SLACK_APP_TOKEN}}",
+        "SLACK_SIGNING_SECRET": "{{SLACK_SIGNING_SECRET}}"
+      }
+    }
+  },
+  "templates": {
+    "SLACK_BOT_TOKEN": {
+      "description": "Slack Bot User OAuth Token (starts with xoxb-)",
+      "type": "password",
+      "required": true,
+      "sensitive": true,
+      "help": "Get from: https://api.slack.com/apps → OAuth & Permissions"
+    },
+    "SLACK_APP_TOKEN": {
+      "description": "Slack App-Level Token (starts with xapp-)",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "help": "Needed for Socket Mode events"
+    },
+    "SLACK_SIGNING_SECRET": {
+      "description": "Slack Signing Secret for webhook verification",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "help": "Found in App Settings → Basic Information"
+    }
+  }
+}

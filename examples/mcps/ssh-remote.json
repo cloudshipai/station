@@ -1,0 +1,64 @@
+{
+  "name": "SSH Remote Server Management",
+  "description": "Execute commands on remote servers via SSH for deployment and management",
+  "mcpServers": {
+    "ssh": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-ssh"],
+      "env": {
+        "SSH_HOST": "{{SSH_HOST}}",
+        "SSH_PORT": "{{SSH_PORT}}",
+        "SSH_USER": "{{SSH_USER}}",
+        "SSH_PASSWORD": "{{SSH_PASSWORD}}",
+        "SSH_PRIVATE_KEY": "{{SSH_PRIVATE_KEY}}",
+        "SSH_PRIVATE_KEY_PATH": "{{SSH_PRIVATE_KEY_PATH}}",
+        "SSH_PASSPHRASE": "{{SSH_PASSPHRASE}}"
+      }
+    }
+  },
+  "templates": {
+    "SSH_HOST": {
+      "description": "SSH server hostname or IP address",
+      "type": "string",
+      "required": true,
+      "help": "Example: server.example.com or 192.168.1.100"
+    },
+    "SSH_PORT": {
+      "description": "SSH server port",
+      "type": "number",
+      "required": false,
+      "default": "22"
+    },
+    "SSH_USER": {
+      "description": "SSH username",
+      "type": "string",
+      "required": true
+    },
+    "SSH_PASSWORD": {
+      "description": "SSH password (not recommended, use key auth instead)",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "help": "Use SSH keys for better security"
+    },
+    "SSH_PRIVATE_KEY": {
+      "description": "SSH private key content (base64 encoded)",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "help": "Use either this OR SSH_PRIVATE_KEY_PATH"
+    },
+    "SSH_PRIVATE_KEY_PATH": {
+      "description": "Path to SSH private key file",
+      "type": "path",
+      "required": false,
+      "help": "Example: ~/.ssh/id_rsa or /path/to/key.pem"
+    },
+    "SSH_PASSPHRASE": {
+      "description": "Passphrase for encrypted SSH key",
+      "type": "password",
+      "required": false,
+      "sensitive": true
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "Anthropic Claude API",
+  "description": "Integrate with Claude AI for advanced reasoning and text generation",
+  "mcpServers": {
+    "claude": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-claude"],
+      "env": {
+        "ANTHROPIC_API_KEY": "{{ANTHROPIC_API_KEY}}",
+        "CLAUDE_MODEL": "{{CLAUDE_MODEL}}",
+        "MAX_TOKENS": "{{MAX_TOKENS}}"
+      }
+    }
+  },
+  "templates": {
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key",
+      "type": "password",
+      "required": true,
+      "sensitive": true,
+      "help": "Get from: https://console.anthropic.com/account/keys"
+    },
+    "CLAUDE_MODEL": {
+      "description": "Claude model to use",
+      "type": "string",
+      "required": false,
+      "default": "claude-3-sonnet-20240229",
+      "help": "Options: claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307"
+    },
+    "MAX_TOKENS": {
+      "description": "Maximum tokens per request",
+      "type": "number",
+      "required": false,
+      "default": "4096"
+    }
+  }
+}
