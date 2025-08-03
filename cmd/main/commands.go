@@ -33,16 +33,23 @@ var (
 		Short: "Load MCP configuration with intelligent template processing",
 		Long: `Load and process MCP configurations with multiple modes:
 
-• No args: Load mcp.json/.mcp.json from current directory
+• No args: Open interactive editor for pasting MCP template configuration
 • GitHub URL: Extract configuration from README and use TurboTax wizard  
 • File path: Load configuration from specified file
 • File path + --detect: Use AI to detect placeholders and generate forms
 • -e/--editor: Open editor to paste template, then detect and generate forms
 
+Interactive Editor Features:
+• Paste any MCP configuration template into the editor
+• AI automatically detects template variables ({{VAR}}, YOUR_KEY, <path>, etc.)
+• Interactive form to fill in variable values securely
+• Saves to file-based configuration system in specified environment
+
 Examples:
-  stn load                                    # Load local mcp.json
+  stn load                                    # Open interactive editor (default env)
+  stn load --env production                   # Open editor, save to production env
   stn load config.json --detect              # Load with AI placeholder detection
-  stn load -e                                # Open editor for template pasting
+  stn load -e --env staging                  # Open editor for staging environment
   stn load https://github.com/user/mcp-repo  # GitHub discovery with wizard`,
 		RunE: runLoad,
 	}
