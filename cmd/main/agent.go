@@ -57,6 +57,30 @@ where our own MCP server analyzes requirements to create optimized agents.`,
 		Args: cobra.ExactArgs(2),
 		RunE: runAgentCreate,
 	}
+
+	agentExportCmd = &cobra.Command{
+		Use:   "export <id> [environment]",
+		Short: "Export agent to file-based config",
+		Long: `Export an agent configuration to file-based system under environments/<env>/agents/.
+Creates two files:
+- <agent-name>.json: Agent configuration and metadata
+- <agent-name>-tools.json: Tool dependencies and MCP server mappings
+
+This enables GitOps-ready agent management and cross-environment deployment.`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: runAgentExport,
+	}
+
+	agentImportCmd = &cobra.Command{
+		Use:   "import [environment]",
+		Short: "Import agents from file-based configs",
+		Long: `Import all agent configurations from environments/<env>/agents/ directory.
+Scans for agent JSON files and creates agents if they don't already exist.
+Skips existing agents to prevent duplicates.
+
+This enables GitOps-ready agent deployment from version-controlled configs.`,
+		RunE: runAgentImport,
+	}
 )
 
 // runAgentList lists all agents
@@ -87,4 +111,16 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 func runAgentCreate(cmd *cobra.Command, args []string) error {
 	agentHandler := agent.NewAgentHandler(themeManager)
 	return agentHandler.RunAgentCreate(cmd, args)
+}
+
+// runAgentExport exports an agent to file-based config
+func runAgentExport(cmd *cobra.Command, args []string) error {
+	agentHandler := agent.NewAgentHandler(themeManager)
+	return agentHandler.RunAgentExport(cmd, args)
+}
+
+// runAgentImport imports agents from file-based configs
+func runAgentImport(cmd *cobra.Command, args []string) error {
+	agentHandler := agent.NewAgentHandler(themeManager)
+	return agentHandler.RunAgentImport(cmd, args)
 }
