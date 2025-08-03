@@ -1,0 +1,12 @@
+{
+  "name": "test-filesystem",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/epuerta/projects"],
+      "env": {
+        "FILESYSTEM_WRITE_ENABLED": "false"
+      }
+    }
+  }
+}

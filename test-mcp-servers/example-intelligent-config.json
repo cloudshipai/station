@@ -1,0 +1,39 @@
+{
+    "mcpServers": {
+        "SQLite MCP Server": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-sqlite",
+                "<path-to-your-sqlite-database.db>"
+            ]
+        },
+        "AWS CLI": {
+            "command": "npx",
+            "args": ["-y", "@aws-mcp/cli"],
+            "env": {
+                "AWS_ACCESS_KEY_ID": "YOUR_AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY": "YOUR_AWS_SECRET_ACCESS_KEY",
+                "AWS_DEFAULT_REGION": "us-east-1"
+            }
+        },
+        "GitHub MCP": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+                "GITHUB_TOKEN": "[GITHUB_TOKEN]",
+                "GITHUB_API_URL": "https://your-github-enterprise.com/api/v3"
+            }
+        },
+        "Database Server": {
+            "command": "node",
+            "args": ["/path/to/your/database/server.js"],
+            "env": {
+                "DB_HOST": "localhost",
+                "DB_USER": "your-username",
+                "DB_PASSWORD": "your-secure-password",
+                "DB_NAME": "your-database-name"
+            }
+        }
+    }
+}
