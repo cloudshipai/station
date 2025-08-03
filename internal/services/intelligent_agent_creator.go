@@ -165,15 +165,23 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 	}
 
 	// Step 4: Create the agent with intelligent configuration
+	// Parse schedule from plan if provided
+	var cronSchedule *string
+	scheduleEnabled := false
+	if plan.Schedule != "" && plan.Schedule != "on-demand" {
+		cronSchedule = &plan.Schedule
+		scheduleEnabled = true
+	}
+	
 	agent, err := iac.repos.Agents.Create(
 		plan.AgentName,
 		plan.AgentDescription,
 		plan.SystemPrompt,
-		environmentID,
 		int64(plan.MaxSteps),
-		1,   // Default user ID for now
-		nil, // Tool assignments handled separately
-		true,
+		environmentID,
+		1, // Default user ID for now
+		cronSchedule,
+		scheduleEnabled,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -185,13 +193,26 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 		assignedCount = iac.assignToolsToAgent(agent.ID, plan.CoreTools, environmentID)
 	}
 
-	// Step 6: Cleanup
+	// Step 6: Handle scheduling if enabled
+	if agent.IsScheduled && agent.CronSchedule != nil {
+		log.Printf("📅 Agent '%s' has schedule '%s' - will be handled by scheduler service", agent.Name, *agent.CronSchedule)
+		// The scheduler service will pick up this agent automatically on next restart,
+		// or we can implement a notification mechanism here if needed
+	}
+
+	// Step 7: Cleanup
 	if iac.mcpClient != nil {
 		iac.mcpClient.Disconnect()
 	}
 
-	log.Printf("✅ Successfully created intelligent agent '%s' (ID: %d) with %d tools",
-		agent.Name, agent.ID, assignedCount)
+	log.Printf("✅ Successfully created intelligent agent '%s' (ID: %d) with %d tools%s",
+		agent.Name, agent.ID, assignedCount, 
+		func() string {
+			if agent.IsScheduled && agent.CronSchedule != nil {
+				return fmt.Sprintf(" (scheduled: %s)", *agent.CronSchedule)
+			}
+			return ""
+		}())
 
 	return agent, nil
 }
@@ -232,6 +253,12 @@ Your task:
 3. Determine optimal max steps (1-25 based on complexity)
 4. Recommend an environment (default, development, production, staging)
 5. Select 2-5 most relevant tools from the available MCP tools
+6. Set appropriate schedule based on task requirements:
+   - "on-demand" for interactive tasks
+   - "0 0 * * *" for daily tasks (midnight)
+   - "0 9 * * 1" for weekly tasks (Monday 9am)
+   - "0 */6 * * *" for every 6 hours
+   - Custom cron expressions for specific needs
 
 Please respond with a JSON object in this exact format:
 {
@@ -241,6 +268,7 @@ Please respond with a JSON object in this exact format:
   "recommended_environment": "environment_name",
   "core_tools": ["tool1", "tool2", "tool3"],
   "max_steps": 5,
+  "schedule": "cron_expression_or_on_demand",
   "rationale": "explanation of decisions made",
   "success_criteria": "how to measure success"
 }
