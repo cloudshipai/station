@@ -16,7 +16,6 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/internal/theme"
-	"station/pkg/crypto"
 	"station/pkg/models"
 )
 
@@ -758,7 +757,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	repos := repositories.New(database)
 	
 	// Load config to get encryption key
-	stationCfg, err := loadStationConfig()
+	_, err = loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -1091,7 +1090,7 @@ func (h *AgentHandler) createAgentLocal(name, description, domain, schedule, env
 	_ = environment // Acknowledge environment parameter
 	
 	// Load config to get encryption key
-	stationCfg, err := loadStationConfig()
+	_, err = loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}

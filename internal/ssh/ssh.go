@@ -25,12 +25,12 @@ type Server struct {
 	cfg            *config.Config
 	db             *db.DB
 	executionQueue *services.ExecutionQueueService
-	genkitService  *services.GenkitService
+	genkitService  services.AgentServiceInterface
 	localMode      bool
 	srv            *ssh.Server
 }
 
-func New(cfg *config.Config, database *db.DB, executionQueue *services.ExecutionQueueService, genkitService *services.GenkitService, localMode bool) *Server {
+func New(cfg *config.Config, database *db.DB, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface, localMode bool) *Server {
 	s := &Server{
 		cfg:            cfg,
 		db:             database,

@@ -100,13 +100,14 @@ func runMainServer() error {
 	
 	// Create repositories and services
 	repos := repositories.New(database)
-	keyManager, err := crypto.NewKeyManagerFromEnv()
+	_, err = crypto.NewKeyManagerFromEnv()
 	if err != nil {
 		return fmt.Errorf("failed to initialize key manager: %w", err)
 	}
 
-	// Initialize all required services
-	mcpConfigSvc := services.NewMCPConfigService(repos, keyManager)
+	// Initialize required services
+	// TODO: Replace with file-based config service
+	// fileConfigSvc := services.NewFileConfigService(configManager, toolDiscovery, repos)
 	webhookSvc := services.NewWebhookService(repos)
 	
 	// Create default environment if none exists
@@ -116,29 +117,21 @@ func runMainServer() error {
 
 	
 	// Initialize Genkit with configured AI provider
-	genkit, err := initializeGenkit(ctx, cfg)
+	_, err = initializeGenkit(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
 	
-	agentSvc := services.NewGenkitService(
-		genkit.app,
-		genkit.openaiPlugin,
-		repos.Agents,
-		repos.AgentRuns,
-		repos.MCPConfigs,
-		repos.MCPTools,
-		repos.AgentTools,
-		repos.Environments,
-		mcpConfigSvc,
-		webhookSvc,
-		telemetryService,
-	)
+	// TODO: Replace with updated service constructor for file-based configs
+	// For now, disable agent service since it needs to be updated for file-based configs
+	var agentSvc services.AgentServiceInterface = nil
 	
-	// Initialize MCP for the agent service
-	if err := agentSvc.InitializeMCP(ctx); err != nil {
-		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
-	}
+	// TODO: Initialize MCP for the agent service when service is implemented
+	// if agentSvc != nil {
+	//	if err := agentSvc.InitializeMCP(ctx); err != nil {
+	//		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
+	//	}
+	// }
 	
 	// Initialize execution queue service for async agent execution
 	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, webhookSvc, 5) // 5 workers
@@ -184,14 +177,14 @@ func runMainServer() error {
 	localMode := viper.GetBool("local_mode")
 	
 	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc, localMode)
-	mcpServer := mcp.NewServer(database, mcpConfigSvc, agentSvc, repos, localMode)
+	mcpServer := mcp.NewServer(database, agentSvc, repos, localMode)
 	apiServer := api.New(cfg, database, localMode)
 	
 	// Initialize ToolDiscoveryService for API config uploads
-	toolDiscoveryService := services.NewToolDiscoveryService(repos, mcpConfigSvc)
+	toolDiscoveryService := services.NewToolDiscoveryService(repos)
 	
 	// Set services for the API server
-	apiServer.SetServices(toolDiscoveryService, agentSvc, executionQueueSvc)
+	apiServer.SetServices(toolDiscoveryService, executionQueueSvc)
 
 	wg.Add(4) // SSH, MCP, API, and webhook retry processor
 
@@ -265,11 +258,12 @@ func runMainServer() error {
 	case <-shutdownCtx.Done():
 		fmt.Println("⏰ Shutdown timeout exceeded (3s), forcing exit")
 		// Force cleanup critical resources immediately
-		if agentSvc != nil {
-			forcedCtx, forceCancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-			agentSvc.Close(forcedCtx)
-			forceCancel()
-		}
+		// TODO: Close agent service when implemented
+		// if agentSvc != nil {
+		//	forcedCtx, forceCancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		//	agentSvc.Close(forcedCtx)
+		//	forceCancel()
+		// }
 	}
 
 	return nil
