@@ -38,16 +38,18 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 
 	var configFile string
 
-	// Check if we have a direct README URL as argument
-	if len(args) > 0 && isDirectReadmeURL(args[0]) {
-		fmt.Println(getCLIStyles(h.themeManager).Info.Render("📄 README URL detected, starting TurboTax-style flow..."))
-		return h.runTurboTaxMCPFlow(args[0], environment, endpoint)
-	}
+	// All HTTPS URLs now use the enhanced TurboTax flow with web content parsing
 
 	// Check if we have a GitHub URL as argument (legacy flow)
 	if len(args) > 0 && isGitHubURL(args[0]) {
 		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🔍 GitHub URL detected, starting discovery flow..."))
 		return h.runGitHubDiscoveryFlow(args[0], environment, endpoint)
+	}
+
+	// Check if we have any HTTPS URL as argument (enhanced flow with web content parsing)
+	if len(args) > 0 && isHTTPSURL(args[0]) {
+		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🌐 HTTPS URL detected, starting enhanced TurboTax wizard..."))
+		return h.runEnhancedTurboTaxFlow(args[0], environment, endpoint)
 	}
 
 	// Check if we have a direct file argument
