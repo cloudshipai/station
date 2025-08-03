@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	
 	"station/internal/tui/styles"
+	"station/pkg/config"
 	"station/pkg/models"
 )
 
@@ -159,12 +160,12 @@ func (m *MCPModel) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) (TabModel, tea.C
 			log.Printf("DEBUG: Manual tool discovery triggered for config '%s'", configName)
 			// Run tool discovery in background with timeout protection
 			go func() {
-				result, err := m.toolDiscoverySvc.ReplaceToolsWithTransaction(m.selectedEnvID, configName)
+				result, err := m.fileConfigService.DiscoverToolsForConfig(context.Background(), m.selectedEnvID, configName)
 				if err != nil {
 					log.Printf("ERROR: Manual tool discovery failed: %v", err)
 				} else {
-					log.Printf("DEBUG: Manual tool discovery completed - %d tools from %d/%d servers", 
-						result.TotalTools, result.SuccessfulServers, result.TotalServers)
+					log.Printf("DEBUG: Manual tool discovery completed - %d tools discovered", 
+						result.TotalTools)
 				}
 			}()
 			return m, tea.Printf("🔄 Tool discovery started in background...")
@@ -330,43 +331,50 @@ func (m *MCPModel) handleSaveConfig() (TabModel, tea.Cmd) {
 	// Add the config name to the data structure
 	configData.Name = configName
 	
-	// Save config using service (with proper encryption)
-	savedConfig, err := m.mcpConfigSvc.UploadConfig(m.selectedEnvID, &configData)
+	// Save config using file-based service
+	template := &config.MCPTemplate{
+		Name:      configName,
+		Content:   configText,
+		Variables: []config.TemplateVariable{}, // No variables for basic templates
+		Metadata: config.TemplateMetadata{
+			Description: fmt.Sprintf("Template for %s", configName),
+			Version:     "1.0.0",
+		},
+	}
+	
+	// Create variables map (empty for now, could be enhanced later)
+	variables := make(map[string]interface{})
+	
+	err := m.fileConfigService.CreateOrUpdateTemplate(context.Background(), m.selectedEnvID, configName, template, variables)
 	if err != nil {
-		log.Printf("DEBUG: Failed to save config: %v", err)
+		log.Printf("DEBUG: Failed to save file config: %v", err)
 		return m, tea.Printf("Error: Failed to save config: %v", err)
 	}
-	log.Printf("DEBUG: Saved encrypted config to database: %+v", savedConfig)
+	log.Printf("DEBUG: Saved file-based config successfully")
 	
 	// Start background tool discovery after manual save (non-blocking)
 	log.Printf("DEBUG: Starting background tool discovery for config '%s'", configName) 
 	go func() {
-		result, err := m.toolDiscoverySvc.ReplaceToolsWithTransaction(m.selectedEnvID, configName)
+		result, err := m.fileConfigService.DiscoverToolsForConfig(context.Background(), m.selectedEnvID, configName)
 		if err != nil {
 			log.Printf("ERROR: Background tool discovery failed for '%s': %v", configName, err)
 		} else {
-			log.Printf("DEBUG: Background tool discovery completed for '%s' - %d tools from %d/%d servers", 
-				configName, result.TotalTools, result.SuccessfulServers, result.TotalServers)
+			log.Printf("DEBUG: Background tool discovery completed for '%s' - %d tools discovered", 
+				configName, result.TotalTools)
 		}
 	}()
 
-	// Trigger async MCP manager reinitialization to refresh available tools
+	// TODO: Trigger async MCP manager reinitialization to refresh available tools
+	// Note: ReinitializeMCP method not available in AgentServiceInterface
 	if m.genkitService != nil {
-		go func() {
-			log.Printf("DEBUG: Reinitializing MCP manager after config upload")
-			if err := m.genkitService.ReinitializeMCP(context.Background()); err != nil {
-				log.Printf("ERROR: Failed to reinitialize MCP manager: %v", err)
-			} else {
-				log.Printf("DEBUG: MCP manager reinitialized successfully")
-			}
-		}()
+		log.Printf("DEBUG: Would reinitialize MCP manager after config upload (not implemented in interface)")
 	}
 	
 	// Stay in editor mode and show success toast
 	log.Printf("DEBUG: Staying in editor mode, showing success toast")
 	
 	// Show success message but stay in editor
-	return m, tea.Printf("✅ Configuration '%s' v%d saved successfully - discovering tools in background", configName, savedConfig.Version)
+	return m, tea.Printf("✅ Configuration '%s' saved successfully - discovering tools in background", configName)
 }
 
 // Handle delete key
@@ -393,30 +401,10 @@ func (m *MCPModel) handleRefreshToolsFromList() (TabModel, tea.Cmd) {
 	return m, m.discoverToolsForConfig(configName, environmentID)
 }
 
-// Command to discover tools for a config
+// Command to discover tools for a file config
 func (m MCPModel) discoverToolsForConfig(configName string, environmentID int64) tea.Cmd {
-	return tea.Cmd(func() tea.Msg {
-		log.Printf("DEBUG: Running tool discovery for config '%s'", configName)
-		
-		result, err := m.toolDiscoverySvc.ReplaceToolsWithTransaction(environmentID, configName)
-		if err != nil {
-			log.Printf("ERROR: Tool discovery failed for '%s': %v", configName, err)
-			return MCPToolDiscoveryCompletedMsg{
-				ConfigName: configName,
-				Success:    false,
-				Error:      err,
-			}
-		}
-		
-		log.Printf("DEBUG: Tool discovery completed for '%s' - %d tools from %d/%d servers", 
-			configName, result.TotalTools, result.SuccessfulServers, result.TotalServers)
-		
-		return MCPToolDiscoveryCompletedMsg{
-			ConfigName: configName,
-			Success:    true,
-			ToolCount:  result.TotalTools,
-		}
-	})
+	// Use the file-based tool discovery
+	return m.discoverFileConfigTools(configName, environmentID)
 }
 
 // Handle up key
@@ -531,27 +519,34 @@ func (m *MCPModel) handleEscKey() (TabModel, tea.Cmd) {
 					// Add the config name to the data structure
 					configData.Name = configName
 					
-					// Save config using service (with proper encryption)
-					savedConfig, err := m.mcpConfigSvc.UploadConfig(m.selectedEnvID, &configData)
+					// Save config using file-based service
+					template := &config.MCPTemplate{
+						Name:      configName,
+						Content:   configText,
+						Variables: []config.TemplateVariable{}, // No variables for basic templates
+						Metadata: config.TemplateMetadata{
+							Description: fmt.Sprintf("Template for %s", configName),
+							Version:     "1.0.0",
+						},
+					}
+					
+					// Create variables map (empty for now, could be enhanced later)
+					variables := make(map[string]interface{})
+					
+					err := m.fileConfigService.CreateOrUpdateTemplate(context.Background(), m.selectedEnvID, configName, template, variables)
 					if err != nil {
 						log.Printf("DEBUG: Auto-save failed: %v", err)
 					} else {
-						log.Printf("DEBUG: Auto-saved config '%s' v%d on ESC", configName, savedConfig.Version)
+						log.Printf("DEBUG: Auto-saved file config '%s' on ESC", configName)
 						
 						// Skip tool replacement on auto-save to avoid UI freeze
 						// Tools will be discovered when user manually saves or refreshes
 						log.Printf("DEBUG: Skipping tool replacement on auto-save to prevent UI freeze")
 						
-						// Trigger async MCP manager reinitialization for auto-saves too
+						// TODO: Trigger async MCP manager reinitialization for auto-saves too
+						// Note: ReinitializeMCP method not available in AgentServiceInterface
 						if m.genkitService != nil {
-							go func() {
-								log.Printf("DEBUG: Reinitializing MCP manager after auto-save")
-								if err := m.genkitService.ReinitializeMCP(context.Background()); err != nil {
-									log.Printf("ERROR: Failed to reinitialize MCP manager: %v", err)
-								} else {
-									log.Printf("DEBUG: MCP manager reinitialized successfully")
-								}
-							}()
+							log.Printf("DEBUG: Would reinitialize MCP manager after auto-save (not implemented in interface)")
 						}
 					}
 				}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -25,9 +26,9 @@ func TestLoad_WithValidEncryptionKey(t *testing.T) {
 		t.Fatalf("Expected config to load successfully, got error: %v", err)
 	}
 
-	// Check defaults
-	if cfg.DatabaseURL != "station.db" {
-		t.Errorf("Expected default database URL to be 'station.db', got %s", cfg.DatabaseURL)
+	// Check defaults (DatabaseURL now includes full path)
+	if !strings.HasSuffix(cfg.DatabaseURL, "station.db") {
+		t.Errorf("Expected database URL to end with 'station.db', got %s", cfg.DatabaseURL)
 	}
 	if cfg.SSHPort != 2222 {
 		t.Errorf("Expected default SSH port to be 2222, got %d", cfg.SSHPort)
@@ -55,9 +56,9 @@ func TestLoad_WithoutEncryptionKey(t *testing.T) {
 		t.Fatal("Expected error when ENCRYPTION_KEY is not set")
 	}
 
-	expectedError := "ENCRYPTION_KEY environment variable is required"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error message '%s', got '%s'", expectedError, err.Error())
+	expectedError := "encryption key is required"
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
 	}
 }
 

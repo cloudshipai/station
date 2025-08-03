@@ -2,19 +2,22 @@ package tabs
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+	"github.com/spf13/afero"
 	
+	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/filesystem"
 	"station/internal/services"
-	"station/pkg/crypto"
+	"station/internal/template"
+	"station/internal/variables"
 	"station/pkg/models"
+	pkgconfig "station/pkg/config"
 )
 
 // MCPModel represents the MCP servers configuration tab
@@ -32,10 +35,10 @@ type MCPModel struct {
 	repos        *repositories.Repositories
 	database     db.Database  // Need this to create services
 	
-	// Services - shared instances to avoid key ID mismatches
-	mcpConfigSvc    *services.MCPConfigService
-	toolDiscoverySvc *services.ToolDiscoveryService
-	genkitService   *services.GenkitService
+	// Services - file-based configuration system
+	fileConfigService   *services.FileConfigService
+	toolDiscoverySvc    *services.ToolDiscoveryService
+	genkitService       services.AgentServiceInterface
 	
 	// State
 	mode         MCPMode
@@ -108,8 +111,8 @@ func (i VersionItem) Description() string {
 	return fmt.Sprintf("Updated %s • Size %s", i.config.Updated, i.config.Size)
 }
 
-// NewMCPModel creates a new MCP model
-func NewMCPModel(database db.Database, genkitService *services.GenkitService) *MCPModel {
+// NewMCPModel creates a new MCP model with file-based configuration
+func NewMCPModel(database db.Database, genkitService services.AgentServiceInterface) *MCPModel {
 	repos := repositories.New(database)
 	
 	// Create textarea for config editing - scrollable
@@ -137,52 +140,67 @@ func NewMCPModel(database db.Database, genkitService *services.GenkitService) *M
 	envList.SetFilteringEnabled(false)
 	versionList.SetFilteringEnabled(false)
 	
-	// Initialize shared services to avoid key ID mismatches
-	// Try to create key manager from config file first, fallback to environment variable
-	encryptionKey := viper.GetString("encryption_key")
-	keyManager, err := crypto.NewKeyManagerFromConfig(encryptionKey)
+	// Initialize file-based configuration system
+	fs := afero.NewOsFs()
+	configDir := "./config"
+	varsDir := "./config/vars"
 	
-	if err != nil {
-		// Fallback to environment variable approach
-		log.Printf("WARNING: Failed to create key manager from config: %v, trying environment variable", err)
-		keyManager, err = crypto.NewKeyManagerFromEnv()
+	// Create file system components
+	fileSystem := filesystem.NewConfigFileSystem(fs, configDir, varsDir)
+	templateEngine := template.NewGoTemplateEngine()
+	variableStore := variables.NewEnvVariableStore(fs)
+	
+	// Create file config options
+	fileConfigOptions := pkgconfig.FileConfigOptions{
+		ConfigDir:       configDir,
+		VariablesDir:    varsDir,
+		Strategy:        pkgconfig.StrategyTemplateFirst,
+		AutoCreate:      true,
+		BackupOnChange:  false,
+		ValidateOnLoad:  true,
 	}
 	
-	var mcpConfigSvc *services.MCPConfigService
-	var toolDiscoverySvc *services.ToolDiscoveryService
+	// Create file config manager
+	fileConfigManager := config.NewFileConfigManager(
+		fileSystem,
+		templateEngine,
+		variableStore,
+		fileConfigOptions,
+		repos.Environments,
+	)
 	
-	if err != nil {
-		log.Printf("WARNING: Failed to create key manager: %v", err)
-		// Create services without encryption support
-		mcpConfigSvc = services.NewMCPConfigService(repos, nil)
-		toolDiscoverySvc = services.NewToolDiscoveryService(repos, mcpConfigSvc)
-	} else {
-		mcpConfigSvc = services.NewMCPConfigService(repos, keyManager)
-		toolDiscoverySvc = services.NewToolDiscoveryService(repos, mcpConfigSvc)
-	}
+	// Initialize tool discovery service (updated to use file-based system)
+	toolDiscoverySvc := services.NewToolDiscoveryService(repos)
+	
+	// Initialize file config service
+	fileConfigService := services.NewFileConfigService(
+		fileConfigManager,
+		toolDiscoverySvc,
+		repos,
+	)
 	
 	m := &MCPModel{
-		BaseTabModel:       NewBaseTabModel(database, "MCP Servers"),
-		configEditor:       ta,
-		nameInput:          ti,
-		environmentList:    envList,
-		versionList:        versionList,
-		repos:              repos,
-		database:           database,
-		mcpConfigSvc:       mcpConfigSvc,
-		toolDiscoverySvc:   toolDiscoverySvc,
-		genkitService:      genkitService,
-		mode:               MCPModeList,
-		configs:            []MCPConfigDisplay{},
-		configVersions:     []MCPConfigDisplay{},
-		selectedIdx:        0,
-		showEditor:         false,
-		selectedEnvID:      0, // Will be set when environments load
-		focusedField:       MCPFieldName,
-		selectedVersionIdx: 0,
-		currentConfigName:  "",
-		originalName:       "",
-		originalConfig:     "",
+		BaseTabModel:        NewBaseTabModel(database, "MCP Servers"),
+		configEditor:        ta,
+		nameInput:           ti,
+		environmentList:     envList,
+		versionList:         versionList,
+		repos:               repos,
+		database:            database,
+		fileConfigService:   fileConfigService,
+		toolDiscoverySvc:    toolDiscoverySvc,
+		genkitService:       genkitService,
+		mode:                MCPModeList,
+		configs:             []MCPConfigDisplay{},
+		configVersions:      []MCPConfigDisplay{},
+		selectedIdx:         0,
+		showEditor:          false,
+		selectedEnvID:       0, // Will be set when environments load
+		focusedField:        MCPFieldName,
+		selectedVersionIdx:  0,
+		currentConfigName:   "",
+		originalName:        "",
+		originalConfig:      "",
 	}
 	
 	return m
