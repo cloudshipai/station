@@ -255,10 +255,10 @@ Your task:
 5. Select 2-5 most relevant tools from the available MCP tools
 6. Set appropriate schedule based on task requirements:
    - "on-demand" for interactive tasks
-   - "0 0 * * *" for daily tasks (midnight)
-   - "0 9 * * 1" for weekly tasks (Monday 9am)
-   - "0 */6 * * *" for every 6 hours
-   - Custom cron expressions for specific needs
+   - "0 0 0 * * *" for daily tasks (midnight) - 6-field format with seconds
+   - "0 0 9 * * 1" for weekly tasks (Monday 9am) - 6-field format with seconds
+   - "0 0 */6 * * *" for every 6 hours - 6-field format with seconds
+   - Use 6-field cron format: "second minute hour day month weekday"
 
 Please respond with a JSON object in this exact format:
 {
