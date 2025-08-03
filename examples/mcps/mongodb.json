@@ -1,0 +1,36 @@
+{
+  "name": "MongoDB Database Operations",
+  "description": "Connect to MongoDB for document-based data operations and aggregations",
+  "mcpServers": {
+    "mongodb": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-mongodb"],
+      "env": {
+        "MONGODB_URI": "{{MONGODB_URI}}",
+        "MONGODB_DATABASE": "{{MONGODB_DATABASE}}",
+        "MONGODB_AUTH_SOURCE": "{{MONGODB_AUTH_SOURCE}}"
+      }
+    }
+  },
+  "templates": {
+    "MONGODB_URI": {
+      "description": "MongoDB connection string",
+      "type": "password",
+      "required": true,
+      "sensitive": true,
+      "help": "Example: mongodb://username:password@localhost:27017 or mongodb+srv://..."
+    },
+    "MONGODB_DATABASE": {
+      "description": "Default database name",
+      "type": "string",
+      "required": true
+    },
+    "MONGODB_AUTH_SOURCE": {
+      "description": "Authentication database",
+      "type": "string",
+      "required": false,
+      "default": "admin",
+      "help": "Usually 'admin' for most setups"
+    }
+  }
+}

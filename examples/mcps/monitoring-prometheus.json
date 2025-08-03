@@ -1,0 +1,43 @@
+{
+  "name": "Prometheus Monitoring",
+  "description": "Query Prometheus metrics and manage alerting rules for system monitoring",
+  "mcpServers": {
+    "prometheus": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-prometheus"],
+      "env": {
+        "PROMETHEUS_URL": "{{PROMETHEUS_URL}}",
+        "PROMETHEUS_USERNAME": "{{PROMETHEUS_USERNAME}}",
+        "PROMETHEUS_PASSWORD": "{{PROMETHEUS_PASSWORD}}",
+        "ALERTMANAGER_URL": "{{ALERTMANAGER_URL}}"
+      }
+    }
+  },
+  "templates": {
+    "PROMETHEUS_URL": {
+      "description": "Prometheus server URL",
+      "type": "string",
+      "required": true,
+      "default": "http://localhost:9090",
+      "help": "Example: https://prometheus.company.com"
+    },
+    "PROMETHEUS_USERNAME": {
+      "description": "Prometheus basic auth username",
+      "type": "string",
+      "required": false,
+      "help": "Required if Prometheus has authentication enabled"
+    },
+    "PROMETHEUS_PASSWORD": {
+      "description": "Prometheus basic auth password",
+      "type": "password",
+      "required": false,
+      "sensitive": true
+    },
+    "ALERTMANAGER_URL": {
+      "description": "Alertmanager URL for managing alerts",
+      "type": "string",
+      "required": false,
+      "help": "Example: http://localhost:9093"
+    }
+  }
+}

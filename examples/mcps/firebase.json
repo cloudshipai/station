@@ -1,0 +1,44 @@
+{
+  "name": "Firebase/Firestore Database",
+  "description": "Interact with Firebase Firestore NoSQL database and authentication",
+  "mcpServers": {
+    "firebase": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-firebase"],
+      "env": {
+        "FIREBASE_PROJECT_ID": "{{FIREBASE_PROJECT_ID}}",
+        "FIREBASE_PRIVATE_KEY": "{{FIREBASE_PRIVATE_KEY}}",
+        "FIREBASE_CLIENT_EMAIL": "{{FIREBASE_CLIENT_EMAIL}}",
+        "FIRESTORE_DATABASE": "{{FIRESTORE_DATABASE}}"
+      }
+    }
+  },
+  "templates": {
+    "FIREBASE_PROJECT_ID": {
+      "description": "Firebase project ID",
+      "type": "string",
+      "required": true,
+      "help": "Found in Firebase Console → Project Settings"
+    },
+    "FIREBASE_PRIVATE_KEY": {
+      "description": "Firebase service account private key",
+      "type": "password",
+      "required": true,
+      "sensitive": true,
+      "help": "Generate in Firebase Console → Project Settings → Service Accounts"
+    },
+    "FIREBASE_CLIENT_EMAIL": {
+      "description": "Firebase service account email",
+      "type": "string",
+      "required": true,
+      "help": "Found in the service account JSON file"
+    },
+    "FIRESTORE_DATABASE": {
+      "description": "Firestore database name",
+      "type": "string",
+      "required": false,
+      "default": "(default)",
+      "help": "Use '(default)' for the default database"
+    }
+  }
+}

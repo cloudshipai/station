@@ -2,11 +2,35 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
+
+// validEditors contains allowlisted editors to prevent command injection
+var validEditors = map[string]bool{
+	"vi":      true,
+	"vim":     true,
+	"nano":    true,
+	"emacs":   true,
+	"code":    true,
+	"gedit":   true,
+	"subl":    true,
+	"atom":    true,
+	"notepad": true,
+}
+
+// validExtensions contains allowlisted file extensions to prevent path traversal
+var validExtensions = map[string]bool{
+	"txt":  true,
+	"json": true,
+	"yaml": true,
+	"yml":  true,
+	"toml": true,
+	"md":   true,
+}
 
 // EditorService handles opening external editors for content editing
 type EditorService struct{}
@@ -18,9 +42,14 @@ func NewEditorService() *EditorService {
 
 // OpenEditor opens the default editor with optional initial content and returns the edited content
 func (e *EditorService) OpenEditor(initialContent string, extension string) (string, error) {
-	// Create temporary file
+	// Validate extension to prevent path traversal
+	if !validExtensions[strings.ToLower(extension)] {
+		return "", fmt.Errorf("invalid file extension: %s (allowed: txt, json, yaml, yml, toml, md)", extension)
+	}
+
+	// Create temporary file with validated extension
 	tmpDir := os.TempDir()
-	tmpFile, err := ioutil.TempFile(tmpDir, fmt.Sprintf("station-template-*.%s", extension))
+	tmpFile, err := os.CreateTemp(tmpDir, fmt.Sprintf("station-template-*.%s", extension))
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}
@@ -34,10 +63,16 @@ func (e *EditorService) OpenEditor(initialContent string, extension string) (str
 	}
 	tmpFile.Close()
 
-	// Determine editor to use
+	// Determine and validate editor to use
 	editor := e.getEditor()
 	
-	// Open editor
+	// Validate editor command against allowlist
+	baseEditor := filepath.Base(editor)
+	if !validEditors[baseEditor] {
+		return "", fmt.Errorf("editor not allowed: %s (allowed: vi, vim, nano, emacs, code, gedit, subl, atom, notepad)", baseEditor)
+	}
+	
+	// Open editor with validated command
 	cmd := exec.Command(editor, tmpFile.Name())
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -51,7 +86,7 @@ func (e *EditorService) OpenEditor(initialContent string, extension string) (str
 	}
 
 	// Read the edited content
-	content, err := ioutil.ReadFile(tmpFile.Name())
+	content, err := io.ReadFile(tmpFile.Name())
 	if err != nil {
 		return "", fmt.Errorf("failed to read edited content: %w", err)
 	}
@@ -138,7 +173,7 @@ func (e *EditorService) getEditor() string {
 // ValidateJSON checks if the content is valid JSON
 func (e *EditorService) ValidateJSON(content string) error {
 	// Basic validation - try to parse as JSON
-	tmpFile, err := ioutil.TempFile("", "validate-*.json")
+	tmpFile, err := os.CreateTemp("", "validate-*.json")
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,68 @@
+{
+  "name": "REST API Client",
+  "description": "Make HTTP requests to REST APIs with authentication and custom headers",
+  "mcpServers": {
+    "rest-api": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-rest-api"],
+      "env": {
+        "API_BASE_URL": "{{API_BASE_URL}}",
+        "API_KEY": "{{API_KEY}}",
+        "API_KEY_HEADER": "{{API_KEY_HEADER}}",
+        "AUTH_TYPE": "{{AUTH_TYPE}}",
+        "BEARER_TOKEN": "{{BEARER_TOKEN}}",
+        "BASIC_AUTH_USER": "{{BASIC_AUTH_USER}}",
+        "BASIC_AUTH_PASS": "{{BASIC_AUTH_PASS}}"
+      }
+    }
+  },
+  "templates": {
+    "API_BASE_URL": {
+      "description": "Base URL for the REST API",
+      "type": "string",
+      "required": true,
+      "help": "Example: https://api.example.com/v1"
+    },
+    "AUTH_TYPE": {
+      "description": "Authentication type",
+      "type": "string",
+      "required": false,
+      "default": "api_key",
+      "help": "Options: api_key, bearer, basic, none"
+    },
+    "API_KEY": {
+      "description": "API key for authentication",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "help": "Required if AUTH_TYPE is 'api_key'"
+    },
+    "API_KEY_HEADER": {
+      "description": "Header name for API key",
+      "type": "string",
+      "required": false,
+      "default": "X-API-Key",
+      "help": "Common options: X-API-Key, Authorization, X-Auth-Token"
+    },
+    "BEARER_TOKEN": {
+      "description": "Bearer token for authentication",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "help": "Required if AUTH_TYPE is 'bearer'"
+    },
+    "BASIC_AUTH_USER": {
+      "description": "Username for basic authentication",
+      "type": "string",
+      "required": false,
+      "help": "Required if AUTH_TYPE is 'basic'"
+    },
+    "BASIC_AUTH_PASS": {
+      "description": "Password for basic authentication",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "help": "Required if AUTH_TYPE is 'basic'"
+    }
+  }
+}
