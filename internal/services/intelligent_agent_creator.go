@@ -491,13 +491,12 @@ Execute the task now:`,
 
 	log.Printf("🔍 Executing agent with model: %s", modelName)
 
-	// Use Genkit to execute the agent - temporarily without tools to debug multi-step
-	// TODO: Add tools back once we fix the multi-step execution
+	// Use Genkit to execute the agent with full MCP tool access
 	response, err := genkit.Generate(ctx, iac.genkitApp,
 		ai.WithModelName(modelName),
 		ai.WithPrompt(executionPrompt),
-		// ai.WithTools(toolRefs...),
-		// ai.WithToolChoice(ai.ToolChoiceAuto),
+		ai.WithTools(toolRefs...),
+		ai.WithToolChoice(ai.ToolChoiceAuto),
 		ai.WithMaxTurns(25), // Increase from default 5 to handle complex tasks
 	)
 	if err != nil {
