@@ -16,9 +16,15 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 
 	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
+	envFlag, _ := cmd.Flags().GetString("env")
 	configName, _ := cmd.Flags().GetString("config-name")
 	detectMode, _ := cmd.Flags().GetBool("detect")
 	editorMode, _ := cmd.Flags().GetBool("editor")
+
+	// --env flag takes priority over --environment
+	if envFlag != "" {
+		environment = envFlag
+	}
 
 	// Initialize AI if detect mode is enabled
 	if detectMode {
@@ -31,7 +37,6 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 	}
 
 	var configFile string
-	var found bool
 
 	// Check if we have a direct README URL as argument
 	if len(args) > 0 && isDirectReadmeURL(args[0]) {
@@ -49,7 +54,6 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		if _, err := os.Stat(args[0]); err == nil {
 			configFile = args[0]
-			found = true
 
 			// Initialize AI if detect mode is enabled for file input
 			if detectMode {
@@ -59,20 +63,9 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("file not found: %s", args[0])
 		}
 	} else {
-		// Look for MCP configuration file in current directory
-		configFiles := []string{"mcp.json", ".mcp.json"}
-
-		for _, file := range configFiles {
-			if _, err := os.Stat(file); err == nil {
-				configFile = file
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("no MCP configuration file found. Looking for: %s", configFiles)
-		}
+		// No arguments provided - open interactive editor
+		fmt.Println(getCLIStyles(h.themeManager).Info.Render("📝 No configuration file specified, opening interactive editor..."))
+		return h.handleInteractiveEditor(endpoint, environment, configName, detectMode)
 	}
 
 	fmt.Printf("📄 Found config file: %s\n", configFile)

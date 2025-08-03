@@ -220,3 +220,99 @@ func (e *EditorService) getEditor() string {
 
 	return "nano" // Fallback
 }
+
+// handleInteractiveEditor opens editor when no arguments are provided to load command
+func (h *LoadHandler) handleInteractiveEditor(endpoint, environment, configName string, detectMode bool) error {
+	styles := getCLIStyles(h.themeManager)
+
+	fmt.Println(styles.Info.Render("📝 Opening interactive editor for MCP template configuration..."))
+	fmt.Println(styles.Info.Render("💡 Paste your MCP configuration template and save to continue"))
+
+	// Initialize AI if detect mode is enabled
+	if detectMode {
+		h.initializeAI()
+	}
+
+	// Import editor service
+	editorService := &EditorService{}
+
+	// Open editor with template
+	content, err := editorService.OpenEditorWithTemplate()
+	if err != nil {
+		return fmt.Errorf("failed to open editor: %w", err)
+	}
+
+	if strings.TrimSpace(content) == "" {
+		fmt.Println(styles.Info.Render("⚠️  No content provided. Operation cancelled."))
+		return nil
+	}
+
+	// Clean up the content (remove instruction comments)
+	content = h.cleanEditorContent(content)
+
+	// Validate JSON
+	if err := editorService.ValidateJSON(content); err != nil {
+		fmt.Printf("%s Invalid JSON format. Please check your configuration.\n", styles.Error.Render("❌"))
+		return err
+	}
+
+	fmt.Println(styles.Success.Render("✅ Configuration received successfully!"))
+
+	// Parse the configuration
+	var config LoadMCPConfig
+	if err := json.Unmarshal([]byte(content), &config); err != nil {
+		return fmt.Errorf("failed to parse configuration: %w", err)
+	}
+
+	// Always use AI detection in interactive editor mode
+	if !detectMode {
+		h.initializeAI()
+	}
+
+	// Detect and process templates
+	hasTemplates, missingValues := h.detectTemplates(&config)
+	if hasTemplates {
+		fmt.Println(styles.Info.Render("🔍 Template variables detected, generating form for values..."))
+		
+		// Show detected variables
+		if len(missingValues) > 0 {
+			fmt.Printf("📋 Found %d template variable(s) that need values:\n", len(missingValues))
+			for i, variable := range missingValues {
+				fmt.Printf("  %d. %s\n", i+1, variable)
+			}
+			fmt.Println()
+		}
+
+		processedConfig, err := h.processTemplateConfig(&config, missingValues)
+		if err != nil {
+			return fmt.Errorf("failed to process templates: %w", err)
+		}
+		
+		if processedConfig == nil {
+			fmt.Println(styles.Info.Render("Template configuration cancelled"))
+			return nil
+		}
+		
+		config = *processedConfig
+	} else {
+		fmt.Println(styles.Info.Render("✅ No template variables detected - configuration ready to load"))
+	}
+
+	// Generate config name if not provided
+	if configName == "" {
+		if config.Name != "" {
+			configName = config.Name
+		} else {
+			configName = "interactive-config"
+		}
+	}
+
+	// Add unique ID suffix to prevent duplicates
+	configName = h.generateUniqueConfigName(configName)
+
+	fmt.Printf("📝 Config name: %s\n", configName)
+	fmt.Printf("🌍 Environment: %s\n", environment)
+
+	// Upload the configuration using the file-based system
+	return h.uploadConfiguration(&config, endpoint, environment, configName)
+}
