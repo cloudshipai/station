@@ -9,7 +9,7 @@ import (
 	"station/internal/db"
 	"station/internal/telemetry"
 	"station/internal/theme"
-	"station/cmd/main/handlers"
+	"station/cmd/main/handlers/file_config"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -52,7 +52,7 @@ func init() {
 	rootCmd.AddCommand(bannerCmd)
 	
 	// Initialize file config handler and integrate with mcp commands
-	fileConfigHandler := handlers.NewFileConfigHandler()
+	fileConfigHandler := file_config.NewFileConfigHandler()
 	fileConfigHandler.RegisterMCPCommands(mcpCmd)
 	
 	configCmd.AddCommand(configShowCmd)
