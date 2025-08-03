@@ -368,20 +368,25 @@ func (iac *IntelligentAgentCreator) ensureEnvironment(envName string) (int64, er
 }
 
 // assignToolsToAgent assigns the specified tools to the agent using the repository API
-// TODO: This needs to be updated for environment-specific agents (Phase 2)
 func (iac *IntelligentAgentCreator) assignToolsToAgent(agentID int64, toolNames []string, environmentID int64) int {
 	assignedCount := 0
 	for _, toolName := range toolNames {
-		// TODO: Need to find tool by name in environment, then use tool ID
-		// _, err := iac.repos.AgentTools.AddAgentTool(agentID, toolID)
-		log.Printf("TODO: assignToolsToAgent needs implementation for environment-specific agents - skipping tool '%s'", toolName)
-		if false { // Temporarily disabled
-			log.Printf("Warning: Failed to assign tool '%s' to agent %d: %v", toolName, agentID, "disabled")
-			// Continue with other tools even if one fails
-		} else {
-			assignedCount++
-			log.Printf("✓ Successfully assigned tool '%s' to agent %d", toolName, agentID)
+		// Find tool by name in the agent's environment
+		tool, err := iac.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
+		if err != nil {
+			log.Printf("Warning: Failed to find tool '%s' in environment %d: %v", toolName, environmentID, err)
+			continue
 		}
+		
+		// Add the tool assignment to the agent
+		_, err = iac.repos.AgentTools.AddAgentTool(agentID, tool.ID)
+		if err != nil {
+			log.Printf("Warning: Failed to assign tool '%s' (ID: %d) to agent %d: %v", toolName, tool.ID, agentID, err)
+			continue
+		}
+		
+		assignedCount++
+		log.Printf("✓ Successfully assigned tool '%s' (ID: %d) to agent %d", toolName, tool.ID, agentID)
 	}
 	return assignedCount
 }
@@ -423,19 +428,48 @@ func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context,
 		return nil, fmt.Errorf("failed to initialize Genkit for agent execution: %w", err)
 	}
 
-	// Get available tools from our MCP server
-	tools, err := iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
+	// Get tools assigned to this specific agent
+	assignedTools, err := iac.repos.AgentTools.ListAgentTools(agent.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get MCP tools for execution: %w", err)
+		return nil, fmt.Errorf("failed to get assigned tools for agent %d: %w", agent.ID, err)
 	}
 
-	log.Printf("📋 Found %d available MCP tools for agent execution", len(tools))
+	log.Printf("📋 Agent has %d assigned tools for execution", len(assignedTools))
 
-	// Convert tools to tool references
-	var toolRefs []ai.ToolRef
-	for _, tool := range tools {
-		toolRefs = append(toolRefs, tool)
+	// Get all available MCP tools from server (for filtering)
+	allTools, err := iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get MCP tools from server: %w", err)
 	}
+
+	// Filter to only include tools assigned to this agent
+	var tools []ai.ToolRef
+	for _, assignedTool := range assignedTools {
+		for _, mcpTool := range allTools {
+			// Match by tool name - try multiple methods to get tool name
+			var toolName string
+			if named, ok := mcpTool.(interface{ Name() string }); ok {
+				toolName = named.Name()
+			} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
+				toolName = stringer.String()
+			} else {
+				// Fallback: check if we can extract name from tool reference somehow
+				log.Printf("🔍 DEBUG: Could not extract name from tool %T", mcpTool)
+				continue
+			}
+			
+			if toolName == assignedTool.ToolName {
+				tools = append(tools, mcpTool)
+				log.Printf("🔧 Including assigned tool: %s", assignedTool.ToolName)
+				break
+			}
+		}
+	}
+
+	log.Printf("📋 Filtered to %d assigned tools for agent execution", len(tools))
+
+	// Tools are already ai.ToolRef, use them directly
+	toolRefs := tools
 
 	// Create execution prompt that incorporates the agent's system prompt and task
 	executionPrompt := fmt.Sprintf(`You are %s, an AI agent with the following configuration:
@@ -491,14 +525,22 @@ Execute the task now:`,
 
 	log.Printf("🔍 Executing agent with model: %s", modelName)
 
-	// Use Genkit to execute the agent with full MCP tool access
-	response, err := genkit.Generate(ctx, iac.genkitApp,
-		ai.WithModelName(modelName),
-		ai.WithPrompt(executionPrompt),
-		ai.WithTools(toolRefs...),
-		ai.WithToolChoice(ai.ToolChoiceAuto),
-		ai.WithMaxTurns(25), // Increase from default 5 to handle complex tasks
-	)
+	// Use Genkit to execute the agent with assigned tools only
+	var generateOptions []ai.GenerateOption
+	generateOptions = append(generateOptions, ai.WithModelName(modelName))
+	generateOptions = append(generateOptions, ai.WithPrompt(executionPrompt))
+	generateOptions = append(generateOptions, ai.WithMaxTurns(25)) // Increase from default 5 to handle complex tasks
+	
+	// Only add tools and tool choice if we have tools available
+	if len(toolRefs) > 0 {
+		generateOptions = append(generateOptions, ai.WithTools(toolRefs...))
+		generateOptions = append(generateOptions, ai.WithToolChoice(ai.ToolChoiceAuto))
+		log.Printf("🔧 Executing with %d assigned tools", len(toolRefs))
+	} else {
+		log.Printf("⚠️ No tools available - executing in reasoning-only mode")
+	}
+	
+	response, err := genkit.Generate(ctx, iac.genkitApp, generateOptions...)
 	if err != nil {
 		// Track execution failure
 		executionTime := time.Since(startTime).Milliseconds()
