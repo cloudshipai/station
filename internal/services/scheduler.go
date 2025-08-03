@@ -86,9 +86,10 @@ func (s *SchedulerService) ScheduleAgent(agent *models.Agent) error {
 	// Remove existing schedule if present
 	s.UnscheduleAgent(agent.ID)
 
-	// Parse and validate cron expression
+	// Parse and validate cron expression (using 6-field format with seconds)
 	schedule := *agent.CronSchedule
-	if _, err := cron.ParseStandard(schedule); err != nil {
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	if _, err := parser.Parse(schedule); err != nil {
 		return fmt.Errorf("invalid cron expression '%s': %w", schedule, err)
 	}
 
@@ -157,8 +158,9 @@ func (s *SchedulerService) loadScheduledAgents() error {
 
 // updateNextRunTime calculates and updates the next run time for an agent
 func (s *SchedulerService) updateNextRunTime(agentID int64, cronExpr string) error {
-	// Parse cron expression to calculate next run time
-	schedule, err := cron.ParseStandard(cronExpr)
+	// Parse cron expression to calculate next run time (using 6-field format with seconds)
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	schedule, err := parser.Parse(cronExpr)
 	if err != nil {
 		return err
 	}
@@ -195,7 +197,8 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 	
 	// Calculate next run time if schedule is still valid
 	if agent.CronSchedule.Valid {
-		if schedule, err := cron.ParseStandard(agent.CronSchedule.String); err == nil {
+		parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+		if schedule, err := parser.Parse(agent.CronSchedule.String); err == nil {
 			nextRun = sql.NullTime{Time: schedule.Next(now), Valid: true}
 		}
 	}
