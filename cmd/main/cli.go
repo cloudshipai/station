@@ -9,25 +9,26 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"station/cmd/main/handlers"
+	"station/cmd/main/handlers/mcp"
 	"station/internal/db"
 	"station/internal/tui"
 )
 
 // runMCPList implements the "station mcp list" command
 func runMCPList(cmd *cobra.Command, args []string) error {
-	mcpHandler := handlers.NewMCPHandler(themeManager)
+	mcpHandler := mcp.NewMCPHandler(themeManager)
 	return mcpHandler.RunMCPList(cmd, args)
 }
 
 // runMCPTools implements the "station mcp tools" command
 func runMCPTools(cmd *cobra.Command, args []string) error {
-	mcpHandler := handlers.NewMCPHandler(themeManager)
+	mcpHandler := mcp.NewMCPHandler(themeManager)
 	return mcpHandler.RunMCPTools(cmd, args)
 }
 
 // runMCPDelete implements the "station mcp delete" command
 func runMCPDelete(cmd *cobra.Command, args []string) error {
-	mcpHandler := handlers.NewMCPHandler(themeManager)
+	mcpHandler := mcp.NewMCPHandler(themeManager)
 	return mcpHandler.RunMCPDelete(cmd, args)
 }
 
@@ -166,7 +167,7 @@ func runMCPAddInteractive(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Command: %s %v\n", getCLIStyles(themeManager).Success.Render(final.GetCommand()), final.GetArgs())
 	
 	// Now execute the actual addition
-	mcpHandler := handlers.NewMCPHandler(themeManager)
+	mcpHandler := mcp.NewMCPHandler(themeManager)
 	result, err := mcpHandler.AddServerToConfig(final.GetConfigID(), final.GetServerName(), final.GetCommand(), final.GetArgs(), final.GetEnvVars(), final.GetEnvironment(), final.GetEndpoint())
 	if err != nil {
 		fmt.Println(getCLIStyles(themeManager).Error.Render("❌ Failed to add server: " + err.Error()))
@@ -179,12 +180,12 @@ func runMCPAddInteractive(cmd *cobra.Command, args []string) error {
 
 // runMCPSync implements the "station mcp sync" command
 func runMCPSync(cmd *cobra.Command, args []string) error {
-	mcpHandler := handlers.NewMCPHandler(themeManager)
+	mcpHandler := mcp.NewMCPHandler(themeManager)
 	return mcpHandler.RunMCPSync(cmd, args)
 }
 
 // runMCPStatus implements the "station mcp status" command
 func runMCPStatus(cmd *cobra.Command, args []string) error {
-	mcpHandler := handlers.NewMCPHandler(themeManager)
+	mcpHandler := mcp.NewMCPHandler(themeManager)
 	return mcpHandler.RunMCPStatus(cmd, args)
 }

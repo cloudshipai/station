@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/spf13/cobra"
-	"station/cmd/main/handlers"
+	"station/cmd/main/handlers/agent"
 )
 
 // Agent command definitions
@@ -61,30 +61,30 @@ where our own MCP server analyzes requirements to create optimized agents.`,
 
 // runAgentList lists all agents
 func runAgentList(cmd *cobra.Command, args []string) error {
-	agentHandler := handlers.NewAgentHandler(themeManager)
+	agentHandler := agent.NewAgentHandler(themeManager)
 	return agentHandler.RunAgentList(cmd, args)
 }
 
 // runAgentShow shows agent details
 func runAgentShow(cmd *cobra.Command, args []string) error {
-	agentHandler := handlers.NewAgentHandler(themeManager)
+	agentHandler := agent.NewAgentHandler(themeManager)
 	return agentHandler.RunAgentShow(cmd, args)
 }
 
 // runAgentRun runs an agent
 func runAgentRun(cmd *cobra.Command, args []string) error {
-	agentHandler := handlers.NewAgentHandler(themeManager)
+	agentHandler := agent.NewAgentHandler(themeManager)
 	return agentHandler.RunAgentRun(cmd, args)
 }
 
 // runAgentDelete deletes an agent
 func runAgentDelete(cmd *cobra.Command, args []string) error {
-	agentHandler := handlers.NewAgentHandler(themeManager)
+	agentHandler := agent.NewAgentHandler(themeManager)
 	return agentHandler.RunAgentDelete(cmd, args)
 }
 
 // runAgentCreate creates a new intelligent agent
 func runAgentCreate(cmd *cobra.Command, args []string) error {
-	agentHandler := handlers.NewAgentHandler(themeManager)
+	agentHandler := agent.NewAgentHandler(themeManager)
 	return agentHandler.RunAgentCreate(cmd, args)
 }
