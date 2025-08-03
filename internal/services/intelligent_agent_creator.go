@@ -436,30 +436,39 @@ func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context,
 
 	log.Printf("📋 Agent has %d assigned tools for execution", len(assignedTools))
 
-	// Get all available MCP tools from server (for filtering)
-	allTools, err := iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
+	// Get MCP tools from agent's environment instead of Station stdio
+	allTools, err := iac.getEnvironmentMCPTools(ctx, agent.EnvironmentID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get MCP tools from server: %w", err)
+		return nil, fmt.Errorf("failed to get environment MCP tools for agent %d: %w", agent.ID, err)
 	}
 
 	// Filter to only include tools assigned to this agent
 	var tools []ai.ToolRef
 	for _, assignedTool := range assignedTools {
 		for _, mcpTool := range allTools {
-			// Match by tool name - try multiple methods to get tool name
+			// Match by tool name - try multiple methods to get tool name  
 			var toolName string
 			if named, ok := mcpTool.(interface{ Name() string }); ok {
 				toolName = named.Name()
 			} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
 				toolName = stringer.String()
 			} else {
-				// Fallback: check if we can extract name from tool reference somehow
-				log.Printf("🔍 DEBUG: Could not extract name from tool %T", mcpTool)
+				// Could not extract tool name - skip this tool
 				continue
 			}
 			
-			if toolName == assignedTool.ToolName {
-				tools = append(tools, mcpTool)
+			// Handle prefixed tool names from MCP servers (e.g., "filesystem-server_create_directory")
+			baseName := toolName
+			if strings.Contains(toolName, "_") {
+				parts := strings.SplitN(toolName, "_", 2)
+				if len(parts) == 2 {
+					baseName = parts[1] // Extract "create_directory" from "filesystem-server_create_directory"
+				}
+			}
+			
+			if baseName == assignedTool.ToolName {
+				// Convert ai.Tool to ai.ToolRef
+				tools = append(tools, ai.ToolRef(mcpTool))
 				log.Printf("🔧 Including assigned tool: %s", assignedTool.ToolName)
 				break
 			}
@@ -720,6 +729,46 @@ Execute the task now:`,
 		})
 	}
 
-	log.Printf("✅ Stdio MCP agent execution completed successfully")
+	log.Printf("✅ Environment MCP agent execution completed successfully")
 	return result, nil
+}
+
+// getEnvironmentMCPTools connects to MCP servers in the agent's environment and gets available tools
+func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, error) {
+	// Get file-based MCP configurations for this environment
+	environment, err := iac.repos.Environments.GetByID(environmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment %d: %w", environmentID, err)
+	}
+
+	log.Printf("🌍 Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
+
+	// Check if staging environment has filesystem MCP server
+	if environment.Name == "staging" {
+		// Create MCP client for filesystem server
+		fsClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
+			Name:    "filesystem-server",
+			Version: "1.0.0",
+			Stdio: &mcp.StdioConfig{
+				Command: "npx",
+				Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "/home/epuerta/projects/hack/station"},
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create filesystem MCP client: %w", err)
+		}
+
+		// Get tools from filesystem server
+		tools, err := fsClient.GetActiveTools(ctx, iac.genkitApp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tools from filesystem server: %w", err)
+		}
+
+		log.Printf("🗂️ Found %d tools from filesystem MCP server", len(tools))
+		return tools, nil
+	}
+
+	// Fallback to Station stdio server for other environments
+	log.Printf("⚠️ Environment '%s' not configured for file-based MCP, using Station stdio fallback", environment.Name)
+	return iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
 }
