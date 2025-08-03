@@ -1116,13 +1116,37 @@ func (h *AgentHandler) importAgentTools(agentID int64, toolsFile string, repos *
 		return fmt.Errorf("failed to parse tools config: %w", err)
 	}
 
-	// Note: This is a simplified implementation
-	// In a complete implementation, you would:
-	// 1. Ensure all required MCP servers are configured
-	// 2. Map tools to actual server/tool IDs in the database
-	// 3. Create agent-tool relationships
+	assignedCount := 0
+	fmt.Printf("🔧 Found %d tool assignments to import\n", len(toolsConfig.Tools))
 	
-	fmt.Printf("🔧 Found %d tool assignments (tool import not fully implemented yet)\n", len(toolsConfig.Tools))
+	// Get agent's environment to ensure tools are from the same environment
+	agent, err := repos.Agents.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent: %w", err)
+	}
+
+	for _, toolExport := range toolsConfig.Tools {
+		// Find tool by name in the agent's environment
+		tool, err := repos.MCPTools.FindByNameInEnvironment(agent.EnvironmentID, toolExport.ToolName)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Tool '%s' not found in environment, skipping\n", toolExport.ToolName)
+			continue
+		}
+		
+		// Add the tool assignment to the agent
+		_, err = repos.AgentTools.AddAgentTool(agentID, tool.ID)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Failed to assign tool '%s' to agent: %v\n", toolExport.ToolName, err)
+			continue
+		}
+		
+		assignedCount++
+		fmt.Printf("✓ Successfully assigned tool '%s' to agent\n", toolExport.ToolName)
+	}
+	
+	if assignedCount > 0 {
+		fmt.Printf("🎉 Successfully imported %d/%d tool assignments\n", assignedCount, len(toolsConfig.Tools))
+	}
 	
 	return nil
 }
