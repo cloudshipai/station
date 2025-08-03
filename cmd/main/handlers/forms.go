@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"station/cmd/main/handlers/mcp"
 	"station/internal/theme"
 )
 
@@ -253,8 +254,8 @@ func (m SpinnerModel) Init() tea.Cmd {
 	// Check if this is an add-server operation
 	if m.configID != "" && m.serverName != "" {
 		return tea.Batch(m.spinner.Tick, func() tea.Msg {
-			handler := NewMCPHandler(m.themeManager)
-			result, err := handler.addServerToConfig(m.configID, m.serverName, m.command, m.args, m.envVars, m.env, m.endpoint)
+			handler := mcp.NewMCPHandler(m.themeManager)
+			result, err := handler.AddServerToConfig(m.configID, m.serverName, m.command, m.args, m.envVars, m.env, m.endpoint)
 			return FinishedMsg{
 				success: err == nil,
 				result:  result,
