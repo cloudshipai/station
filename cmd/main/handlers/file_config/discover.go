@@ -1,0 +1,85 @@
+package file_config
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+// discoverCommand discovers tools for file configs
+func (h *FileConfigHandler) discoverCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "discover <config-name> [environment-name]",
+		Short: "Discover tools for a file-based configuration",
+		Long:  "Load, render, and discover MCP tools for a file-based configuration.",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE:  h.discoverTools,
+	}
+
+	cmd.Flags().Bool("verbose", false, "Verbose output during discovery")
+	cmd.Flags().Int("timeout", 30, "Discovery timeout in seconds")
+	
+	return cmd
+}
+
+// discoverTools handles the discover command
+func (h *FileConfigHandler) discoverTools(cmd *cobra.Command, args []string) error {
+	configName := args[0]
+	envName := "default"
+	if len(args) > 1 {
+		envName = args[1]
+	}
+
+	ctx := context.Background()
+	
+	// Validate file-based environment exists
+	if err := h.validateEnvironmentExists(envName); err != nil {
+		return err
+	}
+	
+	// Get or create environment ID for database operations
+	envID, err := h.getOrCreateEnvironmentID(envName)
+	if err != nil {
+		return fmt.Errorf("failed to get environment ID: %w", err)
+	}
+
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	
+	fmt.Printf("🔍 Discovering tools for config '%s' in environment '%s'...\n", configName, envName)
+	
+	if verbose {
+		fmt.Printf("   1. Loading template...\n")
+		fmt.Printf("   2. Resolving variables...\n")
+		fmt.Printf("   3. Rendering configuration...\n")
+		fmt.Printf("   4. Connecting to MCP servers...\n")
+		fmt.Printf("   5. Discovering tools...\n")
+	}
+
+	result, err := h.fileConfigService.DiscoverToolsForConfig(ctx, envID, configName)
+	if err != nil {
+		return fmt.Errorf("tool discovery failed: %w", err)
+	}
+
+	// Display results
+	if result.Success {
+		fmt.Printf("✅ Tool discovery completed successfully!\n")
+		fmt.Printf("   Servers processed: %d/%d\n", result.SuccessfulServers, result.TotalServers)
+		fmt.Printf("   Tools discovered: %d\n", result.TotalTools)
+		fmt.Printf("   Duration: %v\n", result.CompletedAt.Sub(result.StartedAt))
+	} else {
+		fmt.Printf("⚠️  Tool discovery completed with issues\n")
+		fmt.Printf("   Successful servers: %d/%d\n", result.SuccessfulServers, result.TotalServers)
+		fmt.Printf("   Tools discovered: %d\n", result.TotalTools)
+		fmt.Printf("   Errors: %d\n", len(result.Errors))
+	}
+
+	if len(result.Errors) > 0 && verbose {
+		fmt.Printf("\nErrors encountered:\n")
+		for _, err := range result.Errors {
+			fmt.Printf("   - %s: %s\n", err.ServerName, err.Message)
+		}
+	}
+
+	return nil
+}

@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/viper"
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/internal/services"
 	"station/pkg/crypto"
 	"station/pkg/models"
 	"station/internal/theme"
@@ -101,10 +100,10 @@ func (h *MCPHandler) listMCPConfigsLocal(environment string) error {
 	
 	// Print each config
 	for _, config := range configs {
-		fmt.Printf("│ %-4d │ %-40s │ v%-7d │ %-14s │\n", 
+		fmt.Printf("│ %-4d │ %-40s │ %-9s │ %-14s │\n", 
 			config.ID, 
 			truncateString(config.ConfigName, 40),
-			config.Version, 
+			"file-based", 
 			config.CreatedAt.Format("Jan 2 15:04"))
 	}
 	
@@ -353,60 +352,22 @@ func (h *MCPHandler) addServerToConfigLocal(configID, serverName, command string
 	defer database.Close()
 
 	repos := repositories.New(database)
-	keyManager, err := crypto.NewKeyManagerFromEnv()
+	_, err = crypto.NewKeyManagerFromEnv()
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize key manager: %w", err)
 	}
-	mcpConfigService := services.NewMCPConfigService(repos, keyManager)
+	// TODO: Replace with file-based config service
+	// mcpConfigService := services.NewMCPConfigService(repos, keyManager)
 
 	// Find environment
-	env, err := repos.Environments.GetByName(environment)
+	_, err = repos.Environments.GetByName(environment)
 	if err != nil {
 		return "", fmt.Errorf("environment '%s' not found", environment)
 	}
 
-	// Find config (try by name first, then by ID)
-	var config *models.MCPConfig
-	if configByName, err := repos.MCPConfigs.GetLatestByName(env.ID, configID); err == nil {
-		config = configByName
-	} else {
-		// Try parsing as ID
-		if id, parseErr := strconv.ParseInt(configID, 10, 64); parseErr == nil {
-			if configByID, err := repos.MCPConfigs.GetByID(id); err == nil {
-				config = configByID
-			}
-		}
-	}
-
-	if config == nil {
-		return "", fmt.Errorf("config '%s' not found", configID)
-	}
-
-	// Get and decrypt existing config
-	configData, err := mcpConfigService.GetDecryptedConfig(config.ID)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt existing config: %w", err)
-	}
-
-	// Add new server to the config
-	if configData.Servers == nil {
-		configData.Servers = make(map[string]models.MCPServerConfig)
-	}
-	
-	configData.Servers[serverName] = models.MCPServerConfig{
-		Command: command,
-		Args:    args,
-		Env:     envVars,
-	}
-
-	// Upload updated config (creates new version)
-	newConfig, err := mcpConfigService.UploadConfig(env.ID, configData)
-	if err != nil {
-		return "", fmt.Errorf("failed to save updated config: %w", err)
-	}
-
-	return fmt.Sprintf("Added server '%s' to config '%s' (new version: %d)", 
-		serverName, config.ConfigName, newConfig.Version), nil
+	// TODO: Replace with file-based config logic
+	// This function needs to be updated to work with file-based configs
+	return "", fmt.Errorf("addMCPServerToConfig function needs to be updated for file-based configs")
 }
 
 // addServerToConfigRemote adds server to remote configuration
@@ -459,57 +420,14 @@ func (h *MCPHandler) deleteMCPConfigLocal(configID, environment string, confirm 
 	repos := repositories.New(database)
 
 	// Find environment
-	env, err := repos.Environments.GetByName(environment)
+	_, err = repos.Environments.GetByName(environment)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found", environment)
 	}
 
-	// Find config (try by name first, then by ID)
-	var config *models.MCPConfig
-	if configByName, err := repos.MCPConfigs.GetLatestByName(env.ID, configID); err == nil {
-		config = configByName
-	} else {
-		// Try parsing as ID
-		if id, parseErr := strconv.ParseInt(configID, 10, 64); parseErr == nil {
-			if configByID, err := repos.MCPConfigs.GetByID(id); err == nil {
-				config = configByID
-			}
-		}
-	}
-
-	if config == nil {
-		return fmt.Errorf("config '%s' not found", configID)
-	}
-
-	// Note: Tools should be cascade deleted with the configuration
-	// For now, we'll just show a generic message about associated data
-
-	// Show confirmation prompt if not already confirmed
-	if !confirm {
-		fmt.Printf("\n⚠️  This will delete:\n")
-		fmt.Printf("• Configuration: %s v%d (ID: %d)\n", config.ConfigName, config.Version, config.ID)
-		fmt.Printf("• All associated servers and tools\n")
-		fmt.Print("\nAre you sure? [y/N]: ")
-		
-		var response string
-		fmt.Scanln(&response)
-		if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
-			fmt.Println("Deletion cancelled")
-			return nil
-		}
-	}
-
-	// Delete the configuration (cascade delete should handle tools)
-	err = repos.MCPConfigs.Delete(config.ID)
-	if err != nil {
-		return fmt.Errorf("failed to delete configuration: %w", err)
-	}
-
-	styles := getCLIStyles(h.themeManager)
-	fmt.Printf("✅ %s\n", styles.Success.Render(fmt.Sprintf("Successfully deleted configuration '%s' (ID: %d) and all associated data", 
-		config.ConfigName, config.ID)))
-
-	return nil
+	// TODO: Replace with file-based config logic
+	// This function needs to be updated to work with file-based configs
+	return fmt.Errorf("deleteMCPConfig function needs to be updated for file-based configs")
 }
 
 // deleteMCPConfigRemote deletes an MCP configuration from remote API
