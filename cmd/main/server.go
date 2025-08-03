@@ -122,16 +122,13 @@ func runMainServer() error {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
 	
-	// TODO: Replace with updated service constructor for file-based configs
-	// For now, disable agent service since it needs to be updated for file-based configs
-	var agentSvc services.AgentServiceInterface = nil
+	// Initialize agent service with IntelligentAgentCreator
+	agentSvc := services.NewAgentService(repos)
 	
-	// TODO: Initialize MCP for the agent service when service is implemented
-	// if agentSvc != nil {
-	//	if err := agentSvc.InitializeMCP(ctx); err != nil {
-	//		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
-	//	}
-	// }
+	// Initialize MCP for the agent service
+	if err := agentSvc.InitializeMCP(ctx); err != nil {
+		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
+	}
 	
 	// Initialize execution queue service for async agent execution
 	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, webhookSvc, 5) // 5 workers
