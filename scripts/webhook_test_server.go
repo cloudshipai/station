@@ -140,7 +140,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request, secret string) {
 	}
 
 	log.Printf("✅ Webhook processed successfully")
-	log.Printf("" + strings.Repeat("-", 50))
+	log.Printf("%s", strings.Repeat("-", 50))
 }
 
 // generateSignature generates HMAC-SHA256 signature for webhook payload

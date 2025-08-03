@@ -43,7 +43,7 @@ type Model struct {
 	// Core data
 	db             db.Database
 	executionQueue *services.ExecutionQueueService
-	genkitService  *services.GenkitService
+	genkitService  services.AgentServiceInterface
 	
 	// UI state
 	width       int
@@ -108,7 +108,7 @@ func DefaultKeyMap() KeyMap {
 }
 
 // NewModel creates a new TUI model
-func NewModel(database db.Database, executionQueue *services.ExecutionQueueService, genkitService *services.GenkitService) *Model {
+func NewModel(database db.Database, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface) *Model {
 	
 	return &Model{
 		db:             database,
@@ -761,7 +761,7 @@ func (m *Model) renderSplashScreen() string {
 }
 
 // Program creates a new Bubble Tea program
-func NewProgram(database db.Database, executionQueue *services.ExecutionQueueService, genkitService *services.GenkitService) *tea.Program {
+func NewProgram(database db.Database, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface) *tea.Program {
 	model := NewModel(database, executionQueue, genkitService)
 	return tea.NewProgram(
 		model,

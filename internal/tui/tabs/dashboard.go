@@ -333,11 +333,19 @@ func (m DashboardModel) loadStats() tea.Cmd {
 		stats.DatabaseSize = "1.2 MB" // Could calculate actual DB size
 		stats.Uptime = time.Hour * 24 * 3 // Could track actual uptime
 		
-		// Count MCP Servers from configs 
-		configs, err := m.repos.MCPConfigs.GetAllLatestConfigs()
+		// Count MCP Servers from file configs 
+		envs, err = m.repos.Environments.List()
 		if err == nil {
-			stats.MCPServers = len(configs)
-			stats.ActiveServers = len(configs) // Assume all configs are active
+			// Count file configs across all environments
+			totalFileConfigs := 0
+			for _, env := range envs {
+				fileConfigs, err := m.repos.FileMCPConfigs.ListByEnvironment(env.ID)
+				if err == nil {
+					totalFileConfigs += len(fileConfigs)
+				}
+			}
+			stats.MCPServers = totalFileConfigs
+			stats.ActiveServers = totalFileConfigs // Assume all file configs are active
 		}
 		
 		// Get recent runs (with fallback sample data)
