@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/telemetry"
 	"station/pkg/models"
 
 	"github.com/firebase/genkit/go/ai"
@@ -384,6 +386,7 @@ type AgentExecutionResult struct {
 
 // ExecuteAgentViaStdioMCP executes an agent using self-bootstrapping stdio MCP architecture
 func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
+	startTime := time.Now()
 	log.Printf("🤖 Starting stdio MCP agent execution for agent '%s'", agent.Name)
 
 	// Initialize Genkit + MCP if not already done
@@ -470,6 +473,28 @@ Execute the task now:`,
 		ai.WithMaxTurns(25), // Increase from default 5 to handle complex tasks
 	)
 	if err != nil {
+		// Track execution failure
+		executionTime := time.Since(startTime).Milliseconds()
+		if cfg, cfgErr := config.Load(); cfgErr == nil && cfg.TelemetryEnabled {
+			telemetryService := telemetry.NewTelemetryService(true)
+			defer telemetryService.Close()
+			
+			telemetryService.TrackAgentExecuted(
+				agent.ID,
+				executionTime,
+				false, // failure
+				0,     // no steps completed
+			)
+			
+			telemetryService.TrackError("agent_execution_failed", err.Error(), map[string]interface{}{
+				"agent_id":         agent.ID,
+				"agent_name":      agent.Name,
+				"run_id":          runID,
+				"execution_time_ms": executionTime,
+				"execution_mode":  "stdio_mcp",
+				"model_name":      modelName,
+			})
+		}
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
 	}
 
@@ -495,9 +520,11 @@ Execute the task now:`,
 		"edit_file", "get_file_info", "search_files", "read_text_file",
 	}
 	
+	detectedTools := []string{}
 	for _, pattern := range toolCallPatterns {
 		if count := strings.Count(responseLower, pattern); count > 0 {
 			toolCallCount += count
+			detectedTools = append(detectedTools, pattern)
 		}
 	}
 	
@@ -508,10 +535,12 @@ Execute the task now:`,
 		"first", "second", "third", "fourth", "fifth", "next",
 	}
 	
+	detectedSteps := []string{}
 	stepIndicators := 0
 	for _, pattern := range stepPatterns {
 		if strings.Contains(responseLower, pattern) {
 			stepIndicators++
+			detectedSteps = append(detectedSteps, pattern)
 		}
 	}
 	
@@ -522,8 +551,66 @@ Execute the task now:`,
 		stepsTaken = int64(min(estimatedSteps, 25)) // Cap at max steps
 	}
 	
+	// Create structured tool calls data for display
+	if len(detectedTools) > 0 {
+		toolCallsData := make([]interface{}, 0)
+		for i, tool := range detectedTools {
+			toolCallsData = append(toolCallsData, map[string]interface{}{
+				"call_id":    i + 1,
+				"tool_name":  tool,
+				"detected":   true,
+				"timestamp":  time.Now().Format(time.RFC3339),
+				"context":    "pattern_detection",
+			})
+		}
+		toolCallsArray := models.JSONArray(toolCallsData)
+		toolCalls = &toolCallsArray
+	}
+	
+	// Create structured execution steps data for display
+	executionStepsData := make([]interface{}, 0)
+	
+	// Add initial reasoning step
+	executionStepsData = append(executionStepsData, map[string]interface{}{
+		"step":        1,
+		"type":        "reasoning",
+		"description": "Initial task analysis and planning",
+		"timestamp":   time.Now().Format(time.RFC3339),
+		"status":      "completed",
+	})
+	
+	// Add detected steps
+	for i, stepPattern := range detectedSteps {
+		executionStepsData = append(executionStepsData, map[string]interface{}{
+			"step":        i + 2,
+			"type":        "execution",
+			"description": fmt.Sprintf("Executed step: %s", stepPattern),
+			"timestamp":   time.Now().Format(time.RFC3339),
+			"status":      "completed",
+		})
+	}
+	
+	// Add detected tool usage steps
+	for i, tool := range detectedTools {
+		executionStepsData = append(executionStepsData, map[string]interface{}{
+			"step":        len(detectedSteps) + i + 2,
+			"type":        "tool_usage",
+			"description": fmt.Sprintf("Used tool: %s", tool),
+			"tool":        tool,
+			"timestamp":   time.Now().Format(time.RFC3339),
+			"status":      "completed",
+		})
+	}
+	
+	if len(executionStepsData) > 0 {
+		executionStepsArray := models.JSONArray(executionStepsData)
+		executionSteps = &executionStepsArray
+	}
+	
 	log.Printf("🔍 Multi-step execution analysis: %d tool patterns, %d step indicators → %d total steps", 
 		toolCallCount, stepIndicators, stepsTaken)
+	log.Printf("🔧 Detected tools: %v", detectedTools)
+	log.Printf("📋 Detected steps: %v", detectedSteps)
 
 	result := &AgentExecutionResult{
 		Response:       responseText,
@@ -533,6 +620,36 @@ Execute the task now:`,
 	}
 
 	log.Printf("✅ Stdio MCP agent execution completed: %d steps taken", stepsTaken)
+
+	// Track agent execution with PostHog telemetry
+	executionTime := time.Since(startTime).Milliseconds()
+	
+	// Load telemetry service and track if enabled
+	if cfg, cfgErr := config.Load(); cfgErr == nil && cfg.TelemetryEnabled {
+		telemetryService := telemetry.NewTelemetryService(true)
+		defer telemetryService.Close()
+		
+		telemetryService.TrackAgentExecuted(
+			agent.ID,
+			executionTime,
+			true, // success
+			int(stepsTaken),
+		)
+		
+		// Also track detailed execution metadata
+		telemetryService.TrackEvent("agent_execution_detailed", map[string]interface{}{
+			"agent_id":         agent.ID,
+			"agent_name":      agent.Name,
+			"run_id":          runID,
+			"execution_time_ms": executionTime,
+			"steps_taken":     stepsTaken,
+			"tools_detected":  len(detectedTools),
+			"step_indicators": len(detectedSteps),
+			"task_length":     len(task),
+			"response_length": len(responseText),
+			"execution_mode":  "stdio_mcp",
+		})
+	}
 
 	log.Printf("✅ Stdio MCP agent execution completed successfully")
 	return result, nil
