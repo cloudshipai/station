@@ -1,83 +1,70 @@
-# API Handlers File Structure
+# CLI Handlers Modular Architecture
 
-The Station API v1 handlers have been refactored from a single large `handlers.go` file into multiple focused files for better maintainability and organization.
+The Station CLI handlers have been completely refactored from 5 large monolithic files (5,777 total lines) into a clean modular architecture with 43 focused modules, each under 500 lines for maximum maintainability.
 
-## File Structure
+## Modular Structure
 
-### `/internal/api/v1/handlers.go`
-**Main entry point with documentation**
-- Package declaration and overview documentation
-- No actual code - serves as an index to other handler files
+### `/cmd/main/handlers/agent/` (3 files, ~400 lines total)
+**Agent management CLI commands**
+- `handlers.go` - Main command handlers and routing
+- `local.go` - Local agent operations (create, delete, list, run)
+- `remote.go` - Remote agent operations and API communication
 
-### `/internal/api/v1/base.go`
-**Core structures and routing**
-- `APIHandlers` struct definition with all dependencies
-- `NewAPIHandlers` constructor function
-- `RegisterRoutes` function that sets up all API routes
-- `requireAdminInServerMode` middleware for admin-only endpoints
-- Route group organization with proper authentication
+### `/cmd/main/handlers/file_config/` (16 files, ~1,300 lines total)
+**File-based configuration management**
+- `handlers.go` - Main configuration command routing
+- `init.go` - Configuration system initialization
+- `create.go` - Create new configuration files
+- `update.go` - Update existing configurations  
+- `delete.go` - Remove configuration files
+- `list.go` - List available configurations
+- `status.go` - Configuration status and validation
+- `validate.go` - Configuration validation logic
+- `discover.go` - Auto-discover MCP configurations
+- `environments.go` - Environment-specific configuration management
+- `env_create.go` - Create new environments
+- `env_get.go` - Retrieve environment details
+- `env_list.go` - List available environments
+- `env_update_delete.go` - Environment modification operations
+- `variables.go` - Template variable management
+- `utils.go` - Shared configuration utilities
 
-### `/internal/api/v1/agents.go`
-**Agent management handlers**
-- `listAgents` - Get all agents (accessible to regular users)
-- `callAgent` - Execute an agent with a task (accessible to regular users)
-- `createAgent` - Create a new agent (admin only)
-- `getAgent` - Get agent details (admin only)
-- `updateAgent` - Update agent configuration (admin only) 
-- `deleteAgent` - Remove an agent (admin only)
-- `registerAgentAdminRoutes` - Route registration helper
+### `/cmd/main/handlers/load/` (10 files, ~1,200 lines total)
+**Configuration loading and processing**
+- `handler.go` - Main load command routing
+- `local.go` - Local configuration loading
+- `remote.go` - Remote configuration upload
+- `editor.go` - Interactive configuration editing
+- `templates.go` - Template processing and variable substitution
+- `github.go` - GitHub repository configuration discovery
+- `turbotax.go` - TurboTax-style configuration wizard
+- `types.go` - Load operation data structures
+- `utils.go` - Load operation utilities
+- `common.go` - Shared loading functionality
 
-### `/internal/api/v1/agent_runs.go`
-**Agent execution tracking handlers**
-- `listRuns` - Get recent agent runs with pagination
-- `getRun` - Get detailed run information by ID
-- `listRunsByAgent` - Get runs for a specific agent
-- `registerAgentRunRoutes` - Route registration helper
+### `/cmd/main/handlers/mcp/` (6 files, ~600 lines total)
+**MCP server management**
+- `handlers.go` - Main MCP command routing
+- `list.go` - List MCP servers and tools
+- `delete.go` - Remove MCP configurations
+- `server_config.go` - Server configuration management
+- `utils.go` - MCP operation utilities
+- `common.go` - Shared MCP functionality
 
-### `/internal/api/v1/environments.go`
-**Environment management handlers**
-- `listEnvironments` - Get all environments
-- `createEnvironment` - Create a new environment
-- `getEnvironment` - Get environment details
-- `updateEnvironment` - Update environment configuration
-- `deleteEnvironment` - Remove an environment
-- `registerEnvironmentRoutes` - Route registration helper
+### `/cmd/main/handlers/webhooks/` (8 files, ~800 lines total)
+**Webhook system management**
+- `handler.go` - Main webhook command routing
+- `create.go` - Create new webhooks
+- `list.go` - List webhook configurations
+- `show.go` - Display webhook details
+- `management.go` - Enable/disable webhook operations
+- `settings.go` - Webhook configuration settings
+- `deliveries.go` - Webhook delivery history
+- `utils.go` - Webhook operation utilities
 
-### `/internal/api/v1/mcp_configs.go`
-**MCP configuration handlers**
-- `listMCPConfigs` - Get MCP configs for an environment
-- `uploadMCPConfig` - Upload and encrypt a new MCP configuration
-- `getLatestMCPConfig` - Get the most recent config for an environment
-- `getMCPConfig` - Get specific config by ID with decryption
-- `deleteMCPConfig` - Remove an MCP configuration
-- `registerMCPConfigRoutes` - Route registration helper
-
-### `/internal/api/v1/tools.go`
-**Tool discovery and listing handlers**
-- `listTools` - Get available MCP tools for an environment with filtering
-- `registerToolsRoutes` - Route registration helper
-
-### `/internal/api/v1/settings.go`
-**System settings management handlers**
-- `UpdateSettingRequest` struct for request validation
-- `listSettings` - Get all system settings
-- `getSetting` - Get a specific setting by key
-- `updateSetting` - Update or create a setting
-- `deleteSetting` - Remove a setting
-- `registerSettingsRoutes` - Route registration helper
-
-### `/internal/api/v1/webhooks.go`
-**Webhook system handlers**
-- `CreateWebhookRequest` and `UpdateWebhookRequest` structs
-- `createWebhook` - Create a new webhook endpoint
-- `listWebhooks` - Get all registered webhooks
-- `getWebhook` - Get webhook details
-- `updateWebhook` - Update webhook configuration
-- `deleteWebhook` - Remove a webhook
-- `enableWebhook` / `disableWebhook` - Toggle webhook status
-- `listWebhookDeliveries` - Get delivery history for a webhook
-- `listAllWebhookDeliveries` - Get all webhook deliveries
-- `registerWebhookRoutes` - Route registration helper
+### `/cmd/main/handlers/common/` (1 file, ~170 lines)
+**Shared utilities and helpers**
+- `utils.go` - Common CLI styles, configuration loading, and helper functions
 
 ## Benefits of This Structure
 
@@ -106,46 +93,80 @@ The Station API v1 handlers have been refactored from a single large `handlers.g
 - New resource types get their own dedicated files
 - Route registration is centralized but organized
 
-## Route Organization
+## Command Organization
 
-The API follows a clear pattern:
+The CLI follows a clear hierarchical pattern:
 
 ```
-/api/v1/
-├── agents/                    # User-accessible agent operations
-│   ├── GET    ""             # List agents
-│   └── POST   ":id/execute"  # Execute agent
-├── agents/                    # Admin-only agent management  
-│   ├── POST   ""             # Create agent
-│   ├── GET    ":id"          # Get agent
-│   ├── PUT    ":id"          # Update agent
-│   └── DELETE ":id"          # Delete agent
-├── runs/                      # Agent execution history
-├── environments/              # Environment management (admin)
-│   └── :env_id/
-│       ├── mcp-configs/      # MCP configurations
-│       └── tools/            # Available tools
-├── settings/                  # System settings (admin)
-├── webhooks/                  # Webhook management (admin)
-│   └── :id/deliveries/       # Webhook delivery history
-└── webhook-deliveries/        # All webhook deliveries (admin)
+stn [command] [subcommand] [options]
+├── agent/                     # Agent management
+│   ├── create                 # Create new agent
+│   ├── list                   # List agents
+│   ├── run                    # Execute agent
+│   └── delete                 # Remove agent
+├── config/                    # File-based configuration
+│   ├── init                   # Initialize configuration system
+│   ├── create                 # Create configuration files
+│   ├── list                   # List configurations
+│   ├── validate               # Validate configurations
+│   └── discover               # Auto-discover configurations
+├── load/                      # Configuration loading
+│   ├── [file]                 # Load from file
+│   ├── --editor               # Interactive editor mode
+│   └── --github [url]         # Load from GitHub repository
+├── mcp/                       # MCP server management
+│   ├── list                   # List MCP servers and tools
+│   └── delete                 # Remove MCP configurations
+├── webhook/                   # Webhook management
+│   ├── create                 # Create webhook
+│   ├── list                   # List webhooks
+│   ├── show                   # Show webhook details
+│   └── deliveries             # View delivery history
+└── env/                       # Environment management
+    ├── create                 # Create environment
+    ├── list                   # List environments
+    └── delete                 # Remove environment
 ```
 
-## Authentication & Authorization
+## File-Based Configuration System
 
-- **Local Mode**: No authentication required
-- **Server Mode**: 
-  - All routes require authentication
-  - Admin-only routes require admin privileges
-  - User routes accessible to regular authenticated users
+- **GitOps Ready**: All configurations stored as files, perfect for version control
+- **Template Support**: Go template system with variable substitution
+- **Environment Isolation**: Separate configuration directories per environment
+- **Auto-Discovery**: Intelligent detection of MCP server configurations from GitHub repos
 
 ## Development Workflow
 
-When working on API endpoints:
+When working on CLI commands:
 
-1. **Find the right file**: Look for the resource type (agents, webhooks, etc.)
-2. **Add handler function**: Implement the logic in the appropriate file
-3. **Register route**: Add route registration in the `register*Routes` function
-4. **Update base.go**: Call the registration function in `RegisterRoutes`
+1. **Find the right module**: Look for the feature area (agent, file_config, load, etc.)
+2. **Add handler function**: Implement the logic in the appropriate file within the module
+3. **Update handlers.go**: Add command registration in the module's main handlers file
+4. **Shared utilities**: Use `/common/utils.go` for functionality shared across modules
 
-This structure makes Station's API codebase much more maintainable and easier to work with! 🎉
+## Key Architectural Benefits
+
+### 🏗️ **Modular Design**
+- **43 focused modules** instead of 5 monolithic files
+- **All files under 500 lines** for maximum readability
+- **Single Responsibility Principle** - each module has one clear purpose
+
+### 📁 **Clean Separation of Concerns**
+- **Agent operations** isolated in their own module
+- **File configuration** management completely separate
+- **Load operations** with their own specialized handlers
+- **Webhook system** self-contained
+
+### 🔧 **Maintainability**
+- **Easy to find functionality** - logical grouping by feature
+- **Reduced merge conflicts** - developers work in different modules
+- **Simplified testing** - each module can be tested independently
+- **Clean imports** - no circular dependencies
+
+### 🚀 **Extensibility**
+- **Add new features** by creating focused files in appropriate modules
+- **File-based configuration system** ready for GitOps workflows
+- **Template system** supports complex variable substitution
+- **Auto-discovery** makes onboarding new MCP servers effortless
+
+This modular architecture makes Station's CLI codebase significantly more maintainable and developer-friendly! 🎉
