@@ -142,3 +142,42 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 		return h.createAgentLocal(name, description, domain, schedule, environment)
 	}
 }
+
+// RunAgentExport exports an agent to file-based config
+func (h *AgentHandler) RunAgentExport(cmd *cobra.Command, args []string) error {
+	styles := getCLIStyles(h.themeManager)
+	banner := styles.Banner.Render("📤 Export Agent")
+	fmt.Println(banner)
+
+	agentID, err := common.ParseIDFromString(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid agent ID: %v", err)
+	}
+
+	var environment string
+	if len(args) > 1 {
+		environment = args[1]
+	} else {
+		environment = "default"
+	}
+
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🏠 Exporting agent %d to environment '%s'", agentID, environment)))
+	return h.exportAgentLocal(agentID, environment)
+}
+
+// RunAgentImport imports agents from file-based configs
+func (h *AgentHandler) RunAgentImport(cmd *cobra.Command, args []string) error {
+	styles := getCLIStyles(h.themeManager)
+	banner := styles.Banner.Render("📥 Import Agents")
+	fmt.Println(banner)
+
+	var environment string
+	if len(args) > 0 {
+		environment = args[0]
+	} else {
+		environment = "default"
+	}
+
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🏠 Importing agents from environment '%s'", environment)))
+	return h.importAgentsLocal(environment)
+}
