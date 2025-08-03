@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -86,7 +85,7 @@ func (e *EditorService) OpenEditor(initialContent string, extension string) (str
 	}
 
 	// Read the edited content
-	content, err := io.ReadFile(tmpFile.Name())
+	content, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		return "", fmt.Errorf("failed to read edited content: %w", err)
 	}
