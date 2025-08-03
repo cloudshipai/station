@@ -1,0 +1,29 @@
+{
+  "name": "Docker Container Management",
+  "description": "Manage Docker containers, images, and compose services",
+  "mcpServers": {
+    "docker": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-docker"],
+      "env": {
+        "DOCKER_HOST": "{{DOCKER_HOST}}",
+        "DOCKER_COMPOSE_PATH": "{{DOCKER_COMPOSE_PATH}}"
+      }
+    }
+  },
+  "templates": {
+    "DOCKER_HOST": {
+      "description": "Docker daemon socket (leave empty for default)",
+      "type": "string",
+      "required": false,
+      "default": "unix:///var/run/docker.sock",
+      "help": "Use tcp://localhost:2376 for remote Docker"
+    },
+    "DOCKER_COMPOSE_PATH": {
+      "description": "Path to docker-compose.yml file",
+      "type": "path",
+      "required": false,
+      "help": "Optional: specify if using Docker Compose"
+    }
+  }
+}

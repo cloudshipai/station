@@ -1,0 +1,44 @@
+{
+  "name": "OpenAI GPT Integration",
+  "description": "Access OpenAI's GPT models for text generation and completion",
+  "mcpServers": {
+    "openai": {
+      "command": "npx",
+      "args": ["-y", "@openai/mcp-server"],
+      "env": {
+        "OPENAI_API_KEY": "{{OPENAI_API_KEY}}",
+        "OPENAI_MODEL": "{{OPENAI_MODEL}}",
+        "OPENAI_BASE_URL": "{{OPENAI_BASE_URL}}",
+        "OPENAI_ORGANIZATION": "{{OPENAI_ORGANIZATION}}"
+      }
+    }
+  },
+  "templates": {
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key",
+      "type": "password",
+      "required": true,
+      "sensitive": true,
+      "help": "Get from: https://platform.openai.com/account/api-keys"
+    },
+    "OPENAI_MODEL": {
+      "description": "OpenAI model to use",
+      "type": "string",
+      "required": false,
+      "default": "gpt-4",
+      "help": "Options: gpt-4, gpt-4-turbo, gpt-3.5-turbo"
+    },
+    "OPENAI_BASE_URL": {
+      "description": "Custom OpenAI API base URL",
+      "type": "string",
+      "required": false,
+      "help": "Use for OpenAI-compatible services like Azure OpenAI"
+    },
+    "OPENAI_ORGANIZATION": {
+      "description": "OpenAI organization ID",
+      "type": "string",
+      "required": false,
+      "help": "Required if you belong to multiple organizations"
+    }
+  }
+}
