@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -288,10 +289,30 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 		result.Status = "completed"
 		
 		// Extract execution details from response if available
-		// This is a simplified extraction - in a real implementation you might want
-		// to capture more detailed execution steps and tool calls
+		// Parse step count from response content since we don't have direct metadata access
 		if response != nil {
-			result.StepsTaken = 1 // Simplified - could be extracted from response metadata
+			// Count execution steps based on response content analysis
+			stepsTaken := int64(1) // Default minimum
+			if response.Content != "" {
+				// Look for step indicators in the response
+				responseLower := strings.ToLower(response.Content)
+				stepPatterns := []string{
+					"step 1", "step 2", "step 3", "step 4", "step 5",
+					"action 1", "action 2", "action 3", "action 4", "action 5",
+				}
+				
+				stepCount := 0
+				for _, pattern := range stepPatterns {
+					if strings.Contains(responseLower, pattern) {
+						stepCount++
+					}
+				}
+				
+				if stepCount > 1 {
+					stepsTaken = int64(stepCount)
+				}
+			}
+			result.StepsTaken = stepsTaken
 			result.ExecutionSteps = []interface{}{
 				map[string]interface{}{
 					"step": 1,
