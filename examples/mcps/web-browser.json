@@ -1,0 +1,35 @@
+{
+  "name": "Web Browser Automation",
+  "description": "Automate web browsers for testing, scraping, and interaction",
+  "mcpServers": {
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-puppeteer"],
+      "env": {
+        "BROWSER_HEADLESS": "{{BROWSER_HEADLESS}}",
+        "BROWSER_TIMEOUT": "{{BROWSER_TIMEOUT}}",
+        "USER_AGENT": "{{USER_AGENT}}"
+      }
+    }
+  },
+  "templates": {
+    "BROWSER_HEADLESS": {
+      "description": "Run browser in headless mode",
+      "type": "boolean",
+      "required": false,
+      "default": "true"
+    },
+    "BROWSER_TIMEOUT": {
+      "description": "Page load timeout in milliseconds",
+      "type": "number",
+      "required": false,
+      "default": "30000"
+    },
+    "USER_AGENT": {
+      "description": "Custom user agent string",
+      "type": "string",
+      "required": false,
+      "help": "Leave empty for default Chromium user agent"
+    }
+  }
+}

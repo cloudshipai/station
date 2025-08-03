@@ -1,0 +1,54 @@
+{
+  "name": "PostgreSQL Database Operations",
+  "description": "Connect to PostgreSQL databases for advanced SQL operations and data management",
+  "mcpServers": {
+    "postgresql": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-postgresql"],
+      "env": {
+        "PGHOST": "{{PGHOST}}",
+        "PGPORT": "{{PGPORT}}",
+        "PGUSER": "{{PGUSER}}",
+        "PGPASSWORD": "{{PGPASSWORD}}",
+        "PGDATABASE": "{{PGDATABASE}}",
+        "PGSSLMODE": "{{PGSSLMODE}}"
+      }
+    }
+  },
+  "templates": {
+    "PGHOST": {
+      "description": "PostgreSQL server hostname",
+      "type": "string",
+      "required": true,
+      "default": "localhost"
+    },
+    "PGPORT": {
+      "description": "PostgreSQL server port",
+      "type": "number",
+      "required": false,
+      "default": "5432"
+    },
+    "PGUSER": {
+      "description": "PostgreSQL username",
+      "type": "string",
+      "required": true
+    },
+    "PGPASSWORD": {
+      "description": "PostgreSQL password",
+      "type": "password",
+      "required": true,
+      "sensitive": true
+    },
+    "PGDATABASE": {
+      "description": "Database name",
+      "type": "string",
+      "required": true
+    },
+    "PGSSLMODE": {
+      "description": "SSL mode (disable, require, verify-ca, verify-full)",
+      "type": "string",
+      "required": false,
+      "default": "prefer"
+    }
+  }
+}
