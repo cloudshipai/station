@@ -34,11 +34,15 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 
-	// Agent execution tool
+	// Agent execution tool with advanced options
 	callAgentTool := mcp.NewTool("call_agent",
-		mcp.WithDescription("Execute an AI agent with a specific task"),
+		mcp.WithDescription("Execute an AI agent with advanced options and monitoring"),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to execute")),
 		mcp.WithString("task", mcp.Required(), mcp.Description("Task or input to provide to the agent")),
+		mcp.WithBoolean("async", mcp.Description("Execute asynchronously and return run ID (default: false)")),
+		mcp.WithNumber("timeout", mcp.Description("Execution timeout in seconds (default: 300)")),
+		mcp.WithBoolean("store_run", mcp.Description("Store execution results in runs history (default: true)")),
+		mcp.WithObject("context", mcp.Description("Additional context to provide to the agent")),
 	)
 	s.mcpServer.AddTool(callAgentTool, s.handleCallAgent)
 

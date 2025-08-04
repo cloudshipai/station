@@ -86,6 +86,12 @@ func runWebhookDeliveries(cmd *cobra.Command, args []string) error {
 	return webhookHandler.RunWebhookDeliveries(cmd, args)
 }
 
+// runWebhookTest implements the "station webhook test" command
+func runWebhookTest(cmd *cobra.Command, args []string) error {
+	webhookHandler := webhooks.NewWebhookHandler(themeManager)
+	return webhookHandler.RunWebhookTest(cmd, args)
+}
+
 // runSettingsList implements the "station settings list" command
 func runSettingsList(cmd *cobra.Command, args []string) error {
 	webhookHandler := webhooks.NewWebhookHandler(themeManager)

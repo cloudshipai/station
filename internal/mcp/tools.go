@@ -40,18 +40,7 @@ func NewToolsServer(repos *repositories.Repositories, mcpServer *server.MCPServe
 func (ts *ToolsServer) setupEnhancedTools() {
 	// Note: create_agent is now consolidated in the main MCP server (mcp.go)
 	
-	// Enhanced call_agent tool with execution options
-	enhancedCallAgent := mcp.NewTool("call_agent_advanced",
-		mcp.WithDescription("Execute an AI agent with advanced options and monitoring"),
-		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to execute")),
-		mcp.WithString("task", mcp.Required(), mcp.Description("Task or input to provide to the agent")),
-		mcp.WithBoolean("async", mcp.Description("Execute asynchronously and return run ID (default: false)")),
-		mcp.WithNumber("timeout", mcp.Description("Execution timeout in seconds (default: 300)")),
-		mcp.WithBoolean("store_run", mcp.Description("Store execution results in runs history (default: true)")),
-		mcp.WithObject("context", mcp.Description("Additional context to provide to the agent")),
-	)
-	
-	ts.mcpServer.AddTool(enhancedCallAgent, ts.handleCallAgentAdvanced)
+	// Note: call_agent is now consolidated in the main MCP server (tools_setup.go) with advanced functionality
 	
 	// Add prompts for AI-assisted agent creation
 	ts.setupAgentCreationPrompts()
@@ -286,72 +275,7 @@ func getEnvironmentNames(environments []*models.Environment) []string {
 
 // Note: handleCreateAgentAdvanced has been consolidated into the main MCP server (mcp.go)
 
-func (ts *ToolsServer) handleCallAgentAdvanced(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Get user for agent execution (required in server mode, optional in local mode)
-	var userID int64 = 1 // Default user ID for local mode
-	
-	if !ts.localMode {
-		user, err := auth.GetUserFromHTTPContext(ctx)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Authentication required: %v", err)), nil
-		}
-		userID = user.ID
-	}
-	
-	// Extract required parameters
-	agentIDStr, err := request.RequireString("agent_id")
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
-	}
-	
-	task, err := request.RequireString("task")
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Missing 'task' parameter: %v", err)), nil
-	}
-	
-	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
-	if err != nil {
-		return mcp.NewToolResultError("Invalid agent_id format"), nil
-	}
-	
-	// Extract optional parameters
-	async := request.GetBool("async", false)
-	timeout := request.GetInt("timeout", 300)
-	storeRun := request.GetBool("store_run", true)
-	
-	// Execute the agent synchronously for now
-	response, err := ts.agentService.ExecuteAgent(ctx, agentID, task)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", err)), nil
-	}
-	
-	// Store the run if requested
-	var runID int64
-	if storeRun {
-		// TODO: Store the run in the database
-		// This would require extending the agent service or accessing the repository directly
-		runID = 0 // Run storage not yet implemented
-	}
-	
-	// Return detailed response
-	result := map[string]interface{}{
-		"success": true,
-		"execution": map[string]interface{}{
-			"agent_id": agentID,
-			"task": task,
-			"response": response.Content,
-			"user_id": userID,
-			"run_id": runID,
-			"async": async,
-			"timeout": timeout,
-			"stored": storeRun,
-		},
-		"timestamp": time.Now(),
-	}
-	
-	resultJSON, _ := json.MarshalIndent(result, "", "  ")
-	return mcp.NewToolResultText(string(resultJSON)), nil
-}
+// Note: handleCallAgentAdvanced functionality moved to tools_setup.go handleCallAgent
 
 // handleLogsAnalysisPrompt provides specialized guidance for AWS logs analysis agent creation
 func (ts *ToolsServer) handleLogsAnalysisPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
