@@ -20,7 +20,7 @@ go build -o stn ./cmd/main
 
 ### Option 2: Binary Release (Coming Soon)
 ```bash
-curl -sSL https://getstation.ai/install | bash
+curl -sSL https://getstation.cloudshipai.com/install | bash
 ```
 
 ## Quick Setup (2 minutes)

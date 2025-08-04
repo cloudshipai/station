@@ -89,12 +89,18 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("🔧 Found %d MCP server(s)\n", len(mcpConfig.MCPServers))
 
+	// Save the truly original config before any processing (deep copy)
+	originalConfigJSON, _ := json.Marshal(mcpConfig)
+	var originalConfig LoadMCPConfig
+	json.Unmarshal(originalConfigJSON, &originalConfig)
+	
 	// Check if this is a template configuration and handle it
+	var resolvedVariables map[string]string
 	if hasTemplates, missingValues := h.detectTemplates(&mcpConfig); hasTemplates {
 		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🧩 Template configuration detected"))
 
-		// Show credential form for missing values
-		processedConfig, err := h.processTemplateConfig(&mcpConfig, missingValues)
+		// Show credential form for missing values - this is just for validation/UX
+		processedConfig, vars, err := h.processTemplateConfigWithVariables(&mcpConfig, missingValues)
 		if err != nil {
 			return fmt.Errorf("failed to process template: %w", err)
 		}
@@ -104,8 +110,12 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
-		// Use the processed config
+		resolvedVariables = vars
+		// Use the processed config for tool discovery, but save original as template
 		mcpConfig = *processedConfig
+	} else {
+		// No templates, so no variables to resolve
+		resolvedVariables = make(map[string]string)
 	}
 
 	// Use filename as default config name if not provided
@@ -131,7 +141,7 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 
 	if isLocal {
 		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🏠 Running in local mode"))
-		return h.uploadConfigLocalLoad(mcpConfig, configName, environment)
+		return h.uploadConfigLocalLoadTemplateWithVariables(originalConfig, mcpConfig, resolvedVariables, configName, environment)
 	} else if endpoint != "" {
 		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🌐 Connecting to: " + endpoint))
 		return h.uploadConfigRemoteLoad(mcpConfig, configName, environment, endpoint)

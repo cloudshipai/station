@@ -3,6 +3,7 @@ package file_config
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -10,9 +11,9 @@ import (
 // discoverCommand discovers tools for file configs
 func (h *FileConfigHandler) discoverCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "discover <config-name> [environment-name]",
+		Use:   "discover <config-name-or-id> [environment-name]",
 		Short: "Discover tools for a file-based configuration",
-		Long:  "Load, render, and discover MCP tools for a file-based configuration.",
+		Long:  "Load, render, and discover MCP tools for a file-based configuration by name or ID.",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE:  h.discoverTools,
 	}
@@ -25,7 +26,7 @@ func (h *FileConfigHandler) discoverCommand() *cobra.Command {
 
 // discoverTools handles the discover command
 func (h *FileConfigHandler) discoverTools(cmd *cobra.Command, args []string) error {
-	configName := args[0]
+	configNameOrID := args[0]
 	envName := "default"
 	if len(args) > 1 {
 		envName = args[1]
@@ -42,6 +43,23 @@ func (h *FileConfigHandler) discoverTools(cmd *cobra.Command, args []string) err
 	envID, err := h.getOrCreateEnvironmentID(envName)
 	if err != nil {
 		return fmt.Errorf("failed to get environment ID: %w", err)
+	}
+
+	// Find config (try by name first, then by ID)
+	var configName string
+	if configByName, err := h.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configNameOrID); err == nil {
+		configName = configByName.ConfigName
+	} else {
+		// Try parsing as ID
+		if id, parseErr := strconv.ParseInt(configNameOrID, 10, 64); parseErr == nil {
+			if configByID, err := h.repos.FileMCPConfigs.GetByID(id); err == nil {
+				configName = configByID.ConfigName
+			}
+		}
+	}
+
+	if configName == "" {
+		return fmt.Errorf("config '%s' not found", configNameOrID)
 	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")

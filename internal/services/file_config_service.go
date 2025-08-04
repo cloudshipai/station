@@ -3,9 +3,13 @@ package services
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -103,6 +107,144 @@ func (s *FileConfigService) LoadAndRenderConfig(ctx context.Context, envID int64
 	return renderedConfig, nil
 }
 
+// LoadAndRenderConfigSimple loads and renders config using simple variable substitution (same as load process)
+func (s *FileConfigService) LoadAndRenderConfigSimple(ctx context.Context, envID int64, configName string) (*models.MCPConfigData, error) {
+	// 1. Get environment for file paths
+	env, err := s.repos.Environments.GetByID(envID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// 2. Build template file path
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	envDir := filepath.Join(configHome, "station", "environments", env.Name)
+	templatePath := filepath.Join(envDir, configName+".json")
+
+	// 3. Read template file
+	templateBytes, err := os.ReadFile(templatePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read template file %s: %w", templatePath, err)
+	}
+
+	// 4. Parse template to find placeholders
+	templatePattern := regexp.MustCompile(`\{\{([^}]+)\}\}`)
+	matches := templatePattern.FindAllStringSubmatch(string(templateBytes), -1)
+	var placeholders []string
+	for _, match := range matches {
+		if len(match) > 1 {
+			placeholders = append(placeholders, match[1])
+		}
+	}
+
+	// 5. Resolve variables using same hierarchy as load process
+	resolvedVars := s.resolveVariablesFromFileSystemSimple(placeholders, envDir)
+
+	// 6. Replace placeholders with resolved values
+	renderedContent := string(templateBytes)
+	for placeholder, value := range resolvedVars {
+		renderedContent = strings.ReplaceAll(renderedContent, fmt.Sprintf("{{%s}}", placeholder), value)
+	}
+
+	// 7. Parse rendered JSON
+	var mcpConfig struct {
+		MCPServers map[string]struct {
+			Command string            `json:"command"`
+			Args    []string          `json:"args"`
+			Env     map[string]string `json:"env"`
+		} `json:"mcpServers"`
+	}
+
+	if err := json.Unmarshal([]byte(renderedContent), &mcpConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse rendered config: %w", err)
+	}
+
+	// 8. Convert to internal format
+	servers := make(map[string]models.MCPServerConfig)
+	for name, serverConfig := range mcpConfig.MCPServers {
+		servers[name] = models.MCPServerConfig{
+			Command: serverConfig.Command,
+			Args:    serverConfig.Args,
+			Env:     serverConfig.Env,
+		}
+	}
+
+	return &models.MCPConfigData{
+		Name:    configName,
+		Servers: servers,
+	}, nil
+}
+
+// resolveVariablesFromFileSystemSimple resolves variables using the same hierarchy as load process
+func (s *FileConfigService) resolveVariablesFromFileSystemSimple(placeholders []string, envDir string) map[string]string {
+	values := make(map[string]string)
+
+	// Step 1: Load global variables from variables.yml
+	globalVarsPath := filepath.Join(envDir, "variables.yml")
+	globalVars := s.loadVariablesFromYAMLSimple(globalVarsPath)
+	
+	// Step 2: Check environment variables
+	envVars := make(map[string]string)
+	for _, placeholder := range placeholders {
+		if envValue := os.Getenv(placeholder); envValue != "" {
+			envVars[placeholder] = envValue
+		}
+	}
+
+	// Apply resolution hierarchy for each placeholder
+	for _, placeholder := range placeholders {
+		var value string
+
+		// Priority 1: Global vars (from variables.yml)
+		if val, exists := globalVars[placeholder]; exists {
+			value = val
+		}
+
+		// Priority 2: Environment variables (override global)
+		if val, exists := envVars[placeholder]; exists {
+			value = val
+		}
+
+		if value != "" {
+			values[placeholder] = value
+		}
+	}
+
+	return values
+}
+
+// loadVariablesFromYAMLSimple loads variables from a YAML file (simple version)
+func (s *FileConfigService) loadVariablesFromYAMLSimple(filePath string) map[string]string {
+	variables := make(map[string]string)
+	
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		// File doesn't exist or can't be read - that's okay
+		return variables
+	}
+
+	// Parse as YAML
+	var yamlData map[string]interface{}
+	if err := yaml.Unmarshal(data, &yamlData); err != nil {
+		log.Printf("Warning: Failed to parse %s: %v", filePath, err)
+		return variables
+	}
+
+	// Convert to string map
+	for key, value := range yamlData {
+		if strValue, ok := value.(string); ok {
+			variables[key] = strValue
+		} else {
+			// Convert other types to string
+			variables[key] = fmt.Sprintf("%v", value)
+		}
+	}
+
+	return variables
+}
+
 // UpdateTemplateVariables updates variables for a specific template and re-renders
 func (s *FileConfigService) UpdateTemplateVariables(ctx context.Context, envID int64, configName string, variables map[string]interface{}) error {
 	log.Printf("Updating variables for template %s in environment %d", configName, envID)
@@ -136,8 +278,8 @@ func (s *FileConfigService) UpdateTemplateVariables(ctx context.Context, envID i
 func (s *FileConfigService) DiscoverToolsForConfig(ctx context.Context, envID int64, configName string) (*ToolDiscoveryResult, error) {
 	log.Printf("Discovering tools for file config %s in environment %d", configName, envID)
 	
-	// 1. Load and render config
-	renderedConfig, err := s.LoadAndRenderConfig(ctx, envID, configName)
+	// 1. Load and render config using simple variable resolution (same as load process)
+	renderedConfig, err := s.LoadAndRenderConfigSimple(ctx, envID, configName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load and render config: %w", err)
 	}
@@ -270,8 +412,12 @@ func (s *FileConfigService) loadTemplateVariables(ctx context.Context, envID int
 		return make(map[string]interface{}), nil // Return empty if we can't get env name
 	}
 	
-	// Load template-specific variables from environments/{env}/{configName}.vars.yml
-	templateVarsPath := fmt.Sprintf("./config/environments/%s/%s.vars.yml", envName, configName)
+	// Load template-specific variables from proper config directory
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	templateVarsPath := filepath.Join(configHome, "station", "environments", envName, configName+".vars.yml")
 	
 	// Check if template-specific variables file exists
 	if _, err := os.Stat(templateVarsPath); err != nil {

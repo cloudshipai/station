@@ -21,6 +21,8 @@ build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME)"
 
+local-install: build
+	mv ./bin/stn ~/.local/bin
 # Build and install to $GOPATH/bin
 install:
 	@echo "📦 Installing Station $(VERSION) to $$GOPATH/bin..."
