@@ -3,6 +3,7 @@ package file_config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/afero"
@@ -37,16 +38,23 @@ func NewFileConfigHandler() *FileConfigHandler {
 
 	repos := repositories.New(database)
 	
-	// Initialize file config components
+	// Initialize file config components with proper XDG config directory
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	configDir := filepath.Join(configHome, "station")
+	varsDir := filepath.Join(configDir, "vars")
+	
 	fs := afero.NewOsFs()
-	fileSystem := filesystem.NewConfigFileSystem(fs, "./config", "./config/vars")
+	fileSystem := filesystem.NewConfigFileSystem(fs, configDir, varsDir)
 	templateEngine := template.NewGoTemplateEngine()
 	variableStore := variables.NewEnvVariableStore(fs)
 	
 	// Create file config options
 	fileConfigOptions := config.FileConfigOptions{
-		ConfigDir:       "./config",
-		VariablesDir:    "./config/vars",
+		ConfigDir:       configDir,
+		VariablesDir:    varsDir,
 		Strategy:        config.StrategyTemplateFirst,
 		AutoCreate:      true,
 		BackupOnChange:  false,

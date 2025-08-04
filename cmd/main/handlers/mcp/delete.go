@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -75,6 +77,25 @@ func (h *MCPHandler) deleteMCPConfigLocal(configID, environment string, confirm 
 	err = repos.FileMCPConfigs.Delete(config.ID)
 	if err != nil {
 		return fmt.Errorf("failed to delete configuration: %w", err)
+	}
+
+	// Also remove template files from filesystem
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	envDir := filepath.Join(configHome, "station", "environments", environment)
+	
+	// Delete template file
+	templatePath := filepath.Join(envDir, config.ConfigName+".json")
+	if err := os.Remove(templatePath); err == nil {
+		fmt.Printf("   Deleted template file: %s\n", templatePath)
+	}
+	
+	// Delete template-specific variables if they exist
+	templateVarsPath := filepath.Join(envDir, config.ConfigName+".vars.yml")
+	if err := os.Remove(templateVarsPath); err == nil {
+		fmt.Printf("   Deleted template variables: %s\n", templateVarsPath)
 	}
 
 	styles := getCLIStyles(h.themeManager)

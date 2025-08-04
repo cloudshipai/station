@@ -68,8 +68,9 @@ func LoadStationConfig() (*config.Config, error) {
 	viper.AddConfigPath("$HOME/.station")
 	viper.AddConfigPath("/etc/station")
 
-	// Set default values
-	viper.SetDefault("database_url", "sqlite://./station.db")
+	// Set default values - use config package to get proper XDG path
+	defaultDBPath := config.GetDatabasePath()
+	viper.SetDefault("database_url", defaultDBPath)
 	viper.SetDefault("server.host", "localhost")
 	viper.SetDefault("server.port", 8080)
 

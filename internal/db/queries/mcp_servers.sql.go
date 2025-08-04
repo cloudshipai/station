@@ -94,6 +94,33 @@ func (q *Queries) GetMCPServer(ctx context.Context, id int64) (McpServer, error)
 	return i, err
 }
 
+const getMCPServerByNameAndEnvironment = `-- name: GetMCPServerByNameAndEnvironment :one
+SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at FROM mcp_servers WHERE name = ? AND environment_id = ?
+`
+
+type GetMCPServerByNameAndEnvironmentParams struct {
+	Name          string `json:"name"`
+	EnvironmentID int64  `json:"environment_id"`
+}
+
+func (q *Queries) GetMCPServerByNameAndEnvironment(ctx context.Context, arg GetMCPServerByNameAndEnvironmentParams) (McpServer, error) {
+	row := q.db.QueryRowContext(ctx, getMCPServerByNameAndEnvironment, arg.Name, arg.EnvironmentID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Command,
+		&i.Args,
+		&i.Env,
+		&i.WorkingDir,
+		&i.TimeoutSeconds,
+		&i.AutoRestart,
+		&i.EnvironmentID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listMCPServersByEnvironment = `-- name: ListMCPServersByEnvironment :many
 SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at FROM mcp_servers WHERE environment_id = ? ORDER BY name
 `

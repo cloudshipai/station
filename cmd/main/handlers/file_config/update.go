@@ -3,6 +3,10 @@ package file_config
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -11,9 +15,9 @@ import (
 // updateCommand updates an existing file-based config
 func (h *FileConfigHandler) updateCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update <config-name> [environment-name]",
+		Use:   "update <config-name-or-id> [environment-name]",
 		Short: "Update a file-based MCP configuration",
-		Long:  "Update an existing file-based MCP configuration template or variables.",
+		Long:  "Update an existing file-based MCP configuration template or variables by name or ID.",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE:  h.updateConfig,
 	}
@@ -27,7 +31,7 @@ func (h *FileConfigHandler) updateCommand() *cobra.Command {
 
 // updateConfig handles the update command
 func (h *FileConfigHandler) updateConfig(cmd *cobra.Command, args []string) error {
-	configName := args[0]
+	configNameOrID := args[0]
 	envName := "default"
 	if len(args) > 1 {
 		envName = args[1]
@@ -46,7 +50,49 @@ func (h *FileConfigHandler) updateConfig(cmd *cobra.Command, args []string) erro
 		return fmt.Errorf("failed to get environment ID: %w", err)
 	}
 
+	// Find config (try by name first, then by ID)
+	var configName string
+	if configByName, err := h.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configNameOrID); err == nil {
+		configName = configByName.ConfigName
+	} else {
+		// Try parsing as ID
+		if id, parseErr := strconv.ParseInt(configNameOrID, 10, 64); parseErr == nil {
+			if configByID, err := h.repos.FileMCPConfigs.GetByID(id); err == nil {
+				configName = configByID.ConfigName
+			}
+		}
+	}
+
+	if configName == "" {
+		return fmt.Errorf("config '%s' not found", configNameOrID)
+	}
+
 	fmt.Printf("Updating file-based config '%s' in environment '%s'...\n", configName, envName)
+
+	// Handle template file update
+	templatePath, _ := cmd.Flags().GetString("template")
+	if templatePath != "" {
+		// Read new template content
+		templateContent, err := ioutil.ReadFile(templatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template file: %w", err)
+		}
+
+		// Update the template file directly
+		configHome := os.Getenv("XDG_CONFIG_HOME")
+		if configHome == "" {
+			configHome = filepath.Join(os.Getenv("HOME"), ".config")
+		}
+		envDir := filepath.Join(configHome, "station", "environments", envName)
+		targetPath := filepath.Join(envDir, configName+".json")
+
+		err = ioutil.WriteFile(targetPath, templateContent, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to update template file: %w", err)
+		}
+
+		fmt.Printf("✅ Updated template for config '%s' from %s\n", configName, templatePath)
+	}
 
 	// Handle variable updates
 	setVars, _ := cmd.Flags().GetStringSlice("set-var")

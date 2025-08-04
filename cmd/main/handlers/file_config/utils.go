@@ -3,7 +3,9 @@ package file_config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"station/internal/config"
 )
 
 // getConfigDatabasePath gets the database path from config or returns fallback
@@ -23,8 +25,8 @@ func getConfigDatabasePath() string {
 		}
 	}
 	
-	// Fallback to local database
-	return "station.db"
+	// Fallback to XDG config database
+	return config.GetDatabasePath()
 }
 
 // generateSampleTemplate generates a sample MCP configuration template
@@ -65,9 +67,23 @@ func (h *FileConfigHandler) getOrCreateEnvironmentID(envName string) (int64, err
 
 // validateEnvironmentExists checks if file-based environment directory exists
 func (h *FileConfigHandler) validateEnvironmentExists(envName string) error {
-	configDir := fmt.Sprintf("./config/environments/%s", envName)
+	// Use proper config directory from XDG config home
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	configDir := filepath.Join(configHome, "station", "environments", envName)
+	
 	if _, err := os.Stat(configDir); err != nil {
-		return fmt.Errorf("environment '%s' not found at %s", envName, configDir)
+		// Try to create the environment directory if it doesn't exist
+		if os.IsNotExist(err) {
+			if err := os.MkdirAll(configDir, 0755); err != nil {
+				return fmt.Errorf("environment '%s' not found and failed to create at %s: %w", envName, configDir, err)
+			}
+			// Directory created successfully
+			return nil
+		}
+		return fmt.Errorf("environment '%s' not accessible at %s: %w", envName, configDir, err)
 	}
 	return nil
 }

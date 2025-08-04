@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/charmbracelet/lipgloss"
+	"station/internal/config"
 	"station/internal/theme"
 )
 
@@ -107,7 +108,7 @@ func getCLIStyles(themeManager *theme.ThemeManager) CLIStyles {
 func getDatabasePath() string {
 	dbPath := os.Getenv("STATION_DATABASE_URL")
 	if dbPath == "" {
-		dbPath = "station.db"
+		dbPath = config.GetDatabasePath()
 	}
 	return dbPath
 }
