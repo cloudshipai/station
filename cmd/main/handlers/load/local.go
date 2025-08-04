@@ -10,7 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/internal/services"
 	"station/pkg/models"
 )
 
@@ -121,35 +120,16 @@ func (h *LoadHandler) createFileBasedConfig(envID int64, configName string, mcpC
 		VariablesHash:     "",
 	}
 
-	_, err = repos.FileMCPConfigs.Create(fileConfigRecord)
+	configID, err := repos.FileMCPConfigs.Create(fileConfigRecord)
 	if err != nil {
 		return fmt.Errorf("failed to create file config record: %w", err)
 	}
 
-	// Create a simple tool discovery service and discover tools
-	toolDiscovery := services.NewToolDiscoveryService(repos)
-
-	// Convert back to internal format for tool discovery
-	servers := make(map[string]models.MCPServerConfig)
-	for name, serverConfig := range mcpConfig.MCPServers {
-		servers[name] = models.MCPServerConfig{
-			Command: serverConfig.Command,
-			Args:    serverConfig.Args,
-			Env:     serverConfig.Env,
-		}
-	}
+	// Tool discovery is handled by file-based config system
+	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
-	configData := &models.MCPConfigData{
-		Name:    configName,
-		Servers: servers,
-	}
-	
-	// Use the existing tool discovery with the rendered config
-	_, err = toolDiscovery.DiscoverToolsFromFileConfig(envID, configName, configData)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Tool discovery failed: %v\n", err)
-		// Don't fail the entire operation if tool discovery fails
-	}
+	// Next step: Discover tools from the loaded configuration
+	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
 
 	return nil
 }
@@ -231,20 +211,15 @@ func (h *LoadHandler) createFileBasedConfigFromData(envID int64, configData *mod
 		VariablesHash:     "",
 	}
 
-	_, err = repos.FileMCPConfigs.Create(fileConfigRecord)
+	configID, err := repos.FileMCPConfigs.Create(fileConfigRecord)
 	if err != nil {
 		return fmt.Errorf("failed to create file config record: %w", err)
 	}
 
-	// Create a simple tool discovery service and discover tools
-	toolDiscovery := services.NewToolDiscoveryService(repos)
+	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
-	// Use the existing tool discovery with the rendered config
-	_, err = toolDiscovery.DiscoverToolsFromFileConfig(envID, configData.Name, configData)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Tool discovery failed: %v\n", err)
-		// Don't fail the entire operation if tool discovery fails
-	}
+	// Next step: Discover tools from the loaded configuration
+	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
 
 	return nil
 }
@@ -450,35 +425,15 @@ func (h *LoadHandler) createFileBasedConfigTemplate(envID int64, configName stri
 		VariablesHash:     "",
 	}
 
-	_, err = repos.FileMCPConfigs.Create(fileConfigRecord)
+	configID, err := repos.FileMCPConfigs.Create(fileConfigRecord)
 	if err != nil {
 		return fmt.Errorf("failed to create file config record: %w", err)
 	}
 
-	// Create a simple tool discovery service and discover tools using processed config
-	toolDiscovery := services.NewToolDiscoveryService(repos)
-
-	// Convert processed config to internal format for tool discovery
-	servers := make(map[string]models.MCPServerConfig)
-	for name, serverConfig := range processedConfig.MCPServers {
-		servers[name] = models.MCPServerConfig{
-			Command: serverConfig.Command,
-			Args:    serverConfig.Args,
-			Env:     serverConfig.Env,
-		}
-	}
+	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
-	configData := &models.MCPConfigData{
-		Name:    configName,
-		Servers: servers,
-	}
-	
-	// Use the existing tool discovery with the rendered config
-	_, err = toolDiscovery.DiscoverToolsFromFileConfig(envID, configName, configData)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Tool discovery failed: %v\n", err)
-		// Don't fail the entire operation if tool discovery fails
-	}
+	// Next step: Discover tools from the loaded configuration
+	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
 
 	return nil
 }
@@ -549,35 +504,15 @@ func (h *LoadHandler) createFileBasedConfigTemplateWithVariables(envID int64, co
 		VariablesHash:     "",
 	}
 
-	_, err = repos.FileMCPConfigs.Create(fileConfigRecord)
+	configID, err := repos.FileMCPConfigs.Create(fileConfigRecord)
 	if err != nil {
 		return fmt.Errorf("failed to create file config record: %w", err)
 	}
 
-	// Create a simple tool discovery service and discover tools using processed config
-	toolDiscovery := services.NewToolDiscoveryService(repos)
-
-	// Convert processed config to internal format for tool discovery
-	servers := make(map[string]models.MCPServerConfig)
-	for name, serverConfig := range processedConfig.MCPServers {
-		servers[name] = models.MCPServerConfig{
-			Command: serverConfig.Command,
-			Args:    serverConfig.Args,
-			Env:     serverConfig.Env,
-		}
-	}
+	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
-	configData := &models.MCPConfigData{
-		Name:    configName,
-		Servers: servers,
-	}
-	
-	// Use the existing tool discovery with the rendered config
-	_, err = toolDiscovery.DiscoverToolsFromFileConfig(envID, configName, configData)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Tool discovery failed: %v\n", err)
-		// Don't fail the entire operation if tool discovery fails
-	}
+	// Next step: Discover tools from the loaded configuration
+	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
 
 	return nil
 }
