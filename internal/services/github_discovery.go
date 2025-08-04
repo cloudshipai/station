@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -95,15 +96,36 @@ func (g *GitHubDiscoveryService) DiscoverMCPServerBlocks(ctx context.Context, re
 	// Get model from OpenAI plugin - use GPT-4o for better analysis
 	model := g.openaiPlugin.Model(g.genkit, "gpt-4o")
 	
-	// Use Genkit to extract all MCP server blocks
+	// Use Genkit to extract all MCP server blocks with multi-turn support
 	response, err := genkit.Generate(ctx, g.genkit,
 		ai.WithModel(model),
 		ai.WithPrompt(prompt),
 		ai.WithOutputType(MCPBlocksResponse{}),
+		ai.WithMaxTurns(5), // Allow multi-step analysis of MCP blocks
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze README for MCP blocks: %w", err)
+	}
+
+	// DEBUG: Log comprehensive response details for MCP block analysis
+	log.Printf("🔍 MCP block analysis response: %s", response.Text())
+	if response.Usage != nil {
+		log.Printf("🔍 MCP block analysis usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, 
+			response.Usage.InputTokens + response.Usage.OutputTokens)
+	}
+	
+	// Count turns taken during MCP block analysis
+	if response.Request != nil && len(response.Request.Messages) > 0 {
+		modelMessages := 0
+		for _, msg := range response.Request.Messages {
+			if msg.Role == ai.RoleModel {
+				modelMessages++
+			}
+		}
+		log.Printf("🔍 MCP block analysis took %d turns, %d total messages in conversation", 
+			modelMessages, len(response.Request.Messages))
 	}
 
 	// Get the structured output
@@ -142,15 +164,36 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 	// Get model from OpenAI plugin - use GPT-4o for better analysis
 	model := g.openaiPlugin.Model(g.genkit, "gpt-4o")
 	
-	// Use Genkit to analyze the GitHub Repository with structured JSON output
+	// Use Genkit to analyze the GitHub Repository with structured JSON output and multi-turn support
 	response, err := genkit.Generate(ctx, g.genkit,
 		ai.WithModel(model),
 		ai.WithPrompt(prompt),
 		ai.WithOutputType(AIDiscoveryResponse{}),
+		ai.WithMaxTurns(5), // Allow multi-step analysis of GitHub repository
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze GitHub repository: %w", err)
+	}
+
+	// DEBUG: Log comprehensive response details for GitHub repository analysis
+	log.Printf("🔍 GitHub repository analysis response: %s", response.Text())
+	if response.Usage != nil {
+		log.Printf("🔍 GitHub repository analysis usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, 
+			response.Usage.InputTokens + response.Usage.OutputTokens)
+	}
+	
+	// Count turns taken during GitHub repository analysis
+	if response.Request != nil && len(response.Request.Messages) > 0 {
+		modelMessages := 0
+		for _, msg := range response.Request.Messages {
+			if msg.Role == ai.RoleModel {
+				modelMessages++
+			}
+		}
+		log.Printf("🔍 GitHub repository analysis took %d turns, %d total messages in conversation", 
+			modelMessages, len(response.Request.Messages))
 	}
 
 	// Get the structured output directly from Genkit

@@ -201,6 +201,8 @@ func init() {
 	
 	// Set default values
 	viper.SetDefault("telemetry_enabled", true)
+	viper.SetDefault("ai_provider", "gemini")
+	viper.SetDefault("ai_model", "gemini-2.0-flash-exp")
 }
 
 func initConfig() {
@@ -303,6 +305,8 @@ func main() {
 	if telemetryService != nil {
 		duration := time.Since(startTime).Milliseconds()
 		telemetryService.TrackCLICommand(commandName, subcommandName, success, duration)
+		// Flush to ensure events are sent immediately
+		telemetryService.Flush()
 	}
 	
 	// Cleanup telemetry
