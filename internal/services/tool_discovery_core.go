@@ -202,6 +202,11 @@ func (s *ToolDiscoveryService) DiscoverToolsFromFileConfig(environmentID int64, 
 		result.TotalTools += len(tools)
 		result.SuccessfulServers++
 		
+		log.Printf("Raw tools from MCP server %s:", serverName)
+		for i, tool := range tools {
+			log.Printf("  Raw Tool %d: %s", i+1, tool.Name)
+		}
+
 		// Store discovered tools with file config reference
 		for _, tool := range tools {
 			// Convert the tool schema to JSON
@@ -217,9 +222,10 @@ func (s *ToolDiscoveryService) DiscoverToolsFromFileConfig(environmentID int64, 
 				schemaBytes = []byte(`{"type":"object"}`) // fallback schema
 			}
 			
+			// Use the exact tool name returned by the MCP server - no cleaning/stripping
 			mcpTool := &models.MCPTool{
 				MCPServerID: serverID,
-				Name:        tool.Name,
+				Name:        tool.Name, // Store exact tool name from MCP server
 				Description: tool.Description,
 				Schema:      json.RawMessage(schemaBytes),
 			}

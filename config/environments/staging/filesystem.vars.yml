@@ -1,3 +1,0 @@
-# Template-specific variables for filesystem config
-# These override global variables when rendering the filesystem template  
-AllowedPaths: "/home/epuerta/projects/hack"
