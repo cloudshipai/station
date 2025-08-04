@@ -1,7 +1,9 @@
 package repositories
 
 import (
+	"context"
 	"database/sql"
+	"station/internal/db/queries"
 	"time"
 )
 
@@ -22,190 +24,133 @@ type FileConfigRecord struct {
 	UpdatedAt                time.Time `db:"updated_at"`
 }
 
-// FileMCPConfigRepo manages file-based MCP configuration records
+// FileMCPConfigRepo manages file-based MCP configuration records using SQLC
 type FileMCPConfigRepo struct {
-	db *sql.DB
+	db      *sql.DB
+	queries *queries.Queries
 }
 
 // NewFileMCPConfigRepo creates a new file MCP config repository
 func NewFileMCPConfigRepo(db *sql.DB) *FileMCPConfigRepo {
-	return &FileMCPConfigRepo{db: db}
+	return &FileMCPConfigRepo{
+		db:      db,
+		queries: queries.New(db),
+	}
 }
 
-// Create creates a new file MCP config record
+// convertFileMCPConfigFromSQLc converts SQLC FileMcpConfig to FileConfigRecord
+func convertFileMCPConfigFromSQLc(config queries.FileMcpConfig) *FileConfigRecord {
+	result := &FileConfigRecord{
+		ID:                       config.ID,
+		EnvironmentID:            config.EnvironmentID,
+		ConfigName:               config.ConfigName,
+		TemplatePath:             config.TemplatePath,
+		VariablesPath:            config.VariablesPath.String,
+		TemplateSpecificVarsPath: config.TemplateSpecificVarsPath.String,
+		TemplateHash:             config.TemplateHash.String,
+		VariablesHash:            config.VariablesHash.String,
+		TemplateVarsHash:         config.TemplateVarsHash.String,
+		Metadata:                 config.Metadata.String,
+	}
+	
+	if config.CreatedAt.Valid {
+		result.CreatedAt = config.CreatedAt.Time
+	}
+	if config.UpdatedAt.Valid {
+		result.UpdatedAt = config.UpdatedAt.Time
+	}
+	if config.LastLoadedAt.Valid {
+		result.LastLoadedAt = &config.LastLoadedAt.Time
+	}
+	
+	return result
+}
+
+// convertFileMCPConfigToSQLc converts FileConfigRecord to SQLC CreateFileMCPConfigParams
+func convertFileMCPConfigToSQLc(record *FileConfigRecord) queries.CreateFileMCPConfigParams {
+	return queries.CreateFileMCPConfigParams{
+		EnvironmentID:            record.EnvironmentID,
+		ConfigName:               record.ConfigName,
+		TemplatePath:             record.TemplatePath,
+		VariablesPath:            sql.NullString{String: record.VariablesPath, Valid: record.VariablesPath != ""},
+		TemplateSpecificVarsPath: sql.NullString{String: record.TemplateSpecificVarsPath, Valid: record.TemplateSpecificVarsPath != ""},
+		TemplateHash:             sql.NullString{String: record.TemplateHash, Valid: record.TemplateHash != ""},
+		VariablesHash:            sql.NullString{String: record.VariablesHash, Valid: record.VariablesHash != ""},
+		TemplateVarsHash:         sql.NullString{String: record.TemplateVarsHash, Valid: record.TemplateVarsHash != ""},
+		Metadata:                 sql.NullString{String: record.Metadata, Valid: record.Metadata != ""},
+	}
+}
+
+// Create creates a new file MCP config record using SQLC
 func (r *FileMCPConfigRepo) Create(record *FileConfigRecord) (int64, error) {
-	query := `
-		INSERT INTO file_mcp_configs (
-			environment_id, config_name, template_path, variables_path,
-			template_specific_vars_path, template_hash, variables_hash,
-			template_vars_hash, metadata
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id
-	`
-	
-	var id int64
-	err := r.db.QueryRow(
-		query,
-		record.EnvironmentID,
-		record.ConfigName,
-		record.TemplatePath,
-		record.VariablesPath,
-		record.TemplateSpecificVarsPath,
-		record.TemplateHash,
-		record.VariablesHash,
-		record.TemplateVarsHash,
-		record.Metadata,
-	).Scan(&id)
-	
-	return id, err
+	params := convertFileMCPConfigToSQLc(record)
+	created, err := r.queries.CreateFileMCPConfig(context.Background(), params)
+	if err != nil {
+		return 0, err
+	}
+	return created.ID, nil
 }
 
-// GetByID retrieves a file config record by ID
+// GetByID retrieves a file config record by ID using SQLC
 func (r *FileMCPConfigRepo) GetByID(id int64) (*FileConfigRecord, error) {
-	query := `
-		SELECT id, environment_id, config_name, template_path, variables_path,
-			   template_specific_vars_path, last_loaded_at, template_hash,
-			   variables_hash, template_vars_hash, metadata, created_at, updated_at
-		FROM file_mcp_configs
-		WHERE id = ?
-	`
-	
-	record := &FileConfigRecord{}
-	err := r.db.QueryRow(query, id).Scan(
-		&record.ID,
-		&record.EnvironmentID,
-		&record.ConfigName,
-		&record.TemplatePath,
-		&record.VariablesPath,
-		&record.TemplateSpecificVarsPath,
-		&record.LastLoadedAt,
-		&record.TemplateHash,
-		&record.VariablesHash,
-		&record.TemplateVarsHash,
-		&record.Metadata,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
-	
+	config, err := r.queries.GetFileMCPConfig(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
-	
-	return record, nil
+	return convertFileMCPConfigFromSQLc(config), nil
 }
 
-// GetByEnvironmentAndName retrieves a file config by environment and name
+// GetByEnvironmentAndName retrieves a file config by environment and name using SQLC
 func (r *FileMCPConfigRepo) GetByEnvironmentAndName(environmentID int64, configName string) (*FileConfigRecord, error) {
-	query := `
-		SELECT id, environment_id, config_name, template_path, variables_path,
-			   template_specific_vars_path, last_loaded_at, template_hash,
-			   variables_hash, template_vars_hash, metadata, created_at, updated_at
-		FROM file_mcp_configs
-		WHERE environment_id = ? AND config_name = ?
-	`
-	
-	record := &FileConfigRecord{}
-	err := r.db.QueryRow(query, environmentID, configName).Scan(
-		&record.ID,
-		&record.EnvironmentID,
-		&record.ConfigName,
-		&record.TemplatePath,
-		&record.VariablesPath,
-		&record.TemplateSpecificVarsPath,
-		&record.LastLoadedAt,
-		&record.TemplateHash,
-		&record.VariablesHash,
-		&record.TemplateVarsHash,
-		&record.Metadata,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
-	
+	params := queries.GetFileMCPConfigByEnvironmentAndNameParams{
+		EnvironmentID: environmentID,
+		ConfigName:    configName,
+	}
+	config, err := r.queries.GetFileMCPConfigByEnvironmentAndName(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	
-	return record, nil
+	return convertFileMCPConfigFromSQLc(config), nil
 }
 
-// ListByEnvironment lists all file configs for an environment
+// ListByEnvironment lists all file configs for an environment using SQLC
 func (r *FileMCPConfigRepo) ListByEnvironment(environmentID int64) ([]*FileConfigRecord, error) {
-	query := `
-		SELECT id, environment_id, config_name, template_path, variables_path,
-			   template_specific_vars_path, last_loaded_at, template_hash,
-			   variables_hash, template_vars_hash, metadata, created_at, updated_at
-		FROM file_mcp_configs
-		WHERE environment_id = ?
-		ORDER BY config_name
-	`
-	
-	rows, err := r.db.Query(query, environmentID)
+	configs, err := r.queries.ListFileMCPConfigsByEnvironment(context.Background(), environmentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
 	var records []*FileConfigRecord
-	for rows.Next() {
-		record := &FileConfigRecord{}
-		err := rows.Scan(
-			&record.ID,
-			&record.EnvironmentID,
-			&record.ConfigName,
-			&record.TemplatePath,
-			&record.VariablesPath,
-			&record.TemplateSpecificVarsPath,
-			&record.LastLoadedAt,
-			&record.TemplateHash,
-			&record.VariablesHash,
-			&record.TemplateVarsHash,
-			&record.Metadata,
-			&record.CreatedAt,
-			&record.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		records = append(records, record)
+	for _, config := range configs {
+		records = append(records, convertFileMCPConfigFromSQLc(config))
 	}
 	
-	return records, rows.Err()
+	return records, nil
 }
 
-// UpdateHashes updates the template and variables hashes
+// UpdateHashes updates the template and variables hashes using SQLC
 func (r *FileMCPConfigRepo) UpdateHashes(id int64, templateHash, variablesHash, templateVarsHash string) error {
-	query := `
-		UPDATE file_mcp_configs
-		SET template_hash = ?, variables_hash = ?, template_vars_hash = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`
-	
-	_, err := r.db.Exec(query, templateHash, variablesHash, templateVarsHash, id)
-	return err
+	params := queries.UpdateFileMCPConfigHashesParams{
+		TemplateHash:     sql.NullString{String: templateHash, Valid: templateHash != ""},
+		VariablesHash:    sql.NullString{String: variablesHash, Valid: variablesHash != ""},
+		TemplateVarsHash: sql.NullString{String: templateVarsHash, Valid: templateVarsHash != ""},
+		ID:               id,
+	}
+	return r.queries.UpdateFileMCPConfigHashes(context.Background(), params)
 }
 
-// UpdateLastLoadedAt updates the last loaded timestamp
+// UpdateLastLoadedAt updates the last loaded timestamp using SQLC
 func (r *FileMCPConfigRepo) UpdateLastLoadedAt(id int64) error {
-	query := `
-		UPDATE file_mcp_configs
-		SET last_loaded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`
-	
-	_, err := r.db.Exec(query, id)
-	return err
+	return r.queries.UpdateFileMCPConfigLastLoadedAt(context.Background(), id)
 }
 
-// UpdateMetadata updates the metadata JSON
+// UpdateMetadata updates the metadata JSON using SQLC
 func (r *FileMCPConfigRepo) UpdateMetadata(id int64, metadata string) error {
-	query := `
-		UPDATE file_mcp_configs
-		SET metadata = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`
-	
-	_, err := r.db.Exec(query, metadata, id)
-	return err
+	params := queries.UpdateFileMCPConfigMetadataParams{
+		Metadata: sql.NullString{String: metadata, Valid: metadata != ""},
+		ID:       id,
+	}
+	return r.queries.UpdateFileMCPConfigMetadata(context.Background(), params)
 }
 
 // Upsert creates or updates a file config record
@@ -229,18 +174,18 @@ func (r *FileMCPConfigRepo) Upsert(record *FileConfigRecord) (int64, error) {
 	return r.Create(record)
 }
 
-// Delete deletes a file config record
+// Delete deletes a file config record using SQLC
 func (r *FileMCPConfigRepo) Delete(id int64) error {
-	query := `DELETE FROM file_mcp_configs WHERE id = ?`
-	_, err := r.db.Exec(query, id)
-	return err
+	return r.queries.DeleteFileMCPConfig(context.Background(), id)
 }
 
-// DeleteByEnvironmentAndName deletes a file config by environment and name
+// DeleteByEnvironmentAndName deletes a file config by environment and name using SQLC
 func (r *FileMCPConfigRepo) DeleteByEnvironmentAndName(environmentID int64, configName string) error {
-	query := `DELETE FROM file_mcp_configs WHERE environment_id = ? AND config_name = ?`
-	_, err := r.db.Exec(query, environmentID, configName)
-	return err
+	params := queries.DeleteFileMCPConfigByEnvironmentAndNameParams{
+		EnvironmentID: environmentID,
+		ConfigName:    configName,
+	}
+	return r.queries.DeleteFileMCPConfigByEnvironmentAndName(context.Background(), params)
 }
 
 // GetStaleConfigs returns configs that need to be re-rendered based on hash changes
@@ -250,95 +195,68 @@ func (r *FileMCPConfigRepo) GetStaleConfigs(environmentID int64) ([]*FileConfigR
 	return []*FileConfigRecord{}, nil
 }
 
-// CreateTx creates a new file config record within a transaction
+// CreateTx creates a new file config record within a transaction using SQLC
 func (r *FileMCPConfigRepo) CreateTx(tx *sql.Tx, record *FileConfigRecord) (int64, error) {
-	query := `
-		INSERT INTO file_mcp_configs (
-			environment_id, config_name, template_path, variables_path,
-			template_specific_vars_path, template_hash, variables_hash,
-			template_vars_hash, metadata
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id
-	`
-	
-	var id int64
-	err := tx.QueryRow(
-		query,
-		record.EnvironmentID,
-		record.ConfigName,
-		record.TemplatePath,
-		record.VariablesPath,
-		record.TemplateSpecificVarsPath,
-		record.TemplateHash,
-		record.VariablesHash,
-		record.TemplateVarsHash,
-		record.Metadata,
-	).Scan(&id)
-	
-	return id, err
+	params := convertFileMCPConfigToSQLc(record)
+	txQueries := r.queries.WithTx(tx)
+	created, err := txQueries.CreateFileMCPConfig(context.Background(), params)
+	if err != nil {
+		return 0, err
+	}
+	return created.ID, nil
 }
 
-// UpdateHashesTx updates hashes within a transaction
+// UpdateHashesTx updates hashes within a transaction using SQLC
 func (r *FileMCPConfigRepo) UpdateHashesTx(tx *sql.Tx, id int64, templateHash, variablesHash, templateVarsHash string) error {
-	query := `
-		UPDATE file_mcp_configs
-		SET template_hash = ?, variables_hash = ?, template_vars_hash = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`
-	
-	_, err := tx.Exec(query, templateHash, variablesHash, templateVarsHash, id)
-	return err
+	params := queries.UpdateFileMCPConfigHashesParams{
+		TemplateHash:     sql.NullString{String: templateHash, Valid: templateHash != ""},
+		VariablesHash:    sql.NullString{String: variablesHash, Valid: variablesHash != ""},
+		TemplateVarsHash: sql.NullString{String: templateVarsHash, Valid: templateVarsHash != ""},
+		ID:               id,
+	}
+	txQueries := r.queries.WithTx(tx)
+	return txQueries.UpdateFileMCPConfigHashes(context.Background(), params)
 }
 
-// GetConfigsForChangeDetection gets configs with their hashes for change detection
+// GetConfigsForChangeDetection gets configs with their hashes for change detection using SQLC
 func (r *FileMCPConfigRepo) GetConfigsForChangeDetection(environmentID int64) (map[string]*FileConfigRecord, error) {
-	query := `
-		SELECT id, environment_id, config_name, template_path, variables_path,
-			   template_hash, variables_hash, template_vars_hash, last_loaded_at
-		FROM file_mcp_configs
-		WHERE environment_id = ?
-	`
-	
-	rows, err := r.db.Query(query, environmentID)
+	configs, err := r.queries.GetFileMCPConfigsForChangeDetection(context.Background(), environmentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	configs := make(map[string]*FileConfigRecord)
-	for rows.Next() {
-		record := &FileConfigRecord{}
-		err := rows.Scan(
-			&record.ID,
-			&record.EnvironmentID,
-			&record.ConfigName,
-			&record.TemplatePath,
-			&record.VariablesPath,
-			&record.TemplateHash,
-			&record.VariablesHash,
-			&record.TemplateVarsHash,
-			&record.LastLoadedAt,
-		)
-		if err != nil {
-			return nil, err
+	result := make(map[string]*FileConfigRecord)
+	for _, config := range configs {
+		record := &FileConfigRecord{
+			ID:                   config.ID,
+			EnvironmentID:        config.EnvironmentID,
+			ConfigName:           config.ConfigName,
+			TemplatePath:         config.TemplatePath,
+			VariablesPath:        config.VariablesPath.String,
+			TemplateHash:         config.TemplateHash.String,
+			VariablesHash:        config.VariablesHash.String,
+			TemplateVarsHash:     config.TemplateVarsHash.String,
 		}
-		configs[record.ConfigName] = record
+		if config.LastLoadedAt.Valid {
+			record.LastLoadedAt = &config.LastLoadedAt.Time
+		}
+		result[record.ConfigName] = record
 	}
 	
-	return configs, rows.Err()
+	return result, nil
 }
 
-// HasChanges checks if template or variables have changed since last load
+// HasChanges checks if template or variables have changed since last load using SQLC
 func (r *FileMCPConfigRepo) HasChanges(environmentID int64, configName, templateHash, variablesHash, templateVarsHash string) (bool, error) {
-	query := `
-		SELECT COUNT(*)
-		FROM file_mcp_configs
-		WHERE environment_id = ? AND config_name = ?
-		  AND template_hash = ? AND variables_hash = ? AND template_vars_hash = ?
-	`
+	params := queries.CheckFileMCPConfigChangesParams{
+		EnvironmentID:        environmentID,
+		ConfigName:           configName,
+		TemplateHash:         sql.NullString{String: templateHash, Valid: templateHash != ""},
+		VariablesHash:        sql.NullString{String: variablesHash, Valid: variablesHash != ""},
+		TemplateVarsHash:     sql.NullString{String: templateVarsHash, Valid: templateVarsHash != ""},
+	}
 	
-	var count int
-	err := r.db.QueryRow(query, environmentID, configName, templateHash, variablesHash, templateVarsHash).Scan(&count)
+	count, err := r.queries.CheckFileMCPConfigChanges(context.Background(), params)
 	if err != nil {
 		return false, err
 	}
