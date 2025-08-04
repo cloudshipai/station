@@ -241,7 +241,13 @@ See [Production Readiness Guide](PRODUCTION_READINESS.md) for full deployment de
 
 ## License
 
-AGPL-3.0 - See [LICENSE](LICENSE) for details.
+Station is licensed under **AGPL-3.0** - a strong copyleft license that keeps Station open source while enabling sustainable development.
+
+**TL;DR**: Use Station freely for any purpose. If you offer Station as a network service, you must share your modifications.
+
+📖 **[Why We Chose AGPL-3.0](LICENSE_RATIONALE.md)** - Our licensing philosophy and what it means for different users
+
+📄 **[Full License Text](LICENSE)** - Complete AGPL-3.0 license terms
 
 ---
 

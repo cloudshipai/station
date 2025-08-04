@@ -1,9 +1,24 @@
 # Station Docker Compose Configuration
-# Quick setup for local development and testing
+# Quick setup for local development and testing with Jaeger telemetry
 
 version: '3.8'
 
 services:
+  # Jaeger all-in-one for development telemetry
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+      - "14250:14250"  # Jaeger collector gRPC  
+      - "4317:4317"    # OTLP gRPC receiver
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=debug
+    networks:
+      - station-network
+
   station:
     build: .
     ports:
@@ -16,6 +31,13 @@ services:
     environment:
       - STATION_LOCAL_MODE=false
       - STATION_LOG_LEVEL=info
+      # OpenTelemetry configuration for Genkit
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_SERVICE_NAME=station
+      - OTEL_SERVICE_VERSION=1.0.0
+    depends_on:
+      - jaeger
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "stn", "--version"]
@@ -23,6 +45,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - station-network
 
   # Optional: Add a reverse proxy
   # nginx:
@@ -44,5 +68,5 @@ volumes:
     driver: local
 
 networks:
-  default:
-    name: station-network
+  station-network:
+    driver: bridge
