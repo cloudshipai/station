@@ -203,7 +203,7 @@ See [Production Readiness Guide](PRODUCTION_READINESS.md) for full deployment de
 - **[🔒 Security Guide](docs/SECURITY.md)** - Enterprise security best practices
 - **[🚀 Production Deployment](PRODUCTION_READINESS.md)** - Production-ready setup
 - **[🧪 Testing Guide](TESTING_SCENARIOS.md)** - Comprehensive testing scenarios
-- **[📖 MCP Templates](examples/mcps/README.md)** - All 22+ available templates
+- **[📖 MCP Templates](examples/mcps/README.md)** - All available templates in `examples/mcps/`
 
 ## Benefits by Team
 
