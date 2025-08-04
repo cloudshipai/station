@@ -21,14 +21,16 @@ import (
 
 	"github.com/firebase/genkit/go/genkit"
 	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	"github.com/firebase/genkit/go/plugins/googlegenai"
 	"github.com/openai/openai-go/option"
 	"github.com/spf13/viper"
 )
 
 // genkitSetup holds the initialized Genkit components
 type genkitSetup struct {
-	app          *genkit.Genkit
-	openaiPlugin *oai.OpenAI
+	app           *genkit.Genkit
+	openaiPlugin  *oai.OpenAI
+	geminiPlugin  *googlegenai.GoogleAI
 }
 
 // initializeGenkit initializes Genkit with configured AI provider
@@ -36,6 +38,7 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 	// Initialize AI provider plugin based on configuration
 	var genkitApp *genkit.Genkit
 	var openaiPlugin *oai.OpenAI
+	var geminiPlugin *googlegenai.GoogleAI
 	var err error
 	
 	switch strings.ToLower(cfg.AIProvider) {
@@ -62,8 +65,13 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 		if cfg.AIAPIKey == "" {
 			return nil, fmt.Errorf("STN_AI_API_KEY (or GOOGLE_API_KEY) is required for Gemini provider")
 		}
-		// For now, main server only supports OpenAI - Gemini support will be added
-		return nil, fmt.Errorf("Gemini provider not yet supported in main server (use OpenAI for now)")
+		geminiPlugin = &googlegenai.GoogleAI{
+			APIKey: cfg.AIAPIKey,
+		}
+		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize Genkit with Gemini: %w", err)
+		}
 	case "ollama":
 		// For now, main server only supports OpenAI - Ollama support will be added
 		return nil, fmt.Errorf("Ollama provider not yet supported in main server (use OpenAI for now)")
@@ -72,8 +80,9 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 	}
 	
 	return &genkitSetup{
-		app:          genkitApp,
-		openaiPlugin: openaiPlugin,
+		app:           genkitApp,
+		openaiPlugin:  openaiPlugin,
+		geminiPlugin:  geminiPlugin,
 	}, nil
 }
 

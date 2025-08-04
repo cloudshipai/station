@@ -96,6 +96,7 @@ func init() {
 	webhookCmd.AddCommand(webhookEnableCmd)
 	webhookCmd.AddCommand(webhookDisableCmd)
 	webhookCmd.AddCommand(webhookDeliveriesCmd)
+	webhookCmd.AddCommand(webhookTestCmd)
 	
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
