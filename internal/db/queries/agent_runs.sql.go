@@ -334,3 +334,17 @@ func (q *Queries) UpdateAgentRunCompletion(ctx context.Context, arg UpdateAgentR
 	)
 	return err
 }
+
+const updateAgentRunStatus = `-- name: UpdateAgentRunStatus :exec
+UPDATE agent_runs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+`
+
+type UpdateAgentRunStatusParams struct {
+	Status string `json:"status"`
+	ID     int64  `json:"id"`
+}
+
+func (q *Queries) UpdateAgentRunStatus(ctx context.Context, arg UpdateAgentRunStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateAgentRunStatus, arg.Status, arg.ID)
+	return err
+}

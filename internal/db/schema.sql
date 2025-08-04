@@ -56,10 +56,30 @@ CREATE TABLE mcp_tools (
     name TEXT NOT NULL,
     description TEXT,
     input_schema TEXT, -- JSON schema for tool inputs
+    file_config_id INTEGER REFERENCES file_mcp_configs(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE,
     UNIQUE(name, mcp_server_id)
+);
+
+-- File-based MCP configurations
+CREATE TABLE file_mcp_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    environment_id INTEGER NOT NULL,
+    config_name TEXT NOT NULL,
+    template_path TEXT NOT NULL,
+    variables_path TEXT,
+    template_specific_vars_path TEXT, -- Path to template-specific variables
+    last_loaded_at TIMESTAMP,
+    template_hash TEXT, -- SHA256 hash for change detection
+    variables_hash TEXT, -- SHA256 hash for change detection
+    template_vars_hash TEXT, -- SHA256 hash for template-specific vars
+    metadata TEXT, -- JSON metadata about the template
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE,
+    UNIQUE(environment_id, config_name)
 );
 
 -- Model providers table

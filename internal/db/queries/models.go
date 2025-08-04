@@ -56,6 +56,22 @@ type Environment struct {
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
+type FileMcpConfig struct {
+	ID                       int64          `json:"id"`
+	EnvironmentID            int64          `json:"environment_id"`
+	ConfigName               string         `json:"config_name"`
+	TemplatePath             string         `json:"template_path"`
+	VariablesPath            sql.NullString `json:"variables_path"`
+	TemplateSpecificVarsPath sql.NullString `json:"template_specific_vars_path"`
+	LastLoadedAt             sql.NullTime   `json:"last_loaded_at"`
+	TemplateHash             sql.NullString `json:"template_hash"`
+	VariablesHash            sql.NullString `json:"variables_hash"`
+	TemplateVarsHash         sql.NullString `json:"template_vars_hash"`
+	Metadata                 sql.NullString `json:"metadata"`
+	CreatedAt                sql.NullTime   `json:"created_at"`
+	UpdatedAt                sql.NullTime   `json:"updated_at"`
+}
+
 type McpConfig struct {
 	ID              int64          `json:"id"`
 	EnvironmentID   int64          `json:"environment_id"`
@@ -81,13 +97,14 @@ type McpServer struct {
 }
 
 type McpTool struct {
-	ID          int64          `json:"id"`
-	McpServerID int64          `json:"mcp_server_id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	InputSchema sql.NullString `json:"input_schema"`
-	CreatedAt   sql.NullTime   `json:"created_at"`
-	UpdatedAt   sql.NullTime   `json:"updated_at"`
+	ID           int64          `json:"id"`
+	McpServerID  int64          `json:"mcp_server_id"`
+	Name         string         `json:"name"`
+	Description  sql.NullString `json:"description"`
+	InputSchema  sql.NullString `json:"input_schema"`
+	FileConfigID sql.NullInt64  `json:"file_config_id"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
+	UpdatedAt    sql.NullTime   `json:"updated_at"`
 }
 
 type Model struct {
