@@ -134,7 +134,7 @@ func TestGenkitMCPBasic(t *testing.T) {
 	t.Run("CreateMCPClient", func(t *testing.T) {
 		// Test creating individual MCP client
 		client, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-			Name:     "test-client",
+			Name:     "test", // Short name to avoid long tool call IDs
 			Version:  "1.0.0",
 			Disabled: true, // Disable so we don't need the actual server running
 			Stdio: &mcp.StdioConfig{
@@ -145,7 +145,7 @@ func TestGenkitMCPBasic(t *testing.T) {
 		
 		require.NoError(t, err)
 		assert.NotNil(t, client)
-		assert.Equal(t, "test-client", client.Name())
+		assert.Equal(t, "test", client.Name())
 		assert.False(t, client.IsEnabled()) // Should be disabled
 	})
 }

@@ -140,7 +140,7 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 
 	// Create MCP client to connect to our own stdio server
 	mcpClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-		Name:    "station-mcp",
+		Name:    "", // Empty name to eliminate prefixing and avoid long tool call IDs in OpenAI
 		Version: "1.0.0",
 		Stdio: &mcp.StdioConfig{
 			Command: "./stn", // Use our own binary
@@ -884,9 +884,9 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 				envSlice = append(envSlice, key+"="+value)
 			}
 			
-			// Create Genkit MCP client for this server using clean server name (no suffixes)
+			// Create Genkit MCP client for this server using short name to avoid long tool call IDs
 			mcpClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-				Name:    serverName, // Use clean server name to avoid prefixing
+				Name:    "", // Empty name to eliminate prefixing and prevent long tool call IDs in OpenAI
 				Version: "1.0.0",
 				Stdio: &mcp.StdioConfig{
 					Command: serverConfig.Command,
