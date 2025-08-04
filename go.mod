@@ -141,7 +141,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.37.0
 	golang.org/x/crypto v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.38.1
+	modernc.org/sqlite v1.38.2
 )
 
 replace github.com/firebase/genkit/go => /home/epuerta/projects/hack/genkit/go
