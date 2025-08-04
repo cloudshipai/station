@@ -10,10 +10,19 @@ import (
 	"database/sql"
 )
 
+const clearMCPToolFileConfigReference = `-- name: ClearMCPToolFileConfigReference :exec
+UPDATE mcp_tools SET file_config_id = NULL WHERE id = ?
+`
+
+func (q *Queries) ClearMCPToolFileConfigReference(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, clearMCPToolFileConfigReference, id)
+	return err
+}
+
 const createMCPTool = `-- name: CreateMCPTool :one
 INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema)
 VALUES (?, ?, ?, ?)
-RETURNING id, mcp_server_id, name, description, input_schema, created_at, updated_at
+RETURNING id, mcp_server_id, name, description, input_schema, file_config_id, created_at, updated_at
 `
 
 type CreateMCPToolParams struct {
@@ -37,10 +46,57 @@ func (q *Queries) CreateMCPTool(ctx context.Context, arg CreateMCPToolParams) (M
 		&i.Name,
 		&i.Description,
 		&i.InputSchema,
+		&i.FileConfigID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const createMCPToolWithFileConfig = `-- name: CreateMCPToolWithFileConfig :one
+INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema, file_config_id)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, mcp_server_id, name, description, input_schema, file_config_id, created_at, updated_at
+`
+
+type CreateMCPToolWithFileConfigParams struct {
+	McpServerID  int64          `json:"mcp_server_id"`
+	Name         string         `json:"name"`
+	Description  sql.NullString `json:"description"`
+	InputSchema  sql.NullString `json:"input_schema"`
+	FileConfigID sql.NullInt64  `json:"file_config_id"`
+}
+
+// File config extensions
+func (q *Queries) CreateMCPToolWithFileConfig(ctx context.Context, arg CreateMCPToolWithFileConfigParams) (McpTool, error) {
+	row := q.db.QueryRowContext(ctx, createMCPToolWithFileConfig,
+		arg.McpServerID,
+		arg.Name,
+		arg.Description,
+		arg.InputSchema,
+		arg.FileConfigID,
+	)
+	var i McpTool
+	err := row.Scan(
+		&i.ID,
+		&i.McpServerID,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
+		&i.FileConfigID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteMCPToolsByFileConfigID = `-- name: DeleteMCPToolsByFileConfigID :exec
+DELETE FROM mcp_tools WHERE file_config_id = ?
+`
+
+func (q *Queries) DeleteMCPToolsByFileConfigID(ctx context.Context, fileConfigID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, deleteMCPToolsByFileConfigID, fileConfigID)
+	return err
 }
 
 const deleteMCPToolsByServer = `-- name: DeleteMCPToolsByServer :exec
@@ -53,7 +109,7 @@ func (q *Queries) DeleteMCPToolsByServer(ctx context.Context, mcpServerID int64)
 }
 
 const findMCPToolByNameInEnvironment = `-- name: FindMCPToolByNameInEnvironment :one
-SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
+SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.file_config_id, t.created_at, t.updated_at FROM mcp_tools t
 JOIN mcp_servers s ON t.mcp_server_id = s.id
 WHERE s.environment_id = ? AND t.name = ?
 LIMIT 1
@@ -73,6 +129,7 @@ func (q *Queries) FindMCPToolByNameInEnvironment(ctx context.Context, arg FindMC
 		&i.Name,
 		&i.Description,
 		&i.InputSchema,
+		&i.FileConfigID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -80,7 +137,7 @@ func (q *Queries) FindMCPToolByNameInEnvironment(ctx context.Context, arg FindMC
 }
 
 const getMCPTool = `-- name: GetMCPTool :one
-SELECT id, mcp_server_id, name, description, input_schema, created_at, updated_at FROM mcp_tools WHERE id = ?
+SELECT id, mcp_server_id, name, description, input_schema, file_config_id, created_at, updated_at FROM mcp_tools WHERE id = ?
 `
 
 func (q *Queries) GetMCPTool(ctx context.Context, id int64) (McpTool, error) {
@@ -92,14 +149,231 @@ func (q *Queries) GetMCPTool(ctx context.Context, id int64) (McpTool, error) {
 		&i.Name,
 		&i.Description,
 		&i.InputSchema,
+		&i.FileConfigID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
+const getMCPToolsByFileConfigID = `-- name: GetMCPToolsByFileConfigID :many
+SELECT id, mcp_server_id, name, description, input_schema, file_config_id, created_at, updated_at FROM mcp_tools
+WHERE file_config_id = ?
+ORDER BY name
+`
+
+func (q *Queries) GetMCPToolsByFileConfigID(ctx context.Context, fileConfigID sql.NullInt64) ([]McpTool, error) {
+	rows, err := q.db.QueryContext(ctx, getMCPToolsByFileConfigID, fileConfigID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpTool
+	for rows.Next() {
+		var i McpTool
+		if err := rows.Scan(
+			&i.ID,
+			&i.McpServerID,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
+			&i.FileConfigID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMCPToolsWithDetails = `-- name: GetMCPToolsWithDetails :many
+SELECT 
+    t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at,
+    s.name as server_name,
+    0 as config_id,
+    'server-' || s.name as config_name,
+    1 as config_version,
+    s.environment_id as environment_id,
+    e.name as environment_name
+FROM mcp_tools t
+JOIN mcp_servers s ON t.mcp_server_id = s.id
+JOIN environments e ON s.environment_id = e.id
+ORDER BY e.name, s.name, t.name
+`
+
+type GetMCPToolsWithDetailsRow struct {
+	ID              int64          `json:"id"`
+	McpServerID     int64          `json:"mcp_server_id"`
+	Name            string         `json:"name"`
+	Description     sql.NullString `json:"description"`
+	InputSchema     sql.NullString `json:"input_schema"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
+	ServerName      string         `json:"server_name"`
+	ConfigID        int64          `json:"config_id"`
+	ConfigName      interface{}    `json:"config_name"`
+	ConfigVersion   int64          `json:"config_version"`
+	EnvironmentID   int64          `json:"environment_id"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+func (q *Queries) GetMCPToolsWithDetails(ctx context.Context) ([]GetMCPToolsWithDetailsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getMCPToolsWithDetails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMCPToolsWithDetailsRow
+	for rows.Next() {
+		var i GetMCPToolsWithDetailsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.McpServerID,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
+			&i.CreatedAt,
+			&i.ServerName,
+			&i.ConfigID,
+			&i.ConfigName,
+			&i.ConfigVersion,
+			&i.EnvironmentID,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMCPToolsWithFileConfigInfo = `-- name: GetMCPToolsWithFileConfigInfo :many
+SELECT 
+    t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at,
+    s.name as server_name,
+    fc.id as file_config_id, fc.config_name, fc.template_path, fc.last_loaded_at
+FROM mcp_tools t
+JOIN mcp_servers s ON t.mcp_server_id = s.id
+LEFT JOIN file_mcp_configs fc ON t.file_config_id = fc.id
+WHERE s.environment_id = ?
+ORDER BY fc.config_name, s.name, t.name
+`
+
+type GetMCPToolsWithFileConfigInfoRow struct {
+	ID           int64          `json:"id"`
+	McpServerID  int64          `json:"mcp_server_id"`
+	Name         string         `json:"name"`
+	Description  sql.NullString `json:"description"`
+	InputSchema  sql.NullString `json:"input_schema"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
+	ServerName   string         `json:"server_name"`
+	FileConfigID sql.NullInt64  `json:"file_config_id"`
+	ConfigName   sql.NullString `json:"config_name"`
+	TemplatePath sql.NullString `json:"template_path"`
+	LastLoadedAt sql.NullTime   `json:"last_loaded_at"`
+}
+
+func (q *Queries) GetMCPToolsWithFileConfigInfo(ctx context.Context, environmentID int64) ([]GetMCPToolsWithFileConfigInfoRow, error) {
+	rows, err := q.db.QueryContext(ctx, getMCPToolsWithFileConfigInfo, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMCPToolsWithFileConfigInfoRow
+	for rows.Next() {
+		var i GetMCPToolsWithFileConfigInfoRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.McpServerID,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
+			&i.CreatedAt,
+			&i.ServerName,
+			&i.FileConfigID,
+			&i.ConfigName,
+			&i.TemplatePath,
+			&i.LastLoadedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMCPToolsWithServerCount = `-- name: GetMCPToolsWithServerCount :one
+SELECT COUNT(*) FROM mcp_servers
+`
+
+func (q *Queries) GetMCPToolsWithServerCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getMCPToolsWithServerCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getOrphanedMCPTools = `-- name: GetOrphanedMCPTools :many
+SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.file_config_id, t.created_at, t.updated_at
+FROM mcp_tools t
+JOIN mcp_servers s ON t.mcp_server_id = s.id
+LEFT JOIN file_mcp_configs fc ON t.file_config_id = fc.id
+WHERE s.environment_id = ? AND t.file_config_id IS NOT NULL AND fc.id IS NULL
+`
+
+func (q *Queries) GetOrphanedMCPTools(ctx context.Context, environmentID int64) ([]McpTool, error) {
+	rows, err := q.db.QueryContext(ctx, getOrphanedMCPTools, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpTool
+	for rows.Next() {
+		var i McpTool
+		if err := rows.Scan(
+			&i.ID,
+			&i.McpServerID,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
+			&i.FileConfigID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPToolsByEnvironment = `-- name: ListMCPToolsByEnvironment :many
-SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
+SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.file_config_id, t.created_at, t.updated_at FROM mcp_tools t
 JOIN mcp_servers s ON t.mcp_server_id = s.id
 WHERE s.environment_id = ?
 ORDER BY s.name, t.name
@@ -120,6 +394,7 @@ func (q *Queries) ListMCPToolsByEnvironment(ctx context.Context, environmentID i
 			&i.Name,
 			&i.Description,
 			&i.InputSchema,
+			&i.FileConfigID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -137,7 +412,7 @@ func (q *Queries) ListMCPToolsByEnvironment(ctx context.Context, environmentID i
 }
 
 const listMCPToolsByServer = `-- name: ListMCPToolsByServer :many
-SELECT id, mcp_server_id, name, description, input_schema, created_at, updated_at FROM mcp_tools WHERE mcp_server_id = ? ORDER BY name
+SELECT id, mcp_server_id, name, description, input_schema, file_config_id, created_at, updated_at FROM mcp_tools WHERE mcp_server_id = ? ORDER BY name
 `
 
 func (q *Queries) ListMCPToolsByServer(ctx context.Context, mcpServerID int64) ([]McpTool, error) {
@@ -155,6 +430,7 @@ func (q *Queries) ListMCPToolsByServer(ctx context.Context, mcpServerID int64) (
 			&i.Name,
 			&i.Description,
 			&i.InputSchema,
+			&i.FileConfigID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -172,7 +448,7 @@ func (q *Queries) ListMCPToolsByServer(ctx context.Context, mcpServerID int64) (
 }
 
 const listMCPToolsByServerInEnvironment = `-- name: ListMCPToolsByServerInEnvironment :many
-SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at, t.updated_at FROM mcp_tools t
+SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.file_config_id, t.created_at, t.updated_at FROM mcp_tools t
 JOIN mcp_servers s ON t.mcp_server_id = s.id
 WHERE s.environment_id = ? AND s.name = ?
 ORDER BY t.name
@@ -198,6 +474,7 @@ func (q *Queries) ListMCPToolsByServerInEnvironment(ctx context.Context, arg Lis
 			&i.Name,
 			&i.Description,
 			&i.InputSchema,
+			&i.FileConfigID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -212,4 +489,18 @@ func (q *Queries) ListMCPToolsByServerInEnvironment(ctx context.Context, arg Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMCPToolFileConfigReference = `-- name: UpdateMCPToolFileConfigReference :exec
+UPDATE mcp_tools SET file_config_id = ? WHERE id = ?
+`
+
+type UpdateMCPToolFileConfigReferenceParams struct {
+	FileConfigID sql.NullInt64 `json:"file_config_id"`
+	ID           int64         `json:"id"`
+}
+
+func (q *Queries) UpdateMCPToolFileConfigReference(ctx context.Context, arg UpdateMCPToolFileConfigReferenceParams) error {
+	_, err := q.db.ExecContext(ctx, updateMCPToolFileConfigReference, arg.FileConfigID, arg.ID)
+	return err
 }

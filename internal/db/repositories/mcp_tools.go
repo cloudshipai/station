@@ -157,10 +157,9 @@ func (r *MCPToolRepo) DeleteByServerIDTx(tx *sql.Tx, serverID int64) error {
 }
 
 func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) {
-	// First check if there are any servers at all
-	var serverCount int
-	countQuery := `SELECT COUNT(*) FROM mcp_servers`
-	if err := r.db.QueryRow(countQuery).Scan(&serverCount); err != nil {
+	// First check if there are any servers at all using SQLC
+	serverCount, err := r.queries.GetMCPToolsWithServerCount(context.Background())
+	if err != nil {
 		return nil, err
 	}
 	
@@ -169,45 +168,42 @@ func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) 
 		return []*models.MCPToolWithDetails{}, nil
 	}
 	
-	query := `SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at,
-			         s.name as server_name,
-			         0 as config_id,
-			         'server-' || s.name as config_name,
-			         1 as config_version,
-			         s.environment_id as environment_id,
-			         e.name as environment_name
-			  FROM mcp_tools t
-			  JOIN mcp_servers s ON t.mcp_server_id = s.id
-			  JOIN environments e ON s.environment_id = e.id
-			  ORDER BY e.name, s.name, t.name`
-	
-	rows, err := r.db.Query(query)
+	// Use SQLC generated query and types directly
+	rows, err := r.queries.GetMCPToolsWithDetails(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
+	// Convert SQLC row type to domain model
 	var tools []*models.MCPToolWithDetails
-	for rows.Next() {
-		var tool models.MCPToolWithDetails
-		var schemaStr sql.NullString // Use NullString to handle NULL values
-		err := rows.Scan(
-			&tool.ID, &tool.MCPServerID, &tool.Name, &tool.Description, &schemaStr, &tool.CreatedAt,
-			&tool.ServerName, &tool.ConfigID, &tool.ConfigName, &tool.ConfigVersion, &tool.EnvironmentID, &tool.EnvironmentName,
-		)
-		if err != nil {
-			return nil, err
+	for _, row := range rows {
+		tool := &models.MCPToolWithDetails{
+			MCPTool: models.MCPTool{
+				ID:          row.ID,
+				MCPServerID: row.McpServerID,
+				Name:        row.Name,
+				Description: row.Description.String,
+			},
+			ServerName:      row.ServerName,
+			ConfigID:        row.ConfigID,
+			ConfigName:      row.ConfigName.(string),
+			ConfigVersion:   row.ConfigVersion,
+			EnvironmentID:   row.EnvironmentID,
+			EnvironmentName: row.EnvironmentName,
 		}
 		
-		// Convert NullString to json.RawMessage
-		if schemaStr.Valid && schemaStr.String != "" {
-			tool.Schema = json.RawMessage(schemaStr.String)
+		if row.CreatedAt.Valid {
+			tool.CreatedAt = row.CreatedAt.Time
+		}
+		
+		if row.InputSchema.Valid && row.InputSchema.String != "" {
+			tool.Schema = json.RawMessage(row.InputSchema.String)
 		} else {
 			tool.Schema = json.RawMessage("null")
 		}
 		
-		tools = append(tools, &tool)
+		tools = append(tools, tool)
 	}
 	
-	return tools, rows.Err()
+	return tools, nil
 }
