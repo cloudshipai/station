@@ -33,11 +33,12 @@ type IntelligentAgentCreator struct {
 
 // AgentCreationRequest represents a request for intelligent agent creation
 type AgentCreationRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	UserIntent  string `json:"user_intent"`
-	Domain      string `json:"domain,omitempty"`
-	Schedule    string `json:"schedule,omitempty"`
+	Name                string `json:"name"`
+	Description         string `json:"description"`
+	UserIntent          string `json:"user_intent"`
+	Domain              string `json:"domain,omitempty"`
+	Schedule            string `json:"schedule,omitempty"`
+	TargetEnvironmentID int64  `json:"target_environment_id,omitempty"`
 }
 
 // AgentCreationPlan represents the intelligent agent creation plan
@@ -150,19 +151,27 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 		return nil, fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
 
-	// Step 2: Use Genkit agent to analyze requirements and generate creation plan
-	plan, err := iac.generateAgentPlanWithGenkit(ctx, req)
+	// Step 2: Determine target environment (use specified or validate recommended)
+	targetEnvironmentID := req.TargetEnvironmentID
+	if targetEnvironmentID == 0 {
+		// No target specified, use default
+		environments, err := iac.repos.Environments.List()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list environments: %w", err)
+		}
+		if len(environments) == 0 {
+			return nil, fmt.Errorf("no environments available")
+		}
+		targetEnvironmentID = environments[0].ID
+	}
+
+	// Step 3: Use Genkit agent to analyze requirements and generate creation plan for target environment
+	plan, err := iac.generateAgentPlanWithGenkit(ctx, req, targetEnvironmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate agent plan: %w", err)
 	}
 
-	log.Printf("📋 Generated plan for agent '%s' with %d tools", plan.AgentName, len(plan.CoreTools))
-
-	// Step 3: Find or create the recommended environment
-	environmentID, err := iac.ensureEnvironment(plan.RecommendedEnv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ensure environment: %w", err)
-	}
+	log.Printf("📋 Generated plan for agent '%s' with %d tools for environment ID %d", plan.AgentName, len(plan.CoreTools), targetEnvironmentID)
 
 	// Step 4: Create the agent with intelligent configuration
 	// Parse schedule from plan if provided
@@ -178,7 +187,7 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 		plan.AgentDescription,
 		plan.SystemPrompt,
 		int64(plan.MaxSteps),
-		environmentID,
+		targetEnvironmentID,
 		1, // Default user ID for now
 		cronSchedule,
 		scheduleEnabled,
@@ -187,10 +196,11 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}
 
-	// Step 5: Assign tools to the agent
+	// Step 5: Assign selected tools to the agent in database (for filtering during execution)
 	assignedCount := 0
 	if len(plan.CoreTools) > 0 {
-		assignedCount = iac.assignToolsToAgent(agent.ID, plan.CoreTools, environmentID)
+		assignedCount = iac.assignToolsToAgent(agent.ID, plan.CoreTools, targetEnvironmentID)
+		log.Printf("📋 Agent assigned %d tools from %d selected by AI", assignedCount, len(plan.CoreTools))
 	}
 
 	// Step 6: Handle scheduling if enabled
@@ -217,25 +227,44 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 	return agent, nil
 }
 
-// generateAgentPlanWithGenkit uses Genkit with our MCP server to intelligently analyze requirements
-func (iac *IntelligentAgentCreator) generateAgentPlanWithGenkit(ctx context.Context, req AgentCreationRequest) (*AgentCreationPlan, error) {
-	log.Printf("🔍 Using Genkit to analyze agent requirements...")
+// generateAgentPlanWithGenkit uses Genkit with environment-specific MCP tools to intelligently analyze requirements
+func (iac *IntelligentAgentCreator) generateAgentPlanWithGenkit(ctx context.Context, req AgentCreationRequest, targetEnvironmentID int64) (*AgentCreationPlan, error) {
+	log.Printf("🔍 Using Genkit to analyze agent requirements for environment ID %d...", targetEnvironmentID)
 
-	// Get available tools from our MCP server
-	tools, err := iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
+	// Get available tools from the target environment
+	tools, err := iac.getEnvironmentMCPTools(ctx, targetEnvironmentID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get MCP tools: %w", err)
+		return nil, fmt.Errorf("failed to get environment MCP tools: %w", err)
 	}
 
-	log.Printf("📋 Found %d available MCP tools for analysis", len(tools))
+	log.Printf("📋 Found %d available MCP tools in target environment for analysis", len(tools))
 
-	// Convert tools to tool references
+	// Convert tools to tool references and extract tool names
 	var toolRefs []ai.ToolRef
+	var availableToolNames []string
 	for _, tool := range tools {
 		toolRefs = append(toolRefs, tool)
+		
+		// Extract tool name for prompt
+		var toolName string
+		if named, ok := tool.(interface{ Name() string }); ok {
+			toolName = named.Name()
+		} else if stringer, ok := tool.(interface{ String() string }); ok {
+			toolName = stringer.String()
+		}
+		
+		if toolName != "" {
+			availableToolNames = append(availableToolNames, toolName)
+		}
 	}
 
-	// Create prompt for intelligent agent analysis
+	// Get environment name for context
+	environment, err := iac.repos.Environments.GetByID(targetEnvironmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// Create prompt for intelligent agent analysis with actual available tools
 	prompt := fmt.Sprintf(`IMPORTANT: You must respond with ONLY a valid JSON object. No explanations, no conversational text, no markdown formatting. Only JSON.
 
 Analyze these agent requirements and create an optimal configuration:
@@ -246,31 +275,38 @@ Agent Requirements:
 - User Intent: %s
 - Domain: %s
 - Schedule: %s
+- Target Environment: %s
 
-Available Tools: %d MCP tools including directory operations, file operations, search, and information tools.
+Available Tools in Environment '%s': %d MCP tools
+%s
 
-Based on the requirements, intelligently select 2-5 relevant tools from these common MCP tools:
-- list_directory: List files and directories
-- directory_tree: Show directory structure
-- read_text_file: Read file contents
-- get_file_info: Get file metadata
-- search_files: Search for files
-- create_directory: Create directories
-- edit_file: Edit file contents
+Based on the requirements, intelligently select 2-5 most relevant tools from the available tools listed above.
 
 RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on the requirements):
 {
   "agent_name": "intelligent_agent_name",
   "agent_description": "detailed_description_of_agent_capabilities", 
   "system_prompt": "system_prompt_for_the_agent",
-  "recommended_environment": "default",
-  "core_tools": ["relevant", "tools", "selected"],
+  "recommended_environment": "%s",
+  "core_tools": ["tool1", "tool2", "tool3"],
   "max_steps": 10,
   "schedule": "on-demand",
   "rationale": "explanation_of_selections",
   "success_criteria": "how_to_measure_success"
 }`,
-		req.Name, req.Description, req.UserIntent, req.Domain, req.Schedule, len(tools))
+		req.Name, req.Description, req.UserIntent, req.Domain, req.Schedule, environment.Name, 
+		environment.Name, len(tools), 
+		func() string {
+			if len(availableToolNames) > 0 {
+				result := "Available Tools:\n"
+				for _, toolName := range availableToolNames {
+					result += fmt.Sprintf("- %s\n", toolName)
+				}
+				return result
+			}
+			return "No tools available in this environment."
+		}(),
+		environment.Name)
 
 	// Get model name based on provider (reload config to get latest values)
 	cfg, err := config.Load()
@@ -369,22 +405,40 @@ func (iac *IntelligentAgentCreator) ensureEnvironment(envName string) (int64, er
 func (iac *IntelligentAgentCreator) assignToolsToAgent(agentID int64, toolNames []string, environmentID int64) int {
 	assignedCount := 0
 	for _, toolName := range toolNames {
-		// Find tool by name in the agent's environment
-		tool, err := iac.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
+		// Strip server prefix from tool name if present (e.g., "filesystem-server_read_text_file" -> "read_text_file")
+		cleanToolName := toolName
+		if strings.Contains(toolName, "_") {
+			parts := strings.SplitN(toolName, "_", 2)
+			if len(parts) == 2 && strings.HasSuffix(parts[0], "-server") {
+				cleanToolName = parts[1] // Extract "read_text_file" from "filesystem-server_read_text_file"
+			}
+		}
+		
+		// Try both the original name and cleaned name
+		var tool *models.MCPTool
+		var err error
+		
+		// First try the exact name as provided
+		tool, err = iac.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
+		if err != nil && cleanToolName != toolName {
+			// If that fails and we have a cleaned name, try the cleaned name
+			tool, err = iac.repos.MCPTools.FindByNameInEnvironment(environmentID, cleanToolName)
+		}
+		
 		if err != nil {
-			log.Printf("Warning: Failed to find tool '%s' in environment %d: %v", toolName, environmentID, err)
+			log.Printf("Warning: Failed to find tool '%s' (also tried '%s') in environment %d: %v", toolName, cleanToolName, environmentID, err)
 			continue
 		}
 		
 		// Add the tool assignment to the agent
 		_, err = iac.repos.AgentTools.AddAgentTool(agentID, tool.ID)
 		if err != nil {
-			log.Printf("Warning: Failed to assign tool '%s' (ID: %d) to agent %d: %v", toolName, tool.ID, agentID, err)
+			log.Printf("Warning: Failed to assign tool '%s' (ID: %d) to agent %d: %v", tool.Name, tool.ID, agentID, err)
 			continue
 		}
 		
 		assignedCount++
-		log.Printf("✓ Successfully assigned tool '%s' (ID: %d) to agent %d", toolName, tool.ID, agentID)
+		log.Printf("✓ Successfully assigned tool '%s' (ID: %d) to agent %d", tool.Name, tool.ID, agentID)
 	}
 	return assignedCount
 }

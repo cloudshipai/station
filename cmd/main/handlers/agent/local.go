@@ -470,32 +470,61 @@ func (h *AgentHandler) createAgentLocal(name, description, domain, schedule, env
 	// Initialize repositories and services for intelligent creation
 	repos := repositories.New(database)
 	
-	// Note: User specified environment preference: %s
-	// The intelligent agent creator will analyze requirements and determine optimal environment
-	_ = environment // Acknowledge environment parameter
-	
-	// Load config to get encryption key
-	_, err = loadStationConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load Station config: %w", err)
+	// Resolve target environment for agent creation
+	var targetEnvironmentID int64
+	if environment != "" {
+		// User specified environment - validate it exists
+		environments, err := repos.Environments.List()
+		if err != nil {
+			return fmt.Errorf("failed to list environments: %w", err)
+		}
+		
+		var found bool
+		for _, env := range environments {
+			if env.Name == environment {
+				targetEnvironmentID = env.ID
+				found = true
+				break
+			}
+		}
+		
+		if !found {
+			return fmt.Errorf("environment '%s' not found. Available environments: %v", 
+				environment, func() []string {
+					var names []string
+					for _, env := range environments {
+						names = append(names, env.Name)
+					}
+					return names
+				}())
+		}
+		
+		fmt.Printf("🌍 Creating agent in environment: %s (ID: %d)\n", environment, targetEnvironmentID)
+	} else {
+		// Default to first available environment
+		environments, err := repos.Environments.List()
+		if err != nil {
+			return fmt.Errorf("failed to list environments: %w", err)
+		}
+		if len(environments) == 0 {
+			return fmt.Errorf("no environments available")
+		}
+		targetEnvironmentID = environments[0].ID
+		environment = environments[0].Name
+		fmt.Printf("🌍 No environment specified, using default: %s (ID: %d)\n", environment, targetEnvironmentID)
 	}
-	
-	// keyManager removed - no longer needed for file-based configs
 
-	// MCPConfigService removed - using file-based configs only
-
-	// Create intelligent agent creator (simplified for file-based system)
-	// Note: Intelligent agent creator will analyze requirements and determine optimal environment
-	// The user-specified environment (%s) preference is noted but may be overridden for optimal performance
+	// Create intelligent agent creator
 	creator := services.NewIntelligentAgentCreator(repos, nil)
 
-	// Create agent creation request
+	// Create agent creation request with target environment
 	req := services.AgentCreationRequest{
 		Name:        name,
 		Description: description,
 		UserIntent:  description, // Use description as user intent
 		Domain:      domain,
 		Schedule:    schedule,
+		TargetEnvironmentID: targetEnvironmentID, // Pass target environment
 	}
 
 	styles := getCLIStyles(h.themeManager)
