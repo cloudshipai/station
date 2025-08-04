@@ -53,6 +53,7 @@ func (h *RunsHandler) RunRunsInspect(cmd *cobra.Command, args []string) error {
 	}
 
 	endpoint, _ := cmd.Flags().GetString("endpoint")
+	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	styles := getCLIStyles(h.themeManager)
 	banner := styles.Banner.Render("🔍 Run Details")
@@ -60,10 +61,10 @@ func (h *RunsHandler) RunRunsInspect(cmd *cobra.Command, args []string) error {
 
 	if endpoint != "" {
 		fmt.Println(styles.Info.Render("🌐 Getting run from: " + endpoint))
-		return h.inspectRunRemote(runID, endpoint)
+		return h.inspectRunRemote(runID, endpoint, verbose)
 	} else {
 		fmt.Println(styles.Info.Render("🏠 Getting local run"))
-		return h.inspectRunLocal(runID)
+		return h.inspectRunLocal(runID, verbose)
 	}
 }
 
@@ -114,7 +115,7 @@ func (h *RunsHandler) listRunsLocal(limit int) error {
 	return nil
 }
 
-func (h *RunsHandler) inspectRunLocal(runID int64) error {
+func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
@@ -150,31 +151,92 @@ func (h *RunsHandler) inspectRunLocal(runID int64) error {
 	
 	fmt.Printf("Steps Taken: %d\n", run.StepsTaken)
 	
-	if run.FinalResponse != "" {
-		fmt.Printf("\nResponse:\n%s\n", run.FinalResponse)
-	}
-
-	// Show tool calls if available
-	if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
-		fmt.Printf("\nTool Calls (%d):\n", len(*run.ToolCalls))
-		for i, toolCall := range *run.ToolCalls {
-			if i >= 10 { // Limit to first 10 tool calls
-				fmt.Printf("... and %d more\n", len(*run.ToolCalls)-10)
-				break
-			}
-			fmt.Printf("• %v\n", toolCall)
+	if verbose {
+		// Show comprehensive details in verbose mode
+		fmt.Printf("\n" + styles.Banner.Render("📊 Detailed Run Information") + "\n")
+		
+		// Agent Information
+		fmt.Printf("\n🤖 Agent Details:\n")
+		fmt.Printf("• Agent ID: %d\n", run.AgentID)
+		fmt.Printf("• Agent Name: %s\n", run.AgentName)
+		fmt.Printf("• User: %s\n", run.Username)
+		
+		// Execution Metadata
+		fmt.Printf("\n⚡ Execution Metadata:\n")
+		fmt.Printf("• Run ID: %d\n", run.ID)
+		fmt.Printf("• Status: %s\n", h.colorizeStatus(run.Status))
+		fmt.Printf("• Steps Taken: %d\n", run.StepsTaken)
+		fmt.Printf("• Started At: %s\n", run.StartedAt.Format("Jan 2, 2006 15:04:05 MST"))
+		if run.CompletedAt != nil {
+			duration := run.CompletedAt.Sub(run.StartedAt)
+			fmt.Printf("• Completed At: %s\n", run.CompletedAt.Format("Jan 2, 2006 15:04:05 MST"))
+			fmt.Printf("• Total Duration: %.2fs\n", duration.Seconds())
 		}
-	}
-
-	// Show execution steps if available
-	if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
-		fmt.Printf("\nExecution Steps (%d):\n", len(*run.ExecutionSteps))
-		for i, step := range *run.ExecutionSteps {
-			if i >= 5 { // Limit to first 5 steps
-				fmt.Printf("... and %d more\n", len(*run.ExecutionSteps)-5)
-				break
+		
+		// Task Information
+		fmt.Printf("\n📋 Task:\n")
+		fmt.Printf("%s\n", run.Task)
+		
+		// Tool Calls - Show all in verbose mode
+		if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
+			fmt.Printf("\n🔧 Tool Calls (%d):\n", len(*run.ToolCalls))
+			for i, toolCall := range *run.ToolCalls {
+				toolCallBytes, err := json.MarshalIndent(toolCall, "  ", "  ")
+				if err == nil {
+					fmt.Printf("  %d. %s\n", i+1, string(toolCallBytes))
+				} else {
+					fmt.Printf("  %d. %v\n", i+1, toolCall)
+				}
 			}
-			fmt.Printf("• %v\n", step)
+		}
+
+		// Execution Steps - Show all in verbose mode
+		if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
+			fmt.Printf("\n📝 Execution Steps (%d):\n", len(*run.ExecutionSteps))
+			for i, step := range *run.ExecutionSteps {
+				stepBytes, err := json.MarshalIndent(step, "  ", "  ")
+				if err == nil {
+					fmt.Printf("  %d. %s\n", i+1, string(stepBytes))
+				} else {
+					fmt.Printf("  %d. %v\n", i+1, step)
+				}
+			}
+		}
+		
+		// Final Response
+		if run.FinalResponse != "" {
+			fmt.Printf("\n💬 Final Response:\n")
+			fmt.Printf("─────────────────────────────────────────────────\n")
+			fmt.Printf("%s\n", run.FinalResponse)
+			fmt.Printf("─────────────────────────────────────────────────\n")
+		}
+	} else {
+		// Show limited details in non-verbose mode
+		if run.FinalResponse != "" {
+			fmt.Printf("\nResponse:\n%s\n", run.FinalResponse)
+		}
+		
+		if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
+			fmt.Printf("\nTool Calls (%d):\n", len(*run.ToolCalls))
+			for i, toolCall := range *run.ToolCalls {
+				if i >= 3 { // Show only first 3 in non-verbose mode
+					fmt.Printf("... and %d more (use -v for all)\n", len(*run.ToolCalls)-3)
+					break
+				}
+				fmt.Printf("• %v\n", toolCall)
+			}
+		}
+
+		// Show execution steps if available (limited)
+		if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
+			fmt.Printf("\nExecution Steps (%d):\n", len(*run.ExecutionSteps))
+			for i, step := range *run.ExecutionSteps {
+				if i >= 2 { // Show only first 2 in non-verbose mode
+					fmt.Printf("... and %d more (use -v for all)\n", len(*run.ExecutionSteps)-2)
+					break
+				}
+				fmt.Printf("• %v\n", step)
+			}
 		}
 	}
 
@@ -237,7 +299,7 @@ func (h *RunsHandler) listRunsRemote(endpoint string, limit int) error {
 	return nil
 }
 
-func (h *RunsHandler) inspectRunRemote(runID int64, endpoint string) error {
+func (h *RunsHandler) inspectRunRemote(runID int64, endpoint string, verbose bool) error {
 	url := fmt.Sprintf("%s/api/v1/runs/%d", endpoint, runID)
 	
 	req, err := makeAuthenticatedRequest(http.MethodGet, url, nil)
