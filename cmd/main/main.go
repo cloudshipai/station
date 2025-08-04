@@ -164,6 +164,7 @@ func init() {
 	runsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	runsListCmd.Flags().Int("limit", 50, "Maximum number of runs to display")
 	runsInspectCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	runsInspectCmd.Flags().BoolP("verbose", "v", false, "Show detailed run information including tool calls, execution steps, and metadata")
 	
 	// Webhook command flags
 	webhookListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
