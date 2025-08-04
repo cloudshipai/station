@@ -235,8 +235,10 @@ func (iac *IntelligentAgentCreator) generateAgentPlanWithGenkit(ctx context.Cont
 		toolRefs = append(toolRefs, tool)
 	}
 
-	// Create prompt for agent analysis
-	prompt := fmt.Sprintf(`You are an expert AI agent architect. Your task is to analyze the following agent requirements and create an optimal configuration.
+	// Create prompt for intelligent agent analysis
+	prompt := fmt.Sprintf(`IMPORTANT: You must respond with ONLY a valid JSON object. No explanations, no conversational text, no markdown formatting. Only JSON.
+
+Analyze these agent requirements and create an optimal configuration:
 
 Agent Requirements:
 - Name: %s
@@ -245,36 +247,30 @@ Agent Requirements:
 - Domain: %s
 - Schedule: %s
 
-Available MCP Tools: You have access to %d MCP tools through the Station platform including file operations, directory management, search capabilities, and system information tools.
+Available Tools: %d MCP tools including directory operations, file operations, search, and information tools.
 
-Your task:
-1. Analyze the requirements and determine what tools this agent would need
-2. Generate an appropriate system prompt for the agent
-3. Determine optimal max steps (1-25 based on complexity)
-4. Recommend an environment (default, development, production, staging)
-5. Select 2-5 most relevant tools from the available MCP tools
-6. Set appropriate schedule based on task requirements:
-   - "on-demand" for interactive tasks
-   - "0 0 0 * * *" for daily tasks (midnight) - 6-field format with seconds
-   - "0 0 9 * * 1" for weekly tasks (Monday 9am) - 6-field format with seconds
-   - "0 0 */6 * * *" for every 6 hours - 6-field format with seconds
-   - Use 6-field cron format: "second minute hour day month weekday"
+Based on the requirements, intelligently select 2-5 relevant tools from these common MCP tools:
+- list_directory: List files and directories
+- directory_tree: Show directory structure
+- read_text_file: Read file contents
+- get_file_info: Get file metadata
+- search_files: Search for files
+- create_directory: Create directories
+- edit_file: Edit file contents
 
-Please respond with a JSON object in this exact format:
+RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on the requirements):
 {
-  "agent_name": "%s",
-  "agent_description": "%s", 
-  "system_prompt": "detailed system prompt for the agent...",
-  "recommended_environment": "environment_name",
-  "core_tools": ["tool1", "tool2", "tool3"],
-  "max_steps": 5,
-  "schedule": "cron_expression_or_on_demand",
-  "rationale": "explanation of decisions made",
-  "success_criteria": "how to measure success"
-}
-
-Be intelligent about tool selection - only choose tools that are actually needed for the described task.`,
-		req.Name, req.Description, req.UserIntent, req.Domain, req.Schedule, len(tools), req.Name, req.Description)
+  "agent_name": "intelligent_agent_name",
+  "agent_description": "detailed_description_of_agent_capabilities", 
+  "system_prompt": "system_prompt_for_the_agent",
+  "recommended_environment": "default",
+  "core_tools": ["relevant", "tools", "selected"],
+  "max_steps": 10,
+  "schedule": "on-demand",
+  "rationale": "explanation_of_selections",
+  "success_criteria": "how_to_measure_success"
+}`,
+		req.Name, req.Description, req.UserIntent, req.Domain, req.Schedule, len(tools))
 
 	// Get model name based on provider (reload config to get latest values)
 	cfg, err := config.Load()
@@ -329,13 +325,15 @@ Be intelligent about tool selection - only choose tools that are actually needed
 	jsonStart := strings.Index(responseText, "{")
 	jsonEnd := strings.LastIndex(responseText, "}") + 1
 	if jsonStart == -1 || jsonEnd <= jsonStart {
-		return nil, fmt.Errorf("no valid JSON found in response")
+		return nil, fmt.Errorf("no valid JSON found in response: %s", responseText)
 	}
 
 	jsonStr := responseText[jsonStart:jsonEnd]
+	log.Printf("🔍 Extracted JSON: %s", jsonStr)
+	
 	err = json.Unmarshal([]byte(jsonStr), &plan)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse agent plan JSON: %w", err)
+		return nil, fmt.Errorf("failed to parse agent plan JSON: %w. JSON was: %s", err, jsonStr)
 	}
 
 	log.Printf("📋 Generated intelligent plan for '%s': %d tools, %d max steps",
@@ -743,32 +741,28 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 
 	log.Printf("🌍 Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
 
-	// Check if staging environment has filesystem MCP server
-	if environment.Name == "staging" {
-		// Create MCP client for filesystem server
-		fsClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-			Name:    "filesystem-server",
-			Version: "1.0.0",
-			Stdio: &mcp.StdioConfig{
-				Command: "npx",
-				Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "/home/epuerta/projects/hack/station"},
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create filesystem MCP client: %w", err)
-		}
-
-		// Get tools from filesystem server
-		tools, err := fsClient.GetActiveTools(ctx, iac.genkitApp)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tools from filesystem server: %w", err)
-		}
-
-		log.Printf("🗂️ Found %d tools from filesystem MCP server", len(tools))
-		return tools, nil
+	// For all environments, use the filesystem MCP server as it provides the tools that agents expect
+	// The database tool assignments are matched against these MCP tool names
+	fsClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
+		Name:    "filesystem-server",
+		Version: "1.0.0",
+		Stdio: &mcp.StdioConfig{
+			Command: "npx",
+			Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "/home/epuerta/projects/hack/station"},
+		},
+	})
+	if err != nil {
+		log.Printf("⚠️ Failed to create filesystem MCP client, falling back to Station stdio: %v", err)
+		return iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
 	}
 
-	// Fallback to Station stdio server for other environments
-	log.Printf("⚠️ Environment '%s' not configured for file-based MCP, using Station stdio fallback", environment.Name)
-	return iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
+	// Get tools from filesystem server
+	tools, err := fsClient.GetActiveTools(ctx, iac.genkitApp)
+	if err != nil {
+		log.Printf("⚠️ Failed to get tools from filesystem server, falling back to Station stdio: %v", err)
+		return iac.mcpClient.GetActiveTools(ctx, iac.genkitApp)
+	}
+
+	log.Printf("🗂️ Found %d tools from filesystem MCP server for environment '%s'", len(tools), environment.Name)
+	return tools, nil
 }
