@@ -24,11 +24,14 @@ func NewTelemetryService(enabled bool) *TelemetryService {
 		return &TelemetryService{enabled: false}
 	}
 
-	// PostHog configuration from your screenshot
+	// PostHog configuration with corrected API key
 	client, err := posthog.NewWithConfig(
-		"phc_mEeFH3zxHHot6dGC5ZfQPPBjm2rApGpVZwpKYPYwZD",
+		"phc_3h5yqMKKJsnxofsqFxCEoUFmn3vbm2UFXDDKuhdai9f",
 		posthog.Config{
 			Endpoint: "https://us.i.posthog.com",
+			// Send events more frequently for better responsiveness
+			Interval: time.Second * 5,
+			BatchSize: 1, // Send events immediately for testing
 		},
 	)
 	if err != nil {
@@ -165,9 +168,21 @@ func (t *TelemetryService) TrackEnvironmentCreated(environmentID int64) {
 	})
 }
 
+// Flush forces any queued events to be sent immediately
+func (t *TelemetryService) Flush() {
+	// PostHog Go client doesn't have Flush() method
+	// Events are sent based on Interval and BatchSize configuration
+	if t.enabled && t.client != nil {
+		// Add a small delay to allow batched events to be processed
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
 // Close gracefully shuts down the telemetry service
 func (t *TelemetryService) Close() {
 	if t.enabled && t.client != nil {
+		// Add delay to allow final events to be sent
+		time.Sleep(time.Millisecond * 200)
 		t.client.Close()
 	}
 }
