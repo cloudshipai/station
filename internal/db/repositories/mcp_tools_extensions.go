@@ -1,243 +1,143 @@
 package repositories
 
 import (
+	"context"
 	"database/sql"
+	"station/internal/db/queries"
 	"station/pkg/models"
 )
 
 // Extension methods for MCPToolRepo to support file-based configs
 
-// CreateWithFileConfig creates a new tool linked to a file config
+// CreateWithFileConfig creates a new tool linked to a file config using SQLC
 func (r *MCPToolRepo) CreateWithFileConfig(tool *models.MCPTool, fileConfigID int64) (int64, error) {
-	query := `
-		INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema, file_config_id)
-		VALUES (?, ?, ?, ?, ?)
-		RETURNING id
-	`
+	params := queries.CreateMCPToolWithFileConfigParams{
+		McpServerID:  tool.MCPServerID,
+		Name:         tool.Name,
+		Description:  sql.NullString{String: tool.Description, Valid: tool.Description != ""},
+		InputSchema:  sql.NullString{String: string(tool.Schema), Valid: tool.Schema != nil},
+		FileConfigID: sql.NullInt64{Int64: fileConfigID, Valid: true},
+	}
 	
-	var id int64
-	err := r.db.QueryRow(
-		query,
-		tool.MCPServerID,
-		tool.Name,
-		tool.Description,
-		string(tool.Schema),
-		fileConfigID,
-	).Scan(&id)
-	
-	return id, err
+	created, err := r.queries.CreateMCPToolWithFileConfig(context.Background(), params)
+	if err != nil {
+		return 0, err
+	}
+	return created.ID, nil
 }
 
-// CreateWithFileConfigTx creates a new tool linked to a file config within a transaction
+// CreateWithFileConfigTx creates a new tool linked to a file config within a transaction using SQLC
 func (r *MCPToolRepo) CreateWithFileConfigTx(tx *sql.Tx, tool *models.MCPTool, fileConfigID int64) (int64, error) {
-	query := `
-		INSERT INTO mcp_tools (mcp_server_id, name, description, input_schema, file_config_id)
-		VALUES (?, ?, ?, ?, ?)
-		RETURNING id
-	`
+	params := queries.CreateMCPToolWithFileConfigParams{
+		McpServerID:  tool.MCPServerID,
+		Name:         tool.Name,
+		Description:  sql.NullString{String: tool.Description, Valid: tool.Description != ""},
+		InputSchema:  sql.NullString{String: string(tool.Schema), Valid: tool.Schema != nil},
+		FileConfigID: sql.NullInt64{Int64: fileConfigID, Valid: true},
+	}
 	
-	var id int64
-	err := tx.QueryRow(
-		query,
-		tool.MCPServerID,
-		tool.Name,
-		tool.Description,
-		string(tool.Schema),
-		fileConfigID,
-	).Scan(&id)
-	
-	return id, err
+	txQueries := r.queries.WithTx(tx)
+	created, err := txQueries.CreateMCPToolWithFileConfig(context.Background(), params)
+	if err != nil {
+		return 0, err
+	}
+	return created.ID, nil
 }
 
-// GetByFileConfigID gets all tools for a specific file config
+// GetByFileConfigID gets all tools for a specific file config using SQLC
 func (r *MCPToolRepo) GetByFileConfigID(fileConfigID int64) ([]*models.MCPTool, error) {
-	query := `
-		SELECT id, mcp_server_id, name, description, input_schema, created_at
-		FROM mcp_tools
-		WHERE file_config_id = ?
-		ORDER BY name
-	`
-	
-	rows, err := r.db.Query(query, fileConfigID)
+	tools, err := r.queries.GetMCPToolsByFileConfigID(context.Background(), sql.NullInt64{Int64: fileConfigID, Valid: true})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	var tools []*models.MCPTool
-	for rows.Next() {
-		tool := &models.MCPTool{}
-		var description sql.NullString
-		var schema sql.NullString
-		
-		err := rows.Scan(
-			&tool.ID,
-			&tool.MCPServerID,
-			&tool.Name,
-			&description,
-			&schema,
-			&tool.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		
-		if description.Valid {
-			tool.Description = description.String
-		}
-		if schema.Valid {
-			tool.Schema = []byte(schema.String)
-		}
-		
-		tools = append(tools, tool)
+	var result []*models.MCPTool
+	for _, tool := range tools {
+		result = append(result, convertMCPToolFromSQLc(tool))
 	}
 	
-	return tools, rows.Err()
+	return result, nil
 }
 
-// DeleteByFileConfigID deletes all tools for a specific file config
+// DeleteByFileConfigID deletes all tools for a specific file config using SQLC
 func (r *MCPToolRepo) DeleteByFileConfigID(fileConfigID int64) error {
-	query := `DELETE FROM mcp_tools WHERE file_config_id = ?`
-	_, err := r.db.Exec(query, fileConfigID)
-	return err
+	return r.queries.DeleteMCPToolsByFileConfigID(context.Background(), sql.NullInt64{Int64: fileConfigID, Valid: true})
 }
 
-// DeleteByFileConfigIDTx deletes all tools for a specific file config within a transaction
+// DeleteByFileConfigIDTx deletes all tools for a specific file config within a transaction using SQLC
 func (r *MCPToolRepo) DeleteByFileConfigIDTx(tx *sql.Tx, fileConfigID int64) error {
-	query := `DELETE FROM mcp_tools WHERE file_config_id = ?`
-	_, err := tx.Exec(query, fileConfigID)
-	return err
+	txQueries := r.queries.WithTx(tx)
+	return txQueries.DeleteMCPToolsByFileConfigID(context.Background(), sql.NullInt64{Int64: fileConfigID, Valid: true})
 }
 
-// GetToolsWithFileConfigInfo gets tools with their file config information
+// GetToolsWithFileConfigInfo gets tools with their file config information using SQLC
 func (r *MCPToolRepo) GetToolsWithFileConfigInfo(environmentID int64) ([]*models.MCPToolWithFileConfig, error) {
-	query := `
-		SELECT 
-			t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at,
-			s.name as server_name,
-			fc.id as file_config_id, fc.config_name, fc.template_path, fc.last_loaded_at
-		FROM mcp_tools t
-		JOIN mcp_servers s ON t.mcp_server_id = s.id
-		LEFT JOIN file_mcp_configs fc ON t.file_config_id = fc.id
-		WHERE s.environment_id = ?
-		ORDER BY fc.config_name, s.name, t.name
-	`
-	
-	rows, err := r.db.Query(query, environmentID)
+	// Use SQLC generated query and types directly
+	rows, err := r.queries.GetMCPToolsWithFileConfigInfo(context.Background(), environmentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
+	// Convert SQLC row type to domain model
 	var tools []*models.MCPToolWithFileConfig
-	for rows.Next() {
-		tool := &models.MCPToolWithFileConfig{}
-		var description sql.NullString
-		var schema sql.NullString
-		var fileConfigID sql.NullInt64
-		var configName sql.NullString
-		var templatePath sql.NullString
-		var lastLoaded sql.NullTime
-		
-		err := rows.Scan(
-			&tool.ID,
-			&tool.MCPServerID,
-			&tool.Name,
-			&description,
-			&schema,
-			&tool.CreatedAt,
-			&tool.ServerName,
-			&fileConfigID,
-			&configName,
-			&templatePath,
-			&lastLoaded,
-		)
-		if err != nil {
-			return nil, err
+	for _, row := range rows {
+		tool := &models.MCPToolWithFileConfig{
+			MCPTool: models.MCPTool{
+				ID:          row.ID,
+				MCPServerID: row.McpServerID,
+				Name:        row.Name,
+				Description: row.Description.String,
+			},
+			ServerName:   row.ServerName,
+			ConfigName:   row.ConfigName.String,
+			TemplatePath: row.TemplatePath.String,
 		}
 		
-		if description.Valid {
-			tool.Description = description.String
+		if row.CreatedAt.Valid {
+			tool.CreatedAt = row.CreatedAt.Time
 		}
-		if schema.Valid {
-			tool.Schema = []byte(schema.String)
+		
+		if row.InputSchema.Valid {
+			tool.Schema = []byte(row.InputSchema.String)
 		}
-		if fileConfigID.Valid {
-			tool.FileConfigID = &fileConfigID.Int64
+		if row.FileConfigID.Valid {
+			tool.FileConfigID = &row.FileConfigID.Int64
 		}
-		if configName.Valid {
-			tool.ConfigName = configName.String
-		}
-		if templatePath.Valid {
-			tool.TemplatePath = templatePath.String
-		}
-		if lastLoaded.Valid {
-			tool.LastLoaded = &lastLoaded.Time
+		if row.LastLoadedAt.Valid {
+			tool.LastLoaded = &row.LastLoadedAt.Time
 		}
 		
 		tools = append(tools, tool)
 	}
 	
-	return tools, rows.Err()
+	return tools, nil
 }
 
-// GetOrphanedTools gets tools that reference non-existent file configs
+// GetOrphanedTools gets tools that reference non-existent file configs using SQLC
 func (r *MCPToolRepo) GetOrphanedTools(environmentID int64) ([]*models.MCPTool, error) {
-	query := `
-		SELECT t.id, t.mcp_server_id, t.name, t.description, t.input_schema, t.created_at
-		FROM mcp_tools t
-		JOIN mcp_servers s ON t.mcp_server_id = s.id
-		LEFT JOIN file_mcp_configs fc ON t.file_config_id = fc.id
-		WHERE s.environment_id = ? AND t.file_config_id IS NOT NULL AND fc.id IS NULL
-	`
-	
-	rows, err := r.db.Query(query, environmentID)
+	tools, err := r.queries.GetOrphanedMCPTools(context.Background(), environmentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	
-	var tools []*models.MCPTool
-	for rows.Next() {
-		tool := &models.MCPTool{}
-		var description sql.NullString
-		var schema sql.NullString
-		
-		err := rows.Scan(
-			&tool.ID,
-			&tool.MCPServerID,
-			&tool.Name,
-			&description,
-			&schema,
-			&tool.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		
-		if description.Valid {
-			tool.Description = description.String
-		}
-		if schema.Valid {
-			tool.Schema = []byte(schema.String)
-		}
-		
-		tools = append(tools, tool)
+	var result []*models.MCPTool
+	for _, tool := range tools {
+		result = append(result, convertMCPToolFromSQLc(tool))
 	}
 	
-	return tools, rows.Err()
+	return result, nil
 }
 
-// UpdateFileConfigReference updates the file config reference for tools
+// UpdateFileConfigReference updates the file config reference for tools using SQLC
 func (r *MCPToolRepo) UpdateFileConfigReference(toolID, fileConfigID int64) error {
-	query := `UPDATE mcp_tools SET file_config_id = ? WHERE id = ?`
-	_, err := r.db.Exec(query, fileConfigID, toolID)
-	return err
+	params := queries.UpdateMCPToolFileConfigReferenceParams{
+		FileConfigID: sql.NullInt64{Int64: fileConfigID, Valid: true},
+		ID:           toolID,
+	}
+	return r.queries.UpdateMCPToolFileConfigReference(context.Background(), params)
 }
 
-// ClearFileConfigReference clears the file config reference for tools
+// ClearFileConfigReference clears the file config reference for tools using SQLC
 func (r *MCPToolRepo) ClearFileConfigReference(toolID int64) error {
-	query := `UPDATE mcp_tools SET file_config_id = NULL WHERE id = ?`
-	_, err := r.db.Exec(query, toolID)
-	return err
+	return r.queries.ClearMCPToolFileConfigReference(context.Background(), toolID)
 }

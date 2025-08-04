@@ -36,3 +36,6 @@ WHERE ar.id = ?;
 UPDATE agent_runs 
 SET final_response = ?, steps_taken = ?, tool_calls = ?, execution_steps = ?, status = ?, completed_at = ?
 WHERE id = ?;
+
+-- name: UpdateAgentRunStatus :exec
+UPDATE agent_runs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;
