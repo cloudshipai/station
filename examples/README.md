@@ -29,17 +29,15 @@ These configurations use Station's template system with placeholders like `{{AWS
 
 ## Available MCP Servers
 
+### File System & Local Operations
+- **`filesystem.json`** - Official MCP filesystem server for file operations
+- **`database-sqlite.json`** - SQLite database management and queries
+
 ### Cloud Infrastructure
-- **`aws-cli.json`** - Official AWS MCP server for managing AWS resources
-- **`terraform.json`** - HashiCorp Cloud Platform Terraform integration
-- **`pulumi.json`** - Pulumi infrastructure as code operations
+- **`aws-cli.json`** - Official AWS MCP server for managing AWS resources  
 
-### Container & Orchestration  
-- **`kubernetes.json`** - Kubernetes kubectl integration for cluster management
-
-### Development & Security
-- **`github.json`** - Official GitHub repository management
-- **`semgrep.json`** - Security vulnerability scanning
+### Container & Development
+- **`docker.json`** - Docker container management and operations
 
 ## Template Field Types
 
