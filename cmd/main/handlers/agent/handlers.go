@@ -132,7 +132,7 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 	description, _ := cmd.Flags().GetString("description")
 	domain, _ := cmd.Flags().GetString("domain")
 	schedule, _ := cmd.Flags().GetString("schedule")
-	environment, _ := cmd.Flags().GetString("environment")
+	environment, _ := cmd.Flags().GetString("env")
 
 	if endpoint != "" {
 		fmt.Println(styles.Error.Render("❌ Creating remote agents is not currently supported"))
