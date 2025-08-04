@@ -179,6 +179,14 @@ Examples:
 		RunE:  runWebhookDeliveries,
 	}
 
+	webhookTestCmd = &cobra.Command{
+		Use:   "test <endpoint-url>",
+		Short: "Test webhook by sending POST to endpoint",
+		Long:  "Send a test agent_run_completed webhook payload to the specified endpoint URL",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runWebhookTest,
+	}
+
 	// Settings commands
 	settingsCmd = &cobra.Command{
 		Use:   "settings",
