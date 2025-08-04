@@ -20,3 +20,6 @@ DELETE FROM mcp_servers WHERE id = ?;
 
 -- name: DeleteMCPServersByEnvironment :exec
 DELETE FROM mcp_servers WHERE environment_id = ?;
+
+-- name: GetMCPServerByNameAndEnvironment :one
+SELECT * FROM mcp_servers WHERE name = ? AND environment_id = ?;

@@ -154,3 +154,52 @@ func (r *MCPServerRepo) DeleteByEnvironmentIDTx(tx *sql.Tx, environmentID int64)
 		return r.queries.DeleteMCPServersByEnvironment(context.Background(), environmentID)
 	}
 }
+
+// GetByNameAndEnvironment finds a server by name and environment ID
+func (r *MCPServerRepo) GetByNameAndEnvironment(name string, environmentID int64) (*models.MCPServer, error) {
+	params := queries.GetMCPServerByNameAndEnvironmentParams{
+		Name:          name,
+		EnvironmentID: environmentID,
+	}
+	
+	server, err := r.queries.GetMCPServerByNameAndEnvironment(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+	
+	return convertMCPServerFromSQLc(server), nil
+}
+
+// Update updates an existing MCP server
+func (r *MCPServerRepo) Update(server *models.MCPServer) error {
+	// Convert the server to SQLC update params
+	params := queries.UpdateMCPServerParams{
+		ID:      server.ID,
+		Name:    server.Name,
+		Command: server.Command,
+	}
+	
+	// Handle JSON fields
+	if argsJSON, err := json.Marshal(server.Args); err == nil {
+		params.Args = sql.NullString{String: string(argsJSON), Valid: true}
+	}
+	
+	if envJSON, err := json.Marshal(server.Env); err == nil {
+		params.Env = sql.NullString{String: string(envJSON), Valid: true}
+	}
+	
+	if server.WorkingDir != nil {
+		params.WorkingDir = sql.NullString{String: *server.WorkingDir, Valid: true}
+	}
+	
+	if server.TimeoutSeconds != nil {
+		params.TimeoutSeconds = sql.NullInt64{Int64: *server.TimeoutSeconds, Valid: true}
+	}
+	
+	if server.AutoRestart != nil {
+		params.AutoRestart = sql.NullBool{Bool: *server.AutoRestart, Valid: true}
+	}
+	
+	_, err := r.queries.UpdateMCPServer(context.Background(), params)
+	return err
+}
