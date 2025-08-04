@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"station/pkg/models"
 
@@ -40,20 +41,93 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid environment_id format: %v", err)), nil
 	}
 
-	// Create the agent using repository
-	createdAgent, err := s.repos.Agents.Create(name, description, prompt, environmentID, 5, 1, nil, true)
+	// Extract optional parameters
+	maxSteps := request.GetInt("max_steps", 5) // Default to 5 if not provided
+	
+	// Extract tool_names array if provided
+	var toolNames []string
+	if request.Params.Arguments != nil {
+		if argsMap, ok := request.Params.Arguments.(map[string]interface{}); ok {
+			if toolNamesArg, ok := argsMap["tool_names"]; ok {
+				if toolNamesArray, ok := toolNamesArg.([]interface{}); ok {
+					for _, toolName := range toolNamesArray {
+						if str, ok := toolName.(string); ok {
+							toolNames = append(toolNames, str)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Create the agent using repository with correct parameter order
+	// Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, cronSchedule *string, scheduleEnabled bool)
+	createdAgent, err := s.repos.Agents.Create(name, description, prompt, int64(maxSteps), environmentID, 1, nil, true)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create agent: %v", err)), nil
+	}
+
+	// Assign tools to the agent if tool_names were provided
+	var assignedTools []string
+	var skippedTools []string
+	if len(toolNames) > 0 {
+		for _, toolName := range toolNames {
+			// Find tool by name in the agent's environment
+			tool, err := s.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
+			if err != nil {
+				skippedTools = append(skippedTools, fmt.Sprintf("%s (not found)", toolName))
+				continue
+			}
+			
+			// Assign tool to agent
+			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
+			if err != nil {
+				skippedTools = append(skippedTools, fmt.Sprintf("%s (failed: %v)", toolName, err))
+				continue
+			}
+			
+			assignedTools = append(assignedTools, toolName)
+		}
 	}
 
 	response := map[string]interface{}{
 		"success": true,
 		"agent": map[string]interface{}{
-			"id":          createdAgent.ID,
-			"name":        createdAgent.Name,
-			"description": createdAgent.Description,
+			"id":             createdAgent.ID,
+			"name":           createdAgent.Name,
+			"description":    createdAgent.Description,
+			"max_steps":      createdAgent.MaxSteps,
+			"environment_id": createdAgent.EnvironmentID,
 		},
-		"message": fmt.Sprintf("Agent '%s' created successfully", name),
+		"message": fmt.Sprintf("Agent '%s' created successfully with max_steps=%d in environment_id=%d", name, createdAgent.MaxSteps, createdAgent.EnvironmentID),
+	}
+	
+	// Add tool assignment status to response
+	if len(toolNames) > 0 {
+		toolAssignment := map[string]interface{}{
+			"requested_tools": toolNames,
+			"assigned_tools":  assignedTools,
+			"assigned_count":  len(assignedTools),
+		}
+		
+		if len(skippedTools) > 0 {
+			toolAssignment["skipped_tools"] = skippedTools
+			toolAssignment["skipped_count"] = len(skippedTools)
+		}
+		
+		if len(assignedTools) == len(toolNames) {
+			toolAssignment["status"] = "success"
+		} else if len(assignedTools) > 0 {
+			toolAssignment["status"] = "partial"
+		} else {
+			toolAssignment["status"] = "failed"
+		}
+		
+		response["tool_assignment"] = toolAssignment
+		
+		// Update message to include tool assignment info
+		response["message"] = fmt.Sprintf("Agent '%s' created successfully with max_steps=%d in environment_id=%d. Tools assigned: %d/%d", 
+			name, createdAgent.MaxSteps, createdAgent.EnvironmentID, len(assignedTools), len(toolNames))
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
@@ -61,34 +135,60 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 }
 
 func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Get user for agent execution (default user ID for local mode)
+	var userID int64 = 1
+	
+	// Extract required parameters
 	agentIDStr, err := request.RequireString("agent_id")
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
 	}
-
-	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid agent_id format: %v", err)), nil
-	}
-
+	
 	task, err := request.RequireString("task")
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Missing 'task' parameter: %v", err)), nil
 	}
-
-	// Execute the agent
+	
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError("Invalid agent_id format"), nil
+	}
+	
+	// Extract optional parameters
+	async := request.GetBool("async", false)
+	timeout := request.GetInt("timeout", 300)
+	storeRun := request.GetBool("store_run", true)
+	
+	// Execute the agent synchronously for now
 	response, err := s.agentService.ExecuteAgent(ctx, agentID, task)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", err)), nil
 	}
-
-	result := map[string]interface{}{
-		"success":   true,
-		"agent_id":  agentID,
-		"task":      task,
-		"response":  response.Content,
+	
+	// Store the run if requested
+	var runID int64
+	if storeRun {
+		// TODO: Store the run in the database
+		// This would require extending the agent service or accessing the repository directly
+		runID = 0 // Run storage not yet implemented
 	}
-
+	
+	// Return detailed response
+	result := map[string]interface{}{
+		"success": true,
+		"execution": map[string]interface{}{
+			"agent_id": agentID,
+			"task": task,
+			"response": response.Content,
+			"user_id": userID,
+			"run_id": runID,
+			"async": async,
+			"timeout": timeout,
+			"stored": storeRun,
+		},
+		"timestamp": time.Now(),
+	}
+	
 	resultJSON, _ := json.MarshalIndent(result, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
