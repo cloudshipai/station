@@ -129,7 +129,7 @@ func init() {
 	
 	// MCP command flags
 	mcpListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	mcpListCmd.Flags().String("environment", "default", "Environment to list configs from")
+	mcpListCmd.Flags().String("environment", "", "Environment to list configs from (default: all environments)")
 	
 	mcpToolsCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpToolsCmd.Flags().String("environment", "default", "Environment to list tools from")
@@ -228,7 +228,8 @@ func initTheme() {
 	// For CLI commands, we'll use fallback themes if database is not available
 	databasePath := viper.GetString("database_url")
 	if databasePath == "" {
-		databasePath = "station.db"
+		configDir := getXDGConfigDir()
+		databasePath = filepath.Join(configDir, "station.db")
 	}
 	
 	// Check if database file exists and is accessible

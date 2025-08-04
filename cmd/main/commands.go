@@ -307,7 +307,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("📁 Config file: %s\n", configFile)
 	fmt.Printf("🗄️  Database: %s\n", databasePath)
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
-	fmt.Printf("📁 File config structure: ./config/environments/default/\n")
+	fmt.Printf("📁 File config structure: %s\n", filepath.Join(configDir, "environments", "default"))
 	fmt.Printf("\n🚀 You can now run 'station serve' to launch the server\n")
 	fmt.Printf("🔗 Connect via SSH: ssh admin@localhost -p 2222\n")
 	fmt.Printf("\n📖 Next steps:\n")
@@ -335,14 +335,15 @@ func initDefaultEnvironment(database db.Database) error {
 		fmt.Printf("   ℹ️  Default environment already exists (ID: %d)\n", defaultEnv.ID)
 	}
 	
-	// Create file config directory structure
-	configDir := "./config/environments/default"
+	// Create file config directory structure in XDG config dir
+	xdgConfigDir := getXDGConfigDir()
+	configDir := filepath.Join(xdgConfigDir, "environments", "default")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 	
 	// Create variables directory
-	varsDir := "./config/vars"
+	varsDir := filepath.Join(xdgConfigDir, "vars")
 	if err := os.MkdirAll(varsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create variables directory: %w", err)
 	}

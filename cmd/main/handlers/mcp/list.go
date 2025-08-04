@@ -27,6 +27,17 @@ func (h *MCPHandler) listMCPConfigsLocal(environment string) error {
 
 	repos := repositories.New(database)
 
+	if environment != "" {
+		// List configs for specific environment
+		return h.listConfigsForEnvironment(repos, environment)
+	}
+
+	// List configs for all environments, grouped by environment
+	return h.listConfigsAllEnvironments(repos)
+}
+
+// listConfigsForEnvironment lists configs for a specific environment
+func (h *MCPHandler) listConfigsForEnvironment(repos *repositories.Repositories, environment string) error {
 	// Find environment
 	env, err := repos.Environments.GetByName(environment)
 	if err != nil {
@@ -40,30 +51,115 @@ func (h *MCPHandler) listMCPConfigsLocal(environment string) error {
 	}
 
 	if len(configs) == 0 {
-		fmt.Println("• No configurations found")
+		fmt.Printf("• No configurations found in environment '%s'\n", environment)
 		return nil
 	}
 
-	fmt.Printf("Found %d configuration(s):\n\n", len(configs))
-	
-	// Print table header
-	fmt.Printf("┌──────────────────────────────────────────────────────────────────────┐\n")
-	fmt.Printf("│ %-4s │ %-40s │ %-8s │ %-14s │\n", 
-		"ID", "Configuration Name", "Version", "Created")
-	fmt.Printf("├──────────────────────────────────────────────────────────────────────┤\n")
+	fmt.Printf("Found %d configuration(s) in environment '%s':\n\n", len(configs), environment)
+	h.printConfigTable(configs, false) // false = don't show environment column
+	return nil
+}
+
+// listConfigsAllEnvironments lists configs for all environments, grouped by environment
+func (h *MCPHandler) listConfigsAllEnvironments(repos *repositories.Repositories) error {
+	// Get all environments
+	environments, err := repos.Environments.List()
+	if err != nil {
+		return fmt.Errorf("failed to list environments: %w", err)
+	}
+
+	totalConfigs := 0
+	var allConfigs []*repositories.FileConfigRecord
+	var configsWithEnv []struct {
+		Config *repositories.FileConfigRecord
+		EnvName string
+	}
+
+	// Collect configs from all environments
+	for _, env := range environments {
+		configs, err := repos.FileMCPConfigs.ListByEnvironment(env.ID)
+		if err != nil {
+			fmt.Printf("Warning: failed to list configs for environment '%s': %v\n", env.Name, err)
+			continue
+		}
+		
+		for _, config := range configs {
+			allConfigs = append(allConfigs, config)
+			configsWithEnv = append(configsWithEnv, struct {
+				Config *repositories.FileConfigRecord
+				EnvName string
+			}{config, env.Name})
+		}
+		totalConfigs += len(configs)
+	}
+
+	if totalConfigs == 0 {
+		fmt.Println("• No configurations found in any environment")
+		return nil
+	}
+
+	fmt.Printf("Found %d configuration(s) across all environments:\n\n", totalConfigs)
+	h.printConfigTableWithEnvironments(configsWithEnv)
+	return nil
+}
+
+// printConfigTable prints a table of configs without environment column
+func (h *MCPHandler) printConfigTable(configs []*repositories.FileConfigRecord, showEnv bool) {
+	if showEnv {
+		fmt.Printf("┌──────────────────────────────────────────────────────────────────────────────────┐\n")
+		fmt.Printf("│ %-4s │ %-35s │ %-8s │ %-12s │ %-14s │\n", 
+			"ID", "Configuration Name", "Version", "Environment", "Created")
+		fmt.Printf("├──────────────────────────────────────────────────────────────────────────────────┤\n")
+	} else {
+		fmt.Printf("┌──────────────────────────────────────────────────────────────────────┐\n")
+		fmt.Printf("│ %-4s │ %-40s │ %-8s │ %-14s │\n", 
+			"ID", "Configuration Name", "Version", "Created")
+		fmt.Printf("├──────────────────────────────────────────────────────────────────────┤\n")
+	}
 	
 	// Print each config
 	for _, config := range configs {
-		fmt.Printf("│ %-4d │ %-40s │ %-9s │ %-14s │\n", 
+		if showEnv {
+			// This version won't be used since we have a separate method for env display
+		} else {
+			fmt.Printf("│ %-4d │ %-40s │ %-9s │ %-14s │\n", 
+				config.ID, 
+				truncateString(config.ConfigName, 40),
+				"file-based", 
+				config.CreatedAt.Format("Jan 2 15:04"))
+		}
+	}
+	
+	if showEnv {
+		fmt.Printf("└──────────────────────────────────────────────────────────────────────────────────┘\n")
+	} else {
+		fmt.Printf("└──────────────────────────────────────────────────────────────────────┘\n")
+	}
+}
+
+// printConfigTableWithEnvironments prints configs grouped by environment
+func (h *MCPHandler) printConfigTableWithEnvironments(configsWithEnv []struct {
+	Config *repositories.FileConfigRecord
+	EnvName string
+}) {
+	fmt.Printf("┌──────────────────────────────────────────────────────────────────────────────────┐\n")
+	fmt.Printf("│ %-4s │ %-35s │ %-8s │ %-12s │ %-14s │\n", 
+		"ID", "Configuration Name", "Version", "Environment", "Created")
+	fmt.Printf("├──────────────────────────────────────────────────────────────────────────────────┤\n")
+	
+	// Print each config with environment
+	for _, item := range configsWithEnv {
+		config := item.Config
+		envName := item.EnvName
+		fmt.Printf("│ %-4d │ %-35s │ %-9s │ %-12s │ %-14s │\n", 
 			config.ID, 
-			truncateString(config.ConfigName, 40),
-			"file-based", 
+			truncateString(config.ConfigName, 35),
+			"file-based",
+			truncateString(envName, 12),
 			config.CreatedAt.Format("Jan 2 15:04"))
 	}
 	
-	fmt.Printf("└──────────────────────────────────────────────────────────────────────┘\n")
-
-	return nil
+	fmt.Printf("└──────────────────────────────────────────────────────────────────────────────────┘\n")
 }
 
 // listMCPConfigsRemote lists MCP configs from remote API

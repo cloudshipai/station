@@ -16,8 +16,12 @@ func (h *FileConfigHandler) listEnvironmentsCommand() *cobra.Command {
 		Short: "List file-based MCP environments",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// List environments from file system
-			configDir := "./config/environments"
+			// List environments from proper config directory
+			configHome := os.Getenv("XDG_CONFIG_HOME")
+			if configHome == "" {
+				configHome = filepath.Join(os.Getenv("HOME"), ".config")
+			}
+			configDir := filepath.Join(configHome, "station", "environments")
 			
 			// Check if config directory exists
 			if _, err := os.Stat(configDir); os.IsNotExist(err) {
@@ -69,7 +73,7 @@ func (h *FileConfigHandler) listEnvironmentsCommand() *cobra.Command {
 						fmt.Printf("  📄 Configs: %s\n", strings.Join(configFiles, ", "))
 					}
 				}
-				fmt.Printf("  📁 Path: %s\n", envPath)
+				fmt.Printf("  📁 Path: %s\n", filepath.Join(configDir, envName))
 			}
 			
 			return nil

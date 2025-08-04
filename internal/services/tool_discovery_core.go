@@ -131,7 +131,7 @@ func (s *ToolDiscoveryService) DiscoverToolsFromFileConfig(environmentID int64, 
 	for serverName, serverConfig := range renderedConfig.Servers {
 		log.Printf("Processing file config server: %s", serverName)
 		
-		// Store the server in database
+		// Store the server in database (upsert logic)
 		mcpServer := &models.MCPServer{
 			EnvironmentID: environmentID,
 			Name:        serverName,
@@ -140,16 +140,39 @@ func (s *ToolDiscoveryService) DiscoverToolsFromFileConfig(environmentID int64, 
 			Env:         serverConfig.Env,
 		}
 		
-		serverID, err := s.repos.MCPServers.Create(mcpServer)
-		if err != nil {
-			log.Printf("Failed to store file config server %s: %v", serverName, err)
-			result.AddError(NewToolDiscoveryError(
-				ErrorTypeDatabase,
-				serverName,
-				"Failed to store server in database",
-				err.Error(),
-			))
-			continue
+		var serverID int64
+		// Check if server already exists
+		existingServer, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, environmentID)
+		if err == nil {
+			// Server exists, update it
+			mcpServer.ID = existingServer.ID
+			err = s.repos.MCPServers.Update(mcpServer)
+			if err != nil {
+				log.Printf("Failed to update file config server %s: %v", serverName, err)
+				result.AddError(NewToolDiscoveryError(
+					ErrorTypeDatabase,
+					serverName,
+					"Failed to update server in database",
+					err.Error(),
+				))
+				continue
+			}
+			serverID = existingServer.ID
+			log.Printf("Updated existing server: %s (ID: %d)", serverName, serverID)
+		} else {
+			// Server doesn't exist, create it
+			serverID, err = s.repos.MCPServers.Create(mcpServer)
+			if err != nil {
+				log.Printf("Failed to create file config server %s: %v", serverName, err)
+				result.AddError(NewToolDiscoveryError(
+					ErrorTypeDatabase,
+					serverName,
+					"Failed to create server in database",
+					err.Error(),
+				))
+				continue
+			}
+			log.Printf("Created new server: %s (ID: %d)", serverName, serverID) 
 		}
 		
 		// Discover tools from this server using the MCP client

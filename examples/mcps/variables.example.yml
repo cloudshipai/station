@@ -1,0 +1,31 @@
+# Example variables file for MCP templates
+# Copy to ~/.config/station/environments/<env-name>/variables.yml
+# and set your actual values
+
+# File System
+ALLOWED_PATHS: "/home/user/projects"
+
+# GitHub
+GITHUB_TOKEN: "ghp_your_github_token_here"
+
+# AWS
+AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
+AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+AWS_DEFAULT_REGION: "us-east-1"
+
+# PostgreSQL
+PGHOST: "localhost"
+PGPORT: "5432"
+PGUSER: "postgres"
+PGPASSWORD: "your_password_here"
+PGDATABASE: "myapp"
+PGSSLMODE: "prefer"
+
+# Slack
+SLACK_BOT_TOKEN: "xoxb-your-bot-token-here"
+SLACK_APP_TOKEN: "xapp-your-app-token-here"
+SLACK_SIGNING_SECRET: "your_signing_secret_here"
+
+# Docker
+DOCKER_HOST: "unix:///var/run/docker.sock"
+DOCKER_COMPOSE_PATH: "/path/to/docker-compose.yml"
