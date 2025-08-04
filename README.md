@@ -1,8 +1,10 @@
 ![Station](./image.png)
 
-# Station - AI Agent Runtime
+# Station - AI Sub Agent Runtime
 
-**Build intelligent AI agents that actually work in production.**
+**Build intelligent Sub AI agents that actually work in production.**
+
+> this is an early alpha version v0.1.0 that might have breaking changes as we stabilize the API
 
 Station solves the four biggest problems with AI agents: tool overload degrading performance, configuration management chaos, inability to share agent setups, and requiring technical expertise to build effective agents.
 

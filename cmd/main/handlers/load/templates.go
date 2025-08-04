@@ -129,13 +129,6 @@ func (h *LoadHandler) initializeAI() {
 		return // Already initialized
 	}
 
-	// Initialize Genkit and OpenAI plugin
-	genkitApp, err := genkit.Init(context.Background(), nil)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Failed to initialize AI engine: %v\n", err)
-		return
-	}
-
 	// Initialize OpenAI plugin with API key
 	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 	if openaiAPIKey == "" {
@@ -144,6 +137,14 @@ func (h *LoadHandler) initializeAI() {
 	}
 
 	openaiPlugin := &oai.OpenAI{APIKey: openaiAPIKey}
+
+	// Initialize Genkit with OpenAI plugin
+	genkitApp, err := genkit.Init(context.Background(), genkit.WithPlugins(openaiPlugin))
+	if err != nil {
+		fmt.Printf("⚠️  Warning: Failed to initialize AI engine: %v\n", err)
+		return
+	}
+
 	h.placeholderAnalyzer = services.NewPlaceholderAnalyzer(genkitApp, openaiPlugin)
 
 	fmt.Println(getCLIStyles(h.themeManager).Success.Render("🤖 AI placeholder detection enabled"))

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 
@@ -53,15 +54,36 @@ func (pa *PlaceholderAnalyzer) AnalyzeConfiguration(ctx context.Context, configJ
 	// Get model from OpenAI plugin - use GPT-4o for better analysis
 	model := pa.openaiPlugin.Model(pa.genkit, "gpt-4o")
 	
-	// Use Genkit to analyze the configuration with structured JSON output
+	// Use Genkit to analyze the configuration with structured JSON output and multi-turn support
 	response, err := genkit.Generate(ctx, pa.genkit,
 		ai.WithModel(model),
 		ai.WithPrompt(prompt),
 		ai.WithOutputType([]PlaceholderAnalysis{}),
+		ai.WithMaxTurns(5), // Allow multi-step analysis of placeholders
 	)
 	
 	if err != nil {
 		return nil, fmt.Errorf("AI analysis failed: %w", err)
+	}
+
+	// DEBUG: Log comprehensive response details for placeholder analysis
+	log.Printf("🔍 Placeholder analysis response: %s", response.Text())
+	if response.Usage != nil {
+		log.Printf("🔍 Placeholder analysis usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, 
+			response.Usage.InputTokens + response.Usage.OutputTokens)
+	}
+	
+	// Count turns taken during placeholder analysis
+	if response.Request != nil && len(response.Request.Messages) > 0 {
+		modelMessages := 0
+		for _, msg := range response.Request.Messages {
+			if msg.Role == ai.RoleModel {
+				modelMessages++
+			}
+		}
+		log.Printf("🔍 Placeholder analysis took %d turns, %d total messages in conversation", 
+			modelMessages, len(response.Request.Messages))
 	}
 
 	// Get the structured output directly from Genkit

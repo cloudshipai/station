@@ -65,6 +65,18 @@ func Load() (*Config, error) {
 	if viper.IsSet("telemetry_enabled") {
 		cfg.TelemetryEnabled = viper.GetBool("telemetry_enabled")
 	}
+	if viper.IsSet("ai_provider") {
+		cfg.AIProvider = viper.GetString("ai_provider")
+	}
+	if viper.IsSet("ai_model") {
+		cfg.AIModel = viper.GetString("ai_model")
+	}
+	if viper.IsSet("ai_api_key") {
+		cfg.AIAPIKey = viper.GetString("ai_api_key")
+	}
+	if viper.IsSet("ai_base_url") {
+		cfg.AIBaseURL = viper.GetString("ai_base_url")
+	}
 
 	// Validate that encryption key exists either in config file or environment
 	if cfg.EncryptionKey == "" {

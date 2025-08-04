@@ -140,7 +140,7 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 
 	// Create MCP client to connect to our own stdio server
 	mcpClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-		Name:    "", // Empty name to eliminate prefixing and avoid long tool call IDs in OpenAI
+		Name:    "s", // Short name to minimize tool call IDs in OpenAI
 		Version: "1.0.0",
 		Stdio: &mcp.StdioConfig{
 			Command: "./stn", // Use our own binary
@@ -330,6 +330,7 @@ RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on
 	}
 
 	var modelName string
+	log.Printf("🔍 DEBUG: cfg.AIProvider='%s', cfg.AIModel='%s'", cfg.AIProvider, cfg.AIModel)
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
 		// Use configured model or default
@@ -356,21 +357,41 @@ RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on
 		modelName = "openai/gpt-4o" // Default fallback
 	}
 
-	// Use Genkit to generate the agent plan
+	// Use Genkit to generate the agent plan with multi-turn support
 	response, err := genkit.Generate(ctx, iac.genkitApp,
 		ai.WithModelName(modelName),
 		ai.WithPrompt(prompt),
 		ai.WithTools(toolRefs...),
 		ai.WithToolChoice(ai.ToolChoiceAuto),
+		ai.WithMaxTurns(10), // Allow multi-step agent planning
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate agent plan: %w", err)
 	}
 
-	// Parse the JSON response
+	// Parse the JSON response with enhanced debugging
 	var plan AgentCreationPlan
 	responseText := response.Text()
-	log.Printf("🤖 Genkit response: %s", responseText)
+	
+	// DEBUG: Log comprehensive response details for agent creation
+	log.Printf("🤖 Agent creation response: %s", responseText)
+	if response.Usage != nil {
+		log.Printf("🔍 Agent creation usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, 
+			response.Usage.InputTokens + response.Usage.OutputTokens)
+	}
+	
+	// Count turns taken during agent creation
+	if response.Request != nil && len(response.Request.Messages) > 0 {
+		modelMessages := 0
+		for _, msg := range response.Request.Messages {
+			if msg.Role == ai.RoleModel {
+				modelMessages++
+			}
+		}
+		log.Printf("🔍 Agent creation took %d turns, %d total messages in conversation", 
+			modelMessages, len(response.Request.Messages))
+	}
 
 	// Try to extract JSON from the response (might be wrapped in markdown)
 	jsonStart := strings.Index(responseText, "{")
@@ -420,20 +441,20 @@ func (iac *IntelligentAgentCreator) ensureEnvironment(envName string) (int64, er
 func (iac *IntelligentAgentCreator) assignToolsToAgent(agentID int64, toolNames []string, environmentID int64) int {
 	assignedCount := 0
 	for _, toolName := range toolNames {
-		// Strip Genkit's server prefix to match clean names in database (standardized for OpenAI compatibility)
-		cleanToolName := toolName
+		// AI analysis returns prefixed names but database stores clean names
+		// Strip prefix to match database storage: "f_read_text_file" -> "read_text_file"
+		dbToolName := toolName
 		if strings.Contains(toolName, "_") {
 			parts := strings.SplitN(toolName, "_", 2)
 			if len(parts) == 2 {
-				// Strip server prefix (e.g., "filesystem_list_directory" -> "list_directory")
-				cleanToolName = parts[1]
-				log.Printf("🔄 Mapping tool name: %s -> %s", toolName, cleanToolName)
+				dbToolName = parts[1] // Remove prefix for database lookup
+				log.Printf("🔄 Mapping AI tool name for database: %s -> %s", toolName, dbToolName)
 			}
 		}
 		
-		tool, err := iac.repos.MCPTools.FindByNameInEnvironment(environmentID, cleanToolName)
+		tool, err := iac.repos.MCPTools.FindByNameInEnvironment(environmentID, dbToolName)
 		if err != nil {
-			log.Printf("Warning: Failed to find tool '%s' (clean: '%s') in environment %d: %v", toolName, cleanToolName, environmentID, err)
+			log.Printf("Warning: Failed to find tool '%s' in environment %d: %v", toolName, environmentID, err)
 			continue
 		}
 		
@@ -571,22 +592,32 @@ func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context,
 				continue
 			}
 			
-			// Strip Genkit's server prefix to match clean names in database
-			cleanMCPToolName := toolName
+			// Match prefixed runtime tool names with clean database names
+			// Runtime tools have prefixes like "f_list_directory", database has "list_directory"
+			var matchFound bool
 			if strings.Contains(toolName, "_") {
 				parts := strings.SplitN(toolName, "_", 2)
 				if len(parts) == 2 {
-					// Strip server prefix (e.g., "filesystem_list_directory" -> "list_directory")
-					cleanMCPToolName = parts[1]
+					cleanToolName := parts[1] // Remove prefix: "f_list_directory" -> "list_directory"  
+					if cleanToolName == assignedTool.ToolName {
+						matchFound = true
+					}
 				}
 			}
+			// Also try direct match in case of different naming schemes
+			if toolName == assignedTool.ToolName {
+				matchFound = true
+			}
 			
-			// Match clean tool names (standardized on clean names for OpenAI compatibility)
-			if cleanMCPToolName == assignedTool.ToolName {
-				log.Printf("✅ Tool match found: MCP '%s' (clean: '%s') matches assigned '%s'", toolName, cleanMCPToolName, assignedTool.ToolName)
-				// Use the original MCP tool directly 
-				tools = append(tools, ai.ToolRef(mcpTool))
-				log.Printf("🔧 Including assigned tool: %s (using clean name)", cleanMCPToolName)
+			if matchFound {
+				log.Printf("✅ Tool match found: MCP '%s' matches assigned '%s'", toolName, assignedTool.ToolName)
+				
+				// DEBUG: Log what Station passes to Genkit
+				toolRef := ai.ToolRef(mcpTool)
+				log.Printf("🔍 DEBUG: Station creating ToolRef with Name='%s' (length=%d)", toolRef.Name(), len(toolRef.Name()))
+				
+				tools = append(tools, toolRef)
+				log.Printf("🔧 Including assigned tool: %s", toolName)
 				break
 			}
 		}
@@ -606,11 +637,19 @@ Your task is to: %s
 
 You have access to MCP tools through the Station platform. Use these tools as needed to complete the task effectively.
 
-Please execute this task step by step, using available tools when necessary. Provide a detailed response about what you accomplished.
+IMPORTANT: Break down complex tasks into multiple steps. After each tool call, analyze the results and determine if you need to use additional tools. Do NOT try to complete everything in one response. Take multiple turns as needed.
+
+Multi-Step Execution Guidelines:
+1. Start with one tool call to gather initial information
+2. Analyze the results from that tool call  
+3. Determine what additional information or actions are needed
+4. Make subsequent tool calls based on your analysis
+5. Continue this process until the task is fully complete
+6. Provide a comprehensive final summary
 
 Available Tools: You have access to %d MCP tools including file operations, directory management, search capabilities, and system information tools.
 
-Execute the task now:`,
+Begin by making your first tool call:`,
 		agent.Name,
 		agent.Prompt,
 		task,
@@ -623,6 +662,7 @@ Execute the task now:`,
 	}
 
 	var modelName string
+	log.Printf("🔍 DEBUG: cfg.AIProvider='%s', cfg.AIModel='%s'", cfg.AIProvider, cfg.AIModel)
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
 		// Use configured model or default
@@ -684,9 +724,111 @@ Execute the task now:`,
 	// Extract execution results
 	responseText := response.Text()
 	log.Printf("🤖 Agent execution completed via stdio MCP")
+	
+	// DEBUG: Log comprehensive response details to understand multi-turn behavior
+	log.Printf("🔍 DEBUG: Response text length: %d characters", len(responseText))
+	log.Printf("🔍 DEBUG: Response type: %T", response)
+	log.Printf("🔍 DEBUG: Final response text: %s", responseText)
+	
+	// Try to access usage or turn information if available
+	if response.Usage != nil {
+		log.Printf("🔍 DEBUG: Usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, 
+			response.Usage.InputTokens + response.Usage.OutputTokens)
+	}
+	
+	// Log additional response metadata
+	log.Printf("🔍 DEBUG: Finish reason: %s", response.FinishReason)
+	if response.FinishMessage != "" {
+		log.Printf("🔍 DEBUG: Finish message: %s", response.FinishMessage)
+	}
+	log.Printf("🔍 DEBUG: Latency: %.2fms", response.LatencyMs)
+	
+	// Check if response has any turn/step information
+	log.Printf("🔍 DEBUG: Looking for multi-turn indicators in response...")
 
-	// Default values for execution data - telemetry client will update with comprehensive data
+	// Count actual steps/turns from Genkit response
 	stepsTaken := int64(1) // Default to 1 step for basic reasoning
+	if response.Request != nil && len(response.Request.Messages) > 0 {
+		// Count the number of model messages (excluding the initial user message)
+		modelMessages := 0
+		toolMessages := 0
+		userMessages := 0
+		systemMessages := 0
+		for _, msg := range response.Request.Messages {
+			switch msg.Role {
+			case ai.RoleModel:
+				modelMessages++
+			case ai.RoleTool:
+				toolMessages++
+			case ai.RoleUser:
+				userMessages++
+			case ai.RoleSystem:
+				systemMessages++
+			}
+		}
+		if modelMessages > 0 {
+			stepsTaken = int64(modelMessages)
+			log.Printf("🔍 DEBUG: Found %d model messages in conversation history", modelMessages)
+		}
+		log.Printf("🔍 DEBUG: Message count breakdown - User: %d, Model: %d, Tool: %d, System: %d, Total: %d", 
+			userMessages, modelMessages, toolMessages, systemMessages, len(response.Request.Messages))
+		
+		// Debug: Log detailed conversation flow with content preview
+		log.Printf("🔍 DEBUG: === CONVERSATION FLOW ===")
+		for i, msg := range response.Request.Messages {
+			contentPreview := ""
+			if len(msg.Content) > 0 {
+				// Get text content from the first part if available
+				if msg.Content[0] != nil && msg.Content[0].Text != "" {
+					contentPreview = msg.Content[0].Text
+					if len(contentPreview) > 100 {
+						contentPreview = contentPreview[:100] + "..."
+					}
+				}
+			}
+			log.Printf("🔍 DEBUG: Step %d - Role: %s, Content: %s", i+1, msg.Role, contentPreview)
+			
+			// Log tool calls if this is a model message with tool requests
+			if msg.Role == ai.RoleModel && len(msg.Content) > 0 {
+				for j, part := range msg.Content {
+					if part.ToolRequest != nil {
+						toolCallPreview := fmt.Sprintf("Tool: %s", part.ToolRequest.Name)
+						if part.ToolRequest.Input != nil {
+							if inputBytes, err := json.Marshal(part.ToolRequest.Input); err == nil {
+								inputStr := string(inputBytes)
+								if len(inputStr) > 100 {
+									inputStr = inputStr[:100] + "..."
+								}
+								toolCallPreview += fmt.Sprintf(", Input: %s", inputStr)
+							}
+						}
+						log.Printf("🔍 DEBUG:   Part %d - %s", j+1, toolCallPreview)
+					}
+				}
+			}
+			
+			// Log tool responses if this is a tool message
+			if msg.Role == ai.RoleTool && len(msg.Content) > 0 {
+				for j, part := range msg.Content {
+					if part.ToolResponse != nil {
+						toolRespPreview := fmt.Sprintf("Tool Response: %s", part.ToolResponse.Name)
+						if part.ToolResponse.Output != nil {
+							if outputBytes, err := json.Marshal(part.ToolResponse.Output); err == nil {
+								outputStr := string(outputBytes)
+								if len(outputStr) > 100 {
+									outputStr = outputStr[:100] + "..."
+								}
+								toolRespPreview += fmt.Sprintf(", Output: %s", outputStr)
+							}
+						}
+						log.Printf("🔍 DEBUG:   Part %d - %s", j+1, toolRespPreview)
+					}
+				}
+			}
+		}
+		log.Printf("🔍 DEBUG: === END CONVERSATION FLOW ===")
+	}
 	var toolCalls *models.JSONArray
 	var executionSteps *models.JSONArray
 
@@ -886,7 +1028,7 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 			
 			// Create Genkit MCP client for this server using short name to avoid long tool call IDs
 			mcpClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-				Name:    "", // Empty name to eliminate prefixing and prevent long tool call IDs in OpenAI
+				Name:    "f", // Short name to minimize tool call IDs in OpenAI
 				Version: "1.0.0",
 				Stdio: &mcp.StdioConfig{
 					Command: serverConfig.Command,
