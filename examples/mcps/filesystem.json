@@ -2,7 +2,7 @@
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "{{ALLOWED_PATHS}}"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "{{.ALLOWED_PATHS}}"]
     }
   }
 }
