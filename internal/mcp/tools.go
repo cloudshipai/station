@@ -2,13 +2,9 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
-	"time"
 
-	"station/internal/auth"
 	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/pkg/models"
