@@ -9,6 +9,7 @@ import (
 	"station/internal/db"
 	"station/internal/telemetry"
 	"station/internal/theme"
+	"station/internal/version"
 	"station/cmd/main/handlers/file_config"
 	"time"
 
@@ -25,6 +26,7 @@ var (
 		Short: "Station - AI Agent Management Platform",
 		Long: `Station is a secure, self-hosted platform for managing AI agents with MCP tool integration.
 It provides a retro terminal interface for system administration and agent management.`,
+		Version: version.GetVersionString(),
 	}
 )
 

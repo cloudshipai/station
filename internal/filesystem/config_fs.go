@@ -45,20 +45,20 @@ func (cfs *ConfigFileSystem) EnsureConfigDir(envName string) error {
 	envDir := filepath.Join(cfs.configDir, "environments", envName)
 	
 	// Create main environment directory
-	if err := cfs.MkdirAll(envDir, 0755); err != nil {
+	if err := cfs.Fs.MkdirAll(envDir, 0755); err != nil {
 		return fmt.Errorf("failed to create environment directory: %w", err)
 	}
 	
 	// Create template-vars subdirectory
 	templateVarsDir := filepath.Join(envDir, "template-vars")
-	if err := cfs.MkdirAll(templateVarsDir, 0755); err != nil {
+	if err := cfs.Fs.MkdirAll(templateVarsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create template-vars directory: %w", err)
 	}
 	
 	// Create variables directory (if different from config dir)
 	if cfs.varsDir != "" && cfs.varsDir != cfs.configDir {
 		varsEnvDir := filepath.Join(cfs.varsDir, "environments", envName)
-		if err := cfs.MkdirAll(varsEnvDir, 0700); err != nil { // More restrictive for secrets
+		if err := cfs.Fs.MkdirAll(varsEnvDir, 0700); err != nil { // More restrictive for secrets
 			return fmt.Errorf("failed to create variables directory: %w", err)
 		}
 	}
@@ -169,7 +169,7 @@ func (cfs *ConfigFileSystem) CreateDirectoryStructure() error {
 	}
 	
 	for _, dir := range dirs {
-		if err := cfs.MkdirAll(dir, 0755); err != nil {
+		if err := cfs.Fs.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
