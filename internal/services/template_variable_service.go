@@ -191,8 +191,7 @@ func (tvs *TemplateVariableService) renderTemplate(templateContent string, varia
 	}
 
 	renderedContent := rendered.String()
-	log.Printf("Template rendering completed. Input length: %d, Output length: %d", len(templateContent), len(renderedContent))
-	log.Printf("Template variables applied: %v", variables)
+	log.Printf("Template rendering completed for %d variables", len(variables))
 	
 	return renderedContent, nil
 }
