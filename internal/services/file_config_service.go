@@ -107,6 +107,47 @@ func (s *FileConfigService) LoadAndRenderConfig(ctx context.Context, envID int64
 	return renderedConfig, nil
 }
 
+// LoadAndRenderConfigWithVariables loads template, resolves variables, and renders config
+func (s *FileConfigService) LoadAndRenderConfigWithVariables(ctx context.Context, envID int64, configName string, interactive bool) (string, error) {
+	// 1. Get environment name for file paths
+	env, err := s.repos.Environments.GetByID(envID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// 2. Build template file path
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	envDir := filepath.Join(configHome, "station", "environments", env.Name)
+	templatePath := filepath.Join(envDir, configName+".json")
+
+	// 3. Read template file
+	templateBytes, err := os.ReadFile(templatePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read template file %s: %w", templatePath, err)
+	}
+
+	templateContent := string(templateBytes)
+
+	// 4. Process variables using new TemplateVariableService
+	templateVarService := NewTemplateVariableService(filepath.Join(configHome, "station"), s.repos)
+	
+	result, err := templateVarService.ProcessTemplateWithVariables(envID, configName, templateContent, interactive)
+	if err != nil {
+		return "", fmt.Errorf("failed to process template variables: %w", err)
+	}
+
+	if !result.AllResolved {
+		return "", fmt.Errorf("template has unresolved variables: %v", result.MissingVars)
+	}
+
+	log.Printf("Successfully rendered template %s with %d variables", configName, len(result.ResolvedVars))
+	return result.RenderedContent, nil
+}
+
+// DEPRECATED: Use LoadAndRenderConfigWithVariables instead
 // LoadAndRenderConfigSimple loads and renders config using simple variable substitution (same as load process)
 func (s *FileConfigService) LoadAndRenderConfigSimple(ctx context.Context, envID int64, configName string) (*models.MCPConfigData, error) {
 	// 1. Get environment for file paths
@@ -153,6 +194,7 @@ func (s *FileConfigService) LoadAndRenderConfigSimple(ctx context.Context, envID
 		MCPServers map[string]struct {
 			Command string            `json:"command"`
 			Args    []string          `json:"args"`
+			URL     string            `json:"url"`
 			Env     map[string]string `json:"env"`
 		} `json:"mcpServers"`
 	}
@@ -167,6 +209,7 @@ func (s *FileConfigService) LoadAndRenderConfigSimple(ctx context.Context, envID
 		servers[name] = models.MCPServerConfig{
 			Command: serverConfig.Command,
 			Args:    serverConfig.Args,
+			URL:     serverConfig.URL,
 			Env:     serverConfig.Env,
 		}
 	}
@@ -274,46 +317,12 @@ func (s *FileConfigService) UpdateTemplateVariables(ctx context.Context, envID i
 	return nil
 }
 
-// DiscoverToolsForConfig discovers tools for a specific file-based config
+// DiscoverToolsForConfig discovers tools for a specific file-based config using the new flow
 func (s *FileConfigService) DiscoverToolsForConfig(ctx context.Context, envID int64, configName string) (*ToolDiscoveryResult, error) {
-	log.Printf("Discovering tools for file config %s in environment %d", configName, envID)
+	log.Printf("Discovering tools for file config %s in environment %d using new flow", configName, envID)
 	
-	// 1. Load and render config using simple variable resolution (same as load process)
-	renderedConfig, err := s.LoadAndRenderConfigSimple(ctx, envID, configName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load and render config: %w", err)
-	}
-	
-	// 2. Get file config record
-	fileConfig, err := s.getFileConfigRecord(envID, configName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get file config record: %w", err)
-	}
-	
-	// 3. Clear existing tools for this file config
-	if err := s.clearExistingToolsForFileConfig(fileConfig.ID); err != nil {
-		return nil, fmt.Errorf("failed to clear existing tools: %w", err)
-	}
-	
-	// 4. Create a temporary MCPConfig for tool discovery
-	tempConfig := &models.MCPConfig{
-		ID:            fileConfig.ID,
-		EnvironmentID: envID,
-		ConfigName:    configName,
-	}
-	
-	// 5. Discover tools using the existing tool discovery service
-	result, err := s.discoverToolsFromRenderedConfig(tempConfig, renderedConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover tools: %w", err)
-	}
-	
-	// 6. Update last rendered timestamp
-	if err := s.updateLastRenderedTime(fileConfig.ID); err != nil {
-		log.Printf("Warning: failed to update last rendered time: %v", err)
-	}
-	
-	return result, nil
+	// Use the new tool discovery service with variable resolution
+	return s.toolDiscovery.DiscoverToolsFromFileConfigNew(envID, configName, true) // interactive=true for CLI usage
 }
 
 // ListFileConfigs lists all file-based configs for an environment
