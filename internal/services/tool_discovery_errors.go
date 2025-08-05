@@ -9,13 +9,14 @@ import (
 type ToolDiscoveryErrorType string
 
 const (
-	ErrorTypeTimeout     ToolDiscoveryErrorType = "timeout"
-	ErrorTypeConnection  ToolDiscoveryErrorType = "connection"
-	ErrorTypeDecryption  ToolDiscoveryErrorType = "decryption"
-	ErrorTypeInvalidConfig ToolDiscoveryErrorType = "invalid_config"
-	ErrorTypeServerStart ToolDiscoveryErrorType = "server_start"
-	ErrorTypeToolParsing ToolDiscoveryErrorType = "tool_parsing"
-	ErrorTypeDatabase    ToolDiscoveryErrorType = "database"
+	ErrorTypeTimeout           ToolDiscoveryErrorType = "timeout"
+	ErrorTypeConnection        ToolDiscoveryErrorType = "connection"
+	ErrorTypeDecryption        ToolDiscoveryErrorType = "decryption"
+	ErrorTypeInvalidConfig     ToolDiscoveryErrorType = "invalid_config"
+	ErrorTypeServerStart       ToolDiscoveryErrorType = "server_start"
+	ErrorTypeToolParsing       ToolDiscoveryErrorType = "tool_parsing"
+	ErrorTypeDatabase          ToolDiscoveryErrorType = "database"
+	ErrorTypeTemplateRendering ToolDiscoveryErrorType = "template_rendering"
 )
 
 // ToolDiscoveryError represents a structured error from tool discovery
