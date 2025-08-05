@@ -31,7 +31,6 @@ func (c *MCPClient) DiscoverToolsFromRenderedConfig(renderedConfigJSON string) (
 	log.Printf("Discovering tools from rendered MCP configuration")
 
 	// Parse the rendered JSON to extract server configurations
-	// We still need minimal parsing to extract individual server configs for mcp-go
 	var configData map[string]interface{}
 	if err := json.Unmarshal([]byte(renderedConfigJSON), &configData); err != nil {
 		return nil, fmt.Errorf("invalid rendered config JSON: %w", err)
@@ -44,19 +43,12 @@ func (c *MCPClient) DiscoverToolsFromRenderedConfig(renderedConfigJSON string) (
 
 	results := make(map[string][]mcp.Tool)
 
-	// Process each server individually
+	// Process each server individually using mcp-go convenience methods
 	for serverName, serverConfigRaw := range mcpServers {
 		log.Printf("Processing MCP server: %s", serverName)
 
-		// Convert server config to JSON for mcp-go consumption
-		serverConfigJSON, err := json.Marshal(serverConfigRaw)
-		if err != nil {
-			log.Printf("Failed to marshal config for server %s: %v", serverName, err)
-			continue
-		}
-
-		// Discover tools from this server
-		tools, err := c.discoverToolsFromServerConfig(ctx, serverName, serverConfigJSON)
+		// Discover tools from this server using proper mcp-go methods
+		tools, err := c.discoverToolsFromServerConfigNew(ctx, serverName, serverConfigRaw)
 		if err != nil {
 			log.Printf("Failed to discover tools from server %s: %v", serverName, err)
 			continue
@@ -67,6 +59,93 @@ func (c *MCPClient) DiscoverToolsFromRenderedConfig(renderedConfigJSON string) (
 	}
 
 	return results, nil
+}
+
+// discoverToolsFromServerConfigNew handles individual server tool discovery using mcp-go convenience methods
+func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, serverName string, serverConfigRaw interface{}) ([]mcp.Tool, error) {
+	// Parse server config from interface
+	serverConfig, ok := serverConfigRaw.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid server config format")
+	}
+
+	// Create client using mcp-go convenience methods based on config
+	var mcpClient *client.Client
+	var err error
+
+	// Check for URL-based transport (HTTP/StreamableHTTP)
+	if urlValue, exists := serverConfig["url"]; exists {
+		if urlStr, ok := urlValue.(string); ok && urlStr != "" {
+			log.Printf("Creating StreamableHTTP client for URL: %s", urlStr)
+			mcpClient, err = client.NewStreamableHttpClient(urlStr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create StreamableHTTP client: %w", err)
+			}
+		}
+	} else if cmdValue, exists := serverConfig["command"]; exists {
+		// Check for stdio transport
+		if cmdStr, ok := cmdValue.(string); ok && cmdStr != "" {
+			// Extract args
+			var args []string
+			if argsValue, exists := serverConfig["args"]; exists {
+				if argsList, ok := argsValue.([]interface{}); ok {
+					for _, arg := range argsList {
+						if argStr, ok := arg.(string); ok {
+							args = append(args, argStr)
+						}
+					}
+				}
+			}
+			
+			log.Printf("Creating stdio client for command: %s", cmdStr)
+			mcpClient, err = client.NewStdioMCPClient(cmdStr, nil, args...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create stdio client: %w", err)
+			}
+		}
+	}
+
+	if mcpClient == nil {
+		return nil, fmt.Errorf("no valid transport configuration found - provide either 'command' for stdio or 'url' for HTTP")
+	}
+
+	// Start the client
+	if err := mcpClient.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start client: %w", err)
+	}
+	defer mcpClient.Close()
+
+	// Initialize MCP session
+	initRequest := mcp.InitializeRequest{}
+	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initRequest.Params.ClientInfo = mcp.Implementation{
+		Name:    "Station Tool Discovery",
+		Version: "1.0.0",
+	}
+
+	serverInfo, err := mcpClient.Initialize(ctx, initRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize: %w", err)
+	}
+
+	log.Printf("Connected to MCP server: %s (version %s)", 
+		serverInfo.ServerInfo.Name, 
+		serverInfo.ServerInfo.Version)
+
+	// Check capabilities
+	if serverInfo.Capabilities.Tools == nil {
+		log.Printf("Server %s does not support tools", serverName)
+		return []mcp.Tool{}, nil
+	}
+
+	// Discover tools
+	toolsRequest := mcp.ListToolsRequest{}
+	toolsResult, err := mcpClient.ListTools(ctx, toolsRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tools: %w", err)
+	}
+
+	return toolsResult.Tools, nil
 }
 
 // discoverToolsFromServerConfig handles individual server tool discovery

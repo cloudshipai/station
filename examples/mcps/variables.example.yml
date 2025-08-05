@@ -29,3 +29,6 @@ SLACK_SIGNING_SECRET: "your_signing_secret_here"
 # Docker
 DOCKER_HOST: "unix:///var/run/docker.sock"
 DOCKER_COMPOSE_PATH: "/path/to/docker-compose.yml"
+
+# SQLite Database
+DATABASE_PATH: "/path/to/your/database.db"
