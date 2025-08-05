@@ -99,7 +99,7 @@ func (s *ToolDiscoveryService) DiscoverToolsFromFileConfigNew(environmentID int6
 		StartedAt:     time.Now(),
 	}
 
-	log.Printf("🟢 USING NEW FLOW: Starting new file config tool discovery for environment %d", environmentID)
+	log.Printf("Starting new file config tool discovery for environment %d", environmentID)
 
 	// 1. Get file config record
 	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(environmentID, configName)
@@ -274,7 +274,7 @@ func (s *ToolDiscoveryService) DiscoverToolsFromFileConfig(environmentID int64, 
 	
 	result.TotalServers = len(renderedConfig.Servers)
 	
-	log.Printf("🔴 USING OLD FLOW: Starting file config tool discovery for environment %d with %d servers", environmentID, len(renderedConfig.Servers))
+	log.Printf("Starting file config tool discovery for environment %d with %d servers", environmentID, len(renderedConfig.Servers))
 	
 	// Get or create file config record
 	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(environmentID, configName)
