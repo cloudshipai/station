@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -288,35 +287,60 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 		result.Response = response
 		result.Status = "completed"
 		
-		// Extract execution details from response if available
-		// Parse step count from response content since we don't have direct metadata access
-		if response != nil {
-			// Count execution steps based on response content analysis
-			stepsTaken := int64(1) // Default minimum
-			if response.Content != "" {
-				// Look for step indicators in the response
-				responseLower := strings.ToLower(response.Content)
-				stepPatterns := []string{
-					"step 1", "step 2", "step 3", "step 4", "step 5",
-					"action 1", "action 2", "action 3", "action 4", "action 5",
+		// Extract detailed execution data from response.Extra if available
+		if response != nil && response.Extra != nil {
+			log.Printf("Worker %d: DEBUG - response.Extra has %d keys", worker.ID, len(response.Extra))
+			// Extract steps taken from agent execution result
+			if stepsValue, exists := response.Extra["steps_taken"]; exists {
+				if steps, ok := stepsValue.(int64); ok {
+					result.StepsTaken = steps
+				} else {
+					result.StepsTaken = int64(1) // Default fallback
 				}
-				
-				stepCount := 0
-				for _, pattern := range stepPatterns {
-					if strings.Contains(responseLower, pattern) {
-						stepCount++
-					}
+			} else {
+				result.StepsTaken = int64(1) // Default fallback
+			}
+			
+			// Extract detailed tool calls if available
+			if toolCallsValue, exists := response.Extra["tool_calls"]; exists {
+				log.Printf("Worker %d: DEBUG - tool_calls exists, type: %T", worker.ID, toolCallsValue)
+				if toolCallsPtr, ok := toolCallsValue.(*models.JSONArray); ok && toolCallsPtr != nil {
+					result.ToolCalls = []interface{}(*toolCallsPtr)
+					log.Printf("Worker %d: Extracted %d tool calls from agent execution", worker.ID, len(result.ToolCalls))
+				} else {
+					log.Printf("Worker %d: DEBUG - tool_calls type assertion failed or nil pointer", worker.ID)
 				}
-				
-				if stepCount > 1 {
-					stepsTaken = int64(stepCount)
+			} else {
+				log.Printf("Worker %d: DEBUG - tool_calls key not found in Extra", worker.ID)
+			}
+			
+			// Extract detailed execution steps if available
+			if executionStepsValue, exists := response.Extra["execution_steps"]; exists {
+				if executionStepsPtr, ok := executionStepsValue.(*models.JSONArray); ok && executionStepsPtr != nil {
+					result.ExecutionSteps = []interface{}(*executionStepsPtr)
+					log.Printf("Worker %d: Extracted %d execution steps from agent execution", worker.ID, len(result.ExecutionSteps))
 				}
 			}
-			result.StepsTaken = stepsTaken
+			
+			// If no detailed execution steps were provided, create basic fallback
+			if result.ExecutionSteps == nil {
+				result.ExecutionSteps = []interface{}{
+					map[string]interface{}{
+						"step": 1,
+						"type": "agent_execution",
+						"input": request.Task,
+						"output": response.Content,
+						"timestamp": startTime,
+					},
+				}
+			}
+		} else {
+			// Fallback when no extra data is available
+			result.StepsTaken = int64(1)
 			result.ExecutionSteps = []interface{}{
 				map[string]interface{}{
 					"step": 1,
-					"type": "agent_execution",
+					"type": "basic_execution",
 					"input": request.Task,
 					"output": response.Content,
 					"timestamp": startTime,
@@ -380,12 +404,18 @@ func (eq *ExecutionQueueService) storeExecutionResult(result *ExecutionResult) e
 	if result.ToolCalls != nil {
 		jsonArray := models.JSONArray(result.ToolCalls)
 		toolCalls = &jsonArray
+		log.Printf("DEBUG: Storing %d tool calls", len(result.ToolCalls))
+	} else {
+		log.Printf("DEBUG: No tool calls to store")
 	}
 	
 	var executionSteps *models.JSONArray
 	if result.ExecutionSteps != nil {
 		jsonArray := models.JSONArray(result.ExecutionSteps)
 		executionSteps = &jsonArray
+		log.Printf("DEBUG: Storing %d execution steps", len(result.ExecutionSteps))
+	} else {
+		log.Printf("DEBUG: No execution steps to store")
 	}
 	
 	// Update the existing agent run record (created when queued)

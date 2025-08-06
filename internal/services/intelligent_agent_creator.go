@@ -495,6 +495,15 @@ type AgentExecutionResult struct {
 	StepsTaken     int64             `json:"steps_taken"`
 	ToolCalls      *models.JSONArray `json:"tool_calls,omitempty"`
 	ExecutionSteps *models.JSONArray `json:"execution_steps,omitempty"`
+	TokenUsage     *TokenUsage       `json:"token_usage,omitempty"`
+}
+
+// TokenUsage represents token usage statistics for an execution
+type TokenUsage struct {
+	InputTokens  int     `json:"input_tokens"`
+	OutputTokens int     `json:"output_tokens"`
+	TotalTokens  int     `json:"total_tokens"`
+	LatencyMs    float64 `json:"latency_ms,omitempty"`
 }
 
 // generateShortToolID creates a short unique ID for OpenAI tool calls (max 40 chars)
@@ -832,39 +841,42 @@ Begin by making your first tool call:`,
 	var toolCalls *models.JSONArray
 	var executionSteps *models.JSONArray
 
-	// Update basic run information (Genkit captures detailed telemetry automatically)
-	if runID > 0 {
-		// Fallback: Create basic execution data when telemetry is not available
-		log.Printf("📊 No telemetry client - using basic execution data")
-		
-		// Create basic tool calls data
-		basicToolCalls := []interface{}{
-			map[string]interface{}{
-				"type":        "generation",
-				"model":       modelName,
-				"timestamp":   time.Now().Format(time.RFC3339),
-				"status":      "completed",
-				"tools_available": len(toolRefs),
-			},
-		}
-		toolCallsArray := models.JSONArray(basicToolCalls)
+	// Always extract detailed execution data from GenKit response
+	log.Printf("📊 Extracting detailed execution data from GenKit response...")
+	
+	// Extract actual tool calls from GenKit conversation
+	actualToolCalls := iac.extractToolCallsFromResponse(response, modelName)
+	if len(actualToolCalls) > 0 {
+		toolCallsArray := models.JSONArray(actualToolCalls)
 		toolCalls = &toolCallsArray
-		
-		// Create basic execution steps data
-		basicSteps := []interface{}{
-			map[string]interface{}{
-				"step":        1,
-				"type":        "agent_execution",
-				"description": fmt.Sprintf("Executed agent '%s' with %d available tools", agent.Name, len(toolRefs)),
-				"timestamp":   time.Now().Format(time.RFC3339),
-				"status":      "completed",
-				"model":       modelName,
-			},
-		}
-		executionStepsArray := models.JSONArray(basicSteps)
+		log.Printf("🔧 Extracted %d actual tool calls from execution", len(actualToolCalls))
+	} else {
+		log.Printf("🔧 No tool calls found in execution")
+	}
+	
+	// Build detailed execution steps from conversation flow
+	detailedSteps := iac.buildExecutionStepsFromResponse(response, agent, modelName, len(toolRefs))
+	if len(detailedSteps) > 0 {
+		executionStepsArray := models.JSONArray(detailedSteps)
 		executionSteps = &executionStepsArray
-		
-		log.Printf("📊 Basic execution data created (Genkit provides comprehensive telemetry automatically)")
+		log.Printf("📋 Built %d execution steps from conversation", len(detailedSteps))
+	} else {
+		log.Printf("📋 No detailed execution steps generated")
+	}
+	
+	log.Printf("📊 Detailed execution data extracted successfully")
+
+	// Extract token usage from GenKit response
+	var tokenUsage *TokenUsage
+	if response.Usage != nil {
+		tokenUsage = &TokenUsage{
+			InputTokens:  response.Usage.InputTokens,
+			OutputTokens: response.Usage.OutputTokens,
+			TotalTokens:  response.Usage.InputTokens + response.Usage.OutputTokens,
+			LatencyMs:    response.LatencyMs,
+		}
+		log.Printf("💰 Token usage - Input: %d, Output: %d, Total: %d, Latency: %.2fms", 
+			tokenUsage.InputTokens, tokenUsage.OutputTokens, tokenUsage.TotalTokens, tokenUsage.LatencyMs)
 	}
 
 	result := &AgentExecutionResult{
@@ -872,6 +884,7 @@ Begin by making your first tool call:`,
 		StepsTaken:     stepsTaken,
 		ToolCalls:      toolCalls,
 		ExecutionSteps: executionSteps,
+		TokenUsage:     tokenUsage,
 	}
 
 	log.Printf("✅ Stdio MCP agent execution completed: %d steps taken", stepsTaken)
@@ -1115,4 +1128,221 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 
 	log.Printf("🗂️ Total tools from all file config servers: %d", len(allTools))
 	return allTools, nil
+}
+
+// extractToolCallsFromResponse extracts actual tool calls from GenKit response messages
+func (iac *IntelligentAgentCreator) extractToolCallsFromResponse(response *ai.ModelResponse, modelName string) []interface{} {
+	var toolCalls []interface{}
+	
+	if response.Request == nil || len(response.Request.Messages) == 0 {
+		return toolCalls
+	}
+	
+	stepCounter := 0
+	for _, msg := range response.Request.Messages {
+		if msg.Role == ai.RoleModel && len(msg.Content) > 0 {
+			for _, part := range msg.Content {
+				if part.ToolRequest != nil {
+					stepCounter++
+					toolCall := map[string]interface{}{
+						"step":        stepCounter,
+						"type":        "tool_call",
+						"tool_name":   part.ToolRequest.Name,
+						"timestamp":   time.Now().Format(time.RFC3339),
+						"model":       modelName,
+					}
+					
+					// Add input parameters if available
+					if part.ToolRequest.Input != nil {
+						toolCall["input"] = part.ToolRequest.Input
+					}
+					
+					// Find corresponding tool response
+					for _, respMsg := range response.Request.Messages {
+						if respMsg.Role == ai.RoleTool {
+							for _, respPart := range respMsg.Content {
+								if respPart.ToolResponse != nil && respPart.ToolResponse.Name == part.ToolRequest.Name {
+									toolCall["output"] = respPart.ToolResponse.Output
+									toolCall["status"] = "completed"
+									break
+								}
+							}
+						}
+					}
+					
+					// Add token usage if available from response
+					if response.Usage != nil {
+						toolCall["tokens"] = map[string]interface{}{
+							"input":  response.Usage.InputTokens,
+							"output": response.Usage.OutputTokens,
+							"total":  response.Usage.InputTokens + response.Usage.OutputTokens,
+						}
+					}
+					
+					toolCalls = append(toolCalls, toolCall)
+				}
+			}
+		}
+	}
+	
+	return toolCalls
+}
+
+// buildExecutionStepsFromResponse builds detailed execution steps from GenKit conversation flow
+func (iac *IntelligentAgentCreator) buildExecutionStepsFromResponse(response *ai.ModelResponse, agent *models.Agent, modelName string, toolsAvailable int) []interface{} {
+	var executionSteps []interface{}
+	
+	if response.Request == nil || len(response.Request.Messages) == 0 {
+		// Fallback: Create basic step
+		executionSteps = append(executionSteps, map[string]interface{}{
+			"step":        1,
+			"type":        "agent_execution",
+			"description": fmt.Sprintf("Executed agent '%s' with %d available tools", agent.Name, toolsAvailable),
+			"timestamp":   time.Now().Format(time.RFC3339),
+			"status":      "completed",
+			"model":       modelName,
+		})
+		return executionSteps
+	}
+	
+	stepCounter := 0
+	userMessages := 0
+	modelMessages := 0
+	toolMessages := 0
+	
+	// Count message types and build detailed steps
+	for _, msg := range response.Request.Messages {
+		switch msg.Role {
+		case ai.RoleUser:
+			userMessages++
+			if userMessages == 1 { // Initial user message
+				stepCounter++
+				executionSteps = append(executionSteps, map[string]interface{}{
+					"step":        stepCounter,
+					"type":        "user_input",
+					"description": "Initial task input received",
+					"content":     iac.truncateContent(iac.extractMessageContent(msg), 200),
+					"timestamp":   time.Now().Format(time.RFC3339),
+					"status":      "completed",
+				})
+			}
+			
+		case ai.RoleModel:
+			modelMessages++
+			stepCounter++
+			
+			// Check if this model message contains tool calls
+			hasToolCalls := false
+			toolCallCount := 0
+			for _, part := range msg.Content {
+				if part.ToolRequest != nil {
+					hasToolCalls = true
+					toolCallCount++
+				}
+			}
+			
+			stepType := "reasoning"
+			description := fmt.Sprintf("Model reasoning step %d", modelMessages)
+			if hasToolCalls {
+				stepType = "tool_planning"
+				description = fmt.Sprintf("Model planning to use %d tools", toolCallCount)
+			}
+			
+			executionSteps = append(executionSteps, map[string]interface{}{
+				"step":         stepCounter,
+				"type":         stepType,
+				"description":  description,
+				"content":      iac.truncateContent(iac.extractMessageContent(msg), 200),
+				"tool_calls":   toolCallCount,
+				"timestamp":    time.Now().Format(time.RFC3339),
+				"status":       "completed",
+				"model":        modelName,
+			})
+			
+		case ai.RoleTool:
+			toolMessages++
+			stepCounter++
+			
+			// Get tool name from response
+			toolName := "unknown"
+			for _, part := range msg.Content {
+				if part.ToolResponse != nil {
+					toolName = part.ToolResponse.Name
+					break
+				}
+			}
+			
+			executionSteps = append(executionSteps, map[string]interface{}{
+				"step":        stepCounter,
+				"type":        "tool_response",
+				"description": fmt.Sprintf("Tool '%s' execution completed", toolName),
+				"tool_name":   toolName,
+				"content":     iac.truncateContent(iac.extractMessageContent(msg), 200),
+				"timestamp":   time.Now().Format(time.RFC3339),
+				"status":      "completed",
+			})
+		}
+	}
+	
+	// Add summary step with token usage
+	stepCounter++
+	summaryStep := map[string]interface{}{
+		"step":         stepCounter,
+		"type":         "execution_summary",
+		"description":  fmt.Sprintf("Execution completed: %d user msgs, %d model msgs, %d tool msgs", userMessages, modelMessages, toolMessages),
+		"timestamp":    time.Now().Format(time.RFC3339),
+		"status":       "completed",
+		"model":        modelName,
+		"total_steps":  stepCounter - 1,
+	}
+	
+	// Add token usage and performance metrics
+	if response.Usage != nil {
+		summaryStep["tokens"] = map[string]interface{}{
+			"input":  response.Usage.InputTokens,
+			"output": response.Usage.OutputTokens,
+			"total":  response.Usage.InputTokens + response.Usage.OutputTokens,
+		}
+	}
+	
+	if response.LatencyMs > 0 {
+		summaryStep["latency_ms"] = response.LatencyMs
+	}
+	
+	if response.FinishReason != "" {
+		summaryStep["finish_reason"] = response.FinishReason
+	}
+	
+	executionSteps = append(executionSteps, summaryStep)
+	
+	return executionSteps
+}
+
+// Helper method to extract content from message parts
+func (iac *IntelligentAgentCreator) extractMessageContent(msg *ai.Message) string {
+	var content strings.Builder
+	
+	for i, part := range msg.Content {
+		if i > 0 {
+			content.WriteString(" | ")
+		}
+		
+		if part.Text != "" {
+			content.WriteString(part.Text)
+		} else if part.ToolRequest != nil {
+			content.WriteString(fmt.Sprintf("[Tool Call: %s]", part.ToolRequest.Name))
+		} else if part.ToolResponse != nil {
+			content.WriteString(fmt.Sprintf("[Tool Response: %s]", part.ToolResponse.Name))
+		}
+	}
+	
+	return content.String()
+}
+
+// Helper method to truncate content to specified length
+func (iac *IntelligentAgentCreator) truncateContent(content string, maxLen int) string {
+	if len(content) <= maxLen {
+		return content
+	}
+	return content[:maxLen-3] + "..."
 }

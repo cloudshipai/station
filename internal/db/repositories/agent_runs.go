@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"log"
 	"station/internal/db/queries"
 	"station/pkg/models"
 	"time"
@@ -268,16 +269,54 @@ func (r *AgentRunRepo) UpdateCompletion(id int64, finalResponse string, stepsTak
 		if jsonStr, err := toolCalls.Value(); err == nil {
 			if strVal, ok := jsonStr.(string); ok {
 				params.ToolCalls = sql.NullString{String: strVal, Valid: true}
+				truncated := strVal
+				if len(strVal) > 100 {
+					truncated = strVal[:100]
+				}
+				log.Printf("DEBUG REPO: Setting tool_calls JSON: %s", truncated)
+			} else if byteVal, ok := jsonStr.([]byte); ok {
+				strVal := string(byteVal)
+				params.ToolCalls = sql.NullString{String: strVal, Valid: true}
+				truncated := strVal
+				if len(strVal) > 100 {
+					truncated = strVal[:100]
+				}
+				log.Printf("DEBUG REPO: Setting tool_calls JSON from bytes: %s", truncated)
+			} else {
+				log.Printf("DEBUG REPO: tool_calls Value() returned unexpected type: %T", jsonStr)
 			}
+		} else {
+			log.Printf("DEBUG REPO: tool_calls Value() error: %v", err)
 		}
+	} else {
+		log.Printf("DEBUG REPO: toolCalls is nil")
 	}
 	
 	if executionSteps != nil {
 		if jsonStr, err := executionSteps.Value(); err == nil {
 			if strVal, ok := jsonStr.(string); ok {
 				params.ExecutionSteps = sql.NullString{String: strVal, Valid: true}
+				truncated := strVal
+				if len(strVal) > 100 {
+					truncated = strVal[:100]
+				}
+				log.Printf("DEBUG REPO: Setting execution_steps JSON: %s", truncated)
+			} else if byteVal, ok := jsonStr.([]byte); ok {
+				strVal := string(byteVal)
+				params.ExecutionSteps = sql.NullString{String: strVal, Valid: true}
+				truncated := strVal
+				if len(strVal) > 100 {
+					truncated = strVal[:100]
+				}
+				log.Printf("DEBUG REPO: Setting execution_steps JSON from bytes: %s", truncated)
+			} else {
+				log.Printf("DEBUG REPO: execution_steps Value() returned unexpected type: %T", jsonStr)
 			}
+		} else {
+			log.Printf("DEBUG REPO: execution_steps Value() error: %v", err)
 		}
+	} else {
+		log.Printf("DEBUG REPO: executionSteps is nil")
 	}
 	
 	if completedAt != nil {
