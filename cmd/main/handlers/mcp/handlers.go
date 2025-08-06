@@ -172,24 +172,43 @@ func (h *MCPHandler) getOrCreateEnvironmentID(repos *repositories.Repositories, 
 func (h *MCPHandler) removeOrphanedAgentTools(repos *repositories.Repositories, agents []*models.Agent, fileConfigID int64) (int, error) {
 	removed := 0
 	
+	// Get the config name for logging
+	var configName string
+	dbConfigs, err := repos.FileMCPConfigs.ListByEnvironment(1) // Assuming default environment
+	if err == nil {
+		for _, config := range dbConfigs {
+			if config.ID == fileConfigID {
+				configName = config.ConfigName
+				break
+			}
+		}
+	}
+	if configName == "" {
+		configName = fmt.Sprintf("config_%d", fileConfigID)
+	}
+	
 	// Get all MCP tools that belong to the deleted config
 	orphanedTools, err := repos.MCPTools.GetByServerID(fileConfigID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get tools for config ID %d: %w", fileConfigID, err)
 	}
 	
-	// Create a set of orphaned tool IDs for quick lookup
+	// Create a set of orphaned tool IDs and names for quick lookup and logging
 	orphanedToolIDs := make(map[int64]bool)
+	orphanedToolNames := make(map[int64]string)
 	for _, tool := range orphanedTools {
 		orphanedToolIDs[tool.ID] = true
+		orphanedToolNames[tool.ID] = tool.Name
 	}
 	
-	// Remove orphaned tools from all agents
+	// Remove orphaned tools from all agents and log the changes
 	for _, agent := range agents {
 		agentTools, err := repos.AgentTools.ListAgentTools(agent.ID)
 		if err != nil {
 			continue
 		}
+		
+		var removedToolNames []string
 		
 		// Remove tools that belong to the deleted config
 		for _, agentTool := range agentTools {
@@ -198,7 +217,21 @@ func (h *MCPHandler) removeOrphanedAgentTools(repos *repositories.Repositories, 
 				if err != nil {
 					return removed, fmt.Errorf("failed to remove tool %d from agent %s: %w", agentTool.ToolID, agent.Name, err)
 				}
+				
+				toolName := orphanedToolNames[agentTool.ToolID]
+				removedToolNames = append(removedToolNames, toolName)
 				removed++
+			}
+		}
+		
+		// Create audit log entry for this agent if tools were removed
+		if len(removedToolNames) > 0 {
+			err := h.logAgentHealthEvent(repos, agent.ID, "tool_removed", "orphaned_config", 
+				fmt.Sprintf("Removed tools %v from deleted config '%s'", removedToolNames, configName),
+				h.determineImpactLevel(len(removedToolNames)))
+			if err != nil {
+				// Don't fail the entire operation for logging errors, just log the issue
+				fmt.Printf("\n    ⚠️  Warning: Failed to log health event for agent %s: %v", agent.Name, err)
 			}
 		}
 	}
@@ -219,4 +252,35 @@ func (h *MCPHandler) removeOrphanedAgentTools(repos *repositories.Repositories, 
 	}
 	
 	return removed, nil
+}
+
+// logAgentHealthEvent creates an audit log entry for agent health monitoring
+func (h *MCPHandler) logAgentHealthEvent(repos *repositories.Repositories, agentID int64, eventType, eventReason, details, impact string) error {
+	// For now, we'll just log to console since we don't have AgentAuditLog repository yet
+	// In a full implementation, you would create the repository and save to database
+	fmt.Printf("\n    📋 Agent Health Event: Agent %d - %s (%s) - %s - Impact: %s", 
+		agentID, eventType, eventReason, details, impact)
+	
+	// TODO: Implement AgentAuditLog repository and save to database
+	// auditLog := &models.AgentAuditLog{
+	//     AgentID:     agentID,
+	//     EventType:   eventType,
+	//     EventReason: eventReason,
+	//     Details:     details,
+	//     Impact:      impact,
+	//     CreatedAt:   time.Now(),
+	// }
+	// return repos.AgentAuditLog.Create(auditLog)
+	
+	return nil
+}
+
+// determineImpactLevel determines the impact level based on number of tools removed
+func (h *MCPHandler) determineImpactLevel(toolsRemoved int) string {
+	if toolsRemoved >= 5 {
+		return "high"
+	} else if toolsRemoved >= 2 {
+		return "medium"
+	}
+	return "low"
 }
