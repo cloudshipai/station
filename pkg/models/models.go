@@ -95,6 +95,17 @@ type AgentToolWithDetails struct {
 	EnvironmentName string `json:"environment_name" db:"environment_name"`
 }
 
+// AgentAuditLog tracks changes to agent configuration for health monitoring
+type AgentAuditLog struct {
+	ID          int64     `json:"id" db:"id"`
+	AgentID     int64     `json:"agent_id" db:"agent_id"`
+	EventType   string    `json:"event_type" db:"event_type"` // "tool_removed", "tool_added", "config_changed", etc.
+	EventReason string    `json:"event_reason" db:"event_reason"` // "orphaned_config", "manual_removal", etc.
+	Details     string    `json:"details" db:"details"` // JSON with specifics like tool names, config names
+	Impact      string    `json:"impact" db:"impact"` // "high", "medium", "low" 
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+}
+
 type MCPToolWithDetails struct {
 	MCPTool
 	ServerName      string `json:"server_name" db:"server_name"`
