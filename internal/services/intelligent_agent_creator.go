@@ -1018,35 +1018,74 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 				log.Printf("⚠️ Failed to unmarshal server config for %s: %v", serverName, err)
 				continue
 			}
-			log.Printf("🔌 Connecting to MCP server: %s (command: %s, args: %v)", serverName, serverConfig.Command, serverConfig.Args)
-			
-			// Convert env map to slice for Stdio config
-			var envSlice []string
-			for key, value := range serverConfig.Env {
-				envSlice = append(envSlice, key+"="+value)
+			// Determine transport type based on config fields
+			var mcpClient *mcp.GenkitMCPClient
+			if serverConfig.URL != "" {
+				// HTTP-based MCP server
+				log.Printf("🔌 Connecting to HTTP MCP server: %s (URL: %s)", serverName, serverConfig.URL)
+				mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
+					Name:    "f", // Short name to minimize tool call IDs in OpenAI
+					Version: "1.0.0",
+					StreamableHTTP: &mcp.StreamableHTTPConfig{
+						BaseURL: serverConfig.URL,
+						Timeout: 30 * time.Second, // Add timeout to prevent hanging
+					},
+				})
+			} else if serverConfig.Command != "" {
+				// Stdio-based MCP server
+				log.Printf("🔌 Connecting to Stdio MCP server: %s (command: %s, args: %v)", serverName, serverConfig.Command, serverConfig.Args)
+				
+				// Convert env map to slice for Stdio config
+				var envSlice []string
+				for key, value := range serverConfig.Env {
+					envSlice = append(envSlice, key+"="+value)
+				}
+				
+				mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
+					Name:    "f", // Short name to minimize tool call IDs in OpenAI
+					Version: "1.0.0",
+					Stdio: &mcp.StdioConfig{
+						Command: serverConfig.Command,
+						Args:    serverConfig.Args,
+						Env:     envSlice,
+					},
+				})
+			} else {
+				log.Printf("⚠️ Invalid MCP server config for %s: missing both URL and Command fields", serverName)
+				continue
 			}
-			
-			// Create Genkit MCP client for this server using short name to avoid long tool call IDs
-			mcpClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-				Name:    "f", // Short name to minimize tool call IDs in OpenAI
-				Version: "1.0.0",
-				Stdio: &mcp.StdioConfig{
-					Command: serverConfig.Command,
-					Args:    serverConfig.Args,
-					Env:     envSlice,
-				},
-			})
 			if err != nil {
 				log.Printf("⚠️ Failed to create MCP client for %s: %v", serverName, err)
 				continue
 			}
 
-			// Get tools from this MCP server
+			// Get tools from this MCP server with timeout and panic recovery
 			log.Printf("🔍 Attempting to get tools from MCP server: %s", serverName)
-			serverTools, err := mcpClient.GetActiveTools(ctx, iac.genkitApp)
+			
+			// Create a timeout context for the tool discovery
+			toolCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			
+			var serverTools []ai.Tool
+			func() {
+				// Recover from potential panics in the MCP client
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("🚨 Panic recovered while getting tools from %s: %v", serverName, r)
+						err = fmt.Errorf("panic in MCP client: %v", r)
+					}
+				}()
+				
+				serverTools, err = mcpClient.GetActiveTools(toolCtx, iac.genkitApp)
+			}()
+			
 			if err != nil {
 				log.Printf("⚠️ Failed to get tools from %s: %v", serverName, err)
-				log.Printf("🔍 MCP client details - Name: %s, Command: %s, Args: %v", serverName, serverConfig.Command, serverConfig.Args)
+				if serverConfig.URL != "" {
+					log.Printf("🔍 HTTP MCP server details - Name: %s, URL: %s", serverName, serverConfig.URL)
+				} else {
+					log.Printf("🔍 Stdio MCP server details - Name: %s, Command: %s, Args: %v", serverName, serverConfig.Command, serverConfig.Args)
+				}
 				continue
 			}
 
