@@ -3,6 +3,8 @@ package mcp
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -47,7 +49,6 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environment, err)
 	}
-
 	// Get current database state
 	fmt.Printf("🔍 Scanning database configs in environment '%s'...\n", environment)
 	dbConfigs, err := repos.FileMCPConfigs.ListByEnvironment(envID)
@@ -55,9 +56,11 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 		return fmt.Errorf("failed to list database configs: %w", err)
 	}
 
-	// For now, we'll work with the database configs as our source of truth
-	// TODO: Implement actual file system scanning when DiscoverFileConfigs is available
-	fileConfigs := dbConfigs
+	// Discover actual config files from filesystem
+	fileConfigs, err := h.discoverConfigFiles(environment)
+	if err != nil {
+		return fmt.Errorf("failed to discover config files: %w", err)
+	}
 
 	// Get all agents in this environment
 	agents, err := repos.Agents.ListByEnvironment(envID)
@@ -70,24 +73,38 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 	var toRemove []string
 	var orphanedToolsRemoved int
 
-	// For now, we'll just check what configs exist and mark them as in sync
-	// TODO: Implement actual file system comparison when file discovery is available
-	fileConfigMap := make(map[string]bool)
+	// Create maps for comparison
+	fileConfigMap := make(map[string]*repositories.FileConfigRecord)
+	dbConfigMap := make(map[string]*repositories.FileConfigRecord)
+	
 	for _, fileConfig := range fileConfigs {
-		fileConfigMap[fileConfig.ConfigName] = true
+		fileConfigMap[fileConfig.ConfigName] = fileConfig
+	}
+	
+	for _, dbConfig := range dbConfigs {
+		dbConfigMap[dbConfig.ConfigName] = dbConfig
+	}
+
+	// Find configs that exist in filesystem but not in database (new configs to sync)
+	for _, fileConfig := range fileConfigs {
+		dbConfig, existsInDB := dbConfigMap[fileConfig.ConfigName]
 		
-		// For demonstration, we'll check if force sync is requested
-		if force {
+		if !existsInDB || force {
+			// New config or force sync requested
+			toSync = append(toSync, fileConfig.ConfigName)
+		} else if dbConfig.LastLoadedAt != nil && !dbConfig.LastLoadedAt.IsZero() && fileConfig.LastLoadedAt.After(*dbConfig.LastLoadedAt) {
+			// File modified after last sync
 			toSync = append(toSync, fileConfig.ConfigName)
 		}
 	}
 
-	// Find configs that exist in DB but not in files (to remove)
+	// Find configs that exist in DB but not in filesystem (orphaned configs to remove)
 	for _, dbConfig := range dbConfigs {
-		if !fileConfigMap[dbConfig.ConfigName] {
+		if _, existsInFiles := fileConfigMap[dbConfig.ConfigName]; !existsInFiles {
 			toRemove = append(toRemove, dbConfig.ConfigName)
 		}
 	}
+
 
 	// Show what will be done
 	if len(toSync) > 0 {
@@ -322,4 +339,52 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 	fmt.Printf("\n💡 Run 'stn mcp sync <environment>' to update configurations\n")
 
 	return nil
+}
+
+// discoverConfigFiles scans the filesystem for JSON config files in the environment directory
+func (h *MCPHandler) discoverConfigFiles(environment string) ([]*repositories.FileConfigRecord, error) {
+	// Get config directory path
+	configDir := os.ExpandEnv("$HOME/.config/station")
+	envDir := filepath.Join(configDir, "environments", environment)
+	
+	// Check if environment directory exists
+	if _, err := os.Stat(envDir); os.IsNotExist(err) {
+		return []*repositories.FileConfigRecord{}, nil
+	}
+	
+	// Read all files in environment directory
+	files, err := os.ReadDir(envDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read environment directory %s: %w", envDir, err)
+	}
+	
+	var configs []*repositories.FileConfigRecord
+	for _, file := range files {
+		// Skip non-JSON files and variables.yml
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".json") || 
+		   file.Name() == "variables.yml" {
+			continue
+		}
+		
+		// Get file info
+		fileInfo, err := file.Info()
+		if err != nil {
+			continue
+		}
+		
+		// Extract config name from filename (remove .json extension and timestamp suffix if present)
+		configName := strings.TrimSuffix(file.Name(), ".json")
+		
+		// Create a FileConfigRecord-like structure for filesystem files
+		modTime := fileInfo.ModTime()
+		config := &repositories.FileConfigRecord{
+			ConfigName:    configName,
+			TemplatePath:  filepath.Join("environments", environment, file.Name()),
+			LastLoadedAt:  &modTime,
+		}
+		
+		configs = append(configs, config)
+	}
+	
+	return configs, nil
 }
