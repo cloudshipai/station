@@ -1,17 +1,11 @@
 package mcp
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/internal/services"
-	"station/pkg/models"
+	mcpservice "station/internal/mcp"
 )
 
 // truncateString truncates a string to maxLen characters
@@ -550,6 +544,9 @@ func (h *MCPHandler) loadConfigFromFilesystem(repos *repositories.Repositories, 
 		// Extract server configuration
 		if command, ok := serverConfigMap["command"].(string); ok {
 			server.Command = command
+		}
+		if url, ok := serverConfigMap["url"].(string); ok {
+			server.Command = url // Store URL in command field for HTTP servers
 		}
 		if argsInterface, ok := serverConfigMap["args"]; ok {
 			if argsArray, ok := argsInterface.([]interface{}); ok {
