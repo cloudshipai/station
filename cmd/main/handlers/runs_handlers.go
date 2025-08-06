@@ -155,6 +155,7 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 		// Show comprehensive details in verbose mode
 		fmt.Printf("\n" + styles.Banner.Render("📊 Detailed Run Information") + "\n")
 		
+		
 		// Agent Information
 		fmt.Printf("\n🤖 Agent Details:\n")
 		fmt.Printf("• Agent ID: %d\n", run.AgentID)

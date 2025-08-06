@@ -21,12 +21,13 @@ type Server struct {
 	// mcpConfigSvc removed - using file-based configs only
 	toolDiscoverySvc *ToolDiscoveryService
 	agentService     services.AgentServiceInterface
+	executionQueue   *services.ExecutionQueueService
 	authService      *auth.AuthService
 	repos            *repositories.Repositories
 	localMode        bool
 }
 
-func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, localMode bool) *Server {
+func NewServer(database db.Database, agentService services.AgentServiceInterface, executionQueue *services.ExecutionQueueService, repos *repositories.Repositories, localMode bool) *Server {
 	// Create MCP server using the official mcp-go library
 	mcpServer := server.NewMCPServer(
 		"Station MCP Server",
@@ -51,6 +52,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		// mcpConfigSvc removed
 		toolDiscoverySvc: toolDiscoverySvc,
 		agentService:     agentService,
+		executionQueue:   executionQueue,
 		authService:      authService,
 		repos:            repos,
 		localMode:        localMode,
