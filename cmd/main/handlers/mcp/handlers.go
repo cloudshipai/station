@@ -172,27 +172,49 @@ func (h *MCPHandler) getOrCreateEnvironmentID(repos *repositories.Repositories, 
 func (h *MCPHandler) removeOrphanedAgentTools(repos *repositories.Repositories, agents []*models.Agent, fileConfigID int64) (int, error) {
 	removed := 0
 	
+	// Get all MCP tools that belong to the deleted config
+	orphanedTools, err := repos.MCPTools.GetByServerID(fileConfigID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get tools for config ID %d: %w", fileConfigID, err)
+	}
+	
+	// Create a set of orphaned tool IDs for quick lookup
+	orphanedToolIDs := make(map[int64]bool)
+	for _, tool := range orphanedTools {
+		orphanedToolIDs[tool.ID] = true
+	}
+	
+	// Remove orphaned tools from all agents
 	for _, agent := range agents {
-		// Get agent tools
 		agentTools, err := repos.AgentTools.ListAgentTools(agent.ID)
 		if err != nil {
 			continue
 		}
 		
-		// For now, we'll simulate removal based on the file config ID
-		// TODO: Implement proper file config tracking when models support it
+		// Remove tools that belong to the deleted config
 		for _, agentTool := range agentTools {
-			// Simulate removing tools for the deleted config
-			// In a real implementation, we'd check tool.FileConfigID == fileConfigID
-			if len(agentTools) > 0 {
-				// For demo, we'll remove some tools
+			if orphanedToolIDs[agentTool.ToolID] {
 				err = repos.AgentTools.RemoveAgentTool(agent.ID, agentTool.ToolID)
 				if err != nil {
 					return removed, fmt.Errorf("failed to remove tool %d from agent %s: %w", agentTool.ToolID, agent.Name, err)
 				}
 				removed++
-				break // Only remove one for demo
 			}
+		}
+	}
+	
+	// Also delete the MCP tools and servers from the database
+	if len(orphanedTools) > 0 {
+		// Delete tools first
+		err = repos.MCPTools.DeleteByServerID(fileConfigID)
+		if err != nil {
+			return removed, fmt.Errorf("failed to delete orphaned tools: %w", err)
+		}
+		
+		// Delete the MCP server record
+		err = repos.MCPServers.Delete(fileConfigID)
+		if err != nil {
+			return removed, fmt.Errorf("failed to delete orphaned server: %w", err)
 		}
 	}
 	
