@@ -14,9 +14,11 @@ type LoadMCPConfig struct {
 }
 
 type LoadMCPServerConfig struct {
-	Command string            `json:"command"`
+	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Type    string            `json:"type,omitempty"`
 }
 
 type TemplateField struct {
