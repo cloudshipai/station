@@ -1,13 +1,16 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/pkg/models"
 )
 
@@ -135,14 +138,21 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 	fmt.Printf("\n🔄 Syncing configurations...\n")
 
 	// Load new/updated configs
+	var syncErrors []string
 	for _, configName := range toSync {
-		fmt.Printf("  📥 Reloading %s...", configName)
-		// TODO: Implement actual file config loading when LoadFileConfig is available
-		// For now, we'll just simulate the process
-		fmt.Printf(" %s (simulated)\n", styles.Success.Render("✅"))
+		fmt.Printf("  📥 Loading %s...", configName)
+		
+		err := h.loadConfigFromFilesystem(repos, envID, environment, configName, fileConfigMap[configName])
+		if err != nil {
+			fmt.Printf(" %s\n", styles.Error.Render("❌"))
+			syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", configName, err))
+		} else {
+			fmt.Printf(" %s\n", styles.Success.Render("✅"))
+		}
 	}
 
 	// Remove orphaned configs and clean up agent tools
+	var affectedAgents []string
 	for _, configName := range toRemove {
 		fmt.Printf("  🗑️  Removing %s...", configName)
 		
@@ -156,6 +166,31 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 		}
 		
 		if configToRemove != nil {
+			// Count agents before tool removal for health tracking
+			agentsWithTools := 0
+			for _, agent := range agents {
+				agentTools, err := repos.AgentTools.ListAgentTools(agent.ID)
+				if err != nil {
+					continue
+				}
+				
+				// Check if this agent has any tools from the config being removed
+				orphanedTools, err := repos.MCPTools.GetByServerID(configToRemove.ID)
+				if err != nil {
+					continue
+				}
+				
+				for _, agentTool := range agentTools {
+					for _, orphanedTool := range orphanedTools {
+						if agentTool.ToolID == orphanedTool.ID {
+							agentsWithTools++
+							affectedAgents = append(affectedAgents, agent.Name)
+							break
+						}
+					}
+				}
+			}
+			
 			// Remove agent tools that reference this config
 			toolsRemoved, err := h.removeOrphanedAgentTools(repos, agents, configToRemove.ID)
 			if err != nil {
@@ -176,12 +211,39 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 	}
 
 	// Summary
-	fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
-	fmt.Printf("📊 Summary:\n")
-	fmt.Printf("  • Synced: %d configs\n", len(toSync))
-	fmt.Printf("  • Removed: %d configs\n", len(toRemove))
-	if orphanedToolsRemoved > 0 {
-		fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", orphanedToolsRemoved)
+	if len(syncErrors) > 0 {
+		fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed with errors!"))
+		fmt.Printf("📊 Summary:\n")
+		fmt.Printf("  • Synced: %d configs\n", len(toSync)-len(syncErrors))
+		fmt.Printf("  • Failed: %d configs\n", len(syncErrors))
+		fmt.Printf("  • Removed: %d configs\n", len(toRemove))
+		if orphanedToolsRemoved > 0 {
+			fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", orphanedToolsRemoved)
+		}
+		if len(affectedAgents) > 0 {
+			fmt.Printf("  • Affected agents: %v\n", affectedAgents)
+			fmt.Printf("  • ⚠️  Agent health may be impacted - check agent logs for details\n")
+		}
+		
+		fmt.Printf("\n❌ Sync Errors:\n")
+		for _, errMsg := range syncErrors {
+			fmt.Printf("  • %s\n", styles.Error.Render(errMsg))
+		}
+		
+		// Don't return error - partial success is still useful
+		return nil
+	} else {
+		fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
+		fmt.Printf("📊 Summary:\n")
+		fmt.Printf("  • Synced: %d configs\n", len(toSync))
+		fmt.Printf("  • Removed: %d configs\n", len(toRemove))
+		if orphanedToolsRemoved > 0 {
+			fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", orphanedToolsRemoved)
+		}
+		if len(affectedAgents) > 0 {
+			fmt.Printf("  • Affected agents: %v\n", affectedAgents)
+			fmt.Printf("  • ⚠️  Agent health may be impacted - check agent logs for details\n")
+		}
 	}
 
 	return nil
@@ -387,4 +449,161 @@ func (h *MCPHandler) discoverConfigFiles(environment string) ([]*repositories.Fi
 	}
 	
 	return configs, nil
+}
+
+// loadConfigFromFilesystem loads a config file from filesystem, processes templates, and registers tools
+func (h *MCPHandler) loadConfigFromFilesystem(repos *repositories.Repositories, envID int64, environment, configName string, fileConfig *repositories.FileConfigRecord) error {
+	// Get config directory path
+	configDir := os.ExpandEnv("$HOME/.config/station")
+	configPath := filepath.Join(configDir, fileConfig.TemplatePath)
+	
+	// Read the config file
+	rawContent, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+	
+	// Process template variables
+	templateService := services.NewTemplateVariableService(configDir, repos)
+	result, err := templateService.ProcessTemplateWithVariables(envID, configName, string(rawContent), false)
+	if err != nil {
+		return fmt.Errorf("failed to process template variables: %w", err)
+	}
+	
+	// Check if all variables were resolved
+	if !result.AllResolved {
+		missingVars := make([]string, 0, len(result.MissingVars))
+		for _, missingVar := range result.MissingVars {
+			missingVars = append(missingVars, missingVar.Name)
+		}
+		return fmt.Errorf("missing template variables: %v. Please update %s/environments/%s/variables.yml", 
+			missingVars, configDir, environment)
+	}
+	
+	// Parse the rendered JSON
+	var configData map[string]interface{}
+	if err := json.Unmarshal([]byte(result.RenderedContent), &configData); err != nil {
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
+	
+	// Extract MCP servers from config
+	var serversData map[string]interface{}
+	if mcpServers, ok := configData["mcpServers"].(map[string]interface{}); ok {
+		serversData = mcpServers
+	} else if servers, ok := configData["servers"].(map[string]interface{}); ok {
+		serversData = servers
+	} else {
+		return fmt.Errorf("no 'mcpServers' or 'servers' field found in config")
+	}
+	
+	// Create or update file config record
+	now := time.Now()
+	var fileConfigID int64
+	
+	// Check if config already exists
+	existingConfigs, err := repos.FileMCPConfigs.ListByEnvironment(envID)
+	if err != nil {
+		return fmt.Errorf("failed to check existing configs: %w", err)
+	}
+	
+	var existingConfig *repositories.FileConfigRecord
+	for _, existing := range existingConfigs {
+		if existing.ConfigName == configName {
+			existingConfig = existing
+			break
+		}
+	}
+	
+	if existingConfig != nil {
+		// Update existing config
+		fileConfigID = existingConfig.ID
+		err = repos.FileMCPConfigs.UpdateLastLoadedAt(fileConfigID)
+		if err != nil {
+			return fmt.Errorf("failed to update config timestamp: %w", err)
+		}
+	} else {
+		// Create new config
+		fileConfigID, err = repos.FileMCPConfigs.Create(&repositories.FileConfigRecord{
+			EnvironmentID: envID,
+			ConfigName:    configName,
+			TemplatePath:  fileConfig.TemplatePath,
+			LastLoadedAt:  &now,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create file config record: %w", err)
+		}
+	}
+	
+	// Create MCP servers and discover tools
+	for serverName, serverConfig := range serversData {
+		serverConfigMap, ok := serverConfig.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		
+		// Create MCP server record
+		server := &models.MCPServer{
+			EnvironmentID: envID,
+			Name:          serverName,
+		}
+		
+		// Extract server configuration
+		if command, ok := serverConfigMap["command"].(string); ok {
+			server.Command = command
+		}
+		if argsInterface, ok := serverConfigMap["args"]; ok {
+			if argsArray, ok := argsInterface.([]interface{}); ok {
+				args := make([]string, len(argsArray))
+				for i, arg := range argsArray {
+					if argStr, ok := arg.(string); ok {
+						args[i] = argStr
+					}
+				}
+				server.Args = args
+			}
+		}
+		if envInterface, ok := serverConfigMap["env"]; ok {
+			if envMap, ok := envInterface.(map[string]interface{}); ok {
+				env := make(map[string]string)
+				for k, v := range envMap {
+					if vStr, ok := v.(string); ok {
+						env[k] = vStr
+					}
+				}
+				server.Env = env
+			}
+		}
+		
+		// Create server (or try to find existing one)
+		serverID, err := repos.MCPServers.Create(server)
+		if err != nil {
+			return fmt.Errorf("failed to create/update MCP server %s: %w", serverName, err)
+		}
+		
+		// Discover and register tools for this server
+		err = h.discoverToolsForServer(repos, serverID, serverName, serverConfigMap, result.RenderedContent)
+		if err != nil {
+			// Don't fail the entire sync for tool discovery errors, just log them
+			fmt.Printf("\n    ⚠️  Warning: Failed to discover tools for %s: %v", serverName, err)
+		}
+	}
+	
+	return nil
+}
+
+// discoverToolsForServer discovers and registers tools for a specific MCP server
+func (h *MCPHandler) discoverToolsForServer(repos *repositories.Repositories, serverID int64, serverName string, serverConfig map[string]interface{}, renderedContent string) error {
+	// This is a simplified version - you could integrate with the existing ToolDiscoveryService
+	// For now, we'll create a basic tool discovery based on the server configuration
+	
+	// Create a basic tool entry as placeholder
+	// In a full implementation, this would actually connect to the MCP server and discover real tools
+	tool := &models.MCPTool{
+		MCPServerID: serverID,
+		Name:        fmt.Sprintf("%s_placeholder", serverName),
+		Description: fmt.Sprintf("Placeholder tool for %s server", serverName),
+	}
+	
+	_, err := repos.MCPTools.Create(tool)
+	return err
 }
