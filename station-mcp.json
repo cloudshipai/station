@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "station": {
+      "command": "/home/epuerta/projects/hack/station/bin/stn",
+      "args": ["stdio"],
+      "env": {}
+    }
+  }
+}

@@ -40,13 +40,20 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
 	}
 
-	// Convert result to Message format
+	// Convert result to Message format with proper types for execution queue
 	extra := map[string]interface{}{
 		"agent_id":     agent.ID,
 		"agent_name":   agent.Name,
 		"steps_taken":  result.StepsTaken,
-		"tool_calls":   result.ToolCalls,
-		"execution_steps": result.ExecutionSteps,
+	}
+	
+	// Add tool calls and execution steps directly (they're already *models.JSONArray)
+	if result.ToolCalls != nil {
+		extra["tool_calls"] = result.ToolCalls
+	}
+	
+	if result.ExecutionSteps != nil {
+		extra["execution_steps"] = result.ExecutionSteps
 	}
 
 	return &Message{
