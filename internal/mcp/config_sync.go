@@ -300,10 +300,10 @@ func (s *ConfigSyncer) RemoveOrphanedAgentTools(agents []*models.Agent, configID
 	}
 	
 	// Delete the orphaned tools and servers
-	for _, tool := range orphanedTools {
-		_ = s.repos.MCPTools.Delete(tool.ID)
-	}
 	for _, server := range orphanedServers {
+		// Delete tools by server ID first
+		_ = s.repos.MCPTools.DeleteByServerID(server.ID)
+		// Then delete the server
 		_ = s.repos.MCPServers.Delete(server.ID)
 	}
 	
