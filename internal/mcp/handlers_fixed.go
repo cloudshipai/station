@@ -67,10 +67,12 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create agent: %v", err)), nil
 	}
 
-	// Assign tools to the agent if tool_names were provided
+	// Assign tools to the agent
 	var assignedTools []string
 	var skippedTools []string
+	
 	if len(toolNames) > 0 {
+		// Assign specific tools if provided
 		for _, toolName := range toolNames {
 			// Find tool by name in the agent's environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
@@ -87,6 +89,20 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 			}
 			
 			assignedTools = append(assignedTools, toolName)
+		}
+	} else {
+		// If no specific tools provided, assign all available tools in the environment
+		allTools, err := s.repos.MCPTools.GetByEnvironmentID(environmentID)
+		if err == nil {
+			for _, tool := range allTools {
+				// Assign tool to agent
+				_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
+				if err != nil {
+					skippedTools = append(skippedTools, fmt.Sprintf("%s (failed: %v)", tool.Name, err))
+					continue
+				}
+				assignedTools = append(assignedTools, tool.Name)
+			}
 		}
 	}
 
