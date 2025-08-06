@@ -975,18 +975,30 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 		log.Printf("📂 Reading file config from: %s", absolutePath)
 		
 		// Read the actual file content from template path
-		content, err := os.ReadFile(absolutePath)
+		rawContent, err := os.ReadFile(absolutePath)
 		if err != nil {
 			log.Printf("⚠️ Failed to read file config %s from %s: %v", fileConfig.ConfigName, absolutePath, err)
 			continue
 		}
 
-		log.Printf("📄 File config content loaded: %d bytes", len(content))
+		log.Printf("📄 File config content loaded: %d bytes", len(rawContent))
+
+		// Process template variables using TemplateVariableService
+		templateService := NewTemplateVariableService(os.ExpandEnv("$HOME/.config/station"), iac.repos)
+		result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
+		if err != nil {
+			log.Printf("⚠️ Failed to process template variables for %s: %v", fileConfig.ConfigName, err)
+			continue
+		}
+
+		// Use rendered content with variables resolved
+		content := result.RenderedContent
+		log.Printf("📄 Template rendered: %d bytes, variables resolved: %v", len(content), result.AllResolved)
 
 		// Parse the file config content to get server configurations
 		// The JSON files use "mcpServers" but the struct expects "servers" - handle both
 		var rawConfig map[string]interface{}
-		if err := json.Unmarshal(content, &rawConfig); err != nil {
+		if err := json.Unmarshal([]byte(content), &rawConfig); err != nil {
 			log.Printf("⚠️ Failed to parse file config %s: %v", fileConfig.ConfigName, err)
 			continue
 		}
