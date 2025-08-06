@@ -2,11 +2,10 @@ package mcp
 
 import (
 	"fmt"
-	"os"
 
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/pkg/models"
+	mcpservice "station/internal/mcp"
 )
 
 // truncateString truncates a string to maxLen characters
@@ -19,11 +18,8 @@ func truncateString(s string, maxLen int) string {
 
 // validateEnvironmentExists checks if file-based environment directory exists
 func (h *MCPHandler) validateEnvironmentExists(envName string) bool {
-	configDir := fmt.Sprintf("./config/environments/%s", envName)
-	if _, err := os.Stat(configDir); err != nil {
-		return false
-	}
-	return true
+	statusService := mcpservice.NewStatusService(nil)
+	return statusService.ValidateEnvironmentExists(envName)
 }
 
 // syncMCPConfigsLocal performs declarative sync of file-based configs to database
@@ -47,64 +43,39 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environment, err)
 	}
-
-	// Get current database state
+	
+	// Create config syncer
+	syncer := mcpservice.NewConfigSyncer(repos)
+	
 	fmt.Printf("🔍 Scanning database configs in environment '%s'...\n", environment)
-	dbConfigs, err := repos.FileMCPConfigs.ListByEnvironment(envID)
+	
+	// Perform sync using the service
+	options := mcpservice.SyncOptions{
+		DryRun: dryRun,
+		Force:  force,
+	}
+	
+	result, err := syncer.Sync(environment, envID, options)
 	if err != nil {
-		return fmt.Errorf("failed to list database configs: %w", err)
+		return fmt.Errorf("sync failed: %w", err)
 	}
-
-	// For now, we'll work with the database configs as our source of truth
-	// TODO: Implement actual file system scanning when DiscoverFileConfigs is available
-	fileConfigs := dbConfigs
-
-	// Get all agents in this environment
-	agents, err := repos.Agents.ListByEnvironment(envID)
-	if err != nil {
-		return fmt.Errorf("failed to list agents: %w", err)
-	}
-
-	// Track changes
-	var toSync []string
-	var toRemove []string
-	var orphanedToolsRemoved int
-
-	// For now, we'll just check what configs exist and mark them as in sync
-	// TODO: Implement actual file system comparison when file discovery is available
-	fileConfigMap := make(map[string]bool)
-	for _, fileConfig := range fileConfigs {
-		fileConfigMap[fileConfig.ConfigName] = true
-		
-		// For demonstration, we'll check if force sync is requested
-		if force {
-			toSync = append(toSync, fileConfig.ConfigName)
-		}
-	}
-
-	// Find configs that exist in DB but not in files (to remove)
-	for _, dbConfig := range dbConfigs {
-		if !fileConfigMap[dbConfig.ConfigName] {
-			toRemove = append(toRemove, dbConfig.ConfigName)
-		}
-	}
-
-	// Show what will be done
-	if len(toSync) > 0 {
+	
+	// Display results
+	if len(result.SyncedConfigs) > 0 {
 		fmt.Printf("\n📥 Configs to sync:\n")
-		for _, name := range toSync {
+		for _, name := range result.SyncedConfigs {
 			fmt.Printf("  • %s\n", styles.Success.Render(name))
 		}
 	}
 
-	if len(toRemove) > 0 {
+	if len(result.RemovedConfigs) > 0 {
 		fmt.Printf("\n🗑️  Configs to remove:\n")
-		for _, name := range toRemove {
+		for _, name := range result.RemovedConfigs {
 			fmt.Printf("  • %s\n", styles.Error.Render(name))
 		}
 	}
 
-	if len(toSync) == 0 && len(toRemove) == 0 {
+	if len(result.SyncedConfigs) == 0 && len(result.RemovedConfigs) == 0 {
 		fmt.Printf("\n✅ %s\n", styles.Success.Render("All configurations are up to date"))
 		return nil
 	}
@@ -114,57 +85,63 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 		return nil
 	}
 
-	// Perform actual sync
+	// Show sync progress
 	fmt.Printf("\n🔄 Syncing configurations...\n")
 
-	// Load new/updated configs
-	for _, configName := range toSync {
-		fmt.Printf("  📥 Reloading %s...", configName)
-		// TODO: Implement actual file config loading when LoadFileConfig is available
-		// For now, we'll just simulate the process
-		fmt.Printf(" %s (simulated)\n", styles.Success.Render("✅"))
-	}
-
-	// Remove orphaned configs and clean up agent tools
-	for _, configName := range toRemove {
-		fmt.Printf("  🗑️  Removing %s...", configName)
-		
-		// Find and remove from database
-		var configToRemove *repositories.FileConfigRecord
-		for _, dbConfig := range dbConfigs {
-			if dbConfig.ConfigName == configName {
-				configToRemove = dbConfig
+	// Show individual config results
+	for _, configName := range result.SyncedConfigs {
+		// Check if this config had an error
+		hasError := false
+		for _, syncError := range result.SyncErrors {
+			if syncError.ConfigName == configName {
+				fmt.Printf("  📥 Loading %s... %s\n", configName, styles.Error.Render("❌"))
+				hasError = true
 				break
 			}
 		}
-		
-		if configToRemove != nil {
-			// Remove agent tools that reference this config
-			toolsRemoved, err := h.removeOrphanedAgentTools(repos, agents, configToRemove.ID)
-			if err != nil {
-				fmt.Printf(" %s\n", styles.Error.Render("❌"))
-				return fmt.Errorf("failed to clean up agent tools for %s: %w", configName, err)
-			}
-			orphanedToolsRemoved += toolsRemoved
-			
-			// Remove the file config
-			err = repos.FileMCPConfigs.Delete(configToRemove.ID)
-			if err != nil {
-				fmt.Printf(" %s\n", styles.Error.Render("❌"))
-				return fmt.Errorf("failed to remove %s: %w", configName, err)
-			}
+		if !hasError {
+			fmt.Printf("  📥 Loading %s... %s\n", configName, styles.Success.Render("✅"))
 		}
-		
-		fmt.Printf(" %s\n", styles.Success.Render("✅"))
+	}
+
+	for _, configName := range result.RemovedConfigs {
+		fmt.Printf("  🗑️  Removing %s... %s\n", configName, styles.Success.Render("✅"))
 	}
 
 	// Summary
-	fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
-	fmt.Printf("📊 Summary:\n")
-	fmt.Printf("  • Synced: %d configs\n", len(toSync))
-	fmt.Printf("  • Removed: %d configs\n", len(toRemove))
-	if orphanedToolsRemoved > 0 {
-		fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", orphanedToolsRemoved)
+	if len(result.SyncErrors) > 0 {
+		fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed with errors!"))
+		fmt.Printf("📊 Summary:\n")
+		fmt.Printf("  • Synced: %d configs\n", len(result.SyncedConfigs)-len(result.SyncErrors))
+		fmt.Printf("  • Failed: %d configs\n", len(result.SyncErrors))
+		fmt.Printf("  • Removed: %d configs\n", len(result.RemovedConfigs))
+		if result.OrphanedToolsRemoved > 0 {
+			fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", result.OrphanedToolsRemoved)
+		}
+		if len(result.AffectedAgents) > 0 {
+			fmt.Printf("  • Affected agents: %v\n", result.AffectedAgents)
+			fmt.Printf("  • ⚠️  Agent health may be impacted - check agent logs for details\n")
+		}
+		
+		fmt.Printf("\n❌ Sync Errors:\n")
+		for _, syncError := range result.SyncErrors {
+			fmt.Printf("  • %s: %s\n", syncError.ConfigName, styles.Error.Render(syncError.Error.Error()))
+		}
+		
+		// Don't return error - partial success is still useful
+		return nil
+	} else {
+		fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
+		fmt.Printf("📊 Summary:\n")
+		fmt.Printf("  • Synced: %d configs\n", len(result.SyncedConfigs))
+		fmt.Printf("  • Removed: %d configs\n", len(result.RemovedConfigs))
+		if result.OrphanedToolsRemoved > 0 {
+			fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", result.OrphanedToolsRemoved)
+		}
+		if len(result.AffectedAgents) > 0 {
+			fmt.Printf("  • Affected agents: %v\n", result.AffectedAgents)
+			fmt.Printf("  • ⚠️  Agent health may be impacted - check agent logs for details\n")
+		}
 	}
 
 	return nil
@@ -185,23 +162,14 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 
 	repos := repositories.New(database)
 	styles := getCLIStyles(h.themeManager)
-
-	// Get environments to check
-	var environments []*models.Environment
-	if environment == "default" || environment == "" {
-		// Show all environments
-		allEnvs, err := repos.Environments.List()
-		if err != nil {
-			return fmt.Errorf("failed to list environments: %w", err)
-		}
-		environments = allEnvs
-	} else {
-		// Show specific environment
-		env, err := repos.Environments.GetByName(environment)
-		if err != nil {
-			return fmt.Errorf("environment '%s' not found", environment)
-		}
-		environments = []*models.Environment{env}
+	
+	// Create status service
+	statusService := mcpservice.NewStatusService(repos)
+	
+	// Get environment statuses
+	statuses, err := statusService.GetEnvironmentStatuses(environment)
+	if err != nil {
+		return fmt.Errorf("failed to get status: %w", err)
 	}
 
 	fmt.Printf("\n📊 Configuration Status Report\n\n")
@@ -211,102 +179,50 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 	fmt.Printf("│ %-14s │ %-27s │ %-24s │ %-14s │\n", "Environment", "Agent", "MCP Configs", "Status")
 	fmt.Printf("├────────────────┼─────────────────────────────┼──────────────────────────┼────────────────┤\n")
 
-	for _, env := range environments {
-		// Get agents for this environment
-		agents, err := repos.Agents.ListByEnvironment(env.ID)
-		if err != nil {
-			continue
-		}
-
-		// Get file configs for this environment
-		fileConfigs, err := repos.FileMCPConfigs.ListByEnvironment(env.ID)
-		if err != nil {
-			continue
-		}
-
-		// For now, we'll assume discovered configs are the same as database configs
-		// TODO: Implement actual file system discovery when available
-		_ = fileConfigs // discoveredConfigs := fileConfigs
-
-		if len(agents) == 0 {
+	for _, envStatus := range statuses {
+		if len(envStatus.Agents) == 0 {
 			// No agents in this environment
-			configNames := make([]string, len(fileConfigs))
-			for i, fc := range fileConfigs {
+			configNames := make([]string, len(envStatus.FileConfigs))
+			for i, fc := range envStatus.FileConfigs {
 				configNames[i] = fc.ConfigName
 			}
-			configList := truncateString(fmt.Sprintf("%v", configNames), 24)
+			configList := mcpservice.TruncateString(fmt.Sprintf("%v", configNames), 24)
 			if len(configNames) == 0 {
 				configList = "none"
 			}
 			
 			status := styles.Info.Render("no agents")
 			fmt.Printf("│ %-14s │ %-27s │ %-24s │ %-14s │\n", 
-				truncateString(env.Name, 14), "none", configList, status)
+				mcpservice.TruncateString(envStatus.Environment.Name, 14), "none", configList, status)
 		} else {
-			for i, agent := range agents {
-				// Get tools assigned to this agent
-				agentTools, err := repos.AgentTools.ListAgentTools(agent.ID)
-				if err != nil {
-					continue
-				}
-
-				// Check which configs the agent's tools come from
-				agentConfigNames := make(map[string]bool)
-				orphanedTools := 0
-				
-				for _, _ = range agentTools {
-					// Use the tool information from agentTools which includes file config info
-					// For now, we'll use a simpler approach without FileConfigID
-					// TODO: Implement proper file config tracking when models are updated
-					
-					// For demonstration, assume all tools belong to existing configs for now
-					if len(fileConfigs) > 0 {
-						agentConfigNames[fileConfigs[0].ConfigName] = true
-					}
-				}
-
-				// Build config list
-				configList := make([]string, 0, len(agentConfigNames))
-				for name := range agentConfigNames {
-					configList = append(configList, name)
-				}
-				
-				// Check status
-				var status string
-				hasOutOfSync := false
-				hasOrphaned := orphanedTools > 0
-				
-				// For now, assume all configs are in sync
-				// TODO: Implement proper sync checking when file discovery is available
-				
-				if hasOrphaned && hasOutOfSync {
-					status = styles.Error.Render("orphaned+sync")
-				} else if hasOrphaned {
-					status = styles.Error.Render("orphaned tools")
-				} else if hasOutOfSync {
-					status = styles.Error.Render("out of sync")
-				} else if len(configList) == 0 {
-					status = styles.Info.Render("no tools")
-				} else {
-					status = styles.Success.Render("synced")
-				}
-
+			for i, agentStatus := range envStatus.Agents {
 				// Format display
 				envName := ""
 				if i == 0 {
-					envName = truncateString(env.Name, 14)
+					envName = mcpservice.TruncateString(envStatus.Environment.Name, 14)
 				}
 				
-				configDisplay := truncateString(fmt.Sprintf("%v", configList), 24)
-				if len(configList) == 0 {
+				configDisplay := mcpservice.TruncateString(fmt.Sprintf("%v", agentStatus.ConfigNames), 24)
+				if len(agentStatus.ConfigNames) == 0 {
 					configDisplay = "none"
+				}
+				
+				// Format status with styling
+				var styledStatus string
+				switch agentStatus.Status {
+				case "synced":
+					styledStatus = styles.Success.Render("synced")
+				case "orphaned tools", "orphaned+sync", "out of sync":
+					styledStatus = styles.Error.Render(agentStatus.Status)
+				default:
+					styledStatus = styles.Info.Render(agentStatus.Status)
 				}
 				
 				fmt.Printf("│ %-14s │ %-27s │ %-24s │ %-14s │\n", 
 					envName,
-					truncateString(agent.Name, 27),
+					mcpservice.TruncateString(agentStatus.Agent.Name, 27),
 					configDisplay,
-					status)
+					styledStatus)
 			}
 		}
 	}
