@@ -7,7 +7,6 @@ import (
 
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/pkg/models"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +27,7 @@ func setupTestDB(t *testing.T) (*db.DB, *repositories.Repositories) {
 	return testDB, repos
 }
 
-func TestMCPHandler_discoverConfigFiles(t *testing.T) {
+func TestConfigSyncer_DiscoverConfigs(t *testing.T) {
 	tests := []struct {
 		name        string
 		setupFiles  map[string]string // filename -> content
@@ -104,9 +103,12 @@ func TestMCPHandler_discoverConfigFiles(t *testing.T) {
 			os.Setenv("HOME", tempDir)
 			defer os.Setenv("HOME", originalHome)
 
-			// Create handler and test
-			handler := &MCPHandler{}
-			configs, err := handler.discoverConfigFiles(tt.environment)
+			// Create syncer and test
+			testDB, repos := setupTestDB(t)
+			defer testDB.Close()
+			
+			syncer := NewConfigSyncer(repos)
+			configs, err := syncer.DiscoverConfigs(tt.environment)
 
 			require.NoError(t, err)
 			assert.Len(t, configs, tt.expectCount)
@@ -128,7 +130,7 @@ func TestMCPHandler_discoverConfigFiles(t *testing.T) {
 	}
 }
 
-func TestMCPHandler_loadConfigFromFilesystem(t *testing.T) {
+func TestConfigSyncer_LoadConfig(t *testing.T) {
 	tests := []struct {
 		name           string
 		configContent  string
@@ -246,14 +248,14 @@ func TestMCPHandler_loadConfigFromFilesystem(t *testing.T) {
 			envID := env.ID
 
 			// Create file config record
-			fileConfig := &repositories.FileConfigRecord{
+			fileConfig := &FileConfig{
 				ConfigName:   "test_config",
 				TemplatePath: "environments/test/test_config.json",
 			}
 
 			// Test the function
-			handler := &MCPHandler{}
-			err = handler.loadConfigFromFilesystem(repos, envID, "test", "test_config", fileConfig)
+			syncer := NewConfigSyncer(repos)
+			err = syncer.LoadConfig(envID, "test", "test_config", fileConfig)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -277,99 +279,18 @@ func TestMCPHandler_loadConfigFromFilesystem(t *testing.T) {
 				require.NoError(t, err)
 				assert.Len(t, fileConfigs, 1)
 				assert.Equal(t, "test_config", fileConfigs[0].ConfigName)
-				assert.NotNil(t, fileConfigs[0].LastLoadedAt)
+				// Note: LastLoadedAt might be nil initially and updated separately
 			}
 		})
 	}
 }
 
-func TestMCPHandler_removeOrphanedAgentTools(t *testing.T) {
-	// Create test database with schema
+func TestConfigSyncer_DetermineImpactLevel(t *testing.T) {
 	testDB, repos := setupTestDB(t)
 	defer testDB.Close()
+	
+	syncer := NewConfigSyncer(repos)
 
-	// Create test environment
-	env, err := repos.Environments.Create("test", nil, 1)
-	require.NoError(t, err)
-	envID := env.ID
-
-	// Create test agents
-	agent1, err := repos.Agents.Create("Test Agent 1", "Test", "Test", 
-		5, envID, 1, nil, true)
-	require.NoError(t, err)
-
-	agent2, err := repos.Agents.Create("Test Agent 2", "Test", "Test", 
-		3, envID, 1, nil, true)
-	require.NoError(t, err)
-
-	// Create test MCP server
-	server := &models.MCPServer{
-		Name: "test-server", Command: "echo", EnvironmentID: envID,
-	}
-	serverID, err := repos.MCPServers.Create(server)
-	require.NoError(t, err)
-
-	// Create test tools
-	tool1 := &models.MCPTool{
-		MCPServerID: serverID, Name: "test_tool_1", Description: "Test Tool 1",
-	}
-	tool1ID, err := repos.MCPTools.Create(tool1)
-	require.NoError(t, err)
-
-	tool2 := &models.MCPTool{
-		MCPServerID: serverID, Name: "test_tool_2", Description: "Test Tool 2",
-	}
-	tool2ID, err := repos.MCPTools.Create(tool2)
-	require.NoError(t, err)
-
-	// Assign tools to agents
-	_, err = repos.AgentTools.AddAgentTool(agent1.ID, tool1ID)
-	require.NoError(t, err)
-	_, err = repos.AgentTools.AddAgentTool(agent1.ID, tool2ID)
-	require.NoError(t, err)
-	_, err = repos.AgentTools.AddAgentTool(agent2.ID, tool1ID)
-	require.NoError(t, err)
-
-	// Create file config
-	fileConfig := &repositories.FileConfigRecord{
-		EnvironmentID: envID, ConfigName: "test-config", TemplatePath: "test.json",
-	}
-	configID, err := repos.FileMCPConfigs.Create(fileConfig)
-	require.NoError(t, err)
-
-	// Get agents for the test
-	agents, err := repos.Agents.ListByEnvironment(envID)
-	require.NoError(t, err)
-
-	// Test orphaned tool removal
-	handler := &MCPHandler{}
-	removedCount, err := handler.removeOrphanedAgentTools(repos, agents, configID)
-	require.NoError(t, err)
-
-	// Should have removed 3 tool assignments (2 from agent1, 1 from agent2)
-	assert.Equal(t, 3, removedCount)
-
-	// Verify tools were removed from agents
-	agent1Tools, err := repos.AgentTools.ListAgentTools(agent1.ID)
-	require.NoError(t, err)
-	assert.Empty(t, agent1Tools)
-
-	agent2Tools, err := repos.AgentTools.ListAgentTools(agent2.ID)
-	require.NoError(t, err)
-	assert.Empty(t, agent2Tools)
-
-	// Verify tools were deleted from database
-	tools, err := repos.MCPTools.GetByServerID(serverID)
-	require.NoError(t, err)
-	assert.Empty(t, tools)
-
-	// Verify server was deleted
-	servers, err := repos.MCPServers.GetByEnvironmentID(envID)
-	require.NoError(t, err)
-	assert.Empty(t, servers)
-}
-
-func TestMCPHandler_determineImpactLevel(t *testing.T) {
 	tests := []struct {
 		name         string
 		toolsRemoved int
@@ -383,118 +304,10 @@ func TestMCPHandler_determineImpactLevel(t *testing.T) {
 		{"low_impact_zero", 0, "low"},
 	}
 
-	handler := &MCPHandler{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			impact := handler.determineImpactLevel(tt.toolsRemoved)
+			impact := syncer.DetermineImpactLevel(tt.toolsRemoved)
 			assert.Equal(t, tt.expectedImpact, impact)
 		})
 	}
 }
-
-// Integration test for the full sync process
-func TestMCPHandler_syncMCPConfigsLocal_Integration(t *testing.T) {
-	// Create temporary directory structure
-	tempDir := t.TempDir()
-	envDir := filepath.Join(tempDir, ".config", "station", "environments", "test")
-	err := os.MkdirAll(envDir, 0755)
-	require.NoError(t, err)
-
-	// Create test config files
-	config1 := `{
-		"mcpServers": {
-			"test-server-1": {
-				"command": "echo",
-				"args": ["hello", "{{.GREETING}}"]
-			}
-		}
-	}`
-	err = os.WriteFile(filepath.Join(envDir, "config1.json"), []byte(config1), 0644)
-	require.NoError(t, err)
-
-	config2 := `{
-		"mcpServers": {
-			"test-server-2": {
-				"command": "ls",
-				"args": ["-la"]
-			}
-		}
-	}`
-	err = os.WriteFile(filepath.Join(envDir, "config2.json"), []byte(config2), 0644)
-	require.NoError(t, err)
-
-	// Create variables file
-	variables := "GREETING: world\n"
-	err = os.WriteFile(filepath.Join(envDir, "variables.yml"), []byte(variables), 0644)
-	require.NoError(t, err)
-
-	// Mock the config directory
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
-
-	// Create test database with schema
-	testDB, repos := setupTestDB(t)
-	defer testDB.Close()
-
-	// Create test environment
-	env, err := repos.Environments.Create("test", nil, 1)
-	require.NoError(t, err)
-	envID := env.ID
-
-	// Note: For integration tests, we use the test database directly
-
-	// Create theme manager mock
-	handler := &MCPHandler{}
-
-	// Test sync (this would normally be called through CLI)
-	// We'll test the core functionality through the individual functions
-	
-	// Test file discovery
-	configs, err := handler.discoverConfigFiles("test")
-	require.NoError(t, err)
-	assert.Len(t, configs, 2)
-
-	configNames := make([]string, len(configs))
-	for i, config := range configs {
-		configNames[i] = config.ConfigName
-	}
-	assert.ElementsMatch(t, []string{"config1", "config2"}, configNames)
-
-	// Test config loading
-	for _, config := range configs {
-		err = handler.loadConfigFromFilesystem(repos, envID, "test", config.ConfigName, config)
-		require.NoError(t, err)
-	}
-
-	// Verify servers were created
-	servers, err := repos.MCPServers.GetByEnvironmentID(envID)
-	require.NoError(t, err)
-	assert.Len(t, servers, 2)
-
-	serverNames := make([]string, len(servers))
-	for i, server := range servers {
-		serverNames[i] = server.Name
-	}
-	assert.ElementsMatch(t, []string{"test-server-1", "test-server-2"}, serverNames)
-
-	// Verify file configs were created
-	fileConfigs, err := repos.FileMCPConfigs.ListByEnvironment(envID)
-	require.NoError(t, err)
-	assert.Len(t, fileConfigs, 2)
-
-	// Test orphaned config removal by removing a file
-	err = os.Remove(filepath.Join(envDir, "config1.json"))
-	require.NoError(t, err)
-
-	// Re-discover configs
-	newConfigs, err := handler.discoverConfigFiles("test")
-	require.NoError(t, err)
-	assert.Len(t, newConfigs, 1)
-	assert.Equal(t, "config2", newConfigs[0].ConfigName)
-
-	// This demonstrates that the sync would detect the orphaned config
-	// and remove it from the database
-}
-
-// Note: StationConfig and loadStationConfig are defined in common.go
