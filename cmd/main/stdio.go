@@ -98,7 +98,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	localMode := viper.GetBool("local_mode")
 
 	// Create MCP server with the same functionality as HTTP mode
-	mcpServer := mcp.NewServer(database, agentSvc, repos, localMode)
+	// Note: stdio mode doesn't use execution queue, pass nil for direct execution
+	mcpServer := mcp.NewServer(database, agentSvc, nil, repos, localMode)
 
 	// Log startup message to stderr (so it doesn't interfere with stdio protocol)
 	fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in stdio mode\n")
