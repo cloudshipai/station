@@ -47,11 +47,8 @@ type BundleValidator interface {
 
 // BundlePackager defines the interface for packaging bundles
 type BundlePackager interface {
-	// Package creates a zip file from a bundle directory
-	Package(fs afero.Fs, bundlePath string) ([]byte, error)
-	
-	// Unpackage extracts a bundle from zip data
-	Unpackage(zipData []byte, targetFS afero.Fs, targetPath string) error
+	// Package creates a .tar.gz archive from a bundle directory
+	Package(fs afero.Fs, bundlePath, outputPath string) (*PackageResult, error)
 }
 
 // BundleManager defines the main interface for managing bundles

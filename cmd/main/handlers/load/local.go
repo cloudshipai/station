@@ -129,7 +129,7 @@ func (h *LoadHandler) createFileBasedConfig(envID int64, configName string, mcpC
 	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
 	// Next step: Discover tools from the loaded configuration
-	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
+	fmt.Printf("🔧 Next: Run 'stn mcp sync %s' to sync configs and discover tools\n", env.Name)
 
 	return nil
 }
@@ -219,7 +219,7 @@ func (h *LoadHandler) createFileBasedConfigFromData(envID int64, configData *mod
 	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
 	// Next step: Discover tools from the loaded configuration
-	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
+	fmt.Printf("🔧 Next: Run 'stn mcp sync %s' to sync configs and discover tools\n", env.Name)
 
 	return nil
 }
@@ -433,7 +433,7 @@ func (h *LoadHandler) createFileBasedConfigTemplate(envID int64, configName stri
 	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
 	// Next step: Discover tools from the loaded configuration
-	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
+	fmt.Printf("🔧 Next: Run 'stn mcp sync %s' to sync configs and discover tools\n", env.Name)
 
 	return nil
 }
@@ -512,7 +512,7 @@ func (h *LoadHandler) createFileBasedConfigTemplateWithVariables(envID int64, co
 	fmt.Printf("✅ Created file-based config with ID: %d\n", configID)
 	
 	// Next step: Discover tools from the loaded configuration
-	fmt.Printf("🔧 Next: Run 'stn mcp discover %d %s' to discover available tools\n", configID, env.Name)
+	fmt.Printf("🔧 Next: Run 'stn mcp sync %s' to sync configs and discover tools\n", env.Name)
 
 	return nil
 }

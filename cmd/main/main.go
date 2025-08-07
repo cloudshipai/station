@@ -47,6 +47,7 @@ func init() {
 	rootCmd.AddCommand(keyCmd)
 	rootCmd.AddCommand(loadCmd)
 	rootCmd.AddCommand(mcpCmd)
+	rootCmd.AddCommand(templateCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(runsCmd)
 	rootCmd.AddCommand(webhookCmd)
@@ -80,6 +81,17 @@ func init() {
 	mcpCmd.AddCommand(mcpDeleteCmd)
 	mcpCmd.AddCommand(mcpSyncCmd)
 	mcpCmd.AddCommand(mcpStatusCmd)
+	
+	templateCmd.AddCommand(templateCreateCmd)
+	templateCmd.AddCommand(templateValidateCmd)
+	templateCmd.AddCommand(templateBundleCmd)
+	templateCmd.AddCommand(templatePublishCmd)
+	templateCmd.AddCommand(templateInstallCmd)
+	templateCmd.AddCommand(templateListCmd)
+	templateCmd.AddCommand(templateRegistryCmd)
+	
+	templateRegistryCmd.AddCommand(templateRegistryAddCmd)
+	templateRegistryCmd.AddCommand(templateRegistryListCmd)
 	
 	
 	agentCmd.AddCommand(agentListCmd)
@@ -150,6 +162,23 @@ func init() {
 	
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")
+	
+	// Template command flags
+	templateCreateCmd.Flags().String("name", "", "Bundle name (defaults to directory name)")
+	templateCreateCmd.Flags().String("author", "", "Bundle author")
+	templateCreateCmd.Flags().String("description", "", "Bundle description")
+	
+	templateBundleCmd.Flags().String("output", "", "Output path for package (defaults to bundle-name.tar.gz)")
+	templateBundleCmd.Flags().Bool("validate", true, "Validate bundle before packaging")
+	
+	templatePublishCmd.Flags().String("registry", "default", "Registry to publish to")
+	templatePublishCmd.Flags().Bool("skip-validation", false, "Skip validation before publishing")
+	
+	templateInstallCmd.Flags().String("registry", "", "Registry to install from (defaults to searching all)")
+	templateInstallCmd.Flags().Bool("force", false, "Force reinstallation if bundle already exists")
+	
+	templateListCmd.Flags().String("registry", "", "Filter by registry name")
+	templateListCmd.Flags().String("search", "", "Search term for bundle names/descriptions")
 	
 	
 	// Agent command flags

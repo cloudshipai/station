@@ -111,7 +111,7 @@ func (c *Creator) createTemplate(fs afero.Fs, bundlePath, bundleName string) err
 				"command": "echo",
 				"args":    []string{"Replace with your MCP server configuration"},
 				"env": map[string]string{
-					"EXAMPLE_VAR": "{{EXAMPLE_VAR}}",
+					"EXAMPLE_VAR": "{{ .EXAMPLE_VAR }}",
 				},
 			},
 		},
