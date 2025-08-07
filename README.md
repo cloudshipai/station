@@ -142,6 +142,9 @@ curl -sSL https://getstation.ai/install | bash
 # Initialize with encrypted key management
 stn init
 
+# OR initialize with database replication for production
+stn init --replicate
+
 # Load MCP tools for agent development
 stn load examples/mcps/filesystem.json
 stn load examples/mcps/database-sqlite.json
@@ -296,6 +299,8 @@ stn agent create --name "DevOps Pipeline" \
 - **📚 [Quick Start Guide](docs/QUICKSTART.md)** - Complete setup walkthrough
 - **🎁 [Template Examples](examples/agent-templates/README.md)** - Production-ready patterns
 - **🏗️ [Architecture Overview](docs/ARCHITECTURE.md)** - System design and security
+- **🔄 [Database Replication](docs/DATABASE-REPLICATION.md)** - Production database backup and recovery
+- **🚀 [GitOps Deployment](docs/GITOPS-DEPLOYMENT.md)** - Enterprise deployment guide
 - **🔒 [Security Guide](docs/SECURITY.md)** - Enterprise security practices
 - **📖 [MCP Templates](examples/mcps/README.md)** - Available tool integrations
 
