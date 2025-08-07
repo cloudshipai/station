@@ -77,7 +77,15 @@ func Load() (*Config, error) {
 		cfg.AIModel = viper.GetString("ai_model")
 	}
 	if viper.IsSet("ai_api_key") {
-		cfg.AIAPIKey = viper.GetString("ai_api_key")
+		rawKey := viper.GetString("ai_api_key")
+		// Expand environment variables like ${OPENAI_API_KEY}, but preserve direct values
+		expandedKey := os.ExpandEnv(rawKey)
+		// If expansion resulted in empty string but original had ${}, keep original (missing env var)
+		if expandedKey == "" && rawKey != "" && (len(rawKey) > 3 && rawKey[0] == '$' && rawKey[1] == '{') {
+			cfg.AIAPIKey = rawKey // Keep unexpanded form to show error later
+		} else {
+			cfg.AIAPIKey = expandedKey
+		}
 	}
 	if viper.IsSet("ai_base_url") {
 		cfg.AIBaseURL = viper.GetString("ai_base_url")
