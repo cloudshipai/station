@@ -119,6 +119,81 @@ Examples:
 		RunE:  runMCPStatus,
 	}
 
+	// Template bundle commands
+	templateCmd = &cobra.Command{
+		Use:   "template",
+		Short: "Template bundle management commands",
+		Long:  "Manage template bundles for quick MCP server configuration deployment",
+	}
+
+	templateCreateCmd = &cobra.Command{
+		Use:   "create <path>",
+		Short: "Create a new template bundle",
+		Long:  "Create a new template bundle with scaffolding for MCP server configurations",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runTemplateCreate,
+	}
+
+	templateValidateCmd = &cobra.Command{
+		Use:   "validate <path>",
+		Short: "Validate a template bundle",
+		Long:  "Validate template bundle structure and check variable consistency between template and schema",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runTemplateValidate,
+	}
+
+	templateBundleCmd = &cobra.Command{
+		Use:   "bundle <path>",
+		Short: "Package a template bundle for distribution",
+		Long:  "Create a distributable .tar.gz package from a validated template bundle",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runTemplateBundle,
+	}
+
+	templatePublishCmd = &cobra.Command{
+		Use:   "publish <bundle-path>",
+		Short: "Publish a template bundle to a registry",
+		Long:  "Package and publish a template bundle to a specified registry",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runTemplatePublish,
+	}
+
+	templateInstallCmd = &cobra.Command{
+		Use:   "install <bundle-name>[@version]",
+		Short: "Install a template bundle from a registry",
+		Long:  "Download and install a template bundle from a configured registry",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runTemplateInstall,
+	}
+
+	templateListCmd = &cobra.Command{
+		Use:   "list",
+		Short: "List available template bundles",
+		Long:  "List template bundles from configured registries",
+		RunE:  runTemplateList,
+	}
+
+	templateRegistryCmd = &cobra.Command{
+		Use:   "registry",
+		Short: "Manage template registries",
+		Long:  "Add, remove, and list configured template registries",
+	}
+
+	templateRegistryAddCmd = &cobra.Command{
+		Use:   "add <name> <url>",
+		Short: "Add a new template registry",
+		Long:  "Add a new template registry endpoint",
+		Args:  cobra.ExactArgs(2),
+		RunE:  runTemplateRegistryAdd,
+	}
+
+	templateRegistryListCmd = &cobra.Command{
+		Use:   "list",
+		Short: "List configured registries",
+		Long:  "List all configured template registries",
+		RunE:  runTemplateRegistryList,
+	}
+
 	// Webhook commands
 	webhookCmd = &cobra.Command{
 		Use:   "webhook",
