@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"station/internal/config"
 	"station/internal/db"
+	"station/internal/logging"
 	"station/internal/telemetry"
 	"station/internal/theme"
 	"station/internal/version"
@@ -32,6 +33,7 @@ It provides a retro terminal interface for system administration and agent manag
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initLogging)
 	cobra.OnInitialize(initTheme)
 	cobra.OnInitialize(initTelemetry)
 
@@ -251,6 +253,19 @@ func initTheme() {
 	}
 	
 	// If themeManager is still nil, commands will use fallback themes
+}
+
+func initLogging() {
+	// Load config to check debug settings
+	cfg, err := config.Load()
+	if err != nil {
+		// If config fails to load, default to info level (debug disabled)
+		logging.Initialize(false)
+		return
+	}
+	
+	// Initialize logging based on config
+	logging.Initialize(cfg.Debug)
 }
 
 func initTelemetry() {
