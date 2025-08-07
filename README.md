@@ -1,258 +1,352 @@
 ![Station](./image.png)
 
-# Station - AI Sub Agent Runtime
+# Station - AI Agent Template Platform
 
-**Build intelligent Sub AI agents that actually work in production.**
+**Build reusable AI agent templates that work across environments.**
 
-> this is an early alpha version v0.1.0 that might have breaking changes as we stabilize the API
+> Early access version v0.2.0 with Agent Template System - production-ready for enterprise deployment
 
-Station solves the four biggest problems with AI agents: tool overload degrading performance, configuration management chaos, inability to share agent setups, and requiring technical expertise to build effective agents.
+Station solves the biggest problems in AI agent deployment: **configuration drift across environments, inability to package complete agent setups, lack of reusable patterns, and complex multi-environment management.**
 
-## Four Core Value Propositions
+## What Station Actually Is
 
-### 🎯 **Make Agents More Intelligent**
-**More tools degrade agent performance - Station creates hyper-specific agents with filtered tool access.**
+Station is a **template-driven AI agent platform** that lets you:
+- **Package complete AI agents** as reusable templates with dependencies
+- **Deploy consistently across environments** using GitOps workflows  
+- **Share agent patterns** across teams and organizations
+- **Manage multi-environment complexity** with variable-driven configuration
 
-Traditional platforms give agents 100+ tools, causing decision paralysis and poor performance. Station's AI analyzes your requirements and selects only the optimal tools across multiple MCP servers.
+Think "Terraform for AI Agents" - but easier.
 
-**Example:**
+## Core Value Propositions
+
+### 🎁 **Agent Templates - Package Complete AI Solutions**
+
+**Stop rebuilding agents from scratch. Create once, deploy everywhere.**
+
+Traditional platforms require rebuilding agent configurations manually. Station lets you package complete AI agents as portable templates with all dependencies included.
+
 ```bash
-# Traditional: Agent gets ALL 200+ tools (slow, error-prone)
-# Station: AI selects only relevant tools
-
-./stn agent create \
+# Create a comprehensive agent template
+stn agent bundle create ./database-monitor \
   --name "Database Monitor" \
-  --description "Monitor PostgreSQL performance and alert on issues" \
-  --domain "database-administration"
+  --author "Platform Team" \
+  --description "PostgreSQL monitoring with Slack alerts"
 
-# Station automatically selects ONLY:
-# ✅ postgresql_query, postgresql_stats (from DB server)
-# ✅ prometheus_metrics (from monitoring server)  
-# ✅ slack_alert (from notification server)
-# ❌ Filters out 180+ irrelevant tools
+# Template includes:
+# ✅ Agent configuration (prompts, tools, settings)
+# ✅ MCP dependencies (database + notification tools)
+# ✅ Variable schema (DB_HOST, SLACK_WEBHOOK, etc.)
+# ✅ Deployment examples and documentation
 
-# Result: 5x faster execution, 90%+ success rate
+# Install anywhere with environment-specific variables
+stn agent bundle install ./database-monitor --vars-file prod-vars.json --env production
+stn agent bundle install ./database-monitor --vars-file dev-vars.json --env development
+
+# Result: Identical agent behavior, environment-specific configuration
 ```
 
-### 🗂️ **Make MCP Configs More Manageable**
-**Stop rebuilding MCP configurations for each environment - use templates with environment-specific variables.**
+### 🔄 **Multi-Environment Consistency**
 
-Traditional MCP management requires copy-pasting configurations across dev/staging/prod environments, hardcoding secrets, and manually syncing changes.
+**Deploy the same agent logic across dev/staging/prod with environment-specific variables.**
 
-**Example:**
+Stop maintaining separate agent configurations per environment. Use one template with variable substitution.
+
 ```bash
-# Traditional: 3 environments × 8 MCP servers = 24 config files to maintain
-# Station: 8 template files + 3 variable files
+# Single template with variables: {{.DB_HOST}}, {{.ALERT_THRESHOLD}}
 
-# Single template works everywhere:
-# postgresql.json uses {{DB_HOST}}, {{DB_PASSWORD}} variables
+# Development variables (dev-vars.json):
+{
+  "DB_HOST": "localhost:5432",
+  "ALERT_THRESHOLD": 50,
+  "SLACK_WEBHOOK": "https://hooks.slack.com/dev-alerts"
+}
 
-# Environment-specific variables:
-# dev/variables.yml:    DB_HOST: localhost
-# prod/variables.yml:   DB_HOST: prod-db.company.com
+# Production variables (prod-vars.json):  
+{
+  "DB_HOST": "prod-db.company.com:5432",
+  "ALERT_THRESHOLD": 90,
+  "SLACK_WEBHOOK": "https://hooks.slack.com/prod-alerts"
+}
 
-./stn load postgresql.json --env development  # Uses dev variables
-./stn load postgresql.json --env production   # Uses prod variables
+# Deploy identical logic with environment differences
+stn agent bundle install ./database-monitor --vars-file dev-vars.json --env dev
+stn agent bundle install ./database-monitor --vars-file prod-vars.json --env prod
 
-# Result: 75% fewer config files, zero copy-paste errors
+# Result: 100% configuration consistency, zero environment drift
 ```
 
-### 🚀 **Make Agent Configs Shareable**
-**Version control your agent configurations like infrastructure code with full GitOps workflows.**
+### 📦 **Complete Dependency Management**
 
-Traditional platforms lock agent configurations in proprietary systems with no sharing, version control, or collaboration capabilities.
+**Include MCP tool dependencies in templates. No more "works on my machine".**
 
-**Example:**
+Package all required MCP servers and tools with your agent templates. Recipients get everything they need.
+
 ```bash
-# Export agent as declarative configuration
-./stn agent export 5 production
-# Creates: ~/.config/station/environments/production/agents/db-monitor.json
+# Template manifest.json includes ALL dependencies:
+{
+  "name": "web-scraper",
+  "mcp_dependencies": [
+    {"name": "playwright-tools", "version": "^1.0", "required": true},
+    {"name": "http-client", "version": "^2.1", "required": true}
+  ],
+  "tool_requirements": [
+    {"name": "browser_navigate", "server": "playwright-tools", "required": true},
+    {"name": "http_post", "server": "http-client", "required": true}
+  ]
+}
 
-# Version control like any code
-git add ~/.config/station/environments/
-git commit -m "Add database monitoring agent"
+# Installation automatically resolves and installs dependencies
+stn agent bundle install ./web-scraper --env production
+
+# Station automatically:
+# ✅ Validates all required MCP servers are available
+# ✅ Checks tool compatibility and versions
+# ✅ Resolves conflicts between different templates
+# ✅ Installs missing dependencies
+
+# Result: Zero dependency hell, guaranteed working environments
+```
+
+### 🤝 **Enterprise Sharing & Collaboration**
+
+**Share agent templates across teams with GitOps workflows and API deployment.**
+
+Version control agent templates like infrastructure code. Deploy via API for automation.
+
+```bash
+# Export existing agent as template
+stn agent bundle export 5 ./shared-templates/log-analyzer --include-deps --analyze-vars
+
+# Version control with GitOps
+git add shared-templates/log-analyzer/
+git commit -m "Add log analyzer template v1.2"
 git push origin main
 
-# Team members deploy with GitOps
-git pull && ./stn agent import production
+# Other teams install from repository
+git pull && stn agent bundle install ./shared-templates/log-analyzer --vars-file our-vars.json
 
-# Share templates across organizations
-./stn template export db-monitor > company-db-template.json
-# Other teams can import and customize
+# API deployment for automation
+curl -X POST http://station.company.com/api/v1/agents/templates/install \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bundle_path": "./shared-templates/log-analyzer",
+    "environment": "production", 
+    "variables": {
+      "LOG_DIRECTORY": "/var/log/app",
+      "ALERT_EMAIL": "ops@company.com"
+    }
+  }'
 
-# Result: Full collaboration, audit trails, rollback capability
+# Result: Enterprise-grade sharing, audit trails, automated deployments
 ```
 
-### 🤖 **Make Agents Easy to Build**
-**Use AI to build AI - Station's MCP interface lets Claude Code create agents with natural language.**
-
-Traditional agent building requires prompt engineering expertise, manual tool configuration, and technical knowledge. Station uses AI to create AI.
-
-**Example:**
-```bash
-# Start Station's MCP server
-./stn stdio &
-
-# In Claude Code interface:
-"Create an agent that monitors our PostgreSQL database, 
-checks for slow queries every 5 minutes, and alerts in Slack if issues found"
-
-# Claude Code uses Station's MCP tools to:
-# ✅ Analyze available tools intelligently
-# ✅ Create agent with optimal configuration
-# ✅ Set appropriate execution parameters
-# ✅ Test and validate the agent
-
-# Result: Production-ready agent in 30 seconds, zero technical configuration
-```
-
-## Quick Start (2 Minutes)
+## Quick Start (5 Minutes)
 
 ### 1. Install Station
 ```bash
-# Option 1: Build from source (current)
+# Build from source
 git clone https://github.com/anthropics/station
 cd station && go build -o stn ./cmd/main
 
-# Option 2: Binary install (coming soon)  
+# Binary install (coming soon)
 curl -sSL https://getstation.ai/install | bash
 ```
 
-### 2. Initialize and Load Tools
+### 2. Initialize with MCP Tools
 ```bash
-# Initialize with secure defaults
-./stn init
+# Initialize Station
+stn init
 
-# Load filesystem tools (22+ templates available)
-./stn load examples/mcps/filesystem.json
+# Load filesystem tools for basic operations
+stn load examples/mcps/filesystem.json
 
-# View all available templates
-ls examples/mcps/  # AWS, GitHub, Slack, databases, etc.
+# Load additional tools as needed
+stn load examples/mcps/github.json
+stn load examples/mcps/slack.json
 ```
 
-### 3. Create and Run Agent
+### 3. Create Your First Agent Template
+
 ```bash
-# Create intelligent agent
-./stn agent create \
-  --name "System Explorer" \
-  --description "Analyze file systems and provide insights" \
-  --domain "system-administration"
+# Create a new template bundle
+stn agent bundle create ./my-first-template \
+  --name "File Manager" \
+  --author "Your Name" \
+  --description "Intelligent file management agent"
 
-# Run agent with natural language task
-./stn agent run 1 "Analyze the project directory structure and identify any issues"
+# Edit the generated files:
+# - bundle/manifest.json (metadata and dependencies)
+# - bundle/agent.json (agent configuration with {{variables}})
+# - bundle/variables.schema.json (variable definitions)
 
-# View results
-./stn runs list
+# Validate your template
+stn agent bundle validate ./my-first-template
+
+# Install with interactive variable collection
+stn agent bundle install ./my-first-template --interactive --env development
 ```
+
+### 4. Deploy and Share
+
+```bash
+# Export existing agent as template
+stn agent bundle export 1 ./shared-templates/my-agent --include-deps
+
+# Share via version control
+git add shared-templates/
+git commit -m "Add reusable agent template"
+
+# Install from shared template
+stn agent bundle install ./shared-templates/my-agent --vars-file production-vars.json
+```
+
+## Agent Template System Features
+
+Station's **Agent Template System** provides enterprise-grade template management:
+
+### 📋 **Complete Template Lifecycle**
+- **Create**: `stn agent bundle create` - Generate template scaffolding
+- **Validate**: `stn agent bundle validate` - Comprehensive validation with suggestions  
+- **Install**: `stn agent bundle install` - Deploy with variable substitution
+- **Export**: `stn agent bundle export` - Convert existing agents to templates
+- **Duplicate**: `stn agent bundle duplicate` - Cross-environment deployment
+
+### 🔧 **Advanced Variable System**
+- **Type Preservation**: JSON/YAML variables maintain types (strings, numbers, booleans)
+- **Interactive Mode**: `--interactive` prompts for missing variables with validation
+- **File-Based Variables**: `--vars-file` for repeatable deployments
+- **Sensitive Variables**: Masked input for passwords, API keys, secrets
+- **Default Values**: Fallback configuration for optional variables
+- **Variable Schema**: JSON Schema validation for type safety
+
+### 🌐 **Multi-Environment Excellence**
+- **Environment Isolation**: Separate configuration per environment
+- **Variable Hierarchies**: CLI flags → vars-file → defaults → schema defaults
+- **Template Rendering**: Go template engine with conditional logic
+- **Dependency Resolution**: Environment-specific tool availability checking
+- **Cross-Environment Deployment**: `stn agent bundle duplicate` across environments
+
+### 🛠️ **Production-Ready APIs**
+- **Template Installation**: `POST /api/v1/agents/templates/install`
+- **Agent Management**: `POST /api/v1/agents` (direct creation)
+- **Agent Execution**: `POST /api/v1/agents/:id/execute`
+- **Comprehensive Validation**: Go struct + JSON Schema validation
+- **Error Handling**: Detailed error responses with suggestions
 
 ## Rich Template Library
 
-Station includes **22+ production-ready MCP server templates** covering common enterprise use cases:
+Station includes **20+ production-ready MCP server templates** for immediate use:
 
-| Category | Templates | Description |
-|----------|-----------|-------------|
-| **Databases** | PostgreSQL, MySQL, SQLite, MongoDB, Redis, Firebase | Connect to any database system |
-| **Cloud** | AWS CLI, Kubernetes, Terraform, Cloudflare | Manage cloud infrastructure |  
-| **DevOps** | GitHub, Git, Docker, SSH, Prometheus | Development and operations |
-| **AI/LLM** | OpenAI, Anthropic Claude | AI model integrations |
-| **Productivity** | Slack, Jira, Google Sheets, Email | Team collaboration tools |
-| **Web/API** | REST API, Browser automation | Web services and automation |
+| Category | Templates | Use Cases |
+|----------|-----------|-----------|
+| **Development** | GitHub, Git, Docker, SSH | Code management, CI/CD, deployments |
+| **Databases** | PostgreSQL, MySQL, SQLite, MongoDB, Redis | Database administration, monitoring |
+| **Cloud Services** | AWS CLI, Kubernetes, Terraform | Infrastructure management, deployments |
+| **Communication** | Slack, Email, Webhooks | Notifications, alerts, team coordination |
+| **Monitoring** | Prometheus, System metrics | Performance monitoring, alerting |
+| **File Systems** | Local files, Network storage | File management, data processing |
 
 ```bash
-# Browse all templates
-cat examples/mcps/README.md
+# Browse available templates
+ls examples/mcps/
 
-# Load multiple templates for complex workflows
-./stn load examples/mcps/github.json
-./stn load examples/mcps/aws-cli.json  
-./stn load examples/mcps/slack.json
+# Load multiple tools for complex workflows
+stn load examples/mcps/github.json
+stn load examples/mcps/aws-cli.json  
+stn load examples/mcps/slack.json
 
-# Create agent that uses multiple services
-./stn agent create "DevOps Assistant" "Manage GitHub repos, deploy to AWS, notify in Slack"
+# Create agents that use multiple MCP servers
+stn agent create --name "DevOps Assistant" --description "GitHub → AWS → Slack workflow automation"
 ```
 
-## Architecture
+## Enterprise Architecture
 
-Station's **self-bootstrapping architecture** means it uses AI to manage AI agents:
+Station is designed for enterprise deployment with:
 
-```
-Your AI Provider → Station Runtime → Your Infrastructure Tools
-     ↓                    ↓                     ↓
-Natural Language    AI-Powered Tool       Multi-Environment
-   Descriptions      Selection & Config    MCP Integration
-```
+### 🔒 **Security & Compliance**
+- **Environment Isolation**: Separate agent execution per environment
+- **Secret Management**: Encrypted variable storage with rotation
+- **Audit Logging**: Complete deployment and execution tracking
+- **Access Controls**: Role-based permissions and API authentication
 
-**Key Innovation:** Station provides its own MCP server with 13 management tools, allowing Claude Code and other AI systems to intelligently create, configure, and manage agents using natural language descriptions.
+### 📈 **Scalability & Performance**  
+- **Database Persistence**: SQLite for development, PostgreSQL for production
+- **Queue-Based Execution**: Async agent execution with status tracking
+- **Resource Management**: Memory and execution time limits
+- **Webhook Integration**: Real-time notifications and integrations
 
-## Production Ready
+### 🔄 **DevOps Integration**
+- **GitOps Workflows**: Version-controlled template management
+- **CI/CD Integration**: Automated template validation and deployment
+- **API-First Design**: Full automation via REST APIs
+- **Multi-Environment**: Dev → Staging → Production promotion workflows
 
-Station has been comprehensively tested and is ready for production deployment:
+## Template Examples
 
-- ✅ **Security audited** with critical vulnerabilities fixed
-- ✅ **22+ MCP templates** for immediate enterprise use  
-- ✅ **Complete documentation** for deployment and operations
-- ✅ **Comprehensive testing** with automated validation suites
-- ✅ **Docker/Kubernetes** deployment examples included
+Station includes comprehensive template examples in `examples/agent-templates/`:
 
-See [Production Readiness Guide](PRODUCTION_READINESS.md) for full deployment details.
+- **[Basic Agent](examples/agent-templates/basic-agent/)** - Simple file management template
+- **[Web Scraper](examples/agent-templates/web-scraper/)** - API integration with sensitive variables
+- **[Data Processor](examples/agent-templates/data-processor/)** - Complex variable types and validation
+- **[API Integration](examples/agent-templates/api-integration/)** - Production-ready enterprise pattern
+- **[Multi-Environment](examples/agent-templates/multi-environment/)** - Complete GitOps workflow
 
-## Documentation
+Each example includes complete documentation, variable files, API payloads, and deployment scripts.
 
-- **[📚 Quickstart Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
-- **[🏗️ Architecture](docs/ARCHITECTURE.md)** - How Station works internally  
-- **[🔒 Security Guide](docs/SECURITY.md)** - Enterprise security best practices
-- **[🚀 Production Deployment](PRODUCTION_READINESS.md)** - Production-ready setup
-- **[🧪 Testing Guide](TESTING_SCENARIOS.md)** - Comprehensive testing scenarios
-- **[📖 MCP Templates](examples/mcps/README.md)** - All available templates in `examples/mcps/`
+## Target Users & Use Cases
 
-## Benefits by Team
+### **Platform Engineering Teams**
+- **Template Standardization**: Create reusable agent patterns across organization
+- **Environment Consistency**: Deploy identical logic across dev/staging/prod
+- **Dependency Management**: Package complete agent solutions with all requirements
 
-### **Platform Teams**
-- **Intelligent Agent Creation**: AI selects optimal tools instead of manual configuration
-- **Template-Based Management**: One config works across all environments with variables
-- **GitOps Integration**: Version control agent configurations like infrastructure code
+### **DevOps/SRE Teams**  
+- **Infrastructure Automation**: Database monitoring, alert management, deployment automation
+- **Multi-Environment Management**: Consistent agent behavior across environments
+- **GitOps Integration**: Version-controlled agent templates with audit trails
 
-### **Development Teams**  
-- **Natural Language Agents**: Describe what you want, get working automation
-- **Multi-Tool Intelligence**: Agents coordinate GitHub, CI/CD, and deployment tools intelligently
-- **Shareable Workflows**: Export and share agent configurations across projects
+### **Enterprise Development Teams**
+- **Agent Sharing**: Reusable templates across projects and teams
+- **API Integration**: Automated agent deployment in CI/CD pipelines
+- **Security Compliance**: Standardized, auditable agent configurations
 
-### **DevOps/SRE Teams**
-- **Hyper-Specific Monitoring**: Agents get exactly the tools they need, nothing more
-- **Environment Consistency**: Same agent templates across dev/staging/production
-- **AI-Native Building**: Claude Code creates complex infrastructure agents with natural language
-
-### **Database Teams**
-- **Filtered Tool Access**: Database agents only see database-relevant tools for better performance
-- **Template Reusability**: Share database monitoring templates across multiple databases/teams
-- **Intelligent Troubleshooting**: Agents automatically select optimal diagnostic tools based on issue type
+### **Managed Service Providers**
+- **Client Deployments**: Reusable agent templates across client environments
+- **White-Label Solutions**: Customizable agent templates with client-specific variables
+- **Operational Excellence**: Standardized monitoring and management patterns
 
 ## System Requirements
 
-- **OS:** Linux, macOS, or Windows
-- **Memory:** 256MB RAM minimum, 2GB recommended
-- **Storage:** 100MB for binary + data
-- **Network:** Outbound HTTPS for AI provider API calls
+- **OS:** Linux, macOS, Windows
+- **Memory:** 512MB RAM minimum, 2GB recommended for production
+- **Storage:** 200MB for binary + templates, 1GB+ for production data
+- **Database:** SQLite (included) or PostgreSQL for production
+- **Network:** Outbound HTTPS for AI provider APIs and MCP tool communication
 
-## Support & Community
+## Documentation & Support
 
-- **🐛 Issues:** [GitHub Issues](https://github.com/anthropics/station/issues)
-- **📖 Documentation:** [docs/](docs/) folder
-- **💬 Community:** [Discord Server](https://discord.gg/station-ai)
-- **🏢 Enterprise:** [Contact us](mailto:enterprise@station.ai) for enterprise support
+- **📚 [Quick Start Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
+- **🎁 [Template System Guide](examples/agent-templates/README.md)** - Complete template documentation
+- **🏗️ [Architecture Overview](docs/ARCHITECTURE.md)** - System design and components  
+- **🔒 [Security Guide](docs/SECURITY.md)** - Enterprise security practices
+- **📖 [MCP Templates](examples/mcps/README.md)** - Available MCP server templates
+
+### Community & Support
+- **🐛 [Issues](https://github.com/anthropics/station/issues)** - Bug reports and feature requests
+- **💬 [Discord](https://discord.gg/station-ai)** - Community discussions
+- **🏢 [Enterprise](mailto:enterprise@station.ai)** - Enterprise support and consulting
 
 ## License
 
-Station is licensed under **AGPL-3.0** - a strong copyleft license that keeps Station open source while enabling sustainable development.
+Station is licensed under **AGPL-3.0** - enabling free use while keeping the platform open source.
 
-**TL;DR**: Use Station freely for any purpose. If you offer Station as a network service, you must share your modifications.
+**Simple Terms**: Use Station freely for any purpose. If you provide Station as a network service, share your modifications.
 
-📖 **[Why We Chose AGPL-3.0](LICENSE_RATIONALE.md)** - Our licensing philosophy and what it means for different users
-
-📄 **[Full License Text](LICENSE)** - Complete AGPL-3.0 license terms
+📖 **[License Philosophy](LICENSE_RATIONALE.md)** | 📄 **[Full License](LICENSE)**
 
 ---
 
-**Station - Build intelligent AI agents that actually work in production.**
+**Station - Build reusable AI agent templates that work across environments.**
 
-*Solving the four biggest problems with AI agents: tool overload, config chaos, sharing limitations, and technical complexity.*
+*The only platform purpose-built for enterprise AI agent template management and deployment.*
