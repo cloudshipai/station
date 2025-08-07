@@ -1,0 +1,49 @@
+# Production Dockerfile with Litestream for GitOps deployments
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=1 GOOS=linux go build -o station ./cmd/main
+
+# Production runtime with Litestream
+FROM alpine:latest
+
+# Install dependencies
+RUN apk --no-cache add ca-certificates sqlite curl
+
+# Install Litestream
+RUN wget https://github.com/benbjohnson/litestream/releases/latest/download/litestream-linux-amd64.tar.gz \
+    && tar -C /usr/local/bin -xzf litestream-linux-amd64.tar.gz \
+    && rm litestream-linux-amd64.tar.gz
+
+# Create app user
+RUN addgroup -g 1000 station && \
+    adduser -u 1000 -G station -s /bin/sh -D station
+
+# Create directories
+RUN mkdir -p /app /data /backup /config && \
+    chown -R station:station /app /data /backup /config
+
+USER station
+WORKDIR /app
+
+# Copy application and config
+COPY --from=builder /app/station .
+COPY --from=builder /app/config/litestream.yml /config/
+COPY --from=builder /app/examples/ ./examples/
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+# Startup script that handles Litestream restoration and replication
+COPY docker/entrypoint-production.sh /entrypoint.sh
+USER root
+RUN chmod +x /entrypoint.sh
+USER station
+
+EXPOSE 8080
+ENTRYPOINT ["/entrypoint.sh"]

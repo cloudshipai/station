@@ -126,6 +126,9 @@ func init() {
 	settingsCmd.AddCommand(settingsGetCmd)
 	settingsCmd.AddCommand(settingsSetCmd)
 	
+	// Init command flags
+	initCmd.Flags().Bool("gitops", false, "Set up Litestream configuration for GitOps deployments")
+	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
 	serveCmd.Flags().Int("mcp-port", 3000, "MCP server port") 
