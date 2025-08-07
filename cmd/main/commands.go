@@ -24,7 +24,10 @@ var (
 	initCmd = &cobra.Command{
 		Use:   "init",
 		Short: "Initialize Station configuration",
-		Long:  "Generate encryption keys and create configuration files in XDG config directory",
+		Long: `Initialize Station with configuration files and optional GitOps setup.
+
+By default, sets up Station for local development with SQLite database.
+Use --gitops flag to also configure Litestream for production GitOps deployments.`,
 		RunE:  runInit,
 	}
 
@@ -333,9 +336,16 @@ func runServe(cmd *cobra.Command, args []string) error {
 func runInit(cmd *cobra.Command, args []string) error {
 	configDir := getXDGConfigDir()
 	configFile := filepath.Join(configDir, "config.yaml")
+	
+	// Check if GitOps setup is requested
+	gitopsSetup, _ := cmd.Flags().GetBool("gitops")
 
 	fmt.Printf("🔧 Initializing Station configuration...\n")
 	fmt.Printf("Config directory: %s\n", configDir)
+	
+	if gitopsSetup {
+		fmt.Printf("🚀 GitOps mode: Setting up Litestream for production deployments\n")
+	}
 
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0755); err != nil {
@@ -386,16 +396,37 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize default environment: %w", err)
 	}
 
+	// Set up GitOps/Litestream configuration if requested
+	if gitopsSetup {
+		if err := setupGitOpsConfiguration(configDir); err != nil {
+			return fmt.Errorf("failed to set up GitOps configuration: %w", err)
+		}
+	}
+
 	fmt.Printf("✅ Configuration initialized successfully!\n")
 	fmt.Printf("📁 Config file: %s\n", configFile)
 	fmt.Printf("🗄️  Database: %s\n", databasePath)
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(configDir, "environments", "default"))
-	fmt.Printf("\n🚀 You can now run 'station serve' to launch the server\n")
-	fmt.Printf("🔗 Connect via SSH: ssh admin@localhost -p 2222\n")
-	fmt.Printf("\n📖 Next steps:\n")
-	fmt.Printf("   • Run 'stn mcp init' to create sample configurations\n")
-	fmt.Printf("   • Run 'stn mcp env list' to see your environments\n")
+	
+	if gitopsSetup {
+		fmt.Printf("🚀 GitOps setup: Litestream configuration created at %s\n", filepath.Join(configDir, "litestream.yml"))
+		fmt.Printf("🐳 Docker files: Check examples/deployments/ for production deployment\n")
+		fmt.Printf("\n🌟 You can now run 'station serve' to launch locally or deploy with GitOps\n")
+		fmt.Printf("🔗 Local: ssh admin@localhost -p 2222\n")
+		fmt.Printf("🚢 Production: docker-compose -f examples/deployments/docker-compose/docker-compose.production.yml up\n")
+		fmt.Printf("\n📖 GitOps next steps:\n")
+		fmt.Printf("   • Set LITESTREAM_S3_BUCKET and credentials in .env\n")
+		fmt.Printf("   • Deploy with examples/deployments/kubernetes/station-deployment.yml\n")
+		fmt.Printf("   • See docs/GITOPS-DEPLOYMENT.md for complete guide\n")
+	} else {
+		fmt.Printf("\n🚀 You can now run 'station serve' to launch the server\n")
+		fmt.Printf("🔗 Connect via SSH: ssh admin@localhost -p 2222\n")
+		fmt.Printf("\n📖 Next steps:\n")
+		fmt.Printf("   • Run 'stn mcp init' to create sample configurations\n")
+		fmt.Printf("   • Run 'stn mcp env list' to see your environments\n")
+		fmt.Printf("   • Use 'stn init --gitops' for production GitOps setup\n")
+	}
 
 	return nil
 }
@@ -432,6 +463,115 @@ func initDefaultEnvironment(database db.Database) error {
 	}
 	
 	fmt.Printf("   📁 Created file config directories\n")
+	
+	return nil
+}
+
+// setupGitOpsConfiguration creates Litestream configuration and deployment examples
+func setupGitOpsConfiguration(configDir string) error {
+	fmt.Printf("🔄 Setting up GitOps/Litestream configuration...\n")
+	
+	// Create Litestream configuration
+	litestreamConfigContent := `dbs:
+  - path: /data/station.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_S3_BUCKET}
+        path: station-db
+        region: ${LITESTREAM_S3_REGION:-us-east-1}
+        access-key-id: ${LITESTREAM_S3_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_S3_SECRET_ACCESS_KEY}
+        sync-interval: 10s
+        retention: 24h
+        
+      # Alternative: Local backup for development
+      - type: file
+        path: /backup/station-db-backup
+        sync-interval: 30s
+        retention: 168h  # 7 days`
+
+	litestreamConfigPath := filepath.Join(configDir, "litestream.yml")
+	if err := os.WriteFile(litestreamConfigPath, []byte(litestreamConfigContent), 0644); err != nil {
+		return fmt.Errorf("failed to create litestream.yml: %w", err)
+	}
+	fmt.Printf("   ✅ Created %s\n", litestreamConfigPath)
+	
+	// Create .env.example for Docker Compose
+	envExampleContent := `# Litestream Configuration for GitOps Deployments
+LITESTREAM_S3_BUCKET=your-station-backups
+LITESTREAM_S3_REGION=us-east-1
+LITESTREAM_S3_ACCESS_KEY_ID=your-access-key
+LITESTREAM_S3_SECRET_ACCESS_KEY=your-secret-key
+
+# Station Configuration
+STATION_ENV=production
+PORT=8080
+
+# AI Provider APIs
+OPENAI_API_KEY=sk-your-openai-key
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
+
+# Optional: Additional MCP server credentials
+# GITHUB_TOKEN=ghp_your-github-token
+# SLACK_WEBHOOK_URL=https://hooks.slack.com/your-webhook`
+
+	envExamplePath := filepath.Join(configDir, ".env.example")
+	if err := os.WriteFile(envExamplePath, []byte(envExampleContent), 0644); err != nil {
+		return fmt.Errorf("failed to create .env.example: %w", err)
+	}
+	fmt.Printf("   ✅ Created %s\n", envExamplePath)
+	
+	// Create gitops directory with basic structure
+	gitopsDir := filepath.Join(configDir, "gitops")
+	if err := os.MkdirAll(gitopsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create gitops directory: %w", err)
+	}
+	
+	// Create basic agent template structure
+	agentTemplateDir := filepath.Join(gitopsDir, "agent-templates", "sample-agent")
+	if err := os.MkdirAll(agentTemplateDir, 0755); err != nil {
+		return fmt.Errorf("failed to create agent template directory: %w", err)
+	}
+	
+	// Create README with GitOps instructions
+	readmeContent := `# Station GitOps Setup
+
+This directory contains your Station GitOps configuration created by \` + "`" + `stn init --gitops\` + "`" + `.
+
+## Quick Start
+
+1. **Set up cloud storage credentials:**
+   \` + "`" + `\` + "`" + `\` + "`" + `bash
+   cp .env.example .env
+   # Edit .env with your S3/GCS/Azure credentials
+   \` + "`" + `\` + "`" + `\` + "`" + `
+
+2. **Deploy locally with Litestream:**
+   \` + "`" + `\` + "`" + `\` + "`" + `bash
+   docker-compose -f examples/deployments/docker-compose/docker-compose.production.yml up
+   \` + "`" + `\` + "`" + `\` + "`" + `
+
+3. **Deploy to Kubernetes:**
+   \` + "`" + `\` + "`" + `\` + "`" + `bash
+   kubectl apply -f examples/deployments/kubernetes/station-deployment.yml
+   \` + "`" + `\` + "`" + `\` + "`" + `
+
+## Files Created
+
+- \` + "`" + `litestream.yml\` + "`" + ` - Database replication configuration
+- \` + "`" + `.env.example\` + "`" + ` - Environment variables template
+- \` + "`" + `gitops/\` + "`" + ` - Directory structure for agent templates
+
+## Documentation
+
+See \` + "`" + `docs/GITOPS-DEPLOYMENT.md\` + "`" + ` for the complete GitOps deployment guide.`
+
+	readmePath := filepath.Join(configDir, "README-GITOPS.md")
+	if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
+		return fmt.Errorf("failed to create GitOps README: %w", err)
+	}
+	fmt.Printf("   ✅ Created %s\n", readmePath)
+	fmt.Printf("   📁 Created GitOps directory structure at %s\n", gitopsDir)
 	
 	return nil
 }
