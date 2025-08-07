@@ -1142,9 +1142,13 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 			// Get tools from this MCP server with timeout and panic recovery
 			logging.Debug("Attempting to get tools from MCP server: %s", serverName)
 			
-			// Create a timeout context for the tool discovery
-			toolCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
+			// Create a timeout context for the tool discovery - increased timeout for stdio servers
+			timeout := 30 * time.Second
+			if serverConfig.Command != "" {
+				// Stdio servers (especially uvx-based) need more time for cold start
+				timeout = 90 * time.Second
+			}
+			toolCtx, cancel := context.WithTimeout(ctx, timeout)
 			
 			var serverTools []ai.Tool
 			func() {
@@ -1159,12 +1163,32 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 				serverTools, err = mcpClient.GetActiveTools(toolCtx, iac.genkitApp)
 			}()
 			
+			// Cancel immediately after the call returns to prevent resource leaks
+			cancel()
+			
+			// Always disconnect the client after discovery to prevent subprocess leaks
+			if mcpClient != nil {
+				mcpClient.Disconnect()
+			}
+			
 			if err != nil {
-				logging.Debug("Failed to get tools from %s: %v", serverName, err)
+				// Enhanced error logging for timeouts and other failures
+				if err == context.DeadlineExceeded {
+					envKeys := make([]string, 0, len(serverConfig.Env))
+					for k := range serverConfig.Env {
+						envKeys = append(envKeys, k)
+					}
+					logging.Debug("Timeout discovering tools for %s (cmd=%s args=%v envKeys=%v timeout=%v)", 
+						serverName, serverConfig.Command, serverConfig.Args, envKeys, timeout)
+				} else {
+					logging.Debug("Failed to get tools from %s: %v", serverName, err)
+				}
+				
 				if serverConfig.URL != "" {
 					logging.Debug("HTTP MCP server details - Name: %s, URL: %s", serverName, serverConfig.URL)
 				} else {
-					logging.Debug("Stdio MCP server details - Name: %s, Command: %s, Args: %v", serverName, serverConfig.Command, serverConfig.Args)
+					logging.Debug("Stdio MCP server details - Name: %s, Command: %s, Args: %v, Env: %v", 
+						serverName, serverConfig.Command, serverConfig.Args, serverConfig.Env)
 				}
 				continue
 			}

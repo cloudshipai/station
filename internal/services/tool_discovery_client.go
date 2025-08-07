@@ -25,7 +25,8 @@ func NewMCPClient() *MCPClient {
 
 // DiscoverToolsFromRenderedConfig connects to MCP servers using rendered JSON config and discovers tools
 func (c *MCPClient) DiscoverToolsFromRenderedConfig(renderedConfigJSON string) (map[string][]mcp.Tool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// Increase timeout to handle stdio servers with cold start delays
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	log.Printf("Discovering tools from rendered MCP configuration")
@@ -97,8 +98,23 @@ func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, server
 				}
 			}
 			
-			log.Printf("Creating stdio client for command: %s", cmdStr)
-			mcpClient, err = client.NewStdioMCPClient(cmdStr, nil, args...)
+			// Extract environment variables for stdio client
+			var envSlice []string
+			if envMap, exists := serverConfig["env"]; exists {
+				if envVars, ok := envMap.(map[string]interface{}); ok {
+					for k, v := range envVars {
+						if vs, ok := v.(string); ok {
+							envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, vs))
+						}
+					}
+				}
+			}
+			
+			log.Printf("Creating stdio client for command: %s with %d env vars", cmdStr, len(envSlice))
+			
+			// Use transport API to properly pass environment variables
+			t := transport.NewStdio(cmdStr, envSlice, args...)
+			mcpClient = client.NewClient(t)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create stdio client: %w", err)
 			}
@@ -207,7 +223,12 @@ func (c *MCPClient) discoverToolsFromServerConfig(ctx context.Context, serverNam
 // DEPRECATED: Use DiscoverToolsFromRenderedConfig instead
 // DiscoverToolsFromServer connects to an MCP server using the appropriate transport and discovers its tools
 func (c *MCPClient) DiscoverToolsFromServer(serverConfig models.MCPServerConfig) ([]mcp.Tool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // Increased timeout for HTTP transports
+	// Increased timeout for stdio transports with cold start delays
+	timeout := 60 * time.Second
+	if serverConfig.Command != "" {
+		timeout = 90 * time.Second // Extra time for stdio servers like uvx
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	// Create appropriate transport based on server configuration
