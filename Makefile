@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test lint kill-ports stop-station
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station
 
 # Build configuration
 BINARY_NAME=stn
@@ -99,6 +99,21 @@ version:
 	@echo "Station Version: $(VERSION)"
 	@echo "Build Time: $(BUILD_TIME)"
 
+# Bundle system development targets
+test-bundle:
+	@echo "🧪 Running bundle system tests..."
+	@go test -v ./pkg/bundle/... -cover
+
+test-bundle-watch:
+	@echo "👀 Starting bundle test watcher (Ctrl+C to stop)..."
+	@while true; do \
+		go test -v ./pkg/bundle/... -cover; \
+		echo ""; \
+		echo "⏰ Waiting for changes... Press Ctrl+C to stop"; \
+		inotifywait -r -e modify,create,delete ./pkg/bundle/ 2>/dev/null || sleep 2; \
+		clear; \
+	done
+
 # Show usage help
 help:
 	@echo "Station Build Commands:"
@@ -112,6 +127,10 @@ help:
 	@echo "  make version    - Show version information"
 	@echo "  make kill-ports - Kill processes on ports 2222, 3000, 8080"
 	@echo "  make stop-station - Stop all Station processes and clear ports"
+	@echo ""
+	@echo "Bundle System Development:"
+	@echo "  make test-bundle       - Run bundle system tests"
+	@echo "  make test-bundle-watch - Watch bundle tests (requires inotify-tools)"
 	@echo ""
 	@echo "Version Control:"
 	@echo "  make build VERSION=v1.2.3 - Build with custom version"

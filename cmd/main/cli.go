@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -12,6 +13,8 @@ import (
 	"station/cmd/main/handlers/mcp"
 	"station/internal/db"
 	"station/internal/tui"
+	"station/pkg/bundle"
+	bundlecli "station/pkg/bundle/cli"
 )
 
 // runMCPList implements the "station mcp list" command
@@ -188,4 +191,194 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 func runMCPStatus(cmd *cobra.Command, args []string) error {
 	mcpHandler := mcp.NewMCPHandler(themeManager)
 	return mcpHandler.RunMCPStatus(cmd, args)
+}
+
+// runTemplateCreate implements the "station template create" command
+func runTemplateCreate(cmd *cobra.Command, args []string) error {
+	// Get flags
+	name, _ := cmd.Flags().GetString("name")
+	author, _ := cmd.Flags().GetString("author")
+	description, _ := cmd.Flags().GetString("description")
+	
+	// Use bundle path from args
+	bundlePath := args[0]
+	
+	// If name not provided, use directory name
+	if name == "" {
+		name = filepath.Base(bundlePath)
+	}
+	
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("📦 Create Template Bundle")
+	fmt.Println(banner)
+	
+	// Create bundle CLI
+	bundleCLI := bundlecli.NewBundleCLI(nil)
+	opts := bundle.CreateOptions{
+		Name:        name,
+		Author:      author,
+		Description: description,
+	}
+	
+	return bundleCLI.CreateBundle(bundlePath, opts)
+}
+
+// runTemplateValidate implements the "station template validate" command
+func runTemplateValidate(cmd *cobra.Command, args []string) error {
+	bundlePath := args[0]
+	
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("🔍 Validate Template Bundle")
+	fmt.Println(banner)
+	
+	// Create bundle CLI and validate
+	bundleCLI := bundlecli.NewBundleCLI(nil)
+	summary, err := bundleCLI.ValidateBundle(bundlePath)
+	if err != nil {
+		return err
+	}
+	
+	// Print validation results
+	bundleCLI.PrintValidationSummary(summary)
+	return nil
+}
+
+// runTemplateBundle implements the "station template bundle" command
+func runTemplateBundle(cmd *cobra.Command, args []string) error {
+	bundlePath := args[0]
+	outputPath, _ := cmd.Flags().GetString("output")
+	validateFirst, _ := cmd.Flags().GetBool("validate")
+	
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("📦 Package Template Bundle")
+	fmt.Println(banner)
+	
+	// Create bundle CLI and package
+	bundleCLI := bundlecli.NewBundleCLI(nil)
+	summary, err := bundleCLI.PackageBundle(bundlePath, outputPath, validateFirst)
+	if err != nil {
+		return err
+	}
+	
+	// Print packaging results
+	bundleCLI.PrintPackageSummary(summary)
+	return nil
+}
+
+// runTemplatePublish implements the "station template publish" command
+func runTemplatePublish(cmd *cobra.Command, args []string) error {
+	bundlePath := args[0]
+	registry, _ := cmd.Flags().GetString("registry")
+	skipValidation, _ := cmd.Flags().GetBool("skip-validation")
+	
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("📤 Publish Template Bundle")
+	fmt.Println(banner)
+	
+	// TODO: Implement publishing logic
+	fmt.Printf("Publishing %s to registry '%s'...\n", bundlePath, registry)
+	if skipValidation {
+		fmt.Println("⚠️  Skipping validation")
+	}
+	
+	// For now, just package the bundle
+	bundleCLI := bundlecli.NewBundleCLI(nil)
+	summary, err := bundleCLI.PackageBundle(bundlePath, "", !skipValidation)
+	if err != nil {
+		return err
+	}
+	
+	if !summary.Success {
+		return fmt.Errorf("bundle packaging failed")
+	}
+	
+	fmt.Printf("✅ Bundle packaged successfully: %s\n", summary.OutputPath)
+	fmt.Printf("🚀 Publishing to registry '%s' (feature coming soon)\n", registry)
+	
+	return nil
+}
+
+// runTemplateInstall implements the "station template install" command  
+func runTemplateInstall(cmd *cobra.Command, args []string) error {
+	bundleRef := args[0]
+	registry, _ := cmd.Flags().GetString("registry")
+	force, _ := cmd.Flags().GetBool("force")
+	
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("📥 Install Template Bundle")
+	fmt.Println(banner)
+	
+	fmt.Printf("Installing '%s'", bundleRef)
+	if registry != "" {
+		fmt.Printf(" from registry '%s'", registry)
+	}
+	if force {
+		fmt.Printf(" (force reinstall)")
+	}
+	fmt.Println("...")
+	
+	// TODO: Implement installation logic
+	fmt.Printf("🚀 Installation from registries (feature coming soon)\n")
+	fmt.Printf("📦 Bundle reference: %s\n", bundleRef)
+	
+	return nil
+}
+
+// runTemplateList implements the "station template list" command
+func runTemplateList(cmd *cobra.Command, args []string) error {
+	registry, _ := cmd.Flags().GetString("registry")
+	search, _ := cmd.Flags().GetString("search")
+	
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("📋 Available Template Bundles")
+	fmt.Println(banner)
+	
+	if registry != "" {
+		fmt.Printf("Registry: %s\n", registry)
+	}
+	if search != "" {
+		fmt.Printf("Search: %s\n", search)
+	}
+	
+	// TODO: Implement registry listing
+	fmt.Printf("🚀 Registry discovery (feature coming soon)\n")
+	
+	return nil
+}
+
+// runTemplateRegistryAdd implements the "station template registry add" command
+func runTemplateRegistryAdd(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	url := args[1]
+	
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("➕ Add Template Registry")
+	fmt.Println(banner)
+	
+	fmt.Printf("Adding registry '%s' at %s\n", name, url)
+	
+	// TODO: Implement registry configuration
+	fmt.Printf("🚀 Registry management (feature coming soon)\n")
+	
+	return nil
+}
+
+// runTemplateRegistryList implements the "station template registry list" command
+func runTemplateRegistryList(cmd *cobra.Command, args []string) error {
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("📋 Configured Registries")
+	fmt.Println(banner)
+	
+	// TODO: Implement registry listing
+	fmt.Printf("🚀 Registry management (feature coming soon)\n")
+	
+	return nil
 }
