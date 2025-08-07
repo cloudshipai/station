@@ -17,6 +17,7 @@ type Config struct {
 	AdminUsername     string
 	Environment       string
 	TelemetryEnabled  bool
+	Debug             bool   // Debug mode enables verbose logging
 	EncryptionKey     string // Encryption key (can be loaded from config file or env var)
 	// AI Provider Configuration
 	AIProvider        string // openai, ollama, gemini
@@ -35,6 +36,7 @@ func Load() (*Config, error) {
 		AdminUsername:    getEnvOrDefault("ADMIN_USERNAME", "admin"),
 		Environment:      getEnvOrDefault("ENVIRONMENT", "development"),
 		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true), // Default enabled with opt-out
+		Debug:            getEnvBoolOrDefault("STN_DEBUG", false), // Default to info level
 		EncryptionKey:    os.Getenv("ENCRYPTION_KEY"), // Load from environment
 		// AI Provider Configuration with STN_ prefix and sane defaults
 		AIProvider:       getEnvOrDefault("STN_AI_PROVIDER", "openai"), // Default to OpenAI
@@ -64,6 +66,9 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("telemetry_enabled") {
 		cfg.TelemetryEnabled = viper.GetBool("telemetry_enabled")
+	}
+	if viper.IsSet("debug") {
+		cfg.Debug = viper.GetBool("debug")
 	}
 	if viper.IsSet("ai_provider") {
 		cfg.AIProvider = viper.GetString("ai_provider")
