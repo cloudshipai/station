@@ -11,11 +11,12 @@ import (
 // discoverCommand discovers tools for file configs
 func (h *FileConfigHandler) discoverCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "discover <config-name-or-id> [environment-name]",
-		Short: "Discover tools for a file-based configuration",
-		Long:  "Load, render, and discover MCP tools for a file-based configuration by name or ID.",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE:  h.discoverTools,
+		Use:        "discover <config-name-or-id> [environment-name]",
+		Short:      "[DEPRECATED] Discover tools for a file-based configuration",
+		Long:       "[DEPRECATED] This command is deprecated. Use 'stn mcp sync <environment>' instead for automatic tool discovery and template management.",
+		Args:       cobra.RangeArgs(1, 2),
+		RunE:       h.discoverTools,
+		Deprecated: "Use 'stn mcp sync <environment>' instead, which automatically discovers tools and handles template bundles.",
 	}
 
 	cmd.Flags().Bool("verbose", false, "Verbose output during discovery")
