@@ -1,5 +1,8 @@
 # Production Dockerfile with Litestream for GitOps deployments
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
+
+# Install build dependencies
+RUN apk --no-cache add gcc musl-dev sqlite-dev
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -15,9 +18,10 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates sqlite curl
 
 # Install Litestream
-RUN wget https://github.com/benbjohnson/litestream/releases/latest/download/litestream-linux-amd64.tar.gz \
-    && tar -C /usr/local/bin -xzf litestream-linux-amd64.tar.gz \
-    && rm litestream-linux-amd64.tar.gz
+RUN LITESTREAM_VERSION=$(wget -qO- https://api.github.com/repos/benbjohnson/litestream/releases/latest | grep '"tag_name"' | cut -d '"' -f 4) && \
+    wget https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz \
+    && tar -C /usr/local/bin -xzf litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz \
+    && rm litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz
 
 # Create app user
 RUN addgroup -g 1000 station && \
