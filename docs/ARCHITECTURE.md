@@ -284,18 +284,88 @@ station_database_errors_total
 - **Request Tracing**: Correlation IDs for request tracking
 - **Audit Logging**: Security-relevant events
 
+## GitOps Deployment Architecture
+
+### SQLite State Persistence with Litestream
+
+**Challenge**: GitOps deployments use ephemeral containers, but Station needs persistent database state across deployments.
+
+**Solution**: Litestream integration provides automatic SQLite replication and restoration:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Git Repo      │───▶│  Station Pod    │───▶│  S3/GCS/Azure   │
+│ Agent Templates │    │  + Litestream   │    │  DB Backups     │
+│ Configurations  │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌─────────────────┐
+                       │ Ephemeral SQLite │
+                       │ Auto-Restored   │
+                       └─────────────────┘
+```
+
+### State Persistence Flow
+
+1. **Container Start**: Litestream restores database from cloud replica
+2. **Runtime**: Continuous 10-second replication to cloud storage
+3. **Deployment**: New container automatically restores latest state
+4. **Recovery**: Point-in-time restoration from backup history
+
+### Production Deployment Options
+
+#### Kubernetes with Litestream
+```yaml
+# Single replica deployment with automatic state restoration
+replicas: 1
+strategy:
+  type: Recreate  # Ensure clean database transitions
+  
+containers:
+- name: station
+  image: station:production
+  env:
+  - name: LITESTREAM_S3_BUCKET
+    value: "station-production-backups"
+```
+
+#### Docker Compose with Litestream
+```yaml
+# Production deployment with GitOps configuration mounts
+volumes:
+  - ./agent-templates:/app/agent-templates:ro
+  - ./environments:/app/environments:ro
+  - station-data:/data  # Ephemeral - persisted via Litestream
+```
+
+### GitOps Workflow Integration
+
+- **Infrastructure as Code**: All configurations in version control
+- **Automated Deployments**: CI/CD pipelines with agent template validation
+- **Environment Promotion**: Dev → Staging → Production with encrypted secrets
+- **Audit Trail**: Full deployment history with database backup verification
+
+### Backup and Recovery
+
+- **Automatic Backups**: Continuous replication every 10 seconds
+- **Retention Policy**: 24-hour retention with configurable cleanup
+- **Point-in-Time Recovery**: Restore to any backup timestamp
+- **Multi-Cloud Support**: S3, Google Cloud Storage, Azure Blob Storage
+
 ## Future Architecture Considerations
 
 ### Planned Enhancements
-- **Distributed Execution**: Multi-node agent execution
+- **Multi-Region Deployments**: Cross-region Litestream replication
 - **Advanced Scheduling**: Cron-based and event-driven triggers  
 - **Plugin System**: Custom MCP server plugins
-- **Federation**: Multi-Station orchestration
+- **Federation**: Multi-Station orchestration with shared state
 
 ### Integration Points
-- **CI/CD Pipelines**: GitHub Actions, GitLab CI, Jenkins
-- **Monitoring Systems**: Prometheus, Grafana, DataDog
-- **Alert Systems**: PagerDuty, OpsGenie, Slack
-- **Identity Systems**: LDAP, SAML, OAuth
+- **CI/CD Pipelines**: GitHub Actions, GitLab CI, Jenkins with agent deployment
+- **Monitoring Systems**: Prometheus, Grafana, DataDog with Litestream metrics
+- **Alert Systems**: PagerDuty, OpsGenie, Slack for deployment notifications
+- **Identity Systems**: LDAP, SAML, OAuth for enterprise authentication
+- **Secret Management**: HashiCorp Vault, AWS Secrets Manager, Azure Key Vault
 
-This architecture enables Station to be both simple to deploy and powerful enough for enterprise environments while maintaining security and reliability.
+This architecture enables Station to be both simple to deploy and powerful enough for enterprise GitOps environments while maintaining security, reliability, and zero-downtime deployments with full state persistence.
