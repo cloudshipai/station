@@ -143,3 +143,12 @@ type PublishOptions struct {
 	Tags     map[string]string `json:"tags,omitempty"`     // additional tags
 	Force    bool              `json:"force,omitempty"`    // overwrite existing
 }
+
+// PackageResult contains the result of bundle packaging
+type PackageResult struct {
+	Success          bool              `json:"success"`
+	OutputPath       string            `json:"output_path,omitempty"`
+	Size             int64             `json:"size,omitempty"`
+	ValidationResult *ValidationResult `json:"validation_result,omitempty"`
+	Error            string            `json:"error,omitempty"`
+}
