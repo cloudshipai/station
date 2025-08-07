@@ -13,6 +13,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/logging"
 	"station/pkg/models"
 
 	"github.com/firebase/genkit/go/ai"
@@ -34,8 +35,11 @@ type IntelligentAgentCreator struct {
 	repos        *repositories.Repositories
 	agentService AgentServiceInterface
 	// mcpConfigSvc removed - using file-based configs only
-	genkitApp    *genkit.Genkit
-	mcpClient    *mcp.GenkitMCPClient
+	genkitApp       *genkit.Genkit
+	mcpClient       *mcp.GenkitMCPClient
+	currentProvider string // Track current AI provider to detect changes
+	currentAPIKey   string // Track current API key to detect changes
+	currentBaseURL  string // Track current base URL to detect changes
 }
 
 // AgentCreationRequest represents a request for intelligent agent creation
@@ -70,29 +74,53 @@ func NewIntelligentAgentCreator(repos *repositories.Repositories, agentService A
 
 // initializeGenkit initializes Genkit with the configured AI provider and telemetry
 func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error {
-	if iac.genkitApp != nil {
-		return nil // Already initialized
-	}
-
 	// Load Station configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Check if configuration has changed
+	configChanged := iac.currentProvider != strings.ToLower(cfg.AIProvider) ||
+		iac.currentAPIKey != cfg.AIAPIKey ||
+		iac.currentBaseURL != cfg.AIBaseURL
+
+	// If already initialized with same config, return early
+	if iac.genkitApp != nil && !configChanged {
+		return nil
+	}
+
+	// Configuration changed or first initialization - reinitialize GenKit
+	if configChanged && iac.genkitApp != nil {
+		logging.Info("AI provider configuration changed from %s to %s, reinitializing GenKit...", 
+			iac.currentProvider, strings.ToLower(cfg.AIProvider))
+		// Note: GenKit doesn't provide a clean shutdown method, so we'll just replace the instance
+		iac.genkitApp = nil
+	}
+
+	// Update tracked configuration
+	iac.currentProvider = strings.ToLower(cfg.AIProvider)
+	iac.currentAPIKey = cfg.AIAPIKey
+	iac.currentBaseURL = cfg.AIBaseURL
+
 	// Initialize Genkit with the configured AI provider
+	logging.Info("Initializing GenKit with provider: %s, model: %s", cfg.AIProvider, cfg.AIModel)
+	
 	var genkitApp *genkit.Genkit
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
 		// Validate API key for OpenAI
 		if cfg.AIAPIKey == "" {
-			return fmt.Errorf("STN_AI_API_KEY is required for OpenAI provider")
+			return fmt.Errorf("API key is required for OpenAI provider (set STN_AI_API_KEY or OPENAI_API_KEY)")
 		}
+		logging.Debug("Setting up OpenAI plugin with model: %s", cfg.AIModel)
+		
 		openaiPlugin := &compat_oai.OpenAI{
 			APIKey: cfg.AIAPIKey,
 		}
-		// Set custom base URL if provided
+		// Set custom base URL if provided (for OpenAI-compatible providers)
 		if cfg.AIBaseURL != "" {
+			logging.Debug("Using custom OpenAI-compatible endpoint: %s", cfg.AIBaseURL)
 			openaiPlugin.Opts = []option.RequestOption{
 				option.WithBaseURL(cfg.AIBaseURL),
 			}
@@ -101,11 +129,14 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 		if err != nil {
 			return fmt.Errorf("failed to initialize Genkit with OpenAI: %w", err)
 		}
+		logging.Debug("OpenAI plugin initialized successfully")
 	case "gemini":
 		// Validate API key for Gemini
 		if cfg.AIAPIKey == "" {
-			return fmt.Errorf("STN_AI_API_KEY (or GOOGLE_API_KEY) is required for Gemini provider")
+			return fmt.Errorf("API key is required for Gemini provider (set STN_AI_API_KEY or GOOGLE_API_KEY)")
 		}
+		logging.Debug("Setting up Gemini plugin with model: %s", cfg.AIModel)
+		
 		geminiPlugin := &googlegenai.GoogleAI{
 			APIKey: cfg.AIAPIKey,
 		}
@@ -113,11 +144,15 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 		if err != nil {
 			return fmt.Errorf("failed to initialize Genkit with Gemini: %w", err)
 		}
+		logging.Debug("Gemini plugin initialized successfully")
+		
 	case "ollama":
 		ollamaBaseURL := cfg.AIBaseURL
 		if ollamaBaseURL == "" {
 			ollamaBaseURL = "http://127.0.0.1:11434" // Default Ollama server
 		}
+		logging.Debug("Setting up Ollama plugin with server: %s, model: %s", ollamaBaseURL, cfg.AIModel)
+		
 		ollamaPlugin := &ollama.Ollama{
 			ServerAddress: ollamaBaseURL,
 		}
@@ -125,17 +160,24 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 		if err != nil {
 			return fmt.Errorf("failed to initialize Genkit with Ollama: %w", err)
 		}
+		logging.Debug("Ollama plugin initialized successfully")
+		
 	default:
-		return fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini, ollama)", cfg.AIProvider)
+		return fmt.Errorf("unsupported AI provider: %s\n\nSupported providers:\n"+
+			"  • openai: OpenAI GPT models (gpt-4o, gpt-4, gpt-3.5-turbo)\n"+
+			"  • gemini: Google Gemini models (gemini-2.0-flash-exp, gemini-pro)\n"+
+			"  • ollama: Local Ollama models (llama3, mistral, etc)\n\n"+
+			"For OpenAI-compatible providers, use 'openai' with custom STN_AI_BASE_URL", 
+			cfg.AIProvider)
 	}
 	iac.genkitApp = genkitApp
 
 	// Set up OpenTelemetry export to Jaeger using Genkit's RegisterSpanProcessor
 	if err := iac.setupOpenTelemetryExport(ctx, genkitApp); err != nil {
-		log.Printf("⚠️ Failed to set up OpenTelemetry export: %v", err)
+		logging.Debug("Failed to set up OpenTelemetry export: %v", err)
 		// Don't fail initialization, just log the warning
 	} else {
-		log.Printf("✅ OpenTelemetry telemetry configured successfully")
+		logging.Debug("OpenTelemetry telemetry configured successfully")
 	}
 
 	// Create MCP client to connect to our own stdio server
@@ -152,13 +194,13 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 	}
 	iac.mcpClient = mcpClient
 
-	log.Printf("🤖 Initialized Genkit with Station MCP client")
+	logging.Debug("Initialized Genkit with Station MCP client")
 	return nil
 }
 
 // CreateIntelligentAgent uses Genkit with our own MCP server to analyze requirements and create an optimized agent
 func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, req AgentCreationRequest) (*models.Agent, error) {
-	log.Printf("🤖 Starting intelligent agent creation for: %s", req.Name)
+	logging.Info("Starting intelligent agent creation for: %s", req.Name)
 
 	// Step 1: Initialize Genkit with our MCP server
 	err := iac.initializeGenkit(ctx)
@@ -186,7 +228,7 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 		return nil, fmt.Errorf("failed to generate agent plan: %w", err)
 	}
 
-	log.Printf("📋 Generated plan for agent '%s' with %d tools for environment ID %d", plan.AgentName, len(plan.CoreTools), targetEnvironmentID)
+	logging.Info("Generated plan for agent '%s' with %d tools for environment ID %d", plan.AgentName, len(plan.CoreTools), targetEnvironmentID)
 
 	// Step 4: Create the agent with intelligent configuration
 	// Parse schedule from plan if provided
@@ -215,12 +257,12 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 	assignedCount := 0
 	if len(plan.CoreTools) > 0 {
 		assignedCount = iac.assignToolsToAgent(agent.ID, plan.CoreTools, targetEnvironmentID)
-		log.Printf("📋 Agent assigned %d tools from %d selected by AI", assignedCount, len(plan.CoreTools))
+		logging.Debug("Agent assigned %d tools from %d selected by AI", assignedCount, len(plan.CoreTools))
 	}
 
 	// Step 6: Handle scheduling if enabled
 	if agent.IsScheduled && agent.CronSchedule != nil {
-		log.Printf("📅 Agent '%s' has schedule '%s' - will be handled by scheduler service", agent.Name, *agent.CronSchedule)
+		logging.Info("Agent '%s' has schedule '%s' - will be handled by scheduler service", agent.Name, *agent.CronSchedule)
 		// The scheduler service will pick up this agent automatically on next restart,
 		// or we can implement a notification mechanism here if needed
 	}
@@ -230,7 +272,7 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 		iac.mcpClient.Disconnect()
 	}
 
-	log.Printf("✅ Successfully created intelligent agent '%s' (ID: %d) with %d tools%s",
+	logging.Info("Successfully created intelligent agent '%s' (ID: %d) with %d tools%s",
 		agent.Name, agent.ID, assignedCount, 
 		func() string {
 			if agent.IsScheduled && agent.CronSchedule != nil {
@@ -244,7 +286,7 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 
 // generateAgentPlanWithGenkit uses Genkit with environment-specific MCP tools to intelligently analyze requirements
 func (iac *IntelligentAgentCreator) generateAgentPlanWithGenkit(ctx context.Context, req AgentCreationRequest, targetEnvironmentID int64) (*AgentCreationPlan, error) {
-	log.Printf("🔍 Using Genkit to analyze agent requirements for environment ID %d...", targetEnvironmentID)
+	logging.Info("Using Genkit to analyze agent requirements for environment ID %d...", targetEnvironmentID)
 
 	// Get available tools from the target environment
 	tools, err := iac.getEnvironmentMCPTools(ctx, targetEnvironmentID)
@@ -252,7 +294,7 @@ func (iac *IntelligentAgentCreator) generateAgentPlanWithGenkit(ctx context.Cont
 		return nil, fmt.Errorf("failed to get environment MCP tools: %w", err)
 	}
 
-	log.Printf("📋 Found %d available MCP tools in target environment for analysis", len(tools))
+	logging.Debug("Found %d available MCP tools in target environment for analysis", len(tools))
 
 	// Convert tools to tool references and extract tool names
 	var toolRefs []ai.ToolRef
@@ -330,7 +372,7 @@ RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on
 	}
 
 	var modelName string
-	log.Printf("🔍 DEBUG: cfg.AIProvider='%s', cfg.AIModel='%s'", cfg.AIProvider, cfg.AIModel)
+	// Using provider configuration
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
 		// Use configured model or default
@@ -374,9 +416,9 @@ RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on
 	responseText := response.Text()
 	
 	// DEBUG: Log comprehensive response details for agent creation
-	log.Printf("🤖 Agent creation response: %s", responseText)
+	logging.Debug("Agent creation response: %s", responseText)
 	if response.Usage != nil {
-		log.Printf("🔍 Agent creation usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
+		logging.Debug("Agent creation usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
 			response.Usage.InputTokens, response.Usage.OutputTokens, 
 			response.Usage.InputTokens + response.Usage.OutputTokens)
 	}
@@ -389,7 +431,7 @@ RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on
 				modelMessages++
 			}
 		}
-		log.Printf("🔍 Agent creation took %d turns, %d total messages in conversation", 
+		logging.Debug("Agent creation took %d turns, %d total messages in conversation", 
 			modelMessages, len(response.Request.Messages))
 	}
 
@@ -401,14 +443,14 @@ RESPOND WITH ONLY THIS JSON STRUCTURE (populate with appropriate values based on
 	}
 
 	jsonStr := responseText[jsonStart:jsonEnd]
-	log.Printf("🔍 Extracted JSON: %s", jsonStr)
+	logging.Debug("Extracted JSON: %s", jsonStr)
 	
 	err = json.Unmarshal([]byte(jsonStr), &plan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse agent plan JSON: %w. JSON was: %s", err, jsonStr)
 	}
 
-	log.Printf("📋 Generated intelligent plan for '%s': %d tools, %d max steps",
+	logging.Info("Generated intelligent plan for '%s': %d tools, %d max steps",
 		plan.AgentName, len(plan.CoreTools), plan.MaxSteps)
 
 	return &plan, nil
@@ -430,7 +472,7 @@ func (iac *IntelligentAgentCreator) ensureEnvironment(envName string) (int64, er
 
 	// If not found, use the first available environment (default)
 	if len(environments) > 0 {
-		log.Printf("Environment '%s' not found, using '%s' instead", envName, environments[0].Name)
+		logging.Info("Environment '%s' not found, using '%s' instead", envName, environments[0].Name)
 		return environments[0].ID, nil
 	}
 
@@ -448,25 +490,25 @@ func (iac *IntelligentAgentCreator) assignToolsToAgent(agentID int64, toolNames 
 			parts := strings.SplitN(toolName, "_", 2)
 			if len(parts) == 2 {
 				dbToolName = parts[1] // Remove prefix for database lookup
-				log.Printf("🔄 Mapping AI tool name for database: %s -> %s", toolName, dbToolName)
+				logging.Debug("Mapping AI tool name for database: %s -> %s", toolName, dbToolName)
 			}
 		}
 		
 		tool, err := iac.repos.MCPTools.FindByNameInEnvironment(environmentID, dbToolName)
 		if err != nil {
-			log.Printf("Warning: Failed to find tool '%s' in environment %d: %v", toolName, environmentID, err)
+			logging.Debug("Warning: Failed to find tool '%s' in environment %d: %v", toolName, environmentID, err)
 			continue
 		}
 		
 		// Add the tool assignment to the agent
 		_, err = iac.repos.AgentTools.AddAgentTool(agentID, tool.ID)
 		if err != nil {
-			log.Printf("Warning: Failed to assign tool '%s' (ID: %d) to agent %d: %v", tool.Name, tool.ID, agentID, err)
+			logging.Debug("Warning: Failed to assign tool '%s' (ID: %d) to agent %d: %v", tool.Name, tool.ID, agentID, err)
 			continue
 		}
 		
 		assignedCount++
-		log.Printf("✓ Successfully assigned tool '%s' (ID: %d) to agent %d", tool.Name, tool.ID, agentID)
+		logging.Debug("Successfully assigned tool '%s' (ID: %d) to agent %d", tool.Name, tool.ID, agentID)
 	}
 	return assignedCount
 }
@@ -485,7 +527,7 @@ func (iac *IntelligentAgentCreator) TestStdioMCPConnection(ctx context.Context) 
 		return fmt.Errorf("failed to connect to stdio MCP server: %w", err)
 	}
 
-	log.Printf("✅ Stdio MCP connection successful - found %d tools", len(tools))
+	logging.Debug("Stdio MCP connection successful - found %d tools", len(tools))
 	return nil
 }
 
@@ -563,7 +605,7 @@ func (ct *cleanNameTool) Respond(toolReq *ai.Part, outputData any, opts *ai.Resp
 // ExecuteAgentViaStdioMCP executes an agent using self-bootstrapping stdio MCP architecture
 func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
 	startTime := time.Now()
-	log.Printf("🤖 Starting stdio MCP agent execution for agent '%s'", agent.Name)
+	logging.Info("Starting stdio MCP agent execution for agent '%s'", agent.Name)
 
 	// Initialize Genkit + MCP if not already done
 	err := iac.initializeGenkit(ctx)
@@ -578,7 +620,7 @@ func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context,
 		return nil, fmt.Errorf("failed to get assigned tools for agent %d: %w", agent.ID, err)
 	}
 
-	log.Printf("📋 Agent has %d assigned tools for execution", len(assignedTools))
+	logging.Debug("Agent has %d assigned tools for execution", len(assignedTools))
 
 	// Get MCP tools from agent's environment instead of Station stdio
 	allTools, err := iac.getEnvironmentMCPTools(ctx, agent.EnvironmentID)
@@ -619,20 +661,20 @@ func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context,
 			}
 			
 			if matchFound {
-				log.Printf("✅ Tool match found: MCP '%s' matches assigned '%s'", toolName, assignedTool.ToolName)
+				logging.Debug("Tool match found: MCP '%s' matches assigned '%s'", toolName, assignedTool.ToolName)
 				
 				// DEBUG: Log what Station passes to Genkit
 				toolRef := ai.ToolRef(mcpTool)
-				log.Printf("🔍 DEBUG: Station creating ToolRef with Name='%s' (length=%d)", toolRef.Name(), len(toolRef.Name()))
+				// Tool reference created
 				
 				tools = append(tools, toolRef)
-				log.Printf("🔧 Including assigned tool: %s", toolName)
+				// Including assigned tool
 				break
 			}
 		}
 	}
 
-	log.Printf("📋 Filtered to %d assigned tools for agent execution", len(tools))
+	logging.Debug("Filtered to %d assigned tools for agent execution", len(tools))
 
 	// Tools are already ai.ToolRef, use them directly
 	toolRefs := tools
@@ -671,7 +713,7 @@ Begin by making your first tool call:`,
 	}
 
 	var modelName string
-	log.Printf("🔍 DEBUG: cfg.AIProvider='%s', cfg.AIModel='%s'", cfg.AIProvider, cfg.AIModel)
+	// Using provider configuration
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
 		// Use configured model or default
@@ -698,7 +740,7 @@ Begin by making your first tool call:`,
 		modelName = "openai/gpt-4o" // Default fallback
 	}
 
-	log.Printf("🔍 Executing agent with model: %s", modelName)
+	// Executing agent
 
 	// Note: Genkit automatically captures all telemetry data:
 	// - Token usage (input/output tokens)  
@@ -707,54 +749,117 @@ Begin by making your first tool call:`,
 	// - Performance metrics (latency, request counts)
 	// - OpenTelemetry traces automatically exported to Jaeger
 
+	// Provider-aware tool call tracking
+	var capturedToolCalls []map[string]interface{}
+	var toolTrackingMiddleware func(ai.ModelFunc) ai.ModelFunc
+	
+	// Define providers that need middleware for tool call extraction
+	// These providers use OpenAI-compatible format where GenKit's multi-turn orchestration hides tool calls
+	openAICompatibleProviders := []string{
+		"openai",
+		"anthropic", 
+		"groq",
+		"deepseek",
+		"together",
+		"fireworks",
+		"perplexity",
+		"mistral",
+		"cohere",
+		"huggingface",
+		"replicate",
+		"anyscale",
+		"local", // Local OpenAI-compatible servers
+	}
+	
+	// Check if current provider needs middleware
+	needsMiddleware := false
+	for _, provider := range openAICompatibleProviders {
+		if strings.HasPrefix(cfg.AIProvider, provider) {
+			needsMiddleware = true
+			break
+		}
+	}
+	if needsMiddleware {
+		toolTrackingMiddleware = func(next ai.ModelFunc) ai.ModelFunc {
+			return func(ctx context.Context, req *ai.ModelRequest, cb ai.ModelStreamCallback) (*ai.ModelResponse, error) {
+				resp, err := next(ctx, req, cb)
+				if err != nil {
+					return resp, err
+				}
+				
+				// Capture OpenAI tool calls from response
+				if resp.Message != nil {
+					for _, part := range resp.Message.Content {
+						if part.IsToolRequest() {
+							toolReq := part.ToolRequest
+							capturedToolCalls = append(capturedToolCalls, map[string]interface{}{
+								"tool_name": toolReq.Name,
+								"input":     toolReq.Input,
+								"step":      len(capturedToolCalls) + 1,
+							})
+						}
+					}
+				}
+				
+				return resp, err
+			}
+		}
+	}
+	
 	// Use Genkit to execute the agent with assigned tools only
 	var generateOptions []ai.GenerateOption
 	generateOptions = append(generateOptions, ai.WithModelName(modelName))
 	generateOptions = append(generateOptions, ai.WithPrompt(executionPrompt))
 	generateOptions = append(generateOptions, ai.WithMaxTurns(25)) // Support multi-step workflows
 	
+	// Apply middleware only for OpenAI-compatible providers  
+	if needsMiddleware && toolTrackingMiddleware != nil {
+		generateOptions = append(generateOptions, ai.WithMiddleware(toolTrackingMiddleware))
+	}
+	
 	// Only add tools and tool choice if we have tools available
 	if len(toolRefs) > 0 {
 		generateOptions = append(generateOptions, ai.WithTools(toolRefs...))
 		generateOptions = append(generateOptions, ai.WithToolChoice(ai.ToolChoiceAuto))
-		log.Printf("🔧 Executing with %d assigned tools", len(toolRefs))
+		// Tools available for execution
 	} else {
-		log.Printf("⚠️ No tools available - executing in reasoning-only mode")
+		logging.Info("No tools available - executing in reasoning-only mode")
+	}
+	
+	// EXPERIMENT: Add streaming callback to capture intermediate tool calls
+	var capturedChunks []*ai.ModelResponseChunk
+	_ = func(ctx context.Context, chunk *ai.ModelResponseChunk) error {
+		capturedChunks = append(capturedChunks, chunk)
+		logging.Debug("STREAM CHUNK: Role=%s, Content=%+v", chunk.Role, chunk.Content)
+		return nil
 	}
 	
 	response, err := genkit.Generate(ctx, iac.genkitApp, generateOptions...)
+	// TODO: Also try with streaming callback
+	// response, err := ai.GenerateWithRequest(ctx, iac.genkitApp.Registry(), &ai.GenerateActionOptions{...}, nil, streamCallback)
 	if err != nil {
 		// Track execution failure
 		executionTime := time.Since(startTime).Milliseconds()
-		log.Printf("❌ Agent execution failed after %dms (Genkit captured error telemetry automatically)", executionTime)
+		logging.Debug("Agent execution failed after %dms", executionTime)
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
 	}
 
 	// Extract execution results
 	responseText := response.Text()
-	log.Printf("🤖 Agent execution completed via stdio MCP")
+	logging.Debug("Agent execution completed via stdio MCP")
 	
-	// DEBUG: Log comprehensive response details to understand multi-turn behavior
-	log.Printf("🔍 DEBUG: Response text length: %d characters", len(responseText))
-	log.Printf("🔍 DEBUG: Response type: %T", response)
-	log.Printf("🔍 DEBUG: Final response text: %s", responseText)
-	
-	// Try to access usage or turn information if available
+	// Log execution metrics
 	if response.Usage != nil {
-		log.Printf("🔍 DEBUG: Usage - Input tokens: %d, Output tokens: %d, Total tokens: %d", 
-			response.Usage.InputTokens, response.Usage.OutputTokens, 
-			response.Usage.InputTokens + response.Usage.OutputTokens)
+		logging.Debug("Token usage - Input: %d, Output: %d, Total: %d, Latency: %.2fms", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, response.Usage.TotalTokens, response.LatencyMs)
 	}
 	
-	// Log additional response metadata
-	log.Printf("🔍 DEBUG: Finish reason: %s", response.FinishReason)
-	if response.FinishMessage != "" {
-		log.Printf("🔍 DEBUG: Finish message: %s", response.FinishMessage)
+	// Provider-specific tool call logging
+	if needsMiddleware && len(capturedToolCalls) > 0 {
+		logging.Debug("Middleware captured %d tool calls from %s", len(capturedToolCalls), cfg.AIProvider)
 	}
-	log.Printf("🔍 DEBUG: Latency: %.2fms", response.LatencyMs)
 	
-	// Check if response has any turn/step information
-	log.Printf("🔍 DEBUG: Looking for multi-turn indicators in response...")
+	// Streaming data captured for analysis
 
 	// Count actual steps/turns from Genkit response
 	stepsTaken := int64(1) // Default to 1 step for basic reasoning
@@ -778,80 +883,31 @@ Begin by making your first tool call:`,
 		}
 		if modelMessages > 0 {
 			stepsTaken = int64(modelMessages)
-			log.Printf("🔍 DEBUG: Found %d model messages in conversation history", modelMessages)
 		}
-		log.Printf("🔍 DEBUG: Message count breakdown - User: %d, Model: %d, Tool: %d, System: %d, Total: %d", 
-			userMessages, modelMessages, toolMessages, systemMessages, len(response.Request.Messages))
-		
-		// Debug: Log detailed conversation flow with content preview
-		log.Printf("🔍 DEBUG: === CONVERSATION FLOW ===")
-		for i, msg := range response.Request.Messages {
-			contentPreview := ""
-			if len(msg.Content) > 0 {
-				// Get text content from the first part if available
-				if msg.Content[0] != nil && msg.Content[0].Text != "" {
-					contentPreview = msg.Content[0].Text
-					if len(contentPreview) > 100 {
-						contentPreview = contentPreview[:100] + "..."
-					}
-				}
-			}
-			log.Printf("🔍 DEBUG: Step %d - Role: %s, Content: %s", i+1, msg.Role, contentPreview)
-			
-			// Log tool calls if this is a model message with tool requests
-			if msg.Role == ai.RoleModel && len(msg.Content) > 0 {
-				for j, part := range msg.Content {
-					if part.ToolRequest != nil {
-						toolCallPreview := fmt.Sprintf("Tool: %s", part.ToolRequest.Name)
-						if part.ToolRequest.Input != nil {
-							if inputBytes, err := json.Marshal(part.ToolRequest.Input); err == nil {
-								inputStr := string(inputBytes)
-								if len(inputStr) > 100 {
-									inputStr = inputStr[:100] + "..."
-								}
-								toolCallPreview += fmt.Sprintf(", Input: %s", inputStr)
-							}
-						}
-						log.Printf("🔍 DEBUG:   Part %d - %s", j+1, toolCallPreview)
-					}
-				}
-			}
-			
-			// Log tool responses if this is a tool message
-			if msg.Role == ai.RoleTool && len(msg.Content) > 0 {
-				for j, part := range msg.Content {
-					if part.ToolResponse != nil {
-						toolRespPreview := fmt.Sprintf("Tool Response: %s", part.ToolResponse.Name)
-						if part.ToolResponse.Output != nil {
-							if outputBytes, err := json.Marshal(part.ToolResponse.Output); err == nil {
-								outputStr := string(outputBytes)
-								if len(outputStr) > 100 {
-									outputStr = outputStr[:100] + "..."
-								}
-								toolRespPreview += fmt.Sprintf(", Output: %s", outputStr)
-							}
-						}
-						log.Printf("🔍 DEBUG:   Part %d - %s", j+1, toolRespPreview)
-					}
-				}
-			}
-		}
-		log.Printf("🔍 DEBUG: === END CONVERSATION FLOW ===")
 	}
 	var toolCalls *models.JSONArray
 	var executionSteps *models.JSONArray
 
 	// Always extract detailed execution data from GenKit response
-	log.Printf("📊 Extracting detailed execution data from GenKit response...")
+	logging.Debug("Extracting detailed execution data from GenKit response...")
 	
-	// Extract actual tool calls from GenKit conversation
-	actualToolCalls := iac.extractToolCallsFromResponse(response, modelName)
-	if len(actualToolCalls) > 0 {
-		toolCallsArray := models.JSONArray(actualToolCalls)
+	// Unified tool call extraction: OpenAI-compatible from middleware, Gemini from native response
+	if needsMiddleware && len(capturedToolCalls) > 0 {
+		// Add tool outputs to captured OpenAI tool calls from conversation messages
+		iac.addToolOutputsToCapturedCalls(capturedToolCalls, response)
+		var toolCallsInterface []interface{}
+		for _, toolCall := range capturedToolCalls {
+			toolCallsInterface = append(toolCallsInterface, toolCall)
+		}
+		toolCallsArray := models.JSONArray(toolCallsInterface)
 		toolCalls = &toolCallsArray
-		log.Printf("🔧 Extracted %d actual tool calls from execution", len(actualToolCalls))
-	} else {
-		log.Printf("🔧 No tool calls found in execution")
+	} else if !needsMiddleware {
+		// Use native GenKit tool call extraction for Gemini and other providers (works beautifully)
+		toolCallsFromResponse := iac.extractToolCallsFromResponse(response, modelName)
+		if len(toolCallsFromResponse) > 0 {
+			toolCallsArray := models.JSONArray(toolCallsFromResponse)
+			toolCalls = &toolCallsArray
+		}
 	}
 	
 	// Build detailed execution steps from conversation flow
@@ -859,12 +915,12 @@ Begin by making your first tool call:`,
 	if len(detailedSteps) > 0 {
 		executionStepsArray := models.JSONArray(detailedSteps)
 		executionSteps = &executionStepsArray
-		log.Printf("📋 Built %d execution steps from conversation", len(detailedSteps))
+		logging.Debug("Built %d execution steps from conversation", len(detailedSteps))
 	} else {
-		log.Printf("📋 No detailed execution steps generated")
+		logging.Debug("No detailed execution steps generated")
 	}
 	
-	log.Printf("📊 Detailed execution data extracted successfully")
+	logging.Debug("Detailed execution data extracted successfully")
 
 	// Extract token usage from GenKit response
 	var tokenUsage *TokenUsage
@@ -875,7 +931,7 @@ Begin by making your first tool call:`,
 			TotalTokens:  response.Usage.InputTokens + response.Usage.OutputTokens,
 			LatencyMs:    response.LatencyMs,
 		}
-		log.Printf("💰 Token usage - Input: %d, Output: %d, Total: %d, Latency: %.2fms", 
+		logging.Debug("Token usage - Input: %d, Output: %d, Total: %d, Latency: %.2fms", 
 			tokenUsage.InputTokens, tokenUsage.OutputTokens, tokenUsage.TotalTokens, tokenUsage.LatencyMs)
 	}
 
@@ -887,14 +943,14 @@ Begin by making your first tool call:`,
 		TokenUsage:     tokenUsage,
 	}
 
-	log.Printf("✅ Stdio MCP agent execution completed: %d steps taken", stepsTaken)
+	logging.Info("Agent execution completed: %d steps taken", stepsTaken)
 
 	// Track agent execution with PostHog telemetry
 	executionTime := time.Since(startTime).Milliseconds()
 	
-	log.Printf("✅ Agent execution completed in %dms with %d steps (Genkit captured comprehensive telemetry automatically)", executionTime, stepsTaken)
+	logging.Debug("Agent execution completed in %dms with %d steps", executionTime, stepsTaken)
 
-	log.Printf("✅ Environment MCP agent execution completed successfully")
+	logging.Info("Environment MCP agent execution completed successfully")
 	return result, nil
 }
 
@@ -934,8 +990,8 @@ func (iac *IntelligentAgentCreator) setupOpenTelemetryExport(ctx context.Context
 	// Register the span processor with Genkit
 	genkit.RegisterSpanProcessor(g, spanProcessor)
 	
-	log.Printf("📊 OpenTelemetry configured to export traces to Jaeger at localhost:4317 (service: station-agent)")
-	log.Printf("🔍 Rich telemetry data (tokens, usage, costs) will appear in span attributes")
+	logging.Debug("OpenTelemetry configured to export traces to Jaeger at localhost:4317 (service: station-agent)")
+	logging.Debug("Rich telemetry data (tokens, usage, costs) will appear in span attributes")
 	return nil
 }
 
@@ -961,58 +1017,58 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 		return nil, fmt.Errorf("failed to get environment %d: %w", environmentID, err)
 	}
 
-	log.Printf("🌍 Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
+	logging.Info("Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
 
 	// Get file configs for this environment
-	log.Printf("🔍 Querying database for file configs with environment ID: %d", environmentID)
+	logging.Debug("Querying database for file configs with environment ID: %d", environmentID)
 	fileConfigs, err := iac.repos.FileMCPConfigs.ListByEnvironment(environmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file configs for environment %d: %w", environmentID, err)
 	}
 
-	log.Printf("📋 Database query returned %d file configs for environment %d", len(fileConfigs), environmentID)
+	logging.Debug("Database query returned %d file configs for environment %d", len(fileConfigs), environmentID)
 	for i, config := range fileConfigs {
-		log.Printf("  🗂️ Config %d: %s (ID: %d, Template: %s)", i+1, config.ConfigName, config.ID, config.TemplatePath)
+		logging.Debug("Config %d: %s (ID: %d, Template: %s)", i+1, config.ConfigName, config.ID, config.TemplatePath)
 	}
 
 	var allTools []ai.Tool
 
 	// Connect to each MCP server from file configs and get their tools
 	for _, fileConfig := range fileConfigs {
-		log.Printf("📁 Processing file config: %s (ID: %d), template path: %s", fileConfig.ConfigName, fileConfig.ID, fileConfig.TemplatePath)
+		logging.Debug("Processing file config: %s (ID: %d), template path: %s", fileConfig.ConfigName, fileConfig.ID, fileConfig.TemplatePath)
 		
 		// Make template path absolute (relative to ~/.config/station/)
 		configDir := os.ExpandEnv("$HOME/.config/station")
 		absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
 		
-		log.Printf("📂 Reading file config from: %s", absolutePath)
+		logging.Debug("Reading file config from: %s", absolutePath)
 		
 		// Read the actual file content from template path
 		rawContent, err := os.ReadFile(absolutePath)
 		if err != nil {
-			log.Printf("⚠️ Failed to read file config %s from %s: %v", fileConfig.ConfigName, absolutePath, err)
+			logging.Debug("Failed to read file config %s from %s: %v", fileConfig.ConfigName, absolutePath, err)
 			continue
 		}
 
-		log.Printf("📄 File config content loaded: %d bytes", len(rawContent))
+		logging.Debug("File config content loaded: %d bytes", len(rawContent))
 
 		// Process template variables using TemplateVariableService
 		templateService := NewTemplateVariableService(os.ExpandEnv("$HOME/.config/station"), iac.repos)
 		result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 		if err != nil {
-			log.Printf("⚠️ Failed to process template variables for %s: %v", fileConfig.ConfigName, err)
+			logging.Debug("Failed to process template variables for %s: %v", fileConfig.ConfigName, err)
 			continue
 		}
 
 		// Use rendered content with variables resolved
 		content := result.RenderedContent
-		log.Printf("📄 Template rendered: %d bytes, variables resolved: %v", len(content), result.AllResolved)
+		logging.Debug("Template rendered: %d bytes, variables resolved: %v", len(content), result.AllResolved)
 
 		// Parse the file config content to get server configurations
 		// The JSON files use "mcpServers" but the struct expects "servers" - handle both
 		var rawConfig map[string]interface{}
 		if err := json.Unmarshal([]byte(content), &rawConfig); err != nil {
-			log.Printf("⚠️ Failed to parse file config %s: %v", fileConfig.ConfigName, err)
+			logging.Debug("Failed to parse file config %s: %v", fileConfig.ConfigName, err)
 			continue
 		}
 
@@ -1023,31 +1079,31 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 		} else if servers, ok := rawConfig["servers"].(map[string]interface{}); ok {
 			serversData = servers
 		} else {
-			log.Printf("⚠️ No 'mcpServers' or 'servers' field found in config %s", fileConfig.ConfigName)
+			logging.Debug("No 'mcpServers' or 'servers' field found in config %s", fileConfig.ConfigName)
 			continue
 		}
 
-		log.Printf("🔍 Parsed config data with %d servers", len(serversData))
+		logging.Debug("Parsed config data with %d servers", len(serversData))
 
 		// Process each server in the config
 		for serverName, serverConfigRaw := range serversData {
 			// Convert the server config to proper structure
 			serverConfigBytes, err := json.Marshal(serverConfigRaw)
 			if err != nil {
-				log.Printf("⚠️ Failed to marshal server config for %s: %v", serverName, err)
+				logging.Debug("Failed to marshal server config for %s: %v", serverName, err)
 				continue
 			}
 			
 			var serverConfig models.MCPServerConfig
 			if err := json.Unmarshal(serverConfigBytes, &serverConfig); err != nil {
-				log.Printf("⚠️ Failed to unmarshal server config for %s: %v", serverName, err)
+				logging.Debug("Failed to unmarshal server config for %s: %v", serverName, err)
 				continue
 			}
 			// Determine transport type based on config fields
 			var mcpClient *mcp.GenkitMCPClient
 			if serverConfig.URL != "" {
 				// HTTP-based MCP server
-				log.Printf("🔌 Connecting to HTTP MCP server: %s (URL: %s)", serverName, serverConfig.URL)
+				logging.Debug("Connecting to HTTP MCP server: %s (URL: %s)", serverName, serverConfig.URL)
 				mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
 					Name:    "f", // Short name to minimize tool call IDs in OpenAI
 					Version: "1.0.0",
@@ -1058,7 +1114,7 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 				})
 			} else if serverConfig.Command != "" {
 				// Stdio-based MCP server
-				log.Printf("🔌 Connecting to Stdio MCP server: %s (command: %s, args: %v)", serverName, serverConfig.Command, serverConfig.Args)
+				logging.Debug("Connecting to Stdio MCP server: %s (command: %s, args: %v)", serverName, serverConfig.Command, serverConfig.Args)
 				
 				// Convert env map to slice for Stdio config
 				var envSlice []string
@@ -1076,16 +1132,16 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 					},
 				})
 			} else {
-				log.Printf("⚠️ Invalid MCP server config for %s: missing both URL and Command fields", serverName)
+				logging.Debug("Invalid MCP server config for %s: missing both URL and Command fields", serverName)
 				continue
 			}
 			if err != nil {
-				log.Printf("⚠️ Failed to create MCP client for %s: %v", serverName, err)
+				logging.Debug("Failed to create MCP client for %s: %v", serverName, err)
 				continue
 			}
 
 			// Get tools from this MCP server with timeout and panic recovery
-			log.Printf("🔍 Attempting to get tools from MCP server: %s", serverName)
+			logging.Debug("Attempting to get tools from MCP server: %s", serverName)
 			
 			// Create a timeout context for the tool discovery
 			toolCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -1096,7 +1152,7 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 				// Recover from potential panics in the MCP client
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("🚨 Panic recovered while getting tools from %s: %v", serverName, r)
+						logging.Debug("Panic recovered while getting tools from %s: %v", serverName, r)
 						err = fmt.Errorf("panic in MCP client: %v", r)
 					}
 				}()
@@ -1105,28 +1161,28 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 			}()
 			
 			if err != nil {
-				log.Printf("⚠️ Failed to get tools from %s: %v", serverName, err)
+				logging.Debug("Failed to get tools from %s: %v", serverName, err)
 				if serverConfig.URL != "" {
-					log.Printf("🔍 HTTP MCP server details - Name: %s, URL: %s", serverName, serverConfig.URL)
+					logging.Debug("HTTP MCP server details - Name: %s, URL: %s", serverName, serverConfig.URL)
 				} else {
-					log.Printf("🔍 Stdio MCP server details - Name: %s, Command: %s, Args: %v", serverName, serverConfig.Command, serverConfig.Args)
+					logging.Debug("Stdio MCP server details - Name: %s, Command: %s, Args: %v", serverName, serverConfig.Command, serverConfig.Args)
 				}
 				continue
 			}
 
-			log.Printf("🔧 Found %d tools from %s", len(serverTools), serverName)
+			logging.Debug("Found %d tools from %s", len(serverTools), serverName)
 			for i, tool := range serverTools {
 				if named, ok := tool.(interface{ Name() string }); ok {
-					log.Printf("  📋 Tool %d: %s", i+1, named.Name())
+					logging.Debug("  Tool %d: %s", i+1, named.Name())
 				} else {
-					log.Printf("  📋 Tool %d: %T (no Name method)", i+1, tool)
+					logging.Debug("  Tool %d: %T (no Name method)", i+1, tool)
 				}
 			}
 			allTools = append(allTools, serverTools...)
 		}
 	}
 
-	log.Printf("🗂️ Total tools from all file config servers: %d", len(allTools))
+	logging.Info("Total tools from all file config servers: %d", len(allTools))
 	return allTools, nil
 }
 
@@ -1337,6 +1393,45 @@ func (iac *IntelligentAgentCreator) extractMessageContent(msg *ai.Message) strin
 	}
 	
 	return content.String()
+}
+
+// addToolOutputsToCapturedCalls finds matching tool responses in the conversation 
+// and adds outputs to the captured tool calls for OpenAI-compatible providers
+func (iac *IntelligentAgentCreator) addToolOutputsToCapturedCalls(capturedToolCalls []map[string]interface{}, response *ai.ModelResponse) {
+	if response.Request == nil || len(response.Request.Messages) == 0 {
+		logging.Debug("No conversation messages available for tool output matching")
+		return
+	}
+	
+	logging.Debug("Searching %d conversation messages for tool outputs", len(response.Request.Messages))
+	
+	// Build a map of tool responses by tool name for quick lookup
+	toolResponses := make(map[string]interface{})
+	for _, msg := range response.Request.Messages {
+		if msg.Role == ai.RoleTool {
+			for _, part := range msg.Content {
+				if part.ToolResponse != nil {
+					logging.Debug("Found tool response: %s", part.ToolResponse.Name)
+					toolResponses[part.ToolResponse.Name] = part.ToolResponse.Output
+				}
+			}
+		}
+	}
+	
+	logging.Debug("Found %d tool responses to match with %d captured calls", len(toolResponses), len(capturedToolCalls))
+	
+	// Add outputs to captured tool calls
+	for i, toolCall := range capturedToolCalls {
+		if toolName, ok := toolCall["tool_name"].(string); ok {
+			if output, found := toolResponses[toolName]; found {
+				logging.Debug("Adding output to tool call: %s", toolName)
+				capturedToolCalls[i]["output"] = output
+				capturedToolCalls[i]["status"] = "completed"
+			} else {
+				logging.Debug("No output found for tool call: %s", toolName)
+			}
+		}
+	}
 }
 
 // Helper method to truncate content to specified length
