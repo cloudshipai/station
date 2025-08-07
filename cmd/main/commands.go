@@ -24,10 +24,10 @@ var (
 	initCmd = &cobra.Command{
 		Use:   "init",
 		Short: "Initialize Station configuration",
-		Long: `Initialize Station with configuration files and optional GitOps setup.
+		Long: `Initialize Station with configuration files and optional database replication.
 
 By default, sets up Station for local development with SQLite database.
-Use --gitops flag to also configure Litestream for production GitOps deployments.`,
+Use --replicate flag to also configure Litestream for database replication to cloud storage.`,
 		RunE:  runInit,
 	}
 
@@ -337,14 +337,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	configDir := getXDGConfigDir()
 	configFile := filepath.Join(configDir, "config.yaml")
 	
-	// Check if GitOps setup is requested
-	gitopsSetup, _ := cmd.Flags().GetBool("gitops")
+	// Check if replication setup is requested
+	replicationSetup, _ := cmd.Flags().GetBool("replicate")
 
 	fmt.Printf("🔧 Initializing Station configuration...\n")
 	fmt.Printf("Config directory: %s\n", configDir)
 	
-	if gitopsSetup {
-		fmt.Printf("🚀 GitOps mode: Setting up Litestream for production deployments\n")
+	if replicationSetup {
+		fmt.Printf("🔄 Replication mode: Setting up Litestream for database replication\n")
 	}
 
 	// Create config directory if it doesn't exist
@@ -396,10 +396,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize default environment: %w", err)
 	}
 
-	// Set up GitOps/Litestream configuration if requested
-	if gitopsSetup {
-		if err := setupGitOpsConfiguration(configDir); err != nil {
-			return fmt.Errorf("failed to set up GitOps configuration: %w", err)
+	// Set up Litestream replication configuration if requested
+	if replicationSetup {
+		if err := setupReplicationConfiguration(configDir); err != nil {
+			return fmt.Errorf("failed to set up replication configuration: %w", err)
 		}
 	}
 
@@ -409,15 +409,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(configDir, "environments", "default"))
 	
-	if gitopsSetup {
-		fmt.Printf("🚀 GitOps setup: Litestream configuration created at %s\n", filepath.Join(configDir, "litestream.yml"))
+	if replicationSetup {
+		fmt.Printf("🔄 Replication setup: Litestream configuration created at %s\n", filepath.Join(configDir, "litestream.yml"))
 		fmt.Printf("🐳 Docker files: Check examples/deployments/ for production deployment\n")
-		fmt.Printf("\n🌟 You can now run 'station serve' to launch locally or deploy with GitOps\n")
+		fmt.Printf("\n🌟 You can now run 'station serve' locally or deploy with replication\n")
 		fmt.Printf("🔗 Local: ssh admin@localhost -p 2222\n")
 		fmt.Printf("🚢 Production: docker-compose -f examples/deployments/docker-compose/docker-compose.production.yml up\n")
-		fmt.Printf("\n📖 GitOps next steps:\n")
-		fmt.Printf("   • Set LITESTREAM_S3_BUCKET and credentials in .env\n")
-		fmt.Printf("   • Deploy with examples/deployments/kubernetes/station-deployment.yml\n")
+		fmt.Printf("\n📖 Replication setup steps:\n")
+		fmt.Printf("   • Edit %s to configure your cloud storage\n", filepath.Join(configDir, "litestream.yml"))
+		fmt.Printf("   • Set LITESTREAM_S3_BUCKET and credentials in deployment environment\n")
 		fmt.Printf("   • See docs/GITOPS-DEPLOYMENT.md for complete guide\n")
 	} else {
 		fmt.Printf("\n🚀 You can now run 'station serve' to launch the server\n")
@@ -425,7 +425,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\n📖 Next steps:\n")
 		fmt.Printf("   • Run 'stn mcp init' to create sample configurations\n")
 		fmt.Printf("   • Run 'stn mcp env list' to see your environments\n")
-		fmt.Printf("   • Use 'stn init --gitops' for production GitOps setup\n")
+		fmt.Printf("   • Use 'stn init --replicate' for database replication setup\n")
 	}
 
 	return nil
@@ -467,28 +467,55 @@ func initDefaultEnvironment(database db.Database) error {
 	return nil
 }
 
-// setupGitOpsConfiguration creates Litestream configuration and deployment examples
-func setupGitOpsConfiguration(configDir string) error {
-	fmt.Printf("🔄 Setting up GitOps/Litestream configuration...\n")
+// setupReplicationConfiguration creates Litestream configuration and deployment examples
+func setupReplicationConfiguration(configDir string) error {
+	fmt.Printf("🔄 Setting up Litestream replication configuration...\n")
 	
-	// Create Litestream configuration
-	litestreamConfigContent := `dbs:
+	// Create Litestream configuration with clear user guidance
+	litestreamConfigContent := `# Litestream Database Replication Configuration
+# Configure where and how Station's SQLite database is replicated
+# 
+# REQUIRED: Set environment variables in your deployment:
+#   LITESTREAM_S3_BUCKET=your-backup-bucket-name
+#   LITESTREAM_S3_ACCESS_KEY_ID=your-access-key
+#   LITESTREAM_S3_SECRET_ACCESS_KEY=your-secret-key
+#   LITESTREAM_S3_REGION=us-east-1 (optional, defaults to us-east-1)
+
+dbs:
   - path: /data/station.db
     replicas:
+      # Primary: AWS S3 (recommended for production)
       - type: s3
         bucket: ${LITESTREAM_S3_BUCKET}
         path: station-db
         region: ${LITESTREAM_S3_REGION:-us-east-1}
         access-key-id: ${LITESTREAM_S3_ACCESS_KEY_ID}
         secret-access-key: ${LITESTREAM_S3_SECRET_ACCESS_KEY}
-        sync-interval: 10s
-        retention: 24h
+        sync-interval: 10s    # How often to sync changes
+        retention: 24h        # How long to keep old snapshots
         
-      # Alternative: Local backup for development
-      - type: file
-        path: /backup/station-db-backup
-        sync-interval: 30s
-        retention: 168h  # 7 days`
+      # Alternative: Google Cloud Storage
+      # - type: gcs
+      #   bucket: ${LITESTREAM_GCS_BUCKET}
+      #   path: station-db
+      #   service-account-json-path: /secrets/gcs-service-account.json
+      #   sync-interval: 10s
+      #   retention: 24h
+        
+      # Alternative: Azure Blob Storage  
+      # - type: abs
+      #   bucket: ${LITESTREAM_ABS_BUCKET}
+      #   path: station-db
+      #   account-name: ${LITESTREAM_ABS_ACCOUNT_NAME}
+      #   account-key: ${LITESTREAM_ABS_ACCOUNT_KEY}
+      #   sync-interval: 10s
+      #   retention: 24h
+        
+      # Development: Local file backup (not for production)
+      # - type: file
+      #   path: /backup/station-db-backup
+      #   sync-interval: 30s
+      #   retention: 168h  # 7 days`
 
 	litestreamConfigPath := filepath.Join(configDir, "litestream.yml")
 	if err := os.WriteFile(litestreamConfigPath, []byte(litestreamConfigContent), 0644); err != nil {
