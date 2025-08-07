@@ -1,0 +1,75 @@
+AGENT_TEMPLATE_BASIC_FILE_MANAGER
+
+OVERVIEW:
+Basic file management agent template for Station platform. Demonstrates fundamental concepts of agent template system with file operations.
+
+TEMPLATE_STRUCTURE:
+- Bundle: manifest.json, agent.json, variables.schema.json
+- Variables: CLIENT_NAME (required), WORKSPACE_PATH, MAX_FILES, VERBOSE_MODE  
+- Dependencies: filesystem-tools MCP bundle
+- Tools: list_directory, read_text_file, search_files
+
+VARIABLES:
+CLIENT_NAME: string, required, client identifier
+WORKSPACE_PATH: string, optional, default="/home/user", workspace directory
+MAX_FILES: number, optional, default=1000, range=1-10000, file processing limit
+VERBOSE_MODE: boolean, optional, default=false, detailed logging toggle
+
+INSTALLATION_METHODS:
+1. CLI_VARS_FILE: stn agent bundle install ./bundle --vars-file ./variables/production.json --env production
+2. CLI_INTERACTIVE: stn agent bundle install ./bundle --interactive --env development  
+3. CLI_DIRECT_VARS: stn agent bundle install ./bundle --vars CLIENT_NAME="Test Corp" --env test
+4. API_ENDPOINT: POST /api/v1/agents/templates/install with JSON payload
+
+API_PAYLOAD_STRUCTURE:
+{
+  "bundle_path": "string (required)",
+  "environment": "string (optional, default='default')",
+  "variables": {
+    "CLIENT_NAME": "string (required)",
+    "WORKSPACE_PATH": "string (optional)", 
+    "MAX_FILES": "number (optional)",
+    "VERBOSE_MODE": "boolean (optional)"
+  }
+}
+
+VALIDATION_LAYERS:
+1. Go struct validation with binding tags
+2. JSON Schema for client-side validation  
+3. Bundle validator for template syntax
+4. Variable schema validation against types
+5. Environment existence check
+6. MCP dependency resolution
+
+TEMPLATE_FEATURES:
+- Variable substitution: {{ .VAR_NAME }}
+- Conditional logic: {{ if .VERBOSE_MODE }}...{{ end }}
+- Type preservation: numbers, booleans, strings
+- Default value fallbacks
+- Sensitive variable masking
+- Environment-specific overrides
+
+DEPLOYMENT_ENVIRONMENTS:
+- development: Interactive mode, verbose logging, /tmp/dev workspace
+- staging: YAML configuration, moderate limits, /tmp/staging workspace
+- production: JSON configuration, high limits, /data/production workspace
+
+TESTING_COMMANDS:
+stn agent bundle validate ./bundle
+stn agent bundle install ./bundle --dry-run --vars-file ./variables/test.json
+stn agent list --env [environment]
+stn agent run [agent_id] "list files in current directory"
+
+ERROR_HANDLING:
+- Missing required variables: Interactive prompt or validation error
+- Invalid bundle path: File system validation error
+- Environment not found: Database lookup error  
+- MCP dependencies: Resolution and installation errors
+- Template syntax: Go template parsing errors
+
+AUTOMATION_READY:
+- CI/CD integration via API endpoint
+- GitOps workflow with version-controlled templates
+- Environment promotion pipeline
+- Bulk deployment scripts
+- Monitoring and rollback capabilities
