@@ -100,6 +100,19 @@ type AgentBundle struct {
 	PackagedPath    string                `json:"packaged_path,omitempty"`
 }
 
+// InstalledAgentBundle represents an installed agent bundle in the system
+type InstalledAgentBundle struct {
+	ID           int64    `json:"id"`
+	Name         string   `json:"name"`
+	Version      string   `json:"version"`
+	AgentName    string   `json:"agent_name"`
+	Environment  string   `json:"environment"`
+	Status       string   `json:"status"`
+	Dependencies []string `json:"dependencies"`
+	InstallDate  string   `json:"install_date"`
+	LastUpdate   string   `json:"last_update"`
+}
+
 // CreateOptions defines options for creating agent bundles
 type CreateOptions struct {
 	Name         string
@@ -242,3 +255,48 @@ type AgentTemplateUpdate struct {
 	UpdateVariables map[string]VariableSpec `json:"update_variables,omitempty"`
 	Version       string                 `json:"version"`
 }
+
+// BundleReference represents a reference to a specific bundle in a registry
+type BundleReference struct {
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Registry string `json:"registry"`
+}
+
+// BundleStatus represents the status of all installed bundles in an environment
+type BundleStatus struct {
+	Environment     string                `json:"environment"`
+	TotalBundles    int                   `json:"total_bundles"`
+	InstalledAgents []InstalledAgentInfo  `json:"installed_agents"`
+	LastUpdated     time.Time             `json:"last_updated"`
+}
+
+// InstalledAgentInfo represents information about an installed agent
+type InstalledAgentInfo struct {
+	AgentID       int64                    `json:"agent_id"`
+	AgentName     string                   `json:"agent_name"`
+	BundleName    string                   `json:"bundle_name"`
+	BundleVersion string                   `json:"bundle_version"`
+	InstallDate   time.Time                `json:"install_date"`
+	Variables     map[string]interface{}   `json:"variables"`
+}
+
+// ListOptions defines options for listing agent bundles
+type ListOptions struct {
+	IncludeDisabled bool     `json:"include_disabled"`
+	FilterTags      []string `json:"filter_tags"`
+	SortBy          string   `json:"sort_by"` // "name", "date", "version"
+	SortOrder       string   `json:"sort_order"` // "asc", "desc"
+	Limit           int      `json:"limit"`
+	Offset          int      `json:"offset"`
+}
+
+// BundleList represents a list of agent bundles
+type BundleList struct {
+	Bundles    []InstalledAgentInfo `json:"bundles"`
+	Total      int                  `json:"total"`
+	Page       int                  `json:"page"`
+	PageSize   int                  `json:"page_size"`
+	HasMore    bool                 `json:"has_more"`
+}
+
