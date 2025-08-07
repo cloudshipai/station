@@ -101,6 +101,14 @@ func init() {
 	agentCmd.AddCommand(agentCreateCmd)
 	agentCmd.AddCommand(agentExportCmd)
 	agentCmd.AddCommand(agentImportCmd)
+	agentCmd.AddCommand(agentBundleCmd)
+	
+	// Add agent bundle subcommands
+	agentBundleCmd.AddCommand(agentBundleCreateCmd)
+	agentBundleCmd.AddCommand(agentBundleValidateCmd)
+	agentBundleCmd.AddCommand(agentBundleInstallCmd)
+	agentBundleCmd.AddCommand(agentBundleDuplicateCmd)
+	agentBundleCmd.AddCommand(agentBundleExportCmd)
 	
 	runsCmd.AddCommand(runsListCmd)
 	runsCmd.AddCommand(runsInspectCmd)
@@ -193,6 +201,29 @@ func init() {
 	agentCreateCmd.Flags().String("env", "default", "Environment name or ID for the agent")
 	agentCreateCmd.Flags().String("domain", "", "Domain context for the agent (e.g., devops, data-science)")
 	agentCreateCmd.Flags().String("schedule", "on-demand", "Schedule preference (on-demand, daily, weekly, custom)")
+	
+	// Agent Bundle command flags
+	agentBundleCreateCmd.Flags().String("name", "", "Bundle name (defaults to directory name)")
+	agentBundleCreateCmd.Flags().String("author", "", "Bundle author (required)")
+	agentBundleCreateCmd.Flags().String("description", "", "Bundle description (required)")
+	agentBundleCreateCmd.Flags().String("type", "task", "Agent type (task, scheduled, interactive)")
+	agentBundleCreateCmd.Flags().StringSlice("tags", []string{}, "Bundle tags")
+	
+	agentBundleInstallCmd.Flags().String("name", "", "Override agent name")
+	agentBundleInstallCmd.Flags().String("env", "default", "Target environment")
+	agentBundleInstallCmd.Flags().StringToString("vars", map[string]string{}, "Variable values (key=value)")
+	agentBundleInstallCmd.Flags().String("vars-file", "", "Path to variables file (JSON or YAML)")
+	agentBundleInstallCmd.Flags().Bool("interactive", false, "Interactive variable input")
+	
+	agentBundleDuplicateCmd.Flags().String("name", "", "New agent name")
+	agentBundleDuplicateCmd.Flags().StringToString("vars", map[string]string{}, "Variable values (key=value)")
+	agentBundleDuplicateCmd.Flags().String("vars-file", "", "Path to variables file (JSON or YAML)")
+	agentBundleDuplicateCmd.Flags().Bool("interactive", false, "Interactive variable input")
+	
+	agentBundleExportCmd.Flags().String("env", "", "Source environment (defaults to agent's environment)")
+	agentBundleExportCmd.Flags().Bool("include-deps", true, "Include MCP bundle dependencies")
+	agentBundleExportCmd.Flags().Bool("include-examples", true, "Include example configurations")
+	agentBundleExportCmd.Flags().Bool("analyze-vars", true, "Analyze variables from templates")
 	
 	// Runs command flags
 	runsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
