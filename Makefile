@@ -114,6 +114,26 @@ test-bundle-watch:
 		clear; \
 	done
 
+# Agent Bundle system development targets
+test-agent-bundle:
+	@echo "🤖 Running agent bundle system tests..."
+	@go test -v ./pkg/agent-bundle/... -cover
+
+test-agent-bundle-watch:
+	@echo "👀 Starting agent bundle test watcher (Ctrl+C to stop)..."
+	@while true; do \
+		go test -v ./pkg/agent-bundle/... -cover; \
+		echo ""; \
+		echo "⏰ Waiting for changes... Press Ctrl+C to stop"; \
+		inotifywait -r -e modify,create,delete ./pkg/agent-bundle/ 2>/dev/null || sleep 2; \
+		clear; \
+	done
+
+# Combined bundle testing (both template and agent bundles)
+test-bundles:
+	@echo "📦 Running all bundle system tests..."
+	@go test -v ./pkg/bundle/... ./pkg/agent-bundle/... -cover
+
 # Show usage help
 help:
 	@echo "Station Build Commands:"
@@ -129,8 +149,11 @@ help:
 	@echo "  make stop-station - Stop all Station processes and clear ports"
 	@echo ""
 	@echo "Bundle System Development:"
-	@echo "  make test-bundle       - Run bundle system tests"
-	@echo "  make test-bundle-watch - Watch bundle tests (requires inotify-tools)"
+	@echo "  make test-bundle              - Run template bundle system tests"
+	@echo "  make test-bundle-watch        - Watch template bundle tests"
+	@echo "  make test-agent-bundle        - Run agent bundle system tests"
+	@echo "  make test-agent-bundle-watch  - Watch agent bundle tests"
+	@echo "  make test-bundles             - Run all bundle system tests"
 	@echo ""
 	@echo "Version Control:"
 	@echo "  make build VERSION=v1.2.3 - Build with custom version"
