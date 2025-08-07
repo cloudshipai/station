@@ -1,4 +1,4 @@
-#!/bin/bash
+# test#!/bin/bash
 # Station Comprehensive Test Script
 set -e
 
