@@ -184,7 +184,7 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 		Name:    "s", // Short name to minimize tool call IDs in OpenAI
 		Version: "1.0.0",
 		Stdio: &mcp.StdioConfig{
-			Command: "./stn", // Use our own binary
+			Command: "stn", // Use globally installed binary
 			Args:    []string{"stdio"},
 		},
 	})
