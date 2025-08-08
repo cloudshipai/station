@@ -47,6 +47,7 @@ type MCPServer struct {
 	TimeoutSeconds *int64            `json:"timeout_seconds" db:"timeout_seconds"`
 	AutoRestart    *bool             `json:"auto_restart" db:"auto_restart"`
 	EnvironmentID  int64             `json:"environment_id" db:"environment_id"`
+	FileConfigID   *int64            `json:"file_config_id,omitempty" db:"file_config_id"`
 	CreatedAt      time.Time         `json:"created_at" db:"created_at"`
 }
 

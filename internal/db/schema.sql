@@ -44,6 +44,7 @@ CREATE TABLE mcp_servers (
     timeout_seconds INTEGER DEFAULT 30,
     auto_restart BOOLEAN DEFAULT true,
     environment_id INTEGER NOT NULL,
+    file_config_id INTEGER REFERENCES file_mcp_configs(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE,
     UNIQUE(name, environment_id)

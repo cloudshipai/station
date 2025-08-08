@@ -96,7 +96,7 @@ func runKeySet(cmd *cobra.Command, args []string) error {
 	}
 	
 	// Load current config
-	configDir := getXDGConfigDir()
+	configDir := getWorkspacePath()
 	configFile := filepath.Join(configDir, "config.yaml")
 	
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
@@ -141,7 +141,7 @@ func runKeyRotate(cmd *cobra.Command, args []string) error {
 	}
 	
 	// Load current config
-	configDir := getXDGConfigDir()
+	configDir := getWorkspacePath()
 	configFile := filepath.Join(configDir, "config.yaml")
 	
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
@@ -220,7 +220,7 @@ func runKeyFinishRotation(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔄 Completing encryption key rotation...\n")
 	
 	// Load current config
-	configDir := getXDGConfigDir()
+	configDir := getWorkspacePath()
 	configFile := filepath.Join(configDir, "config.yaml")
 	
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
