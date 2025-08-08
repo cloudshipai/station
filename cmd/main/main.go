@@ -128,6 +128,7 @@ func init() {
 	
 	// Init command flags
 	initCmd.Flags().Bool("replicate", false, "Set up Litestream database replication for production deployments")
+	initCmd.Flags().StringP("config", "c", "", "Path to configuration file (sets workspace to config file's directory)")
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
@@ -278,7 +279,7 @@ func initConfig() {
 		viper.SetConfigFile(cfgFile)
 	} else {
 		// Use XDG config directory
-		configDir := getXDGConfigDir()
+		configDir := getWorkspacePath()
 		viper.AddConfigPath(configDir)
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
@@ -299,7 +300,7 @@ func initTheme() {
 	// For CLI commands, we'll use fallback themes if database is not available
 	databasePath := viper.GetString("database_url")
 	if databasePath == "" {
-		configDir := getXDGConfigDir()
+		configDir := getWorkspacePath()
 		databasePath = filepath.Join(configDir, "station.db")
 	}
 	
@@ -351,6 +352,16 @@ func getXDGConfigDir() string {
 		configHome = filepath.Join(homeDir, ".config")
 	}
 	return filepath.Join(configHome, "station")
+}
+
+func getWorkspacePath() string {
+	// Check if workspace is configured via viper  
+	if workspace := viper.GetString("workspace"); workspace != "" {
+		return workspace
+	}
+	
+	// Fall back to XDG path for backward compatibility
+	return getXDGConfigDir()
 }
 
 func main() {
