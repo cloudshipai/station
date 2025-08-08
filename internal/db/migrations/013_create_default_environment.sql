@@ -2,11 +2,11 @@
 -- Create a default environment for new Station installations
 
 -- Insert default environment if no environments exist
--- Use the system user (id=0) as the creator
+-- Use the console user as the creator
 INSERT OR IGNORE INTO environments (name, description, created_by, created_at, updated_at)
 SELECT 'default', 
        'Default environment for development and testing',
-       0,
+       (SELECT id FROM users WHERE username = 'console' LIMIT 1),
        datetime('now'),
        datetime('now')
 WHERE NOT EXISTS (SELECT 1 FROM environments);
