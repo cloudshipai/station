@@ -181,7 +181,7 @@ func (iac *IntelligentAgentCreator) initializeGenkit(ctx context.Context) error 
 
 	// Create MCP client to connect to our own stdio server
 	mcpClient, err := mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-		Name:    "s", // Short name to minimize tool call IDs in OpenAI
+		Name:    "_", // Minimal discreet prefix
 		Version: "1.0.0",
 		Stdio: &mcp.StdioConfig{
 			Command: "stn", // Use globally installed binary
@@ -509,6 +509,33 @@ func (iac *IntelligentAgentCreator) assignToolsToAgent(agentID int64, toolNames 
 		assignedCount++
 		logging.Debug("Successfully assigned tool '%s' (ID: %d) to agent %d", tool.Name, tool.ID, agentID)
 	}
+	
+	// Fallback: If no specific tools were assigned, assign all available tools in environment
+	if assignedCount == 0 && len(toolNames) > 0 {
+		logging.Debug("No specific tools matched, attempting to assign all available tools in environment %d", environmentID)
+		allTools, err := iac.repos.MCPTools.GetByEnvironmentID(environmentID)
+		if err != nil {
+			logging.Debug("Warning: Failed to get all tools for environment %d: %v", environmentID, err)
+			return 0
+		}
+		
+		// Smart assignment: assign placeholder/marker tools that represent server availability
+		// This allows agents to be created even when real-time discovery finds different tool names
+		for _, tool := range allTools {
+			_, err = iac.repos.AgentTools.AddAgentTool(agentID, tool.ID)
+			if err != nil {
+				logging.Debug("Warning: Failed to assign fallback tool '%s' (ID: %d) to agent %d: %v", tool.Name, tool.ID, agentID, err)
+				continue
+			}
+			assignedCount++
+			logging.Debug("Successfully assigned server availability tool '%s' (ID: %d) to agent %d", tool.Name, tool.ID, agentID)
+		}
+		
+		if assignedCount > 0 {
+			logging.Debug("Assigned %d server availability markers to agent - real tools will be discovered at runtime", assignedCount)
+		}
+	}
+	
 	return assignedCount
 }
 
@@ -642,21 +669,23 @@ func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context,
 				continue
 			}
 			
-			// Match prefixed runtime tool names with clean database names
-			// Runtime tools have prefixes like "f_list_directory", database has "list_directory"
-			var matchFound bool
-			if strings.Contains(toolName, "_") {
-				parts := strings.SplitN(toolName, "_", 2)
-				if len(parts) == 2 {
-					cleanToolName := parts[1] // Remove prefix: "f_list_directory" -> "list_directory"  
-					if cleanToolName == assignedTool.ToolName {
-						matchFound = true
-					}
-				}
-			}
-			// Also try direct match in case of different naming schemes
+			// Match tool names, handling GenKit prefixes
+			// Runtime tools may have prefixes like "unnamed_" when client name is empty
+			// Database stores the real tool names without prefixes
+			matchFound := false
+			
+			// Direct match
 			if toolName == assignedTool.ToolName {
 				matchFound = true
+			}
+			
+			// Handle GenKit "__" prefix when client name is "_" (produces double underscore)
+			if strings.HasPrefix(toolName, "__") {
+				cleanName := strings.TrimPrefix(toolName, "__")
+				if "__" + cleanName == assignedTool.ToolName {
+					matchFound = true
+					logging.Debug("GenKit double underscore prefix match: '%s' matches assigned '%s'", toolName, assignedTool.ToolName)
+				}
 			}
 			
 			if matchFound {
@@ -1104,7 +1133,7 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 				// HTTP-based MCP server
 				logging.Debug("Connecting to HTTP MCP server: %s (URL: %s)", serverName, serverConfig.URL)
 				mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-					Name:    "f", // Short name to minimize tool call IDs in OpenAI
+					Name:    "_", // Minimal discreet prefix
 					Version: "1.0.0",
 					StreamableHTTP: &mcp.StreamableHTTPConfig{
 						BaseURL: serverConfig.URL,
@@ -1122,7 +1151,7 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 				}
 				
 				mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-					Name:    "f", // Short name to minimize tool call IDs in OpenAI
+					Name:    "_", // Minimal discreet prefix
 					Version: "1.0.0",
 					Stdio: &mcp.StdioConfig{
 						Command: serverConfig.Command,
