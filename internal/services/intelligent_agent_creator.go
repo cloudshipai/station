@@ -39,6 +39,7 @@ type IntelligentAgentCreator struct {
 	currentProvider string // Track current AI provider to detect changes
 	currentAPIKey   string // Track current API key to detect changes
 	currentBaseURL  string // Track current base URL to detect changes
+	activeMCPClients []*mcp.GenkitMCPClient // Store active connections for cleanup after execution
 }
 
 // AgentCreationRequest represents a request for intelligent agent creation
@@ -633,6 +634,19 @@ func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context,
 	startTime := time.Now()
 	logging.Info("Starting stdio MCP agent execution for agent '%s'", agent.Name)
 
+	// Setup cleanup of MCP connections when execution completes
+	defer func() {
+		logging.Debug("Cleaning up %d active MCP connections after agent execution", len(iac.activeMCPClients))
+		for i, client := range iac.activeMCPClients {
+			if client != nil {
+				logging.Debug("Disconnecting MCP client %d", i+1)
+				client.Disconnect()
+			}
+		}
+		// Clear the slice for next execution
+		iac.activeMCPClients = nil
+	}()
+
 	// Initialize Genkit + MCP if not already done
 	err := iac.initializeGenkit(ctx)
 	if err != nil {
@@ -1195,9 +1209,10 @@ func (iac *IntelligentAgentCreator) getEnvironmentMCPTools(ctx context.Context, 
 			// Cancel immediately after the call returns to prevent resource leaks
 			cancel()
 			
-			// Always disconnect the client after discovery to prevent subprocess leaks
+			// Store client for cleanup after agent execution completes
+			// DON'T disconnect yet - tools need live connections during execution
 			if mcpClient != nil {
-				mcpClient.Disconnect()
+				iac.activeMCPClients = append(iac.activeMCPClients, mcpClient)
 			}
 			
 			if err != nil {
