@@ -195,6 +195,7 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 		server := &models.MCPServer{
 			EnvironmentID: envID,
 			Name:          serverName,
+			FileConfigID:  &fileConfigID,
 		}
 		
 		// Extract server configuration
@@ -246,11 +247,11 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 }
 
 // RemoveOrphanedAgentTools removes tools from agents when their associated config is deleted
-func (s *ConfigSyncer) RemoveOrphanedAgentTools(agents []*models.Agent, configID int64) (int, error) {
+func (s *ConfigSyncer) RemoveOrphanedAgentTools(agents []*models.Agent, configID int64, envID int64) (int, error) {
 	var removedCount int
 	
 	// Get all tools associated with servers from this config
-	orphanedServers, err := s.repos.MCPServers.GetByEnvironmentID(agents[0].EnvironmentID)
+	orphanedServers, err := s.repos.MCPServers.GetByEnvironmentID(envID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get servers: %w", err)
 	}
@@ -402,7 +403,7 @@ func (s *ConfigSyncer) Sync(environment string, envID int64, options SyncOptions
 		
 		if configToRemove != nil {
 			// Remove agent tools that reference this config
-			toolsRemoved, err := s.RemoveOrphanedAgentTools(agents, configToRemove.ID)
+			toolsRemoved, err := s.RemoveOrphanedAgentTools(agents, configToRemove.ID, envID)
 			if err != nil {
 				result.SyncErrors = append(result.SyncErrors, SyncError{
 					ConfigName: configName,
