@@ -93,6 +93,7 @@ type McpServer struct {
 	TimeoutSeconds sql.NullInt64  `json:"timeout_seconds"`
 	AutoRestart    sql.NullBool   `json:"auto_restart"`
 	EnvironmentID  int64          `json:"environment_id"`
+	FileConfigID   sql.NullInt64  `json:"file_config_id"`
 	CreatedAt      sql.NullTime   `json:"created_at"`
 }
 

@@ -11,9 +11,9 @@ import (
 )
 
 const createMCPServer = `-- name: CreateMCPServer :one
-INSERT INTO mcp_servers (name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at
+INSERT INTO mcp_servers (name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id, created_at
 `
 
 type CreateMCPServerParams struct {
@@ -25,6 +25,7 @@ type CreateMCPServerParams struct {
 	TimeoutSeconds sql.NullInt64  `json:"timeout_seconds"`
 	AutoRestart    sql.NullBool   `json:"auto_restart"`
 	EnvironmentID  int64          `json:"environment_id"`
+	FileConfigID   sql.NullInt64  `json:"file_config_id"`
 }
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
@@ -37,6 +38,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		arg.TimeoutSeconds,
 		arg.AutoRestart,
 		arg.EnvironmentID,
+		arg.FileConfigID,
 	)
 	var i McpServer
 	err := row.Scan(
@@ -49,6 +51,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		&i.TimeoutSeconds,
 		&i.AutoRestart,
 		&i.EnvironmentID,
+		&i.FileConfigID,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -72,8 +75,17 @@ func (q *Queries) DeleteMCPServersByEnvironment(ctx context.Context, environment
 	return err
 }
 
+const deleteMCPServersByFileConfig = `-- name: DeleteMCPServersByFileConfig :exec
+DELETE FROM mcp_servers WHERE file_config_id = ?
+`
+
+func (q *Queries) DeleteMCPServersByFileConfig(ctx context.Context, fileConfigID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, deleteMCPServersByFileConfig, fileConfigID)
+	return err
+}
+
 const getMCPServer = `-- name: GetMCPServer :one
-SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at FROM mcp_servers WHERE id = ?
+SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id, created_at FROM mcp_servers WHERE id = ?
 `
 
 func (q *Queries) GetMCPServer(ctx context.Context, id int64) (McpServer, error) {
@@ -89,13 +101,14 @@ func (q *Queries) GetMCPServer(ctx context.Context, id int64) (McpServer, error)
 		&i.TimeoutSeconds,
 		&i.AutoRestart,
 		&i.EnvironmentID,
+		&i.FileConfigID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getMCPServerByNameAndEnvironment = `-- name: GetMCPServerByNameAndEnvironment :one
-SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at FROM mcp_servers WHERE name = ? AND environment_id = ?
+SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id, created_at FROM mcp_servers WHERE name = ? AND environment_id = ?
 `
 
 type GetMCPServerByNameAndEnvironmentParams struct {
@@ -116,13 +129,14 @@ func (q *Queries) GetMCPServerByNameAndEnvironment(ctx context.Context, arg GetM
 		&i.TimeoutSeconds,
 		&i.AutoRestart,
 		&i.EnvironmentID,
+		&i.FileConfigID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listMCPServersByEnvironment = `-- name: ListMCPServersByEnvironment :many
-SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at FROM mcp_servers WHERE environment_id = ? ORDER BY name
+SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id, created_at FROM mcp_servers WHERE environment_id = ? ORDER BY name
 `
 
 func (q *Queries) ListMCPServersByEnvironment(ctx context.Context, environmentID int64) ([]McpServer, error) {
@@ -144,6 +158,7 @@ func (q *Queries) ListMCPServersByEnvironment(ctx context.Context, environmentID
 			&i.TimeoutSeconds,
 			&i.AutoRestart,
 			&i.EnvironmentID,
+			&i.FileConfigID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -161,9 +176,9 @@ func (q *Queries) ListMCPServersByEnvironment(ctx context.Context, environmentID
 
 const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers 
-SET name = ?, command = ?, args = ?, env = ?, working_dir = ?, timeout_seconds = ?, auto_restart = ?
+SET name = ?, command = ?, args = ?, env = ?, working_dir = ?, timeout_seconds = ?, auto_restart = ?, file_config_id = ?
 WHERE id = ?
-RETURNING id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, created_at
+RETURNING id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id, created_at
 `
 
 type UpdateMCPServerParams struct {
@@ -174,6 +189,7 @@ type UpdateMCPServerParams struct {
 	WorkingDir     sql.NullString `json:"working_dir"`
 	TimeoutSeconds sql.NullInt64  `json:"timeout_seconds"`
 	AutoRestart    sql.NullBool   `json:"auto_restart"`
+	FileConfigID   sql.NullInt64  `json:"file_config_id"`
 	ID             int64          `json:"id"`
 }
 
@@ -186,6 +202,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.WorkingDir,
 		arg.TimeoutSeconds,
 		arg.AutoRestart,
+		arg.FileConfigID,
 		arg.ID,
 	)
 	var i McpServer
@@ -199,6 +216,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.TimeoutSeconds,
 		&i.AutoRestart,
 		&i.EnvironmentID,
+		&i.FileConfigID,
 		&i.CreatedAt,
 	)
 	return i, err
