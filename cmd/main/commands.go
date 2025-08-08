@@ -298,7 +298,7 @@ Examples:
 
 func runServe(cmd *cobra.Command, args []string) error {
 	// Check if configuration exists
-	configDir := getXDGConfigDir()
+	configDir := getWorkspacePath()
 	configFile := filepath.Join(configDir, "config.yaml")
 	
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
@@ -334,14 +334,36 @@ func runServe(cmd *cobra.Command, args []string) error {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	configDir := getXDGConfigDir()
+	// Check if custom config file path is provided
+	configPath, _ := cmd.Flags().GetString("config")
+	if configPath != "" {
+		// Set workspace to the directory containing the config file
+		workspaceDir := filepath.Dir(filepath.Clean(configPath))
+		workspaceDir, _ = filepath.Abs(workspaceDir)
+		
+		// Set the workspace in viper for the session
+		viper.Set("workspace", workspaceDir)
+		
+		// Also set database path relative to workspace
+		databasePath := filepath.Join(workspaceDir, "station.db")
+		viper.Set("database_url", databasePath)
+	}
+	
+	// Config file always stays in secure default location
+	configDir := getXDGConfigDir()  // Use XDG, not workspace
 	configFile := filepath.Join(configDir, "config.yaml")
+	
+	// Workspace directory for content (environments, bundles, etc.)
+	workspaceDir := getWorkspacePath()
 	
 	// Check if replication setup is requested
 	replicationSetup, _ := cmd.Flags().GetBool("replicate")
 
 	fmt.Printf("🔧 Initializing Station configuration...\n")
-	fmt.Printf("Config directory: %s\n", configDir)
+	fmt.Printf("Config file: %s\n", configFile)
+	if workspaceDir != configDir {
+		fmt.Printf("Workspace directory: %s\n", workspaceDir)
+	}
 	
 	if replicationSetup {
 		fmt.Printf("🔄 Replication mode: Setting up Litestream for database replication\n")
@@ -350,6 +372,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+	
+	// Create workspace directory if different from config directory
+	if workspaceDir != configDir {
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			return fmt.Errorf("failed to create workspace directory: %w", err)
+		}
 	}
 
 	// Generate encryption key
@@ -365,11 +394,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 	viper.Set("ssh_port", 2222)
 	viper.Set("mcp_port", 3000)
 	viper.Set("api_port", 8080)
-	viper.Set("database_url", filepath.Join(configDir, "station.db"))
 	viper.Set("ssh_host_key_path", "./ssh_host_key")
 	viper.Set("admin_username", "admin")
 	viper.Set("debug", false)
 	viper.Set("local_mode", true) // Default to local mode
+	
+	// Set workspace and database paths
+	if workspaceDir != configDir {
+		// Custom workspace: database goes to workspace, workspace setting saved
+		viper.Set("workspace", workspaceDir)
+		viper.Set("database_url", filepath.Join(workspaceDir, "station.db"))
+	} else {
+		// Default: database in config directory, no workspace setting needed
+		viper.Set("database_url", filepath.Join(configDir, "station.db"))
+	}
 
 	// Write configuration file
 	viper.SetConfigFile(configFile)
@@ -405,9 +443,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✅ Configuration initialized successfully!\n")
 	fmt.Printf("📁 Config file: %s\n", configFile)
-	fmt.Printf("🗄️  Database: %s\n", databasePath)
+	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
-	fmt.Printf("📁 File config structure: %s\n", filepath.Join(configDir, "environments", "default"))
+	fmt.Printf("📁 File config structure: %s\n", filepath.Join(workspaceDir, "environments", "default"))
 	
 	if replicationSetup {
 		fmt.Printf("🔄 Replication setup: Litestream configuration created at %s\n", filepath.Join(configDir, "litestream.yml"))
@@ -450,7 +488,7 @@ func initDefaultEnvironment(database db.Database) error {
 	}
 	
 	// Create file config directory structure in XDG config dir
-	xdgConfigDir := getXDGConfigDir()
+	xdgConfigDir := getWorkspacePath()
 	configDir := filepath.Join(xdgConfigDir, "environments", "default")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
