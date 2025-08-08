@@ -1,131 +1,51 @@
 ![Station](./image.png)
 
-# Station - GitOps for AI Agents
+# Station - Lightweight Runtime for Deployable Sub-Agents
 
-**Deploy AI agents as reliably as infrastructure - with declarative configuration, secret management, and team collaboration.**
+**A secure, self-hosted platform for building and deploying intelligent sub-agents.**
 
-> Production-ready v0.2.0 - Self-hosted platform for enterprise AI agent deployment
+> Lightweight runtime for deployable sub-agents that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
 
-Station solves the **agent configuration hell** that prevents teams from deploying AI agents reliably across environments. No more "works on my machine" - deploy agents with the same reliability as infrastructure code.
+Station is purpose-built for **deployable sub-agents** - the intelligent automation you need for infrastructure monitoring, deployment pipelines, security scanning, and day-to-day tasks that require secure access to internal systems.
 
-## What Station Actually Is
+## Why Station Exists
 
-Station enables the complete AI agent lifecycle from development to production:
+When you need agents for internal work, you need more than application-focused agent platforms. You need:
 
-- **🔬 Develop Locally** - Quick agent creation and testing with zero setup overhead
-- **🤖 Orchestrate Complexity** - Sub-agents calling other agents for multi-step workflows  
-- **🚀 Deploy Securely** - GitOps workflows with encrypted secret management
-- **👥 Share Patterns** - Version-controlled agent templates across teams
+- **Secure Internal Access** - Agents that can safely handle database credentials, API keys, and system-level access
+- **Versionable Deployment** - Deployable agents that integrate with your existing deployment pipelines  
+- **Team-Approved Tools** - Easy way to use and share the tools your team builds and approves
+- **Low Footprint Runtime** - Lightweight system that blends into your infrastructure without overhead
 
-**Think "Terraform for AI Agents" - but easier.**
+**Station provides exactly this** - a lightweight, secure runtime specifically designed for deployable sub-agents.
 
-## The Problem Station Solves
+## Core Value: Secure Deployable Sub-Agent Runtime
 
-**Agent Configuration Hell:**
-- Agents work locally but fail in production due to missing dependencies
-- No way to securely manage MCP credentials and API keys across environments  
-- Teams can't share working agent setups - everyone rebuilds from scratch
-- Configuration drift between dev/staging/prod environments causes unpredictable behavior
+### 🔧 **Purpose-Built for Internal Tasks**
 
-**Station's Solution:**
-**Declarative agent deployment with GitOps workflows and encrypted secret management.**
+Unlike application-focused agent platforms, Station is designed for deployable sub-agents that need to:
 
-## Core Value Propositions
+- Access internal databases with production credentials
+- Monitor infrastructure and alert on issues
+- Automate deployment pipelines with CI/CD system access
+- Perform security scans with elevated permissions
+- Handle incident response with system-level tools
 
-### 🔐 **Secure Internal Agent Deployment**
+### 🔐 **Security by Design**
 
-**Deploy agents that access internal systems with enterprise-grade security.**
+- **Self-Hosted** - Complete data sovereignty, no external dependencies beyond AI providers
+- **Encrypted Secrets** - AES encryption for credentials and sensitive configuration
+- **Environment Isolation** - Separate execution contexts for dev/staging/prod
+- **Audit Trail** - Complete tracking of agent deployments and executions
 
-Traditional platforms can't handle internal agents that need database credentials, API keys, and system access. Station provides encrypted secret management for production-ready internal automation.
+### ⚡ **Lightweight & Integrated**
 
-```bash
-# Declarative agent template with encrypted secrets
-agents/database-monitor/
-├── agent.json              # Agent configuration with {{variables}}
-├── manifest.json           # MCP dependencies and tool requirements
-├── variables.schema.json   # Variable validation schema
-└── secrets/
-    ├── production.enc      # Encrypted prod DB credentials
-    └── staging.enc         # Encrypted staging credentials
+- **Single 45MB Binary** - No complex infrastructure or dependencies
+- **SQLite Database** - Zero-setup local development, PostgreSQL for production
+- **GitOps Ready** - Version-controlled agent configurations like infrastructure code
+- **Existing Toolchain** - Uses your team's approved MCP tools and integrations
 
-# Secure deployment with full audit trail
-stn agent bundle install ./database-monitor \
-  --env production \
-  --vars-file secrets/production.enc
-
-# Result: Verifiable, auditable, repeatable agent deployment
-```
-
-**Use Cases:**
-- **Database monitoring** with production DB credentials
-- **Infrastructure agents** accessing internal APIs and secrets
-- **Security scanning** with elevated system access  
-- **Deployment automation** with CI/CD system credentials
-
-### 🌍 **Environment Consistency**
-
-**Deploy identical agent logic across dev/staging/prod with environment-specific configuration.**
-
-Eliminate configuration drift with declarative templates. One agent definition works everywhere with only variable differences.
-
-```bash
-# Single template, multiple environments
-# Development variables (dev-vars.json):
-{
-  "DB_HOST": "localhost:5432",
-  "ALERT_THRESHOLD": 50,
-  "SLACK_WEBHOOK": "https://hooks.slack.com/dev-alerts"
-}
-
-# Production variables (prod-vars.json):  
-{
-  "DB_HOST": "prod-db.company.com:5432", 
-  "ALERT_THRESHOLD": 90,
-  "SLACK_WEBHOOK": "https://hooks.slack.com/prod-alerts"
-}
-
-# Deploy identical logic with environment differences
-stn agent bundle install ./database-monitor --vars-file dev-vars.json --env dev
-stn agent bundle install ./database-monitor --vars-file prod-vars.json --env prod
-
-# Result: 100% configuration consistency, zero environment drift
-```
-
-### 👥 **Team Collaboration & GitOps**
-
-**Share agent templates across teams with version-controlled workflows.**
-
-Version control complete agent configurations like infrastructure code. Enable enterprise-wide agent standardization and collaboration.
-
-```bash
-# Export working agent as template
-stn agent bundle export 5 ./shared-templates/log-analyzer --include-deps
-
-# Version control with GitOps
-git add shared-templates/log-analyzer/
-git commit -m "Add log analyzer agent v1.2 - supports JSON parsing" 
-git push origin main
-
-# Other teams install from repository
-git pull && stn agent bundle install ./shared-templates/log-analyzer \
-  --vars-file our-environment.json --env staging
-
-# API deployment for CI/CD automation
-curl -X POST http://station.company.com/api/v1/agents/templates/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bundle_path": "./shared-templates/log-analyzer",
-    "environment": "production",
-    "variables": {
-      "LOG_DIRECTORY": "/var/log/applications",
-      "ALERT_EMAIL": "platform-team@company.com"
-    }
-  }'
-
-# Result: Enterprise-wide agent standardization with full audit trails
-```
-
-## Quick Start (5 Minutes)
+## Quick Start
 
 ### 1. Install Station
 ```bash
@@ -137,188 +57,195 @@ cd station && go build -o stn ./cmd/main
 curl -sSL https://getstation.ai/install | bash
 ```
 
-### 2. Initialize & Load Tools
+### 2. Initialize & Configure Tools
 ```bash
-# Initialize with encrypted key management
+# Initialize runtime
 stn init
 
-# OR initialize with database replication for production
-stn init --replicate
+# Load operational tools (two-step process)
+stn load examples/mcps/aws-cli.json
+stn load examples/mcps/database-postgres.json
+stn load examples/mcps/slack.json
 
-# Load MCP tools for agent development
-stn load examples/mcps/filesystem.json
-stn load examples/mcps/database-sqlite.json
+# Sync configurations to keep tools up-to-date
+stn mcp sync production
 ```
 
-### 3. Develop Locally
+### 3. Create Deployable Sub-Agents
 ```bash
-# Quick local development
+# Create a database monitoring agent
 stn agent create \
-  --name "System Monitor" \
-  --description "Monitor system resources and alert on issues"
+  --name "Database Monitor" \
+  --description "Monitor production database health and alert on issues"
+
+# Create an infrastructure deployment agent  
+stn agent create \
+  --name "Deploy Pipeline" \
+  --description "Automated deployment pipeline with rollback capability"
 
 # Test locally
-stn agent run 1 "Check disk usage and memory consumption"
-
-# View execution history
-stn runs list
+stn agent run 1 "Check database connection pool and alert if over 80% capacity"
 ```
 
-### 4. Deploy with GitOps
+### 4. Deploy with Version Control
 ```bash
-# Export as template for sharing
-stn agent bundle export 1 ./templates/system-monitor --analyze-vars
+# Export agents as versioned templates
+stn agent bundle export 1 ./ops-agents/db-monitor
+stn agent bundle export 2 ./ops-agents/deploy-pipeline
 
-# Version control
-git add templates/ && git commit -m "Add system monitor agent"
+# Version control like infrastructure code
+git add ops-agents/
+git commit -m "Add production database monitoring agent"
+git push origin main
 
 # Deploy to production with encrypted secrets
-stn agent bundle install ./templates/system-monitor \
-  --vars-file secrets/production.enc --env production
+stn agent bundle install ./ops-agents/db-monitor \
+  --vars-file secrets/production.enc \
+  --env production
 ```
 
-## Platform Features
+## Deployable Sub-Agent Use Cases
 
-### 🔬 **Local Development Experience**
-- **Zero-Setup Development** - Single binary with embedded database
-- **Interactive Agent Creation** - AI-assisted configuration and tool selection
-- **Real-Time Testing** - Immediate feedback with execution tailing
-- **Sub-Agent Orchestration** - Agents calling other agents for complex workflows
+### **Infrastructure Monitoring**
+```bash
+# Database health monitoring with production credentials
+stn agent create --name "DB Health Monitor" \
+  --description "Monitor connection pools, query performance, disk usage"
 
-### 🚀 **Production Deployment**
-- **Declarative Configuration** - Complete agent definitions in version control
-- **Encrypted Secret Management** - Secure credential storage with rotation support
-- **Multi-Environment Isolation** - Separate execution contexts per environment
-- **Dependency Resolution** - Automatic MCP tool validation and conflict detection
+# System resource monitoring across environments  
+stn agent create --name "Resource Monitor" \
+  --description "Monitor CPU, memory, disk across development and production"
+```
 
-### 🛠️ **Enterprise Operations**
-- **GitOps Workflows** - Standard git-based deployment pipelines
-- **Audit & Compliance** - Complete deployment tracking and history
-- **API Automation** - Full REST API for CI/CD integration
-- **Team Management** - Role-based access with environment permissions
+### **Deployment Automation**
+```bash
+# CI/CD pipeline integration
+stn agent create --name "Deployment Pipeline" \
+  --description "Automated deployments with health checks and rollback"
 
-### 🌐 **Self-Hosted Architecture**
-- **Complete Data Sovereignty** - No external dependencies beyond AI providers
-- **Multi-Modal Access** - CLI, SSH/TUI, REST API, MCP server interfaces
-- **Lightweight Runtime** - Single 45MB binary with SQLite database
-- **Production Ready** - Queue-based execution, webhook notifications, monitoring
+# Infrastructure as Code management
+stn agent create --name "Terraform Manager" \
+  --description "Plan, apply, and manage infrastructure changes"
+```
 
-## Agent Template System
+### **Security Operations**
+```bash
+# Vulnerability scanning and alerting
+stn agent create --name "Security Scanner" \
+  --description "Scan for vulnerabilities and compliance issues"
 
-Station's template system enables packaging complete agent solutions as portable bundles:
+# Access monitoring and incident response
+stn agent create --name "Incident Responder" \
+  --description "Automated incident detection and initial response"
+```
+
+## MCP Tool Integration
+
+Station includes **20+ production-ready tools for sub-agents**:
+
+| **Operations** | **Tools** |
+|----------------|-----------|
+| **Infrastructure** | AWS CLI, Kubernetes, Docker, Terraform, SSH |
+| **Databases** | PostgreSQL, MySQL, MongoDB, Redis, SQLite |
+| **Monitoring** | Prometheus, Grafana, System metrics, Log analysis |
+| **Communication** | Slack, PagerDuty, Email, Webhook notifications |
+| **Security** | Vault, Certificate management, Access control |
+| **Files** | Local files, Network storage, Configuration management |
+
+```bash
+# Load toolchains for sub-agents (two-step process)
+stn load examples/mcps/infrastructure-suite.json
+stn mcp sync production  # Keep configurations in sync
+
+# Load monitoring and alerting tools
+stn load examples/mcps/monitoring-stack.json  
+stn mcp sync production
+
+# Load security and compliance tools
+stn load examples/mcps/security-tools.json
+stn mcp sync production
+```
+
+## Agent Templates for Teams
 
 ### **Template Structure**
 ```
-database-monitor/
+ops-agents/database-monitor/
 ├── bundle/
-│   ├── manifest.json         # Metadata and MCP dependencies
-│   ├── agent.json           # Agent config with {{variables}}
-│   └── variables.schema.json # Variable validation
+│   ├── manifest.json         # MCP dependencies and metadata
+│   ├── agent.json           # Agent configuration with variables
+│   └── variables.schema.json # Variable validation schema
 ├── variables/
 │   ├── development.json     # Dev environment values
-│   ├── staging.yml         # Staging environment values  
-│   └── production.enc      # Encrypted prod secrets
-├── examples/
-│   ├── api-install.json    # API deployment examples
-│   └── basic-usage.md      # Documentation
-└── README.md               # Template documentation
+│   ├── staging.json        # Staging environment values  
+│   └── production.enc      # Encrypted production secrets
+└── README.md               # Agent documentation
 ```
 
-### **Template Lifecycle**
-- **`stn agent bundle create`** - Generate template scaffolding
-- **`stn agent bundle validate`** - Comprehensive validation with suggestions
-- **`stn agent bundle install`** - Deploy with variable substitution
-- **`stn agent bundle duplicate`** - Cross-environment deployment
-- **`stn agent bundle export`** - Convert existing agents to templates
-
-## MCP Tool Library
-
-Station includes **20+ production-ready MCP server templates**:
-
-| Category | Templates | Use Cases |
-|----------|-----------|-----------|
-| **Development** | GitHub, Git, Docker, SSH | Code management, CI/CD, deployments |
-| **Databases** | PostgreSQL, MySQL, SQLite, MongoDB | Database administration, monitoring |
-| **Cloud Services** | AWS CLI, Kubernetes, Terraform | Infrastructure management, deployments |
-| **Communication** | Slack, Email, Webhooks | Notifications, alerts, team coordination |
-| **Monitoring** | Prometheus, System metrics | Performance monitoring, alerting |
-| **File Systems** | Local files, Network storage | File management, data processing |
-
+### **Team Workflow**
 ```bash
-# Load multiple tools for complex workflows
-stn load examples/mcps/github.json
-stn load examples/mcps/aws-cli.json  
-stn load examples/mcps/slack.json
+# Export working sub-agents
+stn agent bundle export 3 ./team-agents/db-monitor --analyze-vars
 
-# Create agents that coordinate multiple MCP servers
-stn agent create --name "DevOps Pipeline" \
-  --description "GitHub → AWS → Slack deployment workflow"
+# Share across team with version control
+git add team-agents/ && git commit -m "Add database monitoring agent v1.0"
+
+# Team members deploy with their environment variables
+stn agent bundle install ./team-agents/db-monitor \
+  --vars-file ~/.station/secrets/staging.enc --env staging
+
+# Invoke and trigger remote sub-agents via API or MCP
+curl -X POST https://station.company.com/api/v1/agents/3/execute \
+  -d '{"task": "Check database health and alert if issues found"}'
+
+# Or trigger via MCP from other agents
+stn agent run 5 "Coordinate with database monitor agent to run health check"
 ```
 
-## Target Users & Use Cases
+## Architecture
 
-### **Platform Engineering Teams**
-- **Internal Tool Automation** - Agents for monitoring, deployments, maintenance
-- **Multi-Environment Management** - Consistent agent behavior across environments
-- **Secret Management** - Secure credential handling for internal system access
+### **Lightweight Runtime**
+- **45MB Binary** - Single executable with embedded SQLite
+- **Low Memory** - 512MB minimum, optimized for container deployment
+- **Multi-Access** - CLI, SSH/TUI, REST API, MCP server interfaces
 
-### **DevOps/SRE Teams**  
-- **Infrastructure Monitoring** - Database, server, and application health checks
-- **Incident Response** - Automated diagnostics and alert management
-- **Deployment Automation** - CI/CD integration with proper credential management
+### **Production Ready**
+- **Queue-Based Execution** - Asynchronous processing with worker pools
+- **Webhook Integration** - Real-time notifications to existing systems
+- **Database Replication** - Litestream integration for production backup
+- **Environment Isolation** - Complete separation of dev/staging/prod contexts
 
-### **Enterprise Development Teams**
-- **Shared Agent Libraries** - Reusable templates across projects and teams
-- **Compliance & Audit** - Version-controlled agent configurations with tracking
-- **Security-First Development** - Encrypted secrets and controlled deployments
-
-## Architecture & Security
-
-### **Self-Hosted Security**
-- **Data Sovereignty** - Complete control over agent configurations and secrets
-- **Encrypted Storage** - AES encryption for sensitive variables and credentials
-- **Environment Isolation** - Separate execution contexts prevent cross-contamination
-- **Audit Logging** - Complete tracking of agent deployments and executions
-
-### **Production Architecture**
-- **Queue-Based Execution** - Asynchronous agent processing with worker pools
-- **Multi-Modal Interface** - CLI, SSH/TUI, REST API, MCP server access
-- **Database Persistence** - SQLite for development, PostgreSQL for production
-- **Webhook Integration** - Real-time notifications and CI/CD system integration
+### **Security Architecture**
+- **Self-Hosted** - No external dependencies beyond AI provider APIs
+- **Encrypted Storage** - AES encryption for secrets and sensitive variables
+- **Audit Logging** - Complete deployment and execution tracking
+- **Access Controls** - Role-based permissions with environment boundaries
 
 ## System Requirements
 
 - **OS:** Linux, macOS, Windows
-- **Memory:** 512MB RAM minimum, 2GB recommended for production
-- **Storage:** 200MB for binary + templates, 1GB+ for production data
-- **Database:** SQLite (included) or PostgreSQL for production scale
-- **Network:** Outbound HTTPS for AI provider APIs and MCP communication
+- **Memory:** 512MB RAM minimum, 1GB recommended
+- **Storage:** 200MB for runtime, 1GB+ for production agent data
+- **Database:** SQLite (development) or PostgreSQL (production)
+- **Network:** Outbound HTTPS for AI providers and tool integrations
 
-## Documentation & Support
+## Documentation
 
-- **📚 [Quick Start Guide](docs/QUICKSTART.md)** - Complete setup walkthrough
-- **🎁 [Template Examples](examples/agent-templates/README.md)** - Production-ready patterns
-- **🏗️ [Architecture Overview](docs/ARCHITECTURE.md)** - System design and security
-- **🔄 [Database Replication](docs/DATABASE-REPLICATION.md)** - Production database backup and recovery
-- **🚀 [GitOps Deployment](docs/GITOPS-DEPLOYMENT.md)** - Enterprise deployment guide
-- **🔒 [Security Guide](docs/SECURITY.md)** - Enterprise security practices
-- **📖 [MCP Templates](examples/mcps/README.md)** - Available tool integrations
+- **[Database Replication](docs/DATABASE-REPLICATION.md)** - Production backup with Litestream
+- **[MCP Tool Library](examples/mcps/README.md)** - Available tool integrations
+- **[Agent Templates](examples/agent-templates/README.md)** - Sub-agent patterns and examples
 
-### Community & Support
-- **🐛 [Issues](https://github.com/cloudshipai/station/issues)** - Bug reports and feature requests
-- **💬 [Discord](https://discord.gg/station-ai)** - Community discussions and support
-- **🏢 [Enterprise](mailto:enterprise@station.ai)** - Enterprise deployment and consulting
+## Community
+
+- **[Issues](https://github.com/cloudshipai/station/issues)** - Bug reports and feature requests
+- **[Discord](https://discord.gg/station-ai)** - Community support and discussions
 
 ## License
 
-Station is licensed under **AGPL-3.0** - enabling free use while keeping the platform open source.
-
-**Simple Terms**: Use Station freely for any purpose. If you provide Station as a network service, share your modifications.
-
-📖 **[License Philosophy](LICENSE_RATIONALE.md)** | 📄 **[Full License](LICENSE)**
+**AGPL-3.0** - Free for all use, open source contributions welcome.
 
 ---
 
-**Station - GitOps for AI Agents**
+**Station - Lightweight Runtime for Deployable Sub-Agents**
 
-*Deploy AI agents as reliably as infrastructure - with declarative configuration, secret management, and team collaboration.*
+*Secure, versionable, deployable sub-agents for your infrastructure.*
