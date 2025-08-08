@@ -19,6 +19,8 @@ type Config struct {
 	TelemetryEnabled  bool
 	Debug             bool   // Debug mode enables verbose logging
 	EncryptionKey     string // Encryption key (can be loaded from config file or env var)
+	// Workspace Configuration
+	Workspace         string // Custom workspace path (overrides XDG paths)
 	// AI Provider Configuration
 	AIProvider        string // openai, ollama, gemini
 	AIAPIKey          string // The API key for the AI provider  
@@ -38,6 +40,8 @@ func Load() (*Config, error) {
 		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true), // Default enabled with opt-out
 		Debug:            getEnvBoolOrDefault("STN_DEBUG", false), // Default to info level
 		EncryptionKey:    os.Getenv("ENCRYPTION_KEY"), // Load from environment
+		// Workspace Configuration  
+		Workspace:        getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults
 		AIProvider:       getEnvOrDefault("STN_AI_PROVIDER", "openai"), // Default to OpenAI
 		AIAPIKey:         getAIAPIKey(), // Smart fallback for API keys
@@ -89,6 +93,9 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("ai_base_url") {
 		cfg.AIBaseURL = viper.GetString("ai_base_url")
+	}
+	if viper.IsSet("workspace") {
+		cfg.Workspace = viper.GetString("workspace")
 	}
 
 	// Validate that encryption key exists either in config file or environment
