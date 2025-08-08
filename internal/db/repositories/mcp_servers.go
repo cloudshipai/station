@@ -58,6 +58,10 @@ func convertMCPServerFromSQLc(server queries.McpServer) *models.MCPServer {
 		result.AutoRestart = &server.AutoRestart.Bool
 	}
 	
+	if server.FileConfigID.Valid {
+		result.FileConfigID = &server.FileConfigID.Int64
+	}
+	
 	if server.CreatedAt.Valid {
 		result.CreatedAt = server.CreatedAt.Time
 	}
@@ -71,6 +75,11 @@ func convertMCPServerToSQLc(server *models.MCPServer) queries.CreateMCPServerPar
 		Name:          server.Name,
 		Command:       server.Command,
 		EnvironmentID: server.EnvironmentID,
+	}
+	
+	// Set FileConfigID if available
+	if server.FileConfigID != nil {
+		params.FileConfigID = sql.NullInt64{Int64: *server.FileConfigID, Valid: true}
 	}
 	
 	// Handle JSON fields
@@ -198,6 +207,10 @@ func (r *MCPServerRepo) Update(server *models.MCPServer) error {
 	
 	if server.AutoRestart != nil {
 		params.AutoRestart = sql.NullBool{Bool: *server.AutoRestart, Valid: true}
+	}
+	
+	if server.FileConfigID != nil {
+		params.FileConfigID = sql.NullInt64{Int64: *server.FileConfigID, Valid: true}
 	}
 	
 	_, err := r.queries.UpdateMCPServer(context.Background(), params)
