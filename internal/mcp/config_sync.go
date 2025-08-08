@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,8 +10,13 @@ import (
 	"time"
 
 	"station/internal/db/repositories"
+	"station/internal/logging"
 	"station/internal/services"
 	"station/pkg/models"
+	
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // ConfigSyncer handles MCP configuration synchronization between filesystem and database
@@ -238,8 +244,7 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 		err = s.discoverToolsForServer(serverID, serverName, serverConfigMap, result.RenderedContent)
 		if err != nil {
 			// Don't fail the entire sync for tool discovery errors, just log them
-			// In a CLI context, this would be logged, but for the service layer we continue
-			_ = err // Could be logged to a logger if available
+			logging.Debug("Tool discovery failed for server %s: %v", serverName, err)
 		}
 	}
 	
@@ -427,19 +432,116 @@ func (s *ConfigSyncer) Sync(environment string, envID int64, options SyncOptions
 	return result, nil
 }
 
-// discoverToolsForServer discovers and registers tools for a specific MCP server
+// discoverToolsForServer discovers and registers tools for a specific MCP server using pure mcp-go client
 func (s *ConfigSyncer) discoverToolsForServer(serverID int64, serverName string, serverConfig map[string]interface{}, renderedContent string) error {
-	// This is a simplified version - you could integrate with the existing ToolDiscoveryService
-	// For now, we'll create a basic tool discovery based on the server configuration
+	logging.Debug("Starting real tool discovery for server: %s", serverName)
 	
-	// Create a basic tool entry as placeholder
-	// In a full implementation, this would actually connect to the MCP server and discover real tools
-	tool := &models.MCPTool{
-		MCPServerID: serverID,
-		Name:        fmt.Sprintf("%s_placeholder", serverName),
-		Description: fmt.Sprintf("Placeholder tool for %s server", serverName),
+	// Parse the server configuration to determine connection type
+	var serverConfigStruct models.MCPServerConfig
+	serverConfigBytes, err := json.Marshal(serverConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal server config: %w", err)
 	}
 	
-	_, err := s.repos.MCPTools.Create(tool)
-	return err
+	if err := json.Unmarshal(serverConfigBytes, &serverConfigStruct); err != nil {
+		return fmt.Errorf("failed to unmarshal server config: %w", err)
+	}
+	
+	// Create proper mcp-go client based on server configuration
+	var mcpClient *client.Client
+	var clientTransport transport.Interface
+	
+	if serverConfigStruct.URL != "" {
+		// HTTP-based MCP server
+		logging.Debug("Connecting to HTTP MCP server: %s (URL: %s)", serverName, serverConfigStruct.URL)
+		httpTransport, err := transport.NewStreamableHTTP(serverConfigStruct.URL)
+		if err != nil {
+			return fmt.Errorf("failed to create HTTP transport for %s: %w", serverName, err)
+		}
+		clientTransport = httpTransport
+	} else if serverConfigStruct.Command != "" {
+		// Stdio-based MCP server
+		logging.Debug("Connecting to Stdio MCP server: %s (command: %s, args: %v)", serverName, serverConfigStruct.Command, serverConfigStruct.Args)
+		
+		// Convert env map to environment variables for the command
+		var envVars []string
+		for key, value := range serverConfigStruct.Env {
+			envVars = append(envVars, key+"="+value)
+		}
+		
+		// Create stdio transport with environment
+		stdioTransport := transport.NewStdio(serverConfigStruct.Command, envVars, serverConfigStruct.Args...)
+		clientTransport = stdioTransport
+	} else {
+		return fmt.Errorf("invalid MCP server config for %s: missing both URL and Command fields", serverName)
+	}
+
+	// Create the MCP client
+	mcpClient = client.NewClient(clientTransport)
+
+	// Always close the client after discovery to prevent subprocess leaks
+	defer func() {
+		if mcpClient != nil {
+			mcpClient.Close()
+		}
+	}()
+
+	// Start the client with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	err = mcpClient.Start(ctx)
+	if err != nil {
+		logging.Debug("Failed to start MCP client for %s: %v", serverName, err)
+		return fmt.Errorf("failed to start MCP client for %s: %w", serverName, err)
+	}
+
+	// Initialize the MCP client
+	logging.Debug("Initializing MCP client for %s", serverName)
+	initRequest := mcp.InitializeRequest{}
+	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initRequest.Params.ClientInfo = mcp.Implementation{
+		Name:    "Station MCP Sync",
+		Version: "1.0.0",
+	}
+	initRequest.Params.Capabilities = mcp.ClientCapabilities{}
+
+	_, err = mcpClient.Initialize(ctx, initRequest)
+	if err != nil {
+		logging.Debug("Failed to initialize MCP client for %s: %v", serverName, err)
+		return fmt.Errorf("failed to initialize MCP client for %s: %w", serverName, err)
+	}
+
+	// List available tools from the server
+	logging.Debug("Fetching available tools from %s", serverName)
+	toolsRequest := mcp.ListToolsRequest{}
+	toolsResult, err := mcpClient.ListTools(ctx, toolsRequest)
+	if err != nil {
+		logging.Debug("Failed to list tools from %s: %v", serverName, err)
+		return fmt.Errorf("failed to list tools from %s: %w", serverName, err)
+	}
+
+	logging.Debug("Discovered %d real tools from %s", len(toolsResult.Tools), serverName)
+	
+	// Store each real tool in the database with its actual name from the server
+	for i, tool := range toolsResult.Tools {
+		logging.Debug("  Tool %d: %s - %s", i+1, tool.Name, tool.Description)
+		
+		// Create database record for this real tool
+		mcpTool := &models.MCPTool{
+			MCPServerID: serverID,
+			Name:        "__" + tool.Name,                          // Add double underscore to match GenKit runtime
+			Description: tool.Description,                          // Use actual description from server
+		}
+		
+		_, err = s.repos.MCPTools.Create(mcpTool)
+		if err != nil {
+			logging.Debug("Failed to store tool %s: %v", tool.Name, err)
+			continue
+		}
+	}
+	
+	logging.Debug("Completed real tool discovery for server: %s", serverName)
+	return nil
 }
+
