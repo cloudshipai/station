@@ -661,35 +661,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	// Use the intelligent agent creator's stdio MCP connection to execute
 	ctx := context.Background()
 	
-	fmt.Printf("🔍 Analyzing execution requirements using stdio MCP...\n")
-	
-	// Initialize the creator's Genkit + MCP system (stdio MCP is mandatory)
-	err = creator.TestStdioMCPConnection(ctx)
-	if err != nil {
-		// Update run as failed since stdio MCP is mandatory
-		completedAt := time.Now()
-		errorMsg := fmt.Sprintf("Stdio MCP connection failed (required for execution): %v", err)
-		
-		updateErr := repos.AgentRuns.UpdateCompletion(
-			agentRun.ID,
-			errorMsg,
-			0, // steps_taken
-			nil, // tool_calls
-			nil, // execution_steps  
-			"failed",
-			&completedAt,
-		)
-		if updateErr != nil {
-			return fmt.Errorf("failed to update failed agent run: %w", updateErr)
-		}
-		
-		fmt.Printf("❌ Stdio MCP connection failed: %v\n", err)
-		fmt.Printf("💡 Stdio MCP is required for self-bootstrapping agent execution\n")
-		fmt.Printf("💡 Make sure Station binary (./stn) is available and working\n")
-		return fmt.Errorf("stdio MCP connection failed (required): %w", err)
-	}
-	
-	fmt.Printf("✅ Connected to stdio MCP server successfully\n")
+	fmt.Printf("🔍 Initializing agent execution with stdio MCP...\n")
 	fmt.Printf("🤖 Executing agent using self-bootstrapping architecture...\n")
 	
 	// Execute the agent using our stdio MCP approach
