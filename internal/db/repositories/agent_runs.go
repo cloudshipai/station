@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"log"
 	"station/internal/db/queries"
 	"station/pkg/models"
 	"time"
@@ -55,6 +54,37 @@ func convertAgentRunFromSQLc(run queries.AgentRun) *models.AgentRun {
 	
 	if run.CompletedAt.Valid {
 		result.CompletedAt = &run.CompletedAt.Time
+	}
+	
+	// Convert response object metadata
+	if run.InputTokens.Valid {
+		inputTokens := run.InputTokens.Int64
+		result.InputTokens = &inputTokens
+	}
+	
+	if run.OutputTokens.Valid {
+		outputTokens := run.OutputTokens.Int64
+		result.OutputTokens = &outputTokens
+	}
+	
+	if run.TotalTokens.Valid {
+		totalTokens := run.TotalTokens.Int64
+		result.TotalTokens = &totalTokens
+	}
+	
+	if run.DurationSeconds.Valid {
+		durationSeconds := run.DurationSeconds.Float64
+		result.DurationSeconds = &durationSeconds
+	}
+	
+	if run.ModelName.Valid {
+		modelName := run.ModelName.String
+		result.ModelName = &modelName
+	}
+	
+	if run.ToolsUsed.Valid {
+		toolsUsed := run.ToolsUsed.Int64
+		result.ToolsUsed = &toolsUsed
 	}
 	
 	return result
@@ -144,7 +174,8 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 	return result
 }
 
-func (r *AgentRunRepo) Create(agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) (*models.AgentRun, error) {
+// CreateWithMetadata creates a new agent run with response object metadata
+func (r *AgentRunRepo) CreateWithMetadata(agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) (*models.AgentRun, error) {
 	params := queries.CreateAgentRunParams{
 		AgentID:       agentID,
 		UserID:        userID,
@@ -175,7 +206,72 @@ func (r *AgentRunRepo) Create(agentID, userID int64, task, finalResponse string,
 		params.CompletedAt = sql.NullTime{Time: *completedAt, Valid: true}
 	}
 	
+	// Add response object metadata
+	if inputTokens != nil {
+		params.InputTokens = sql.NullInt64{Int64: *inputTokens, Valid: true}
+	}
+	
+	if outputTokens != nil {
+		params.OutputTokens = sql.NullInt64{Int64: *outputTokens, Valid: true}
+	}
+	
+	if totalTokens != nil {
+		params.TotalTokens = sql.NullInt64{Int64: *totalTokens, Valid: true}
+	}
+	
+	if durationSeconds != nil {
+		params.DurationSeconds = sql.NullFloat64{Float64: *durationSeconds, Valid: true}
+	}
+	
+	if modelName != nil {
+		params.ModelName = sql.NullString{String: *modelName, Valid: true}
+	}
+	
+	if toolsUsed != nil {
+		params.ToolsUsed = sql.NullInt64{Int64: *toolsUsed, Valid: true}
+	}
+	
 	sqlcRun, err := r.queries.CreateAgentRun(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+	
+	return convertAgentRunFromSQLc(sqlcRun), nil
+}
+
+// Create creates a new agent run (backwards compatibility)
+func (r *AgentRunRepo) Create(agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) (*models.AgentRun, error) {
+	params := queries.CreateAgentRunBasicParams{
+		AgentID:       agentID,
+		UserID:        userID,
+		Task:          task,
+		FinalResponse: finalResponse,
+		StepsTaken:    stepsTaken,
+		Status:        status,
+	}
+	
+	// Convert JSONArray to sql.NullString
+	if toolCalls != nil {
+		if jsonStr, err := toolCalls.Value(); err == nil {
+			if strVal, ok := jsonStr.(string); ok {
+				params.ToolCalls = sql.NullString{String: strVal, Valid: true}
+			}
+		}
+	}
+	
+	if executionSteps != nil {
+		if jsonStr, err := executionSteps.Value(); err == nil {
+			if strVal, ok := jsonStr.(string); ok {
+				params.ExecutionSteps = sql.NullString{String: strVal, Valid: true}
+			}
+		}
+	}
+	
+	if completedAt != nil {
+		params.CompletedAt = sql.NullTime{Time: *completedAt, Valid: true}
+	}
+	
+	sqlcRun, err := r.queries.CreateAgentRunBasic(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
@@ -255,8 +351,8 @@ func (r *AgentRunRepo) ListRecent(limit int64) ([]*models.AgentRunWithDetails, e
 	return result, nil
 }
 
-// UpdateCompletion updates an existing run record with completion data using SQLC
-func (r *AgentRunRepo) UpdateCompletion(id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) error {
+// UpdateCompletionWithMetadata updates an existing run record with completion data and response metadata
+func (r *AgentRunRepo) UpdateCompletionWithMetadata(id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) error {
 	params := queries.UpdateAgentRunCompletionParams{
 		FinalResponse:  finalResponse,
 		StepsTaken:     stepsTaken,
@@ -269,61 +365,65 @@ func (r *AgentRunRepo) UpdateCompletion(id int64, finalResponse string, stepsTak
 		if jsonStr, err := toolCalls.Value(); err == nil {
 			if strVal, ok := jsonStr.(string); ok {
 				params.ToolCalls = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
-				log.Printf("DEBUG REPO: Setting tool_calls JSON: %s", truncated)
 			} else if byteVal, ok := jsonStr.([]byte); ok {
 				strVal := string(byteVal)
 				params.ToolCalls = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
-				log.Printf("DEBUG REPO: Setting tool_calls JSON from bytes: %s", truncated)
 			} else {
-				log.Printf("DEBUG REPO: tool_calls Value() returned unexpected type: %T", jsonStr)
 			}
 		} else {
-			log.Printf("DEBUG REPO: tool_calls Value() error: %v", err)
 		}
 	} else {
-		log.Printf("DEBUG REPO: toolCalls is nil")
 	}
 	
 	if executionSteps != nil {
 		if jsonStr, err := executionSteps.Value(); err == nil {
 			if strVal, ok := jsonStr.(string); ok {
 				params.ExecutionSteps = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
-				log.Printf("DEBUG REPO: Setting execution_steps JSON: %s", truncated)
 			} else if byteVal, ok := jsonStr.([]byte); ok {
 				strVal := string(byteVal)
 				params.ExecutionSteps = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
-				log.Printf("DEBUG REPO: Setting execution_steps JSON from bytes: %s", truncated)
 			} else {
-				log.Printf("DEBUG REPO: execution_steps Value() returned unexpected type: %T", jsonStr)
 			}
 		} else {
-			log.Printf("DEBUG REPO: execution_steps Value() error: %v", err)
 		}
 	} else {
-		log.Printf("DEBUG REPO: executionSteps is nil")
 	}
 	
 	if completedAt != nil {
 		params.CompletedAt = sql.NullTime{Time: *completedAt, Valid: true}
 	}
 	
+	// Add response object metadata
+	if inputTokens != nil {
+		params.InputTokens = sql.NullInt64{Int64: *inputTokens, Valid: true}
+	}
+	
+	if outputTokens != nil {
+		params.OutputTokens = sql.NullInt64{Int64: *outputTokens, Valid: true}
+	}
+	
+	if totalTokens != nil {
+		params.TotalTokens = sql.NullInt64{Int64: *totalTokens, Valid: true}
+	}
+	
+	if durationSeconds != nil {
+		params.DurationSeconds = sql.NullFloat64{Float64: *durationSeconds, Valid: true}
+	}
+	
+	if modelName != nil {
+		params.ModelName = sql.NullString{String: *modelName, Valid: true}
+	}
+	
+	if toolsUsed != nil {
+		params.ToolsUsed = sql.NullInt64{Int64: *toolsUsed, Valid: true}
+	}
+	
 	return r.queries.UpdateAgentRunCompletion(context.Background(), params)
+}
+
+// UpdateCompletion updates an existing run record (backwards compatibility)
+func (r *AgentRunRepo) UpdateCompletion(id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) error {
+	return r.UpdateCompletionWithMetadata(id, finalResponse, stepsTaken, toolCalls, executionSteps, status, completedAt, nil, nil, nil, nil, nil, nil)
 }
 
 // UpdateStatus updates only the status of an agent run using SQLC

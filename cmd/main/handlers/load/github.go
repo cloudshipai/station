@@ -12,7 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/firebase/genkit/go/genkit"
-	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	stationGenkit "station/internal/genkit"
 
 	"station/internal/db"
 	"station/internal/services"
@@ -93,7 +93,7 @@ func (h *LoadHandler) runGitHubDiscoveryFlow(githubURL, environment, endpoint st
 		return fmt.Errorf("OPENAI_API_KEY environment variable is required for GitHub discovery")
 	}
 
-	openaiPlugin := &oai.OpenAI{APIKey: openaiAPIKey}
+	openaiPlugin := &stationGenkit.StationOpenAI{APIKey: openaiAPIKey}
 
 	// Initialize Genkit with OpenAI plugin for AI analysis
 	genkitApp, err := genkit.Init(context.Background(), genkit.WithPlugins(openaiPlugin))

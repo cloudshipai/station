@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/firebase/genkit/go/genkit"
-	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	stationGenkit "station/internal/genkit"
 	"gopkg.in/yaml.v3"
 
 	"station/internal/services"
@@ -136,7 +136,7 @@ func (h *LoadHandler) initializeAI() {
 		return
 	}
 
-	openaiPlugin := &oai.OpenAI{APIKey: openaiAPIKey}
+	openaiPlugin := &stationGenkit.StationOpenAI{APIKey: openaiAPIKey}
 
 	// Initialize Genkit with OpenAI plugin
 	genkitApp, err := genkit.Init(context.Background(), genkit.WithPlugins(openaiPlugin))
