@@ -20,16 +20,15 @@ import (
 	"time"
 
 	"github.com/firebase/genkit/go/genkit"
-	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	stationGenkit "station/internal/genkit"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
-	"github.com/openai/openai-go/option"
 	"github.com/spf13/viper"
 )
 
 // genkitSetup holds the initialized Genkit components
 type genkitSetup struct {
 	app           *genkit.Genkit
-	openaiPlugin  *oai.OpenAI
+	openaiPlugin  *stationGenkit.StationOpenAI
 	geminiPlugin  *googlegenai.GoogleAI
 }
 
@@ -37,7 +36,7 @@ type genkitSetup struct {
 func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, error) {
 	// Initialize AI provider plugin based on configuration
 	var genkitApp *genkit.Genkit
-	var openaiPlugin *oai.OpenAI
+	var openaiPlugin *stationGenkit.StationOpenAI
 	var geminiPlugin *googlegenai.GoogleAI
 	var err error
 	
@@ -47,14 +46,12 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 		if cfg.AIAPIKey == "" {
 			return nil, fmt.Errorf("STN_AI_API_KEY is required for OpenAI provider")
 		}
-		openaiPlugin = &oai.OpenAI{
+		openaiPlugin = &stationGenkit.StationOpenAI{
 			APIKey: cfg.AIAPIKey,
 		}
 		// Set custom base URL if provided
 		if cfg.AIBaseURL != "" {
-			openaiPlugin.Opts = []option.RequestOption{
-				option.WithBaseURL(cfg.AIBaseURL),
-			}
+			openaiPlugin.BaseURL = cfg.AIBaseURL
 		}
 		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
 		if err != nil {

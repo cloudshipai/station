@@ -9,17 +9,17 @@ import (
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
-	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	stationGenkit "station/internal/genkit"
 )
 
 // PlaceholderAnalyzer uses AI to intelligently detect and analyze configuration placeholders
 type PlaceholderAnalyzer struct {
 	genkit       *genkit.Genkit
-	openaiPlugin *oai.OpenAI
+	openaiPlugin *stationGenkit.StationOpenAI
 }
 
 // NewPlaceholderAnalyzer creates a new intelligent placeholder analyzer
-func NewPlaceholderAnalyzer(genkitApp *genkit.Genkit, openaiPlugin *oai.OpenAI) *PlaceholderAnalyzer {
+func NewPlaceholderAnalyzer(genkitApp *genkit.Genkit, openaiPlugin *stationGenkit.StationOpenAI) *PlaceholderAnalyzer {
 	return &PlaceholderAnalyzer{
 		genkit:       genkitApp,
 		openaiPlugin: openaiPlugin,
