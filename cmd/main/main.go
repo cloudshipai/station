@@ -46,6 +46,7 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(keyCmd)
 	rootCmd.AddCommand(loadCmd)
+	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(mcpCmd)
 	rootCmd.AddCommand(templateCmd)
 	rootCmd.AddCommand(agentCmd)
@@ -54,7 +55,6 @@ func init() {
 	rootCmd.AddCommand(settingsCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(blastoffCmd)
-	rootCmd.AddCommand(bannerCmd)
 	
 	// Initialize file config handler and integrate with mcp commands
 	fileConfigHandler := file_config.NewFileConfigHandler()
@@ -172,6 +172,13 @@ func init() {
 	mcpSyncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
 	mcpSyncCmd.Flags().Bool("force", false, "Force sync even if no changes detected")
 	
+	// Sync command flags (top-level)
+	syncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	syncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
+	syncCmd.Flags().Bool("force", false, "Force sync even if no changes detected")
+	syncCmd.Flags().Bool("validate", false, "Validate configurations only without syncing")
+	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
+	
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")
 	
@@ -197,7 +204,9 @@ func init() {
 	agentListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentListCmd.Flags().String("env", "", "Filter agents by environment name or ID")
 	agentShowCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentShowCmd.Flags().String("env", "default", "Environment name for the agent")
 	agentRunCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	agentRunCmd.Flags().String("env", "default", "Environment name for the agent")
 	agentRunCmd.Flags().Bool("tail", false, "Follow the agent execution with real-time output")
 	agentDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
