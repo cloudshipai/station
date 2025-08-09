@@ -23,15 +23,22 @@ type ExecutionRequest struct {
 
 // ExecutionResult represents the result of an agent execution
 type ExecutionResult struct {
-	Request       *ExecutionRequest
-	Response      *Message
-	StepsTaken    int64
-	ToolCalls     []interface{}
-	ExecutionSteps []interface{}
-	Status        string // "completed", "failed", "timeout"
-	Error         error
-	StartedAt     time.Time
-	CompletedAt   time.Time
+	Request         *ExecutionRequest
+	Response        *Message
+	StepsTaken      int64
+	ToolCalls       []interface{}
+	ExecutionSteps  []interface{}
+	Status          string // "completed", "failed", "timeout"
+	Error           error
+	StartedAt       time.Time
+	CompletedAt     time.Time
+	// Response object metadata from Station's OpenAI plugin
+	InputTokens     *int64
+	OutputTokens    *int64
+	TotalTokens     *int64
+	DurationSeconds *float64
+	ModelName       *string
+	ToolsUsed       *int64
 }
 
 // ExecutionQueueService manages async agent execution using Go channels and worker pools
@@ -289,7 +296,6 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 		
 		// Extract detailed execution data from response.Extra if available
 		if response != nil && response.Extra != nil {
-			log.Printf("Worker %d: DEBUG - response.Extra has %d keys", worker.ID, len(response.Extra))
 			// Extract steps taken from agent execution result
 			if stepsValue, exists := response.Extra["steps_taken"]; exists {
 				if steps, ok := stepsValue.(int64); ok {
@@ -303,15 +309,12 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 			
 			// Extract detailed tool calls if available
 			if toolCallsValue, exists := response.Extra["tool_calls"]; exists {
-				log.Printf("Worker %d: DEBUG - tool_calls exists, type: %T", worker.ID, toolCallsValue)
 				if toolCallsPtr, ok := toolCallsValue.(*models.JSONArray); ok && toolCallsPtr != nil {
 					result.ToolCalls = []interface{}(*toolCallsPtr)
 					log.Printf("Worker %d: Extracted %d tool calls from agent execution", worker.ID, len(result.ToolCalls))
 				} else {
-					log.Printf("Worker %d: DEBUG - tool_calls type assertion failed or nil pointer", worker.ID)
 				}
 			} else {
-				log.Printf("Worker %d: DEBUG - tool_calls key not found in Extra", worker.ID)
 			}
 			
 			// Extract detailed execution steps if available
@@ -332,6 +335,43 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 						"output": response.Content,
 						"timestamp": startTime,
 					},
+				}
+			}
+			
+			// Extract response object metadata from Station's OpenAI plugin
+			if tokenUsageValue, exists := response.Extra["token_usage"]; exists {
+				if tokenUsage, ok := tokenUsageValue.(map[string]interface{}); ok {
+					if inputTokens, ok := tokenUsage["input_tokens"].(int64); ok {
+						result.InputTokens = &inputTokens
+					}
+					if outputTokens, ok := tokenUsage["output_tokens"].(int64); ok {
+						result.OutputTokens = &outputTokens
+					}
+					if totalTokens, ok := tokenUsage["total_tokens"].(int64); ok {
+						result.TotalTokens = &totalTokens
+					}
+					log.Printf("Worker %d: Extracted token usage - Input: %v, Output: %v, Total: %v", worker.ID, result.InputTokens, result.OutputTokens, result.TotalTokens)
+				}
+			}
+			
+			if durationValue, exists := response.Extra["duration"]; exists {
+				if duration, ok := durationValue.(float64); ok {
+					result.DurationSeconds = &duration
+					log.Printf("Worker %d: Extracted duration: %v seconds", worker.ID, duration)
+				}
+			}
+			
+			if modelNameValue, exists := response.Extra["model_name"]; exists {
+				if modelName, ok := modelNameValue.(string); ok {
+					result.ModelName = &modelName
+					log.Printf("Worker %d: Extracted model name: %s", worker.ID, modelName)
+				}
+			}
+			
+			if toolsUsedValue, exists := response.Extra["tools_used"]; exists {
+				if toolsUsed, ok := toolsUsedValue.(int64); ok {
+					result.ToolsUsed = &toolsUsed
+					log.Printf("Worker %d: Extracted tools used: %d", worker.ID, toolsUsed)
 				}
 			}
 		} else {
@@ -404,23 +444,19 @@ func (eq *ExecutionQueueService) storeExecutionResult(result *ExecutionResult) e
 	if result.ToolCalls != nil {
 		jsonArray := models.JSONArray(result.ToolCalls)
 		toolCalls = &jsonArray
-		log.Printf("DEBUG: Storing %d tool calls", len(result.ToolCalls))
 	} else {
-		log.Printf("DEBUG: No tool calls to store")
 	}
 	
 	var executionSteps *models.JSONArray
 	if result.ExecutionSteps != nil {
 		jsonArray := models.JSONArray(result.ExecutionSteps)
 		executionSteps = &jsonArray
-		log.Printf("DEBUG: Storing %d execution steps", len(result.ExecutionSteps))
 	} else {
-		log.Printf("DEBUG: No execution steps to store")
 	}
 	
-	// Update the existing agent run record (created when queued)
+	// Update the existing agent run record (created when queued) with response metadata
 	runID := result.Request.RunID
-	err := eq.repos.AgentRuns.UpdateCompletion(
+	err := eq.repos.AgentRuns.UpdateCompletionWithMetadata(
 		runID,
 		finalResponse,
 		result.StepsTaken,
@@ -428,6 +464,12 @@ func (eq *ExecutionQueueService) storeExecutionResult(result *ExecutionResult) e
 		executionSteps,
 		result.Status,
 		&result.CompletedAt,
+		result.InputTokens,
+		result.OutputTokens,
+		result.TotalTokens,
+		result.DurationSeconds,
+		result.ModelName,
+		result.ToolsUsed,
 	)
 	
 	if err != nil {

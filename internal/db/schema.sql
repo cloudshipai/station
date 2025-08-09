@@ -160,6 +160,13 @@ CREATE TABLE agent_runs (
     status TEXT NOT NULL DEFAULT 'completed', -- completed, failed, timeout
     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
+    -- Response object metadata from Station's OpenAI plugin
+    input_tokens INTEGER DEFAULT NULL,
+    output_tokens INTEGER DEFAULT NULL,
+    total_tokens INTEGER DEFAULT NULL,
+    duration_seconds REAL DEFAULT NULL,
+    model_name TEXT DEFAULT NULL,
+    tools_used INTEGER DEFAULT NULL,
     FOREIGN KEY (agent_id) REFERENCES agents (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );

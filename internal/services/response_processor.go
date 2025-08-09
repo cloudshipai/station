@@ -73,6 +73,44 @@ func (rp *ResponseProcessor) extractFromRequestMessages(response *ai.ModelRespon
 	return toolCalls
 }
 
+// BuildExecutionStepsFromCapturedCalls builds execution steps from middleware-captured tool calls
+func (rp *ResponseProcessor) BuildExecutionStepsFromCapturedCalls(capturedToolCalls []map[string]interface{}, response *ai.ModelResponse, agent *models.Agent, modelName string) []interface{} {
+	var steps []interface{}
+	
+	// Create step from captured tool calls
+	if len(capturedToolCalls) > 0 {
+		step := map[string]interface{}{
+			"step":              1,
+			"role":              "model",
+			"agent_id":          agent.ID,
+			"agent_name":        agent.Name,
+			"model_name":        modelName,
+			"tool_calls_count":  len(capturedToolCalls),
+			"content":           fmt.Sprintf("Used %d tools", len(capturedToolCalls)),
+			"content_length":    len(fmt.Sprintf("Used %d tools", len(capturedToolCalls))),
+		}
+		steps = append(steps, step)
+	}
+	
+	// Add final response step
+	if response != nil {
+		responseText := response.Text()
+		finalStep := map[string]interface{}{
+			"step":              len(steps) + 1,
+			"role":              "model",
+			"agent_id":          agent.ID,
+			"agent_name":        agent.Name,
+			"model_name":        modelName,
+			"tool_calls_count":  0,
+			"content":           rp.TruncateContent(responseText, 2000),
+			"content_length":    len(responseText),
+		}
+		steps = append(steps, finalStep)
+	}
+	
+	return steps
+}
+
 // BuildExecutionStepsFromResponse builds execution steps from GenKit response for detailed logging
 func (rp *ResponseProcessor) BuildExecutionStepsFromResponse(response *ai.ModelResponse, agent *models.Agent, modelName string, toolsAvailable int) []interface{} {
 	var steps []interface{}
