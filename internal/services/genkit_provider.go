@@ -10,6 +10,7 @@ import (
 
 	"github.com/firebase/genkit/go/genkit"
 	compat_oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
 // GenKitProvider manages GenKit initialization and AI provider configuration
@@ -90,7 +91,13 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
 		
 	case "googlegenai", "gemini":
-		return fmt.Errorf("GoogleGenAI provider not yet supported in modular architecture")
+		logging.Debug("Setting up Google AI plugin with model: %s", cfg.AIModel)
+		
+		// Let GoogleAI plugin automatically pick up GEMINI_API_KEY or GOOGLE_API_KEY from environment
+		// This matches the official GenKit examples approach
+		geminiPlugin := &googlegenai.GoogleAI{}
+		
+		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
 		
 	case "ollama":
 		return fmt.Errorf("Ollama provider not yet supported in modular architecture")
