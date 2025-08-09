@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"log"
 	"station/internal/db/queries"
 	"station/pkg/models"
 	"time"
@@ -366,17 +365,9 @@ func (r *AgentRunRepo) UpdateCompletionWithMetadata(id int64, finalResponse stri
 		if jsonStr, err := toolCalls.Value(); err == nil {
 			if strVal, ok := jsonStr.(string); ok {
 				params.ToolCalls = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
 			} else if byteVal, ok := jsonStr.([]byte); ok {
 				strVal := string(byteVal)
 				params.ToolCalls = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
 			} else {
 			}
 		} else {
@@ -388,17 +379,9 @@ func (r *AgentRunRepo) UpdateCompletionWithMetadata(id int64, finalResponse stri
 		if jsonStr, err := executionSteps.Value(); err == nil {
 			if strVal, ok := jsonStr.(string); ok {
 				params.ExecutionSteps = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
 			} else if byteVal, ok := jsonStr.([]byte); ok {
 				strVal := string(byteVal)
 				params.ExecutionSteps = sql.NullString{String: strVal, Valid: true}
-				truncated := strVal
-				if len(strVal) > 100 {
-					truncated = strVal[:100]
-				}
 			} else {
 			}
 		} else {
