@@ -214,6 +214,7 @@ stn agent run 5 "Coordinate with database monitor agent to run health check"
 - **Webhook Integration** - Real-time notifications to existing systems
 - **Database Replication** - Litestream integration for production backup
 - **Environment Isolation** - Complete separation of dev/staging/prod contexts
+- **Enhanced AI Providers** - Custom OpenAI plugin with multi-turn conversation fixes
 
 ### **Security Architecture**
 - **Self-Hosted** - No external dependencies beyond AI provider APIs

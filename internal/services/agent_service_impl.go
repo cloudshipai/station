@@ -55,6 +55,23 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	if result.ExecutionSteps != nil {
 		extra["execution_steps"] = result.ExecutionSteps
 	}
+	
+	// Preserve rich GenKit response object data from Station's OpenAI plugin
+	if result.TokenUsage != nil {
+		extra["token_usage"] = result.TokenUsage
+	}
+	
+	if result.Duration > 0 {
+		extra["duration"] = result.Duration.Seconds()
+	}
+	
+	if result.ModelName != "" {
+		extra["model_name"] = result.ModelName
+	}
+	
+	if result.ToolsUsed > 0 {
+		extra["tools_used"] = result.ToolsUsed
+	}
 
 	return &Message{
 		Content: result.Response,
