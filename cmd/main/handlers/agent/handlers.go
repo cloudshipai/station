@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -15,12 +16,16 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v2"
 	"station/cmd/main/handlers/common"
+	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/theme"
+	"station/pkg/models"
 	agent_bundle "station/pkg/agent-bundle"
 	"station/pkg/agent-bundle/creator"
 	"station/pkg/agent-bundle/manager"
 	"station/pkg/agent-bundle/validator"
 	"station/pkg/bundle"
+	"station/pkg/dotprompt"
 )
 
 // AgentHandler handles agent-related CLI commands
@@ -57,71 +62,273 @@ func (h *AgentHandler) RunAgentList(cmd *cobra.Command, args []string) error {
 // RunAgentShow shows details of a specific agent
 func (h *AgentHandler) RunAgentShow(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("agent ID is required")
+		return fmt.Errorf("agent name is required")
 	}
 
-	agentID, err := common.ParseIDFromString(args[0])
-	if err != nil {
-		return fmt.Errorf("invalid agent ID: %v", err)
+	agentName := args[0]
+	
+	// Get environment from flag or default
+	environment, _ := cmd.Flags().GetString("env")
+	if environment == "" {
+		environment = "default"
 	}
 
 	styles := common.GetCLIStyles(h.themeManager)
-	banner := styles.Banner.Render(fmt.Sprintf("🤖 Agent #%d", agentID))
+	banner := styles.Banner.Render(fmt.Sprintf("🤖 Agent: %s", agentName))
 	fmt.Println(banner)
 
 	endpoint, _ := cmd.Flags().GetString("endpoint")
 
 	if endpoint != "" {
 		fmt.Println(styles.Info.Render("🌐 Showing agent from: " + endpoint))
-		return h.showAgentRemote(agentID, endpoint)
+		return fmt.Errorf("remote agent show with names not yet implemented")
 	} else {
 		fmt.Println(styles.Info.Render("🏠 Showing local agent"))
-		return h.showAgentLocal(agentID)
+		return h.showAgentLocalByName(agentName, environment)
 	}
 }
 
-// RunAgentRun executes an agent
+// RunAgentRun executes an agent using dotprompt methodology
 func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("agent ID and task are required")
+		return fmt.Errorf("agent name and task are required")
 	}
 
-	agentID, err := strconv.ParseInt(args[0], 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid agent ID: %v", err)
-	}
-
+	agentName := args[0]
 	task := args[1]
+	
+	// Get environment from flag or default
+	environment, _ := cmd.Flags().GetString("env")
+	if environment == "" {
+		environment = "default"
+	}
+	
 	tail, _ := cmd.Flags().GetBool("tail")
 
 	styles := common.GetCLIStyles(h.themeManager)
-	banner := styles.Banner.Render(fmt.Sprintf("▶️  Running Agent #%d", agentID))
+	banner := styles.Banner.Render(fmt.Sprintf("▶️  Running Agent: %s", agentName))
 	fmt.Println(banner)
 
 	endpoint, _ := cmd.Flags().GetString("endpoint")
 
 	if endpoint != "" {
 		fmt.Println(styles.Info.Render("🌐 Running agent on: " + endpoint))
-		return h.runAgentRemote(agentID, task, endpoint, tail)
+		// TODO: Update runAgentRemote to use names instead of IDs
+		return fmt.Errorf("remote agent execution with names not yet implemented")
 	} else {
-		fmt.Println(styles.Info.Render("🏠 Running local agent"))
-		return h.runAgentLocal(agentID, task, tail)
+		fmt.Println(styles.Info.Render("🚀 Running local agent with dotprompt"))
+		return h.runAgentLocalDotprompt(agentName, task, environment, tail)
 	}
 }
 
-// RunAgentDelete deletes an agent
-func (h *AgentHandler) RunAgentDelete(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("agent ID is required")
+// runAgentLocalDotprompt executes an agent using database-driven ai.Generate() with multi-step tool support
+func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment string, tail bool) error {
+	styles := common.GetCLIStyles(h.themeManager)
+	
+	// 1. Connect to database and get agent configuration (runtime source of truth)
+	cfg, err := common.LoadStationConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
 	}
 
-	agentID, err := common.ParseIDFromString(args[0])
+	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
-		return fmt.Errorf("invalid agent ID: %v", err)
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	
+	// 2. Get environment ID
+	env, err := repos.Environments.GetByName(environment)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environment, err)
+	}
+	
+	// 3. Get agents in environment and find by name (runtime source of truth)
+	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get agents from environment '%s': %w", environment, err)
+	}
+	
+	var agent *models.Agent
+	for _, a := range agents {
+		if a.Name == agentName {
+			agent = a
+			break
+		}
+	}
+	
+	if agent == nil {
+		return fmt.Errorf("agent '%s' not found in environment '%s'", agentName, environment)
+	}
+	
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🤖 Agent: %s", agent.Name)))
+	fmt.Println(styles.Info.Render(fmt.Sprintf("📝 Description: %s", agent.Description)))
+	
+	// 4. Get agent tools from database
+	agentTools, err := repos.AgentTools.ListAgentTools(agent.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent tools: %w", err)
+	}
+	
+	fmt.Printf("🔧 Tools Available: %d\n", len(agentTools))
+	for _, tool := range agentTools {
+		fmt.Printf("    • %s\n", tool.ToolName)
+	}
+	
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🚀 Executing task: %s", task)))
+	if tail {
+		fmt.Println(styles.Info.Render("👀 Following execution with real-time output..."))
+	}
+	
+	// 5. Execute using hybrid approach: database config + dotprompt rendering + real execution
+	executor := dotprompt.NewGenKitExecutor()
+	response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, repos, task)
+	if err != nil {
+		fmt.Println(styles.Error.Render(fmt.Sprintf("❌ Execution failed: %v", err)))
+		return fmt.Errorf("agent execution failed: %w", err)
+	}
+	
+	// 7. Display results
+	fmt.Println("\n" + styles.Banner.Render("🎯 Execution Results"))
+	fmt.Printf("⏱️  Duration: %v\n", response.Duration)
+	fmt.Printf("✅ Success: %t\n", response.Success)
+	fmt.Printf("🤖 Model: %s\n", response.ModelName)
+	fmt.Printf("📊 Steps Used: %d\n", response.StepsUsed)
+	fmt.Printf("🔧 Tools Used: %d\n", response.ToolsUsed)
+	
+	if response.Response != "" {
+		fmt.Println("\n" + styles.Info.Render("📄 Response:"))
+		fmt.Println(response.Response)
+	}
+	
+	if response.Error != "" {
+		fmt.Println("\n" + styles.Error.Render("❌ Error:"))
+		fmt.Println(response.Error)
+		return fmt.Errorf("agent execution error: %s", response.Error)
+	}
+	
+	return nil
+}
+
+// showAgentLocalByName shows agent details by name using dotprompt file
+func (h *AgentHandler) showAgentLocalByName(agentName, environment string) error {
+	styles := common.GetCLIStyles(h.themeManager)
+	
+	// Construct .prompt file path
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	promptFilePath := fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment, agentName)
+	
+	// Check if .prompt file exists
+	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {
+		return fmt.Errorf("agent '%s' not found in environment '%s' (file: %s)", agentName, environment, promptFilePath)
+	}
+	
+	fmt.Println(styles.Info.Render(fmt.Sprintf("📄 Loading agent from: %s", promptFilePath)))
+	
+	// Parse the .prompt file
+	extractor, err := dotprompt.NewRuntimeExtraction(promptFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to parse dotprompt file: %w", err)
+	}
+	
+	config := extractor.GetConfig()
+	
+	// Display agent information
+	fmt.Printf("\n📋 %s\n", styles.Info.Render("Agent Details:"))
+	fmt.Printf("   Name: %s\n", config.Metadata.Name)
+	if config.Metadata.Description != "" {
+		fmt.Printf("   Description: %s\n", config.Metadata.Description)
+	}
+	if config.Metadata.Version != "" {
+		fmt.Printf("   Version: %s\n", config.Metadata.Version)
+	}
+	fmt.Printf("   Environment: %s\n", environment)
+	
+	// Display model configuration
+	fmt.Printf("\n🤖 %s\n", styles.Info.Render("Model Configuration:"))
+	fmt.Printf("   Model: %s\n", config.Model)
+	if config.Config.Temperature != nil {
+		fmt.Printf("   Temperature: %.1f\n", *config.Config.Temperature)
+	}
+	if config.Config.MaxTokens != nil {
+		fmt.Printf("   Max Tokens: %d\n", *config.Config.MaxTokens)
+	}
+	
+	// Display tools
+	if len(config.Tools) > 0 {
+		fmt.Printf("\n🔧 %s\n", styles.Info.Render("Tools:"))
+		for _, tool := range config.Tools {
+			fmt.Printf("   • %s\n", tool)
+		}
+	}
+	
+	// Display MCP dependencies
+	if mcpDeps, err := extractor.ExtractCustomField("station.mcp_dependencies"); err == nil && mcpDeps != nil {
+		fmt.Printf("\n🔗 %s\n", styles.Info.Render("MCP Dependencies:"))
+		if depsMap, ok := mcpDeps.(map[string]interface{}); ok {
+			for mcpConfig, deps := range depsMap {
+				fmt.Printf("   • %s:\n", mcpConfig)
+				if depMap, ok := deps.(map[string]interface{}); ok {
+					if tools, exists := depMap["assigned_tools"]; exists {
+						if toolsList, ok := tools.([]interface{}); ok {
+							fmt.Printf("     Tools: %v\n", toolsList)
+						}
+					}
+					if cmd, exists := depMap["server_command"]; exists {
+						fmt.Printf("     Command: %v\n", cmd)
+					}
+					if envVars, exists := depMap["environment_vars"]; exists {
+						fmt.Printf("     Environment Variables: %v\n", envVars)
+					}
+				}
+			}
+		}
+	}
+	
+	// Display execution metadata
+	if metadata, err := extractor.ExtractCustomField("station.execution_metadata"); err == nil && metadata != nil {
+		fmt.Printf("\n📊 %s\n", styles.Info.Render("Execution Metadata:"))
+		if metadataMap, ok := metadata.(map[string]interface{}); ok {
+			for key, value := range metadataMap {
+				fmt.Printf("   %s: %v\n", key, value)
+			}
+		}
+	}
+	
+	// Display feature flags
+	if flags, err := extractor.ExtractCustomField("station.feature_flags"); err == nil && flags != nil {
+		fmt.Printf("\n🚩 %s\n", styles.Info.Render("Feature Flags:"))
+		if flagsMap, ok := flags.(map[string]interface{}); ok {
+			for key, value := range flagsMap {
+				fmt.Printf("   %s: %v\n", key, value)
+			}
+		}
+	}
+	
+	return nil
+}
+
+// RunAgentDelete deletes an agent by name
+func (h *AgentHandler) RunAgentDelete(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("agent name is required")
+	}
+
+	agentName := args[0]
+	
+	// Get environment from flag or default
+	environment, _ := cmd.Flags().GetString("env")
+	if environment == "" {
+		environment = "default"
 	}
 
 	styles := common.GetCLIStyles(h.themeManager)
-	banner := styles.Banner.Render(fmt.Sprintf("🗑️  Delete Agent #%d", agentID))
+	banner := styles.Banner.Render(fmt.Sprintf("🗑️  Delete Agent: %s", agentName))
 	fmt.Println(banner)
 
 	endpoint, _ := cmd.Flags().GetString("endpoint")
@@ -131,8 +338,59 @@ func (h *AgentHandler) RunAgentDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("remote agent deletion not supported")
 	} else {
 		fmt.Println(styles.Info.Render("🏠 Deleting local agent"))
-		return h.deleteAgentLocal(agentID)
+		return h.deleteAgentLocalByName(agentName, environment)
 	}
+}
+
+// deleteAgentLocalByName deletes an agent by name from a specific environment
+func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) error {
+	// Load Station config and connect to database
+	cfg, err := common.LoadStationConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	
+	// Get environment
+	env, err := repos.Environments.GetByName(environment)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environment, err)
+	}
+	
+	// Find agent by name in the environment
+	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get agents from environment '%s': %w", environment, err)
+	}
+	
+	var agent *models.Agent
+	for _, a := range agents {
+		if a.Name == agentName {
+			agent = a
+			break
+		}
+	}
+	
+	if agent == nil {
+		return fmt.Errorf("agent '%s' not found in environment '%s'", agentName, environment)
+	}
+
+	// Delete the agent
+	err = repos.Agents.Delete(agent.ID)
+	if err != nil {
+		return fmt.Errorf("failed to delete agent: %w", err)
+	}
+
+	styles := common.GetCLIStyles(h.themeManager)
+	fmt.Printf("✅ Agent deleted: %s\n", styles.Success.Render(agent.Name))
+	return nil
 }
 
 // RunAgentCreate creates a new agent
@@ -163,10 +421,7 @@ func (h *AgentHandler) RunAgentExport(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("📤 Export Agent")
 	fmt.Println(banner)
 
-	agentID, err := common.ParseIDFromString(args[0])
-	if err != nil {
-		return fmt.Errorf("invalid agent ID: %v", err)
-	}
+	agentName := args[0]
 
 	var environment string
 	if len(args) > 1 {
@@ -175,8 +430,154 @@ func (h *AgentHandler) RunAgentExport(cmd *cobra.Command, args []string) error {
 		environment = "default"
 	}
 
-	fmt.Println(styles.Info.Render(fmt.Sprintf("🏠 Exporting agent %d to environment '%s'", agentID, environment)))
-	return h.exportAgentLocal(agentID, environment)
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🏠 Exporting agent '%s' to environment '%s'", agentName, environment)))
+	return h.exportAgentLocalByName(agentName, environment)
+}
+
+// exportAgentLocalByName exports an agent by name to dotprompt format
+func (h *AgentHandler) exportAgentLocalByName(agentName, environment string) error {
+	// For now, since we don't have the new name-based database queries yet,
+	// let's look up the agent by checking if a .prompt file exists and just
+	// report that it's already in dotprompt format
+	
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	promptFilePath := fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment, agentName)
+	
+	styles := common.GetCLIStyles(h.themeManager)
+	
+	if _, err := os.Stat(promptFilePath); err == nil {
+		fmt.Println(styles.Info.Render(fmt.Sprintf("✅ Agent '%s' already exists in dotprompt format", agentName)))
+		fmt.Println(styles.Info.Render(fmt.Sprintf("📄 File: %s", promptFilePath)))
+		return nil
+	}
+	
+	// Agent doesn't exist as .prompt file, try to export from database
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🔍 Looking up agent '%s' in database...", agentName)))
+	return h.exportAgentFromDatabase(agentName, environment, promptFilePath)
+}
+
+// exportAgentFromDatabase exports an agent from database to .prompt file
+func (h *AgentHandler) exportAgentFromDatabase(agentName, environment, promptFilePath string) error {
+	styles := common.GetCLIStyles(h.themeManager)
+	
+	// Load configuration and connect to database
+	cfg, err := common.LoadStationConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+	
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+	
+	repos := repositories.New(database)
+	
+	// Get environment ID
+	env, err := repos.Environments.GetByName(environment)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environment, err)
+	}
+	
+	// Try to find agent by name (for now, we'll use a simple query)
+	// TODO: Replace with proper name-based lookup when SQLC queries are ready
+	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to list agents: %w", err)
+	}
+	
+	var targetAgent *models.Agent
+	for _, agent := range agents {
+		if agent.Name == agentName {
+			targetAgent = agent
+			break
+		}
+	}
+	
+	if targetAgent == nil {
+		return fmt.Errorf("agent '%s' not found in database", agentName)
+	}
+	
+	fmt.Println(styles.Info.Render(fmt.Sprintf("📄 Found agent: %s (ID: %d)", targetAgent.Name, targetAgent.ID)))
+	
+	// Get agent tools
+	tools, err := repos.AgentTools.ListAgentTools(targetAgent.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent tools: %w", err)
+	}
+	
+	// Generate .prompt file content
+	promptContent := h.generateDotpromptContent(targetAgent, tools, environment)
+	
+	// Ensure directory exists
+	agentsDir := filepath.Dir(promptFilePath)
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create agents directory: %w", err)
+	}
+	
+	// Write .prompt file
+	if err := os.WriteFile(promptFilePath, []byte(promptContent), 0644); err != nil {
+		return fmt.Errorf("failed to write .prompt file: %w", err)
+	}
+	
+	fmt.Println(styles.Success.Render(fmt.Sprintf("✅ Successfully exported agent '%s'", agentName)))
+	fmt.Println(styles.Info.Render(fmt.Sprintf("📄 Created: %s", promptFilePath)))
+	
+	return nil
+}
+
+// generateDotpromptContent generates the .prompt file content for an agent
+func (h *AgentHandler) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environment string) string {
+	var content strings.Builder
+	
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("model: \"gemini-2.0-flash-exp\"\n")
+	content.WriteString("config:\n")
+	content.WriteString("  temperature: 0.3\n")
+	content.WriteString("  max_tokens: 2000\n")
+	content.WriteString("metadata:\n")
+	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))
+	if agent.Description != "" {
+		content.WriteString(fmt.Sprintf("  description: \"%s\"\n", agent.Description))
+	}
+	content.WriteString("  version: \"1.0.0\"\n")
+	
+	// Tools section
+	if len(tools) > 0 {
+		content.WriteString("tools:\n")
+		for _, tool := range tools {
+			content.WriteString(fmt.Sprintf("  - \"%s\"\n", tool.ToolName))
+		}
+	}
+	
+	// Station metadata (basic)
+	content.WriteString("station:\n")
+	content.WriteString("  execution_metadata:\n")
+	if agent.MaxSteps > 0 {
+		content.WriteString(fmt.Sprintf("    max_steps: %d\n", agent.MaxSteps))
+	}
+	content.WriteString("    timeout_seconds: 120\n")
+	content.WriteString("    max_retries: 3\n")
+	content.WriteString("    priority: \"medium\"\n")
+	content.WriteString("---\n\n")
+	
+	// Template content
+	content.WriteString(fmt.Sprintf("You are %s.\n\n", agent.Name))
+	if agent.Description != "" {
+		content.WriteString(fmt.Sprintf("%s\n\n", agent.Description))
+	}
+	
+	content.WriteString("## Task Instructions\n\n")
+	content.WriteString("**Task**: {{TASK}}\n")
+	content.WriteString("**Environment**: {{ENVIRONMENT}}\n\n")
+	content.WriteString("Please analyze the task and provide a comprehensive response using your available tools as needed.\n")
+	
+	return content.String()
 }
 
 // RunAgentImport imports agents from file-based configs

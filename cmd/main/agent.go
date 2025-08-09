@@ -21,25 +21,25 @@ var (
 	}
 
 	agentShowCmd = &cobra.Command{
-		Use:   "show <id>",
+		Use:   "show <name>",
 		Short: "Show agent details",
-		Long:  "Show detailed information about an agent by ID",
+		Long:  "Show detailed information about an agent by name",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runAgentShow,
 	}
 
 	agentRunCmd = &cobra.Command{
-		Use:   "run <id> <task>",
-		Short: "Run an agent",
-		Long:  "Execute an agent with the specified task",
+		Use:   "run <name> <task>",
+		Short: "Run an agent using dotprompt",
+		Long:  "Execute an agent by name using dotprompt methodology with custom frontmatter support",
 		Args:  cobra.ExactArgs(2),
 		RunE:  runAgentRun,
 	}
 
 	agentDeleteCmd = &cobra.Command{
-		Use:   "delete <id>",
+		Use:   "delete <name>",
 		Short: "Delete an agent",
-		Long:  "Delete an agent and all associated data",
+		Long:  "Delete an agent and all associated data by name",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runAgentDelete,
 	}
@@ -59,12 +59,13 @@ where our own MCP server analyzes requirements to create optimized agents.`,
 	}
 
 	agentExportCmd = &cobra.Command{
-		Use:   "export <id> [environment]",
-		Short: "Export agent to file-based config",
-		Long: `Export an agent configuration to file-based system under environments/<env>/agents/.
-Creates two files:
-- <agent-name>.json: Agent configuration and metadata
-- <agent-name>-tools.json: Tool dependencies and MCP server mappings
+		Use:   "export <name> [environment]",
+		Short: "Export agent to dotprompt format",
+		Long: `Export an agent configuration to dotprompt format under environments/<env>/agents/.
+Creates a <agent-name>.prompt file with YAML frontmatter containing:
+- Model configuration and parameters
+- Tool dependencies and MCP server mappings
+- Custom metadata and execution settings
 
 This enables GitOps-ready agent management and cross-environment deployment.`,
 		Args: cobra.RangeArgs(1, 2),

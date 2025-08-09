@@ -256,21 +256,31 @@ func (g *StationModelGenerator) WithTools(tools []*ai.ToolDefinition) *StationMo
 func (g *StationModelGenerator) Generate(ctx context.Context, handleChunk func(context.Context, *ai.ModelResponseChunk) error) (*ai.ModelResponse, error) {
 	// Check for any errors that occurred during building
 	if g.err != nil {
+		logging.Debug("Station GenKit: Generate failed with build error: %v", g.err)
 		return nil, g.err
 	}
 
 	if len(g.messages) == 0 {
+		logging.Debug("Station GenKit: Generate failed - no messages provided")
 		return nil, fmt.Errorf("no messages provided")
 	}
+	
+	logging.Debug("Station GenKit: Starting Generate with %d messages, %d tools", len(g.messages), len(g.tools))
 	g.request.Messages = (g.messages)
 
 	if len(g.tools) > 0 {
+		logging.Debug("Station GenKit: Adding %d tools to request", len(g.tools))
 		g.request.Tools = (g.tools)
+		for i, tool := range g.tools {
+			logging.Debug("Station GenKit: Tool %d: %s (type: %s)", i, tool.Function.Name, tool.Type)
+		}
 	}
 
 	if handleChunk != nil {
+		logging.Debug("Station GenKit: Using streaming mode")
 		return g.generateStream(ctx, handleChunk)
 	}
+	logging.Debug("Station GenKit: Using complete mode")
 	return g.generateComplete(ctx)
 }
 
@@ -395,10 +405,13 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 		}
 	}
 	
+	logging.Debug("Station GenKit: Calling OpenAI API with model=%s", g.request.Model)
 	completion, err := g.client.Chat.Completions.New(ctx, *g.request)
 	if err != nil {
+		logging.Debug("Station GenKit: OpenAI API call failed: %v", err)
 		return nil, fmt.Errorf("failed to create completion: %w", err)
 	}
+	logging.Debug("Station GenKit: OpenAI API call successful, processing response...")
 
 	resp := &ai.ModelResponse{
 		Request: &ai.ModelRequest{},
