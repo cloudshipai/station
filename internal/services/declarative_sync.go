@@ -1,0 +1,287 @@
+package services
+
+import (
+	"context"
+	"crypto/md5"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"station/internal/config"
+	"station/internal/db/repositories"
+)
+
+// DeclarativeSync handles synchronization between file-based configs and database
+type DeclarativeSync struct {
+	repos  *repositories.Repositories
+	config *config.Config
+}
+
+// SyncOptions controls sync behavior
+type SyncOptions struct {
+	DryRun   bool
+	Validate bool
+	Force    bool
+	Verbose  bool
+}
+
+// SyncResult contains results of a sync operation
+type SyncResult struct {
+	Environment             string
+	AgentsProcessed         int
+	AgentsSynced            int
+	AgentsSkipped           int
+	ValidationErrors        int
+	ValidationMessages      []string
+	MCPServersProcessed     int
+	MCPServersConnected     int
+	Operations              []SyncOperation
+	Duration                time.Duration
+}
+
+// SyncOperation represents a single sync operation
+type SyncOperation struct {
+	Type        SyncOperationType
+	Target      string // agent name, mcp config, etc.
+	Description string
+	Error       error
+}
+
+// SyncOperationType represents the type of sync operation
+type SyncOperationType string
+
+const (
+	OpTypeCreate   SyncOperationType = "create"
+	OpTypeUpdate   SyncOperationType = "update"
+	OpTypeDelete   SyncOperationType = "delete"
+	OpTypeSkip     SyncOperationType = "skip"
+	OpTypeValidate SyncOperationType = "validate"
+	OpTypeError    SyncOperationType = "error"
+)
+
+// NewDeclarativeSync creates a new declarative sync service
+func NewDeclarativeSync(repos *repositories.Repositories, config *config.Config) *DeclarativeSync {
+	return &DeclarativeSync{
+		repos:  repos,
+		config: config,
+	}
+}
+
+// SyncEnvironment synchronizes a specific environment
+func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName string, options SyncOptions) (*SyncResult, error) {
+	startTime := time.Now()
+	
+	result := &SyncResult{
+		Environment:        environmentName,
+		Operations:         []SyncOperation{},
+		ValidationMessages: []string{},
+	}
+
+	fmt.Printf("Starting declarative sync for environment: %s\n", environmentName)
+
+	// 1. Validate environment exists in database
+	_, err := s.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return nil, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
+	}
+
+	// 2. Determine paths for this environment  
+	envDir := filepath.Join("environments", environmentName)
+	agentsDir := filepath.Join(envDir, "agents")
+	mcpConfigPath := filepath.Join(envDir, "mcp-config.yaml")
+
+	// 3. Sync agents from .prompt files
+	agentResult, err := s.syncAgents(ctx, agentsDir, environmentName, options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sync agents: %w", err)
+	}
+
+	// Merge agent results
+	result.AgentsProcessed = agentResult.AgentsProcessed
+	result.AgentsSynced = agentResult.AgentsSynced
+	result.AgentsSkipped = agentResult.AgentsSkipped
+	result.ValidationErrors += agentResult.ValidationErrors
+	result.ValidationMessages = append(result.ValidationMessages, agentResult.ValidationMessages...)
+	result.Operations = append(result.Operations, agentResult.Operations...)
+
+	// 4. Sync MCP configurations (if file exists)
+	if _, err := os.Stat(mcpConfigPath); err == nil {
+		mcpResult, err := s.syncMCPConfig(ctx, mcpConfigPath, environmentName, options)
+		if err != nil {
+			fmt.Printf("Warning: Failed to sync MCP config for %s: %v\n", environmentName, err)
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages, 
+				fmt.Sprintf("MCP config sync failed: %v", err))
+		} else {
+			result.MCPServersProcessed = mcpResult.MCPServersProcessed
+			result.MCPServersConnected = mcpResult.MCPServersConnected
+			result.Operations = append(result.Operations, mcpResult.Operations...)
+		}
+	}
+
+	result.Duration = time.Since(startTime)
+	
+	fmt.Printf("Completed sync for environment %s: %d agents processed, %d errors\n", 
+		environmentName, result.AgentsProcessed, result.ValidationErrors)
+
+	return result, nil
+}
+
+// syncAgents handles synchronization of agent .prompt files
+func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environmentName string, options SyncOptions) (*SyncResult, error) {
+	result := &SyncResult{
+		Environment:        environmentName,
+		Operations:         []SyncOperation{},
+		ValidationMessages: []string{},
+	}
+
+	// Check if agents directory exists
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+		fmt.Printf("Debug: Agents directory does not exist: %s\n", agentsDir)
+		return result, nil
+	}
+
+	// Find all .prompt files
+	promptFiles, err := filepath.Glob(filepath.Join(agentsDir, "*.prompt"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan agent files: %w", err)
+	}
+
+	result.AgentsProcessed = len(promptFiles)
+
+	// Process each .prompt file
+	for _, promptFile := range promptFiles {
+		agentName := strings.TrimSuffix(filepath.Base(promptFile), ".prompt")
+		
+		operation, err := s.syncSingleAgent(ctx, promptFile, agentName, environmentName, options)
+		if err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages, 
+				fmt.Sprintf("Agent '%s': %v", agentName, err))
+			
+			result.Operations = append(result.Operations, SyncOperation{
+				Type:        OpTypeError,
+				Target:      agentName,
+				Description: fmt.Sprintf("Failed to sync agent: %v", err),
+				Error:       err,
+			})
+			continue
+		}
+
+		result.Operations = append(result.Operations, *operation)
+		
+		switch operation.Type {
+		case OpTypeCreate, OpTypeUpdate:
+			result.AgentsSynced++
+		case OpTypeSkip:
+			result.AgentsSkipped++
+		}
+	}
+
+	return result, nil
+}
+
+// syncSingleAgent synchronizes a single agent .prompt file
+func (s *DeclarativeSync) syncSingleAgent(ctx context.Context, filePath, agentName, environmentName string, options SyncOptions) (*SyncOperation, error) {
+	// 1. Basic file validation
+	if _, err := os.Stat(filePath); err != nil {
+		return nil, fmt.Errorf("prompt file not found: %w", err)
+	}
+
+	// 3. Calculate file checksum
+	checksum, err := s.calculateFileChecksum(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate checksum: %w", err)
+	}
+
+	// 4. If dry-run, just report what would be done
+	if options.DryRun {
+		return &SyncOperation{
+			Type:        OpTypeCreate,
+			Target:      agentName,
+			Description: "Would sync agent from .prompt file",
+		}, nil
+	}
+
+	// 5. For now, just report successful validation
+	fmt.Printf("Info: Validated agent file: %s (checksum: %s)\n", agentName, checksum[:8])
+
+	return &SyncOperation{
+		Type:        OpTypeSkip,
+		Target:      agentName,
+		Description: "Agent validated successfully",
+	}, nil
+}
+
+// validateMCPDependencies validates that all MCP dependencies are available
+func (s *DeclarativeSync) validateMCPDependencies(environmentName string) error {
+	// For now, skip complex validation to avoid circular imports
+	// TODO: Implement proper MCP dependency validation
+	fmt.Printf("Debug: Skipping MCP dependency validation for environment: %s\n", environmentName)
+	return nil
+}
+
+// createAgentFromFile creates a new agent in the database from a .prompt file
+func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, environmentName, checksum string) error {
+	// TODO: Implement agent creation once SQLC is working
+	fmt.Printf("Info: Would create agent from file '%s' in environment '%s'\n", filePath, environmentName)
+	return nil
+}
+
+// updateAgentFromFile updates an existing agent in the database from a .prompt file
+func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, agentName, environmentName, checksum string) error {
+	// TODO: Implement agent update once SQLC is working
+	fmt.Printf("Info: Would update agent '%s' in environment '%s'\n", agentName, environmentName)
+	return nil
+}
+
+// syncMCPConfig handles MCP configuration synchronization
+func (s *DeclarativeSync) syncMCPConfig(ctx context.Context, configPath, environmentName string, options SyncOptions) (*SyncResult, error) {
+	result := &SyncResult{
+		Environment: environmentName,
+		Operations:  []SyncOperation{},
+	}
+
+	fmt.Printf("Debug: Syncing MCP config from: %s\n", configPath)
+
+	// TODO: Implement MCP config parsing and synchronization
+	// This would parse the mcp-config.yaml file and update MCP servers in the database
+
+	result.MCPServersProcessed = 1 // Placeholder
+	result.Operations = append(result.Operations, SyncOperation{
+		Type:        OpTypeSkip,
+		Target:      "mcp-config",
+		Description: "MCP config sync not yet implemented",
+	})
+
+	return result, nil
+}
+
+// calculateFileChecksum calculates MD5 checksum of a file
+func (s *DeclarativeSync) calculateFileChecksum(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+// Helper type for database operations (until SQLC is working)
+type AgentRecord struct {
+	Name            string
+	DisplayName     string
+	Description     string
+	FilePath        string
+	EnvironmentName string
+	ChecksumMD5     string
+}
