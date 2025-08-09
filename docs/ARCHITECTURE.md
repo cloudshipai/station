@@ -31,7 +31,32 @@ Station uses Google's Genkit framework with its own MCP server:
 - **AI-Powered Tool Selection**: Analyzes requirements and assigns optimal tools
 - **Dynamic Execution Planning**: Adjusts iteration limits (1-25) based on task complexity
 - **Self-Management**: Station creates and manages agents using its own MCP interface
-- **Multi-Provider Support**: OpenAI, Anthropic, Google, Ollama with smart fallbacks
+- **Multi-Provider Support**: OpenAI (Station's fixed plugin), Google, Anthropic, Ollama with smart fallbacks
+
+#### AI Provider Architecture
+Station implements custom AI provider plugins to ensure reliable multi-turn conversations:
+
+**Station OpenAI Plugin** (`internal/genkit/`):
+- **Custom Implementation**: Complete reimplementation of GenKit Go's OpenAI plugin
+- **Critical Bug Fixes**: Resolves tool_call_id bugs that prevented multi-turn agent workflows
+- **Enhanced Debugging**: Comprehensive logging for tool call flow tracing
+- **API Compliance**: Proper handling of OpenAI's 40-character tool_call_id limits
+
+**Provider Selection Logic**:
+```go
+switch cfg.AIProvider {
+case "openai":   // Uses Station's fixed plugin
+case "gemini":   // Uses Google's official plugin  
+case "anthropic":// Uses OpenAI-compatible mode
+}
+```
+
+**Technical Fixes**:
+- **Tool Call ID Preservation**: Uses `ToolRequest.Ref` instead of `ToolRequest.Name`
+- **Parameter Order Correction**: Fixes OpenAI ToolMessage parameter swap
+- **Length Validation**: Ensures compliance with API character limits
+
+> 📋 **See**: [Station OpenAI Plugin Fix Documentation](/docs/bug-reports/STATION_OPENAI_PLUGIN_FIX.md) for complete technical details.
 
 ### 3. MCP Integration Layer
 Station acts as both MCP client and server:
