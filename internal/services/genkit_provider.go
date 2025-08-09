@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"station/internal/config"
+	stationGenkit "station/internal/genkit"
 	"station/internal/logging"
 
 	"github.com/firebase/genkit/go/genkit"
-	compat_oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
@@ -71,24 +71,20 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 	var genkitApp *genkit.Genkit
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
-		// Validate API key for OpenAI
-		if cfg.AIAPIKey == "" {
-			return fmt.Errorf("API key is required for OpenAI provider (set STN_AI_API_KEY or OPENAI_API_KEY)")
-		}
-		logging.Debug("Setting up OpenAI plugin with model: %s", cfg.AIModel)
+		logging.Debug("Setting up Station's fixed OpenAI plugin with model: %s", cfg.AIModel)
 		
-		openaiPlugin := &compat_oai.OpenAI{
+		// Use Station's fixed OpenAI plugin that handles tool_call_id properly
+		stationOpenAI := &stationGenkit.StationOpenAI{
 			APIKey: cfg.AIAPIKey,
 		}
 		
-		// Add base URL if specified for OpenAI-compatible providers
+		// Set base URL if provided for OpenAI-compatible APIs
 		if cfg.AIBaseURL != "" {
+			stationOpenAI.BaseURL = cfg.AIBaseURL
 			logging.Debug("Using custom OpenAI base URL: %s", cfg.AIBaseURL)
-			// TODO: Configure custom base URL for OpenAI-compatible providers
-			// The current GenKit OpenAI plugin doesn't expose client configuration
 		}
 		
-		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
+		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(stationOpenAI))
 		
 	case "googlegenai", "gemini":
 		logging.Debug("Setting up Google AI plugin with model: %s", cfg.AIModel)

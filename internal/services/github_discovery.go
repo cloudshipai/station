@@ -11,7 +11,7 @@ import (
 
 	"github.com/firebase/genkit/go/ai" 
 	"github.com/firebase/genkit/go/genkit"
-	oai "github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	stationGenkit "station/internal/genkit"
 )
 
 // MCPServerDiscovery represents the structured output from GitHub analysis
@@ -71,11 +71,11 @@ type MCPBlocksResponse struct {
 // GitHubDiscoveryService handles GitHub MCP server discovery
 type GitHubDiscoveryService struct {
 	genkit       *genkit.Genkit
-	openaiPlugin *oai.OpenAI
+	openaiPlugin *stationGenkit.StationOpenAI
 }
 
 // NewGitHubDiscoveryService creates a new GitHub discovery service
-func NewGitHubDiscoveryService(genkitApp *genkit.Genkit, openaiPlugin *oai.OpenAI) *GitHubDiscoveryService {
+func NewGitHubDiscoveryService(genkitApp *genkit.Genkit, openaiPlugin *stationGenkit.StationOpenAI) *GitHubDiscoveryService {
 	return &GitHubDiscoveryService{
 		genkit:       genkitApp,
 		openaiPlugin: openaiPlugin,

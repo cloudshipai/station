@@ -38,7 +38,6 @@ type AgentExecutionEngine struct {
 	agentService       AgentServiceInterface
 	genkitProvider     *GenKitProvider
 	mcpConnManager     *MCPConnectionManager
-	responseProcessor  *ResponseProcessor
 	telemetryManager   *TelemetryManager
 	activeMCPClients   []*mcp.GenkitMCPClient // Store active connections for cleanup after execution
 }
@@ -50,7 +49,6 @@ func NewAgentExecutionEngine(repos *repositories.Repositories, agentService Agen
 		agentService:      agentService,
 		genkitProvider:    NewGenKitProvider(),
 		mcpConnManager:    NewMCPConnectionManager(repos, nil),
-		responseProcessor: NewResponseProcessor(),
 		telemetryManager:  NewTelemetryManager(),
 	}
 }
@@ -187,32 +185,15 @@ Guidelines:
 	switch strings.ToLower(cfg.AIProvider) {
 	case "gemini", "googlegenai":
 		modelName = fmt.Sprintf("googleai/%s", cfg.AIModel)
+	case "openai":
+		modelName = fmt.Sprintf("station-openai/%s", cfg.AIModel)
 	default:
 		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)
 	}
 	logging.Info("DEBUG: Model name: %s", modelName)
 	
-	// Provider-aware tool call tracking middleware  
-	var capturedToolCalls []map[string]interface{}
-	// Define providers that need middleware for tool call extraction
-	// These providers use OpenAI-compatible format where GenKit's multi-turn orchestration hides tool calls
-	openAICompatibleProviders := []string{
-		"openai", "anthropic", "groq", "deepseek", "together",
-		"fireworks", "perplexity", "mistral", "cohere",
-		"huggingface", "replicate", "anyscale", "local",
-	}
-	
-	// Check if current provider needs middleware
-	// NOTE: Gemini and other native providers are excluded - they work beautifully with native GenKit extraction
-	needsMiddleware := false
-	for _, provider := range openAICompatibleProviders {
-		if strings.HasPrefix(strings.ToLower(cfg.AIProvider), provider) {
-			needsMiddleware = true
-			break
-		}
-	}
-	
-	logging.Info("DEBUG: Provider needs middleware: %v", needsMiddleware)
+	// Station's custom OpenAI plugin handles tool calling properly, no middleware needed
+	logging.Info("DEBUG: Using Station's custom plugin architecture - no middleware required")
 	
 	var generateOptions []ai.GenerateOption
 	generateOptions = append(generateOptions, ai.WithModelName(modelName))
@@ -220,41 +201,6 @@ Guidelines:
 	
 	generateOptions = append(generateOptions, ai.WithTools(tools...))
 	
-	// Add middleware for OpenAI-compatible providers to capture tool calls
-	if needsMiddleware {
-		toolTrackingMiddleware := func(next ai.ModelFunc) ai.ModelFunc {
-			return func(ctx context.Context, req *ai.ModelRequest, cb ai.ModelStreamCallback) (*ai.ModelResponse, error) {
-				logging.Info("DEBUG: Middleware intercepting model call")
-				resp, err := next(ctx, req, cb)
-				if err != nil {
-					logging.Info("DEBUG: Middleware - model call failed: %v", err)
-					return resp, err
-				}
-				
-				// Capture tool calls from response
-				if resp != nil && resp.Message != nil {
-					logging.Info("DEBUG: Middleware checking response for tool calls")
-					for _, part := range resp.Message.Content {
-						if part.IsToolRequest() {
-							toolReq := part.ToolRequest
-							logging.Info("DEBUG: Middleware captured tool call: %s", toolReq.Name)
-							capturedToolCalls = append(capturedToolCalls, map[string]interface{}{
-								"tool_name": toolReq.Name,
-								"input":     toolReq.Input,
-								"step":      len(capturedToolCalls) + 1,
-								"type":      "tool_call",
-							})
-						}
-					}
-					logging.Info("DEBUG: Middleware captured %d tool calls total", len(capturedToolCalls))
-				}
-				
-				return resp, err
-			}
-		}
-		generateOptions = append(generateOptions, ai.WithMiddleware(toolTrackingMiddleware))
-		logging.Info("DEBUG: Added tool tracking middleware for provider: %s", cfg.AIProvider)
-	}
 	
 	response, err := genkit.Generate(ctx, genkitApp, generateOptions...)
 	
@@ -276,48 +222,106 @@ Guidelines:
 	responseText := response.Text()
 	logging.Info("AI Response Text: %s", responseText)
 	
-	// Debug: Detailed tool request analysis
+	// Debug: Detailed GenKit Response Object Analysis
+	logging.Info("DEBUG: === GenKit Response Object Details ===")
+	logging.Info("DEBUG: Response Type: %T", response)
+	logging.Info("DEBUG: Response Text Length: %d characters", len(responseText))
+	
+	// Examine response request details
+	if response.Request != nil {
+		logging.Info("DEBUG: Request Messages Count: %d", len(response.Request.Messages))
+		for i, msg := range response.Request.Messages {
+			logging.Info("DEBUG: Message %d - Role: %s, Content Parts: %d", i, msg.Role, len(msg.Content))
+		}
+	}
+	
+	// Examine response message details
+	if response.Message != nil {
+		logging.Info("DEBUG: Response Message Role: %s", response.Message.Role)
+		logging.Info("DEBUG: Response Message Content Parts: %d", len(response.Message.Content))
+		for i, part := range response.Message.Content {
+			if part.IsText() {
+				logging.Info("DEBUG: Content Part %d (Text): %.200s...", i, part.Text)
+			} else if part.IsToolRequest() {
+				logging.Info("DEBUG: Content Part %d (Tool Request): Name=%s, Ref=%s", 
+					i, part.ToolRequest.Name, part.ToolRequest.Ref)
+			} else if part.IsToolResponse() {
+				logging.Info("DEBUG: Content Part %d (Tool Response): Name=%s, Ref=%s", 
+					i, part.ToolResponse.Name, part.ToolResponse.Ref)
+			}
+		}
+	}
+	
+	// Usage information
+	if response.Usage != nil {
+		logging.Info("DEBUG: Token Usage - Input: %d, Output: %d, Total: %d", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, response.Usage.TotalTokens)
+	}
+	
+	// Tool request analysis
 	toolRequests := response.ToolRequests()
 	logging.Info("DEBUG: Tool Requests in Response: %d", len(toolRequests))
 	for i, req := range toolRequests {
-		logging.Info("DEBUG: Tool Request %d: Name=%s, Input=%v", i+1, req.Name, req.Input)
+		logging.Info("DEBUG: Tool Request %d: Name=%s, Ref=%s, Input=%v", i+1, req.Name, req.Ref, req.Input)
 	}
 	
 	// Debug: Check if response has any tool-related content
 	logging.Info("DEBUG: Response length: %d characters", len(responseText))
 
-	// Extract tool calls using provider-aware approach
-	var toolCalls interface{}
+	// Extract tool calls directly from GenKit response object (no middleware)
+	logging.Info("DEBUG: Extracting tool calls directly from GenKit response object")
+	var toolCalls []interface{}
 	var steps []interface{}
 	
-	if needsMiddleware && len(capturedToolCalls) > 0 {
-		// Use middleware-captured tool calls for OpenAI-compatible providers
-		logging.Info("DEBUG: Using middleware-captured tool calls (%d captured)", len(capturedToolCalls))
-		var toolCallsInterface []interface{}
-		for _, toolCall := range capturedToolCalls {
-			toolCallsInterface = append(toolCallsInterface, toolCall)
+	// Direct extraction from response.ToolRequests() (reuse existing variable)
+	// toolRequests already declared above, so reuse it
+	for i, toolReq := range toolRequests {
+		toolCall := map[string]interface{}{
+			"step":           i + 1,
+			"type":           "tool_call",
+			"tool_name":      toolReq.Name,
+			"tool_input":     toolReq.Input,
+			"model_name":     cfg.AIModel,
+			"tool_call_id":   toolReq.Ref, // Station's fixed plugin preserves proper IDs
 		}
-		toolCalls = toolCallsInterface
-		
-		// Build execution steps from captured tool calls
-		steps = aee.responseProcessor.BuildExecutionStepsFromCapturedCalls(capturedToolCalls, response, agent, cfg.AIModel)
-	} else {
-		// Use native GenKit tool call extraction for Gemini and providers without middleware
-		logging.Info("DEBUG: Using native GenKit tool call extraction")
-		toolCalls = aee.responseProcessor.ExtractToolCallsFromResponse(response, cfg.AIModel)
-		steps = aee.responseProcessor.BuildExecutionStepsFromResponse(response, agent, cfg.AIModel, len(tools))
+		toolCalls = append(toolCalls, toolCall)
+	}
+	
+	// Build simple execution steps from response data
+	if len(toolCalls) > 0 {
+		step := map[string]interface{}{
+			"step":              1,
+			"type":              "tool_execution",
+			"agent_id":          agent.ID,
+			"agent_name":        agent.Name,
+			"model_name":        cfg.AIModel,
+			"tool_calls_count":  len(toolCalls),
+			"tools_used":        len(toolCalls),
+		}
+		steps = append(steps, step)
+	}
+	
+	// Add final response step
+	if responseText != "" {
+		finalStep := map[string]interface{}{
+			"step":              len(steps) + 1,
+			"type":              "final_response",
+			"agent_id":          agent.ID,
+			"agent_name":        agent.Name,
+			"model_name":        cfg.AIModel,
+			"content_length":    len(responseText),
+		}
+		steps = append(steps, finalStep)
 	}
 
 	// Convert to database-compatible types
 	toolCallsJSON := &models.JSONArray{}
-	if toolCalls != nil {
-		if toolCallsSlice, ok := toolCalls.([]interface{}); ok {
-			*toolCallsJSON = models.JSONArray(toolCallsSlice)
-		}
+	if len(toolCalls) > 0 {
+		*toolCallsJSON = models.JSONArray(toolCalls)
 	}
 	
 	executionStepsJSON := &models.JSONArray{}
-	if steps != nil {
+	if len(steps) > 0 {
 		*executionStepsJSON = models.JSONArray(steps)
 	}
 	
@@ -331,12 +335,7 @@ Guidelines:
 		ModelName:      cfg.AIModel,
 		StepsUsed:      len(steps),
 		StepsTaken:     int64(len(steps)),
-		ToolsUsed:      func() int {
-			if toolCallsSlice, ok := toolCalls.([]interface{}); ok {
-				return len(toolCallsSlice)
-			}
-			return 0
-		}(),
+		ToolsUsed:      len(toolCalls),
 	}
 
 	// Extract token usage if available
@@ -346,6 +345,30 @@ Guidelines:
 			"output_tokens": response.Usage.OutputTokens,
 			"total_tokens":  response.Usage.TotalTokens,
 		}
+	}
+
+	// DEBUG: Log complete AgentExecutionResult data  
+	logging.Info("DEBUG: === AgentExecutionResult Complete Data ===")
+	logging.Info("DEBUG: Success: %v", result.Success)
+	logging.Info("DEBUG: Response length: %d chars", len(result.Response))
+	logging.Info("DEBUG: Duration: %v", result.Duration)
+	logging.Info("DEBUG: ModelName: %s", result.ModelName)
+	logging.Info("DEBUG: StepsUsed: %d", result.StepsUsed)
+	logging.Info("DEBUG: ToolsUsed: %d", result.ToolsUsed)
+	if result.TokenUsage != nil {
+		logging.Info("DEBUG: TokenUsage: %+v", result.TokenUsage)
+	} else {
+		logging.Info("DEBUG: TokenUsage: nil")
+	}
+	if result.ToolCalls != nil {
+		logging.Info("DEBUG: ToolCalls: %d items", len(*result.ToolCalls))
+	} else {
+		logging.Info("DEBUG: ToolCalls: nil")
+	}
+	if result.ExecutionSteps != nil {
+		logging.Info("DEBUG: ExecutionSteps: %d items", len(*result.ExecutionSteps))
+	} else {
+		logging.Info("DEBUG: ExecutionSteps: nil")
 	}
 
 	logging.Info("Agent execution completed successfully in %v (steps: %d, tools: %d)", 

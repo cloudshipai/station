@@ -118,17 +118,24 @@ type MCPToolWithDetails struct {
 }
 
 type AgentRun struct {
-	ID             int64      `json:"id" db:"id"`
-	AgentID        int64      `json:"agent_id" db:"agent_id"`
-	UserID         int64      `json:"user_id" db:"user_id"`
-	Task           string     `json:"task" db:"task"`
-	FinalResponse  string     `json:"final_response" db:"final_response"`
-	StepsTaken     int64      `json:"steps_taken" db:"steps_taken"`
-	ToolCalls      *JSONArray `json:"tool_calls" db:"tool_calls"`
-	ExecutionSteps *JSONArray `json:"execution_steps" db:"execution_steps"`
-	Status         string     `json:"status" db:"status"`
-	StartedAt      time.Time  `json:"started_at" db:"started_at"`
-	CompletedAt    *time.Time `json:"completed_at" db:"completed_at"`
+	ID              int64      `json:"id" db:"id"`
+	AgentID         int64      `json:"agent_id" db:"agent_id"`
+	UserID          int64      `json:"user_id" db:"user_id"`
+	Task            string     `json:"task" db:"task"`
+	FinalResponse   string     `json:"final_response" db:"final_response"`
+	StepsTaken      int64      `json:"steps_taken" db:"steps_taken"`
+	ToolCalls       *JSONArray `json:"tool_calls" db:"tool_calls"`
+	ExecutionSteps  *JSONArray `json:"execution_steps" db:"execution_steps"`
+	Status          string     `json:"status" db:"status"`
+	StartedAt       time.Time  `json:"started_at" db:"started_at"`
+	CompletedAt     *time.Time `json:"completed_at" db:"completed_at"`
+	// Response object metadata from Station's OpenAI plugin
+	InputTokens     *int64     `json:"input_tokens,omitempty" db:"input_tokens"`
+	OutputTokens    *int64     `json:"output_tokens,omitempty" db:"output_tokens"`
+	TotalTokens     *int64     `json:"total_tokens,omitempty" db:"total_tokens"`
+	DurationSeconds *float64   `json:"duration_seconds,omitempty" db:"duration_seconds"`
+	ModelName       *string    `json:"model_name,omitempty" db:"model_name"`
+	ToolsUsed       *int64     `json:"tools_used,omitempty" db:"tools_used"`
 }
 
 type AgentRunWithDetails struct {
