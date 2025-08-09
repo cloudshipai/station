@@ -11,6 +11,7 @@ import (
 	"station/internal/telemetry"
 	"station/internal/theme"
 	"station/internal/version"
+	"station/cmd/main/handlers/agent"
 	"station/cmd/main/handlers/file_config"
 	"time"
 

@@ -1,0 +1,141 @@
+---
+model: googleai/gemini-1.5-flash
+input:
+  schema:
+    task: string
+    context: object
+    parameters: object
+output:
+  format: json
+  schema:
+    result:
+      type: object
+      properties:
+        success: { type: boolean }
+        summary: { type: string }
+        custom_data: { type: object }
+tools:
+  - system_monitor
+metadata:
+  agent_id: 1001
+  name: DemoAgentWithCustomData
+  description: Demonstration agent with rich custom frontmatter
+  max_steps: 3
+  environment: demo
+  version: "1.0"
+  schedule_enabled: false
+
+# Rich custom frontmatter demonstrating flexible data structures
+team_info:
+  lead: "Alice Johnson"
+  members: ["Bob Smith", "Carol Davis", "David Wilson"]
+  contact: "team-alpha@company.com"
+  slack_channel: "#team-alpha"
+
+deployment_config:
+  cloud_provider: "AWS"
+  region: "us-west-2"
+  instance_type: "t3.medium"
+  scaling:
+    min_instances: 2
+    max_instances: 8
+    target_cpu: 70
+  cost_allocation:
+    department: "Engineering"
+    project: "System Monitoring"
+    budget_code: "ENG-2024-Q4"
+
+business_rules:
+  sla_target: "99.9%"
+  max_response_time: 5000
+  escalation_matrix:
+    level_1: "team-alpha@company.com"
+    level_2: "engineering-leads@company.com" 
+    level_3: "cto@company.com"
+  compliance:
+    framework: "SOC2"
+    data_retention_days: 365
+    audit_trail: true
+
+execution_profile:
+  timeout_seconds: 120
+  retry_policy:
+    enabled: true
+    max_attempts: 3
+    backoff_strategy: "exponential"
+    base_delay_ms: 500
+  resource_limits:
+    memory_mb: 256
+    cpu_millicores: 500
+  monitoring:
+    enable_tracing: true
+    log_level: "INFO"
+    custom_metrics:
+      - "execution_duration_ms"
+      - "memory_usage_mb"
+      - "api_calls_count"
+
+integration_endpoints:
+  metrics_collector: "https://metrics.company.com/api/v1/custom"
+  notification_service: "https://notifications.company.com/webhooks/alerts"
+  audit_logger: "https://audit.company.com/api/v2/events"
+  status_dashboard: "https://status.company.com/api/incidents"
+
+feature_flags:
+  enable_advanced_analytics: true
+  use_ml_predictions: false
+  send_detailed_notifications: true
+  cache_intermediate_results: true
+---
+
+{{#system}}
+You are {{metadata.name}} ({{metadata.description}}).
+
+Team: {{team_info.lead}} leads the {{team_info.members}} team
+Contact: {{team_info.contact}} | Slack: {{team_info.slack_channel}}
+
+Deployment: {{deployment_config.cloud_provider}} {{deployment_config.instance_type}} in {{deployment_config.region}}
+Cost Center: {{deployment_config.cost_allocation.department}} - {{deployment_config.cost_allocation.project}}
+Budget: {{deployment_config.cost_allocation.budget_code}}
+
+SLA Target: {{business_rules.sla_target}}
+Max Response Time: {{business_rules.max_response_time}}ms
+Compliance: {{business_rules.compliance.framework}} ({{business_rules.compliance.data_retention_days}} day retention)
+
+Resource Limits: {{execution_profile.resource_limits.memory_mb}}MB RAM, {{execution_profile.resource_limits.cpu_millicores}}m CPU
+Timeout: {{execution_profile.timeout_seconds}} seconds
+
+{{#if feature_flags.enable_advanced_analytics}}
+🔬 Advanced analytics enabled - provide detailed insights
+{{/if}}
+
+{{#if feature_flags.send_detailed_notifications}}  
+📢 Detailed notifications enabled - include comprehensive status info
+{{/if}}
+
+{{#if business_rules.compliance.audit_trail}}
+📋 Audit trail required - log all decisions and actions
+{{/if}}
+{{/system}}
+
+**Task**: {{task}}
+
+{{#if context}}
+**Context**: {{toJson context}}
+{{/if}}
+
+{{#if parameters}}
+**Parameters**: {{toJson parameters}}  
+{{/if}}
+
+**Available Tools**: {{#each tools}}{{.}} {{/each}}
+
+Please execute this task according to our {{business_rules.sla_target}} SLA target.
+Team contact for escalation: {{team_info.contact}}
+
+**Response Requirements**:
+- Include success status
+- Provide executive summary  
+- Add custom metadata with team info and deployment details
+- Ensure compliance with {{business_rules.compliance.framework}}
+- Keep response under {{business_rules.max_response_time}}ms processing time
