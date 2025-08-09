@@ -201,6 +201,8 @@ Guidelines:
 	
 	generateOptions = append(generateOptions, ai.WithTools(tools...))
 	
+	// Set max turns to handle complex multi-step analysis (default is 5, increase to 25)
+	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
 	
 	response, err := genkit.Generate(ctx, genkitApp, generateOptions...)
 	

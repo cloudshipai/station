@@ -2,10 +2,14 @@ package mcp
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"station/internal/db"
 	"station/internal/db/repositories"
 	mcpservice "station/internal/mcp"
+	"station/pkg/dotprompt"
 )
 
 // truncateString truncates a string to maxLen characters
@@ -60,12 +64,22 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 		return fmt.Errorf("sync failed: %w", err)
 	}
 	
+	// Phase 2: Sync .prompt files (agents depend on MCP configs)
+	agentsSynced, err := h.syncAgentPromptFiles(repos, environment, envID, dryRun, force)
+	if err != nil {
+		return fmt.Errorf("agent sync failed: %w", err)
+	}
+	
 	// Display results
 	if len(result.SyncedConfigs) > 0 {
 		fmt.Printf("\n📥 Configs to sync:\n")
 		for _, name := range result.SyncedConfigs {
 			fmt.Printf("  • %s\n", styles.Success.Render(name))
 		}
+	}
+	
+	if agentsSynced > 0 {
+		fmt.Printf("\n🤖 Agents synced: %d\n", agentsSynced)
 	}
 
 	if len(result.RemovedConfigs) > 0 {
@@ -237,5 +251,177 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 
 	fmt.Printf("\n💡 Run 'stn mcp sync <environment>' to update configurations\n")
 
+	return nil
+}
+
+// syncAgentPromptFiles syncs .prompt files to the database
+func (h *MCPHandler) syncAgentPromptFiles(repos *repositories.Repositories, environment string, envID int64, dryRun, force bool) (int, error) {
+	// Get user home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	
+	// Construct agents directory path
+	agentsDir := fmt.Sprintf("%s/.config/station/environments/%s/agents", homeDir, environment)
+	
+	// Check if agents directory exists
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+		// No agents directory, nothing to sync
+		return 0, nil
+	}
+	
+	// Scan for .prompt files
+	promptFiles, err := filepath.Glob(filepath.Join(agentsDir, "*.prompt"))
+	if err != nil {
+		return 0, fmt.Errorf("failed to scan for .prompt files: %w", err)
+	}
+	
+	if len(promptFiles) == 0 {
+		return 0, nil
+	}
+	
+	fmt.Printf("🤖 Found %d .prompt files to sync...\n", len(promptFiles))
+	
+	var syncedCount int
+	
+	for _, promptFile := range promptFiles {
+		// Extract agent name from filename
+		filename := filepath.Base(promptFile)
+		agentName := strings.TrimSuffix(filename, ".prompt")
+		
+		if dryRun {
+			fmt.Printf("  [DRY RUN] Would sync agent: %s\n", agentName)
+			syncedCount++
+			continue
+		}
+		
+		// Parse the .prompt file
+		extractor, err := dotprompt.NewRuntimeExtraction(promptFile)
+		if err != nil {
+			fmt.Printf("  ❌ Failed to parse %s: %v\n", agentName, err)
+			continue
+		}
+		
+		config := extractor.GetConfig()
+		
+		// Validate agent name matches file
+		if config.Metadata.Name != agentName {
+			fmt.Printf("  ❌ Agent name mismatch in %s: expected '%s', got '%s'\n", 
+				filename, agentName, config.Metadata.Name)
+			continue
+		}
+		
+		// Validate tool dependencies exist in MCP configs
+		if err := h.validateAgentToolDependencies(repos, envID, &config, agentName); err != nil {
+			fmt.Printf("  ❌ Validation failed for %s: %v\n", agentName, err)
+			continue
+		}
+		
+		// Sync agent to database - update prompt and tool assignments
+		if err := h.syncAgentToDatabase(repos, envID, &config, agentName, extractor.GetTemplate()); err != nil {
+			fmt.Printf("  ❌ Failed to sync %s to database: %v\n", agentName, err)
+			continue
+		}
+		
+		// Sync successful
+		fmt.Printf("  ✅ Synced agent: %s\n", agentName)
+		syncedCount++
+	}
+	
+	return syncedCount, nil
+}
+
+// validateAgentToolDependencies validates that all tools assigned to an agent exist in MCP configs
+func (h *MCPHandler) validateAgentToolDependencies(repos *repositories.Repositories, envID int64, config *dotprompt.DotpromptConfig, agentName string) error {
+	if len(config.Tools) == 0 {
+		return nil // No tools to validate
+	}
+	
+	// Get all available MCP tools for this environment
+	mcpTools, err := repos.MCPTools.GetByEnvironmentID(envID)
+	if err != nil {
+		return fmt.Errorf("failed to get MCP tools: %w", err)
+	}
+	
+	// Create a map of available tool names for quick lookup
+	availableTools := make(map[string]bool)
+	for _, tool := range mcpTools {
+		availableTools[tool.Name] = true
+	}
+	
+	// Check each agent tool against available tools
+	var missingTools []string
+	for _, toolName := range config.Tools {
+		if !availableTools[toolName] {
+			missingTools = append(missingTools, toolName)
+		}
+	}
+	
+	if len(missingTools) > 0 {
+		return fmt.Errorf("agent '%s' references non-existent tools: %v", agentName, missingTools)
+	}
+	
+	return nil
+}
+
+// syncAgentToDatabase updates the agent in the database with .prompt file content and tool assignments
+func (h *MCPHandler) syncAgentToDatabase(repos *repositories.Repositories, envID int64, config *dotprompt.DotpromptConfig, agentName, promptTemplate string) error {
+	// Find the agent by name in the environment
+	agent, err := repos.Agents.GetByName(agentName)
+	if err != nil {
+		return fmt.Errorf("agent '%s' not found: %w", agentName, err)
+	}
+	
+	// Verify agent is in the correct environment
+	if agent.EnvironmentID != envID {
+		return fmt.Errorf("agent '%s' is in environment %d, expected %d", agentName, agent.EnvironmentID, envID)
+	}
+	
+	// Update agent with .prompt content
+	maxSteps := int64(5) // Default
+	// Try to extract max_steps from custom fields (station.execution_metadata.max_steps)
+	if stationData, ok := config.CustomFields["station"].(map[interface{}]interface{}); ok {
+		if execData, ok := stationData["execution_metadata"].(map[interface{}]interface{}); ok {
+			if steps, ok := execData["max_steps"].(int); ok {
+				maxSteps = int64(steps)
+			}
+		}
+	}
+	
+	err = repos.Agents.Update(
+		agent.ID,
+		config.Metadata.Name,
+		config.Metadata.Description,
+		promptTemplate, // Use the full template content
+		maxSteps,
+		nil, // cron schedule - preserve existing
+		agent.ScheduleEnabled,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update agent: %w", err)
+	}
+	
+	// Clear existing tool assignments
+	err = repos.AgentTools.Clear(agent.ID)
+	if err != nil {
+		return fmt.Errorf("failed to clear existing tool assignments: %w", err)
+	}
+	
+	// Assign new tools from .prompt file
+	for _, toolName := range config.Tools {
+		// Find tool by name in this environment
+		tool, err := repos.MCPTools.FindByNameInEnvironment(envID, toolName)
+		if err != nil {
+			return fmt.Errorf("tool '%s' not found in environment: %w", toolName, err)
+		}
+		
+		// Add tool assignment
+		_, err = repos.AgentTools.AddAgentTool(agent.ID, tool.ID)
+		if err != nil {
+			return fmt.Errorf("failed to assign tool '%s': %w", toolName, err)
+		}
+	}
+	
 	return nil
 }

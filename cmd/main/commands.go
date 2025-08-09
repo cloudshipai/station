@@ -294,6 +294,19 @@ Examples:
 		Args:  cobra.ExactArgs(2),
 		RunE:  runSettingsSet,
 	}
+
+	// Top-level sync command for all configurations
+	syncCmd = &cobra.Command{
+		Use:   "sync [environment]",
+		Short: "Sync all file-based configurations",
+		Long:  `Declaratively synchronize all file-based configurations to the database.
+This includes agents (.prompt files), MCP configurations, and environment settings.`,
+		Example: `  stn sync                    # Sync all environments
+  stn sync production         # Sync specific environment  
+  stn sync --dry-run          # Show what would change
+  stn sync --validate         # Validate configurations only`,
+		RunE: runSync,
+	}
 )
 
 func runServe(cmd *cobra.Command, args []string) error {
@@ -639,4 +652,16 @@ See \` + "`" + `docs/GITOPS-DEPLOYMENT.md\` + "`" + ` for the complete GitOps de
 	fmt.Printf("   📁 Created GitOps directory structure at %s\n", gitopsDir)
 	
 	return nil
+}
+
+// runSync handles the top-level sync command
+func runSync(cmd *cobra.Command, args []string) error {
+	// If no environment specified, default to "default"
+	if len(args) == 0 {
+		args = []string{"default"}
+	}
+	
+	// Use the existing MCP sync functionality but make it more general
+	// For now, delegate to runMCPSync but we can expand this later
+	return runMCPSync(cmd, args)
 }
