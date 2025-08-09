@@ -93,27 +93,28 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 	// Store clients for cleanup
 	aee.activeMCPClients = clients
 
-	// Filter to only include tools assigned to this agent and ensure clean tool names
+	// TESTING: Use all available tools instead of filtering by assigned tools
+	// This allows agents to access all environment tools for GitHub MCP functionality
+	// Deduplicate tools to prevent GenKit errors
 	var tools []ai.ToolRef
-	for _, assignedTool := range assignedTools {
-		for _, mcpTool := range allTools {
-			// Match by tool name - try multiple methods to get tool name  
-			var toolName string
-			if named, ok := mcpTool.(interface{ Name() string }); ok {
-				toolName = named.Name()
-			} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
-				toolName = stringer.String()
-			} else {
-				// Fallback: use the type name
-				toolName = fmt.Sprintf("%T", mcpTool)
-				logging.Debug("Tool has no Name() method, using type name: %s", toolName)
-			}
-			
-			if toolName == assignedTool.ToolName {
-				logging.Debug("Including assigned tool: %s", toolName)
-				tools = append(tools, mcpTool) // Tool implements ToolRef interface
-				break
-			}
+	toolNames := make(map[string]bool)
+	for _, mcpTool := range allTools {
+		var toolName string
+		if named, ok := mcpTool.(interface{ Name() string }); ok {
+			toolName = named.Name()
+		} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
+			toolName = stringer.String()
+		} else {
+			toolName = fmt.Sprintf("%T", mcpTool)
+		}
+		
+		// Only add if not already seen
+		if !toolNames[toolName] {
+			toolNames[toolName] = true
+			logging.Debug("Including environment tool: %s", toolName)
+			tools = append(tools, mcpTool)
+		} else {
+			logging.Debug("Skipping duplicate tool: %s", toolName)
 		}
 	}
 

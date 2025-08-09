@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"station/internal/db/repositories"
@@ -181,6 +182,8 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	serverTools, err := mcpClient.GetActiveTools(ctx, mcm.genkitApp)
 	
 	// NOTE: Connection stays alive for tool execution during Generate() calls
+	// Start monitoring this connection for health/lifecycle issues
+	go mcm.monitorConnection(mcpClient, serverName, ctx)
 	
 	if err != nil {
 		logging.Debug("Failed to get tools from %s: %v", serverName, err)
@@ -189,6 +192,78 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 
 	logging.Debug("Successfully discovered %d tools from server: %s", len(serverTools), serverName)
 	return serverTools, mcpClient
+}
+
+// monitorConnection monitors an MCP connection for health issues and subprocess lifecycle
+func (mcm *MCPConnectionManager) monitorConnection(client *mcp.GenkitMCPClient, serverName string, ctx context.Context) {
+	logging.Debug("Starting health monitoring for MCP connection: %s", serverName)
+	
+	// Use a ticker to periodically check connection health
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			if !mcm.isConnectionHealthy(client, serverName, ctx) {
+				logging.Info("WARNING: MCP connection to %s appears unhealthy", serverName)
+				// For now, just log the issue. In the future, we could implement reconnection
+				// but that would require more complex state management
+			}
+			
+		case <-ctx.Done():
+			logging.Debug("Stopping health monitoring for %s (context cancelled)", serverName)
+			return
+		}
+	}
+}
+
+// isConnectionHealthy performs a lightweight health check on an MCP connection
+func (mcm *MCPConnectionManager) isConnectionHealthy(client *mcp.GenkitMCPClient, serverName string, ctx context.Context) bool {
+	// Create a short timeout context for the health check
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	
+	// Try to get tools as a health check - if this fails, connection is likely dead
+	_, err := client.GetActiveTools(healthCtx, mcm.genkitApp)
+	if err != nil {
+		// Check if this is a connection-related error
+		if isConnectionError(err) {
+			logging.Debug("Health check failed for %s: %v", serverName, err)
+			return false
+		}
+		// Other errors might not indicate connection issues
+		logging.Debug("Health check got non-connection error for %s: %v", serverName, err)
+	}
+	
+	return true
+}
+
+// isConnectionError checks if an error indicates a connection/transport problem
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errorStr := err.Error()
+	connectionErrors := []string{
+		"file already closed",
+		"broken pipe", 
+		"connection refused",
+		"transport error",
+		"no such file or directory",
+		"connection reset",
+		"deadline exceeded",
+		"context deadline exceeded",
+	}
+	
+	for _, connErr := range connectionErrors {
+		if fmt.Sprintf("%s", errorStr) != "" && strings.Contains(strings.ToLower(errorStr), connErr) {
+			return true
+		}
+	}
+	
+	return false
 }
 
 // CleanupConnections closes all provided MCP connections
