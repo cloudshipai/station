@@ -623,16 +623,40 @@ func downloadBundle(url string) (string, error) {
 	}
 	defer tempFile.Close()
 
-	// Download the bundle
-	resp, err := http.Get(url)
+	// Try downloading without authentication first
+	resp, err := downloadWithAuth(url, "")
 	if err != nil {
 		os.Remove(tempFile.Name())
 		return "", fmt.Errorf("failed to download from %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
+	// If we get a 404 and this is a GitHub URL, try with authentication
+	if resp.StatusCode == http.StatusNotFound && strings.Contains(url, "github.com") {
+		resp.Body.Close()
+		
+		// Look for GitHub token
+		token := os.Getenv("GITHUB_TOKEN")
+		if token == "" {
+			token = os.Getenv("GH_TOKEN") // Alternative env var used by gh CLI
+		}
+		
+		if token != "" {
+			fmt.Printf("   🔐 Trying with GitHub authentication for private repo...\n")
+			resp, err = downloadWithAuth(url, token)
+			if err != nil {
+				os.Remove(tempFile.Name())
+				return "", fmt.Errorf("failed to download from %s with authentication: %w", url, err)
+			}
+			defer resp.Body.Close()
+		}
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		os.Remove(tempFile.Name())
+		if resp.StatusCode == http.StatusNotFound && strings.Contains(url, "github.com") {
+			return "", fmt.Errorf("download failed with status %d: %s (hint: for private repos, set GITHUB_TOKEN environment variable)", resp.StatusCode, resp.Status)
+		}
 		return "", fmt.Errorf("download failed with status %d: %s", resp.StatusCode, resp.Status)
 	}
 
@@ -644,4 +668,20 @@ func downloadBundle(url string) (string, error) {
 	}
 
 	return tempFile.Name(), nil
+}
+
+// downloadWithAuth downloads from URL with optional GitHub token authentication
+func downloadWithAuth(url, token string) (*http.Response, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Add GitHub token if provided
+	if token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+	
+	return client.Do(req)
 }
