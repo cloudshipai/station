@@ -4,6 +4,8 @@
 
 **A secure, self-hosted platform for building and deploying intelligent sub-agents.**
 
+🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
+
 > Lightweight runtime for deployable sub-agents that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
 
 Station is purpose-built for **deployable sub-agents** - the intelligent automation you need for infrastructure monitoring, deployment pipelines, security scanning, and day-to-day tasks that require secure access to internal systems.
@@ -68,7 +70,7 @@ stn load examples/mcps/database-postgres.json
 stn load examples/mcps/slack.json
 
 # Sync configurations to keep tools up-to-date
-stn mcp sync production
+stn sync production
 ```
 
 ### 3. Create Deployable Sub-Agents
@@ -90,8 +92,8 @@ stn agent run 1 "Check database connection pool and alert if over 80% capacity"
 ### 4. Deploy with Version Control
 ```bash
 # Export agents as versioned templates
-stn agent bundle export 1 ./ops-agents/db-monitor
-stn agent bundle export 2 ./ops-agents/deploy-pipeline
+stn agent export 1 ./ops-agents/db-monitor
+stn agent export 2 ./ops-agents/deploy-pipeline
 
 # Version control like infrastructure code
 git add ops-agents/
@@ -99,9 +101,8 @@ git commit -m "Add production database monitoring agent"
 git push origin main
 
 # Deploy to production with encrypted secrets
-stn agent bundle install ./ops-agents/db-monitor \
-  --vars-file secrets/production.enc \
-  --env production
+stn template install ./ops-agents/db-monitor production \
+  --vars-file secrets/production.enc
 ```
 
 ## Deployable Sub-Agent Use Cases
@@ -155,15 +156,15 @@ Station includes **20+ production-ready tools for sub-agents**:
 ```bash
 # Load toolchains for sub-agents (two-step process)
 stn load examples/mcps/infrastructure-suite.json
-stn mcp sync production  # Keep configurations in sync
+stn sync production  # Keep configurations in sync
 
 # Load monitoring and alerting tools
 stn load examples/mcps/monitoring-stack.json  
-stn mcp sync production
+stn sync production
 
 # Load security and compliance tools
 stn load examples/mcps/security-tools.json
-stn mcp sync production
+stn sync production
 ```
 
 ## Agent Templates for Teams
@@ -185,14 +186,14 @@ ops-agents/database-monitor/
 ### **Team Workflow**
 ```bash
 # Export working sub-agents
-stn agent bundle export 3 ./team-agents/db-monitor --analyze-vars
+stn agent export 3 ./team-agents/db-monitor --analyze-vars
 
 # Share across team with version control
 git add team-agents/ && git commit -m "Add database monitoring agent v1.0"
 
 # Team members deploy with their environment variables
-stn agent bundle install ./team-agents/db-monitor \
-  --vars-file ~/.station/secrets/staging.enc --env staging
+stn template install ./team-agents/db-monitor staging \
+  --vars-file ~/.station/secrets/staging.enc
 
 # Invoke and trigger remote sub-agents via API or MCP
 curl -X POST https://station.company.com/api/v1/agents/3/execute \
