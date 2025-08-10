@@ -1,4 +1,6 @@
 {
+  "name": "Test MCP Configuration",
+  "description": "A simple test configuration for auto-discovery",
   "mcpServers": {
     "filesystem": {
       "command": "npx",

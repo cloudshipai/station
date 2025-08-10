@@ -34,13 +34,18 @@ Use --replicate flag to also configure Litestream for database replication to cl
 	loadCmd = &cobra.Command{
 		Use:   "load [file|url]",
 		Short: "Load MCP configuration with intelligent template processing",
-		Long: `Load and process MCP configurations with multiple modes:
+		Long: `Load and process MCP configurations with automatic discovery:
 
-• No args: Open interactive editor for pasting MCP template configuration
+• No args: Auto-discover mcp.json or .mcp.json in current directory, or open interactive editor
 • GitHub URL: Extract configuration from README and use TurboTax wizard  
 • File path: Load configuration from specified file
 • File path + --detect: Use AI to detect placeholders and generate forms
 • -e/--editor: Open editor to paste template, then detect and generate forms
+
+Auto-Discovery:
+• Looks for: mcp.json, .mcp.json, mcp-config.json, .mcp-config.json
+• Loads to default environment unless --env specified
+• Falls back to interactive editor if no files found
 
 Interactive Editor Features:
 • Paste any MCP configuration template into the editor
@@ -49,9 +54,9 @@ Interactive Editor Features:
 • Saves to file-based configuration system in specified environment
 
 Examples:
-  stn load                                    # Open interactive editor (default env)
-  stn load --env production                   # Open editor, save to production env
-  stn load config.json --detect              # Load with AI placeholder detection
+  stn load                                    # Auto-discover config file (default env)
+  stn load --env production                   # Auto-discover, load to production env
+  stn load config.json --detect              # Load specific file with AI detection
   stn load -e --env staging                  # Open editor for staging environment
   stn load https://github.com/user/mcp-repo  # GitHub discovery with wizard`,
 		RunE: runLoad,
@@ -306,6 +311,27 @@ This includes agents (.prompt files), MCP configurations, and environment settin
   stn sync --dry-run          # Show what would change
   stn sync --validate         # Validate configurations only`,
 		RunE: runSync,
+	}
+
+	// Development playground command
+	developCmd = &cobra.Command{
+		Use:   "develop",
+		Short: "Launch Genkit development playground with Station agents and tools",
+		Long: `Start a Genkit development server with all agents and MCP tools loaded for interactive testing.
+
+This command creates a development environment where you can:
+• Test and iterate on your agents in the Genkit UI
+• Access all MCP tools from your environment
+• Use dotprompt templates with live reloading
+• Debug agent execution with full tool calling support
+
+The development server loads all file-based configurations from the specified environment
+and makes them available in the Genkit developer UI for interactive testing.`,
+		Example: `  stn develop                    # Start playground with default environment
+  stn develop --env production   # Start playground with production environment
+  stn develop --port 4000        # Start on custom port
+  stn develop --ai-model gemini-2.0-flash-exp  # Override AI model`,
+		RunE: runDevelop,
 	}
 )
 

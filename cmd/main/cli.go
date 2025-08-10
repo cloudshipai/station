@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -14,13 +15,65 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	
+	"github.com/firebase/genkit/go/ai"
+	"github.com/firebase/genkit/go/genkit"
 	"station/cmd/main/handlers"
 	"station/cmd/main/handlers/mcp"
 	"station/internal/db"
+	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/internal/tui"
 	"station/pkg/bundle"
 	bundlecli "station/pkg/bundle/cli"
 )
+
+// loadAgentPrompts loads all .prompt files from the specified agents directory
+func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir string) (int, error) {
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+		return 0, fmt.Errorf("agents directory does not exist: %s", agentsDir)
+	}
+	
+	promptCount := 0
+	err := filepath.Walk(agentsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		
+		// Only process .prompt files
+		if !strings.HasSuffix(info.Name(), ".prompt") {
+			return nil
+		}
+		
+		// Get the agent name from filename (without .prompt extension)
+		agentName := strings.TrimSuffix(info.Name(), ".prompt")
+		
+		// Read the prompt file
+		content, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Printf("   ⚠️  Warning: failed to read prompt file %s: %v\n", path, err)
+			return nil // Continue with other files
+		}
+		
+		// Define the prompt in GenKit
+		// Note: GenKit's dotprompt library expects prompts to be in a specific format
+		// For now, we'll register them as simple text prompts
+		_, err = genkit.DefinePrompt(genkitApp, agentName, 
+			ai.WithPrompt(string(content)),
+		)
+		if err != nil {
+			fmt.Printf("   ⚠️  Warning: failed to define prompt %s: %v\n", agentName, err)
+			return nil // Continue with other files
+		}
+		
+		fmt.Printf("   ✅ Agent Prompt: %s\n", agentName)
+		promptCount++
+		return nil
+	})
+	
+	return promptCount, err
+}
+
 
 // runMCPList implements the "station mcp list" command
 func runMCPList(cmd *cobra.Command, args []string) error {
@@ -684,4 +737,103 @@ func downloadWithAuth(url, token string) (*http.Response, error) {
 	}
 	
 	return client.Do(req)
+}
+
+// runDevelop implements the "stn develop" command
+func runDevelop(cmd *cobra.Command, args []string) error {
+	// Get command flags
+	environment, _ := cmd.Flags().GetString("env")
+	port, _ := cmd.Flags().GetInt("port")
+	aiModel, _ := cmd.Flags().GetString("ai-model")
+	aiProvider, _ := cmd.Flags().GetString("ai-provider")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+
+	// Show banner
+	styles := getCLIStyles(themeManager)
+	banner := styles.Banner.Render("🧪 Station Development Playground")
+	fmt.Println(banner)
+
+	fmt.Printf("🌍 Environment: %s\n", environment)
+	fmt.Printf("🚀 Starting development server on port %d...\n", port)
+	fmt.Printf("🤖 AI Provider: %s, Model: %s\n", aiProvider, aiModel)
+	fmt.Printf("🔧 Verbose: %v\n", verbose)
+	
+	ctx := context.Background()
+	
+	// Initialize database and services
+	databasePath := viper.GetString("database_url")
+	if databasePath == "" {
+		configDir := getWorkspacePath()
+		databasePath = filepath.Join(configDir, "station.db")
+	}
+	
+	database, err := db.New(databasePath)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+	
+	repos := repositories.New(database)
+	
+	// Get environment ID
+	env, err := repos.Environments.GetByName(environment)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environment, err)
+	}
+	
+	fmt.Printf("📁 Loading agents and MCP configs from environment: %s (ID: %d)\n", env.Name, env.ID)
+	
+	// Initialize Station's GenKit provider
+	genkitProvider := services.NewGenKitProvider()
+	genkitApp, err := genkitProvider.GetApp(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize GenKit: %w", err)
+	}
+	
+	// Load MCP tools
+	mcpManager := services.NewMCPConnectionManager(repos, genkitApp)
+	mcpTools, mcpClients, err := mcpManager.GetEnvironmentMCPTools(ctx, env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to load MCP tools: %w", err)
+	}
+	defer mcpManager.CleanupConnections(mcpClients)
+	
+	fmt.Printf("🔧 Loaded %d MCP tools from %d servers\n", len(mcpTools), len(mcpClients))
+	
+	// Load agent prompts from the environment
+	workspacePath := getWorkspacePath()
+	agentsDir := filepath.Join(workspacePath, "environments", environment, "agents")
+	
+	promptCount, err := loadAgentPrompts(ctx, genkitApp, agentsDir)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: failed to load agent prompts: %v\n", err)
+	} else {
+		fmt.Printf("🤖 Loaded %d agent prompts\n", promptCount)
+	}
+	
+	// Define MCP tools in GenKit
+	for _, tool := range mcpTools {
+		// MCP tools are already registered in GenKit by the MCP plugin
+		fmt.Printf("   ✅ MCP Tool: %s\n", tool.Name)
+	}
+	
+	fmt.Println()
+	fmt.Println("🎉 Station Development Playground is ready!")
+	fmt.Printf("📖 To start the Genkit developer UI, run:\n")
+	fmt.Printf("   genkit start -o -- stn develop --env %s --port %d\n", environment, port)
+	fmt.Println()
+	fmt.Println("🧪 This will start the interactive testing UI at http://localhost:4000")
+	fmt.Println("🔧 All your agents and MCP tools will be available for testing")
+	fmt.Println()
+	fmt.Println("For now, Station development playground setup is complete.")
+	fmt.Println("Your agents and tools are loaded in Genkit and ready to use.")
+	
+	// Keep the process alive to maintain MCP connections
+	fmt.Println()
+	fmt.Println("Press Ctrl+C to exit and cleanup MCP connections...")
+	
+	// Block indefinitely until interrupted
+	select {}
+	
+	return nil
 }

@@ -54,6 +54,7 @@ func init() {
 	rootCmd.AddCommand(webhookCmd)
 	rootCmd.AddCommand(settingsCmd)
 	rootCmd.AddCommand(uiCmd)
+	rootCmd.AddCommand(developCmd)
 	rootCmd.AddCommand(blastoffCmd)
 	
 	// Initialize file config handler and integrate with mcp commands
@@ -176,6 +177,13 @@ func init() {
 	syncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	syncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
 	syncCmd.Flags().Bool("validate", false, "Validate configurations only without syncing")
+
+	// Develop command flags
+	developCmd.Flags().String("env", "default", "Environment to load agents and MCP configs from")
+	developCmd.Flags().Int("port", 4000, "Port to run the Genkit development server on")
+	developCmd.Flags().String("ai-model", "", "AI model to use (overrides Station config)")
+	developCmd.Flags().String("ai-provider", "", "AI provider to use (gemini, openai, anthropic)")
+	developCmd.Flags().Bool("verbose", false, "Enable verbose logging for debugging")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 	
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
