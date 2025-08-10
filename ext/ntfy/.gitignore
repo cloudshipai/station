@@ -1,0 +1,14 @@
+# Generated configuration files (use templates instead)
+fly.toml
+server.yml
+
+# Backup files created by deploy script
+*.bak
+
+# Local development files
+*.log
+*.tmp
+
+# OS specific files
+.DS_Store
+Thumbs.db

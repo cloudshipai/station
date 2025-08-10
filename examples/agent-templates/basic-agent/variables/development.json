@@ -1,0 +1,6 @@
+{
+  "CLIENT_NAME": "Dev Testing Co",
+  "WORKSPACE_PATH": "/tmp/dev",
+  "MAX_FILES": 100,
+  "VERBOSE_MODE": true
+}

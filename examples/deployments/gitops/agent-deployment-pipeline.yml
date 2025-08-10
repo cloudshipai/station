@@ -1,0 +1,136 @@
+# GitOps Deployment Pipeline for Station Agents
+# GitHub Actions workflow for automated agent deployment
+
+name: Deploy Station Agents
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agents/**'
+      - 'environments/**'
+      - 'mcp-configs/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agents/**'
+      - 'environments/**'
+
+env:
+  STATION_URL: https://station.company.com
+  STATION_ENV: production
+
+jobs:
+  validate-templates:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Station CLI
+      run: |
+        curl -sSL https://getstation.ai/install | bash
+        echo "$HOME/.station/bin" >> $GITHUB_PATH
+    
+    - name: Validate Agent Templates
+      run: |
+        for template in agents/*/; do
+          echo "🔍 Validating template: $template"
+          stn agent bundle validate "$template" --strict
+        done
+    
+    - name: Check Environment Configuration
+      run: |
+        for env in environments/*/; do
+          echo "🌍 Checking environment: $env"
+          stn environment validate "$env"
+        done
+
+  deploy-staging:
+    needs: validate-templates
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to Staging
+      env:
+        STATION_API_TOKEN: ${{ secrets.STATION_STAGING_TOKEN }}
+      run: |
+        # Deploy each modified agent template
+        for template in agents/*/; do
+          agent_name=$(basename "$template")
+          
+          echo "🚀 Deploying $agent_name to staging..."
+          
+          curl -X POST "$STATION_URL/api/v1/agents/templates/install" \
+            -H "Authorization: Bearer $STATION_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"bundle_path\": \"$template\",
+              \"environment\": \"staging\",
+              \"variables_file\": \"environments/staging/variables.yml\"
+            }"
+        done
+    
+    - name: Run Integration Tests
+      run: |
+        # Test deployed agents
+        ./scripts/test-staging-agents.sh
+
+  deploy-production:
+    needs: [validate-templates, deploy-staging]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to Production
+      env:
+        STATION_API_TOKEN: ${{ secrets.STATION_PRODUCTION_TOKEN }}
+      run: |
+        for template in agents/*/; do
+          agent_name=$(basename "$template")
+          
+          echo "🎯 Deploying $agent_name to production..."
+          
+          # Install with encrypted production variables
+          curl -X POST "$STATION_URL/api/v1/agents/templates/install" \
+            -H "Authorization: Bearer $STATION_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"bundle_path\": \"$template\",
+              \"environment\": \"production\",
+              \"variables_file\": \"environments/production/variables.enc\"
+            }"
+        done
+    
+    - name: Verify Production Deployment
+      run: |
+        # Health check all production agents
+        ./scripts/verify-production-agents.sh
+    
+    - name: Notify Team
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        channel: '#platform-deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+
+  backup-verification:
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    steps:
+    - name: Verify Litestream Backup
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      run: |
+        # Check that recent database backups exist
+        aws s3 ls s3://station-production-backups/station-db/ \
+          --recursive --human-readable | tail -10
+        
+        echo "✅ Database backup verification complete"

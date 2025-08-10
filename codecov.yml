@@ -1,0 +1,43 @@
+# Codecov configuration for Station
+# See https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  status:
+    project:
+      default:
+        target: 80%          # Target coverage percentage
+        threshold: 5%        # Allow 5% drop from target
+        base: auto
+        flags:
+          - unittests
+    patch:
+      default:
+        target: 70%          # New code should have 70% coverage
+        threshold: 10%       # Allow 10% drop for patches
+        base: auto
+        flags:
+          - unittests
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: true
+  require_base: false
+  require_head: true
+
+flags:
+  unittests:
+    paths:
+      - "internal/"
+      - "pkg/"
+      - "cmd/"
+
+ignore:
+  - "**/*_test.go"
+  - "**/testdata/**"
+  - "**/mock/**"
+  - "**/mocks/**"
+  - "**/*.pb.go"
+  - "**/vendor/**"
+  - "scripts/**"
+  - "docs/**"

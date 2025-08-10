@@ -1,0 +1,6 @@
+{
+  "CLIENT_NAME": "Acme Corporation",
+  "WORKSPACE_PATH": "/data/production",
+  "MAX_FILES": 5000,
+  "VERBOSE_MODE": false
+}

@@ -1,0 +1,72 @@
+---
+title: Bundle Registry
+description: Discover and install pre-built Station bundles
+---
+
+# Bundle Registry
+
+The Station Bundle Registry is a curated collection of ready-to-use templates and configurations for common operational tasks.
+
+## Browse the Registry
+
+🌐 **[Station Bundle Registry](https://cloudshipai.github.io/registry)**
+
+The registry includes bundles for:
+- **Infrastructure Monitoring** - System health, database monitoring, log analysis
+- **Deployment Automation** - CI/CD pipelines, infrastructure as code
+- **Security Operations** - Vulnerability scanning, compliance checks  
+- **Communication Tools** - Slack integration, notification systems
+
+## Installing Bundles
+
+### Filesystem Bundle
+Complete file system operations with MCP integration:
+```bash
+stn template install https://cloudshipai.github.io/registry/bundles/filesystem-bundle.tar.gz
+stn sync production
+```
+
+### Database Monitoring Bundle  
+PostgreSQL monitoring and alerting:
+```bash
+stn template install https://cloudshipai.github.io/registry/bundles/database-monitor.tar.gz
+stn sync production
+```
+
+### AWS Operations Bundle
+Complete AWS service management:
+```bash  
+stn template install https://cloudshipai.github.io/registry/bundles/aws-ops.tar.gz
+stn sync production
+```
+
+## Creating Your Own Registry
+
+You can create a custom registry for your organization using our cookiecutter template:
+
+```bash
+# Install cookiecutter
+pip install cookiecutter
+
+# Create your registry
+cookiecutter https://github.com/cloudshipai/cookiecutter-registry
+
+# Deploy to GitHub Pages
+git push origin main
+```
+
+## Contributing Bundles
+
+To contribute to the main registry:
+1. Fork the [registry repository](https://github.com/cloudshipai/registry)
+2. Add your bundle to the `bundles/` directory
+3. Update the registry index
+4. Submit a pull request
+
+## Bundle Quality Standards
+
+All registry bundles must meet:
+- **Documentation** - Clear README with usage examples
+- **Testing** - Validated in multiple environments  
+- **Security** - No hardcoded secrets or credentials
+- **Maintenance** - Active maintenance and updates

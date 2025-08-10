@@ -1,0 +1,37 @@
+# Station Code Owners
+# 
+# This file defines who is responsible for reviewing changes to specific parts
+# of the Station codebase. Code owners are automatically requested for review
+# when someone opens a pull request that modifies their code.
+#
+# Order is important; the last matching pattern takes the most precedence.
+
+# Global fallback
+* @cloudshipai/station-maintainers
+
+# Core architecture and database
+/internal/db/ @cloudshipai/station-maintainers
+/internal/auth/ @cloudshipai/station-maintainers
+/pkg/models/ @cloudshipai/station-maintainers
+
+# MCP server implementation
+/internal/mcp/ @cloudshipai/station-maintainers
+/internal/services/ @cloudshipai/station-maintainers
+
+# CLI and user interface
+/cmd/ @cloudshipai/station-maintainers
+/internal/tui/ @cloudshipai/station-maintainers
+
+# Configuration and deployment
+/internal/config/ @cloudshipai/station-maintainers
+/internal/ssh/ @cloudshipai/station-maintainers
+
+# Build and release
+/Makefile @cloudshipai/station-maintainers
+/.github/ @cloudshipai/station-maintainers
+/.goreleaser.yml @cloudshipai/station-maintainers
+
+# Documentation
+/README.md @cloudshipai/station-maintainers
+/CONTRIBUTING.md @cloudshipai/station-maintainers
+/docs/ @cloudshipai/station-maintainers

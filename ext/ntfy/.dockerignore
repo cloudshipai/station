@@ -1,0 +1,8 @@
+README.md
+.git
+.gitignore
+fly.toml
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

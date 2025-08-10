@@ -1,0 +1,68 @@
+---
+title: Introduction
+description: Station - Lightweight Runtime for Deployable Sub-Agents
+---
+
+# Station
+
+Station is a lightweight, secure runtime specifically designed for **deployable sub-agents** that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
+
+## What is Station?
+
+Station is purpose-built for the intelligent automation you need for:
+- Infrastructure monitoring and alerting
+- Deployment pipeline automation
+- Security scanning and compliance
+- Day-to-day operational tasks requiring secure system access
+
+## Key Features
+
+### 🔒 Security by Design
+- **Self-Hosted** - Complete data sovereignty, no external dependencies beyond AI providers
+- **Encrypted Secrets** - AES encryption for credentials and sensitive configuration
+- **Environment Isolation** - Separate execution contexts for dev/staging/prod
+- **Audit Trail** - Complete tracking of agent deployments and executions
+
+### ⚡ Lightweight & Integrated
+- **Single 45MB Binary** - No complex infrastructure or dependencies
+- **SQLite Database** - Zero-setup local development, PostgreSQL for production
+- **GitOps Ready** - Version-controlled agent configurations like infrastructure code
+- **Existing Toolchain** - Uses your team's approved MCP tools and integrations
+
+### 🔧 MCP Integration
+- **20+ Built-in Tools** - Filesystem, AWS, databases, monitoring, communication
+- **Tool Discovery** - Automatic MCP server detection and configuration
+- **Configuration Management** - File-based GitOps-ready configs
+- **Custom Tools** - Easy integration of your internal tools
+
+## Quick Start
+
+```bash
+# Install Station
+curl -sSL https://getstation.cloudshipai.com | bash
+
+# Initialize and create your first agent
+stn init
+stn agent create --name "System Monitor" --description "Monitor system resources"
+
+# Test your agent
+stn agent run 1 "Check current disk usage and memory status"
+```
+
+## Architecture Overview
+
+Station provides multiple interfaces for agent management:
+
+- **CLI** - Command-line interface for development and scripting
+- **REST API** - HTTP API for integration with existing systems  
+- **SSH/TUI** - Terminal-based admin interface
+- **WebSocket** - Real-time updates and streaming responses
+
+All interfaces connect to the core agent management system with MCP tool integration, configuration management, and security services.
+
+## Next Steps
+
+- [Learn why Station is different →](/en/why-station)
+- [Follow the installation guide →](/en/installation)  
+- [Understand the architecture →](/en/architecture)
+- [Browse ready-to-use bundles](https://cloudshipai.github.io/registry)
