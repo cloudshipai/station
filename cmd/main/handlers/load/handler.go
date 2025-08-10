@@ -10,6 +10,26 @@ import (
 	"github.com/spf13/viper"
 )
 
+// discoverMCPConfig looks for MCP configuration files in the current directory
+// Returns the first found file or empty string if none found
+func (h *LoadHandler) discoverMCPConfig() string {
+	// Check for common MCP config file patterns in current directory
+	possibleFiles := []string{
+		"mcp.json",
+		".mcp.json", 
+		"mcp-config.json",
+		".mcp-config.json",
+	}
+	
+	for _, filename := range possibleFiles {
+		if _, err := os.Stat(filename); err == nil {
+			return filename
+		}
+	}
+	
+	return ""
+}
+
 func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 	banner := getCLIStyles(h.themeManager).Banner.Render("📂 Loading MCP Configuration")
 	fmt.Println(banner)
@@ -65,9 +85,21 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("file not found: %s", args[0])
 		}
 	} else {
-		// No arguments provided - open interactive editor
-		fmt.Println(getCLIStyles(h.themeManager).Info.Render("📝 No configuration file specified, opening interactive editor..."))
-		return h.handleInteractiveEditor(endpoint, environment, configName, detectMode)
+		// No arguments provided - try to discover MCP config files in current directory
+		discoveredFile := h.discoverMCPConfig()
+		if discoveredFile != "" {
+			configFile = discoveredFile
+			fmt.Printf("🔍 Discovered config file: %s\n", configFile)
+			
+			// Initialize AI if detect mode is enabled for discovered file
+			if detectMode {
+				h.initializeAI()
+			}
+		} else {
+			// No config files found - open interactive editor
+			fmt.Println(getCLIStyles(h.themeManager).Info.Render("📝 No MCP configuration files found in current directory, opening interactive editor..."))
+			return h.handleInteractiveEditor(endpoint, environment, configName, detectMode)
+		}
 	}
 
 	fmt.Printf("📄 Found config file: %s\n", configFile)
