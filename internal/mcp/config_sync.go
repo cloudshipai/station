@@ -238,7 +238,7 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 			if err != nil {
 				return fmt.Errorf("failed to create MCP server %s: %w", serverName, err)
 			}
-		} else {
+			} else {
 			// Server already exists, update it with new config
 			logging.Debug("Updating existing MCP server: %s (ID: %d, envID: %d)", serverName, existingServer.ID, envID)
 			server.ID = existingServer.ID
@@ -248,6 +248,10 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 			}
 			serverID = existingServer.ID
 		}
+		
+		// NOTE: We don't delete all tools here to preserve tool IDs for agent references
+		// Instead, we'll use upsert logic in discoverToolsForServer to update existing tools
+		// and only delete tools that are no longer available from the server
 		
 		// Discover and register tools for this server
 		err = s.discoverToolsForServer(serverID, serverName, serverConfigMap, renderedContent)
@@ -376,7 +380,10 @@ func (s *ConfigSyncer) Sync(environment string, envID int64, options SyncOptions
 		if !existsInDB {
 			// New config to sync
 			result.SyncedConfigs = append(result.SyncedConfigs, fileConfig.ConfigName)
-		} else if dbConfig.LastLoadedAt != nil && !dbConfig.LastLoadedAt.IsZero() && fileConfig.LastLoadedAt.After(*dbConfig.LastLoadedAt) {
+		} else if dbConfig.LastLoadedAt == nil || dbConfig.LastLoadedAt.IsZero() {
+			// Config exists in DB but was never actually loaded - treat as new
+			result.SyncedConfigs = append(result.SyncedConfigs, fileConfig.ConfigName)
+		} else if fileConfig.LastLoadedAt.After(*dbConfig.LastLoadedAt) {
 			// File modified after last sync
 			result.SyncedConfigs = append(result.SyncedConfigs, fileConfig.ConfigName)
 		}
@@ -532,22 +539,65 @@ func (s *ConfigSyncer) discoverToolsForServer(serverID int64, serverName string,
 
 	logging.Debug("Discovered %d real tools from %s", len(toolsResult.Tools), serverName)
 	
+	// Get existing tools for this server to implement proper upsert
+	existingTools, err := s.repos.MCPTools.GetByServerID(serverID)
+	if err != nil {
+		logging.Debug("Failed to get existing tools for server %s: %v", serverName, err)
+		existingTools = []*models.MCPTool{} // Continue with empty slice
+	}
+	
+	// Create map of existing tools by name for quick lookup
+	existingToolMap := make(map[string]*models.MCPTool)
+	for _, tool := range existingTools {
+		existingToolMap[tool.Name] = tool
+	}
+	
+	// Track which tools we've seen from the server
+	discoveredToolNames := make(map[string]bool)
+	
 	// Store each real tool in the database with its actual name from the server
 	for i, tool := range toolsResult.Tools {
 		logging.Debug("  Tool %d: %s - %s", i+1, tool.Name, tool.Description)
 		
-		// Create database record for this real tool
-		mcpTool := &models.MCPTool{
-			MCPServerID: serverID,
-			Name:        "__" + tool.Name,                          // Add double underscore to match GenKit runtime
-			Description: tool.Description,                          // Use actual description from server
-		}
+		toolName := "__" + tool.Name // Add double underscore to match GenKit runtime
+		discoveredToolNames[toolName] = true
 		
-		_, err = s.repos.MCPTools.Create(mcpTool)
-		if err != nil {
-			logging.Debug("Failed to store tool %s: %v", tool.Name, err)
-			continue
+		if existingTool, exists := existingToolMap[toolName]; exists {
+			// Tool exists, update description if changed
+			if existingTool.Description != tool.Description {
+				// For now, just log - we can add Update method later if needed
+				logging.Debug("Tool %s description changed, but Update not implemented yet", tool.Name)
+			}
+		} else {
+			// Tool doesn't exist, create it
+			mcpTool := &models.MCPTool{
+				MCPServerID: serverID,
+				Name:        toolName,
+				Description: tool.Description,
+			}
+			
+			_, err := s.repos.MCPTools.Create(mcpTool)
+			if err != nil {
+				logging.Debug("Failed to create tool %s: %v", tool.Name, err)
+				continue
+			}
 		}
+	}
+	
+	// TODO: Delete tools that are no longer available from the server
+	// For now, we skip deletion to avoid breaking agent references
+	// In a full implementation, we'd need to:
+	// 1. Remove orphaned tools from agent assignments first
+	// 2. Then delete the obsolete tools
+	obsoleteCount := 0
+	for _, existingTool := range existingTools {
+		if !discoveredToolNames[existingTool.Name] {
+			obsoleteCount++
+			logging.Debug("Tool %s (ID: %d) is obsolete but not deleted (preservation mode)", existingTool.Name, existingTool.ID)
+		}
+	}
+	if obsoleteCount > 0 {
+		logging.Debug("Found %d obsolete tools that should be cleaned up", obsoleteCount)
 	}
 	
 	logging.Debug("Completed real tool discovery for server: %s", serverName)
