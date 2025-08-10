@@ -366,20 +366,26 @@ func (h *MCPHandler) validateAgentToolDependencies(repos *repositories.Repositor
 
 // syncAgentToDatabase updates the agent in the database with .prompt file content and tool assignments
 func (h *MCPHandler) syncAgentToDatabase(repos *repositories.Repositories, envID int64, config *dotprompt.DotpromptConfig, agentName, promptTemplate string) error {
-	// Find the agent by name in the environment
+	// Try to find existing agent by name
 	agent, err := repos.Agents.GetByName(agentName)
+	
+	var agentID int64
+	var isUpdate bool
+	
 	if err != nil {
-		return fmt.Errorf("agent '%s' not found: %w", agentName, err)
+		// Agent doesn't exist, create it
+		isUpdate = false
+	} else {
+		// Agent exists, verify it's in the correct environment
+		if agent.EnvironmentID != envID {
+			return fmt.Errorf("agent '%s' is in environment %d, expected %d", agentName, agent.EnvironmentID, envID)
+		}
+		agentID = agent.ID
+		isUpdate = true
 	}
 	
-	// Verify agent is in the correct environment
-	if agent.EnvironmentID != envID {
-		return fmt.Errorf("agent '%s' is in environment %d, expected %d", agentName, agent.EnvironmentID, envID)
-	}
-	
-	// Update agent with .prompt content
+	// Extract max_steps from .prompt file metadata
 	maxSteps := int64(5) // Default
-	// Try to extract max_steps from custom fields (station.execution_metadata.max_steps)
 	if stationData, ok := config.CustomFields["station"].(map[interface{}]interface{}); ok {
 		if execData, ok := stationData["execution_metadata"].(map[interface{}]interface{}); ok {
 			if steps, ok := execData["max_steps"].(int); ok {
@@ -388,21 +394,40 @@ func (h *MCPHandler) syncAgentToDatabase(repos *repositories.Repositories, envID
 		}
 	}
 	
-	err = repos.Agents.Update(
-		agent.ID,
-		config.Metadata.Name,
-		config.Metadata.Description,
-		promptTemplate, // Use the full template content
-		maxSteps,
-		nil, // cron schedule - preserve existing
-		agent.ScheduleEnabled,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update agent: %w", err)
+	if isUpdate {
+		// Update existing agent
+		err = repos.Agents.Update(
+			agentID,
+			config.Metadata.Name,
+			config.Metadata.Description,
+			promptTemplate,
+			maxSteps,
+			nil, // cron schedule - preserve existing
+			agent.ScheduleEnabled,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update agent: %w", err)
+		}
+	} else {
+		// Create new agent
+		newAgent, err := repos.Agents.Create(
+			agentName,
+			config.Metadata.Description,
+			promptTemplate,
+			maxSteps,
+			envID,
+			1, // Default user ID
+			nil, // No cron schedule initially
+			false, // Schedule not enabled initially
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create agent: %w", err)
+		}
+		agentID = newAgent.ID
 	}
 	
 	// Clear existing tool assignments
-	err = repos.AgentTools.Clear(agent.ID)
+	err = repos.AgentTools.Clear(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to clear existing tool assignments: %w", err)
 	}
@@ -416,7 +441,7 @@ func (h *MCPHandler) syncAgentToDatabase(repos *repositories.Repositories, envID
 		}
 		
 		// Add tool assignment
-		_, err = repos.AgentTools.AddAgentTool(agent.ID, tool.ID)
+		_, err = repos.AgentTools.AddAgentTool(agentID, tool.ID)
 		if err != nil {
 			return fmt.Errorf("failed to assign tool '%s': %w", toolName, err)
 		}

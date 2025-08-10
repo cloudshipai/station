@@ -169,8 +169,9 @@ func (s *StatusService) getAgentStatus(agent *models.Agent, fileConfigs []*repos
 
 // ValidateEnvironmentExists checks if file-based environment directory exists
 func (s *StatusService) ValidateEnvironmentExists(envName string) bool {
-	configDir := fmt.Sprintf("./config/environments/%s", envName)
-	if _, err := os.Stat(configDir); err != nil {
+	configDir := os.ExpandEnv("$HOME/.config/station")
+	envDir := fmt.Sprintf("%s/environments/%s", configDir, envName)
+	if _, err := os.Stat(envDir); err != nil {
 		return false
 	}
 	return true
