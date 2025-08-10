@@ -28,32 +28,32 @@ const editUrl = `${EDIT_URL}/${currentFile}`
     <title>
       {`${data.title} 🚀 ${SITE.title}`}
     </title>
-    <script type="module">
-      import mermaid from 'https://cdn.skypack.dev/mermaid@latest';
-      
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'loose',
-        themeVariables: {
-          primaryColor: '#667eea',
-          primaryTextColor: '#fff',
-          primaryBorderColor: '#764ba2',
-          lineColor: '#333',
-          sectionBkgColor: '#f8fafc',
-          altSectionBkgColor: '#e2e8f0'
-        }
-      });
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Mermaid
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'default',
+          securityLevel: 'loose',
+          themeVariables: {
+            primaryColor: '#667eea',
+            primaryTextColor: '#fff',
+            primaryBorderColor: '#764ba2',
+            lineColor: '#333',
+            sectionBkgColor: '#f8fafc',
+            altSectionBkgColor: '#e2e8f0'
+          }
+        });
 
-      // Wait for DOM to be ready
-      document.addEventListener('DOMContentLoaded', async () => {
         // Find all code blocks with language "mermaid"
         const mermaidBlocks = document.querySelectorAll('pre code.language-mermaid');
+        console.log('Found Mermaid blocks:', mermaidBlocks.length);
         
-        for (let i = 0; i < mermaidBlocks.length; i++) {
-          const block = mermaidBlocks[i];
+        mermaidBlocks.forEach((block, i) => {
           const diagramCode = block.textContent.trim();
           const diagramId = `mermaid-diagram-${i}`;
+          console.log('Processing Mermaid diagram:', diagramId, diagramCode.substring(0, 50) + '...');
           
           try {
             // Create a div to render the diagram
@@ -61,17 +61,18 @@ const editUrl = `${EDIT_URL}/${currentFile}`
             diagramDiv.className = 'mermaid-diagram';
             diagramDiv.style.textAlign = 'center';
             diagramDiv.style.margin = '2rem 0';
+            diagramDiv.id = diagramId;
+            diagramDiv.textContent = diagramCode;
             
-            // Render the diagram
-            const { svg } = await mermaid.render(diagramId, diagramCode);
-            diagramDiv.innerHTML = svg;
-            
-            // Replace the pre block with the diagram
+            // Replace the pre block with the diagram div
             block.closest('pre').replaceWith(diagramDiv);
+            
+            // Initialize this specific diagram
+            mermaid.init(undefined, diagramDiv);
           } catch (error) {
-            console.error('Mermaid rendering error:', error);
+            console.error('Mermaid rendering error for', diagramId, ':', error);
           }
-        }
+        });
       });
     </script>
     <style>
