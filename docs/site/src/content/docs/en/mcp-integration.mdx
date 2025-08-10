@@ -1,0 +1,235 @@
+---
+title: MCP Integration
+description: Model Context Protocol integration and tool management
+---
+
+# MCP Integration
+
+Station is built around the Model Context Protocol (MCP), enabling seamless integration with a wide ecosystem of tools and services that agents can use to perform real-world tasks.
+
+## What is MCP?
+
+The **Model Context Protocol** is a standard that allows AI agents to securely connect to external tools and data sources. Station uses MCP to provide agents with access to:
+
+- File systems and databases
+- Cloud services (AWS, GCP, Azure)
+- Development tools (Git, Docker, Kubernetes)  
+- Communication platforms (Slack, email)
+- Monitoring and observability tools
+
+## Available MCP Tools
+
+Station includes 20+ production-ready MCP integrations:
+
+### Infrastructure Tools
+- **AWS CLI** - Complete AWS service management
+- **Kubernetes** - Cluster and workload management  
+- **Docker** - Container operations and management
+- **SSH** - Secure remote server access
+- **Terraform** - Infrastructure as code operations
+
+### Database Tools
+- **PostgreSQL** - Database queries and administration
+- **MySQL** - Database operations and monitoring
+- **MongoDB** - NoSQL database management
+- **Redis** - In-memory data structure operations
+- **SQLite** - Lightweight database operations
+
+### Monitoring & Observability
+- **Prometheus** - Metrics collection and querying
+- **Grafana** - Dashboard and visualization management
+- **System Metrics** - CPU, memory, disk monitoring
+- **Log Analysis** - Log parsing and analysis
+- **Health Checks** - Service availability monitoring
+
+### Communication & Notifications
+- **Slack** - Team communication and notifications
+- **Email** - SMTP email sending
+- **PagerDuty** - Incident management and alerting
+- **Webhooks** - HTTP-based notifications
+- **Discord** - Community and team chat
+
+### Development & DevOps
+- **Git** - Version control operations
+- **GitHub/GitLab** - Repository management and CI/CD
+- **Jenkins** - Build automation and deployment
+- **Jira** - Issue tracking and project management
+- **Confluence** - Documentation and knowledge base
+
+## Loading MCP Tools
+
+### Install MCP Servers
+```bash
+# Load filesystem tools
+stn load examples/mcps/filesystem.json
+
+# Load AWS tools  
+stn load examples/mcps/aws-cli.json
+
+# Load database tools
+stn load examples/mcps/postgres.json
+
+# Load communication tools
+stn load examples/mcps/slack.json
+```
+
+### Sync Configuration
+After loading MCP servers, sync them to make tools available:
+```bash
+stn sync production
+```
+
+## MCP Configuration
+
+### Server Configuration Files
+MCP servers are configured through JSON files:
+
+```json
+{
+  "name": "postgresql",
+  "description": "PostgreSQL database operations",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-postgres@latest"],
+  "env": {
+    "POSTGRES_CONNECTION_STRING": "{{ .DATABASE_URL }}"
+  },
+  "disabled": false,
+  "autoApprove": [
+    "query",
+    "schema"
+  ]
+}
+```
+
+### Environment Variables
+Use template variables for environment-specific configuration:
+```yaml
+# variables.yml
+DATABASE_URL: "postgresql://user:pass@localhost:5432/mydb"
+SLACK_TOKEN: "{{ .SLACK_BOT_TOKEN }}"
+AWS_REGION: "us-west-2"
+```
+
+## Tool Discovery
+
+Station automatically discovers available tools when agents start:
+
+```bash
+stn agent run 1 "What tools do I have available?"
+```
+
+Agents receive tool definitions including:
+- Tool name and description
+- Required parameters
+- Expected response format
+- Usage examples
+
+## Tool Usage in Agents
+
+Agents can use tools through natural language:
+
+```bash
+stn agent run 1 "Check the disk usage on the production database server and alert the team if it's over 80%"
+```
+
+The agent will:
+1. Use SSH tools to connect to the database server
+2. Use system monitoring tools to check disk usage
+3. Use Slack tools to send alerts if thresholds are exceeded
+
+## Security & Permissions
+
+### Tool Access Control
+```json
+{
+  "autoApprove": ["read", "query"],
+  "requireApproval": ["write", "delete", "create"],
+  "forbidden": ["drop", "truncate"]
+}
+```
+
+### Environment Isolation
+Tools are isolated by environment:
+- **Development** - Full tool access, sandbox data
+- **Staging** - Limited write access, test data  
+- **Production** - Restricted access, real data
+
+### Audit Logging
+All tool usage is logged:
+- Which agent used which tool
+- Tool parameters and responses
+- Timestamp and execution context
+- Success/failure status
+
+## Custom MCP Servers
+
+### Creating Custom Tools
+```javascript
+// custom-mcp-server.js
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+
+const server = new Server({
+  name: "custom-tools",
+  version: "1.0.0"
+});
+
+server.tool("deploy-service", async (params) => {
+  // Custom deployment logic
+  return { success: true, deploymentId: "dep-123" };
+});
+
+server.listen();
+```
+
+### Registering Custom Servers
+```json
+{
+  "name": "custom-deployment",
+  "description": "Custom deployment tools",
+  "command": "node",
+  "args": ["./custom-mcp-server.js"],
+  "env": {
+    "DEPLOY_TOKEN": "{{ .DEPLOYMENT_TOKEN }}"
+  }
+}
+```
+
+## Tool Development Guidelines
+
+### Best Practices
+- **Idempotent Operations** - Safe to run multiple times
+- **Clear Error Messages** - Helpful failure information
+- **Comprehensive Logging** - Detailed execution traces
+- **Parameter Validation** - Validate inputs before execution
+
+### Security Considerations
+- **Input Sanitization** - Prevent injection attacks
+- **Rate Limiting** - Prevent abuse and overload
+- **Access Controls** - Verify permissions before execution
+- **Sensitive Data** - Encrypt secrets and credentials
+
+## Troubleshooting
+
+### Tool Connection Issues
+```bash
+# Check MCP server status
+stn mcp status
+
+# Test tool connectivity
+stn mcp test postgresql
+
+# View tool definitions
+stn mcp list tools
+```
+
+### Common Issues
+- **Connection timeouts** - Check network and firewall settings
+- **Authentication failures** - Verify credentials and tokens  
+- **Permission errors** - Check access controls and roles
+- **Missing dependencies** - Ensure MCP servers are properly installed
+
+## Next Steps
+
+- **[Environment Management](/en/environments)** - Configure tools per environment
+- **[Creating Bundles](/en/creating-bundles)** - Package tools with agents
+- **[Architecture](/en/architecture)** - Understand MCP integration architecture
