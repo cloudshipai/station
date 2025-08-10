@@ -1,0 +1,376 @@
+<!DOCTYPE html><html dir="ltr" lang="en-us" class="initial" data-astro-cid-ouamjn2i> <head><!-- Global Metadata --><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="generator" content="Astro v3.6.5"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="sitemap" href="/sitemap.xml"><!-- Scrollable a11y code helper --><script src="/make-scrollable-code-focusable.js"></script><!-- This is intentionally inlined to avoid FOUC --><script>
+  const root = document.documentElement
+  const theme = localStorage.getItem('theme')
+  if (
+    theme === 'dark' ||
+    (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  ) {
+    root.classList.add('theme-dark')
+  } else {
+    root.classList.remove('theme-dark')
+  }
+</script><!-- Page Metadata --><link rel="canonical" href="https://cloudshipai.github.io/station/en/architecture/"><!-- OpenGraph Tags --><meta property="og:title" content="Architecture 🚀 Station Documentation"><meta property="og:type" content="article"><meta property="og:url" content="https://cloudshipai.github.io/station/en/architecture/"><meta property="og:locale" content="en-us"><meta property="og:image" content="https://cloudshipai.github.io/default-og-image.png"><meta property="og:image:alt" content="Station logo - Lightweight Runtime for Deployable Sub-Agents"><meta name="description" property="og:description" content="Understanding Station's lightweight runtime architecture"><meta property="og:site_name" content="Station Documentation"><!-- Twitter Tags --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="cloudshipai"><meta name="twitter:title" content="Architecture 🚀 Station Documentation"><meta name="twitter:description" content="Understanding Station's lightweight runtime architecture"><meta name="twitter:image" content="https://cloudshipai.github.io/default-og-image.png"><meta name="twitter:image:alt" content="Station logo - Lightweight Runtime for Deployable Sub-Agents"><!--
+  TODO: Add json+ld data, maybe https://schema.org/APIReference makes sense?
+  Docs: https://developers.google.com/search/docs/advanced/structured-data/intro-structured-data
+  https://www.npmjs.com/package/schema-dts seems like a great resource for implementing this.
+  Even better, there's a React component that integrates with `schema-dts`: https://github.com/google/react-schemaorg
+--><title>
+      Architecture 🚀 Station Documentation
+    </title><script type="module">
+      import mermaid from 'https://cdn.skypack.dev/mermaid@latest';
+      
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+        themeVariables: {
+          primaryColor: '#667eea',
+          primaryTextColor: '#fff',
+          primaryBorderColor: '#764ba2',
+          lineColor: '#333',
+          sectionBkgColor: '#f8fafc',
+          altSectionBkgColor: '#e2e8f0'
+        }
+      });
+
+      // Wait for DOM to be ready
+      document.addEventListener('DOMContentLoaded', async () => {
+        // Find all code blocks with language "mermaid"
+        const mermaidBlocks = document.querySelectorAll('pre code.language-mermaid');
+        
+        for (let i = 0; i < mermaidBlocks.length; i++) {
+          const block = mermaidBlocks[i];
+          const diagramCode = block.textContent.trim();
+          const diagramId = `mermaid-diagram-${i}`;
+          
+          try {
+            // Create a div to render the diagram
+            const diagramDiv = document.createElement('div');
+            diagramDiv.className = 'mermaid-diagram';
+            diagramDiv.style.textAlign = 'center';
+            diagramDiv.style.margin = '2rem 0';
+            
+            // Render the diagram
+            const { svg } = await mermaid.render(diagramId, diagramCode);
+            diagramDiv.innerHTML = svg;
+            
+            // Replace the pre block with the diagram
+            block.closest('pre').replaceWith(diagramDiv);
+          } catch (error) {
+            console.error('Mermaid rendering error:', error);
+          }
+        }
+      });
+    </script><link rel="stylesheet" href="/station/_astro/_slug_.9bc607ee.css" /></head> <body data-astro-cid-ouamjn2i> <header data-astro-cid-2w66rqv5> <a href="#article" class="sr-only focus:not-sr-only skiplink" data-astro-cid-dmgooz7y><span data-astro-cid-dmgooz7y>Skip to Content</span></a>  <nav class="nav-wrapper" title="Top Navigation" data-astro-cid-2w66rqv5> <div class="menu-toggle" data-astro-cid-2w66rqv5> <style>astro-island,astro-slot,astro-static-slot{display:contents}</style><script>(()=>{var i=t=>{let e=async()=>{await(await t())()};"requestIdleCallback"in window?window.requestIdleCallback(e):setTimeout(e,200)};(self.Astro||(self.Astro={})).idle=i;window.dispatchEvent(new Event("astro:idle"));})();;(()=>{var b=Object.defineProperty;var f=(c,o,i)=>o in c?b(c,o,{enumerable:!0,configurable:!0,writable:!0,value:i}):c[o]=i;var l=(c,o,i)=>(f(c,typeof o!="symbol"?o+"":o,i),i);var p;{let c={0:t=>m(t),1:t=>i(t),2:t=>new RegExp(t),3:t=>new Date(t),4:t=>new Map(i(t)),5:t=>new Set(i(t)),6:t=>BigInt(t),7:t=>new URL(t),8:t=>new Uint8Array(t),9:t=>new Uint16Array(t),10:t=>new Uint32Array(t)},o=t=>{let[e,r]=t;return e in c?c[e](r):void 0},i=t=>t.map(o),m=t=>typeof t!="object"||t===null?t:Object.fromEntries(Object.entries(t).map(([e,r])=>[e,o(r)]));customElements.get("astro-island")||customElements.define("astro-island",(p=class extends HTMLElement{constructor(){super(...arguments);l(this,"Component");l(this,"hydrator");l(this,"hydrate",async()=>{var d;if(!this.hydrator||!this.isConnected)return;let e=(d=this.parentElement)==null?void 0:d.closest("astro-island[ssr]");if(e){e.addEventListener("astro:hydrate",this.hydrate,{once:!0});return}let r=this.querySelectorAll("astro-slot"),a={},h=this.querySelectorAll("template[data-astro-template]");for(let n of h){let s=n.closest(this.tagName);s!=null&&s.isSameNode(this)&&(a[n.getAttribute("data-astro-template")||"default"]=n.innerHTML,n.remove())}for(let n of r){let s=n.closest(this.tagName);s!=null&&s.isSameNode(this)&&(a[n.getAttribute("name")||"default"]=n.innerHTML)}let u;try{u=this.hasAttribute("props")?m(JSON.parse(this.getAttribute("props"))):{}}catch(n){let s=this.getAttribute("component-url")||"<unknown>",y=this.getAttribute("component-export");throw y&&(s+=` (export ${y})`),console.error(`[hydrate] Error parsing props for component ${s}`,this.getAttribute("props"),n),n}await this.hydrator(this)(this.Component,u,a,{client:this.getAttribute("client")}),this.removeAttribute("ssr"),this.dispatchEvent(new CustomEvent("astro:hydrate"))});l(this,"unmount",()=>{this.isConnected||this.dispatchEvent(new CustomEvent("astro:unmount"))})}disconnectedCallback(){document.removeEventListener("astro:after-swap",this.unmount),document.addEventListener("astro:after-swap",this.unmount,{once:!0})}connectedCallback(){if(!this.hasAttribute("await-children")||document.readyState==="interactive"||document.readyState==="complete")this.childrenConnectedCallback();else{let e=()=>{document.removeEventListener("DOMContentLoaded",e),r.disconnect(),this.childrenConnectedCallback()},r=new MutationObserver(()=>{var a;((a=this.lastChild)==null?void 0:a.nodeType)===Node.COMMENT_NODE&&this.lastChild.nodeValue==="astro:end"&&(this.lastChild.remove(),e())});r.observe(this,{childList:!0}),document.addEventListener("DOMContentLoaded",e)}}async childrenConnectedCallback(){let e=this.getAttribute("before-hydration-url");e&&await import(e),this.start()}start(){let e=JSON.parse(this.getAttribute("opts")),r=this.getAttribute("client");if(Astro[r]===void 0){window.addEventListener(`astro:${r}`,()=>this.start(),{once:!0});return}Astro[r](async()=>{let a=this.getAttribute("renderer-url"),[h,{default:u}]=await Promise.all([import(this.getAttribute("component-url")),a?import(a):()=>()=>{}]),d=this.getAttribute("component-export")||"default";if(!d.includes("."))this.Component=h[d];else{this.Component=h;for(let n of d.split("."))this.Component=this.Component[n]}return this.hydrator=u,this.hydrate},e,this)}attributeChangedCallback(){this.hydrate()}},l(p,"observedAttributes",["props"]),p))}})();</script><astro-island uid="caY3Q" component-url="/station/_astro/SidebarToggle.a86a0ab5.js" component-export="default" renderer-url="/station/_astro/client.f901bbcc.js" props="{&quot;data-astro-cid-2w66rqv5&quot;:[0,true]}" ssr="" client="idle" opts="{&quot;name&quot;:&quot;SidebarToggle&quot;,&quot;value&quot;:true}" await-children=""><button type="button" aria-pressed="false" id="menu-toggle"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg><span class="sr-only">Toggle sidebar</span></button><!--astro:end--></astro-island> </div> <div class="logo flex" data-astro-cid-2w66rqv5> <a href="/" data-astro-cid-2w66rqv5> <img src="/station/station-logo.png" alt="Station" width="40" height="40" data-astro-cid-2w66rqv5> <h1 data-astro-cid-2w66rqv5>Station Documentation</h1> </a> </div> <!-- <div style="flex-grow: 1;"></div> --> <div class="search-item" data-astro-cid-2w66rqv5> <astro-island uid="Z2mrRv9" prefix="r0" component-url="/station/_astro/Search.26765136.js" component-export="default" renderer-url="/station/_astro/client.a0b6dd74.js" props="{&quot;data-astro-cid-2w66rqv5&quot;:[0,true]}" ssr="" client="idle" opts="{&quot;name&quot;:&quot;Search&quot;,&quot;value&quot;:true}" await-children=""><button type="button" class="search-input"><svg width="24" height="24" fill="none"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Search</span><span class="search-hint"><span class="sr-only">Press </span><kbd>/</kbd><span class="sr-only"> to search</span></span></button><!--astro:end--></astro-island> </div>  </nav> </header>   <main class="layout" data-astro-cid-ouamjn2i> <aside id="grid-left" class="grid-sidebar" title="Site Navigation" data-astro-cid-ouamjn2i> <nav aria-labelledby="grid-left" data-astro-cid-kqne5hrn> <ul class="nav-groups" data-astro-cid-kqne5hrn> <li data-astro-cid-kqne5hrn> <div class="nav-group" data-astro-cid-kqne5hrn> <h2 data-astro-cid-kqne5hrn>Getting Started</h2> <ul data-astro-cid-kqne5hrn> <li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/introduction" data-astro-cid-kqne5hrn> Introduction </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/why-station" data-astro-cid-kqne5hrn> Why Station </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/quickstart" data-astro-cid-kqne5hrn> Quick Start </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/installation" data-astro-cid-kqne5hrn> Installation </a> </li> </ul> </div> </li><li data-astro-cid-kqne5hrn> <div class="nav-group" data-astro-cid-kqne5hrn> <h2 data-astro-cid-kqne5hrn>Core Concepts</h2> <ul data-astro-cid-kqne5hrn> <li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/architecture" data-astro-cid-kqne5hrn> Architecture </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/intelligent-agents" data-astro-cid-kqne5hrn> Intelligent Agents </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/mcp-integration" data-astro-cid-kqne5hrn> MCP Integration </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/environments" data-astro-cid-kqne5hrn> Environment Management </a> </li> </ul> </div> </li><li data-astro-cid-kqne5hrn> <div class="nav-group" data-astro-cid-kqne5hrn> <h2 data-astro-cid-kqne5hrn>Templates &amp; Bundles</h2> <ul data-astro-cid-kqne5hrn> <li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/templates" data-astro-cid-kqne5hrn> Template System </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/registry" data-astro-cid-kqne5hrn> Bundle Registry </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/creating-bundles" data-astro-cid-kqne5hrn> Creating Bundles </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/publishing-bundles" data-astro-cid-kqne5hrn> Publishing Bundles </a> </li> </ul> </div> </li><li data-astro-cid-kqne5hrn> <div class="nav-group" data-astro-cid-kqne5hrn> <h2 data-astro-cid-kqne5hrn>Use Cases</h2> <ul data-astro-cid-kqne5hrn> <li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/use-cases/monitoring" data-astro-cid-kqne5hrn> Infrastructure Monitoring </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/use-cases/deployment" data-astro-cid-kqne5hrn> Deployment Automation </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/use-cases/security" data-astro-cid-kqne5hrn> Security Operations </a> </li> </ul> </div> </li><li data-astro-cid-kqne5hrn> <div class="nav-group" data-astro-cid-kqne5hrn> <h2 data-astro-cid-kqne5hrn>Deployment</h2> <ul data-astro-cid-kqne5hrn> <li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/deployment/production" data-astro-cid-kqne5hrn> Production Setup </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/deployment/docker" data-astro-cid-kqne5hrn> Docker Deployment </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/deployment/replication" data-astro-cid-kqne5hrn> Database Replication </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/deployment/security" data-astro-cid-kqne5hrn> Security Configuration </a> </li> </ul> </div> </li><li data-astro-cid-kqne5hrn> <div class="nav-group" data-astro-cid-kqne5hrn> <h2 data-astro-cid-kqne5hrn>API Reference</h2> <ul data-astro-cid-kqne5hrn> <li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/api/cli" data-astro-cid-kqne5hrn> CLI Commands </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/api/rest" data-astro-cid-kqne5hrn> REST API </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/api/websocket" data-astro-cid-kqne5hrn> WebSocket API </a> </li><li class="nav-link" data-astro-cid-kqne5hrn> <a href="/en/api/mcp-tools" data-astro-cid-kqne5hrn> MCP Tools </a> </li> </ul> </div> </li> </ul> </nav> <script>
+  window.addEventListener('DOMContentLoaded', () => {
+    var target = document.querySelector('[aria-current="page"]')
+    if (target && target.offsetTop > window.innerHeight - 100) {
+      document.querySelector('.nav-groups').scrollTop = target.offsetTop
+    }
+  })
+</script>   </aside> <div id="grid-main" data-astro-cid-ouamjn2i> <article id="article" class="content" data-astro-cid-j75b3yus> <section class="main-section" data-astro-cid-j75b3yus> <h1 class="content-title" id="overview" data-astro-cid-j75b3yus>Architecture</h1> <nav class="block sm:hidden" data-astro-cid-j75b3yus> <script>(()=>{var s=(i,t)=>{let a=async()=>{await(await i())()};if(t.value){let e=matchMedia(t.value);e.matches?a():e.addEventListener("change",a,{once:!0})}};(self.Astro||(self.Astro={})).media=s;window.dispatchEvent(new Event("astro:media"));})();</script><astro-island uid="Z18XwoJ" component-url="/station/_astro/TableOfContents.07ca98c7.js" component-export="default" renderer-url="/station/_astro/client.f901bbcc.js" props="{&quot;headings&quot;:[1,[[0,{&quot;depth&quot;:[0,1],&quot;slug&quot;:[0,&quot;architecture-overview&quot;],&quot;text&quot;:[0,&quot;Architecture Overview&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;system-architecture&quot;],&quot;text&quot;:[0,&quot;System Architecture&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;core-components&quot;],&quot;text&quot;:[0,&quot;Core Components&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;️-lightweight-runtime&quot;],&quot;text&quot;:[0,&quot;🏗️ Lightweight Runtime&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-agent-management&quot;],&quot;text&quot;:[0,&quot;🤖 Agent Management&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-mcp-integration&quot;],&quot;text&quot;:[0,&quot;🔧 MCP Integration&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-security-layer&quot;],&quot;text&quot;:[0,&quot;🔒 Security Layer&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;data-flow&quot;],&quot;text&quot;:[0,&quot;Data Flow&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;file-system-layout&quot;],&quot;text&quot;:[0,&quot;File System Layout&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;environment-isolation&quot;],&quot;text&quot;:[0,&quot;Environment Isolation&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;security-architecture&quot;],&quot;text&quot;:[0,&quot;Security Architecture&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-encryption-at-rest&quot;],&quot;text&quot;:[0,&quot;🔐 Encryption at Rest&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-access-control&quot;],&quot;text&quot;:[0,&quot;🚪 Access Control&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-audit-trail&quot;],&quot;text&quot;:[0,&quot;📊 Audit Trail&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-network-security&quot;],&quot;text&quot;:[0,&quot;🌐 Network Security&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;deployment-patterns&quot;],&quot;text&quot;:[0,&quot;Deployment Patterns&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;single-node-development&quot;],&quot;text&quot;:[0,&quot;Single-Node Development&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;production-deployment&quot;],&quot;text&quot;:[0,&quot;Production Deployment&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;performance-characteristics&quot;],&quot;text&quot;:[0,&quot;Performance Characteristics&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-scalability&quot;],&quot;text&quot;:[0,&quot;📈 Scalability&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-response-times&quot;],&quot;text&quot;:[0,&quot;⚡ Response Times&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-resource-usage&quot;],&quot;text&quot;:[0,&quot;💾 Resource Usage&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-reliability&quot;],&quot;text&quot;:[0,&quot;🔄 Reliability&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;technology-stack&quot;],&quot;text&quot;:[0,&quot;Technology Stack&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;next-steps&quot;],&quot;text&quot;:[0,&quot;Next Steps&quot;]}]]],&quot;data-astro-cid-j75b3yus&quot;:[0,true]}" ssr="" client="media" opts="{&quot;name&quot;:&quot;TableOfContents&quot;,&quot;value&quot;:&quot;(max-width: 50em)&quot;}" await-children=""><h2 id="on-this-page-heading" class="heading">On this page</h2><ul><li class="header-link depth-2"><a href="#system-architecture">System Architecture</a></li><li class="header-link depth-2"><a href="#core-components">Core Components</a></li><li class="header-link depth-3"><a href="#️-lightweight-runtime">🏗️ Lightweight Runtime</a></li><li class="header-link depth-3"><a href="#-agent-management">🤖 Agent Management</a></li><li class="header-link depth-3"><a href="#-mcp-integration">🔧 MCP Integration</a></li><li class="header-link depth-3"><a href="#-security-layer">🔒 Security Layer</a></li><li class="header-link depth-2"><a href="#data-flow">Data Flow</a></li><li class="header-link depth-2"><a href="#file-system-layout">File System Layout</a></li><li class="header-link depth-2"><a href="#environment-isolation">Environment Isolation</a></li><li class="header-link depth-2"><a href="#security-architecture">Security Architecture</a></li><li class="header-link depth-3"><a href="#-encryption-at-rest">🔐 Encryption at Rest</a></li><li class="header-link depth-3"><a href="#-access-control">🚪 Access Control</a></li><li class="header-link depth-3"><a href="#-audit-trail">📊 Audit Trail</a></li><li class="header-link depth-3"><a href="#-network-security">🌐 Network Security</a></li><li class="header-link depth-2"><a href="#deployment-patterns">Deployment Patterns</a></li><li class="header-link depth-3"><a href="#single-node-development">Single-Node Development</a></li><li class="header-link depth-3"><a href="#production-deployment">Production Deployment</a></li><li class="header-link depth-2"><a href="#performance-characteristics">Performance Characteristics</a></li><li class="header-link depth-3"><a href="#-scalability">📈 Scalability</a></li><li class="header-link depth-3"><a href="#-response-times">⚡ Response Times</a></li><li class="header-link depth-3"><a href="#-resource-usage">💾 Resource Usage</a></li><li class="header-link depth-3"><a href="#-reliability">🔄 Reliability</a></li><li class="header-link depth-2"><a href="#technology-stack">Technology Stack</a></li><li class="header-link depth-2"><a href="#next-steps">Next Steps</a></li></ul><!--astro:end--></astro-island> </nav>   <h1 id="architecture-overview">Architecture Overview</h1>
+<p>Station is designed as a lightweight, secure runtime for deployable sub-agents with a focus on simplicity, security, and production readiness.</p>
+<h2 id="system-architecture">System Architecture</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0"><code><span class="line"><span style="color:#F97583">graph</span><span style="color:#B392F0"> TB</span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Client Interfaces</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        CLI</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Station CLI&lt;br/&gt;stn command</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        API</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">REST API&lt;br/&gt;Port 8080</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        SSH</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">SSH/TUI Access&lt;br/&gt;Port 2222</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        WS</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">WebSocket&lt;br/&gt;Real</span><span style="color:#E1E4E8">-</span><span style="color:#9ECBFF">time updates</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Core Runtime</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        Router</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Request Router&lt;br/&gt;HTTP/SSH/WS</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        Auth</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Authentication&lt;br/&gt;&amp; Authorization</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        Queue</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Execution Queue&lt;br/&gt;Background Processing</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        Scheduler</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Agent Scheduler&lt;br/&gt;Cron &amp; Events</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Service Layer</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        AgentSvc</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Agent Management&lt;br/&gt;Creation &amp; Execution</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        MCPSvc</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">MCP Integration&lt;br/&gt;Tool Discovery</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        ConfigSvc</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Configuration&lt;br/&gt;File</span><span style="color:#E1E4E8">-</span><span style="color:#9ECBFF">based Management</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        SecuritySvc</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Security Services&lt;br/&gt;Encryption &amp; Audit</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        WebhookSvc</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Webhook Service&lt;br/&gt;Event Notifications</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Data Layer</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        SQLite</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">SQLite&lt;br/&gt;Development</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">        PostgreSQL</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">PostgreSQL&lt;br/&gt;Production</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">        ConfigFiles</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Config Files&lt;br/&gt;.json/.yml</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        SecretStore</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Encrypted Secrets&lt;br/&gt;AES</span><span style="color:#E1E4E8">-</span><span style="color:#9ECBFF">256</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        AuditLog</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Audit Logs&lt;br/&gt;JSON Lines</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">External Systems</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        MCPServers</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">MCP Servers&lt;br/&gt;Filesystem, AWS, etc.</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        AIProviders</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">AI Providers&lt;br/&gt;OpenAI, Anthropic</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        Webhooks</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">External Webhooks&lt;br/&gt;Slack, PagerDuty</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        VCS</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Version Control&lt;br/&gt;Git repositories</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    CLI </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Router</span></span>
+<span class="line"><span style="color:#FFAB70">    API </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Router</span></span>
+<span class="line"><span style="color:#FFAB70">    SSH </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Router</span></span>
+<span class="line"><span style="color:#FFAB70">    WS </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Router</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    Router </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Auth</span></span>
+<span class="line"><span style="color:#FFAB70">    Auth </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Queue</span></span>
+<span class="line"><span style="color:#FFAB70">    Auth </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Scheduler</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    Queue </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> AgentSvc</span></span>
+<span class="line"><span style="color:#FFAB70">    Scheduler </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> AgentSvc</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    AgentSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> MCPSvc</span></span>
+<span class="line"><span style="color:#FFAB70">    AgentSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> ConfigSvc</span></span>
+<span class="line"><span style="color:#FFAB70">    AgentSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> SecuritySvc</span></span>
+<span class="line"><span style="color:#FFAB70">    AgentSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> WebhookSvc</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    ConfigSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> ConfigFiles</span></span>
+<span class="line"><span style="color:#FFAB70">    SecuritySvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> SQLite</span></span>
+<span class="line"><span style="color:#FFAB70">    SecuritySvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> PostgreSQL</span></span>
+<span class="line"><span style="color:#FFAB70">    SecuritySvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> SecretStore</span></span>
+<span class="line"><span style="color:#FFAB70">    SecuritySvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> AuditLog</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    MCPSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> MCPServers</span></span>
+<span class="line"><span style="color:#FFAB70">    AgentSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> AIProviders</span></span>
+<span class="line"><span style="color:#FFAB70">    WebhookSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Webhooks</span></span>
+<span class="line"><span style="color:#FFAB70">    ConfigSvc </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> VCS</span></span></code></pre>
+<h2 id="core-components">Core Components</h2>
+<h3 id="️-lightweight-runtime">🏗️ Lightweight Runtime</h3>
+<p><strong>45MB Binary</strong> with embedded SQLite for development</p>
+<ul>
+<li><strong>Low Memory Footprint</strong> - 512MB minimum</li>
+<li><strong>Container Optimized</strong> - Perfect for Docker/K8s</li>
+<li><strong>Multi-Interface</strong> - CLI, REST, SSH, WebSocket</li>
+<li><strong>Production Ready</strong> - Queue-based execution</li>
+</ul>
+<h3 id="-agent-management">🤖 Agent Management</h3>
+<p><strong>Intelligent Sub-Agent Orchestration</strong></p>
+<ul>
+<li><strong>Agent Lifecycle</strong> - Create, deploy, monitor, scale</li>
+<li><strong>Environment Isolation</strong> - Dev/staging/prod separation</li>
+<li><strong>Template System</strong> - Reusable agent bundles</li>
+<li><strong>Scheduling</strong> - Cron-based and event-driven</li>
+</ul>
+<h3 id="-mcp-integration">🔧 MCP Integration</h3>
+<p><strong>Model Context Protocol Support</strong></p>
+<ul>
+<li><strong>Tool Discovery</strong> - Automatic MCP server detection</li>
+<li><strong>Configuration Management</strong> - GitOps-ready configs</li>
+<li><strong>20+ Built-in Tools</strong> - Filesystem, AWS, databases</li>
+<li><strong>Custom Tools</strong> - Easy integration of your tools</li>
+</ul>
+<h3 id="-security-layer">🔒 Security Layer</h3>
+<p><strong>Enterprise-Grade Security</strong></p>
+<ul>
+<li><strong>Self-Hosted</strong> - Complete data sovereignty</li>
+<li><strong>AES Encryption</strong> - Secrets and sensitive data</li>
+<li><strong>Audit Logging</strong> - Complete execution trail</li>
+<li><strong>Access Controls</strong> - Role-based permissions</li>
+</ul>
+<h2 id="data-flow">Data Flow</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> User</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> CLI</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> Runtime</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> Agent</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> MCP</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> AI</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    User</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">CLI</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> stn agent run 1 &quot;task&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">    CLI</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">Runtime</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> POST /api/v1/agents/1/queue</span></span>
+<span class="line"><span style="color:#FFAB70">    Runtime</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">Runtime</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Authenticate &amp; validate</span></span>
+<span class="line"><span style="color:#FFAB70">    Runtime</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">Agent</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Queue execution</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    loop</span><span style="color:#9ECBFF"> Agent Execution</span></span>
+<span class="line"><span style="color:#FFAB70">        Agent</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">MCP</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Discover available tools</span></span>
+<span class="line"><span style="color:#FFAB70">        MCP</span><span style="color:#F97583">--&gt;&gt;</span><span style="color:#FFAB70">Agent</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Tool definitions</span></span>
+<span class="line"><span style="color:#FFAB70">        Agent</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">AI</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Generate execution plan</span></span>
+<span class="line"><span style="color:#FFAB70">        AI</span><span style="color:#F97583">--&gt;&gt;</span><span style="color:#FFAB70">Agent</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Step-by-step actions</span></span>
+<span class="line"><span style="color:#FFAB70">        Agent</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">MCP</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Execute tool calls</span></span>
+<span class="line"><span style="color:#FFAB70">        MCP</span><span style="color:#F97583">--&gt;&gt;</span><span style="color:#FFAB70">Agent</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Tool responses</span></span>
+<span class="line"><span style="color:#FFAB70">        Agent</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">Runtime</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Update execution status</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    Agent</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">Runtime</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Execution complete</span></span>
+<span class="line"><span style="color:#FFAB70">    Runtime</span><span style="color:#F97583">-&gt;&gt;</span><span style="color:#FFAB70">CLI</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Stream results</span></span>
+<span class="line"><span style="color:#FFAB70">    CLI</span><span style="color:#F97583">--&gt;&gt;</span><span style="color:#FFAB70">User</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Display output</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    Note</span><span style="color:#B392F0"> over</span><span style="color:#FFAB70"> Runtime</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Audit log, webhooks,&lt;br/&gt;metrics collection</span></span></code></pre>
+<h2 id="file-system-layout">File System Layout</h2>
+<p>Station follows a standard configuration layout for predictable deployment:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0"><code><span class="line"><span># Development (default)</span></span>
+<span class="line"><span>~/.config/station/</span></span>
+<span class="line"><span>├── station.db              # SQLite database</span></span>
+<span class="line"><span>├── environments/</span></span>
+<span class="line"><span>│   ├── development/</span></span>
+<span class="line"><span>│   │   ├── agents/          # Agent definitions (.prompt files)</span></span>
+<span class="line"><span>│   │   ├── *.json           # MCP configurations</span></span>
+<span class="line"><span>│   │   └── variables.yml    # Environment variables</span></span>
+<span class="line"><span>│   ├── staging/</span></span>
+<span class="line"><span>│   └── production/</span></span>
+<span class="line"><span>├── secrets/                 # Encrypted secrets (AES-256)</span></span>
+<span class="line"><span>├── audit/                   # Audit logs (JSONL)</span></span>
+<span class="line"><span>└── cache/                   # Temporary execution cache</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span># Production (configurable)</span></span>
+<span class="line"><span>/opt/station/</span></span>
+<span class="line"><span>├── config/                  # Configuration files</span></span>
+<span class="line"><span>├── data/                    # PostgreSQL data</span></span>
+<span class="line"><span>├── logs/                    # Application logs</span></span>
+<span class="line"><span>└── backup/                  # Database backups</span></span></code></pre>
+<h2 id="environment-isolation">Environment Isolation</h2>
+<p>Station provides complete isolation between environments:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0"><code><span class="line"><span style="color:#F97583">graph</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Development</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        DevDB</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">SQLite&lt;br/&gt;Development</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">        DevAgents</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Dev Agents&lt;br/&gt;Test tools</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        DevVars</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Dev Variables&lt;br/&gt;Local paths</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Staging</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        StageDB</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">SQLite/PostgreSQL&lt;br/&gt;Staging</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">        StageAgents</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Staging Agents&lt;br/&gt;Safe tools</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        StageVars</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Staging Variables&lt;br/&gt;Test credentials</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Production</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        ProdDB</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">PostgreSQL&lt;br/&gt;Production</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">        ProdAgents</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Production Agents&lt;br/&gt;All tools</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        ProdVars</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Production Variables&lt;br/&gt;Real credentials</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    DevDB </span><span style="color:#F97583">-.-&gt;</span><span style="color:#FFAB70"> StageDB</span></span>
+<span class="line"><span style="color:#FFAB70">    StageDB </span><span style="color:#F97583">-.-&gt;</span><span style="color:#FFAB70"> ProdDB</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    DevAgents </span><span style="color:#F97583">-.-&gt;</span><span style="color:#FFAB70"> StageAgents</span></span>
+<span class="line"><span style="color:#FFAB70">    StageAgents </span><span style="color:#F97583">-.-&gt;</span><span style="color:#FFAB70"> ProdAgents</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    DevVars </span><span style="color:#F97583">-.-&gt;</span><span style="color:#FFAB70"> StageVars</span></span>
+<span class="line"><span style="color:#FFAB70">    StageVars </span><span style="color:#F97583">-.-&gt;</span><span style="color:#FFAB70"> ProdVars</span></span></code></pre>
+<h2 id="security-architecture">Security Architecture</h2>
+<h3 id="-encryption-at-rest">🔐 Encryption at Rest</h3>
+<ul>
+<li><strong>AES-256 encryption</strong> for all secrets and sensitive variables</li>
+<li><strong>Encrypted database fields</strong> for credentials and tokens</li>
+<li><strong>Secure key derivation</strong> using PBKDF2 with salt</li>
+<li><strong>Key rotation support</strong> for long-term security</li>
+</ul>
+<h3 id="-access-control">🚪 Access Control</h3>
+<ul>
+<li><strong>Environment-based isolation</strong> prevents cross-environment access</li>
+<li><strong>Role-based permissions</strong> for different user types</li>
+<li><strong>API key authentication</strong> for programmatic access</li>
+<li><strong>SSH key authentication</strong> for secure terminal access</li>
+</ul>
+<h3 id="-audit-trail">📊 Audit Trail</h3>
+<ul>
+<li><strong>Complete execution logging</strong> for all agent activities</li>
+<li><strong>Configuration change tracking</strong> with Git integration</li>
+<li><strong>Access logging</strong> for all API and SSH connections</li>
+<li><strong>Compliance reporting</strong> for security audits</li>
+</ul>
+<h3 id="-network-security">🌐 Network Security</h3>
+<ul>
+<li><strong>TLS encryption</strong> for all external communications</li>
+<li><strong>Configurable firewall rules</strong> for port restrictions</li>
+<li><strong>Webhook signature validation</strong> for trusted notifications</li>
+<li><strong>Zero-trust architecture</strong> - verify all requests</li>
+</ul>
+<h2 id="deployment-patterns">Deployment Patterns</h2>
+<h3 id="single-node-development">Single-Node Development</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0"><code><span class="line"><span style="color:#F97583">graph</span><span style="color:#B392F0"> TB</span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Developer Machine</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        StationBin</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Station Binary&lt;br/&gt;stn command</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        SQLiteDB</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">SQLite&lt;br/&gt;Local database</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">        ConfigFiles</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Config Files&lt;br/&gt;Git tracked</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        LocalMCP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Local MCP&lt;br/&gt;Filesystem tools</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    StationBin </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> SQLiteDB</span></span>
+<span class="line"><span style="color:#FFAB70">    StationBin </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> ConfigFiles</span></span>
+<span class="line"><span style="color:#FFAB70">    StationBin </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> LocalMCP</span></span></code></pre>
+<h3 id="production-deployment">Production Deployment</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0"><code><span class="line"><span style="color:#F97583">graph</span><span style="color:#B392F0"> TB</span></span>
+<span class="line"><span style="color:#FFAB70">    subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Production Environment</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">        LB</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Load Balancer&lt;br/&gt;HAProxy/nginx</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#FFAB70">        subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Station Cluster</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">            Station1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Station Instance 1&lt;br/&gt;Primary</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">            Station2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Station Instance 2&lt;br/&gt;Replica</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">            Station3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Station Instance 3&lt;br/&gt;Replica</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">        end</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#FFAB70">        subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Data Layer</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">            PGPrimary</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">PostgreSQL&lt;br/&gt;Primary</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">            PGReplica</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">PostgreSQL&lt;br/&gt;Read Replica</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">            Redis</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">Redis&lt;br/&gt;Session store</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#F97583">        end</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#FFAB70">        subgraph </span><span style="color:#E1E4E8">&quot;</span><span style="color:#FFAB70">Monitoring</span><span style="color:#E1E4E8">&quot;</span></span>
+<span class="line"><span style="color:#FFAB70">            Prometheus</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Prometheus&lt;br/&gt;Metrics</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">            Grafana</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Grafana&lt;br/&gt;Dashboards</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">            AlertManager</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Alert Manager&lt;br/&gt;Notifications</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">        end</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    LB </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Station1</span></span>
+<span class="line"><span style="color:#FFAB70">    LB </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Station2</span></span>
+<span class="line"><span style="color:#FFAB70">    LB </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Station3</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    Station1 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> PGPrimary</span></span>
+<span class="line"><span style="color:#FFAB70">    Station2 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> PGReplica</span></span>
+<span class="line"><span style="color:#FFAB70">    Station3 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> PGReplica</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    Station1 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Redis</span></span>
+<span class="line"><span style="color:#FFAB70">    Station2 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Redis</span></span>
+<span class="line"><span style="color:#FFAB70">    Station3 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Redis</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    Station1 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Prometheus</span></span>
+<span class="line"><span style="color:#FFAB70">    Station2 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Prometheus</span></span>
+<span class="line"><span style="color:#FFAB70">    Station3 </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Prometheus</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#FFAB70">    Prometheus </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> Grafana</span></span>
+<span class="line"><span style="color:#FFAB70">    Prometheus </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> AlertManager</span></span></code></pre>
+<h2 id="performance-characteristics">Performance Characteristics</h2>
+<h3 id="-scalability">📈 Scalability</h3>
+<ul>
+<li><strong>Agent Concurrency</strong>: 100+ concurrent agent executions</li>
+<li><strong>API Throughput</strong>: 1000+ requests/second</li>
+<li><strong>Database</strong>: Scales from SQLite to PostgreSQL cluster</li>
+<li><strong>Memory</strong>: Linear scaling with agent count</li>
+</ul>
+<h3 id="-response-times">⚡ Response Times</h3>
+<ul>
+<li><strong>Agent Start</strong>: Less than 500ms for simple agents</li>
+<li><strong>API Latency</strong>: Less than 100ms for status queries</li>
+<li><strong>SSH Connection</strong>: Less than 200ms for terminal access</li>
+<li><strong>Tool Execution</strong>: Depends on MCP server performance</li>
+</ul>
+<h3 id="-resource-usage">💾 Resource Usage</h3>
+<ul>
+<li><strong>Binary Size</strong>: 45MB (includes embedded SQLite)</li>
+<li><strong>Memory Usage</strong>: 128MB base + 50MB per active agent</li>
+<li><strong>Disk Space</strong>: 100MB + logs and database</li>
+<li><strong>CPU Usage</strong>: Less than 5% idle, scales with agent activity</li>
+</ul>
+<h3 id="-reliability">🔄 Reliability</h3>
+<ul>
+<li><strong>Uptime</strong>: 99.9%+ with proper deployment</li>
+<li><strong>Error Recovery</strong>: Automatic agent restart on failure</li>
+<li><strong>Data Integrity</strong>: ACID compliance with PostgreSQL</li>
+<li><strong>Backup</strong>: Automated database backup and restore</li>
+</ul>
+<h2 id="technology-stack">Technology Stack</h2>
+<p><strong>Runtime:</strong> Go 1.21+, SQLite/PostgreSQL, HTTP/WebSocket servers</p>
+<p><strong>Security:</strong> AES-256, PBKDF2, TLS 1.3, JWT tokens</p>
+<p><strong>Protocols:</strong> HTTP/2, WebSocket, SSH, MCP (Model Context Protocol)</p>
+<p><strong>Storage:</strong> SQLite (dev), PostgreSQL (prod), Git (configs)</p>
+<p><strong>Deployment:</strong> Docker, Kubernetes, systemd, GitHub Actions</p>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li><strong><a href="/en/quickstart">Quick Start</a></strong> - Get Station running locally and create your first agent</li>
+<li><strong><a href="/en/mcp-integration">MCP Integration</a></strong> - Learn how Station integrates with Model Context Protocol servers</li>
+<li><strong><a href="/en/deployment/production">Production Setup</a></strong> - Deploy Station in production with proper security and monitoring</li>
+</ul>   </section> <nav class="block sm:hidden" data-astro-cid-j75b3yus> <h2 class="heading" data-astro-cid-byikqf6w>More</h2><ul data-astro-cid-byikqf6w><li class="header-link depth-2" data-astro-cid-byikqf6w><a class="edit-on-github" href="https://github.com/cloudshipai/station/tree/main/docs/site/src/content/docs/station/en/architecture.mdx" target="_blank" data-astro-cid-byikqf6w><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="pen" class="svg-inline--fa fa-pen fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" height="1em" width="1em" data-astro-cid-byikqf6w><path fill="currentColor" d="M290.74 93.24l128.02 128.02-277.99 277.99-114.14 12.6C11.35 513.54-1.56 500.62.14 485.34l12.7-114.22 277.9-277.88zm207.2-19.06l-60.11-60.11c-18.75-18.75-49.16-18.75-67.91 0l-56.55 56.55 128.02 128.02 56.55-56.55c18.75-18.76 18.75-49.16 0-67.91z" data-astro-cid-byikqf6w></path></svg><span data-astro-cid-byikqf6w>Edit this page</span></a></li><li class="header-link depth-2" data-astro-cid-byikqf6w><a href="https://discord.gg/station-ai" target="_blank" data-astro-cid-byikqf6w><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="comment-alt" class="svg-inline--fa fa-comment-alt fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" height="1em" width="1em" data-astro-cid-byikqf6w><path fill="currentColor" d="M448 0H64C28.7 0 0 28.7 0 64v288c0 35.3 28.7 64 64 64h96v84c0 9.8 11.2 15.5 19.1 9.7L304 416h144c35.3 0 64-28.7 64-64V64c0-35.3-28.7-64-64-64z" data-astro-cid-byikqf6w></path></svg><span data-astro-cid-byikqf6w>Join our community</span></a></li></ul><div style="margin: 2rem 0; text-align: center;" data-astro-cid-byikqf6w><script>(()=>{var r=(i,c,s)=>{let n=async()=>{await(await i())()},t=new IntersectionObserver(e=>{for(let o of e)if(o.isIntersecting){t.disconnect(),n();break}});for(let e of s.children)t.observe(e)};(self.Astro||(self.Astro={})).visible=r;window.dispatchEvent(new Event("astro:visible"));})();</script><astro-island uid="1BEV7e" component-url="/station/_astro/ThemeToggleButton.f55de46e.js" component-export="default" renderer-url="/station/_astro/client.f901bbcc.js" props="{&quot;data-astro-cid-byikqf6w&quot;:[0,true]}" ssr="" client="visible" opts="{&quot;name&quot;:&quot;ThemeToggleButton&quot;,&quot;value&quot;:true}" await-children=""><div class="theme-toggle"><label class><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path></svg><input type="radio" name="theme-toggle" value="light" title="Use light theme" aria-label="Use light theme"/></label><label class><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg><input type="radio" name="theme-toggle" value="dark" title="Use dark theme" aria-label="Use dark theme"/></label></div><!--astro:end--></astro-island></div> </nav> </article>  </div> <aside id="grid-right" class="grid-sidebar" title="Table of Contents" data-astro-cid-ouamjn2i> <nav class="sidebar-nav" aria-labelledby="grid-right" data-astro-cid-roivmluz> <div class="sidebar-nav-inner" data-astro-cid-roivmluz> <astro-island uid="1ylySD" component-url="/station/_astro/TableOfContents.07ca98c7.js" component-export="default" renderer-url="/station/_astro/client.f901bbcc.js" props="{&quot;headings&quot;:[1,[[0,{&quot;depth&quot;:[0,1],&quot;slug&quot;:[0,&quot;architecture-overview&quot;],&quot;text&quot;:[0,&quot;Architecture Overview&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;system-architecture&quot;],&quot;text&quot;:[0,&quot;System Architecture&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;core-components&quot;],&quot;text&quot;:[0,&quot;Core Components&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;️-lightweight-runtime&quot;],&quot;text&quot;:[0,&quot;🏗️ Lightweight Runtime&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-agent-management&quot;],&quot;text&quot;:[0,&quot;🤖 Agent Management&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-mcp-integration&quot;],&quot;text&quot;:[0,&quot;🔧 MCP Integration&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-security-layer&quot;],&quot;text&quot;:[0,&quot;🔒 Security Layer&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;data-flow&quot;],&quot;text&quot;:[0,&quot;Data Flow&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;file-system-layout&quot;],&quot;text&quot;:[0,&quot;File System Layout&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;environment-isolation&quot;],&quot;text&quot;:[0,&quot;Environment Isolation&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;security-architecture&quot;],&quot;text&quot;:[0,&quot;Security Architecture&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-encryption-at-rest&quot;],&quot;text&quot;:[0,&quot;🔐 Encryption at Rest&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-access-control&quot;],&quot;text&quot;:[0,&quot;🚪 Access Control&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-audit-trail&quot;],&quot;text&quot;:[0,&quot;📊 Audit Trail&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-network-security&quot;],&quot;text&quot;:[0,&quot;🌐 Network Security&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;deployment-patterns&quot;],&quot;text&quot;:[0,&quot;Deployment Patterns&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;single-node-development&quot;],&quot;text&quot;:[0,&quot;Single-Node Development&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;production-deployment&quot;],&quot;text&quot;:[0,&quot;Production Deployment&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;performance-characteristics&quot;],&quot;text&quot;:[0,&quot;Performance Characteristics&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-scalability&quot;],&quot;text&quot;:[0,&quot;📈 Scalability&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-response-times&quot;],&quot;text&quot;:[0,&quot;⚡ Response Times&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-resource-usage&quot;],&quot;text&quot;:[0,&quot;💾 Resource Usage&quot;]}],[0,{&quot;depth&quot;:[0,3],&quot;slug&quot;:[0,&quot;-reliability&quot;],&quot;text&quot;:[0,&quot;🔄 Reliability&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;technology-stack&quot;],&quot;text&quot;:[0,&quot;Technology Stack&quot;]}],[0,{&quot;depth&quot;:[0,2],&quot;slug&quot;:[0,&quot;next-steps&quot;],&quot;text&quot;:[0,&quot;Next Steps&quot;]}]]],&quot;data-astro-cid-roivmluz&quot;:[0,true]}" ssr="" client="media" opts="{&quot;name&quot;:&quot;TableOfContents&quot;,&quot;value&quot;:&quot;(min-width: 50em)&quot;}" await-children=""><h2 id="on-this-page-heading" class="heading">On this page</h2><ul><li class="header-link depth-2"><a href="#system-architecture">System Architecture</a></li><li class="header-link depth-2"><a href="#core-components">Core Components</a></li><li class="header-link depth-3"><a href="#️-lightweight-runtime">🏗️ Lightweight Runtime</a></li><li class="header-link depth-3"><a href="#-agent-management">🤖 Agent Management</a></li><li class="header-link depth-3"><a href="#-mcp-integration">🔧 MCP Integration</a></li><li class="header-link depth-3"><a href="#-security-layer">🔒 Security Layer</a></li><li class="header-link depth-2"><a href="#data-flow">Data Flow</a></li><li class="header-link depth-2"><a href="#file-system-layout">File System Layout</a></li><li class="header-link depth-2"><a href="#environment-isolation">Environment Isolation</a></li><li class="header-link depth-2"><a href="#security-architecture">Security Architecture</a></li><li class="header-link depth-3"><a href="#-encryption-at-rest">🔐 Encryption at Rest</a></li><li class="header-link depth-3"><a href="#-access-control">🚪 Access Control</a></li><li class="header-link depth-3"><a href="#-audit-trail">📊 Audit Trail</a></li><li class="header-link depth-3"><a href="#-network-security">🌐 Network Security</a></li><li class="header-link depth-2"><a href="#deployment-patterns">Deployment Patterns</a></li><li class="header-link depth-3"><a href="#single-node-development">Single-Node Development</a></li><li class="header-link depth-3"><a href="#production-deployment">Production Deployment</a></li><li class="header-link depth-2"><a href="#performance-characteristics">Performance Characteristics</a></li><li class="header-link depth-3"><a href="#-scalability">📈 Scalability</a></li><li class="header-link depth-3"><a href="#-response-times">⚡ Response Times</a></li><li class="header-link depth-3"><a href="#-resource-usage">💾 Resource Usage</a></li><li class="header-link depth-3"><a href="#-reliability">🔄 Reliability</a></li><li class="header-link depth-2"><a href="#technology-stack">Technology Stack</a></li><li class="header-link depth-2"><a href="#next-steps">Next Steps</a></li></ul><!--astro:end--></astro-island> <h2 class="heading" data-astro-cid-byikqf6w>More</h2><ul data-astro-cid-byikqf6w><li class="header-link depth-2" data-astro-cid-byikqf6w><a class="edit-on-github" href="https://github.com/cloudshipai/station/tree/main/docs/site/src/content/docs/station/en/architecture.mdx" target="_blank" data-astro-cid-byikqf6w><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="pen" class="svg-inline--fa fa-pen fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" height="1em" width="1em" data-astro-cid-byikqf6w><path fill="currentColor" d="M290.74 93.24l128.02 128.02-277.99 277.99-114.14 12.6C11.35 513.54-1.56 500.62.14 485.34l12.7-114.22 277.9-277.88zm207.2-19.06l-60.11-60.11c-18.75-18.75-49.16-18.75-67.91 0l-56.55 56.55 128.02 128.02 56.55-56.55c18.75-18.76 18.75-49.16 0-67.91z" data-astro-cid-byikqf6w></path></svg><span data-astro-cid-byikqf6w>Edit this page</span></a></li><li class="header-link depth-2" data-astro-cid-byikqf6w><a href="https://discord.gg/station-ai" target="_blank" data-astro-cid-byikqf6w><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="comment-alt" class="svg-inline--fa fa-comment-alt fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" height="1em" width="1em" data-astro-cid-byikqf6w><path fill="currentColor" d="M448 0H64C28.7 0 0 28.7 0 64v288c0 35.3 28.7 64 64 64h96v84c0 9.8 11.2 15.5 19.1 9.7L304 416h144c35.3 0 64-28.7 64-64V64c0-35.3-28.7-64-64-64z" data-astro-cid-byikqf6w></path></svg><span data-astro-cid-byikqf6w>Join our community</span></a></li></ul><div style="margin: 2rem 0; text-align: center;" data-astro-cid-byikqf6w><astro-island uid="1BEV7e" component-url="/station/_astro/ThemeToggleButton.f55de46e.js" component-export="default" renderer-url="/station/_astro/client.f901bbcc.js" props="{&quot;data-astro-cid-byikqf6w&quot;:[0,true]}" ssr="" client="visible" opts="{&quot;name&quot;:&quot;ThemeToggleButton&quot;,&quot;value&quot;:true}" await-children=""><div class="theme-toggle"><label class><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path></svg><input type="radio" name="theme-toggle" value="light" title="Use light theme" aria-label="Use light theme"/></label><label class><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg><input type="radio" name="theme-toggle" value="dark" title="Use dark theme" aria-label="Use dark theme"/></label></div><!--astro:end--></astro-island></div> </div> </nav>  </aside> </main> <footer data-astro-cid-ak3upacl> <!-- Thanks to @5t3ph for https://smolcss.dev/#smol-avatar-list! --><div class="contributors" data-astro-cid-qvdstm4s> <ul class="avatar-list" style="--avatar-count: 0" data-astro-cid-qvdstm4s>  </ul>  <a href="https://github.com/advanced-astro/astro-docs-template/commits/main/src/content/docs/station/en/architecture.mdx" data-astro-cid-qvdstm4s>Contributors</a> </div>  </footer>  </body></html>
