@@ -346,28 +346,28 @@ graph TB
 
 <CardGrid>
   <Card title="📈 Scalability" icon="rocket">
-    - **Agent Concurrency**: 100+ concurrent agent executions
-    - **API Throughput**: 1000+ requests/second
+    - **Agent Concurrency**: 100 or more concurrent agent executions
+    - **API Throughput**: 1000 or more requests/second
     - **Database**: Scales from SQLite to PostgreSQL cluster
     - **Memory**: Linear scaling with agent count
   </Card>
   
   <Card title="⚡ Response Times" icon="information">
-    - **Agent Start**: <500ms for simple agents
-    - **API Latency**: <100ms for status queries
-    - **SSH Connection**: <200ms for terminal access
+    - **Agent Start**: Less than 500ms for simple agents
+    - **API Latency**: Less than 100ms for status queries  
+    - **SSH Connection**: Less than 200ms for terminal access
     - **Tool Execution**: Depends on MCP server performance
   </Card>
   
   <Card title="💾 Resource Usage" icon="setting">
     - **Binary Size**: 45MB (includes embedded SQLite)
-    - **Memory Usage**: 128MB base + 50MB per active agent
-    - **Disk Space**: 100MB + logs and database
-    - **CPU Usage**: <5% idle, scales with agent activity
+    - **Memory Usage**: 128MB base plus 50MB per active agent
+    - **Disk Space**: 100MB plus logs and database
+    - **CPU Usage**: Less than 5% idle, scales with agent activity
   </Card>
   
   <Card title="🔄 Reliability" icon="lock">
-    - **Uptime**: 99.9%+ with proper deployment
+    - **Uptime**: 99.9% or higher with proper deployment
     - **Error Recovery**: Automatic agent restart on failure
     - **Data Integrity**: ACID compliance with PostgreSQL
     - **Backup**: Automated database backup and restore

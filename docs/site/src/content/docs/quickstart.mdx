@@ -235,20 +235,3 @@ graph LR
   </div>
 </details>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  // Copy button functionality
-  document.querySelectorAll('.copy-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const codeBlock = this.closest('.bg-slate-900');
-      const text = codeBlock.textContent.replace('Copy', '').trim();
-      navigator.clipboard.writeText(text).then(() => {
-        this.textContent = 'Copied!';
-        setTimeout(() => {
-          this.textContent = 'Copy';
-        }, 2000);
-      });
-    });
-  });
-});
-</script>

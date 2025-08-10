@@ -12,6 +12,13 @@ export default defineConfig({
     starlight({
       title: 'Station Docs',
       description: 'Lightweight Runtime for Deployable Sub-Agents',
+      defaultLocale: 'root',
+      locales: {
+        root: {
+          label: 'English',
+          lang: 'en',
+        },
+      },
       logo: {
         src: './src/assets/station-logo.png',
         replacesTitle: true,
@@ -78,10 +85,6 @@ export default defineConfig({
           ],
         },
       ],
-      components: {
-        // Override the default `Head` component to add custom meta tags
-        Head: './src/components/Head.astro',
-      },
     }),
   ],
 });
