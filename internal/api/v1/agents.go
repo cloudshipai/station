@@ -1,0 +1,423 @@
+package v1
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/spf13/afero"
+	"station/internal/auth"
+	"station/pkg/models"
+	agent_bundle "station/pkg/agent-bundle"
+	"station/pkg/agent-bundle/manager"
+	"station/pkg/agent-bundle/validator"
+
+	"github.com/gin-gonic/gin"
+)
+
+// registerAgentAdminRoutes registers admin-only agent management routes
+func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
+	group.POST("", h.createAgent)
+	group.GET("/:id", h.getAgent)
+	group.PUT("/:id", h.updateAgent)
+	group.DELETE("/:id", h.deleteAgent)
+	
+	// Agent template installation endpoint
+	group.POST("/templates/install", h.installAgentTemplate)
+}
+
+// Agent handlers
+
+func (h *APIHandlers) listAgents(c *gin.Context) {
+	// Check for environment filter parameter
+	envFilter := c.Query("environment")
+	
+	agents, err := h.repos.Agents.List()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agents"})
+		return
+	}
+
+	// Filter by environment if specified
+	if envFilter != "" {
+		// Try to parse as environment ID or name
+		var targetEnvID int64 = -1
+		
+		// Try as ID first
+		if envID, err := strconv.ParseInt(envFilter, 10, 64); err == nil {
+			targetEnvID = envID
+		} else {
+			// Try as environment name
+			envs, err := h.repos.Environments.List()
+			if err == nil {
+				for _, env := range envs {
+					if env.Name == envFilter {
+						targetEnvID = env.ID
+						break
+					}
+				}
+			}
+		}
+		
+		if targetEnvID == -1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Environment '%s' not found", envFilter)})
+			return
+		}
+		
+		// Filter agents by environment
+		var filteredAgents []*models.Agent
+		for _, agent := range agents {
+			if agent.EnvironmentID == targetEnvID {
+				filteredAgents = append(filteredAgents, agent)
+			}
+		}
+		agents = filteredAgents
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"agents": agents,
+		"count":  len(agents),
+	})
+}
+
+func (h *APIHandlers) callAgent(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	var req struct {
+		Task string `json:"task" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate agent exists
+	agent, err := h.repos.Agents.GetByID(agentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
+		return
+	}
+
+	// For direct execution (not queued), we'll use a simplified approach
+	// In a production system, this would:
+	// 1. Load agent configuration and tools
+	// 2. Set up MCP connections
+	// 3. Execute the task with the Claude API
+	// 4. Stream results back to client
+
+	// For now, return a placeholder response indicating the execution was received
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":    "Agent execution initiated (direct mode)",
+		"agent_id":   agentID,
+		"agent_name": agent.Name,
+		"task":       req.Task,
+		"status":     "executing",
+		"note":       "Direct execution is simplified - use queue endpoint for full execution with streaming",
+	})
+}
+
+func (h *APIHandlers) queueAgent(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	var req struct {
+		Task string `json:"task" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Check if execution queue service is available
+	if h.executionQueueSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Execution queue service not available"})
+		return
+	}
+
+	// Get user ID for tracking (use console user for local mode)
+	var userID int64 = 1 // Default console user
+	if !h.localMode {
+		user, exists := auth.GetUserFromContext(c)
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			return
+		}
+		userID = user.ID
+	}
+
+	// Create metadata for the execution
+	metadata := map[string]interface{}{
+		"source":       "api_execution",
+		"triggered_by": "cli",
+		"api_endpoint": c.Request.URL.Path,
+	}
+
+	// Queue the execution
+	runID, err := h.executionQueueSvc.QueueExecution(agentID, userID, req.Task, metadata)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to queue execution: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"agent_id": agentID,
+		"task":     req.Task,
+		"run_id":   runID,
+		"status":   "queued",
+		"message":  "Agent execution queued successfully",
+	})
+}
+
+func (h *APIHandlers) createAgent(c *gin.Context) {
+	var req struct {
+		Name          string   `json:"name" binding:"required"`
+		Description   string   `json:"description" binding:"required"`
+		Prompt        string   `json:"prompt" binding:"required"`
+		EnvironmentID int64    `json:"environment_id" binding:"required"`
+		MaxSteps      int64    `json:"max_steps"`
+		AssignedTools []string `json:"assigned_tools"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get user for created_by field
+	var createdBy int64 = 1 // Default for local mode
+	if !h.localMode {
+		user, exists := auth.GetUserFromContext(c)
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			return
+		}
+		createdBy = user.ID
+	}
+
+	// Set default max steps if not provided
+	if req.MaxSteps == 0 {
+		req.MaxSteps = 25
+	}
+
+	// Validate environment exists
+	environment, err := h.repos.Environments.GetByID(req.EnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Environment not found"})
+		return
+	}
+
+	// Create agent directly in database (simplified implementation)
+	// In a production system, you might want to:
+	// 1. Validate tool assignments
+	// 2. Check user permissions for the environment
+	// 3. Create associated tool mappings
+
+	// Create the agent using the repository
+	agent, err := h.repos.Agents.Create(
+		req.Name,
+		req.Description,
+		req.Prompt,
+		req.MaxSteps,
+		req.EnvironmentID,
+		createdBy,
+		nil,   // cronSchedule - no schedule initially
+		false, // scheduleEnabled - disabled initially
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create agent"})
+		return
+	}
+
+	// TODO: Handle tool assignments
+	// For now, we'll skip tool assignment - this would require:
+	// 1. Validating that tools exist in the environment
+	// 2. Creating AgentTool records in the database
+	
+	if len(req.AssignedTools) > 0 {
+		// Placeholder for tool assignment
+		// h.assignToolsToAgent(agentID, req.AssignedTools, req.EnvironmentID)
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":     "Agent created successfully",
+		"agent_id":    agent.ID,
+		"agent_name":  agent.Name,
+		"environment": environment.Name,
+	})
+}
+
+func (h *APIHandlers) getAgent(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	agent, err := h.repos.Agents.GetByID(agentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"agent": agent})
+}
+
+func (h *APIHandlers) updateAgent(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Prompt      string `json:"prompt"`
+		MaxSteps    int64  `json:"max_steps"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Update agent fields if provided
+	if req.Name != "" || req.Description != "" || req.Prompt != "" || req.MaxSteps > 0 {
+		err = h.repos.Agents.Update(agentID, req.Name, req.Description, req.Prompt, req.MaxSteps, nil, false)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Agent updated successfully"})
+}
+
+func (h *APIHandlers) deleteAgent(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	err = h.repos.Agents.Delete(agentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete agent"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Agent deleted successfully"})
+}
+
+// installAgentTemplate installs an agent from a template bundle
+func (h *APIHandlers) installAgentTemplate(c *gin.Context) {
+	var req struct {
+		BundlePath  string                 `json:"bundle_path" binding:"required"`
+		Environment string                 `json:"environment"`
+		Variables   map[string]interface{} `json:"variables"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Set default environment if not provided
+	if req.Environment == "" {
+		req.Environment = "default"
+	}
+
+	// Validate that environment exists
+	envs, err := h.repos.Environments.List()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list environments"})
+		return
+	}
+
+	var foundEnv *models.Environment
+	for _, env := range envs {
+		if env.Name == req.Environment {
+			foundEnv = env
+			break
+		}
+	}
+
+	if foundEnv == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Environment '%s' not found", req.Environment)})
+		return
+	}
+
+	// Create manager with dependencies (using mock for now - TODO: implement real resolver)
+	fs := afero.NewOsFs()
+	bundleValidator := validator.New(fs)
+	mockResolver := &MockResolver{}
+	bundleManager := manager.New(fs, bundleValidator, mockResolver)
+
+	// Install the bundle
+	result, err := bundleManager.Install(req.BundlePath, req.Environment, req.Variables)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to install agent template",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if !result.Success {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Agent template installation failed",
+			"details": result.Error,
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":        "Agent template installed successfully",
+		"agent_id":       result.AgentID,
+		"agent_name":     result.AgentName,
+		"environment":    result.Environment,
+		"tools_installed": result.ToolsInstalled,
+		"mcp_bundles":    result.MCPBundles,
+	})
+}
+
+// MockResolver for template installation API (reused from CLI handler)
+type MockResolver struct{}
+
+func (r *MockResolver) Resolve(ctx context.Context, deps []agent_bundle.MCPBundleDependency, env string) (*agent_bundle.ResolutionResult, error) {
+	return &agent_bundle.ResolutionResult{
+		Success: true,
+		ResolvedBundles: []agent_bundle.MCPBundleRef{
+			{Name: "filesystem-tools", Version: "1.0.0", Source: "registry"},
+		},
+		MissingBundles: []agent_bundle.MCPBundleDependency{},
+		Conflicts:      []agent_bundle.ToolConflict{},
+		InstallOrder:   []string{"filesystem-tools"},
+	}, nil
+}
+
+func (r *MockResolver) InstallMCPBundles(ctx context.Context, bundles []agent_bundle.MCPBundleRef, env string) error {
+	return nil
+}
+
+func (r *MockResolver) ValidateToolAvailability(ctx context.Context, tools []agent_bundle.ToolRequirement, env string) error {
+	return nil
+}
+
+func (r *MockResolver) ResolveConflicts(conflicts []agent_bundle.ToolConflict) (*agent_bundle.ConflictResolution, error) {
+	return &agent_bundle.ConflictResolution{
+		Strategy:    "auto",
+		Resolutions: make(map[string]string),
+		Warnings:    []string{},
+	}, nil
+}

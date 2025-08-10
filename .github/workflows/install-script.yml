@@ -1,0 +1,61 @@
+name: Deploy Installation Script
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'install.sh'
+      - '.github/workflows/install-script.yml'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy-install-script:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup install script hosting
+        run: |
+          mkdir -p _site
+          cp install.sh _site/
+          
+          # Create index.html that redirects to install.sh for browser requests
+          cat > _site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Station Installation</title>
+              <meta http-equiv="refresh" content="0; url=https://cloudshipai.github.io/station/">
+              <link rel="canonical" href="https://cloudshipai.github.io/station/">
+          </head>
+          <body>
+              <h1>🚂 Station Installation</h1>
+              <p>To install Station, run:</p>
+              <pre><code>curl -sSL https://getstation.cloudshipai.com | bash</code></pre>
+              <p>Or visit our <a href="https://cloudshipai.github.io/station/">documentation</a> for more options.</p>
+              <script>
+                  // Auto-redirect after 3 seconds
+                  setTimeout(function() {
+                      window.location.href = 'https://cloudshipai.github.io/station/';
+                  }, 3000);
+              </script>
+          </body>
+          </html>
+          EOF
+          
+          # Create CNAME for custom domain (if you have one)
+          # echo "getstation.cloudshipai.com" > _site/CNAME
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3

@@ -1,1 +1,60 @@
+<<<<<<< HEAD
 .crush/
+=======
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+station
+station-cli
+stn
+# Test binary, built with `go test -c`
+*.test
+/main
+coverage.out
+# Output of the go build command
+/bin/
+/tmp/
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# SSH keys and host keys
+*.pem
+*.key
+!*_test.key
+ssh_host_key*
+
+# MCP config
+.mcp.json
+
+# Test files (in root - move to tests/ for permanent tests)
+test_*.go
+stn
+>>>>>>> fd3f5dc1e1fdccd92926e5feae57c3c1ee96ba40
