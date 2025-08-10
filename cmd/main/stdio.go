@@ -82,7 +82,10 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 
 	// Initialize agent service with IntelligentAgentCreator (same as server mode)
 	agentSvc := services.NewAgentService(repos)
+<<<<<<< HEAD
 	fmt.Fprintf(os.Stderr, "DEBUG: Agent service created: %v\n", agentSvc != nil)
+=======
+>>>>>>> a21c00f (Implement stn develop command with Genkit integration)
 	
 	// Note: Skip InitializeMCP in stdio mode - MCP tools are available directly
 	// The agent service is initialized but doesn't need the MCP connection test
