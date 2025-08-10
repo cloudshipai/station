@@ -55,8 +55,8 @@ Unlike application-focused agent platforms, Station is designed for deployable s
 git clone https://github.com/cloudshipai/station
 cd station && go build -o stn ./cmd/main
 
-# Binary install (coming soon)
-curl -sSL https://getstation.ai/install | bash
+# Binary install
+curl -sSL https://getstation.cloudshipai.com | bash
 ```
 
 ### 2. Initialize & Configure Tools
@@ -101,8 +101,7 @@ git commit -m "Add production database monitoring agent"
 git push origin main
 
 # Deploy to production with encrypted secrets
-stn template install ./ops-agents/db-monitor production \
-  --vars-file secrets/production.enc
+stn template install ./ops-agents/db-monitor
 ```
 
 ## Deployable Sub-Agent Use Cases
@@ -192,8 +191,7 @@ stn agent export 3 ./team-agents/db-monitor --analyze-vars
 git add team-agents/ && git commit -m "Add database monitoring agent v1.0"
 
 # Team members deploy with their environment variables
-stn template install ./team-agents/db-monitor staging \
-  --vars-file ~/.station/secrets/staging.enc
+stn template install ./team-agents/db-monitor
 
 # Invoke and trigger remote sub-agents via API or MCP
 curl -X POST https://station.company.com/api/v1/agents/3/execute \
