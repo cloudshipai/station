@@ -23,7 +23,7 @@ const sidebar = SIDEBAR[langCode]
             <h2>{header}</h2>
             <ul>
               {children.map((child) => {
-                const url = Astro.site?.pathname + child.link
+                const url = import.meta.env.BASE_URL + child.link
                 return (
                   <li class="nav-link">
                     <a
