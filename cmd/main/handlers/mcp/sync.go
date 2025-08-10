@@ -31,7 +31,6 @@ type syncFlags struct {
 	Environment string
 	DryRun      bool
 	Validate    bool
-	Force       bool
 	Verbose     bool
 }
 
@@ -40,14 +39,12 @@ func init() {
 	syncCmd.Flags().String("env", "", "Environment to sync (default: all environments)")
 	syncCmd.Flags().Bool("dry-run", false, "Show what would be changed without applying changes")
 	syncCmd.Flags().Bool("validate", false, "Only validate configurations without syncing")
-	syncCmd.Flags().Bool("force", false, "Force sync even if files haven't changed")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 	
 	// Bind flags to viper
 	viper.BindPFlag("mcp.sync.environment", syncCmd.Flags().Lookup("env"))
 	viper.BindPFlag("mcp.sync.dry_run", syncCmd.Flags().Lookup("dry-run"))
 	viper.BindPFlag("mcp.sync.validate", syncCmd.Flags().Lookup("validate"))
-	viper.BindPFlag("mcp.sync.force", syncCmd.Flags().Lookup("force"))
 	viper.BindPFlag("mcp.sync.verbose", syncCmd.Flags().Lookup("verbose"))
 }
 
@@ -57,7 +54,6 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 		Environment: viper.GetString("mcp.sync.environment"),
 		DryRun:      viper.GetBool("mcp.sync.dry_run"),
 		Validate:    viper.GetBool("mcp.sync.validate"),
-		Force:       viper.GetBool("mcp.sync.force"),
 		Verbose:     viper.GetBool("mcp.sync.verbose"),
 	}
 
@@ -105,7 +101,6 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 		result, err := syncer.SyncEnvironment(context.Background(), envName, services.SyncOptions{
 			DryRun:   flags.DryRun,
 			Validate: flags.Validate,
-			Force:    flags.Force,
 			Verbose:  flags.Verbose,
 		})
 		

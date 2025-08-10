@@ -27,7 +27,7 @@ func (h *MCPHandler) validateEnvironmentExists(envName string) bool {
 }
 
 // syncMCPConfigsLocal performs declarative sync of file-based configs to database
-func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool) error {
+func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool) error {
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
@@ -56,7 +56,6 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 	// Perform sync using the service
 	options := mcpservice.SyncOptions{
 		DryRun: dryRun,
-		Force:  force,
 	}
 	
 	result, err := syncer.Sync(environment, envID, options)
@@ -65,7 +64,7 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun, force bool)
 	}
 	
 	// Phase 2: Sync .prompt files (agents depend on MCP configs)
-	agentsSynced, err := h.syncAgentPromptFiles(repos, environment, envID, dryRun, force)
+	agentsSynced, err := h.syncAgentPromptFiles(repos, environment, envID, dryRun)
 	if err != nil {
 		return fmt.Errorf("agent sync failed: %w", err)
 	}
@@ -255,7 +254,7 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 }
 
 // syncAgentPromptFiles syncs .prompt files to the database
-func (h *MCPHandler) syncAgentPromptFiles(repos *repositories.Repositories, environment string, envID int64, dryRun, force bool) (int, error) {
+func (h *MCPHandler) syncAgentPromptFiles(repos *repositories.Repositories, environment string, envID int64, dryRun bool) (int, error) {
 	// Get user home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

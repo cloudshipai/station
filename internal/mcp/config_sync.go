@@ -34,7 +34,6 @@ func NewConfigSyncer(repos *repositories.Repositories) *ConfigSyncer {
 // SyncOptions contains options for sync operations
 type SyncOptions struct {
 	DryRun bool
-	Force  bool
 }
 
 // SyncResult contains the results of a sync operation
@@ -191,7 +190,9 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 	}
 	
 	// Create MCP servers and discover tools
+	logging.Debug("Processing %d MCP servers from config", len(serversData))
 	for serverName, serverConfig := range serversData {
+		logging.Debug("Processing MCP server: %s", serverName)
 		serverConfigMap, ok := serverConfig.(map[string]interface{})
 		if !ok {
 			continue
@@ -234,10 +235,27 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 			}
 		}
 		
-		// Create server (or try to find existing one)
-		serverID, err := s.repos.MCPServers.Create(server)
+		// Try to get existing server first
+		logging.Debug("Looking for existing server: name='%s', envID=%d", serverName, envID)
+		existingServer, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
+		logging.Debug("GetByNameAndEnvironment result: err=%v, server=%v", err, existingServer != nil)
+		var serverID int64
 		if err != nil {
-			return fmt.Errorf("failed to create/update MCP server %s: %w", serverName, err)
+			// Server doesn't exist, create it
+			logging.Debug("Creating new MCP server: %s (envID: %d)", serverName, envID)
+			serverID, err = s.repos.MCPServers.Create(server)
+			if err != nil {
+				return fmt.Errorf("failed to create MCP server %s: %w", serverName, err)
+			}
+		} else {
+			// Server already exists, update it with new config
+			logging.Debug("Updating existing MCP server: %s (ID: %d, envID: %d)", serverName, existingServer.ID, envID)
+			server.ID = existingServer.ID
+			err = s.repos.MCPServers.Update(server)
+			if err != nil {
+				return fmt.Errorf("failed to update MCP server %s: %w", serverName, err)
+			}
+			serverID = existingServer.ID
 		}
 		
 		// Discover and register tools for this server
@@ -364,8 +382,8 @@ func (s *ConfigSyncer) Sync(environment string, envID int64, options SyncOptions
 	for _, fileConfig := range fileConfigs {
 		dbConfig, existsInDB := dbConfigMap[fileConfig.ConfigName]
 		
-		if !existsInDB || options.Force {
-			// New config or force sync requested
+		if !existsInDB {
+			// New config to sync
 			result.SyncedConfigs = append(result.SyncedConfigs, fileConfig.ConfigName)
 		} else if dbConfig.LastLoadedAt != nil && !dbConfig.LastLoadedAt.IsZero() && fileConfig.LastLoadedAt.After(*dbConfig.LastLoadedAt) {
 			// File modified after last sync
