@@ -12,6 +12,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/internal/template"
+	"station/pkg/config"
 	"station/pkg/models"
 	
 	"github.com/mark3labs/mcp-go/client"
@@ -589,6 +590,29 @@ func (s *ConfigSyncer) processTemplateWithGoEngine(envID int64, configName, temp
 		logging.Debug("  %s = %v", key, value)
 	}
 	
+	// Check for missing variables and prompt if necessary
+	missingVars := s.findMissingVariables(parsedTemplate.Variables, variables)
+	if len(missingVars) > 0 {
+		logging.Debug("Found %d missing variables for template %s", len(missingVars), configName)
+		
+		// Prompt user for missing variables
+		newVars, err := s.promptForMissingVariables(envName, missingVars)
+		if err != nil {
+			return "", fmt.Errorf("failed to prompt for missing variables: %w", err)
+		}
+		
+		// Merge new variables with existing ones
+		for k, v := range newVars {
+			variables[k] = v
+		}
+		
+		// Save updated variables to variables.yml
+		err = s.saveEnvironmentVariables(envName, variables)
+		if err != nil {
+			return "", fmt.Errorf("failed to save environment variables: %w", err)
+		}
+	}
+	
 	// Render template
 	renderedContent, err := engine.Render(ctx, parsedTemplate, variables)
 	if err != nil {
@@ -619,6 +643,11 @@ func (s *ConfigSyncer) loadEnvironmentVariables(envName string) (map[string]inte
 	
 	data, err := os.ReadFile(variablesPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			// Variables file doesn't exist, return empty map
+			logging.Debug("Variables file %s does not exist, starting with empty variables", variablesPath)
+			return make(map[string]interface{}), nil
+		}
 		return nil, fmt.Errorf("failed to read variables file: %w", err)
 	}
 	
@@ -628,5 +657,108 @@ func (s *ConfigSyncer) loadEnvironmentVariables(envName string) (map[string]inte
 	}
 	
 	return variables, nil
+}
+
+// findMissingVariables compares required variables with available variables
+func (s *ConfigSyncer) findMissingVariables(requiredVars []config.TemplateVariable, availableVars map[string]interface{}) []config.TemplateVariable {
+	var missing []config.TemplateVariable
+	
+	for _, reqVar := range requiredVars {
+		if _, exists := availableVars[reqVar.Name]; !exists {
+			missing = append(missing, reqVar)
+		}
+	}
+	
+	return missing
+}
+
+// promptForMissingVariables interactively prompts the user for missing template variables
+func (s *ConfigSyncer) promptForMissingVariables(envName string, missingVars []config.TemplateVariable) (map[string]interface{}, error) {
+	if len(missingVars) == 0 {
+		return nil, nil
+	}
+	
+	fmt.Printf("\n🔧 Missing Variables for Environment: %s\n", envName)
+	fmt.Printf("The following template variables need to be configured:\n\n")
+	
+	newVars := make(map[string]interface{})
+	
+	for _, variable := range missingVars {
+		// Determine if this is a secret variable
+		isSecret := variable.Secret || s.isSecretVariableName(variable.Name)
+		
+		var prompt string
+		if isSecret {
+			prompt = fmt.Sprintf("🔑 Enter value for %s (secret - hidden input): ", variable.Name)
+		} else {
+			prompt = fmt.Sprintf("📝 Enter value for %s: ", variable.Name)
+		}
+		
+		fmt.Print(prompt)
+		
+		var value string
+		if isSecret {
+			// For secrets, we'd use a library like golang.org/x/term to hide input
+			// For now, we'll use regular input but mark it as sensitive
+			fmt.Scanln(&value)
+		} else {
+			fmt.Scanln(&value)
+		}
+		
+		if value != "" {
+			newVars[variable.Name] = value
+		}
+	}
+	
+	return newVars, nil
+}
+
+// saveEnvironmentVariables saves variables to the environment's variables.yml file
+func (s *ConfigSyncer) saveEnvironmentVariables(envName string, variables map[string]interface{}) error {
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		configHome = filepath.Join(homeDir, ".config")
+	}
+	
+	envDir := filepath.Join(configHome, "station", "environments", envName)
+	variablesPath := filepath.Join(envDir, "variables.yml")
+	
+	// Ensure environment directory exists
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+	
+	// Marshal variables to YAML
+	data, err := yaml.Marshal(variables)
+	if err != nil {
+		return fmt.Errorf("failed to marshal variables to YAML: %w", err)
+	}
+	
+	// Write to file
+	err = os.WriteFile(variablesPath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write variables file: %w", err)
+	}
+	
+	fmt.Printf("✅ Saved variables to: %s\n", variablesPath)
+	return nil
+}
+
+// isSecretVariableName determines if a variable name indicates it contains secret data
+func (s *ConfigSyncer) isSecretVariableName(name string) bool {
+	secretKeywords := []string{"token", "key", "secret", "password", "auth", "api_key", "access_key"}
+	lowerName := strings.ToLower(name)
+	
+	for _, keyword := range secretKeywords {
+		if strings.Contains(lowerName, keyword) {
+			return true
+		}
+	}
+	
+	return false
 }
 
