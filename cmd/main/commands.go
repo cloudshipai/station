@@ -162,10 +162,10 @@ Examples:
 	}
 
 	templateInstallCmd = &cobra.Command{
-		Use:   "install <bundle-name>[@version]",
+		Use:   "install <bundle-name>[@version] [environment]",
 		Short: "Install a template bundle from a registry",
-		Long:  "Download and install a template bundle from a configured registry",
-		Args:  cobra.ExactArgs(1),
+		Long:  "Download and install a template bundle from a configured registry into the specified environment (defaults to 'default')",
+		Args:  cobra.RangeArgs(1, 2),
 		RunE:  runTemplateInstall,
 	}
 
