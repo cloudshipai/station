@@ -52,6 +52,11 @@ func (h *MCPHandler) RunMCPTools(cmd *cobra.Command, args []string) error {
 	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 	filter, _ := cmd.Flags().GetString("filter")
+	
+	// If environment is not explicitly set via flag and we have args, use the first arg as environment
+	if environment == "default" && len(args) > 0 {
+		environment = args[0]
+	}
 
 	// Determine if we're in local mode
 	isLocal := endpoint == "" && viper.GetBool("local_mode")
