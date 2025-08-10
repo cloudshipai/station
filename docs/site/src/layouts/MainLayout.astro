@@ -28,51 +28,59 @@ const editUrl = `${EDIT_URL}/${currentFile}`
     <title>
       {`${data.title} 🚀 ${SITE.title}`}
     </title>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script src="https://unpkg.com/mermaid@10/dist/mermaid.min.js"></script>
     <script>
+      // Initialize Mermaid when page loads
       document.addEventListener('DOMContentLoaded', function() {
-        // Initialize Mermaid
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'default',
-          securityLevel: 'loose',
-          themeVariables: {
-            primaryColor: '#667eea',
-            primaryTextColor: '#fff',
-            primaryBorderColor: '#764ba2',
-            lineColor: '#333',
-            sectionBkgColor: '#f8fafc',
-            altSectionBkgColor: '#e2e8f0'
-          }
-        });
-
-        // Find all code blocks with language "mermaid"
-        const mermaidBlocks = document.querySelectorAll('pre code.language-mermaid');
-        console.log('Found Mermaid blocks:', mermaidBlocks.length);
+        console.log('Initializing Mermaid...');
         
-        mermaidBlocks.forEach((block, i) => {
-          const diagramCode = block.textContent.trim();
-          const diagramId = `mermaid-diagram-${i}`;
-          console.log('Processing Mermaid diagram:', diagramId, diagramCode.substring(0, 50) + '...');
-          
-          try {
-            // Create a div to render the diagram
-            const diagramDiv = document.createElement('div');
-            diagramDiv.className = 'mermaid-diagram';
-            diagramDiv.style.textAlign = 'center';
-            diagramDiv.style.margin = '2rem 0';
-            diagramDiv.id = diagramId;
-            diagramDiv.textContent = diagramCode;
-            
-            // Replace the pre block with the diagram div
-            block.closest('pre').replaceWith(diagramDiv);
-            
-            // Initialize this specific diagram
-            mermaid.init(undefined, diagramDiv);
-          } catch (error) {
-            console.error('Mermaid rendering error for', diagramId, ':', error);
+        // Configure Mermaid
+        mermaid.initialize({
+          startOnLoad: true,
+          theme: 'default',
+          securityLevel: 'loose'
+        });
+        
+        // Find code blocks that contain Mermaid syntax (look for "graph TB", "sequenceDiagram", etc.)
+        const preBlocks = document.querySelectorAll('pre code');
+        const mermaidBlocks = [];
+        
+        preBlocks.forEach(codeBlock => {
+          const content = codeBlock.textContent.trim();
+          if (content.startsWith('graph ') || 
+              content.startsWith('sequenceDiagram') || 
+              content.startsWith('flowchart ') ||
+              content.startsWith('gantt') ||
+              content.startsWith('pie ') ||
+              content.includes('graph TB') ||
+              content.includes('graph LR')) {
+            mermaidBlocks.push(codeBlock);
           }
         });
+        
+        console.log('Found', mermaidBlocks.length, 'mermaid code blocks');
+        
+        mermaidBlocks.forEach((codeBlock, index) => {
+          const mermaidCode = codeBlock.textContent.trim();
+          console.log('Converting block', index, ':', mermaidCode.substring(0, 30) + '...');
+          
+          // Create new div with mermaid class
+          const mermaidDiv = document.createElement('div');
+          mermaidDiv.className = 'mermaid';
+          mermaidDiv.textContent = mermaidCode;
+          mermaidDiv.style.textAlign = 'center';
+          mermaidDiv.style.margin = '2rem 0';
+          
+          // Replace the pre block with the mermaid div
+          const preElement = codeBlock.closest('pre');
+          preElement.parentNode.replaceChild(mermaidDiv, preElement);
+        });
+        
+        // Re-run mermaid init after converting blocks
+        setTimeout(() => {
+          console.log('Re-initializing Mermaid after block conversion...');
+          mermaid.init();
+        }, 100);
       });
     </script>
     <style>
