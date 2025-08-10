@@ -225,7 +225,7 @@ func (h *MCPHandler) listMCPToolsLocal(environment, filter string) error {
 	// Find environment using hybrid approach (supports file-based environments)
 	envID, err := h.getOrCreateEnvironmentID(repos, environment)
 	if err != nil {
-		return fmt.Errorf("environment '%s' not found", environment)
+		return fmt.Errorf("environment '%s' not found: %w", environment, err)
 	}
 
 	// List tools

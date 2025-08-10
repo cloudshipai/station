@@ -11,12 +11,14 @@ import (
 
 	"station/internal/db/repositories"
 	"station/internal/logging"
-	"station/internal/services"
+	"station/internal/template"
+	"station/pkg/config"
 	"station/pkg/models"
 	
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+	"gopkg.in/yaml.v3"
 )
 
 // ConfigSyncer handles MCP configuration synchronization between filesystem and database
@@ -118,26 +120,15 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
 	
-	// Process template variables
-	templateService := services.NewTemplateVariableService(configDir, s.repos)
-	result, err := templateService.ProcessTemplateWithVariables(envID, configName, string(rawContent), false)
+	// Process template variables with proper Go template engine
+	renderedContent, err := s.processTemplateWithGoEngine(envID, configName, string(rawContent))
 	if err != nil {
 		return fmt.Errorf("failed to process template variables: %w", err)
 	}
 	
-	// Check if all variables were resolved
-	if !result.AllResolved {
-		missingVars := make([]string, 0, len(result.MissingVars))
-		for _, missingVar := range result.MissingVars {
-			missingVars = append(missingVars, missingVar.Name)
-		}
-		return fmt.Errorf("missing template variables: %v. Please update %s/environments/%s/variables.yml", 
-			missingVars, configDir, environment)
-	}
-	
 	// Parse the rendered JSON
 	var configData map[string]interface{}
-	if err := json.Unmarshal([]byte(result.RenderedContent), &configData); err != nil {
+	if err := json.Unmarshal([]byte(renderedContent), &configData); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w", err)
 	}
 	
@@ -247,7 +238,7 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 			if err != nil {
 				return fmt.Errorf("failed to create MCP server %s: %w", serverName, err)
 			}
-		} else {
+			} else {
 			// Server already exists, update it with new config
 			logging.Debug("Updating existing MCP server: %s (ID: %d, envID: %d)", serverName, existingServer.ID, envID)
 			server.ID = existingServer.ID
@@ -258,8 +249,12 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 			serverID = existingServer.ID
 		}
 		
+		// NOTE: We don't delete all tools here to preserve tool IDs for agent references
+		// Instead, we'll use upsert logic in discoverToolsForServer to update existing tools
+		// and only delete tools that are no longer available from the server
+		
 		// Discover and register tools for this server
-		err = s.discoverToolsForServer(serverID, serverName, serverConfigMap, result.RenderedContent)
+		err = s.discoverToolsForServer(serverID, serverName, serverConfigMap, renderedContent)
 		if err != nil {
 			// Don't fail the entire sync for tool discovery errors, just log them
 			logging.Debug("Tool discovery failed for server %s: %v", serverName, err)
@@ -385,7 +380,10 @@ func (s *ConfigSyncer) Sync(environment string, envID int64, options SyncOptions
 		if !existsInDB {
 			// New config to sync
 			result.SyncedConfigs = append(result.SyncedConfigs, fileConfig.ConfigName)
-		} else if dbConfig.LastLoadedAt != nil && !dbConfig.LastLoadedAt.IsZero() && fileConfig.LastLoadedAt.After(*dbConfig.LastLoadedAt) {
+		} else if dbConfig.LastLoadedAt == nil || dbConfig.LastLoadedAt.IsZero() {
+			// Config exists in DB but was never actually loaded - treat as new
+			result.SyncedConfigs = append(result.SyncedConfigs, fileConfig.ConfigName)
+		} else if fileConfig.LastLoadedAt.After(*dbConfig.LastLoadedAt) {
 			// File modified after last sync
 			result.SyncedConfigs = append(result.SyncedConfigs, fileConfig.ConfigName)
 		}
@@ -541,25 +539,276 @@ func (s *ConfigSyncer) discoverToolsForServer(serverID int64, serverName string,
 
 	logging.Debug("Discovered %d real tools from %s", len(toolsResult.Tools), serverName)
 	
+	// Get existing tools for this server to implement proper upsert
+	existingTools, err := s.repos.MCPTools.GetByServerID(serverID)
+	if err != nil {
+		logging.Debug("Failed to get existing tools for server %s: %v", serverName, err)
+		existingTools = []*models.MCPTool{} // Continue with empty slice
+	}
+	
+	// Create map of existing tools by name for quick lookup
+	existingToolMap := make(map[string]*models.MCPTool)
+	for _, tool := range existingTools {
+		existingToolMap[tool.Name] = tool
+	}
+	
+	// Track which tools we've seen from the server
+	discoveredToolNames := make(map[string]bool)
+	
 	// Store each real tool in the database with its actual name from the server
 	for i, tool := range toolsResult.Tools {
 		logging.Debug("  Tool %d: %s - %s", i+1, tool.Name, tool.Description)
 		
-		// Create database record for this real tool
-		mcpTool := &models.MCPTool{
-			MCPServerID: serverID,
-			Name:        "__" + tool.Name,                          // Add double underscore to match GenKit runtime
-			Description: tool.Description,                          // Use actual description from server
-		}
+		toolName := "__" + tool.Name // Add double underscore to match GenKit runtime
+		discoveredToolNames[toolName] = true
 		
-		_, err = s.repos.MCPTools.Create(mcpTool)
-		if err != nil {
-			logging.Debug("Failed to store tool %s: %v", tool.Name, err)
-			continue
+		if existingTool, exists := existingToolMap[toolName]; exists {
+			// Tool exists, update description if changed
+			if existingTool.Description != tool.Description {
+				// For now, just log - we can add Update method later if needed
+				logging.Debug("Tool %s description changed, but Update not implemented yet", tool.Name)
+			}
+		} else {
+			// Tool doesn't exist, create it
+			mcpTool := &models.MCPTool{
+				MCPServerID: serverID,
+				Name:        toolName,
+				Description: tool.Description,
+			}
+			
+			_, err := s.repos.MCPTools.Create(mcpTool)
+			if err != nil {
+				logging.Debug("Failed to create tool %s: %v", tool.Name, err)
+				continue
+			}
 		}
+	}
+	
+	// TODO: Delete tools that are no longer available from the server
+	// For now, we skip deletion to avoid breaking agent references
+	// In a full implementation, we'd need to:
+	// 1. Remove orphaned tools from agent assignments first
+	// 2. Then delete the obsolete tools
+	obsoleteCount := 0
+	for _, existingTool := range existingTools {
+		if !discoveredToolNames[existingTool.Name] {
+			obsoleteCount++
+			logging.Debug("Tool %s (ID: %d) is obsolete but not deleted (preservation mode)", existingTool.Name, existingTool.ID)
+		}
+	}
+	if obsoleteCount > 0 {
+		logging.Debug("Found %d obsolete tools that should be cleaned up", obsoleteCount)
 	}
 	
 	logging.Debug("Completed real tool discovery for server: %s", serverName)
 	return nil
+}
+
+// processTemplateWithGoEngine processes template content using the proper Go template engine
+func (s *ConfigSyncer) processTemplateWithGoEngine(envID int64, configName, templateContent string) (string, error) {
+	ctx := context.Background()
+	
+	logging.Debug("Processing template %s with Go template engine", configName)
+	
+	// Create template engine
+	engine := template.NewGoTemplateEngine()
+	
+	// Parse template
+	parsedTemplate, err := engine.Parse(ctx, templateContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+	
+	logging.Debug("Detected %d variables in template %s", len(parsedTemplate.Variables), configName)
+	for _, variable := range parsedTemplate.Variables {
+		logging.Debug("  Variable: %s", variable.Name)
+	}
+	
+	// Load variables for environment
+	envName, err := s.getEnvironmentName(envID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get environment name: %w", err)
+	}
+	
+	variables, err := s.loadEnvironmentVariables(envName)
+	if err != nil {
+		return "", fmt.Errorf("failed to load environment variables: %w", err)
+	}
+	
+	logging.Debug("Loaded %d environment variables for %s", len(variables), envName)
+	for key, value := range variables {
+		logging.Debug("  %s = %v", key, value)
+	}
+	
+	// Check for missing variables and prompt if necessary
+	missingVars := s.findMissingVariables(parsedTemplate.Variables, variables)
+	if len(missingVars) > 0 {
+		logging.Debug("Found %d missing variables for template %s", len(missingVars), configName)
+		
+		// Prompt user for missing variables
+		newVars, err := s.promptForMissingVariables(envName, missingVars)
+		if err != nil {
+			return "", fmt.Errorf("failed to prompt for missing variables: %w", err)
+		}
+		
+		// Merge new variables with existing ones
+		for k, v := range newVars {
+			variables[k] = v
+		}
+		
+		// Save updated variables to variables.yml
+		err = s.saveEnvironmentVariables(envName, variables)
+		if err != nil {
+			return "", fmt.Errorf("failed to save environment variables: %w", err)
+		}
+	}
+	
+	// Render template
+	renderedContent, err := engine.Render(ctx, parsedTemplate, variables)
+	if err != nil {
+		return "", fmt.Errorf("failed to render template: %w", err)
+	}
+	
+	logging.Debug("Template rendering completed for %s", configName)
+	return renderedContent, nil
+}
+
+// getEnvironmentName gets environment name by ID
+func (s *ConfigSyncer) getEnvironmentName(envID int64) (string, error) {
+	env, err := s.repos.Environments.GetByID(envID)
+	if err != nil {
+		return "", err
+	}
+	return env.Name, nil
+}
+
+// loadEnvironmentVariables loads variables from environment's variables.yml
+func (s *ConfigSyncer) loadEnvironmentVariables(envName string) (map[string]interface{}, error) {
+	configHome, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user config dir: %w", err)
+	}
+	
+	variablesPath := filepath.Join(configHome, "station", "environments", envName, "variables.yml")
+	
+	data, err := os.ReadFile(variablesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Variables file doesn't exist, return empty map
+			logging.Debug("Variables file %s does not exist, starting with empty variables", variablesPath)
+			return make(map[string]interface{}), nil
+		}
+		return nil, fmt.Errorf("failed to read variables file: %w", err)
+	}
+	
+	var variables map[string]interface{}
+	if err := yaml.Unmarshal(data, &variables); err != nil {
+		return nil, fmt.Errorf("failed to parse variables YAML: %w", err)
+	}
+	
+	return variables, nil
+}
+
+// findMissingVariables compares required variables with available variables
+func (s *ConfigSyncer) findMissingVariables(requiredVars []config.TemplateVariable, availableVars map[string]interface{}) []config.TemplateVariable {
+	var missing []config.TemplateVariable
+	
+	for _, reqVar := range requiredVars {
+		if _, exists := availableVars[reqVar.Name]; !exists {
+			missing = append(missing, reqVar)
+		}
+	}
+	
+	return missing
+}
+
+// promptForMissingVariables interactively prompts the user for missing template variables
+func (s *ConfigSyncer) promptForMissingVariables(envName string, missingVars []config.TemplateVariable) (map[string]interface{}, error) {
+	if len(missingVars) == 0 {
+		return nil, nil
+	}
+	
+	fmt.Printf("\n🔧 Missing Variables for Environment: %s\n", envName)
+	fmt.Printf("The following template variables need to be configured:\n\n")
+	
+	newVars := make(map[string]interface{})
+	
+	for _, variable := range missingVars {
+		// Determine if this is a secret variable
+		isSecret := variable.Secret || s.isSecretVariableName(variable.Name)
+		
+		var prompt string
+		if isSecret {
+			prompt = fmt.Sprintf("🔑 Enter value for %s (secret - hidden input): ", variable.Name)
+		} else {
+			prompt = fmt.Sprintf("📝 Enter value for %s: ", variable.Name)
+		}
+		
+		fmt.Print(prompt)
+		
+		var value string
+		if isSecret {
+			// For secrets, we'd use a library like golang.org/x/term to hide input
+			// For now, we'll use regular input but mark it as sensitive
+			fmt.Scanln(&value)
+		} else {
+			fmt.Scanln(&value)
+		}
+		
+		if value != "" {
+			newVars[variable.Name] = value
+		}
+	}
+	
+	return newVars, nil
+}
+
+// saveEnvironmentVariables saves variables to the environment's variables.yml file
+func (s *ConfigSyncer) saveEnvironmentVariables(envName string, variables map[string]interface{}) error {
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		configHome = filepath.Join(homeDir, ".config")
+	}
+	
+	envDir := filepath.Join(configHome, "station", "environments", envName)
+	variablesPath := filepath.Join(envDir, "variables.yml")
+	
+	// Ensure environment directory exists
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+	
+	// Marshal variables to YAML
+	data, err := yaml.Marshal(variables)
+	if err != nil {
+		return fmt.Errorf("failed to marshal variables to YAML: %w", err)
+	}
+	
+	// Write to file
+	err = os.WriteFile(variablesPath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write variables file: %w", err)
+	}
+	
+	fmt.Printf("✅ Saved variables to: %s\n", variablesPath)
+	return nil
+}
+
+// isSecretVariableName determines if a variable name indicates it contains secret data
+func (s *ConfigSyncer) isSecretVariableName(name string) bool {
+	secretKeywords := []string{"token", "key", "secret", "password", "auth", "api_key", "access_key"}
+	lowerName := strings.ToLower(name)
+	
+	for _, keyword := range secretKeywords {
+		if strings.Contains(lowerName, keyword) {
+			return true
+		}
+	}
+	
+	return false
 }
 

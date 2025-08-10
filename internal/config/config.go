@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	
 	"github.com/spf13/viper"
@@ -104,6 +105,31 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// GetStationConfigDir returns the station configuration directory path
+// This respects workspace configuration and falls back to XDG paths
+func GetStationConfigDir() string {
+	// Check if workspace is configured via viper (CLI override or config file)
+	if workspace := viper.GetString("workspace"); workspace != "" {
+		return workspace
+	}
+	
+	// Fall back to XDG config directory
+	return getXDGConfigDir()
+}
+
+// getXDGConfigDir returns the XDG config directory for station
+func getXDGConfigDir() string {
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return filepath.Join(os.TempDir(), ".config", "station") // Fallback
+		}
+		configHome = filepath.Join(homeDir, ".config")
+	}
+	return filepath.Join(configHome, "station")
 }
 
 func getEnvOrDefault(key, defaultValue string) string {
