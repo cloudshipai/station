@@ -88,6 +88,17 @@ func (c *Creator) Create(fs afero.Fs, bundlePath string, opts bundle.CreateOptio
 		return fmt.Errorf("failed to create example variables: %w", err)
 	}
 
+	// Create agents directory with example agents
+	agentsDir := filepath.Join(bundlePath, "agents")
+	if err := fs.MkdirAll(agentsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create agents directory: %w", err)
+	}
+
+	// Create example agent files
+	if err := c.createExampleAgents(fs, agentsDir, opts.Name); err != nil {
+		return fmt.Errorf("failed to create example agents: %w", err)
+	}
+
 	return nil
 }
 
@@ -106,13 +117,14 @@ func (c *Creator) createTemplate(fs afero.Fs, bundlePath, bundleName string) err
 	templatePath := filepath.Join(bundlePath, "template.json")
 	
 	template := map[string]interface{}{
+		"name":        bundleName,
+		"description": "Essential filesystem operations with MCP server integration",
 		"mcpServers": map[string]interface{}{
-			bundleName: map[string]interface{}{
-				"command": "echo",
-				"args":    []string{"Replace with your MCP server configuration"},
-				"env": map[string]string{
-					"EXAMPLE_VAR": "{{ .EXAMPLE_VAR }}",
-				},
+			"filesystem": map[string]interface{}{
+				"command":     "npx",
+				"args":        []string{"-y", "@modelcontextprotocol/server-filesystem@latest", "{{ .ROOT_PATH }}"},
+				"disabled":    false,
+				"autoApprove": []string{},
 			},
 		},
 	}
@@ -139,13 +151,15 @@ func (c *Creator) createVariablesSchema(fs afero.Fs, bundlePath string, variable
 	properties := schema["properties"].(map[string]interface{})
 	required := []string{}
 
-	// Add example variable if none provided
+	// Add filesystem ROOT_PATH variable if none provided
 	if len(variables) == 0 {
-		properties["EXAMPLE_VAR"] = map[string]interface{}{
+		properties["ROOT_PATH"] = map[string]interface{}{
 			"type":        "string",
-			"description": "Example variable - replace with your actual variables",
-			"default":     "example-value",
+			"description": "Root filesystem path for file operations",
+			"default":     "/tmp",
+			"examples":    []string{"/tmp", "/home/user/workspace", "/var/data"},
 		}
+		required = append(required, "ROOT_PATH")
 	} else {
 		for name, spec := range variables {
 			prop := map[string]interface{}{
@@ -212,7 +226,7 @@ func (c *Creator) createExampleVariables(fs afero.Fs, examplesDir string, variab
 	devVars := make(map[string]interface{})
 	
 	if len(variables) == 0 {
-		devVars["EXAMPLE_VAR"] = "development-value"
+		devVars["ROOT_PATH"] = "/tmp"
 	} else {
 		for name, spec := range variables {
 			if spec.Default != nil {
@@ -242,37 +256,111 @@ func (c *Creator) createExampleVariables(fs afero.Fs, examplesDir string, variab
 		return err
 	}
 
-	// Create production example (with placeholders for secrets)
-	prodVars := make(map[string]interface{})
-	
-	if len(variables) == 0 {
-		prodVars["EXAMPLE_VAR"] = "production-value"
-	} else {
-		for name, spec := range variables {
-			if spec.Secret {
-				prodVars[name] = "# Set via environment variable or secure secrets management"
-			} else if spec.Default != nil {
-				prodVars[name] = spec.Default
-			} else {
-				switch spec.Type {
-				case "string":
-					prodVars[name] = "production-" + name
-				case "boolean":
-					prodVars[name] = true
-				case "number":
-					prodVars[name] = 1
-				default:
-					prodVars[name] = "production-" + name
-				}
-			}
-		}
-	}
+	return nil
+}
 
-	prodData, err := yaml.Marshal(prodVars)
-	if err != nil {
+func (c *Creator) createExampleAgents(fs afero.Fs, agentsDir, bundleName string) error {
+	// Create a general-purpose assistant agent template based on real working agent format
+	assistantAgentPath := filepath.Join(agentsDir, "assistant.prompt")
+	assistantAgentContent := `---
+model: "gpt-4o"
+config:
+  temperature: 0.7
+  max_tokens: 2000
+metadata:
+  name: "assistant"
+  description: "General-purpose assistant agent for the ` + bundleName + ` bundle with access to MCP tools"
+  version: "1.0.0"
+tools:
+  - "__example_tool_1"
+  - "__example_tool_2"
+station:
+  execution_metadata:
+    max_steps: 5
+    timeout_seconds: 120
+    max_retries: 3
+    priority: "medium"
+---
+
+You are a helpful Assistant for the ` + bundleName + ` bundle.
+
+A general-purpose assistant agent with access to MCP tools for completing various tasks efficiently and effectively.
+
+## Task Instructions
+
+**Task**: {{TASK}}
+**Environment**: {{ENVIRONMENT}}
+
+Please analyze the task and provide a comprehensive response using your available tools as needed.
+
+## Your Capabilities
+
+You have access to tools that allow you to:
+- Replace with actual tool descriptions from your MCP server
+- Add more capabilities as tools become available
+
+## Guidelines
+
+1. **Be helpful** - Always strive to assist the user effectively
+2. **Use tools wisely** - Leverage available tools to complete tasks
+3. **Ask for clarification** - When requirements are unclear, ask questions
+4. **Provide clear feedback** - Explain what you're doing and why
+
+Ready to help you accomplish your goals!
+`
+
+	if err := afero.WriteFile(fs, assistantAgentPath, []byte(assistantAgentContent), 0644); err != nil {
 		return err
 	}
 
-	prodPath := filepath.Join(examplesDir, "production.vars.yml")
-	return afero.WriteFile(fs, prodPath, prodData, 0644)
+	// Create a specialized task agent template based on analysis agent format
+	specialistAgentPath := filepath.Join(agentsDir, "specialist.prompt")
+	specialistAgentContent := `---
+model: "gpt-4o"
+config:
+  temperature: 0.3
+  max_tokens: 1500
+metadata:
+  name: "specialist"
+  description: "Specialized agent for focused task execution with minimal steps"
+  version: "1.0.0"
+tools:
+  - "__specialized_tool"
+station:
+  execution_metadata:
+    max_steps: 3
+    timeout_seconds: 120
+    max_retries: 3
+    priority: "high"
+---
+
+You are a Task Specialist for the ` + bundleName + ` bundle.
+
+A specialized agent designed for focused task execution with minimal steps and maximum efficiency.
+
+## Task Instructions
+
+**Task**: {{TASK}}
+**Environment**: {{ENVIRONMENT}}
+
+Please analyze the task and provide a comprehensive response using your available tools as needed.
+
+## Your Role
+
+You excel at:
+- Quick task analysis and execution
+- Focused use of specialized tools
+- Minimal step completion
+- Clear, concise results
+
+## Approach
+
+1. **Understand quickly** - Analyze task requirements efficiently
+2. **Execute directly** - Use tools to complete tasks with minimal steps
+3. **Report clearly** - Provide concise status and actionable results
+
+Perfect for automated workflows, quick tasks, and focused operations.
+`
+
+	return afero.WriteFile(fs, specialistAgentPath, []byte(specialistAgentContent), 0644)
 }
