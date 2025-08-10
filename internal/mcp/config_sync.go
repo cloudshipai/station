@@ -11,12 +11,13 @@ import (
 
 	"station/internal/db/repositories"
 	"station/internal/logging"
-	"station/internal/services"
+	"station/internal/template"
 	"station/pkg/models"
 	
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+	"gopkg.in/yaml.v3"
 )
 
 // ConfigSyncer handles MCP configuration synchronization between filesystem and database
@@ -118,26 +119,15 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
 	
-	// Process template variables
-	templateService := services.NewTemplateVariableService(configDir, s.repos)
-	result, err := templateService.ProcessTemplateWithVariables(envID, configName, string(rawContent), false)
+	// Process template variables with proper Go template engine
+	renderedContent, err := s.processTemplateWithGoEngine(envID, configName, string(rawContent))
 	if err != nil {
 		return fmt.Errorf("failed to process template variables: %w", err)
 	}
 	
-	// Check if all variables were resolved
-	if !result.AllResolved {
-		missingVars := make([]string, 0, len(result.MissingVars))
-		for _, missingVar := range result.MissingVars {
-			missingVars = append(missingVars, missingVar.Name)
-		}
-		return fmt.Errorf("missing template variables: %v. Please update %s/environments/%s/variables.yml", 
-			missingVars, configDir, environment)
-	}
-	
 	// Parse the rendered JSON
 	var configData map[string]interface{}
-	if err := json.Unmarshal([]byte(result.RenderedContent), &configData); err != nil {
+	if err := json.Unmarshal([]byte(renderedContent), &configData); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w", err)
 	}
 	
@@ -259,7 +249,7 @@ func (s *ConfigSyncer) LoadConfig(envID int64, environment, configName string, f
 		}
 		
 		// Discover and register tools for this server
-		err = s.discoverToolsForServer(serverID, serverName, serverConfigMap, result.RenderedContent)
+		err = s.discoverToolsForServer(serverID, serverName, serverConfigMap, renderedContent)
 		if err != nil {
 			// Don't fail the entire sync for tool discovery errors, just log them
 			logging.Debug("Tool discovery failed for server %s: %v", serverName, err)
@@ -561,5 +551,82 @@ func (s *ConfigSyncer) discoverToolsForServer(serverID int64, serverName string,
 	
 	logging.Debug("Completed real tool discovery for server: %s", serverName)
 	return nil
+}
+
+// processTemplateWithGoEngine processes template content using the proper Go template engine
+func (s *ConfigSyncer) processTemplateWithGoEngine(envID int64, configName, templateContent string) (string, error) {
+	ctx := context.Background()
+	
+	logging.Debug("Processing template %s with Go template engine", configName)
+	
+	// Create template engine
+	engine := template.NewGoTemplateEngine()
+	
+	// Parse template
+	parsedTemplate, err := engine.Parse(ctx, templateContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+	
+	logging.Debug("Detected %d variables in template %s", len(parsedTemplate.Variables), configName)
+	for _, variable := range parsedTemplate.Variables {
+		logging.Debug("  Variable: %s", variable.Name)
+	}
+	
+	// Load variables for environment
+	envName, err := s.getEnvironmentName(envID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get environment name: %w", err)
+	}
+	
+	variables, err := s.loadEnvironmentVariables(envName)
+	if err != nil {
+		return "", fmt.Errorf("failed to load environment variables: %w", err)
+	}
+	
+	logging.Debug("Loaded %d environment variables for %s", len(variables), envName)
+	for key, value := range variables {
+		logging.Debug("  %s = %v", key, value)
+	}
+	
+	// Render template
+	renderedContent, err := engine.Render(ctx, parsedTemplate, variables)
+	if err != nil {
+		return "", fmt.Errorf("failed to render template: %w", err)
+	}
+	
+	logging.Debug("Template rendering completed for %s", configName)
+	return renderedContent, nil
+}
+
+// getEnvironmentName gets environment name by ID
+func (s *ConfigSyncer) getEnvironmentName(envID int64) (string, error) {
+	env, err := s.repos.Environments.GetByID(envID)
+	if err != nil {
+		return "", err
+	}
+	return env.Name, nil
+}
+
+// loadEnvironmentVariables loads variables from environment's variables.yml
+func (s *ConfigSyncer) loadEnvironmentVariables(envName string) (map[string]interface{}, error) {
+	configHome, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user config dir: %w", err)
+	}
+	
+	variablesPath := filepath.Join(configHome, "station", "environments", envName, "variables.yml")
+	
+	data, err := os.ReadFile(variablesPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read variables file: %w", err)
+	}
+	
+	var variables map[string]interface{}
+	if err := yaml.Unmarshal(data, &variables); err != nil {
+		return nil, fmt.Errorf("failed to parse variables YAML: %w", err)
+	}
+	
+	return variables, nil
 }
 
