@@ -175,7 +175,6 @@ func init() {
 	// Sync command flags (top-level)
 	syncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	syncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
-	syncCmd.Flags().Bool("force", false, "Force sync even if no changes detected")
 	syncCmd.Flags().Bool("validate", false, "Validate configurations only without syncing")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 	
