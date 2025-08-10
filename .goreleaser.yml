@@ -102,6 +102,11 @@ release:
     curl -sSL https://getstation.cloudshipai.com | bash
     ```
     
+    **Or with specific version:**
+    ```bash
+    curl -sSL https://getstation.cloudshipai.com | bash -s -- --version {{.Tag}}
+    ```
+    
     **Manual download:**
     Download the appropriate binary for your platform from the assets below.
     
