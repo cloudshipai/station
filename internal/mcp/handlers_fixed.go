@@ -152,6 +152,11 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 }
 
 func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Validate required dependencies
+	if s.repos == nil {
+		return mcp.NewToolResultError("Server repositories not initialized"), nil
+	}
+	
 	// Get user for agent execution (default user ID for local mode)
 	var userID int64 = 1
 	
@@ -204,6 +209,9 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 				return mcp.NewToolResultError("Agent execution timed out"), nil
 			default:
 				// Check if execution is complete
+				if s.repos.AgentRuns == nil {
+					return mcp.NewToolResultError("Agent runs repository not available"), nil
+				}
 				run, checkErr := s.repos.AgentRuns.GetByID(runID)
 				if checkErr != nil {
 					return mcp.NewToolResultError(fmt.Sprintf("Failed to check execution status: %v", checkErr)), nil
@@ -222,6 +230,9 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 		}
 	} else {
 		// Fallback to direct execution
+		if s.agentService == nil {
+			return mcp.NewToolResultError("Agent service not available for direct execution"), nil
+		}
 		response, execErr = s.agentService.ExecuteAgent(ctx, agentID, task)
 		if execErr != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil

@@ -44,7 +44,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/goccy/go-yaml v1.17.1 // indirect
-	github.com/google/dotprompt/go v0.0.0-20250611200215-bb73406b05ca // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -127,6 +126,7 @@ require (
 	github.com/charmbracelet/wish v1.4.7
 	github.com/firebase/genkit/go v0.6.2
 	github.com/gin-gonic/gin v1.10.1
+	github.com/google/dotprompt/go v0.0.0-20250611200215-bb73406b05ca
 	github.com/mark3labs/mcp-go v0.36.0
 	github.com/openai/openai-go v1.8.2
 	github.com/posthog/posthog-go v1.6.1
