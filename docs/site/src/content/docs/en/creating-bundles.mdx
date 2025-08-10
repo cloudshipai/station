@@ -1,0 +1,68 @@
+---
+title: Creating Bundles
+description: How to create and package Station bundles
+---
+
+# Creating Bundles
+
+Learn how to create, package, and distribute your own Station bundles for reuse across environments and teams.
+
+## Bundle Creation Process
+
+### 1. Create Your Template
+```bash
+# Create a new template directory
+stn template create my-custom-bundle
+cd my-custom-bundle
+```
+
+### 2. Configure MCP Servers
+Edit `template.json` to define required tools:
+```json
+{
+  "name": "my-custom-bundle",
+  "description": "Custom operational bundle",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "{{ .ROOT_PATH }}"],
+      "disabled": false
+    }
+  }
+}
+```
+
+### 3. Add Agent Definitions
+Create agents in the `agents/` directory:
+```yaml
+---
+name: "Custom Monitor"
+description: "Custom monitoring agent"
+max_steps: 5
+---
+
+You are a custom monitoring specialist. Monitor system health and report issues.
+```
+
+### 4. Package the Bundle
+```bash
+stn template bundle ./my-custom-bundle --output my-custom-bundle.tar.gz
+```
+
+### 5. Test Installation
+```bash
+stn template install ./my-custom-bundle.tar.gz
+stn sync production
+```
+
+## Bundle Best Practices
+
+- **Clear Documentation** - Include comprehensive README
+- **Template Variables** - Use variables for customization
+- **Testing** - Validate in multiple environments
+- **Version Control** - Track changes and releases
+
+## Next Steps
+
+- **[Publishing Bundles](/en/publishing-bundles)** - Share with others
+- **[Bundle Registry](/en/registry)** - Browse existing bundles
