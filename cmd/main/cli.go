@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -346,13 +347,22 @@ func runTemplateInstall(cmd *cobra.Command, args []string) error {
 
 // installTemplateBundle installs a template bundle into the specified environment
 func installTemplateBundle(bundleRef, environmentName string, force bool) error {
-	// Determine if bundleRef is a local file or registry reference
+	// Determine if bundleRef is a local file or remote URL
 	var bundlePath string
-	if strings.HasSuffix(bundleRef, ".tar.gz") && fileExists(bundleRef) {
+	if strings.HasPrefix(bundleRef, "http://") || strings.HasPrefix(bundleRef, "https://") {
+		// Download remote bundle
+		fmt.Printf("⬇️  Downloading bundle from remote URL...\n")
+		tempFile, err := downloadBundle(bundleRef)
+		if err != nil {
+			return fmt.Errorf("failed to download bundle: %w", err)
+		}
+		defer os.Remove(tempFile)
+		bundlePath = tempFile
+	} else if strings.HasSuffix(bundleRef, ".tar.gz") && fileExists(bundleRef) {
 		bundlePath = bundleRef
 	} else {
-		// TODO: Handle registry-based bundles in the future
-		return fmt.Errorf("registry-based bundles not yet supported. Please provide a local .tar.gz file")
+		// TODO: Handle registry-based bundles by name in the future
+		return fmt.Errorf("bundle not found. Please provide a local .tar.gz file or remote URL")
 	}
 	
 	// Get Station config directory
@@ -602,4 +612,36 @@ func runTemplateRegistryList(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🚀 Registry management (feature coming soon)\n")
 	
 	return nil
+}
+
+// downloadBundle downloads a bundle from a remote URL and returns the path to the temp file
+func downloadBundle(url string) (string, error) {
+	// Create temporary file
+	tempFile, err := os.CreateTemp("", "bundle-download-*.tar.gz")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer tempFile.Close()
+
+	// Download the bundle
+	resp, err := http.Get(url)
+	if err != nil {
+		os.Remove(tempFile.Name())
+		return "", fmt.Errorf("failed to download from %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		os.Remove(tempFile.Name())
+		return "", fmt.Errorf("download failed with status %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// Copy response body to temp file
+	_, err = io.Copy(tempFile, resp.Body)
+	if err != nil {
+		os.Remove(tempFile.Name())
+		return "", fmt.Errorf("failed to write bundle to temp file: %w", err)
+	}
+
+	return tempFile.Name(), nil
 }
