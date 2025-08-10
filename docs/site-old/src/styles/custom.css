@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Station Custom Styles with Tailwind */
+:root {
+  --sl-color-accent: theme('colors.station-primary');
+  --sl-color-accent-low: #667eea22;
+  --sl-color-accent-high: #5a6fd8;
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: theme('colors.slate.50');
+  --sl-color-gray-2: theme('colors.slate.100');
+  --sl-color-gray-3: theme('colors.slate.200');
+  --sl-color-gray-4: theme('colors.slate.300');
+  --sl-color-gray-5: theme('colors.slate.400');
+  --sl-color-gray-6: theme('colors.slate.500');
+  --sl-color-black: theme('colors.slate.900');
+}
+
+[data-theme='dark'] {
+  --sl-color-accent: theme('colors.station-secondary');
+  --sl-color-accent-low: #764ba222;
+  --sl-color-accent-high: #8b5fbf;
+}
+
+/* Custom hero section */
+.hero {
+  background: linear-gradient(135deg, var(--sl-color-accent) 0%, #764ba2 100%);
+  color: white;
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  background: var(--sl-color-gray-1);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+/* Code block enhancements */
+pre {
+  border-radius: 8px !important;
+  border: 1px solid var(--sl-color-gray-3) !important;
+}
+
+/* Installation commands styling */
+.install-command {
+  background: var(--sl-color-black);
+  color: var(--sl-color-white);
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+  font-size: 0.9rem;
+  margin: 1rem 0;
+  position: relative;
+  overflow-x: auto;
+}
+
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--sl-color-accent);
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.copy-button:hover {
+  opacity: 1;
+}
+
+/* Badge styling */
+.badge {
+  background: var(--sl-color-accent);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  display: inline-block;
+  margin: 0.2rem 0.2rem 0.2rem 0;
+}
+
+/* Feature cards */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.feature-card {
+  background: var(--sl-color-white);
+  border: 1px solid var(--sl-color-gray-3);
+  border-radius: 8px;
+  padding: 1.5rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.1);
+}
+
+.feature-card h3 {
+  color: var(--sl-color-accent);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.feature-card .icon {
+  font-size: 1.5rem;
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .feature-card {
+  background: var(--sl-color-gray-6);
+  border-color: var(--sl-color-gray-5);
+}
+
+[data-theme='dark'] .mermaid {
+  background: var(--sl-color-gray-6);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Starlight overrides for better Station branding */
+.site-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.site-title::before {
+  content: '🚂';
+  font-size: 1.2em;
+}
+
+/* Custom link styling for external links */
+a[href^="http"]:not([href*="cloudshipai.github.io"])::after {
+  content: ' ↗';
+  color: var(--sl-color-accent);
+  font-size: 0.8em;
+}
+
+/* Registry link special styling */
+a[href*="registry"]::before {
+  content: '📦 ';
+}
+
+/* GitHub link special styling */  
+a[href*="github.com"]::before {
+  content: '📚 ';
+}
