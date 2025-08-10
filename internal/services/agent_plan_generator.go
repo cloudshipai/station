@@ -271,11 +271,15 @@ CRITICAL: Read through ALL available tools before making your selection. Match t
 		strings.Join(toolDescriptions, "\n"),
 		environmentName, targetEnvironmentID)
 
-	// Generate response using GenKit
+	// Generate response using GenKit with proper provider-specific model selection
 	var modelName string
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
+		// Station's OpenAI plugin registers models with station-openai provider prefix
 		modelName = fmt.Sprintf("station-openai/%s", cfg.AIModel)
+	case "googlegenai", "gemini":
+		// Gemini models need the googleai provider prefix
+		modelName = fmt.Sprintf("googleai/%s", cfg.AIModel)
 	default:
 		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)
 	}
