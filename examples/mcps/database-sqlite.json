@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server-sqlite", "{{.DATABASE_PATH}}"],
+      "env": {
+        "SQLITE_DATABASE_PATH": "{{.DATABASE_PATH}}"
+      }
+    }
+  }
+}

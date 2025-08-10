@@ -1,0 +1,151 @@
+---
+title: Intelligent Agents
+description: Understanding Station's intelligent agent system
+---
+
+# Intelligent Agents
+
+Station's intelligent agents are the core of the system - deployable sub-agents designed to handle specific operational tasks with AI-powered decision making.
+
+## What are Intelligent Agents?
+
+Intelligent agents in Station are:
+- **AI-powered** - Use large language models for reasoning and decision making
+- **Tool-enabled** - Access to 20+ MCP tools for infrastructure operations
+- **Deployable** - Can be packaged, versioned, and deployed like code
+- **Environment-aware** - Understand dev/staging/prod contexts and constraints
+
+## Agent Lifecycle
+
+### Creation
+```bash
+stn agent create \
+  --name "Database Monitor" \
+  --description "Monitor database health and performance"
+```
+
+### Configuration
+Agents are configured through `.prompt` files with YAML frontmatter:
+
+```yaml
+---
+name: "Database Monitor"
+description: "Monitor database health and alert on issues"
+max_steps: 10
+tools_required: ["postgres", "slack"]
+environment: "production"
+---
+
+You are a database monitoring specialist. Your job is to:
+1. Check database connection pools
+2. Monitor query performance
+3. Alert if any metrics exceed thresholds
+4. Generate detailed reports for the ops team
+```
+
+### Execution
+```bash
+# Direct execution
+stn agent run 1 "Check database health and report any issues"
+
+# Scheduled execution
+stn agent schedule 1 "0 */6 * * *"  # Every 6 hours
+```
+
+## Agent Capabilities
+
+### Multi-Step Reasoning
+Agents can break down complex tasks into multiple steps:
+1. **Assessment** - Analyze the current situation
+2. **Planning** - Determine the best course of action  
+3. **Execution** - Perform necessary operations
+4. **Validation** - Verify results and success
+5. **Reporting** - Communicate outcomes
+
+### Tool Integration
+Agents have access to production-grade tools:
+- **Infrastructure** - AWS CLI, Kubernetes, Docker, SSH
+- **Databases** - PostgreSQL, MySQL, MongoDB, Redis
+- **Monitoring** - Prometheus, Grafana, system metrics
+- **Communication** - Slack, email, PagerDuty webhooks
+
+### Context Awareness
+Agents understand their operational context:
+- Current environment (dev/staging/prod)
+- Available tools and permissions
+- Previous execution history
+- System state and metrics
+
+## Agent Types
+
+### Monitoring Agents
+```bash
+stn agent create --name "System Monitor" \
+  --description "Monitor CPU, memory, disk usage across servers"
+```
+- Continuous system health monitoring
+- Threshold-based alerting
+- Performance trend analysis
+- Capacity planning recommendations
+
+### Deployment Agents  
+```bash
+stn agent create --name "Deploy Pipeline" \
+  --description "Automated deployment with rollback capability"
+```
+- CI/CD pipeline automation
+- Health check validation
+- Automatic rollback on failure
+- Deployment approval workflows
+
+### Security Agents
+```bash
+stn agent create --name "Security Scanner" \
+  --description "Vulnerability scanning and compliance checks"
+```
+- Automated security scanning
+- Compliance verification
+- Access audit trails
+- Incident response automation
+
+## Agent Communication
+
+### Inter-Agent Coordination
+Agents can communicate and coordinate:
+```bash
+# Agent 1 triggers Agent 2
+stn agent run 1 "Check system health, if critical issues found, trigger deployment rollback agent"
+```
+
+### Webhook Integration
+Agents can send notifications to external systems:
+- Slack channels for alerts
+- PagerDuty for incidents
+- Email for reports
+- Custom webhooks for integrations
+
+## Best Practices
+
+### Agent Design
+- **Single Responsibility** - Each agent has one clear purpose
+- **Idempotent Operations** - Safe to run multiple times
+- **Proper Error Handling** - Graceful failure and recovery
+- **Clear Communication** - Detailed logging and reporting
+
+### Security Considerations
+- **Least Privilege** - Agents only have necessary permissions
+- **Environment Isolation** - Production agents isolated from dev/staging
+- **Audit Trails** - All agent actions are logged and traceable
+- **Secret Management** - Sensitive data encrypted and rotated
+
+### Operational Excellence
+- **Monitoring** - Agent performance and health metrics
+- **Testing** - Agents tested in lower environments first
+- **Documentation** - Clear descriptions and usage examples
+- **Version Control** - Agent configurations tracked in git
+
+## Next Steps
+
+- **[MCP Integration](/en/mcp-integration)** - Learn about available tools
+- **[Environment Management](/en/environments)** - Understand multi-environment setup
+- **[Creating Bundles](/en/creating-bundles)** - Package agents for reuse

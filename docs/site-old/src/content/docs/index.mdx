@@ -1,0 +1,79 @@
+---
+title: Station Documentation
+description: Lightweight Runtime for Deployable Sub-Agents
+template: splash
+hero:
+  tagline: Secure, self-hosted platform for building and deploying intelligent sub-agents
+  image:
+    file: ../../assets/station-logo.png
+  actions:
+    - text: Quick Start
+      link: /quickstart/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/cloudshipai/station
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Station is a lightweight, secure runtime specifically designed for deployable sub-agents that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
+
+## Why Station?
+
+<CardGrid>
+  <Card title="🔐 Secure by Design" icon="lock">
+    - **Self-Hosted** - Complete data sovereignty
+    - **Encrypted Secrets** - AES encryption for credentials  
+    - **Environment Isolation** - Dev/staging/prod separation
+    - **Audit Trail** - Complete execution tracking
+  </Card>
+  
+  <Card title="⚡ Lightweight Runtime" icon="rocket">
+    - **Single 45MB Binary** - No complex infrastructure
+    - **SQLite/PostgreSQL** - Zero-setup to production-ready
+    - **Container Optimized** - Perfect for Docker/K8s
+    - **Multi-Interface** - CLI, REST, SSH, WebSocket
+  </Card>
+  
+  <Card title="🔧 MCP Integration" icon="puzzle">
+    - **20+ Built-in Tools** - Filesystem, AWS, databases
+    - **Tool Discovery** - Automatic MCP server detection
+    - **Configuration Management** - GitOps-ready configs
+    - **Custom Tools** - Easy integration of your tools
+  </Card>
+  
+  <Card title="🏗️ Production Ready" icon="setting">
+    - **Queue-based Execution** - Asynchronous processing
+    - **Webhook Integration** - Real-time notifications
+    - **Database Replication** - Production backup support
+    - **Multi-Environment** - Complete isolation
+  </Card>
+</CardGrid>
+
+## Quick Start
+
+```bash
+# Install Station
+curl -sSL https://getstation.cloudshipai.com | bash
+
+# Initialize and create your first agent
+stn init
+stn agent create --name "System Monitor" --description "Monitor system resources"
+
+# Test your agent
+stn agent run 1 "Check current disk usage and memory status"
+```
+
+## Browse Bundle Registry
+
+🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
+
+```bash
+# Install a filesystem bundle
+stn template install https://cloudshipai.github.io/registry/bundles/filesystem-bundle.tar.gz
+
+# Sync to load the agents and tools
+stn sync production
+```
