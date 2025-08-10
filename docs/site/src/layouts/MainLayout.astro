@@ -30,10 +30,48 @@ const editUrl = `${EDIT_URL}/${currentFile}`
     </title>
     <script type="module">
       import mermaid from 'https://cdn.skypack.dev/mermaid@latest';
+      
       mermaid.initialize({
-        startOnLoad: true,
+        startOnLoad: false,
         theme: 'default',
         securityLevel: 'loose',
+        themeVariables: {
+          primaryColor: '#667eea',
+          primaryTextColor: '#fff',
+          primaryBorderColor: '#764ba2',
+          lineColor: '#333',
+          sectionBkgColor: '#f8fafc',
+          altSectionBkgColor: '#e2e8f0'
+        }
+      });
+
+      // Wait for DOM to be ready
+      document.addEventListener('DOMContentLoaded', async () => {
+        // Find all code blocks with language "mermaid"
+        const mermaidBlocks = document.querySelectorAll('pre code.language-mermaid');
+        
+        for (let i = 0; i < mermaidBlocks.length; i++) {
+          const block = mermaidBlocks[i];
+          const diagramCode = block.textContent.trim();
+          const diagramId = `mermaid-diagram-${i}`;
+          
+          try {
+            // Create a div to render the diagram
+            const diagramDiv = document.createElement('div');
+            diagramDiv.className = 'mermaid-diagram';
+            diagramDiv.style.textAlign = 'center';
+            diagramDiv.style.margin = '2rem 0';
+            
+            // Render the diagram
+            const { svg } = await mermaid.render(diagramId, diagramCode);
+            diagramDiv.innerHTML = svg;
+            
+            // Replace the pre block with the diagram
+            block.closest('pre').replaceWith(diagramDiv);
+          } catch (error) {
+            console.error('Mermaid rendering error:', error);
+          }
+        }
       });
     </script>
     <style>
