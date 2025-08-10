@@ -1,0 +1,72 @@
+---
+title: Publishing Bundles
+description: Share your Station bundles with the community
+---
+
+# Publishing Bundles
+
+Share your Station bundles with the community by publishing them to the official registry or creating your own custom registry.
+
+## Publishing to Official Registry
+
+### 1. Prepare Your Bundle
+Ensure your bundle meets quality standards:
+- Comprehensive documentation
+- No hardcoded secrets
+- Tested in multiple environments
+- Clear usage examples
+
+### 2. Submit to Registry
+```bash
+# Fork the registry repository
+git clone https://github.com/your-username/registry
+cd registry
+
+# Add your bundle
+cp my-bundle.tar.gz bundles/
+./scripts/update-index.sh
+
+# Submit pull request  
+git add .
+git commit -m "Add my-custom-bundle v1.0.0"
+git push origin main
+```
+
+## Creating Custom Registry
+
+Use the cookiecutter template to create your own registry:
+```bash
+cookiecutter https://github.com/cloudshipai/cookiecutter-registry
+```
+
+This creates a complete registry with:
+- GitHub Pages hosting
+- Automated bundle indexing
+- Professional documentation site
+- CI/CD deployment pipeline
+
+## Distribution Methods
+
+### GitHub Releases
+```bash
+# Create GitHub release with bundle
+gh release create v1.0.0 my-bundle.tar.gz --title "My Bundle v1.0.0"
+```
+
+### Private Registry
+```bash
+# Install from private registry
+stn template install https://my-company.github.io/registry/bundles/internal-tools.tar.gz
+```
+
+## Version Management
+
+Use semantic versioning for bundle releases:
+- **Major** (1.0.0) - Breaking changes
+- **Minor** (1.1.0) - New features  
+- **Patch** (1.1.1) - Bug fixes
+
+## Next Steps
+
+- **[Bundle Registry](/en/registry)** - Browse existing bundles
+- **[Template System](/en/templates)** - Learn about templates

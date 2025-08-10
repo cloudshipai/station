@@ -1,0 +1,158 @@
+---
+title: Quick Start
+description: Get Station running in minutes
+---
+
+# Quick Start
+
+Get Station up and running in minutes and deploy your first intelligent sub-agent.
+
+## Installation
+
+### Automatic Install (Recommended)
+
+```bash
+curl -sSL https://getstation.cloudshipai.com | bash
+```
+
+This script automatically detects your platform and installs the latest version.
+
+### Manual Download
+
+Download for your platform from [GitHub Releases](https://github.com/cloudshipai/station/releases/latest)
+
+**Linux x64:**
+```bash
+wget https://github.com/cloudshipai/station/releases/latest/download/station_linux_amd64.tar.gz
+tar -xzf station_linux_amd64.tar.gz
+sudo mv stn /usr/local/bin/
+```
+
+**macOS:**
+```bash
+wget https://github.com/cloudshipai/station/releases/latest/download/station_darwin_amd64.tar.gz
+tar -xzf station_darwin_amd64.tar.gz
+sudo mv stn /usr/local/bin/
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/cloudshipai/station
+cd station
+make install
+```
+
+## Setup Workflow
+
+### 1. Initialize Station
+
+```bash
+stn init
+```
+
+This creates the Station configuration directory and initializes the database.
+
+### 2. Load MCP Tools
+
+Station works with Model Context Protocol (MCP) servers. Load some essential tools:
+
+```bash
+# Load filesystem tools
+stn load examples/mcps/filesystem.json
+
+# Load database tools  
+stn load examples/mcps/postgres.json
+
+# Sync configurations to make tools available
+stn sync production
+```
+
+### 3. Create Your First Agent
+
+```bash
+stn agent create \
+  --name "System Monitor" \
+  --description "Monitor system resources and alert on issues"
+```
+
+### 4. Test Your Agent
+
+```bash
+stn agent run 1 "Check current disk usage and memory status"
+```
+
+### 5. Install from Bundle Registry
+
+Browse and install pre-built bundles from the [Bundle Registry](https://cloudshipai.github.io/registry):
+
+```bash
+# Install a filesystem bundle
+stn template install https://cloudshipai.github.io/registry/bundles/filesystem-bundle.tar.gz
+
+# Sync to load the agents and tools
+stn sync production
+```
+
+## Access Methods
+
+Station provides multiple ways to interact with your agents:
+
+### Command Line
+
+```bash
+# Direct agent execution
+stn agent run 1 "task description"
+
+# List agents
+stn agent list
+
+# Check system status
+stn status
+```
+
+### SSH/TUI Access
+
+```bash
+# Access admin interface via SSH
+ssh admin@localhost -p 2222
+```
+
+Interactive terminal interface for managing agents and viewing logs.
+
+### REST API
+
+```bash
+# Queue agent execution
+curl -X POST http://localhost:8080/api/v1/agents/1/queue \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Check system status"}'
+```
+
+### WebSocket
+
+Real-time updates and streaming responses for agent execution and system events.
+
+## Development Workflow
+
+1. **Create Agent** - `stn agent create` to define your agent
+2. **Test Locally** - `stn agent run` to test functionality
+3. **Export Template** - `stn agent export` to create reusable templates
+4. **Version Control** - `git add & commit` for your agent configurations
+5. **Deploy** - `stn template install` in production environment
+6. **Monitor** - Use SSH/API access to monitor execution
+
+## Next Steps
+
+- **[Learn the Architecture](/en/architecture)** - Understand how Station manages agents and tools
+- **[Explore Use Cases](/en/use-cases/monitoring)** - See real-world examples  
+- **[Create Bundles](/en/creating-bundles)** - Package and share your agents
+- **[Production Setup](/en/deployment/production)** - Deploy Station in production
+
+## System Requirements
+
+- **OS**: Linux, macOS, Windows
+- **Memory**: 512MB RAM minimum, 1GB recommended  
+- **Storage**: 200MB for runtime, 1GB+ for production data
+- **Database**: SQLite (development) or PostgreSQL (production)
+- **Network**: Outbound HTTPS for AI providers and tool integrations

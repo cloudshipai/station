@@ -1,0 +1,78 @@
+---
+title: Template System
+description: Agent template creation and management
+---
+
+# Template System
+
+Station's template system allows you to package agents, configurations, and dependencies into reusable bundles that can be shared, versioned, and deployed across environments.
+
+## What are Templates?
+
+Templates are packaged configurations that include:
+- Agent definitions with prompts and configurations
+- MCP server configurations and tool dependencies  
+- Environment variables and secrets
+- Documentation and usage examples
+
+## Creating Templates
+
+### From Existing Agents
+```bash
+# Export an agent as a template
+stn agent export 1 ./templates/database-monitor
+
+# Create template bundle
+stn template bundle ./templates/database-monitor --output db-monitor.tar.gz
+```
+
+### Template Structure
+```
+database-monitor/
+├── manifest.json           # Template metadata
+├── template.json          # MCP server configurations  
+├── agents/
+│   └── monitor.prompt     # Agent definition
+├── examples/
+│   └── variables.yml      # Example configuration
+└── README.md             # Template documentation
+```
+
+## Installing Templates
+
+### From Local Path
+```bash
+stn template install ./templates/database-monitor
+```
+
+### From Bundle Registry
+```bash
+stn template install https://cloudshipai.github.io/registry/bundles/filesystem-bundle.tar.gz
+```
+
+### From Git Repository
+```bash
+stn template install https://github.com/cloudshipai/station-templates/tree/main/database-monitor
+```
+
+## Template Variables
+
+Templates support Go template syntax for customization:
+```yaml
+# template.json
+{
+  "mcpServers": {
+    "postgres": {
+      "env": {
+        "DATABASE_URL": "{{ .DATABASE_URL }}"
+      }
+    }
+  }
+}
+```
+
+## Next Steps
+
+- **[Bundle Registry](/en/registry)** - Browse available templates
+- **[Creating Bundles](/en/creating-bundles)** - Package your own templates
+- **[Publishing Bundles](/en/publishing-bundles)** - Share with the community

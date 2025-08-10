@@ -3,8 +3,6 @@ title: Installation
 description: Install Station on your system
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
-
 # Installation
 
 Station provides multiple installation methods to fit your environment and preferences.
@@ -13,19 +11,15 @@ Station provides multiple installation methods to fit your environment and prefe
 
 The easiest way to install Station is using our installation script:
 
-<Tabs>
-  <TabItem label="Linux / macOS">
-    ```bash
-    curl -sSL https://getstation.cloudshipai.com | bash
-    ```
-  </TabItem>
-  
-  <TabItem label="Windows (PowerShell)">
-    ```powershell
-    iwr -useb https://getstation.cloudshipai.com/install.ps1 | iex
-    ```
-  </TabItem>
-</Tabs>
+### Linux / macOS
+```bash
+curl -sSL https://getstation.cloudshipai.com | bash
+```
+
+### Windows (PowerShell)
+```powershell
+iwr -useb https://getstation.cloudshipai.com/install.ps1 | iex
+```
 
 This script will:
 - Detect your platform automatically
@@ -47,22 +41,18 @@ This script will:
 
 3. Extract and install:
 
-<Tabs>
-  <TabItem label="Linux / macOS">
-    ```bash
-    tar -xzf station_*.tar.gz
-    sudo mv stn /usr/local/bin/
-    chmod +x /usr/local/bin/stn
-    ```
-  </TabItem>
-  
-  <TabItem label="Windows">
-    ```powershell
-    Expand-Archive station_*.zip
-    # Move stn.exe to a directory in your PATH
-    ```
-  </TabItem>
-</Tabs>
+**Linux / macOS:**
+```bash
+tar -xzf station_*.tar.gz
+sudo mv stn /usr/local/bin/
+chmod +x /usr/local/bin/stn
+```
+
+**Windows:**
+```powershell
+Expand-Archive station_*.zip
+# Move stn.exe to a directory in your PATH
+```
 
 ### Build from Source
 
@@ -97,9 +87,9 @@ Platform: linux/amd64
 
 Now that Station is installed:
 
-1. **[Initialize Station →](/quickstart/#1-initialize-station)** - Set up your first environment
-2. **[Quick Start Guide →](/quickstart/)** - Create and run your first agent
-3. **[Architecture Overview →](/architecture/)** - Understand how Station works
+1. **[Initialize Station](/en/quickstart#1-initialize-station)** - Set up your first environment
+2. **[Quick Start Guide](/en/quickstart)** - Create and run your first agent
+3. **[Architecture Overview](/en/architecture)** - Understand how Station works
 
 ## Troubleshooting
 
