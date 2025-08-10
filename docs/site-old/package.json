@@ -1,0 +1,22 @@
+{
+  "name": "station-docs",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^2.0.0",
+    "@astrojs/sitemap": "^3.0.0",
+    "@astrojs/starlight": "^0.16.0",
+    "@astrojs/starlight-tailwind": "^2.0.0",
+    "@astrojs/tailwind": "^5.0.0",
+    "astro": "^4.0.0",
+    "sharp": "^0.33.0",
+    "tailwindcss": "^3.4.0"
+  }
+}
