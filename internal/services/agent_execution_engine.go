@@ -180,12 +180,13 @@ Guidelines:
 	logging.Info("DEBUG: About to call genkit.Generate with %d tools", len(tools))
 	logging.Info("DEBUG: Prompt length: %d characters", len(prompt))
 	
-	// Create properly formatted model name with provider prefix
+	// Create properly formatted model name with provider-specific logic
 	var modelName string
 	switch strings.ToLower(cfg.AIProvider) {
 	case "gemini", "googlegenai":
 		modelName = fmt.Sprintf("googleai/%s", cfg.AIModel)
 	case "openai":
+		// Station's OpenAI plugin registers models with station-openai provider prefix
 		modelName = fmt.Sprintf("station-openai/%s", cfg.AIModel)
 	default:
 		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)

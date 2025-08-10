@@ -3,9 +3,11 @@ package file_config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"station/internal/config"
 )
 
 // getEnvironmentCommand gets file-based MCP environment details
@@ -17,8 +19,9 @@ func (h *FileConfigHandler) getEnvironmentCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			envName := args[0]
 			
-			// Check file config directory
-			configDir := fmt.Sprintf("./config/environments/%s", envName)
+			// Use proper config directory
+			stationConfig := config.GetStationConfigDir()
+			configDir := filepath.Join(stationConfig, "environments", envName)
 			stat, err := os.Stat(configDir)
 			if err != nil {
 				return fmt.Errorf("environment '%s' not found at %s", envName, configDir)

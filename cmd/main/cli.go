@@ -1,10 +1,14 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -305,6 +309,11 @@ func runTemplatePublish(cmd *cobra.Command, args []string) error {
 // runTemplateInstall implements the "station template install" command  
 func runTemplateInstall(cmd *cobra.Command, args []string) error {
 	bundleRef := args[0]
+	environmentName := "default" // Default environment
+	if len(args) > 1 {
+		environmentName = args[1]
+	}
+	
 	registry, _ := cmd.Flags().GetString("registry")
 	force, _ := cmd.Flags().GetBool("force")
 	
@@ -313,20 +322,232 @@ func runTemplateInstall(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("📥 Install Template Bundle")
 	fmt.Println(banner)
 	
-	fmt.Printf("Installing '%s'", bundleRef)
+	fmt.Printf("🎯 Installing '%s' into environment '%s'\n", bundleRef, environmentName)
 	if registry != "" {
-		fmt.Printf(" from registry '%s'", registry)
+		fmt.Printf("📡 Registry: %s\n", registry)
 	}
 	if force {
-		fmt.Printf(" (force reinstall)")
+		fmt.Printf("⚠️  Force reinstall mode enabled\n")
 	}
-	fmt.Println("...")
+	fmt.Println()
 	
-	// TODO: Implement installation logic
-	fmt.Printf("🚀 Installation from registries (feature coming soon)\n")
-	fmt.Printf("📦 Bundle reference: %s\n", bundleRef)
+	// Call our installation logic
+	if err := installTemplateBundle(bundleRef, environmentName, force); err != nil {
+		return fmt.Errorf("installation failed: %w", err)
+	}
+	
+	fmt.Printf("✅ Bundle '%s' installed successfully!\n", bundleRef)
+	fmt.Printf("📋 Next steps:\n")
+	fmt.Printf("   1. Run 'stn sync %s' to load MCP configs and agents\n", environmentName)
+	fmt.Printf("   2. If prompted for variables, update ~/.config/station/environments/%s/variables.yml\n", environmentName)
 	
 	return nil
+}
+
+// installTemplateBundle installs a template bundle into the specified environment
+func installTemplateBundle(bundleRef, environmentName string, force bool) error {
+	// Determine if bundleRef is a local file or registry reference
+	var bundlePath string
+	if strings.HasSuffix(bundleRef, ".tar.gz") && fileExists(bundleRef) {
+		bundlePath = bundleRef
+	} else {
+		// TODO: Handle registry-based bundles in the future
+		return fmt.Errorf("registry-based bundles not yet supported. Please provide a local .tar.gz file")
+	}
+	
+	// Get Station config directory
+	configDir := os.ExpandEnv("$HOME/.config/station")
+	envDir := filepath.Join(configDir, "environments", environmentName)
+	
+	// Create environment directory if it doesn't exist
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+	
+	// Extract bundle to temporary directory
+	tempDir, err := os.MkdirTemp("", "bundle-install-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	
+	fmt.Printf("📦 Extracting bundle...\n")
+	if err := extractTarGz(bundlePath, tempDir); err != nil {
+		return fmt.Errorf("failed to extract bundle: %w", err)
+	}
+	
+	// Install MCP configuration
+	fmt.Printf("⚙️  Installing MCP configuration...\n")
+	templatePath := filepath.Join(tempDir, "template.json")
+	if fileExists(templatePath) {
+		manifestPath := filepath.Join(tempDir, "manifest.json")
+		configName := "template"
+		if fileExists(manifestPath) {
+			// Try to get a better config name from manifest
+			if manifest, err := loadManifestFile(manifestPath); err == nil && manifest.Name != "" {
+				// Sanitize name for filename
+				configName = strings.ToLower(strings.ReplaceAll(manifest.Name, " ", "-"))
+				configName = strings.ReplaceAll(configName, "_", "-")
+			}
+		}
+		
+		destConfigPath := filepath.Join(envDir, configName+".json")
+		if err := copyFile(templatePath, destConfigPath); err != nil {
+			return fmt.Errorf("failed to install MCP config: %w", err)
+		}
+		fmt.Printf("   ✅ Installed MCP config: %s.json\n", configName)
+	}
+	
+	// Install agents
+	agentsDir := filepath.Join(tempDir, "agents")
+	if dirExists(agentsDir) {
+		fmt.Printf("🤖 Installing agents...\n")
+		
+		destAgentsDir := filepath.Join(envDir, "agents")
+		if err := os.MkdirAll(destAgentsDir, 0755); err != nil {
+			return fmt.Errorf("failed to create agents directory: %w", err)
+		}
+		
+		// Copy all .prompt files
+		entries, err := os.ReadDir(agentsDir)
+		if err != nil {
+			return fmt.Errorf("failed to read agents directory: %w", err)
+		}
+		
+		agentCount := 0
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".prompt") {
+				continue
+			}
+			
+			srcPath := filepath.Join(agentsDir, entry.Name())
+			destPath := filepath.Join(destAgentsDir, entry.Name())
+			
+			// Don't overwrite existing agents unless force is enabled
+			if !force && fileExists(destPath) {
+				fmt.Printf("   ⏭️  Skipping existing agent: %s (use --force to overwrite)\n", entry.Name())
+				continue
+			}
+			
+			if err := copyFile(srcPath, destPath); err != nil {
+				return fmt.Errorf("failed to install agent %s: %w", entry.Name(), err)
+			}
+			fmt.Printf("   ✅ Installed agent: %s\n", entry.Name())
+			agentCount++
+		}
+		
+		if agentCount == 0 {
+			fmt.Printf("   ℹ️  No new agents installed\n")
+		}
+	}
+	
+	// Install example variables (only if variables.yml doesn't exist)
+	variablesPath := filepath.Join(envDir, "variables.yml")
+	if !fileExists(variablesPath) {
+		exampleVarsPath := filepath.Join(tempDir, "examples", "development.vars.yml")
+		if fileExists(exampleVarsPath) {
+			fmt.Printf("📝 Installing example variables...\n")
+			if err := copyFile(exampleVarsPath, variablesPath); err != nil {
+				return fmt.Errorf("failed to install example variables: %w", err)
+			}
+			fmt.Printf("   ✅ Created variables.yml from development example\n")
+		}
+	} else {
+		fmt.Printf("📝 Preserving existing variables.yml\n")
+	}
+	
+	return nil
+}
+
+// Helper functions
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+	
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+	
+	_, err = io.Copy(destFile, sourceFile)
+	return err
+}
+
+func extractTarGz(src, dst string) error {
+	file, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	gzr, err := gzip.NewReader(file)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+	
+	tr := tar.NewReader(gzr)
+	
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		
+		target := filepath.Join(dst, header.Name)
+		
+		// Security: ensure target is within dst directory
+		if !strings.HasPrefix(target, filepath.Clean(dst)+string(os.PathSeparator)) {
+			continue
+		}
+		
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			
+			file, err := os.Create(target)
+			if err != nil {
+				return err
+			}
+			
+			if _, err := io.Copy(file, tr); err != nil {
+				file.Close()
+				return err
+			}
+			file.Close()
+		}
+	}
+	
+	return nil
+}
+
+func loadManifestFile(path string) (*bundle.BundleManifest, error) {
+	// Simple implementation - just try to extract name from JSON
+	// For now, return error to use fallback
+	return nil, fmt.Errorf("manifest parsing not implemented")
 }
 
 // runTemplateList implements the "station template list" command

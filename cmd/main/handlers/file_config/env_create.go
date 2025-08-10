@@ -3,8 +3,10 @@ package file_config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"station/internal/config"
 )
 
 // createEnvironmentCommand creates a new file-based MCP environment
@@ -17,8 +19,9 @@ func (h *FileConfigHandler) createEnvironmentCommand() *cobra.Command {
 			envName := args[0]
 			createSamples, _ := cmd.Flags().GetBool("init-samples")
 			
-			// Create file structure
-			configDir := fmt.Sprintf("./config/environments/%s", envName)
+			// Use proper config directory
+			stationConfig := config.GetStationConfigDir()
+			configDir := filepath.Join(stationConfig, "environments", envName)
 			
 			// Check if environment already exists
 			if _, err := os.Stat(configDir); err == nil {
@@ -31,7 +34,7 @@ func (h *FileConfigHandler) createEnvironmentCommand() *cobra.Command {
 			}
 			
 			// Create variables directory if it doesn't exist
-			varsDir := "./config/vars"
+			varsDir := filepath.Join(stationConfig, "vars")
 			if err := os.MkdirAll(varsDir, 0755); err != nil {
 				return fmt.Errorf("failed to create variables directory: %w", err)
 			}
