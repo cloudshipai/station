@@ -1,8 +1,10 @@
 {
   "mcpServers": {
-    "station": {
-      "type": "http",
-      "url": "http://localhost:3000/mcp"
+    "stn": {
+      "command": "stn",
+      "args": [
+        "stdio"
+      ]
     }
   }
 }
