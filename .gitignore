@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-.crush/
-=======
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -10,10 +7,12 @@
 station
 station-cli
 stn
+
 # Test binary, built with `go test -c`
 *.test
 /main
 coverage.out
+
 # Output of the go build command
 /bin/
 /tmp/
@@ -56,5 +55,14 @@ ssh_host_key*
 
 # Test files (in root - move to tests/ for permanent tests)
 test_*.go
-stn
->>>>>>> fd3f5dc1e1fdccd92926e5feae57c3c1ee96ba40
+
+# Node modules from any examples or tests
+node_modules/
+
+# Documentation site
+docs/site/dist/
+docs/site/.astro/
+docs/site/node_modules/
+
+# Crush framework
+.crush/
