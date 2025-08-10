@@ -811,4 +811,3 @@ func (s *ConfigSyncer) isSecretVariableName(name string) bool {
 	
 	return false
 }
-
