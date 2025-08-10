@@ -1,0 +1,79 @@
+# ntfy server configuration for production deployment
+# Documentation: https://docs.ntfy.sh/config/
+
+# Base URL of the service (important for web UI and push notifications)
+base-url: "https://{{APP_NAME}}.fly.dev"
+
+# Listen address for HTTP requests
+listen-http: ":8080"
+
+# Message cache (SQLite database)
+cache-file: "/var/cache/ntfy/cache.db"
+
+# Cache duration for messages (default: 12h)
+cache-duration: "12h"
+
+# Maximum size of message cache
+cache-startup-queries: |
+  PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL;
+  PRAGMA cache_size = -8192;
+  PRAGMA temp_store = memory;
+
+# Authentication database (for user management)
+auth-file: "/var/cache/ntfy/auth.db"
+auth-default-access: "read-write"
+
+# File attachments
+attachment-cache-dir: "/var/cache/ntfy/attachments"
+attachment-total-size-limit: "5G"
+attachment-file-size-limit: "15M"
+attachment-expiry-duration: "3h"
+
+# Rate limiting
+visitor-request-limit-burst: 60
+visitor-request-limit-replenish: "5s"
+visitor-message-daily-limit: 10000
+
+# Web UI settings
+web-root: "disable"  # Set to "app" to enable web UI
+
+# CORS settings for API access
+cors-allow-origin: "*"
+
+# Logging
+log-level: "INFO"
+log-format: "text"
+
+# Security headers
+server-name: "ntfy"
+
+# Message limits
+message-size-limit: "4096"
+message-delay-limit: "3d"
+
+# Topic settings
+upstream-base-url: ""
+
+# Metrics (Prometheus)
+enable-metrics: false
+
+# Web push notifications (disabled for basic setup)
+web-push-public-key: ""
+web-push-private-key: ""
+web-push-file: ""
+web-push-email-address: ""
+web-push-startup-queries: ""
+
+# Firebase settings (disabled)
+firebase-key-file: ""
+
+# SMTP settings (for email notifications - configure as needed)
+smtp-sender-addr: ""
+smtp-sender-from: ""
+smtp-sender-user: ""
+smtp-sender-pass: ""
+
+# Access tokens (for API access control)
+# Uncomment and configure if you need authentication
+# auth-default-access: "deny-all"

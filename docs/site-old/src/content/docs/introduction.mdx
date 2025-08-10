@@ -1,0 +1,137 @@
+---
+title: Welcome to Station
+description: Lightweight Runtime for Deployable Sub-Agents
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+# Station - Lightweight Runtime for Deployable Sub-Agents
+
+**A secure, self-hosted platform for building and deploying intelligent sub-agents.**
+
+🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
+
+Station is purpose-built for **deployable sub-agents** - the intelligent automation you need for infrastructure monitoring, deployment pipelines, security scanning, and day-to-day tasks that require secure access to internal systems.
+
+## Quick Installation
+
+<div class="install-command">
+curl -sSL https://getstation.cloudshipai.com | bash
+<button class="copy-button" onclick="copyToClipboard('curl -sSL https://getstation.cloudshipai.com | bash')">Copy</button>
+</div>
+
+## Why Station Exists
+
+When you need agents for internal work, you need more than application-focused agent platforms. You need:
+
+<CardGrid>
+  <Card title="🔒 Secure Internal Access" icon="lock">
+    Agents that can safely handle database credentials, API keys, and system-level access with AES encryption and environment isolation.
+  </Card>
+  
+  <Card title="📋 Versionable Deployment" icon="document">
+    Deployable agents that integrate with your existing deployment pipelines using GitOps-ready configuration management.
+  </Card>
+  
+  <Card title="🔧 Team-Approved Tools" icon="setting">
+    Easy way to use and share the tools your team builds and approves with 20+ production-ready MCP integrations.
+  </Card>
+  
+  <Card title="⚡ Low Footprint Runtime" icon="rocket">
+    Single 45MB binary with SQLite development mode and PostgreSQL production support - no complex infrastructure.
+  </Card>
+</CardGrid>
+
+**Station provides exactly this** - a lightweight, secure runtime specifically designed for deployable sub-agents.
+
+## Core Value: Secure Deployable Sub-Agent Runtime
+
+### 🔧 Purpose-Built for Internal Tasks
+
+Unlike application-focused agent platforms, Station is designed for deployable sub-agents that need to:
+
+- Access internal databases with production credentials
+- Monitor infrastructure and alert on issues  
+- Automate deployment pipelines with CI/CD system access
+- Perform security scans with elevated permissions
+- Handle incident response with system-level tools
+
+### 🔐 Security by Design
+
+- **Self-Hosted** - Complete data sovereignty, no external dependencies beyond AI providers
+- **Encrypted Secrets** - AES encryption for credentials and sensitive configuration
+- **Environment Isolation** - Separate execution contexts for dev/staging/prod
+- **Audit Trail** - Complete tracking of agent deployments and executions
+
+### ⚡ Lightweight & Integrated
+
+- **Single 45MB Binary** - No complex infrastructure or dependencies
+- **SQLite Database** - Zero-setup local development, PostgreSQL for production
+- **GitOps Ready** - Version-controlled agent configurations like infrastructure code
+- **Existing Toolchain** - Uses your team's approved MCP tools and integrations
+
+## Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Station Runtime"
+        CLI[Station CLI<br/>stn command]
+        API[REST API<br/>Port 8080]
+        SSH[SSH/TUI Access<br/>Port 2222]
+        WS[WebSocket<br/>Real-time updates]
+    end
+    
+    subgraph "Core Services"
+        AgentSvc[Agent Management<br/>Scheduling & Execution]
+        MCPSvc[MCP Server<br/>Tool Discovery]
+        ConfigSvc[Configuration<br/>File-based GitOps]
+        SecuritySvc[Security Layer<br/>Encryption & Audit]
+    end
+    
+    subgraph "Storage Layer"
+        SQLite[(SQLite<br/>Development)]
+        PostgreSQL[(PostgreSQL<br/>Production)]
+        Files[Config Files<br/>Version Controlled]
+    end
+    
+    subgraph "External Integrations"
+        MCPServers[MCP Servers<br/>Filesystem, AWS, etc.]
+        AIProviders[AI Providers<br/>OpenAI, Anthropic]
+        Webhooks[Webhooks<br/>Notifications]
+    end
+    
+    CLI --> AgentSvc
+    API --> AgentSvc
+    SSH --> AgentSvc
+    WS --> AgentSvc
+    
+    AgentSvc --> MCPSvc
+    AgentSvc --> ConfigSvc
+    AgentSvc --> SecuritySvc
+    
+    ConfigSvc --> Files
+    SecuritySvc --> SQLite
+    SecuritySvc --> PostgreSQL
+    
+    MCPSvc --> MCPServers
+    AgentSvc --> AIProviders
+    AgentSvc --> Webhooks
+    
+    classDef runtime fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+    classDef service fill:#764ba2,stroke:#333,stroke-width:2px,color:#fff
+    classDef storage fill:#f093fb,stroke:#333,stroke-width:2px,color:#fff
+    classDef external fill:#a8e6cf,stroke:#333,stroke-width:2px,color:#333
+    
+    class CLI,API,SSH,WS runtime
+    class AgentSvc,MCPSvc,ConfigSvc,SecuritySvc service
+    class SQLite,PostgreSQL,Files storage
+    class MCPServers,AIProviders,Webhooks external
+```
+
+## Next Steps
+
+1. [📚 Learn why Station is different](/why-station/)
+2. [🚀 Follow the Quick Start guide](/quickstart/)
+3. [🏗️ Understand the architecture](/architecture/)
+4. [📦 Browse the Bundle Registry](https://cloudshipai.github.io/registry)
+

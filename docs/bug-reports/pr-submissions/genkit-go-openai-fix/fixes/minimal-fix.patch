@@ -1,0 +1,32 @@
+From: Station Development Team <station@dev>
+Date: Sun, 4 Aug 2025 13:30:00 +0000
+Subject: [PATCH] Fix tool_call_id bug in OpenAI plugin - use Ref instead of Name
+
+The OpenAI plugin was incorrectly using tool execution results (Name) as 
+tool_call_id values instead of the original OpenAI-generated reference IDs (Ref).
+This caused all multi-turn tool calling to fail with "tool_call_id not found" 
+or "string too long" errors.
+
+This minimal fix changes the tool call ID source from Name to Ref, aligning
+the Go implementation with the working JavaScript version.
+
+Fixes: Tool calling with OpenAI-compatible APIs
+Affects: All OpenAI, Anthropic, and OpenAI-compatible endpoints
+---
+ go/plugins/compat_oai/generate.go | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/go/plugins/compat_oai/generate.go b/go/plugins/compat_oai/generate.go
+index 1234567..abcdefg 100644
+--- a/go/plugins/compat_oai/generate.go
++++ b/go/plugins/compat_oai/generate.go
+@@ -399,8 +399,8 @@ func convertMessages(messages []*ai.Message) []openai.ChatCompletionMessagePara
+ func convertToolCall(part *ai.Part) openai.ChatCompletionMessageToolCallParam {
+ 	param := openai.ChatCompletionMessageToolCallParam{
+-		// NOTE: Temporarily set its name instead of its ref (i.e. call_xxxxx) since it's not defined in the ai.ToolRequest struct.
+-		ID: (part.ToolRequest.Name),
++		// Use Ref for tool_call_id to match OpenAI's correlation requirements
++		ID: (part.ToolRequest.Ref),
+ 		Function: (openai.ChatCompletionMessageToolCallFunctionParam{
+ 			Name: (part.ToolRequest.Name),
+ 		}),

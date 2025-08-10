@@ -1,0 +1,129 @@
+---
+title: Environment Management  
+description: Multi-environment configuration and isolation
+---
+
+# Environment Management
+
+Station provides complete isolation between development, staging, and production environments, allowing safe testing and deployment of agents with environment-specific configurations.
+
+## Environment Concepts
+
+### Environment Isolation
+Each environment is completely isolated with:
+- **Separate databases** - SQLite for dev, PostgreSQL for production
+- **Different tool configurations** - Environment-specific credentials and endpoints
+- **Isolated agent execution** - Agents cannot access other environments
+- **Separate audit logs** - Complete traceability per environment
+
+### Environment Types
+- **Development** - Local testing and experimentation
+- **Staging** - Integration testing with production-like data
+- **Production** - Live operational environment
+
+## Configuration Structure
+
+```
+~/.config/station/environments/
+├── development/
+│   ├── agents/              # Agent definitions
+│   ├── filesystem.json      # MCP server configs
+│   ├── postgres.json
+│   └── variables.yml        # Environment variables
+├── staging/
+│   ├── agents/
+│   ├── filesystem.json
+│   ├── postgres.json  
+│   └── variables.yml
+└── production/
+    ├── agents/
+    ├── filesystem.json
+    ├── postgres.json
+    └── variables.yml
+```
+
+## Environment Variables
+
+### Template Variables
+Use Go template syntax for environment-specific values:
+```yaml
+# development/variables.yml
+DATABASE_URL: "postgresql://dev:password@localhost:5432/station_dev"
+SLACK_TOKEN: "{{ .DEV_SLACK_TOKEN }}"
+LOG_LEVEL: "debug"
+
+# production/variables.yml  
+DATABASE_URL: "{{ .PROD_DATABASE_URL }}"
+SLACK_TOKEN: "{{ .PROD_SLACK_TOKEN }}"
+LOG_LEVEL: "info"
+```
+
+### Encrypted Secrets
+Production secrets are encrypted:
+```bash
+# Encrypt production secrets
+stn encrypt production PROD_DATABASE_URL "postgresql://..."
+stn encrypt production PROD_SLACK_TOKEN "xoxb-..."
+```
+
+## Environment Operations
+
+### Switching Environments
+```bash
+# Work with development environment (default)
+stn agent list
+
+# Switch to staging environment
+stn --env staging agent list
+
+# Switch to production environment  
+stn --env production agent list
+```
+
+### Syncing Configurations
+```bash
+# Sync development environment
+stn sync development
+
+# Sync all environments
+stn sync --all
+
+# Sync specific environment
+stn sync production
+```
+
+## Deployment Workflow
+
+### Development to Staging
+```bash
+# Test agent in development
+stn agent run 1 "test task"
+
+# Export agent template
+stn agent export 1 ./agent-templates/monitor
+
+# Install in staging
+stn --env staging template install ./agent-templates/monitor
+
+# Sync staging environment
+stn sync staging
+```
+
+### Staging to Production
+```bash
+# Validate in staging
+stn --env staging agent run 1 "production-like test"
+
+# Deploy to production
+stn --env production template install ./agent-templates/monitor
+
+# Sync production environment
+stn sync production
+```
+
+## Best Practices
+
+- **Test First** - Always test in lower environments
+- **Environment Parity** - Keep configs as similar as possible
+- **Secret Management** - Use encryption for production secrets  
+- **Gradual Rollout** - Deploy incrementally to minimize risk
