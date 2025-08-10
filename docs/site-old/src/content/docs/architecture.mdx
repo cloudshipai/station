@@ -1,0 +1,428 @@
+---
+title: Architecture Overview
+description: Understanding Station's lightweight runtime architecture
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+# Architecture Overview
+
+Station is designed as a lightweight, secure runtime for deployable sub-agents with a focus on simplicity, security, and production readiness.
+
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Interfaces"
+        CLI[Station CLI<br/>stn command]
+        API[REST API<br/>Port 8080]
+        SSH[SSH/TUI Access<br/>Port 2222]
+        WS[WebSocket<br/>Real-time updates]
+    end
+    
+    subgraph "Core Runtime"
+        Router[Request Router<br/>HTTP/SSH/WS]
+        Auth[Authentication<br/>& Authorization]
+        Queue[Execution Queue<br/>Background Processing]
+        Scheduler[Agent Scheduler<br/>Cron & Events]
+    end
+    
+    subgraph "Service Layer"
+        AgentSvc[Agent Management<br/>Creation & Execution]
+        MCPSvc[MCP Integration<br/>Tool Discovery]
+        ConfigSvc[Configuration<br/>File-based Management]
+        SecuritySvc[Security Services<br/>Encryption & Audit]
+        WebhookSvc[Webhook Service<br/>Event Notifications]
+    end
+    
+    subgraph "Data Layer"
+        SQLite[(SQLite<br/>Development)]
+        PostgreSQL[(PostgreSQL<br/>Production)]
+        ConfigFiles[Config Files<br/>.json/.yml]
+        SecretStore[Encrypted Secrets<br/>AES-256]
+        AuditLog[Audit Logs<br/>JSON Lines]
+    end
+    
+    subgraph "External Systems"
+        MCPServers[MCP Servers<br/>Filesystem, AWS, etc.]
+        AIProviders[AI Providers<br/>OpenAI, Anthropic]
+        Webhooks[External Webhooks<br/>Slack, PagerDuty]
+        VCS[Version Control<br/>Git repositories]
+    end
+    
+    CLI --> Router
+    API --> Router
+    SSH --> Router
+    WS --> Router
+    
+    Router --> Auth
+    Auth --> Queue
+    Auth --> Scheduler
+    
+    Queue --> AgentSvc
+    Scheduler --> AgentSvc
+    
+    AgentSvc --> MCPSvc
+    AgentSvc --> ConfigSvc
+    AgentSvc --> SecuritySvc
+    AgentSvc --> WebhookSvc
+    
+    ConfigSvc --> ConfigFiles
+    SecuritySvc --> SQLite
+    SecuritySvc --> PostgreSQL
+    SecuritySvc --> SecretStore
+    SecuritySvc --> AuditLog
+    
+    MCPSvc --> MCPServers
+    AgentSvc --> AIProviders
+    WebhookSvc --> Webhooks
+    ConfigSvc --> VCS
+    
+    classDef client fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+    classDef runtime fill:#764ba2,stroke:#333,stroke-width:2px,color:#fff
+    classDef service fill:#f093fb,stroke:#333,stroke-width:2px,color:#fff
+    classDef data fill:#a8e6cf,stroke:#333,stroke-width:2px,color:#333
+    classDef external fill:#ffd93d,stroke:#333,stroke-width:2px,color:#333
+    
+    class CLI,API,SSH,WS client
+    class Router,Auth,Queue,Scheduler runtime
+    class AgentSvc,MCPSvc,ConfigSvc,SecuritySvc,WebhookSvc service
+    class SQLite,PostgreSQL,ConfigFiles,SecretStore,AuditLog data
+    class MCPServers,AIProviders,Webhooks,VCS external
+```
+
+## Core Components
+
+<CardGrid>
+  <Card title="🏗️ Lightweight Runtime" icon="rocket">
+    **45MB Binary** with embedded SQLite for development
+    
+    - **Low Memory Footprint** - 512MB minimum
+    - **Container Optimized** - Perfect for Docker/K8s
+    - **Multi-Interface** - CLI, REST, SSH, WebSocket
+    - **Production Ready** - Queue-based execution
+  </Card>
+  
+  <Card title="🤖 Agent Management" icon="setting">
+    **Intelligent Sub-Agent Orchestration**
+    
+    - **Agent Lifecycle** - Create, deploy, monitor, scale
+    - **Environment Isolation** - Dev/staging/prod separation
+    - **Template System** - Reusable agent bundles
+    - **Scheduling** - Cron-based and event-driven
+  </Card>
+  
+  <Card title="🔧 MCP Integration" icon="puzzle">
+    **Model Context Protocol Support**
+    
+    - **Tool Discovery** - Automatic MCP server detection
+    - **Configuration Management** - GitOps-ready configs
+    - **20+ Built-in Tools** - Filesystem, AWS, databases
+    - **Custom Tools** - Easy integration of your tools
+  </Card>
+  
+  <Card title="🔒 Security Layer" icon="lock">
+    **Enterprise-Grade Security**
+    
+    - **Self-Hosted** - Complete data sovereignty
+    - **AES Encryption** - Secrets and sensitive data
+    - **Audit Logging** - Complete execution trail
+    - **Access Controls** - Role-based permissions
+  </Card>
+</CardGrid>
+
+## Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI
+    participant Runtime
+    participant Agent
+    participant MCP
+    participant AI
+    
+    User->>CLI: stn agent run 1 "task"
+    CLI->>Runtime: POST /api/v1/agents/1/queue
+    Runtime->>Runtime: Authenticate & validate
+    Runtime->>Agent: Queue execution
+    
+    loop Agent Execution
+        Agent->>MCP: Discover available tools
+        MCP-->>Agent: Tool definitions
+        Agent->>AI: Generate execution plan
+        AI-->>Agent: Step-by-step actions
+        Agent->>MCP: Execute tool calls
+        MCP-->>Agent: Tool responses
+        Agent->>Runtime: Update execution status
+    end
+    
+    Agent->>Runtime: Execution complete
+    Runtime->>CLI: Stream results
+    CLI-->>User: Display output
+    
+    Note over Runtime: Audit log, webhooks,<br/>metrics collection
+```
+
+## File System Layout
+
+Station follows a standard configuration layout for predictable deployment:
+
+<div class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-sm">
+<span class="text-slate-400"># Development (default)</span><br/>
+~/.config/station/<br/>
+├── station.db              <span class="text-slate-400"># SQLite database</span><br/>
+├── environments/<br/>
+│   ├── development/<br/>
+│   │   ├── agents/          <span class="text-slate-400"># Agent definitions (.prompt files)</span><br/>
+│   │   ├── *.json           <span class="text-slate-400"># MCP configurations</span><br/>
+│   │   └── variables.yml    <span class="text-slate-400"># Environment variables</span><br/>
+│   ├── staging/<br/>
+│   └── production/<br/>
+├── secrets/                 <span class="text-slate-400"># Encrypted secrets (AES-256)</span><br/>
+├── audit/                   <span class="text-slate-400"># Audit logs (JSONL)</span><br/>
+└── cache/                   <span class="text-slate-400"># Temporary execution cache</span><br/>
+<br/>
+<span class="text-slate-400"># Production (configurable)</span><br/>
+/opt/station/<br/>
+├── config/                  <span class="text-slate-400"># Configuration files</span><br/>
+├── data/                    <span class="text-slate-400"># PostgreSQL data</span><br/>
+├── logs/                    <span class="text-slate-400"># Application logs</span><br/>
+└── backup/                  <span class="text-slate-400"># Database backups</span>
+</div>
+
+## Environment Isolation
+
+Station provides complete isolation between environments:
+
+```mermaid
+graph LR
+    subgraph "Development"
+        DevDB[(SQLite<br/>Development)]
+        DevAgents[Dev Agents<br/>Test tools]
+        DevVars[Dev Variables<br/>Local paths]
+    end
+    
+    subgraph "Staging"
+        StageDB[(SQLite/PostgreSQL<br/>Staging)]
+        StageAgents[Staging Agents<br/>Safe tools]
+        StageVars[Staging Variables<br/>Test credentials]
+    end
+    
+    subgraph "Production"
+        ProdDB[(PostgreSQL<br/>Production)]
+        ProdAgents[Production Agents<br/>All tools]
+        ProdVars[Production Variables<br/>Real credentials]
+    end
+    
+    DevDB -.-> StageDB
+    StageDB -.-> ProdDB
+    
+    DevAgents -.-> StageAgents
+    StageAgents -.-> ProdAgents
+    
+    DevVars -.-> StageVars
+    StageVars -.-> ProdVars
+    
+    classDef dev fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+    classDef staging fill:#764ba2,stroke:#333,stroke-width:2px,color:#fff
+    classDef prod fill:#f093fb,stroke:#333,stroke-width:2px,color:#fff
+    
+    class DevDB,DevAgents,DevVars dev
+    class StageDB,StageAgents,StageVars staging
+    class ProdDB,ProdAgents,ProdVars prod
+```
+
+## Security Architecture
+
+<CardGrid>
+  <Card title="🔐 Encryption at Rest" icon="lock">
+    - **AES-256 encryption** for all secrets and sensitive variables
+    - **Encrypted database fields** for credentials and tokens
+    - **Secure key derivation** using PBKDF2 with salt
+    - **Key rotation support** for long-term security
+  </Card>
+  
+  <Card title="🚪 Access Control" icon="setting">
+    - **Environment-based isolation** prevents cross-environment access
+    - **Role-based permissions** for different user types
+    - **API key authentication** for programmatic access
+    - **SSH key authentication** for secure terminal access
+  </Card>
+  
+  <Card title="📊 Audit Trail" icon="document">
+    - **Complete execution logging** for all agent activities
+    - **Configuration change tracking** with Git integration
+    - **Access logging** for all API and SSH connections
+    - **Compliance reporting** for security audits
+  </Card>
+  
+  <Card title="🌐 Network Security" icon="information">
+    - **TLS encryption** for all external communications
+    - **Configurable firewall rules** for port restrictions
+    - **Webhook signature validation** for trusted notifications
+    - **Zero-trust architecture** - verify all requests
+  </Card>
+</CardGrid>
+
+## Deployment Patterns
+
+### Single-Node Development
+
+```mermaid
+graph TB
+    subgraph "Developer Machine"
+        StationBin[Station Binary<br/>stn command]
+        SQLiteDB[(SQLite<br/>Local database)]
+        ConfigFiles[Config Files<br/>Git tracked]
+        LocalMCP[Local MCP<br/>Filesystem tools]
+    end
+    
+    StationBin --> SQLiteDB
+    StationBin --> ConfigFiles
+    StationBin --> LocalMCP
+    
+    classDef local fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+    class StationBin,SQLiteDB,ConfigFiles,LocalMCP local
+```
+
+### Production Deployment
+
+```mermaid
+graph TB
+    subgraph "Production Environment"
+        LB[Load Balancer<br/>HAProxy/nginx]
+        
+        subgraph "Station Cluster"
+            Station1[Station Instance 1<br/>Primary]
+            Station2[Station Instance 2<br/>Replica]
+            Station3[Station Instance 3<br/>Replica]
+        end
+        
+        subgraph "Data Layer"
+            PGPrimary[(PostgreSQL<br/>Primary)]
+            PGReplica[(PostgreSQL<br/>Read Replica)]
+            Redis[(Redis<br/>Session store)]
+        end
+        
+        subgraph "Monitoring"
+            Prometheus[Prometheus<br/>Metrics]
+            Grafana[Grafana<br/>Dashboards]
+            AlertManager[Alert Manager<br/>Notifications]
+        end
+    end
+    
+    LB --> Station1
+    LB --> Station2
+    LB --> Station3
+    
+    Station1 --> PGPrimary
+    Station2 --> PGReplica
+    Station3 --> PGReplica
+    
+    Station1 --> Redis
+    Station2 --> Redis
+    Station3 --> Redis
+    
+    Station1 --> Prometheus
+    Station2 --> Prometheus
+    Station3 --> Prometheus
+    
+    Prometheus --> Grafana
+    Prometheus --> AlertManager
+    
+    classDef lb fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+    classDef station fill:#764ba2,stroke:#333,stroke-width:2px,color:#fff
+    classDef data fill:#f093fb,stroke:#333,stroke-width:2px,color:#fff
+    classDef monitoring fill:#a8e6cf,stroke:#333,stroke-width:2px,color:#333
+    
+    class LB lb
+    class Station1,Station2,Station3 station
+    class PGPrimary,PGReplica,Redis data
+    class Prometheus,Grafana,AlertManager monitoring
+```
+
+## Performance Characteristics
+
+<CardGrid>
+  <Card title="📈 Scalability" icon="rocket">
+    - **Agent Concurrency**: 100 or more concurrent agent executions
+    - **API Throughput**: 1000 or more requests/second
+    - **Database**: Scales from SQLite to PostgreSQL cluster
+    - **Memory**: Linear scaling with agent count
+  </Card>
+  
+  <Card title="⚡ Response Times" icon="information">
+    - **Agent Start**: Less than 500ms for simple agents
+    - **API Latency**: Less than 100ms for status queries  
+    - **SSH Connection**: Less than 200ms for terminal access
+    - **Tool Execution**: Depends on MCP server performance
+  </Card>
+  
+  <Card title="💾 Resource Usage" icon="setting">
+    - **Binary Size**: 45MB (includes embedded SQLite)
+    - **Memory Usage**: 128MB base plus 50MB per active agent
+    - **Disk Space**: 100MB plus logs and database
+    - **CPU Usage**: Less than 5% idle, scales with agent activity
+  </Card>
+  
+  <Card title="🔄 Reliability" icon="lock">
+    - **Uptime**: 99.9% or higher with proper deployment
+    - **Error Recovery**: Automatic agent restart on failure
+    - **Data Integrity**: ACID compliance with PostgreSQL
+    - **Backup**: Automated database backup and restore
+  </Card>
+</CardGrid>
+
+## Technology Stack
+
+<div class="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+  <div>
+    <strong class="text-slate-800">Runtime:</strong>
+    <span class="ml-2">Go 1.21+, SQLite/PostgreSQL, HTTP/WebSocket servers</span>
+  </div>
+  <div>
+    <strong class="text-slate-800">Security:</strong>
+    <span class="ml-2">AES-256, PBKDF2, TLS 1.3, JWT tokens</span>
+  </div>
+  <div>
+    <strong class="text-slate-800">Protocols:</strong>
+    <span class="ml-2">HTTP/2, WebSocket, SSH, MCP (Model Context Protocol)</span>
+  </div>
+  <div>
+    <strong class="text-slate-800">Storage:</strong>
+    <span class="ml-2">SQLite (dev), PostgreSQL (prod), Git (configs)</span>
+  </div>
+  <div>
+    <strong class="text-slate-800">Deployment:</strong>
+    <span class="ml-2">Docker, Kubernetes, systemd, GitHub Actions</span>
+  </div>
+</div>
+
+## Next Steps
+
+<CardGrid>
+  <Card title="🚀 Quick Start" icon="rocket">
+    Get Station running locally and create your first agent.
+    
+    [Quick Start Guide →](/quickstart/)
+  </Card>
+  
+  <Card title="🔧 MCP Integration" icon="puzzle">
+    Learn how Station integrates with Model Context Protocol servers.
+    
+    [MCP Integration →](/mcp-integration/)
+  </Card>
+  
+  <Card title="🏭 Production Setup" icon="setting">
+    Deploy Station in production with proper security and monitoring.
+    
+    [Production Deployment →](/deployment/production/)
+  </Card>
+  
+  <Card title="📊 Monitoring" icon="information">
+    Set up monitoring, metrics, and alerting for your Station deployment.
+    
+    [Monitoring Guide →](/deployment/monitoring/)
+  </Card>
+</CardGrid>
