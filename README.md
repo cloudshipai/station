@@ -25,6 +25,23 @@ When you need agents for internal work, you need more than application-focused a
 
 ## Core Value: Secure Deployable Sub-Agent Runtime
 
+### 🧪 **Interactive Development Playground**
+
+**NEW**: Station now includes a powerful interactive development environment powered by Firebase Genkit:
+
+```bash
+genkit start -- stn develop --env dev
+```
+
+This launches a complete browser-based development playground where you can:
+- **Test agents interactively** with custom task inputs
+- **Debug tool calling** with real-time execution traces  
+- **Access all MCP tools** from your environment
+- **Iterate on prompts** with live reloading
+- **Analyze execution flows** with detailed logging
+
+Perfect for developing and testing agents before deployment.
+
 ### 🔧 **Purpose-Built for Internal Tasks**
 
 Unlike application-focused agent platforms, Station is designed for deployable sub-agents that need to:
@@ -263,6 +280,46 @@ curl -X POST https://station.company.com/api/v1/agents/3/execute \
 
 # Or trigger via MCP from other agents
 stn agent run 5 "Coordinate with database monitor agent to run health check"
+```
+
+## Key Commands
+
+### Development & Testing
+```bash
+# Interactive development playground with browser UI
+genkit start -- stn develop --env dev
+
+# Initialize Station in current directory  
+stn init
+
+# Load MCP configurations
+stn load <config-file-or-url>
+stn sync  # Sync all configurations
+```
+
+### Agent Management
+```bash
+# Create agents
+stn agent create --name "My Agent" --env dev
+
+# Run agents with tasks
+stn agent run <id> "Task description"
+
+# Export/import agent bundles
+stn agent export <id> ./path/to/bundle
+stn template install ./path/to/bundle
+```
+
+### Server & UI
+```bash
+# Start full Station server
+stn serve
+
+# Terminal UI interface
+stn ui
+
+# MCP server mode for integrations
+stn stdio
 ```
 
 ## Architecture
