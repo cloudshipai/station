@@ -287,7 +287,7 @@ func init() {
 	// Set default values
 	viper.SetDefault("telemetry_enabled", true)
 	viper.SetDefault("ai_provider", "gemini")
-	viper.SetDefault("ai_model", "gemini-2.0-flash-exp")
+	viper.SetDefault("ai_model", "gemini-2.5-flash")
 }
 
 func initConfig() {

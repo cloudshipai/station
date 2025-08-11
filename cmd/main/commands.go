@@ -330,7 +330,7 @@ and makes them available in the Genkit developer UI for interactive testing.`,
 		Example: `  stn develop                    # Start playground with default environment
   stn develop --env production   # Start playground with production environment
   stn develop --port 4000        # Start on custom port
-  stn develop --ai-model gemini-2.0-flash-exp  # Override AI model`,
+  stn develop --ai-model gemini-2.5-flash      # Override AI model`,
 		RunE: runDevelop,
 	}
 )
