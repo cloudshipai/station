@@ -106,6 +106,23 @@ git push origin main
 stn template install ./ops-agents/db-monitor
 ```
 
+### 5. Use as MCP Server (Optional)
+```bash
+# Use Station as MCP server for other AI applications
+# Add to your MCP client config (e.g., Claude Desktop):
+{
+  "mcpServers": {
+    "stn": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
+
+# Then access Station agents from any MCP-compatible AI application
+# Available tools: call_agent, create_agent, list_agents, discover_tools
+```
+
 ## Deployable Sub-Agent Use Cases
 
 ### **Infrastructure Monitoring**
@@ -167,6 +184,51 @@ stn sync production
 stn load examples/mcps/security-tools.json
 stn sync production
 ```
+
+### **Using Station as an MCP Server**
+
+Station can also be used as a standalone MCP server for other AI applications and frameworks. This allows you to integrate Station's agent management capabilities with any MCP-compatible system.
+
+#### **MCP Configuration**
+
+Add Station to your MCP client configuration (e.g., Claude Desktop, other MCP clients):
+
+```json
+{
+  "mcpServers": {
+    "stn": {
+      "command": "stn",
+      "args": [
+        "stdio"
+      ]
+    }
+  }
+}
+```
+
+#### **Available MCP Tools**
+
+When running as an MCP server, Station provides these tools:
+
+- **Agent Management**: `call_agent`, `create_agent`, `list_agents`, `get_agent_details`
+- **Tool Discovery**: `discover_tools`, `list_tools`, `list_mcp_configs`
+- **Environment Management**: `list_environments`
+- **System Integration**: Access to all configured MCP tools across environments
+
+#### **Example Usage**
+
+```bash
+# Start Station MCP server in stdio mode
+stn stdio
+
+# The server provides tools like:
+# - call_agent: Execute any Station agent with a task
+# - create_agent: Create new agents with specific tools
+# - list_agents: Browse available agents across environments
+# - discover_tools: Find available tools in your Station setup
+```
+
+This makes Station a powerful backend for AI applications that need access to your internal tools and agents while maintaining security and environment isolation.
 
 ## Agent Templates for Teams
 
