@@ -66,3 +66,34 @@ docs/site/node_modules/
 
 # Crush framework
 .crush/
+
+# Genkit traces and data
+.genkit/
+
+# Prevent accidental inclusion of other projects from parent directory
+../awesome-devops-mcp-servers/
+../bubbles/
+../bubbletea/ 
+../cookiecutter-registry/
+../crush/
+../genkit/
+../lipgloss/
+../mcp-go/
+../opencode/
+../soft-serve/
+../toolhive/
+../wish/
+
+# Make sure we only include Station files
+awesome-devops-mcp-servers/
+bubbles/
+bubbletea/
+cookiecutter-registry/
+crush/
+genkit/
+lipgloss/
+mcp-go/
+opencode/
+soft-serve/
+toolhive/
+wish/
