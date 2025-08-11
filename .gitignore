@@ -64,6 +64,18 @@ docs/site/dist/
 docs/site/.astro/
 docs/site/node_modules/
 
+# Prevent documentation build artifacts in root
+/_astro/
+/en/
+/fonts/
+/registry/
+/sitemap*.xml
+/index.html
+/favicon.*
+/default-og-image.png
+/make-scrollable-code-focusable.js
+/mermaid-init.js
+
 # Crush framework
 .crush/
 
