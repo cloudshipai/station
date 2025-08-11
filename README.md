@@ -1,4 +1,4 @@
-![Station](./image.png)
+![Station](./station-logo.png)
 
 # Station - Lightweight Runtime for Deployable Sub-Agents
 
