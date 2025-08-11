@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"station/internal/db/repositories"
@@ -16,11 +17,26 @@ import (
 	"github.com/firebase/genkit/go/plugins/mcp"
 )
 
+// EnvironmentToolCache caches tools and clients for an environment
+type EnvironmentToolCache struct {
+	Tools       []ai.Tool
+	Clients     []*mcp.GenkitMCPClient
+	CachedAt    time.Time
+	ValidFor    time.Duration
+}
+
+// IsValid checks if the cached tools are still valid
+func (cache *EnvironmentToolCache) IsValid() bool {
+	return time.Since(cache.CachedAt) < cache.ValidFor
+}
+
 // MCPConnectionManager handles MCP server connections and tool discovery lifecycle
 type MCPConnectionManager struct {
 	repos            *repositories.Repositories
 	genkitApp        *genkit.Genkit
 	activeMCPClients []*mcp.GenkitMCPClient
+	toolCache        map[int64]*EnvironmentToolCache
+	cacheMutex       sync.RWMutex
 }
 
 // NewMCPConnectionManager creates a new MCP connection manager
@@ -28,12 +44,22 @@ func NewMCPConnectionManager(repos *repositories.Repositories, genkitApp *genkit
 	return &MCPConnectionManager{
 		repos:     repos,
 		genkitApp: genkitApp,
+		toolCache: make(map[int64]*EnvironmentToolCache),
 	}
 }
 
 // GetEnvironmentMCPTools connects to MCP servers from file configs and gets their tools
 // This replaces the large method in IntelligentAgentCreator
 func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, []*mcp.GenkitMCPClient, error) {
+	// Check cache first
+	mcm.cacheMutex.RLock()
+	if cached, exists := mcm.toolCache[environmentID]; exists && cached.IsValid() {
+		mcm.cacheMutex.RUnlock()
+		logging.Debug("Using cached MCP tools for environment %d (%d tools)", environmentID, len(cached.Tools))
+		return cached.Tools, cached.Clients, nil
+	}
+	mcm.cacheMutex.RUnlock()
+
 	// Get file-based MCP configurations for this environment
 	environment, err := mcm.repos.Environments.GetByID(environmentID)
 	if err != nil {
@@ -61,6 +87,18 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	}
 
 	logging.Debug("Total tools discovered from all file config servers: %d", len(allTools))
+	
+	// Cache the results for 5 minutes
+	mcm.cacheMutex.Lock()
+	mcm.toolCache[environmentID] = &EnvironmentToolCache{
+		Tools:    allTools,
+		Clients:  allClients,
+		CachedAt: time.Now(),
+		ValidFor: 5 * time.Minute,
+	}
+	mcm.cacheMutex.Unlock()
+	logging.Debug("Cached MCP tools for environment %d", environmentID)
+	
 	return allTools, allClients, nil
 }
 
