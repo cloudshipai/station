@@ -21,6 +21,9 @@ SELECT * FROM agents WHERE created_by = ? ORDER BY name;
 -- name: UpdateAgent :exec
 UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?;
 
+-- name: UpdateAgentPrompt :exec
+UPDATE agents SET prompt = ? WHERE id = ?;
+
 -- name: DeleteAgent :exec
 DELETE FROM agents WHERE id = ?;
 
