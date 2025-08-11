@@ -163,3 +163,10 @@ func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps 
 func (r *AgentRepo) Delete(id int64) error {
 	return r.queries.DeleteAgent(context.Background(), id)
 }
+
+func (r *AgentRepo) UpdatePrompt(id int64, prompt string) error {
+	return r.queries.UpdateAgentPrompt(context.Background(), queries.UpdateAgentPromptParams{
+		ID:     id,
+		Prompt: prompt,
+	})
+}
