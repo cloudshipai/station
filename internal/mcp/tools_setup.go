@@ -100,5 +100,34 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(getAgentDetailsTool, s.handleGetAgentDetails)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 11)
+	// Agent management tools for fine-grained control
+	updateAgentPromptTool := mcp.NewTool("update_agent_prompt",
+		mcp.WithDescription("Update an agent's system prompt"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to update")),
+		mcp.WithString("prompt", mcp.Required(), mcp.Description("New system prompt for the agent")),
+	)
+	s.mcpServer.AddTool(updateAgentPromptTool, s.handleUpdateAgentPrompt)
+
+	addToolTool := mcp.NewTool("add_tool",
+		mcp.WithDescription("Add a tool to an agent"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
+		mcp.WithString("tool_name", mcp.Required(), mcp.Description("Name of the tool to add")),
+	)
+	s.mcpServer.AddTool(addToolTool, s.handleAddTool)
+
+	removeToolTool := mcp.NewTool("remove_tool",
+		mcp.WithDescription("Remove a tool from an agent"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
+		mcp.WithString("tool_name", mcp.Required(), mcp.Description("Name of the tool to remove")),
+	)
+	s.mcpServer.AddTool(removeToolTool, s.handleRemoveTool)
+
+	exportAgentTool := mcp.NewTool("export_agent",
+		mcp.WithDescription("Export agent configuration to dotprompt format"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to export")),
+		mcp.WithString("output_path", mcp.Description("Optional output file path (defaults to agent name)")),
+	)
+	s.mcpServer.AddTool(exportAgentTool, s.handleExportAgent)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 15)
 }

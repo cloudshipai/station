@@ -352,6 +352,20 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) error 
 	return err
 }
 
+const updateAgentPrompt = `-- name: UpdateAgentPrompt :exec
+UPDATE agents SET prompt = ? WHERE id = ?
+`
+
+type UpdateAgentPromptParams struct {
+	Prompt string `json:"prompt"`
+	ID     int64  `json:"id"`
+}
+
+func (q *Queries) UpdateAgentPrompt(ctx context.Context, arg UpdateAgentPromptParams) error {
+	_, err := q.db.ExecContext(ctx, updateAgentPrompt, arg.Prompt, arg.ID)
+	return err
+}
+
 const updateAgentScheduleTime = `-- name: UpdateAgentScheduleTime :exec
 UPDATE agents SET last_scheduled_run = ?, next_scheduled_run = ? WHERE id = ?
 `

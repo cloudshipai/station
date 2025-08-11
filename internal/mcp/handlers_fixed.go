@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"station/internal/services"
@@ -509,5 +512,284 @@ func (s *Server) handleGetAgentDetails(ctx context.Context, request mcp.CallTool
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+// New agent management handlers
+
+func (s *Server) handleUpdateAgentPrompt(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+
+	prompt, err := request.RequireString("prompt")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'prompt' parameter: %v", err)), nil
+	}
+
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid agent_id format: %v", err)), nil
+	}
+
+	// Get existing agent to verify it exists
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+	}
+
+	// Update the agent prompt
+	err = s.repos.Agents.UpdatePrompt(agentID, prompt)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent prompt: %v", err)), nil
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Successfully updated prompt for agent '%s'", agent.Name),
+		"agent": map[string]interface{}{
+			"id":     agent.ID,
+			"name":   agent.Name,
+			"prompt": prompt,
+		},
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleAddTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+
+	toolName, err := request.RequireString("tool_name")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'tool_name' parameter: %v", err)), nil
+	}
+
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid agent_id format: %v", err)), nil
+	}
+
+	// Get agent to verify it exists and get environment
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+	}
+
+	// Find tool by name in the agent's environment
+	tool, err := s.repos.MCPTools.FindByNameInEnvironment(agent.EnvironmentID, toolName)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Tool '%s' not found in environment: %v", toolName, err)), nil
+	}
+
+	// Check if tool is already assigned
+	existingTools, err := s.repos.AgentTools.ListAgentTools(agentID)
+	if err == nil {
+		for _, existingTool := range existingTools {
+			if existingTool.ToolName == toolName {
+				return mcp.NewToolResultError(fmt.Sprintf("Tool '%s' is already assigned to agent '%s'", toolName, agent.Name)), nil
+			}
+		}
+	}
+
+	// Add tool to agent
+	_, err = s.repos.AgentTools.AddAgentTool(agentID, tool.ID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to add tool to agent: %v", err)), nil
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Successfully added tool '%s' to agent '%s'", toolName, agent.Name),
+		"agent": map[string]interface{}{
+			"id":   agent.ID,
+			"name": agent.Name,
+		},
+		"tool": map[string]interface{}{
+			"name": toolName,
+			"id":   tool.ID,
+		},
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleRemoveTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+
+	toolName, err := request.RequireString("tool_name")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'tool_name' parameter: %v", err)), nil
+	}
+
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid agent_id format: %v", err)), nil
+	}
+
+	// Get agent to verify it exists
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+	}
+
+	// Find tool by name in the agent's environment
+	tool, err := s.repos.MCPTools.FindByNameInEnvironment(agent.EnvironmentID, toolName)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Tool '%s' not found in environment: %v", toolName, err)), nil
+	}
+
+	// Remove tool from agent
+	err = s.repos.AgentTools.RemoveAgentTool(agentID, tool.ID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to remove tool from agent: %v", err)), nil
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Successfully removed tool '%s' from agent '%s'", toolName, agent.Name),
+		"agent": map[string]interface{}{
+			"id":   agent.ID,
+			"name": agent.Name,
+		},
+		"tool": map[string]interface{}{
+			"name": toolName,
+			"id":   tool.ID,
+		},
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleExportAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid agent_id format: %v", err)), nil
+	}
+
+	// Get optional output path
+	outputPath := request.GetString("output_path", "")
+
+	// Get agent details
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+	}
+
+	// Get environment info
+	environment, err := s.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Environment not found: %v", err)), nil
+	}
+
+	// Get agent tools
+	tools, err := s.repos.AgentTools.ListAgentTools(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get agent tools: %v", err)), nil
+	}
+
+	// Generate dotprompt content
+	dotpromptContent := s.generateDotpromptContent(agent, tools, environment.Name)
+
+	// Determine output file path like CLI does
+	if outputPath == "" {
+		homeDir := os.Getenv("HOME")
+		if homeDir == "" {
+			var homeErr error
+			homeDir, homeErr = os.UserHomeDir()
+			if homeErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to get user home directory: %v", homeErr)), nil
+			}
+		}
+		outputPath = fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment.Name, agent.Name)
+	}
+
+	// Ensure directory exists
+	agentsDir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to create agents directory: %v", err)), nil
+	}
+
+	// Write .prompt file to filesystem like CLI does
+	if err := os.WriteFile(outputPath, []byte(dotpromptContent), 0644); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to write .prompt file: %v", err)), nil
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Successfully exported agent '%s' to dotprompt file", agent.Name),
+		"agent": map[string]interface{}{
+			"id":          agent.ID,
+			"name":        agent.Name,
+			"environment": environment.Name,
+		},
+		"export": map[string]interface{}{
+			"filepath":    outputPath,
+			"format":      "dotprompt",
+			"written":     true,
+		},
+		"tools_count": len(tools),
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+// generateDotpromptContent generates the .prompt file content for an agent (similar to CLI export)
+func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environment string) string {
+	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("model: \"gemini-2.0-flash-exp\"\n")
+	content.WriteString("config:\n")
+	content.WriteString("  temperature: 0.3\n")
+	content.WriteString("  max_tokens: 2000\n")
+	content.WriteString("metadata:\n")
+	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))
+	if agent.Description != "" {
+		content.WriteString(fmt.Sprintf("  description: \"%s\"\n", agent.Description))
+	}
+	content.WriteString("  version: \"1.0.0\"\n")
+
+	// Tools section
+	if len(tools) > 0 {
+		content.WriteString("tools:\n")
+		for _, tool := range tools {
+			content.WriteString(fmt.Sprintf("  - \"%s\"\n", tool.ToolName))
+		}
+	}
+
+	// Station metadata
+	content.WriteString("station:\n")
+	content.WriteString("  execution_metadata:\n")
+	if agent.MaxSteps > 0 {
+		content.WriteString(fmt.Sprintf("    max_steps: %d\n", agent.MaxSteps))
+	}
+	content.WriteString(fmt.Sprintf("    environment: \"%s\"\n", environment))
+	content.WriteString(fmt.Sprintf("    agent_id: %d\n", agent.ID))
+	content.WriteString(fmt.Sprintf("    created_at: \"%s\"\n", agent.CreatedAt.Format(time.RFC3339)))
+	content.WriteString(fmt.Sprintf("    updated_at: \"%s\"\n", agent.UpdatedAt.Format(time.RFC3339)))
+	content.WriteString("---\n\n")
+
+	// Agent prompt content
+	content.WriteString(agent.Prompt)
+	content.WriteString("\n")
+
+	return content.String()
 }
 
