@@ -1,8 +1,6 @@
 # GoReleaser configuration for Station
 # See https://goreleaser.com for documentation
 
-version: 2
-
 project_name: station
 
 env:
