@@ -50,11 +50,21 @@ Thumbs.db
 !*_test.key
 ssh_host_key*
 
-# MCP config
+# MCP config and temporary configs
 .mcp.json
+mcp.json
+station-mcp.json
+*-test.json
 
 # Test files (in root - move to tests/ for permanent tests)
 test_*.go
+test-*.sh
+test_*.sh
+
+# Development workspace for temporary artifacts
+dev-workspace/
+temp/
+tmp-*/
 
 # Node modules from any examples or tests
 node_modules/
