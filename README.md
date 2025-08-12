@@ -74,8 +74,8 @@ Unlike application-focused agent platforms, Station is designed for deployable s
 git clone https://github.com/cloudshipai/station
 cd station && go build -o stn ./cmd/main
 
-# Binary install
-curl -sSL https://getstation.cloudshipai.com | bash
+# Quick install (YOLO)
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
 ### 2. Initialize & Configure Tools

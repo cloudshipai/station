@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 # Configuration
 REPO="cloudshipai/station"
 BINARY_NAME="stn"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="$HOME/.local/bin"
 VERSION="latest"
 
 # Banner
@@ -152,13 +152,13 @@ install_binary() {
     temp_dir=$(mktemp -d)
     cd "$temp_dir"
     
-    # Construct download URL
-    local filename="station_${version#v}_${platform}"
-    local archive_name="${filename}.tar.gz"
+    # Construct download URL (matching GoReleaser format)
+    local os_arch="${platform/_/-}"
+    local archive_name="stn-${os_arch}.tar.gz"
     
     # Handle Windows zip format
     if [[ "$platform" == "windows"* ]]; then
-        archive_name="${filename}.zip"
+        archive_name="stn-${os_arch}.zip"
     fi
     
     local download_url="https://github.com/$REPO/releases/download/$version/$archive_name"

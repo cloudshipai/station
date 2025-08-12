@@ -18,7 +18,7 @@ builds:
     binary: stn
     main: ./cmd/main
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -38,10 +38,8 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
-      - -X main.builtBy=goreleaser
+      - -X 'station/internal/version.Version={{.Version}}'
+      - -X 'station/internal/version.BuildTime={{.Date}}'
 
 archives:
   - id: station
@@ -51,7 +49,7 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "stn-{{ .Os }}-{{ .Arch }}"
     files:
       - README.md
       - LICENSE
@@ -99,12 +97,12 @@ release:
     
     **One-liner install:**
     ```bash
-    curl -sSL https://getstation.cloudshipai.com | bash
+    curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
     ```
     
     **Or with specific version:**
     ```bash
-    curl -sSL https://getstation.cloudshipai.com | bash -s -- --version {{.Tag}}
+    curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash -s -- --version {{.Tag}}
     ```
     
     **Manual download:**
