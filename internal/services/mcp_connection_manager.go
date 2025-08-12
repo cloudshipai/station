@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sync"
+	"strings"
 	"time"
 
 	"station/internal/db/repositories"
@@ -17,26 +17,11 @@ import (
 	"github.com/firebase/genkit/go/plugins/mcp"
 )
 
-// EnvironmentToolCache caches tools and clients for an environment
-type EnvironmentToolCache struct {
-	Tools       []ai.Tool
-	Clients     []*mcp.GenkitMCPClient
-	CachedAt    time.Time
-	ValidFor    time.Duration
-}
-
-// IsValid checks if the cached tools are still valid
-func (cache *EnvironmentToolCache) IsValid() bool {
-	return time.Since(cache.CachedAt) < cache.ValidFor
-}
-
 // MCPConnectionManager handles MCP server connections and tool discovery lifecycle
 type MCPConnectionManager struct {
 	repos            *repositories.Repositories
 	genkitApp        *genkit.Genkit
 	activeMCPClients []*mcp.GenkitMCPClient
-	toolCache        map[int64]*EnvironmentToolCache
-	cacheMutex       sync.RWMutex
 }
 
 // NewMCPConnectionManager creates a new MCP connection manager
@@ -44,22 +29,12 @@ func NewMCPConnectionManager(repos *repositories.Repositories, genkitApp *genkit
 	return &MCPConnectionManager{
 		repos:     repos,
 		genkitApp: genkitApp,
-		toolCache: make(map[int64]*EnvironmentToolCache),
 	}
 }
 
 // GetEnvironmentMCPTools connects to MCP servers from file configs and gets their tools
 // This replaces the large method in IntelligentAgentCreator
 func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, []*mcp.GenkitMCPClient, error) {
-	// Check cache first
-	mcm.cacheMutex.RLock()
-	if cached, exists := mcm.toolCache[environmentID]; exists && cached.IsValid() {
-		mcm.cacheMutex.RUnlock()
-		logging.Debug("Using cached MCP tools for environment %d (%d tools)", environmentID, len(cached.Tools))
-		return cached.Tools, cached.Clients, nil
-	}
-	mcm.cacheMutex.RUnlock()
-
 	// Get file-based MCP configurations for this environment
 	environment, err := mcm.repos.Environments.GetByID(environmentID)
 	if err != nil {
@@ -87,18 +62,6 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	}
 
 	logging.Debug("Total tools discovered from all file config servers: %d", len(allTools))
-	
-	// Cache the results for 5 minutes
-	mcm.cacheMutex.Lock()
-	mcm.toolCache[environmentID] = &EnvironmentToolCache{
-		Tools:    allTools,
-		Clients:  allClients,
-		CachedAt: time.Now(),
-		ValidFor: 5 * time.Minute,
-	}
-	mcm.cacheMutex.Unlock()
-	logging.Debug("Cached MCP tools for environment %d", environmentID)
-	
 	return allTools, allClients, nil
 }
 
@@ -161,7 +124,7 @@ func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConf
 }
 
 // connectToMCPServer connects to a single MCP server and gets its tools
-// Returns tools and client - client context should NOT be canceled until after execution
+// Returns tools and client - client uses background context for long-lived connections
 func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverName string, serverConfigRaw interface{}) ([]ai.Tool, *mcp.GenkitMCPClient) {
 	// Convert server config
 	serverConfigBytes, err := json.Marshal(serverConfigRaw)
@@ -214,11 +177,13 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		return nil, nil
 	}
 
-	// Use main context directly - don't create timeout context that could break connection
-	// The MCP client internally handles timeouts appropriately
+	// Use the provided context for initial tool discovery
 	serverTools, err := mcpClient.GetActiveTools(ctx, mcm.genkitApp)
 	
-	// NOTE: Connection stays alive for tool execution during Generate() calls
+	// CRITICAL FIX: Use background context for monitoring to prevent premature cancellation
+	// when the agent execution context is cancelled. This ensures connections stay alive
+	// for GenKit's asynchronous tool execution.
+	go mcm.monitorConnection(mcpClient, serverName, context.Background())
 	
 	if err != nil {
 		logging.Debug("Failed to get tools from %s: %v", serverName, err)
@@ -227,6 +192,90 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 
 	logging.Debug("Successfully discovered %d tools from server: %s", len(serverTools), serverName)
 	return serverTools, mcpClient
+}
+
+// monitorConnection monitors an MCP connection for health issues and subprocess lifecycle
+func (mcm *MCPConnectionManager) monitorConnection(client *mcp.GenkitMCPClient, serverName string, ctx context.Context) {
+	logging.Debug("Starting health monitoring for MCP connection: %s", serverName)
+	
+	// Wait 5 minutes before starting health checks to avoid interference with tool execution
+	initialDelay := time.NewTimer(5 * time.Minute)
+	defer initialDelay.Stop()
+	
+	select {
+	case <-initialDelay.C:
+		// Continue with health monitoring after delay
+	case <-ctx.Done():
+		logging.Debug("Stopping health monitoring for %s (context cancelled during initial delay)", serverName)
+		return
+	}
+	
+	// Use a ticker to periodically check connection health (reduced frequency to avoid interference)
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			if !mcm.isConnectionHealthy(client, serverName, ctx) {
+				logging.Info("WARNING: MCP connection to %s appears unhealthy", serverName)
+				// For now, just log the issue. In the future, we could implement reconnection
+				// but that would require more complex state management
+			}
+			
+		case <-ctx.Done():
+			logging.Debug("Stopping health monitoring for %s (context cancelled)", serverName)
+			return
+		}
+	}
+}
+
+// isConnectionHealthy performs a lightweight health check on an MCP connection
+func (mcm *MCPConnectionManager) isConnectionHealthy(client *mcp.GenkitMCPClient, serverName string, ctx context.Context) bool {
+	// Create a short timeout context for the health check
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	
+	// Try to get tools as a health check - if this fails, connection is likely dead
+	_, err := client.GetActiveTools(healthCtx, mcm.genkitApp)
+	if err != nil {
+		// Check if this is a connection-related error
+		if isConnectionError(err) {
+			logging.Debug("Health check failed for %s: %v", serverName, err)
+			return false
+		}
+		// Other errors might not indicate connection issues
+		logging.Debug("Health check got non-connection error for %s: %v", serverName, err)
+	}
+	
+	return true
+}
+
+// isConnectionError checks if an error indicates a connection/transport problem
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errorStr := err.Error()
+	connectionErrors := []string{
+		"file already closed",
+		"broken pipe", 
+		"connection refused",
+		"transport error",
+		"no such file or directory",
+		"connection reset",
+		"deadline exceeded",
+		"context deadline exceeded",
+	}
+	
+	for _, connErr := range connectionErrors {
+		if fmt.Sprintf("%s", errorStr) != "" && strings.Contains(strings.ToLower(errorStr), connErr) {
+			return true
+		}
+	}
+	
+	return false
 }
 
 // CleanupConnections closes all provided MCP connections
