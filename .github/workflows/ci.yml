@@ -101,12 +101,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Run Gosec Security Scanner
-      uses: securecodewarrior/github-action-gosec@master
+    - name: Set up Go
+      uses: actions/setup-go@v5
       with:
-        args: '-no-fail -fmt sarif -out results.sarif ./...'
+        go-version: "1.21"
+        cache: true
+
+    - name: Install gosec
+      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+
+    - name: Run Gosec Security Scanner
+      run: gosec -no-fail -fmt sarif -out results.sarif ./...
 
     - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: results.sarif

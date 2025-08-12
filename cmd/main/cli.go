@@ -893,7 +893,7 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	// Define MCP tools in GenKit
 	for _, tool := range mcpTools {
 		// MCP tools are already registered in GenKit by the MCP plugin
-		fmt.Printf("   ✅ MCP Tool: %s\n", tool.Name)
+		fmt.Printf("   ✅ MCP Tool: %s\n", tool.Name())
 	}
 	
 	fmt.Println()
