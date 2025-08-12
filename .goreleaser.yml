@@ -32,10 +32,8 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
-      - -X main.builtBy=goreleaser
+      - -X station/internal/version.Version={{.Version}}
+      - -X station/internal/version.BuildTime={{.Date}}
 
 archives:
   - id: station
