@@ -32,7 +32,7 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X station/internal/version.Version={{.Version}}
+      - -X station/internal/version.Version={{.Tag}}
       - -X station/internal/version.BuildTime={{.Date}}
 
 archives:
