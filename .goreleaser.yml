@@ -215,7 +215,7 @@ snapcrafts:
         plugs: ["home", "network", "network-bind"]
 
 # Announcement (optional - configure webhooks/notifications)
-announce:
-  discord:
-    enabled: "{{ .Env.DISCORD_WEBHOOK_ID }}"
-    message_template: "Station {{.Tag}} is out! Check it out: {{ .ReleaseURL }}"
+# announce:
+#   discord:
+#     enabled: true
+#     message_template: "Station {{.Tag}} is out! Check it out: {{ .ReleaseURL }}"
