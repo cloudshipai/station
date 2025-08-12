@@ -18,6 +18,7 @@ dev-workspace/
 # Output of the go build command
 /bin/
 /tmp/
+/dist/
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
