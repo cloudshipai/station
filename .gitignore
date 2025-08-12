@@ -13,6 +13,8 @@ stn
 /main
 coverage.out
 
+dev-workspace/
+
 # Output of the go build command
 /bin/
 /tmp/
