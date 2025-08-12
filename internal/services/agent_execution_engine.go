@@ -14,6 +14,7 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
+	"github.com/google/dotprompt/go/dotprompt"
 )
 
 // AgentExecutionResult contains the result of an agent execution
@@ -126,6 +127,12 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Render agent prompt with dotprompt if it contains frontmatter
+	renderedAgentPrompt, err := aee.RenderAgentPromptWithDotprompt(agent.Prompt, task, agent.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render agent prompt: %w", err)
+	}
+
 	// Build the system prompt with agent-specific instructions
 	systemPrompt := fmt.Sprintf(`%s
 
@@ -145,7 +152,7 @@ Guidelines:
 - Provide clear explanations of what you're doing and why
 - If you encounter errors, try alternative approaches
 - Summarize your findings and actions at the end`,
-		agent.Prompt,
+		renderedAgentPrompt,
 		agent.Name,
 		agent.ID,
 		agent.EnvironmentID,
@@ -176,9 +183,9 @@ Guidelines:
 		}
 	}
 	
-	prompt := fmt.Sprintf("%s\n\nUser Task: %s", systemPrompt, task)
 	logging.Info("DEBUG: About to call genkit.Generate with %d tools", len(tools))
-	logging.Info("DEBUG: Prompt length: %d characters", len(prompt))
+	logging.Info("DEBUG: System prompt length: %d characters", len(systemPrompt))
+	logging.Info("DEBUG: User task: %s", task)
 	
 	// Create properly formatted model name with provider-specific logic
 	var modelName string
@@ -198,7 +205,8 @@ Guidelines:
 	
 	var generateOptions []ai.GenerateOption
 	generateOptions = append(generateOptions, ai.WithModelName(modelName))
-	generateOptions = append(generateOptions, ai.WithPrompt(prompt))
+	generateOptions = append(generateOptions, ai.WithSystem(systemPrompt))
+	generateOptions = append(generateOptions, ai.WithPrompt(task))
 	
 	generateOptions = append(generateOptions, ai.WithTools(tools...))
 	
@@ -506,4 +514,69 @@ func (aee *AgentExecutionEngine) TestStdioMCPConnection(ctx context.Context) err
 	}
 
 	return nil
+}
+
+// RenderAgentPromptWithDotprompt renders agent prompt with dotprompt if it contains frontmatter
+func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt, task, agentName string) (string, error) {
+	// Check if this is a dotprompt with YAML frontmatter
+	if !aee.isDotpromptContent(agentPrompt) {
+		// Not a dotprompt, return as-is
+		return agentPrompt, nil
+	}
+
+	// Do inline dotprompt rendering to avoid import cycle
+	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, task, agentName)
+	if err != nil {
+		return "", fmt.Errorf("failed to render dotprompt: %w", err)
+	}
+
+	logging.Info("DEBUG: Rendered dotprompt for agent '%s'", agentName)
+	return renderedPrompt, nil
+}
+
+// isDotpromptContent checks if the prompt contains dotprompt frontmatter
+func (aee *AgentExecutionEngine) isDotpromptContent(prompt string) bool {
+	// Check for YAML frontmatter markers
+	return strings.HasPrefix(strings.TrimSpace(prompt), "---") && 
+		   strings.Contains(prompt, "\n---\n")
+}
+
+// renderDotpromptInline renders dotprompt content inline to avoid import cycles
+func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent, task, agentName string) (string, error) {
+	// 1. Create dotprompt instance
+	dp := dotprompt.NewDotprompt(nil) // Use default options
+	
+	// 2. Prepare data for rendering
+	data := &dotprompt.DataArgument{
+		Input: map[string]any{
+			"TASK":       task,
+			"AGENT_NAME": agentName,
+			"ENVIRONMENT": "default", // TODO: get from agent config
+		},
+		Context: map[string]any{
+			"agent_name": agentName,
+		},
+	}
+	
+	// 3. Render the template  
+	rendered, err := dp.Render(dotpromptContent, data, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to render dotprompt: %w", err)
+	}
+	
+	// 4. Convert messages to text (for now, until we implement full ai.Generate)
+	var renderedText strings.Builder
+	for i, msg := range rendered.Messages {
+		if i > 0 {
+			renderedText.WriteString("\n\n")
+		}
+		renderedText.WriteString(fmt.Sprintf("[%s]: ", msg.Role))
+		for _, part := range msg.Content {
+			if textPart, ok := part.(*dotprompt.TextPart); ok {
+				renderedText.WriteString(textPart.Text)
+			}
+		}
+	}
+	
+	return renderedText.String(), nil
 }
