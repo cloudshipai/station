@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 # Configuration
 REPO="cloudshipai/station"
 BINARY_NAME="stn"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR=""  # Will be determined by get_install_dir()
 VERSION="latest"
 
 # Banner
@@ -132,15 +132,56 @@ get_latest_version() {
     echo "$version"
 }
 
-# Check if running as root or with sudo
-check_permissions() {
-    if [ "$EUID" -eq 0 ]; then
-        return 0  # Running as root
-    elif command_exists sudo && sudo -n true 2>/dev/null; then
-        return 0  # Can sudo without password
-    else
-        return 1  # Need to prompt for sudo
+# Determine the best install directory
+get_install_dir() {
+    # Priority order for installation paths
+    local user_bin="$HOME/.local/bin"
+    local homebrew_bin="/opt/homebrew/bin"  # Apple Silicon macOS
+    local old_homebrew_bin="/usr/local/bin"  # Intel macOS / Linux
+    local system_bin="/usr/bin"
+    
+    # Always prefer user-local installation first
+    if [ -w "$HOME" ]; then
+        mkdir -p "$user_bin" 2>/dev/null
+        if [ -d "$user_bin" ]; then
+            echo "$user_bin"
+            return 0
+        fi
     fi
+    
+    # macOS: Check Homebrew paths (these are usually user-writable)
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if [ -d "$homebrew_bin" ] && [ -w "$homebrew_bin" ]; then
+            echo "$homebrew_bin"
+            return 0
+        fi
+        if [ -d "$old_homebrew_bin" ] && [ -w "$old_homebrew_bin" ]; then
+            echo "$old_homebrew_bin"
+            return 0
+        fi
+    fi
+    
+    # Check if we can write to /usr/local/bin
+    if [ -w "$old_homebrew_bin" ] || ([ -d "$old_homebrew_bin" ] && command_exists sudo && sudo -n true 2>/dev/null); then
+        echo "$old_homebrew_bin"
+        return 0
+    fi
+    
+    # Last resort: system bin (requires sudo)
+    if command_exists sudo; then
+        echo "$system_bin"
+        return 0
+    fi
+    
+    # Fallback to user bin even if we couldn't create it initially
+    echo "$user_bin"
+    return 0
+}
+
+# Check if we need sudo for a given directory
+needs_sudo() {
+    local target_dir="$1"
+    [ ! -w "$target_dir" ] && [ "$target_dir" != "$HOME/.local/bin" ]
 }
 
 # Install binary
@@ -198,28 +239,50 @@ install_binary() {
     # Make binary executable
     chmod +x "$binary_path"
     
+    # Determine install directory
+    INSTALL_DIR=$(get_install_dir)
+    
+    # Create directory if it doesn't exist
+    if [ "$INSTALL_DIR" = "$HOME/.local/bin" ]; then
+        mkdir -p "$INSTALL_DIR"
+    elif [ ! -d "$INSTALL_DIR" ]; then
+        if needs_sudo "$INSTALL_DIR"; then
+            sudo mkdir -p "$INSTALL_DIR"
+        else
+            mkdir -p "$INSTALL_DIR"
+        fi
+    fi
+    
     # Install binary
     log_info "Installing Station to $INSTALL_DIR..."
     
-    if check_permissions; then
-        if [ "$EUID" -eq 0 ]; then
-            cp "$binary_path" "$INSTALL_DIR/$BINARY_NAME"
-        else
-            sudo cp "$binary_path" "$INSTALL_DIR/$BINARY_NAME"
-        fi
+    if needs_sudo "$INSTALL_DIR"; then
+        sudo cp "$binary_path" "$INSTALL_DIR/$BINARY_NAME"
+        sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
     else
-        log_warning "Insufficient permissions to install to $INSTALL_DIR"
-        local user_bin="$HOME/.local/bin"
-        mkdir -p "$user_bin"
-        cp "$binary_path" "$user_bin/$BINARY_NAME"
-        INSTALL_DIR="$user_bin"
-        log_info "Installed to $user_bin instead"
+        cp "$binary_path" "$INSTALL_DIR/$BINARY_NAME"
+        chmod +x "$INSTALL_DIR/$BINARY_NAME"
+    fi
+    
+    # Check if install directory is in PATH and provide guidance
+    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+        echo ""
+        log_warning "$INSTALL_DIR is not in your PATH."
         
-        # Add to PATH if not already there
-        if [[ ":$PATH:" != *":$user_bin:"* ]]; then
-            echo ""
-            log_warning "Add $user_bin to your PATH:"
-            echo "  echo 'export PATH=\"$user_bin:\$PATH\"' >> ~/.bashrc"
+        # Provide platform-specific PATH instructions
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            if [[ "$SHELL" == *"zsh"* ]]; then
+                echo "Add it by running:"
+                echo "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.zshrc"
+                echo "  source ~/.zshrc"
+            else
+                echo "Add it by running:"
+                echo "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.bash_profile"
+                echo "  source ~/.bash_profile"
+            fi
+        else
+            echo "Add it by running:"
+            echo "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.bashrc"
             echo "  source ~/.bashrc"
         fi
     fi
