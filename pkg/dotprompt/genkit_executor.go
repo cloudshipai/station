@@ -45,7 +45,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfig(agent models.Agent, agen
 	
 	if e.isDotpromptContent(agent.Prompt) {
 		// Use dotprompt rendering for rich templates
-		finalPrompt, err = e.renderDotpromptContent(agent.Prompt, task, agent.Name)
+		finalPrompt, err = e.RenderDotpromptContent(agent.Prompt, task, agent.Name)
 		if err != nil {
 			return nil, fmt.Errorf("dotprompt rendering failed: %w", err)
 		}
@@ -129,8 +129,8 @@ func (e *GenKitExecutor) getPromptSource(prompt string) string {
 	return "simple text prompt"
 }
 
-// renderDotpromptContent renders a dotprompt template with the given variables
-func (e *GenKitExecutor) renderDotpromptContent(dotpromptContent, task, agentName string) (string, error) {
+// RenderDotpromptContent renders a dotprompt template with the given variables
+func (e *GenKitExecutor) RenderDotpromptContent(dotpromptContent, task, agentName string) (string, error) {
 	// 1. Create dotprompt instance
 	dp := dotprompt.NewDotprompt(nil) // Use default options
 	
