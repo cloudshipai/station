@@ -24,6 +24,20 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - **Webhook Support**: Full webhook notifications work in server mode
   - **Graceful Degradation**: Clear messaging about mode limitations
 
+- **Template Variable Processing**: ✅ Fixed critical hanging agent issue
+  - **Root Cause**: Regex-based variable detection failed with spaces in `{{ .ROOT_PATH }}`
+  - **Solution**: Eliminated regex detection, always load `variables.yml` and use Go template engine
+  - **Key Fix**: `template_variable_service.go:48-94` - proper template processing without fragile regex
+  - **MCP Template Sync**: Fixed `declarative_sync.go` to process individual JSON templates during `stn sync`
+
+- **Detailed Agent Run Capture**: ✅ Restored full execution metadata tracking
+  - **Issue**: CLI switched from `AgentExecutionEngine` to simplified `dotprompt.GenKitExecutor`
+  - **Lost Data**: Tool calls, execution steps, token usage, detailed timing not captured
+  - **Solution**: CLI now uses full `AgentExecutionEngine` with proper run creation/completion
+  - **Captured Data**: Every tool call with parameters, execution steps, token usage, duration
+  - **Database**: All runs saved with complete metadata via `UpdateCompletionWithMetadata`
+  - **Commands**: `stn runs list` and `stn runs inspect <id> -v` show full execution details
+
 ### Known Issues
 - **SSH/MCP Shutdown Performance**: Graceful shutdown takes ~1m25s (should be <10s)
   - Likely causes: hanging MCP connections, database locks, resource cleanup delays

@@ -48,84 +48,48 @@ func NewTemplateVariableService(configDir string, repos *repositories.Repositori
 func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, configName, templateContent string, interactive bool) (*VariableResolutionResult, error) {
 	log.Printf("Processing template %s for variable resolution", configName)
 	
-	// 1. Detect variables in template
-	variables, err := tvs.DetectVariables(templateContent)
-	if err != nil {
-		return nil, fmt.Errorf("failed to detect variables: %w", err)
-	}
-	
-	log.Printf("Detected %d variables in template", len(variables))
-	
-	// 2. Load existing variables from environment
+	// 1. Get environment name
 	envName, err := tvs.getEnvironmentName(envID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment name: %w", err)
 	}
 	
+	// 2. Always load variables from environment's variables.yml (no regex detection)
 	existingVars, err := tvs.loadEnvironmentVariables(envName)
 	if err != nil {
-		log.Printf("No existing variables found for environment %s: %v", envName, err)
+		log.Printf("No variables.yml found for environment %s: %v", envName, err)
 		existingVars = make(map[string]string)
 	}
 	
-	// 3. Resolve variables and identify missing ones
-	resolvedVars := make(map[string]string)
-	var missingVars []VariableInfo
+	log.Printf("Loaded %d variables from environment %s", len(existingVars), envName)
 	
-	for _, variable := range variables {
-		// Check if variable exists in environment variables
-		if value, exists := existingVars[variable.Name]; exists {
-			resolvedVars[variable.Name] = value
-			log.Printf("Found existing variable: %s", variable.Name)
-		} else {
-			// Check environment variables as fallback
-			if envValue := os.Getenv(variable.Name); envValue != "" {
-				resolvedVars[variable.Name] = envValue
-				log.Printf("Found variable in environment: %s", variable.Name)
-			} else {
-				missingVars = append(missingVars, variable)
-				log.Printf("Missing variable: %s", variable.Name)
-			}
+	// 3. Add environment variables as fallback/override
+	for key := range existingVars {
+		if envValue := os.Getenv(key); envValue != "" {
+			existingVars[key] = envValue
+			log.Printf("Override variable %s with environment value", key)
 		}
 	}
 	
-	// 4. Handle missing variables
-	if len(missingVars) > 0 {
-		if interactive {
-			// Prompt user for missing variables
-			newVars, err := tvs.promptForMissingVariables(missingVars)
-			if err != nil {
-				return nil, fmt.Errorf("failed to collect missing variables: %w", err)
-			}
-			
-			// Merge new variables
-			for k, v := range newVars {
-				resolvedVars[k] = v
-			}
-			
-			// Save new variables to environment
-			if err := tvs.saveVariablesToEnvironment(envName, newVars); err != nil {
-				return nil, fmt.Errorf("failed to save variables: %w", err)
-			}
-			
-			missingVars = []VariableInfo{} // Clear missing vars since we resolved them
-		}
-	}
-	
-	// 5. Render template with resolved variables
-	renderedContent, err := tvs.renderTemplate(templateContent, resolvedVars)
+	// 4. Render template with Go template engine - let it handle missing variables
+	renderedContent, err := tvs.renderTemplate(templateContent, existingVars)
 	if err != nil {
-		return nil, fmt.Errorf("failed to render template: %w", err)
+		// Template rendering failed - this indicates missing variables or template syntax errors
+		log.Printf("Template rendering failed for %s: %v", configName, err)
+		
+		// If interactive, we could prompt for missing variables here
+		// For now, return the error to indicate template issues
+		return nil, fmt.Errorf("template rendering failed (likely missing variables): %w", err)
 	}
 	
 	result := &VariableResolutionResult{
-		AllResolved:     len(missingVars) == 0,
-		ResolvedVars:    resolvedVars,
-		MissingVars:     missingVars,
+		AllResolved:     true, // If rendering succeeded, all variables were resolved
+		ResolvedVars:    existingVars,
+		MissingVars:     []VariableInfo{}, // No missing vars if rendering succeeded
 		RenderedContent: renderedContent,
 	}
 	
-	log.Printf("Variable resolution completed. All resolved: %v, Missing: %d", result.AllResolved, len(missingVars))
+	log.Printf("Template rendering completed for %s with %d variables", configName, len(existingVars))
 	return result, nil
 }
 
