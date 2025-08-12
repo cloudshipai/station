@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ import (
 	"station/cmd/main/handlers/common"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/internal/theme"
 	"station/pkg/models"
 	agent_bundle "station/pkg/agent-bundle"
@@ -116,8 +118,8 @@ func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
 		// TODO: Update runAgentRemote to use names instead of IDs
 		return fmt.Errorf("remote agent execution with names not yet implemented")
 	} else {
-		fmt.Println(styles.Info.Render("🚀 Running local agent with dotprompt"))
-		return h.runAgentLocalDotprompt(agentName, task, environment, tail)
+		fmt.Println(styles.Info.Render("🚀 Running local agent with full execution engine"))
+		return h.runAgentLocalWithFullEngine(agentName, task, environment, tail)
 	}
 }
 
@@ -182,15 +184,106 @@ func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment strin
 		fmt.Println(styles.Info.Render("👀 Following execution with real-time output..."))
 	}
 	
-	// 5. Execute using hybrid approach: database config + dotprompt rendering + real execution
+	// 5. Get console user and create agent run record
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		return fmt.Errorf("failed to get console user: %w", err)
+	}
+	
+	agentRun, err := repos.AgentRuns.Create(
+		agent.ID,
+		consoleUser.ID,
+		task,
+		"", // final_response (will be updated)
+		0,  // steps_taken
+		nil, // tool_calls 
+		nil, // execution_steps
+		"running", // status
+		nil, // completed_at
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create agent run record: %w", err)
+	}
+
+	// 6. Execute using hybrid approach: database config + dotprompt rendering + real execution
 	executor := dotprompt.NewGenKitExecutor()
 	response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, repos, task)
 	if err != nil {
+		// Update run as failed
+		completedAt := time.Now()
+		durationSeconds := time.Since(time.Now().Add(-time.Second)).Seconds() // Minimal duration for failed runs
+		
+		updateErr := repos.AgentRuns.UpdateCompletionWithMetadata(
+			agentRun.ID,
+			fmt.Sprintf("Execution failed: %v", err),
+			0, // steps_taken
+			nil, // tool_calls
+			nil, // execution_steps  
+			"failed",
+			&completedAt,
+			nil, nil, nil, // token usage
+			&durationSeconds,
+			&response.ModelName,
+			nil, // tools_used
+		)
+		if updateErr != nil {
+			fmt.Printf("Warning: Failed to update failed run record: %v\n", updateErr)
+		}
+		
 		fmt.Println(styles.Error.Render(fmt.Sprintf("❌ Execution failed: %v", err)))
 		return fmt.Errorf("agent execution failed: %w", err)
 	}
 	
-	// 7. Display results
+	// 7. Save successful execution to database
+	completedAt := time.Now()
+	durationSeconds := response.Duration.Seconds()
+	
+	// Extract token usage if available
+	var inputTokens, outputTokens, totalTokens *int64
+	if response.TokenUsage != nil {
+		if val, ok := response.TokenUsage["input_tokens"].(int64); ok {
+			inputTokens = &val
+		} else if val, ok := response.TokenUsage["input_tokens"].(float64); ok {
+			inputVal := int64(val)
+			inputTokens = &inputVal
+		}
+		if val, ok := response.TokenUsage["output_tokens"].(int64); ok {
+			outputTokens = &val
+		} else if val, ok := response.TokenUsage["output_tokens"].(float64); ok {
+			outputVal := int64(val)
+			outputTokens = &outputVal
+		}
+		if val, ok := response.TokenUsage["total_tokens"].(int64); ok {
+			totalTokens = &val
+		} else if val, ok := response.TokenUsage["total_tokens"].(float64); ok {
+			totalVal := int64(val)
+			totalTokens = &totalVal
+		}
+	}
+	
+	toolsUsed := int64(response.ToolsUsed)
+	stepsTaken := int64(response.StepsUsed)
+	
+	err = repos.AgentRuns.UpdateCompletionWithMetadata(
+		agentRun.ID,
+		response.Response,
+		stepsTaken,
+		nil, // tool_calls (dotprompt doesn't provide detailed tool calls)
+		nil, // execution_steps
+		"completed",
+		&completedAt,
+		inputTokens,
+		outputTokens,
+		totalTokens,
+		&durationSeconds,
+		&response.ModelName,
+		&toolsUsed,
+	)
+	if err != nil {
+		fmt.Printf("Warning: Failed to update run record: %v\n", err)
+	}
+
+	// 8. Display results
 	fmt.Println("\n" + styles.Banner.Render("🎯 Execution Results"))
 	fmt.Printf("⏱️  Duration: %v\n", response.Duration)
 	fmt.Printf("✅ Success: %t\n", response.Success)
@@ -207,6 +300,234 @@ func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment strin
 		fmt.Println("\n" + styles.Error.Render("❌ Error:"))
 		fmt.Println(response.Error)
 		return fmt.Errorf("agent execution error: %s", response.Error)
+	}
+	
+	return nil
+}
+
+// runAgentLocalWithFullEngine executes an agent using the full AgentExecutionEngine with detailed capture
+func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment string, tail bool) error {
+	styles := common.GetCLIStyles(h.themeManager)
+	
+	// 1. Connect to database and get agent configuration
+	cfg, err := common.LoadStationConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	
+	// 2. Get environment and agent
+	env, err := repos.Environments.GetByName(environment)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environment, err)
+	}
+	
+	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get agents from environment '%s': %w", environment, err)
+	}
+	
+	var agent *models.Agent
+	for _, a := range agents {
+		if a.Name == agentName {
+			agent = a
+			break
+		}
+	}
+	
+	if agent == nil {
+		return fmt.Errorf("agent '%s' not found in environment '%s'", agentName, environment)
+	}
+	
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🤖 Agent: %s", agent.Name)))
+	fmt.Println(styles.Info.Render(fmt.Sprintf("📝 Description: %s", agent.Description)))
+	
+	// 3. Get agent tools
+	agentTools, err := repos.AgentTools.ListAgentTools(agent.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent tools: %w", err)
+	}
+	
+	fmt.Printf("🔧 Tools Available: %d\n", len(agentTools))
+	for _, tool := range agentTools {
+		fmt.Printf("    • %s\n", tool.ToolName)
+	}
+	
+	fmt.Println(styles.Info.Render(fmt.Sprintf("🚀 Executing task: %s", task)))
+	if tail {
+		fmt.Println(styles.Info.Render("👀 Following execution with real-time output..."))
+	}
+	
+	// 4. Get console user and create agent run record  
+	consoleUser, err := repos.Users.GetByUsername("console")
+	if err != nil {
+		return fmt.Errorf("failed to get console user: %w", err)
+	}
+	
+	agentRun, err := repos.AgentRuns.Create(
+		agent.ID,
+		consoleUser.ID,
+		task,
+		"", // final_response (will be updated)
+		0,  // steps_taken
+		nil, // tool_calls 
+		nil, // execution_steps
+		"running", // status
+		nil, // completed_at
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create agent run record: %w", err)
+	}
+
+	// 5. Use the full AgentExecutionEngine for detailed execution
+	creator := services.NewIntelligentAgentCreator(repos, nil)
+	ctx := context.Background()
+	
+	result, err := creator.ExecuteAgentViaStdioMCP(ctx, agent, task, agentRun.ID)
+	if err != nil {
+		// Update run as failed
+		completedAt := time.Now()
+		durationSeconds := time.Since(time.Now().Add(-time.Second)).Seconds()
+		
+		updateErr := repos.AgentRuns.UpdateCompletionWithMetadata(
+			agentRun.ID,
+			fmt.Sprintf("Execution failed: %v", err),
+			0, // steps_taken
+			nil, // tool_calls
+			nil, // execution_steps  
+			"failed",
+			&completedAt,
+			nil, nil, nil, // token usage
+			&durationSeconds,
+			nil, // model name
+			nil, // tools_used
+		)
+		if updateErr != nil {
+			fmt.Printf("Warning: Failed to update failed run record: %v\n", updateErr)
+		}
+		
+		fmt.Println(styles.Error.Render(fmt.Sprintf("❌ Execution failed: %v", err)))
+		return fmt.Errorf("agent execution failed: %w", err)
+	}
+
+	// 6. Update run as completed with detailed execution metadata
+	completedAt := time.Now()
+	durationSeconds := result.Duration.Seconds()
+	
+	// Extract token usage from result
+	var inputTokens, outputTokens, totalTokens *int64
+	var toolsUsed *int64
+	
+	if result.TokenUsage != nil {
+		if inputVal, ok := result.TokenUsage["input_tokens"].(int64); ok {
+			inputTokens = &inputVal
+		} else if inputFloat, ok := result.TokenUsage["input_tokens"].(float64); ok {
+			inputVal := int64(inputFloat)
+			inputTokens = &inputVal
+		}
+		
+		if outputVal, ok := result.TokenUsage["output_tokens"].(int64); ok {
+			outputTokens = &outputVal
+		} else if outputFloat, ok := result.TokenUsage["output_tokens"].(float64); ok {
+			outputVal := int64(outputFloat)
+			outputTokens = &outputVal
+		}
+		
+		if totalVal, ok := result.TokenUsage["total_tokens"].(int64); ok {
+			totalTokens = &totalVal
+		} else if totalFloat, ok := result.TokenUsage["total_tokens"].(float64); ok {
+			totalVal := int64(totalFloat)
+			totalTokens = &totalVal
+		}
+	}
+	
+	if result.ToolsUsed > 0 {
+		toolsUsedVal := int64(result.ToolsUsed)
+		toolsUsed = &toolsUsedVal
+	}
+	
+	err = repos.AgentRuns.UpdateCompletionWithMetadata(
+		agentRun.ID,
+		result.Response,
+		result.StepsTaken,
+		result.ToolCalls,
+		result.ExecutionSteps,
+		"completed",
+		&completedAt,
+		inputTokens,
+		outputTokens,
+		totalTokens,
+		&durationSeconds,
+		&result.ModelName,
+		toolsUsed,
+	)
+	if err != nil {
+		fmt.Printf("Warning: Failed to update run record: %v\n", err)
+	}
+
+	// 7. Get the updated run for detailed display
+	updatedRun, err := repos.AgentRuns.GetByID(agentRun.ID)
+	if err != nil {
+		fmt.Printf("Warning: Failed to get updated run: %v\n", err)
+		// Fall back to displaying basic results
+		fmt.Println("\n" + styles.Banner.Render("🎯 Execution Results"))
+		fmt.Printf("⏱️  Duration: %v\n", result.Duration)
+		fmt.Printf("✅ Success: %t\n", result.Success)
+		fmt.Printf("🤖 Model: %s\n", result.ModelName)
+		fmt.Printf("📊 Steps Used: %d\n", result.StepsUsed)
+		fmt.Printf("🔧 Tools Used: %d\n", result.ToolsUsed)
+		
+		if result.Response != "" {
+			fmt.Println("\n" + styles.Info.Render("📄 Response:"))
+			fmt.Println(result.Response)
+		}
+		return nil
+	}
+
+	// 8. Display detailed results with all the captured tool calls and execution steps
+	return h.displayExecutionResults(updatedRun)
+}
+
+// displayExecutionResults shows the final execution results with tool calls
+func (h *AgentHandler) displayExecutionResults(run *models.AgentRun) error {
+	styles := common.GetCLIStyles(h.themeManager)
+	
+	fmt.Print("\n" + styles.Banner.Render("🎉 Execution Results") + "\n\n")
+	fmt.Printf("📊 Run ID: %d\n", run.ID)
+	fmt.Printf("⚡ Steps Taken: %d\n", run.StepsTaken)
+	if run.CompletedAt != nil {
+		fmt.Printf("⏱️  Duration: %v\n", run.CompletedAt.Sub(run.StartedAt).Round(time.Second))
+	}
+	
+	// Display final response
+	if run.FinalResponse != "" {
+		fmt.Printf("\n📝 Final Response:\n")
+		fmt.Printf("%s\n", styles.Success.Render(run.FinalResponse))
+	}
+	
+	// Display tool calls if available
+	if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
+		fmt.Printf("\n🔧 Tool Calls (%d):\n", len(*run.ToolCalls))
+		for i, toolCall := range *run.ToolCalls {
+			toolData, _ := json.MarshalIndent(toolCall, "", "  ")
+			fmt.Printf("  %d. %s\n", i+1, string(toolData))
+		}
+	}
+	
+	// Display execution steps if available
+	if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
+		fmt.Printf("\n📋 Execution Steps (%d):\n", len(*run.ExecutionSteps))
+		for i, step := range *run.ExecutionSteps {
+			stepData, _ := json.MarshalIndent(step, "", "  ")
+			fmt.Printf("  %d. %s\n", i+1, string(stepData))
+		}
 	}
 	
 	return nil

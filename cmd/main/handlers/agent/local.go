@@ -674,7 +674,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		completedAt := time.Now()
 		errorMsg := fmt.Sprintf("Stdio MCP execution failed: %v", originalErr)
 		
-		updateErr := repos.AgentRuns.UpdateCompletion(
+		updateErr := repos.AgentRuns.UpdateCompletionWithMetadata(
 			agentRun.ID,
 			errorMsg,
 			0, // steps_taken
@@ -682,6 +682,12 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			nil, // execution_steps  
 			"failed",
 			&completedAt,
+			nil, // inputTokens
+			nil, // outputTokens
+			nil, // totalTokens
+			nil, // durationSeconds
+			nil, // modelName
+			nil, // toolsUsed
 		)
 		if updateErr != nil {
 			return fmt.Errorf("failed to update failed agent run: %w", updateErr)
@@ -691,9 +697,43 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		return fmt.Errorf("stdio MCP execution failed: %w", originalErr)
 	}
 	
-	// Update run as completed with stdio MCP results
+	// Update run as completed with stdio MCP results and metadata
 	completedAt := time.Now()
-	err = repos.AgentRuns.UpdateCompletion(
+	durationSeconds := result.Duration.Seconds()
+	
+	// Extract token usage from result
+	var inputTokens, outputTokens, totalTokens *int64
+	var toolsUsed *int64
+	
+	if result.TokenUsage != nil {
+		if inputVal, ok := result.TokenUsage["input_tokens"].(int64); ok {
+			inputTokens = &inputVal
+		} else if inputFloat, ok := result.TokenUsage["input_tokens"].(float64); ok {
+			inputVal := int64(inputFloat)
+			inputTokens = &inputVal
+		}
+		
+		if outputVal, ok := result.TokenUsage["output_tokens"].(int64); ok {
+			outputTokens = &outputVal
+		} else if outputFloat, ok := result.TokenUsage["output_tokens"].(float64); ok {
+			outputVal := int64(outputFloat)
+			outputTokens = &outputVal
+		}
+		
+		if totalVal, ok := result.TokenUsage["total_tokens"].(int64); ok {
+			totalTokens = &totalVal
+		} else if totalFloat, ok := result.TokenUsage["total_tokens"].(float64); ok {
+			totalVal := int64(totalFloat)
+			totalTokens = &totalVal
+		}
+	}
+	
+	if result.ToolsUsed > 0 {
+		toolsUsedVal := int64(result.ToolsUsed)
+		toolsUsed = &toolsUsedVal
+	}
+	
+	err = repos.AgentRuns.UpdateCompletionWithMetadata(
 		agentRun.ID,
 		result.Response,
 		result.StepsTaken,
@@ -701,6 +741,12 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		result.ExecutionSteps,
 		"completed",
 		&completedAt,
+		inputTokens,
+		outputTokens,
+		totalTokens,
+		&durationSeconds,
+		&result.ModelName,
+		toolsUsed,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update agent run: %w", err)
@@ -812,43 +858,6 @@ func (h *AgentHandler) monitorExecutionWithTail(runID int64, apiPort int) error 
 	return h.monitorExecution(runID, apiPort)
 }
 
-// displayExecutionResults shows the final execution results with tool calls
-func (h *AgentHandler) displayExecutionResults(run *models.AgentRun) error {
-	styles := getCLIStyles(h.themeManager)
-	
-	fmt.Print("\n" + styles.Banner.Render("🎉 Execution Results") + "\n\n")
-	fmt.Printf("📊 Run ID: %d\n", run.ID)
-	fmt.Printf("⚡ Steps Taken: %d\n", run.StepsTaken)
-	if run.CompletedAt != nil {
-		fmt.Printf("⏱️  Duration: %v\n", run.CompletedAt.Sub(run.StartedAt).Round(time.Second))
-	}
-	
-	// Display final response
-	if run.FinalResponse != "" {
-		fmt.Printf("\n📝 Final Response:\n")
-		fmt.Printf("%s\n", styles.Success.Render(run.FinalResponse))
-	}
-	
-	// Display tool calls if available
-	if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
-		fmt.Printf("\n🔧 Tool Calls (%d):\n", len(*run.ToolCalls))
-		for i, toolCall := range *run.ToolCalls {
-			toolData, _ := json.MarshalIndent(toolCall, "", "  ")
-			fmt.Printf("  %d. %s\n", i+1, string(toolData))
-		}
-	}
-	
-	// Display execution steps if available
-	if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
-		fmt.Printf("\n📋 Execution Steps (%d):\n", len(*run.ExecutionSteps))
-		for i, step := range *run.ExecutionSteps {
-			stepData, _ := json.MarshalIndent(step, "", "  ")
-			fmt.Printf("  %d. %s\n", i+1, string(stepData))
-		}
-	}
-	
-	return nil
-}
 
 // exportAgentLocal exports an agent to file-based configuration
 func (h *AgentHandler) exportAgentLocal(agentID int64, environment string) error {
