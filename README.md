@@ -70,12 +70,15 @@ Unlike application-focused agent platforms, Station is designed for deployable s
 
 ### 1. Install Station
 ```bash
-# Build from source
+# Quick install (recommended) 
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+
+# Or build from source
 git clone https://github.com/cloudshipai/station
 cd station && go build -o stn ./cmd/main
 
-# Binary install
-curl -sSL https://getstation.cloudshipai.com | bash
+# Or download binary manually from GitHub releases
+# https://github.com/cloudshipai/station/releases
 ```
 
 ### 2. Initialize & Configure Tools
