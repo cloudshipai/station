@@ -152,7 +152,7 @@ install_binary() {
     temp_dir=$(mktemp -d)
     cd "$temp_dir"
     
-    # Construct download URL
+    # Construct download URL - GoReleaser uses ProjectName_Version_Os_Arch format
     local filename="station_${version#v}_${platform}"
     local archive_name="${filename}.tar.gz"
     
