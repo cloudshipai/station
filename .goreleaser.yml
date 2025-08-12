@@ -1,6 +1,7 @@
 # GoReleaser configuration for Station
 # See https://goreleaser.com for documentation
 
+version: 2
 project_name: station
 
 env:
@@ -16,7 +17,7 @@ builds:
     binary: stn
     main: ./cmd/main
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -24,14 +25,9 @@ builds:
     goarch:
       - amd64
       - arm64
-      - "386"
-    goarm:
-      - "7"
     ignore:
       - goos: windows
         goarch: arm64
-      - goos: windows
-        goarch: "386"
     flags:
       - -trimpath
     ldflags:
@@ -140,18 +136,18 @@ release:
     **Full Changelog**: https://github.com/cloudshipai/station/compare/{{.PreviousTag}}...{{.Tag}}
 
 # Docker configuration (optional)
-dockers:
-  - id: station
-    image_templates:
-      - "ghcr.io/cloudshipai/station:{{ .Version }}"
-      - "ghcr.io/cloudshipai/station:latest"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
+# dockers:
+#   - id: station
+#     image_templates:
+#       - "ghcr.io/cloudshipai/station:{{ .Version }}"
+#       - "ghcr.io/cloudshipai/station:latest"
+#     dockerfile: Dockerfile
+#     build_flag_templates:
+#       - "--pull"
+#       - "--label=org.opencontainers.image.created={{.Date}}"
+#       - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#       - "--label=org.opencontainers.image.version={{.Version}}"
 
 # Package repositories (for advanced users)
 # brews:
@@ -198,21 +194,21 @@ publishers:
     cmd: curl -F package=@{{ .ArtifactPath }} https://push.fury.io/cloudshipai/
 
 # Snapcraft (Ubuntu Store)
-snapcrafts:
-  - name: station
-    summary: AI Infrastructure Platform
-    description: |
-      Station transforms complex MCP server setup from hours of configuration 
-      into a 30-second guided wizard. Making MCP servers as easy as Docker containers.
-    grade: stable
-    confinement: strict
-    publish: true
-    license: AGPL-3.0
-    base: core20
-    apps:
-      stn:
-        command: stn
-        plugs: ["home", "network", "network-bind"]
+# snapcrafts:
+#  - name: station
+#    summary: AI Infrastructure Platform
+#    description: |
+#      Station transforms complex MCP server setup from hours of configuration 
+#      into a 30-second guided wizard. Making MCP servers as easy as Docker containers.
+#    grade: stable
+#    confinement: strict
+#    publish: true
+#    license: AGPL-3.0
+#    base: core20
+#    apps:
+#      stn:
+#        command: stn
+#        plugs: ["home", "network", "network-bind"]
 
 # Announcement (optional - configure webhooks/notifications)
 # announce:
