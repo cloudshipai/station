@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/pkg/models"
 )
 
 // DeclarativeSync handles synchronization between file-based configs and database
@@ -91,7 +93,6 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	// 2. Determine paths for this environment  
 	envDir := filepath.Join("environments", environmentName)
 	agentsDir := filepath.Join(envDir, "agents")
-	mcpConfigPath := filepath.Join(envDir, "mcp-config.yaml")
 
 	// 3. Sync agents from .prompt files
 	agentResult, err := s.syncAgents(ctx, agentsDir, environmentName, options)
@@ -107,19 +108,17 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	result.ValidationMessages = append(result.ValidationMessages, agentResult.ValidationMessages...)
 	result.Operations = append(result.Operations, agentResult.Operations...)
 
-	// 4. Sync MCP configurations (if file exists)
-	if _, err := os.Stat(mcpConfigPath); err == nil {
-		mcpResult, err := s.syncMCPConfig(ctx, mcpConfigPath, environmentName, options)
-		if err != nil {
-			fmt.Printf("Warning: Failed to sync MCP config for %s: %v\n", environmentName, err)
-			result.ValidationErrors++
-			result.ValidationMessages = append(result.ValidationMessages, 
-				fmt.Sprintf("MCP config sync failed: %v", err))
-		} else {
-			result.MCPServersProcessed = mcpResult.MCPServersProcessed
-			result.MCPServersConnected = mcpResult.MCPServersConnected
-			result.Operations = append(result.Operations, mcpResult.Operations...)
-		}
+	// 4. Sync MCP template files (JSON files with potential variables)
+	mcpResult, err := s.syncMCPTemplateFiles(ctx, envDir, environmentName, options)
+	if err != nil {
+		fmt.Printf("Warning: Failed to sync MCP templates for %s: %v\n", environmentName, err)
+		result.ValidationErrors++
+		result.ValidationMessages = append(result.ValidationMessages, 
+			fmt.Sprintf("MCP template sync failed: %v", err))
+	} else {
+		result.MCPServersProcessed = mcpResult.MCPServersProcessed
+		result.MCPServersConnected = mcpResult.MCPServersConnected
+		result.Operations = append(result.Operations, mcpResult.Operations...)
 	}
 
 	result.Duration = time.Since(startTime)
@@ -274,6 +273,167 @@ func (s *DeclarativeSync) calculateFileChecksum(filePath string) (string, error)
 	}
 
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+// syncMCPTemplateFiles processes individual JSON template files in the environment directory
+func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, environmentName string, options SyncOptions) (*SyncResult, error) {
+	result := &SyncResult{
+		Environment:        environmentName,
+		Operations:         []SyncOperation{},
+		ValidationMessages: []string{},
+	}
+
+	// Check if environment directory exists
+	if _, err := os.Stat(envDir); os.IsNotExist(err) {
+		fmt.Printf("Debug: Environment directory does not exist: %s\n", envDir)
+		return result, nil
+	}
+
+	// Find all .json files (excluding agent .prompt files)
+	jsonFiles, err := filepath.Glob(filepath.Join(envDir, "*.json"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan JSON template files: %w", err)
+	}
+
+	result.MCPServersProcessed = len(jsonFiles)
+
+	// Process each JSON template file
+	for _, jsonFile := range jsonFiles {
+		configName := strings.TrimSuffix(filepath.Base(jsonFile), ".json")
+		
+		fmt.Printf("Processing MCP template: %s\n", configName)
+		
+		// Read the template file
+		templateContent, err := os.ReadFile(jsonFile)
+		if err != nil {
+			fmt.Printf("Warning: Failed to read template file %s: %v\n", jsonFile, err)
+			result.ValidationErrors++
+			continue
+		}
+
+		// Get environment from database
+		env, err := s.repos.Environments.GetByName(environmentName)
+		if err != nil {
+			fmt.Printf("Warning: Failed to get environment %s: %v\n", environmentName, err)
+			result.ValidationErrors++
+			continue
+		}
+
+		// Process template with variables using the fixed template service
+		configDir := filepath.Dir(filepath.Dir(envDir)) // Go up to station config dir
+		templateService := NewTemplateVariableService(configDir, s.repos)
+		
+		templateResult, err := templateService.ProcessTemplateWithVariables(env.ID, configName, string(templateContent), false)
+		if err != nil {
+			fmt.Printf("Warning: Failed to process template variables for %s: %v\n", configName, err)
+			result.ValidationErrors++
+			continue
+		}
+
+		// Parse the rendered JSON to extract MCP server configurations
+		var mcpConfig map[string]interface{}
+		if err := json.Unmarshal([]byte(templateResult.RenderedContent), &mcpConfig); err != nil {
+			fmt.Printf("Warning: Failed to parse rendered template %s: %v\n", configName, err)
+			result.ValidationErrors++
+			continue
+		}
+
+		// Extract and sync MCP servers from the template
+		if err := s.syncMCPServersFromTemplate(ctx, mcpConfig, env.ID, configName, options); err != nil {
+			fmt.Printf("Warning: Failed to sync MCP servers from template %s: %v\n", configName, err)
+			result.ValidationErrors++
+			continue
+		}
+
+		result.MCPServersConnected++
+		fmt.Printf("Successfully synced template: %s\n", configName)
+	}
+
+	return result, nil
+}
+
+// syncMCPServersFromTemplate extracts MCP servers from a rendered template and updates the database
+func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpConfig map[string]interface{}, envID int64, configName string, options SyncOptions) error {
+	// Extract MCP servers section
+	var serversData map[string]interface{}
+	if mcpServers, ok := mcpConfig["mcpServers"].(map[string]interface{}); ok {
+		serversData = mcpServers
+	} else if servers, ok := mcpConfig["servers"].(map[string]interface{}); ok {
+		serversData = servers
+	} else {
+		// No MCP servers in this template - that's OK
+		return nil
+	}
+
+	// Process each server configuration
+	for serverName, serverConfigRaw := range serversData {
+		if options.DryRun {
+			fmt.Printf("  [DRY RUN] Would sync MCP server: %s\n", serverName)
+			continue
+		}
+
+		// Convert server config to proper format
+		serverConfigBytes, err := json.Marshal(serverConfigRaw)
+		if err != nil {
+			return fmt.Errorf("failed to marshal server config for %s: %w", serverName, err)
+		}
+		
+		var serverConfig map[string]interface{}
+		if err := json.Unmarshal(serverConfigBytes, &serverConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal server config for %s: %w", serverName, err)
+		}
+
+		// Extract server properties
+		command, _ := serverConfig["command"].(string)
+		args := []string{}
+		if argsRaw, ok := serverConfig["args"].([]interface{}); ok {
+			for _, arg := range argsRaw {
+				if argStr, ok := arg.(string); ok {
+					args = append(args, argStr)
+				}
+			}
+		}
+
+		env := map[string]string{}
+		if envRaw, ok := serverConfig["env"].(map[string]interface{}); ok {
+			for key, value := range envRaw {
+				if valueStr, ok := value.(string); ok {
+					env[key] = valueStr
+				}
+			}
+		}
+
+		// Check if server already exists
+		existingServer, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
+		if err != nil {
+			// Server doesn't exist, create new one
+			newServer := &models.MCPServer{
+				Name:          serverName,
+				Command:       command,
+				Args:          args,
+				Env:           env,
+				EnvironmentID: envID,
+			}
+			_, err = s.repos.MCPServers.Create(newServer)
+			if err != nil {
+				return fmt.Errorf("failed to create MCP server %s: %w", serverName, err)
+			}
+			fmt.Printf("  Created MCP server: %s\n", serverName)
+		} else {
+			// Server exists, update it
+			existingServer.Command = command
+			existingServer.Args = args
+			existingServer.Env = env
+			
+			err = s.repos.MCPServers.Update(existingServer)
+			if err != nil {
+				return fmt.Errorf("failed to update MCP server %s: %w", serverName, err)
+			}
+			fmt.Printf("  Updated MCP server: %s with new args: %v\n", serverName, args)
+		}
+	}
+
+	return nil
 }
 
 // Helper type for database operations (until SQLC is working)
