@@ -50,11 +50,27 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 
 ## Development Best Practices
 
-### File Management
+### File Management & Clean Development
 - **ALWAYS** prefer editing existing files over creating new ones
 - **NEVER** create documentation files unless explicitly requested
 - Use `TodoWrite` tool for task tracking and planning
 - Maintain concise responses (≤4 lines unless detail requested)
+
+### Keep Root Directory Clean
+- **NEVER** create temporary files in project root
+- Use `dev-workspace/` for temporary development artifacts:
+  - `dev-workspace/test-configs/` - Temporary MCP configs and test files
+  - `dev-workspace/test-scripts/` - Development and testing scripts
+  - `dev-workspace/test-artifacts/` - Built binaries, databases, generated files
+  - `dev-workspace/ssh-keys/` - SSH host keys for development
+- **Automated cleanup**: Root-level test files are gitignored and cleaned automatically
+- **Before committing**: Ensure no temporary files pollute the root directory
+
+### Branch Strategy
+- **main**: Production-ready code
+- **develop**: Long-lived staging branch for testing development builds
+- **feature/***: Feature branches (PRs to develop, then develop → main)
+- **CI only runs on main and develop** - feature branches test via PRs
 
 ### Security Guidelines
 - Only assist with defensive security tasks
