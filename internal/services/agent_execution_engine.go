@@ -128,7 +128,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 	}
 
 	// Render agent prompt with dotprompt if it contains frontmatter
-	renderedAgentPrompt, err := aee.RenderAgentPromptWithDotprompt(agent.Prompt, task, agent.Name)
+	// TODO: Accept user-defined variables payload here
+	userVariables := map[string]interface{}{} // Empty for now, will be populated from CLI/API
+	renderedAgentPrompt, err := aee.RenderAgentPromptWithDotprompt(agent.Prompt, userVariables)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render agent prompt: %w", err)
 	}
@@ -517,7 +519,7 @@ func (aee *AgentExecutionEngine) TestStdioMCPConnection(ctx context.Context) err
 }
 
 // RenderAgentPromptWithDotprompt renders agent prompt with dotprompt if it contains frontmatter
-func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt, task, agentName string) (string, error) {
+func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt string, userVariables map[string]interface{}) (string, error) {
 	// Check if this is a dotprompt with YAML frontmatter
 	if !aee.isDotpromptContent(agentPrompt) {
 		// Not a dotprompt, return as-is
@@ -525,12 +527,14 @@ func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt, tas
 	}
 
 	// Do inline dotprompt rendering to avoid import cycle
-	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, task, agentName)
+	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, userVariables)
 	if err != nil {
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 
-	logging.Info("DEBUG: Rendered dotprompt for agent '%s'", agentName)
+	if len(userVariables) > 0 {
+		logging.Info("DEBUG: Rendered dotprompt with %d user variables", len(userVariables))
+	}
 	return renderedPrompt, nil
 }
 
@@ -542,20 +546,14 @@ func (aee *AgentExecutionEngine) isDotpromptContent(prompt string) bool {
 }
 
 // renderDotpromptInline renders dotprompt content inline to avoid import cycles
-func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent, task, agentName string) (string, error) {
+func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent string, userVariables map[string]interface{}) (string, error) {
 	// 1. Create dotprompt instance
 	dp := dotprompt.NewDotprompt(nil) // Use default options
 	
-	// 2. Prepare data for rendering
+	// 2. Prepare data for rendering with user-defined variables only
 	data := &dotprompt.DataArgument{
-		Input: map[string]any{
-			"TASK":       task,
-			"AGENT_NAME": agentName,
-			"ENVIRONMENT": "default", // TODO: get from agent config
-		},
-		Context: map[string]any{
-			"agent_name": agentName,
-		},
+		Input:   userVariables, // User-defined variables like {{my_folder}}, {{my_var}}
+		Context: map[string]any{}, // Keep context empty unless needed
 	}
 	
 	// 3. Render the template  
