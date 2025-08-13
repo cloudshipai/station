@@ -42,10 +42,15 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with %d variables", agent.ID, agent.Name, len(userVariables))
 	
-	// Execute using IntelligentAgentCreator with stdio MCP and user variables
-	result, err := s.creator.ExecuteAgentViaStdioMCP(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
+	// CRITICAL FIX: Create fresh execution context like CLI does
+	// This prevents shared state issues that cause STDIO pipe transport failures
+	log.Printf("DEBUG AgentService: Creating fresh execution context to avoid shared state issues")
+	freshCreator := NewIntelligentAgentCreator(s.repos, nil) // Fresh creator instance
 	
-	log.Printf("DEBUG AgentService: ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
+	// Execute using fresh IntelligentAgentCreator with stdio MCP and user variables
+	result, err := freshCreator.ExecuteAgentViaStdioMCP(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
+	
+	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
 	}
