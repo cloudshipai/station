@@ -4,7 +4,7 @@ import { SITE } from '../../consts'
 import SkipToContent from './SkipToContent.astro'
 import SidebarToggle from './SidebarToggle'
 import LanguageSelect from './LanguageSelect'
-import Search from './Search'
+import SimpleSearch from './SimpleSearch'
 
 type Props = {
   currentPage: string
@@ -14,131 +14,519 @@ const { currentPage } = Astro.props
 const lang = getLanguageFromURL(currentPage)
 ---
 
-<header>
+<header class="modern-header">
   <SkipToContent />
-  <nav class="nav-wrapper" title="Top Navigation">
-    <div class="menu-toggle">
+  <nav class="nav-container">
+    <!-- Mobile menu button -->
+    <div class="mobile-menu-toggle">
       <SidebarToggle client:idle />
     </div>
-    <div class="logo flex">
-      <a href="/">
-        <img src="/station/station-logo.png" alt="Station" width="40" height="40" />
-        <h1>{SITE.title ?? 'Documentation'}</h1>
+    
+    <!-- Logo and branding -->
+    <div class="brand">
+      <a href="/station/" class="brand-link">
+        <div class="logo-container">
+          <img src="/station/station-logo.png" alt="Station" width="32" height="32" />
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Station</span>
+          <span class="brand-tagline">Documentation</span>
+        </div>
       </a>
     </div>
-    <!-- <div style="flex-grow: 1;"></div> -->
-    <div class="search-item">
-      <Search client:idle />
+    
+    <!-- Main navigation -->
+    <div class="main-nav">
+      <a href="/station/en/introduction/" class="nav-link">Get Started</a>
+      <a href="/station/en/mcp/claude-desktop/" class="nav-link">MCP Guide</a>
+      <a href="/station/en/agents/creating/" class="nav-link">Agents</a>
+      <a href="https://discord.gg/station-ai" class="nav-link discord-link" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.19 12.19 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032c.001.014.01.028.021.037a13.276 13.276 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019c.308-.42.582-.863.818-1.329a.05.05 0 0 0-.01-.059.051.051 0 0 0-.018-.011 8.875 8.875 0 0 1-1.248-.595.05.05 0 0 1-.02-.066.051.051 0 0 1 .015-.019c.084-.063.168-.129.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.052.052 0 0 1 .053.007c.08.066.164.132.248.195a.051.051 0 0 1-.004.085 8.254 8.254 0 0 1-1.249.594.05.05 0 0 0-.03.03.052.052 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.235 13.235 0 0 0 4.001-2.02.049.049 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.034.034 0 0 0-.02-.019Zm-8.198 7.307c-.789 0-1.438-.724-1.438-1.612 0-.889.637-1.613 1.438-1.613.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612Zm5.316 0c-.788 0-1.438-.724-1.438-1.612 0-.889.637-1.613 1.438-1.613.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612Z"/>
+        </svg>
+        <span>Discord</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" class="external-icon">
+          <path d="M3 9L9 3M9 3L6 3M9 3L9 6"/>
+        </svg>
+      </a>
+      <a href="https://github.com/cloudshipai/station" class="nav-link github-link" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        <span class="github-text">
+          <span class="github-label">GitHub</span>
+          <span class="github-stars" id="github-stars">⭐</span>
+        </span>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" class="external-icon">
+          <path d="M3 9L9 3M9 3L6 3M9 3L9 6"/>
+        </svg>
+      </a>
     </div>
-    {
-      KNOWN_LANGUAGE_CODES.length > 1 && (
-        <LanguageSelect lang={lang} client:idle />
-      )
-    }
+    
+    <!-- Right side actions -->
+    <div class="nav-actions">
+      {
+        KNOWN_LANGUAGE_CODES.length > 1 && (
+          <LanguageSelect lang={lang} client:idle />
+        )
+      }
+    </div>
   </nav>
 </header>
 
+<script is:inline>
+  // Fetch GitHub stars count
+  async function fetchGitHubStars() {
+    try {
+      const response = await fetch('https://api.github.com/repos/cloudshipai/station');
+      if (response.ok) {
+        const data = await response.json();
+        const starsElement = document.getElementById('github-stars');
+        const githubLink = document.querySelector('.github-link');
+        
+        if (starsElement && data.stargazers_count) {
+          const count = data.stargazers_count;
+          const formattedCount = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count;
+          starsElement.textContent = `⭐ ${formattedCount}`;
+          
+          // Set data attribute for mobile display
+          if (githubLink) {
+            githubLink.setAttribute('data-stars', `⭐ ${formattedCount}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Could not fetch GitHub stars:', error);
+      // Fallback for mobile
+      const githubLink = document.querySelector('.github-link');
+      if (githubLink) {
+        githubLink.setAttribute('data-stars', '⭐');
+      }
+    }
+  }
+
+  // Fetch stars when page loads
+  document.addEventListener('DOMContentLoaded', fetchGitHubStars);
+</script>
+
 <style>
-  header {
-    z-index: 11;
+  .modern-header {
+    z-index: 1000;
     height: var(--theme-navbar-height);
     width: 100%;
-    background-color: var(--theme-navbar-bg);
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    position: sticky;
+    top: 0;
+    transition: all 0.3s ease;
+  }
+
+  .modern-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.02), rgba(168, 85, 247, 0.02));
+    pointer-events: none;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .modern-header {
+      background: rgba(17, 24, 39, 0.85);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .modern-header::before {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+    }
+  }
+
+  .nav-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    height: 100%;
+    gap: 3rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  .mobile-menu-toggle {
+    display: flex;
+    align-items: center;
+    z-index: 100;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .brand-link {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    text-decoration: none;
+    color: inherit;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0.625rem 1rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .brand-link:hover {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: rgba(99, 102, 241, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1);
+  }
+
+  .logo-container {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
-    position: sticky;
-    top: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
   }
 
-  .logo {
-    flex: 1;
+  .logo-container img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+  }
+
+  .brand-text {
     display: flex;
-    overflow: hidden;
-    width: 30px;
-    font-size: 2rem;
-    flex-shrink: 0;
-    font-weight: 600;
-    line-height: 1;
-    color: hsla(var(--color-base-white), 100%, 1);
-    gap: 0.25em;
-    z-index: -1;
+    flex-direction: column;
+    line-height: 1.1;
+    min-width: 0;
   }
 
-  .logo a {
-    display: flex;
-    padding: 0.5em 0.25em;
-    margin: -0.5em -0.25em;
-    text-decoration: none;
-    font-weight: bold;
-    transition: color 100ms ease-out;
-    color: var(--theme-text);
+  .brand-name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.025em;
+    background: linear-gradient(135deg, #111827, #374151);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
-  .logo a:hover,
-  .logo a:focus {
-    color: var(--theme-text-accent);
+  .brand-tagline {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.075em;
+    margin-top: -2px;
   }
 
-  .logo h1 {
+  @media (prefers-color-scheme: dark) {
+    .brand-link {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .brand-link:hover {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .brand-name {
+      color: #f9fafb;
+      background: linear-gradient(135deg, #f9fafb, #d1d5db);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .brand-tagline {
+      color: #9ca3af;
+    }
+  }
+
+  .main-nav {
     display: none;
-    font: inherit;
-    color: inherit;
-    margin: 0;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    text-decoration: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+  }
+
+  .nav-link::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .nav-link:hover {
+    background: rgba(99, 102, 241, 0.08);
+    color: #6366f1;
+    transform: translateY(-1px);
+    border-color: rgba(99, 102, 241, 0.2);
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.1);
+  }
+
+  .nav-link:hover::before {
+    opacity: 1;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .nav-link {
+      color: #d1d5db;
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    .nav-link:hover {
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .nav-link.github-link,
+    .nav-link.discord-link {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #d1d5db;
+    }
+
+    .nav-link.github-link:hover,
+    .nav-link.discord-link:hover {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+    }
+
+    .nav-link.discord-link:hover {
+      background: rgba(88, 101, 242, 0.2);
+      color: #8b9cf7;
+      border-color: rgba(88, 101, 242, 0.4);
+      box-shadow: 0 8px 24px rgba(88, 101, 242, 0.2);
+    }
+
+    .nav-link.github-link::before,
+    .nav-link.discord-link::before {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+    }
+  }
+
+  .nav-link.github-link,
+  .nav-link.discord-link {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 0.625rem 1rem;
+    border-radius: 10px;
+    font-weight: 500;
+    gap: 0.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .nav-link.github-link::before,
+  .nav-link.discord-link::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .nav-link.github-link:hover,
+  .nav-link.discord-link:hover {
+    background: rgba(99, 102, 241, 0.15);
+    color: #6366f1;
+    border-color: rgba(99, 102, 241, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+  }
+
+  .nav-link.discord-link:hover {
+    background: rgba(88, 101, 242, 0.15);
+    color: #5865f2;
+    border-color: rgba(88, 101, 242, 0.3);
+    box-shadow: 0 8px 24px rgba(88, 101, 242, 0.15);
+  }
+
+  .nav-link.github-link:hover::before,
+  .nav-link.discord-link:hover::before {
+    opacity: 1;
+  }
+
+  .github-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.2;
+  }
+
+  .github-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .github-stars {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    font-weight: 500;
+  }
+
+  .nav-link.github-link:hover .github-stars {
+    opacity: 1;
+  }
+
+  .external-icon {
+    width: 12px;
+    height: 12px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    margin-left: auto;
+  }
+
+  .nav-link:hover .external-icon {
+    opacity: 1;
+  }
+
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* Mobile Styles */
+  @media (max-width: 768px) {
+    .nav-container {
+      padding: 0 0.75rem;
+      gap: 1rem;
+    }
+
+    .brand-text {
+      display: none;
+    }
+
+    .logo-container {
+      width: 28px;
+      height: 28px;
+    }
+
+    .main-nav {
+      display: none;
+    }
+
+    .mobile-menu-toggle {
+      order: 1;
+    }
+
+    .brand {
+      order: 2;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .nav-actions {
+      order: 3;
+    }
+
+    .nav-link.github-link {
+      padding: 0.375rem 0.5rem;
+      gap: 0.25rem;
+    }
+
+    .github-text {
+      display: none;
+    }
+
+    .nav-link.github-link::after {
+      content: attr(data-stars);
+      font-size: 0.75rem;
+      opacity: 0.8;
+      margin-left: 0.25rem;
+    }
+  }
+
+  /* Tablet and Desktop */
+  @media (min-width: 769px) {
+    .mobile-menu-toggle {
+      display: none;
+    }
+
+    .main-nav {
+      display: flex;
+    }
+
+    .brand {
+      flex-shrink: 0;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .nav-container {
+      padding: 0 2rem;
+      gap: 3rem;
+    }
+
+    .main-nav {
+      gap: 1rem;
+    }
+
+    .nav-link {
+      padding: 0.75rem 1.25rem;
+      font-size: 0.95rem;
+    }
+  }
+
+  /* Legacy styles for backwards compatibility */
+  .logo {
+    display: none;
   }
 
   .nav-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 1em;
-    width: 100%;
-    max-width: 82em;
-    padding: 0 1rem;
-  }
-
-  @media (min-width: 50em) {
-    header {
-      position: static;
-      padding: 2rem 0rem;
-    }
-
-    .logo {
-      width: auto;
-      margin: 0;
-      z-index: 0;
-    }
-
-    .logo h1 {
-      display: initial;
-    }
-
-    .menu-toggle {
-      display: none;
-    }
-  }
-
-  /** Style Algolia */
-  :root {
-    --docsearch-primary-color: var(--theme-accent);
-    --docsearch-logo-color: var(--theme-text);
+    display: none;
   }
 
   .search-item {
-    /* display: none; */
-    position: relative;
-    z-index: 10;
-    flex-grow: 1;
-    padding-right: 0.7rem;
-    display: flex;
-    max-width: 200px;
-  }
-
-  @media (min-width: 50em) {
-    .search-item {
-      max-width: 400px;
-    }
+    display: none;
   }
 </style>
 
