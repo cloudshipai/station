@@ -684,12 +684,9 @@ func (s *ConfigSyncer) getEnvironmentName(envID int64) (string, error) {
 
 // loadEnvironmentVariables loads variables from environment's variables.yml
 func (s *ConfigSyncer) loadEnvironmentVariables(envName string) (map[string]interface{}, error) {
-	configHome, err := os.UserConfigDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user config dir: %w", err)
-	}
-	
-	variablesPath := filepath.Join(configHome, "station", "environments", envName, "variables.yml")
+	// Use same path resolution as config discovery to ensure consistency
+	configDir := os.ExpandEnv("$HOME/.config/station")
+	variablesPath := filepath.Join(configDir, "environments", envName, "variables.yml")
 	
 	data, err := os.ReadFile(variablesPath)
 	if err != nil {
@@ -765,16 +762,9 @@ func (s *ConfigSyncer) promptForMissingVariables(envName string, missingVars []c
 
 // saveEnvironmentVariables saves variables to the environment's variables.yml file
 func (s *ConfigSyncer) saveEnvironmentVariables(envName string, variables map[string]interface{}) error {
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		configHome = filepath.Join(homeDir, ".config")
-	}
-	
-	envDir := filepath.Join(configHome, "station", "environments", envName)
+	// Use same path resolution as config discovery to ensure consistency
+	configDir := os.ExpandEnv("$HOME/.config/station")
+	envDir := filepath.Join(configDir, "environments", envName)
 	variablesPath := filepath.Join(envDir, "variables.yml")
 	
 	// Ensure environment directory exists
