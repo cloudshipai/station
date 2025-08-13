@@ -99,8 +99,10 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 	aee.activeMCPClients = clients
 
 	// Filter to only include tools assigned to this agent and ensure clean tool names
+	logging.Info("DEBUG ExecutionEngine: Filtering %d assigned tools from %d available MCP tools", len(assignedTools), len(allTools))
 	var tools []ai.ToolRef
 	for _, assignedTool := range assignedTools {
+		logging.Debug("DEBUG ExecutionEngine: Looking for assigned tool: %s", assignedTool.ToolName)
 		for _, mcpTool := range allTools {
 			// Match by tool name - try multiple methods to get tool name  
 			var toolName string
@@ -220,7 +222,30 @@ Guidelines:
 	// Set max turns to handle complex multi-step analysis (default is 5, increase to 25)
 	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
 	
+	logging.Info("DEBUG: === BEFORE GenKit Generate Call ===")
+	logging.Info("DEBUG: Context timeout: %v", ctx.Err())
+	logging.Info("DEBUG: GenKit app initialized: %v", genkitApp != nil)
+	logging.Info("DEBUG: Generate options count: %d", len(generateOptions))
+	logging.Info("DEBUG: Tools for generation: %d", len(tools))
+	for i, tool := range tools {
+		if named, ok := tool.(interface{ Name() string }); ok {
+			logging.Info("DEBUG: Tool %d for generation: %s", i+1, named.Name())
+		}
+	}
+	logging.Info("DEBUG: Max turns: 25")
+	logging.Info("DEBUG: Now calling genkit.Generate...")
+	
 	response, err := genkit.Generate(ctx, genkitApp, generateOptions...)
+	
+	logging.Info("DEBUG: === AFTER GenKit Generate Call ===")
+	logging.Info("DEBUG: GenKit Generate completed, checking results...")
+	logging.Info("DEBUG: Generate error: %v", err)
+	if response != nil {
+		logging.Info("DEBUG: Response received: %v", response != nil)
+		logging.Info("DEBUG: Response text length: %d", len(response.Text()))
+	} else {
+		logging.Info("DEBUG: Response is nil!")
+	}
 	
 	// Debug: Log the response details regardless of error
 	logging.Info("DEBUG: GenKit Generate returned, error: %v", err)

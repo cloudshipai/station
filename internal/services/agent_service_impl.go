@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"station/internal/db/repositories"
 	"station/pkg/models"
@@ -39,8 +40,12 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
 	}
 
+	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with %d variables", agent.ID, agent.Name, len(userVariables))
+	
 	// Execute using IntelligentAgentCreator with stdio MCP and user variables
 	result, err := s.creator.ExecuteAgentViaStdioMCP(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
+	
+	log.Printf("DEBUG AgentService: ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
 	}

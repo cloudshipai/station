@@ -288,7 +288,9 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 	}
 	
 	// Execute the agent using AgentServiceInterface with variables support
+	log.Printf("DEBUG ExecutionQueue: About to call ExecuteAgent for agent %d with %d variables", request.AgentID, len(userVariables))
 	response, err := worker.ExecutionService.ExecuteAgent(ctx, request.AgentID, request.Task, userVariables)
+	log.Printf("DEBUG ExecutionQueue: ExecuteAgent returned for agent %d, error: %v", request.AgentID, err)
 	
 	endTime := time.Now()
 	
