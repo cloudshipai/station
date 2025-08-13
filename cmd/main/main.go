@@ -177,6 +177,7 @@ func init() {
 	syncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	syncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
 	syncCmd.Flags().Bool("validate", false, "Validate configurations only without syncing")
+	syncCmd.Flags().BoolP("interactive", "i", true, "Prompt for missing variables (default: true)")
 
 	// Develop command flags
 	developCmd.Flags().String("env", "default", "Environment to load agents and MCP configs from")

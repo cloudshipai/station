@@ -309,10 +309,11 @@ Examples:
 		Short: "Sync all file-based configurations",
 		Long:  `Declaratively synchronize all file-based configurations to the database.
 This includes agents (.prompt files), MCP configurations, and environment settings.`,
-		Example: `  stn sync                    # Sync all environments
+		Example: `  stn sync                    # Sync all environments (interactive)
   stn sync production         # Sync specific environment  
   stn sync --dry-run          # Show what would change
-  stn sync --validate         # Validate configurations only`,
+  stn sync --validate         # Validate configurations only
+  stn sync --no-interactive   # Skip prompting for missing variables`,
 		RunE: runSync,
 	}
 
