@@ -19,10 +19,11 @@ var syncCmd = &cobra.Command{
 	Short: "Sync file-based configurations to database",
 	Long: `Declaratively synchronize all file-based agent and MCP configurations to the database.
 This command scans .prompt files and MCP configurations, validates dependencies, and updates the database accordingly.`,
-	Example: `  stn mcp sync                    # Sync all environments
+	Example: `  stn mcp sync                    # Sync all environments (interactive)
   stn mcp sync --env production   # Sync specific environment  
   stn mcp sync --dry-run          # Show what would change
-  stn mcp sync --validate         # Validate configurations only`,
+  stn mcp sync --validate         # Validate configurations only
+  stn mcp sync --no-interactive   # Skip prompting for missing variables`,
 	RunE: runMCPSync,
 }
 
@@ -32,6 +33,7 @@ type syncFlags struct {
 	DryRun      bool
 	Validate    bool
 	Verbose     bool
+	Interactive bool
 }
 
 func init() {
@@ -40,12 +42,14 @@ func init() {
 	syncCmd.Flags().Bool("dry-run", false, "Show what would be changed without applying changes")
 	syncCmd.Flags().Bool("validate", false, "Only validate configurations without syncing")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
+	syncCmd.Flags().BoolP("interactive", "i", true, "Prompt for missing variables (default: true)")
 	
 	// Bind flags to viper
 	viper.BindPFlag("mcp.sync.environment", syncCmd.Flags().Lookup("env"))
 	viper.BindPFlag("mcp.sync.dry_run", syncCmd.Flags().Lookup("dry-run"))
 	viper.BindPFlag("mcp.sync.validate", syncCmd.Flags().Lookup("validate"))
 	viper.BindPFlag("mcp.sync.verbose", syncCmd.Flags().Lookup("verbose"))
+	viper.BindPFlag("mcp.sync.interactive", syncCmd.Flags().Lookup("interactive"))
 }
 
 func runMCPSync(cmd *cobra.Command, args []string) error {
@@ -55,6 +59,7 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 		DryRun:      viper.GetBool("mcp.sync.dry_run"),
 		Validate:    viper.GetBool("mcp.sync.validate"),
 		Verbose:     viper.GetBool("mcp.sync.verbose"),
+		Interactive: viper.GetBool("mcp.sync.interactive"),
 	}
 
 	// Load configuration
@@ -99,9 +104,10 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 		fmt.Printf("🌍 Processing environment: %s\n", envName)
 		
 		result, err := syncer.SyncEnvironment(context.Background(), envName, services.SyncOptions{
-			DryRun:   flags.DryRun,
-			Validate: flags.Validate,
-			Verbose:  flags.Verbose,
+			DryRun:      flags.DryRun,
+			Validate:    flags.Validate,
+			Verbose:     flags.Verbose,
+			Interactive: flags.Interactive,
 		})
 		
 		if err != nil {
