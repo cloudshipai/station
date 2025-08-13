@@ -15,6 +15,7 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	"github.com/google/dotprompt/go/dotprompt"
+	"gopkg.in/yaml.v3"
 )
 
 // AgentExecutionResult contains the result of an agent execution
@@ -746,6 +747,55 @@ func (aee *AgentExecutionEngine) GetAgentSchema(agent *models.Agent) (*AgentSche
 		}
 	}
 	
+	// Also extract variables from template content as fallback
+	if len(schema.Variables) == 0 {
+		variables := aee.extractTemplateVariables(agent.Prompt)
+		schema.Variables = variables
+	}
+	
 	return schema, nil
 }
 
+// extractTemplateVariables finds all {{variable}} patterns in the template content as fallback
+func (aee *AgentExecutionEngine) extractTemplateVariables(dotpromptContent string) []string {
+	// Extract template content (after frontmatter)
+	parts := strings.SplitN(strings.TrimSpace(dotpromptContent), "\n---\n", 2)
+	templateContent := parts[len(parts)-1] // Use last part (template content)
+	
+	// Find all {{variable}} patterns
+	var variables []string
+	variableMap := make(map[string]bool) // Use map to deduplicate
+	
+	// Simple regex to find {{variable}} patterns
+	start := 0
+	for {
+		openIndex := strings.Index(templateContent[start:], "{{")
+		if openIndex == -1 {
+			break
+		}
+		openIndex += start
+		
+		closeIndex := strings.Index(templateContent[openIndex:], "}}")
+		if closeIndex == -1 {
+			break
+		}
+		closeIndex += openIndex
+		
+		// Extract variable name
+		varContent := strings.TrimSpace(templateContent[openIndex+2 : closeIndex])
+		
+		// Handle simple variable names (no complex handlebars logic)
+		if varContent != "" && !strings.Contains(varContent, " ") && !strings.Contains(varContent, "#") {
+			variableMap[varContent] = true
+		}
+		
+		start = closeIndex + 2
+	}
+	
+	// Convert map to slice
+	for variable := range variableMap {
+		variables = append(variables, variable)
+	}
+	
+	return variables
+}
