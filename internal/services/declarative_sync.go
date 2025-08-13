@@ -313,8 +313,20 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 	result.MCPServersProcessed = len(jsonFiles)
 
 	// Create template service once for this environment and reuse it
-	// Use the same workspaceDir we calculated above (e.g., /Users/jaredwolff/.config/station)
-	templateService := NewTemplateVariableService(workspaceDir, s.repos)
+	// Recalculate workspace directory to ensure it's in scope
+	var templateWorkspaceDir string
+	if s.config.Workspace != "" {
+		templateWorkspaceDir = s.config.Workspace
+	} else {
+		// Fallback to XDG config directory  
+		configHome := os.Getenv("XDG_CONFIG_HOME")
+		if configHome == "" {
+			homeDir, _ := os.UserHomeDir()
+			configHome = filepath.Join(homeDir, ".config")
+		}
+		templateWorkspaceDir = filepath.Join(configHome, "station")
+	}
+	templateService := NewTemplateVariableService(templateWorkspaceDir, s.repos)
 
 	// Process each JSON template file
 	for _, jsonFile := range jsonFiles {
