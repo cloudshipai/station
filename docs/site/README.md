@@ -1,15 +1,18 @@
-# Astro Starter Kit: Docs Site
+# Station Documentation Site
 
-[![Build Astro site](https://github.com/advanced-astro/astro-docs-template/actions/workflows/test.yml/badge.svg)](https://github.com/advanced-astro/astro-docs-template/actions/workflows/test.yml)
+[![Build Station docs](https://github.com/cloudshipai/station/actions/workflows/test.yml/badge.svg)](https://github.com/cloudshipai/station/actions/workflows/test.yml)
 
 ```bash
-pnpm create astro@latest -- --template advanced-astro/astro-docs-template
+git clone https://github.com/cloudshipai/station.git
+cd station/docs/site
+npm install
+npm run dev
 ```
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/advanced-astro/astro-docs-template)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/s/github/advanced-astro/astro-docs-template)
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/cloudshipai/station)
+[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/s/github/cloudshipai/station)
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+> 🚀 **Station Developer?** This is the documentation site for Station.
 
 ![docs](https://user-images.githubusercontent.com/4677417/186189283-0831b9ab-d6b9-485d-8955-3057e532ab31.png)
 
