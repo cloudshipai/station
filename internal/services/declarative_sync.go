@@ -24,10 +24,11 @@ type DeclarativeSync struct {
 
 // SyncOptions controls sync behavior
 type SyncOptions struct {
-	DryRun   bool
-	Validate bool
-	Force    bool
-	Verbose  bool
+	DryRun      bool
+	Validate    bool
+	Force       bool
+	Verbose     bool
+	Interactive bool
 }
 
 // SyncResult contains results of a sync operation
@@ -297,6 +298,10 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 
 	result.MCPServersProcessed = len(jsonFiles)
 
+	// Create template service once for this environment and reuse it
+	configDir := filepath.Dir(filepath.Dir(envDir)) // Go up to station config dir
+	templateService := NewTemplateVariableService(configDir, s.repos)
+
 	// Process each JSON template file
 	for _, jsonFile := range jsonFiles {
 		configName := strings.TrimSuffix(filepath.Base(jsonFile), ".json")
@@ -319,11 +324,8 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 			continue
 		}
 
-		// Process template with variables using the fixed template service
-		configDir := filepath.Dir(filepath.Dir(envDir)) // Go up to station config dir
-		templateService := NewTemplateVariableService(configDir, s.repos)
-		
-		templateResult, err := templateService.ProcessTemplateWithVariables(env.ID, configName, string(templateContent), false)
+		// Process template with variables using the shared template service
+		templateResult, err := templateService.ProcessTemplateWithVariables(env.ID, configName, string(templateContent), options.Interactive)
 		if err != nil {
 			fmt.Printf("Warning: Failed to process template variables for %s: %v\n", configName, err)
 			result.ValidationErrors++

@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -54,16 +53,16 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 		return nil, fmt.Errorf("failed to get environment name: %w", err)
 	}
 	
-	// 2. Always load variables from environment's variables.yml (no regex detection)
+	// 2. Load existing variables from environment's variables.yml
 	existingVars, err := tvs.loadEnvironmentVariables(envName)
 	if err != nil {
 		log.Printf("No variables.yml found for environment %s: %v", envName, err)
 		existingVars = make(map[string]string)
 	}
 	
-	log.Printf("Loaded %d variables from environment %s", len(existingVars), envName)
+	log.Printf("Loaded %d existing variables from environment %s", len(existingVars), envName)
 	
-	// 3. Add environment variables as fallback/override
+	// 3. Apply environment variable overrides
 	for key := range existingVars {
 		if envValue := os.Getenv(key); envValue != "" {
 			existingVars[key] = envValue
@@ -71,68 +70,90 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 		}
 	}
 	
-	// 4. Render template with Go template engine - let it handle missing variables
+	// 4. Try to render template with available variables
 	renderedContent, err := tvs.renderTemplate(templateContent, existingVars)
 	if err != nil {
-		// Template rendering failed - this indicates missing variables or template syntax errors
 		log.Printf("Template rendering failed for %s: %v", configName, err)
 		
-		// If interactive, we could prompt for missing variables here
-		// For now, return the error to indicate template issues
-		return nil, fmt.Errorf("template rendering failed (likely missing variables): %w", err)
+		if interactive {
+			// In interactive mode, we can try to extract missing variable from error and prompt
+			missingVar := tvs.extractMissingVariableFromError(err)
+			if missingVar != "" {
+				log.Printf("Extracted missing variable '%s' from template error", missingVar)
+				
+				// Prompt for the missing variable
+				newVars, err := tvs.promptForMissingVariables([]VariableInfo{{
+					Name:     missingVar,
+					Required: true,
+					Secret:   tvs.isSecretVariable(missingVar),
+				}})
+				if err != nil {
+					return nil, fmt.Errorf("failed to collect missing variable: %w", err)
+				}
+				
+				// Merge new variable and try rendering again
+				for k, v := range newVars {
+					existingVars[k] = v
+				}
+				
+				// Save new variable to environment file
+				if err := tvs.saveVariablesToEnvironment(envName, newVars); err != nil {
+					log.Printf("Warning: failed to save variables to environment file: %v", err)
+				}
+				
+				// Try rendering again
+				renderedContent, err = tvs.renderTemplate(templateContent, existingVars)
+				if err != nil {
+					// Still failing - return error
+					return &VariableResolutionResult{
+						AllResolved:     false,
+						ResolvedVars:    existingVars,
+						MissingVars:     []VariableInfo{{Name: missingVar, Required: true}},
+						RenderedContent: "",
+					}, fmt.Errorf("template rendering failed even after providing variable: %w", err)
+				}
+			} else {
+				// Couldn't extract variable name from error
+				return &VariableResolutionResult{
+					AllResolved:     false,
+					ResolvedVars:    existingVars,
+					MissingVars:     []VariableInfo{},
+					RenderedContent: "",
+				}, fmt.Errorf("template rendering failed and couldn't determine missing variable: %w", err)
+			}
+		} else {
+			// Non-interactive mode - return failure
+			return &VariableResolutionResult{
+				AllResolved:     false,
+				ResolvedVars:    existingVars,
+				MissingVars:     []VariableInfo{},
+				RenderedContent: "",
+			}, fmt.Errorf("template rendering failed: %w", err)
+		}
 	}
 	
+	// Check for "<no value>" in rendered content - indicates optional missing variables
+	hasNoValue := strings.Contains(renderedContent, "<no value>")
+	
 	result := &VariableResolutionResult{
-		AllResolved:     true, // If rendering succeeded, all variables were resolved
+		AllResolved:     !hasNoValue, // If no "<no value>", all variables resolved
 		ResolvedVars:    existingVars,
-		MissingVars:     []VariableInfo{}, // No missing vars if rendering succeeded
+		MissingVars:     []VariableInfo{}, // We don't track individual missing vars anymore
 		RenderedContent: renderedContent,
 	}
 	
-	log.Printf("Template rendering completed for %s with %d variables", configName, len(existingVars))
+	if hasNoValue {
+		log.Printf("Template rendering completed for %s with some '<no value>' placeholders", configName)
+	} else {
+		log.Printf("Template rendering completed for %s: all variables resolved", configName)
+	}
+	
 	return result, nil
 }
 
-// DetectVariables finds all variables in a template using Go template syntax
-func (tvs *TemplateVariableService) DetectVariables(templateContent string) ([]VariableInfo, error) {
-	var variables []VariableInfo
-	seen := make(map[string]bool)
-	
-	// Pattern 1: Go template syntax {{.VAR_NAME}} - standard template access
-	goTemplatePattern := regexp.MustCompile(`\{\{\.([A-Z_][A-Z0-9_]*)\}\}`)
-	matches := goTemplatePattern.FindAllStringSubmatch(templateContent, -1)
-	for _, match := range matches {
-		if len(match) > 1 && !seen[match[1]] {
-			variables = append(variables, VariableInfo{
-				Name:     match[1],
-				Required: true,
-				Secret:   tvs.isSecretVariable(match[1]),
-			})
-			seen[match[1]] = true
-		}
-	}
-	
-	// Pattern 2: Legacy support for {{VAR_NAME}} (without dot) - convert to standard format
-	legacyPattern := regexp.MustCompile(`\{\{([A-Z_][A-Z0-9_]*)\}\}`)
-	matches = legacyPattern.FindAllStringSubmatch(templateContent, -1)
-	for _, match := range matches {
-		if len(match) > 1 && !seen[match[1]] {
-			// Skip if already found with dot notation
-			dotPattern := fmt.Sprintf("{{.%s}}", match[1])
-			if !strings.Contains(templateContent, dotPattern) {
-				variables = append(variables, VariableInfo{
-					Name:     match[1],
-					Required: true,
-					Secret:   tvs.isSecretVariable(match[1]),
-				})
-				seen[match[1]] = true
-			}
-		}
-	}
-	
-	log.Printf("Detected variables: %v", tvs.getVariableNames(variables))
-	return variables, nil
-}
+// Note: DetectVariables function removed as part of the fix to eliminate regex-based detection.
+// The new approach directly attempts template rendering and handles missing variables through
+// Go template engine errors, making upfront variable detection unnecessary.
 
 // renderTemplate applies variables to template content using Go's text/template library
 func (tvs *TemplateVariableService) renderTemplate(templateContent string, variables map[string]string) (string, error) {
@@ -285,4 +306,36 @@ func (tvs *TemplateVariableService) getEnvironmentName(envID int64) (string, err
 		return "", err
 	}
 	return env.Name, nil
+}
+
+// extractMissingVariableFromError extracts variable name from Go template error messages
+func (tvs *TemplateVariableService) extractMissingVariableFromError(err error) string {
+	errorStr := err.Error()
+	
+	// Go template errors for missing variables look like:
+	// "template: detect:1:23: executing \"detect\" at <.MISSING_VAR>: map has no entry for key \"MISSING_VAR\""
+	if strings.Contains(errorStr, "map has no entry for key") {
+		start := strings.Index(errorStr, "map has no entry for key \"")
+		if start != -1 {
+			start += len("map has no entry for key \"")
+			end := strings.Index(errorStr[start:], "\"")
+			if end != -1 {
+				return errorStr[start : start+end]
+			}
+		}
+	}
+	
+	// Alternative pattern: executing "template" at <.VAR_NAME>:
+	if strings.Contains(errorStr, "executing") && strings.Contains(errorStr, "at <.") {
+		start := strings.Index(errorStr, "at <.")
+		if start != -1 {
+			start += len("at <.")
+			end := strings.Index(errorStr[start:], ">:")
+			if end != -1 {
+				return errorStr[start : start+end]
+			}
+		}
+	}
+	
+	return ""
 }
