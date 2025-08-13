@@ -528,18 +528,22 @@ func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt stri
 	// Check if this is a dotprompt with YAML frontmatter
 	if !aee.isDotpromptContent(agentPrompt) {
 		// Not a dotprompt, return as-is
+		logging.Info("DEBUG: Agent prompt is NOT dotprompt, returning as-is")
 		return agentPrompt, nil
 	}
 
+	logging.Info("DEBUG: Agent prompt IS dotprompt, rendering with %d variables", len(userVariables))
+	
 	// Do inline dotprompt rendering to avoid import cycle
 	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, userVariables)
 	if err != nil {
+		logging.Info("DEBUG: Dotprompt rendering failed: %v", err)
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 
-	if len(userVariables) > 0 {
-		logging.Info("DEBUG: Rendered dotprompt with %d user variables", len(userVariables))
-	}
+	logging.Info("DEBUG: Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
+	logging.Info("DEBUG: Rendered content preview: %.200s", renderedPrompt)
+	
 	return renderedPrompt, nil
 }
 
@@ -567,13 +571,13 @@ func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent string, 
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 	
-	// 4. Convert messages to text (for now, until we implement full ai.Generate)
+	// 4. Convert messages to text (extract just the content, no role prefixes)
 	var renderedText strings.Builder
 	for i, msg := range rendered.Messages {
 		if i > 0 {
 			renderedText.WriteString("\n\n")
 		}
-		renderedText.WriteString(fmt.Sprintf("[%s]: ", msg.Role))
+		// Don't include role prefix - just the content
 		for _, part := range msg.Content {
 			if textPart, ok := part.(*dotprompt.TextPart); ok {
 				renderedText.WriteString(textPart.Text)
