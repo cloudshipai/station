@@ -15,7 +15,6 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	"github.com/google/dotprompt/go/dotprompt"
-	"gopkg.in/yaml.v3"
 )
 
 // AgentExecutionResult contains the result of an agent execution
