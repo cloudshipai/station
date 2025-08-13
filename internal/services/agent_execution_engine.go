@@ -15,7 +15,6 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	"github.com/google/dotprompt/go/dotprompt"
-	"gopkg.in/yaml.v3"
 )
 
 // AgentExecutionResult contains the result of an agent execution
@@ -595,7 +594,7 @@ type AgentSchema struct {
 	Variables    []string               `json:"variables,omitempty"` // Available template variables
 }
 
-// GetAgentSchema extracts schema information from agent's dotprompt content
+// GetAgentSchema extracts schema information from agent's dotprompt content using GenKit's parser
 func (aee *AgentExecutionEngine) GetAgentSchema(agent *models.Agent) (*AgentSchema, error) {
 	schema := &AgentSchema{
 		AgentID:   agent.ID,
@@ -609,96 +608,45 @@ func (aee *AgentExecutionEngine) GetAgentSchema(agent *models.Agent) (*AgentSche
 		return schema, nil
 	}
 	
-	// Parse dotprompt frontmatter to extract schema
-	frontmatter, err := aee.parseDotpromptFrontmatter(agent.Prompt)
+	// Use GenKit's dotprompt parser to properly parse the template
+	parsedPrompt, err := dotprompt.ParseDocument(agent.Prompt)
 	if err != nil {
-		return schema, fmt.Errorf("failed to parse dotprompt frontmatter: %w", err)
+		return schema, fmt.Errorf("failed to parse dotprompt document: %w", err)
 	}
 	
 	schema.HasSchema = true
-	schema.InputSchema = frontmatter.Input
-	schema.OutputSchema = frontmatter.Output
 	
-	// Extract available variables from the template content
-	variables := aee.extractTemplateVariables(agent.Prompt)
-	schema.Variables = variables
+	// Extract input schema from parsed metadata
+	if parsedPrompt.Input.Schema != nil {
+		// Schema is of type 'any', so we need to properly handle it
+		if schemaMap, ok := parsedPrompt.Input.Schema.(map[string]interface{}); ok {
+			schema.InputSchema = schemaMap
+			
+			// Extract variable names from the input schema
+			for varName := range schemaMap {
+				schema.Variables = append(schema.Variables, varName)
+			}
+		} else {
+			// Store the raw schema even if it's not a map
+			if schemaAny, ok := parsedPrompt.Input.Schema.(interface{}); ok {
+				// Try to convert to map[string]interface{} for JSON serialization
+				schema.InputSchema = map[string]interface{}{"schema": schemaAny}
+			}
+		}
+	}
+	
+	// Extract output schema from parsed metadata
+	if parsedPrompt.Output.Schema != nil {
+		if schemaMap, ok := parsedPrompt.Output.Schema.(map[string]interface{}); ok {
+			schema.OutputSchema = schemaMap
+		} else {
+			// Store the raw schema even if it's not a map
+			if schemaAny, ok := parsedPrompt.Output.Schema.(interface{}); ok {
+				schema.OutputSchema = map[string]interface{}{"schema": schemaAny}
+			}
+		}
+	}
 	
 	return schema, nil
 }
 
-// DotpromptFrontmatter represents the parsed YAML frontmatter
-type DotpromptFrontmatter struct {
-	Input  map[string]interface{} `yaml:"input"`
-	Output map[string]interface{} `yaml:"output"`
-	Model  string                 `yaml:"model"`
-	Tools  []string               `yaml:"tools"`
-}
-
-// parseDotpromptFrontmatter extracts and parses YAML frontmatter from dotprompt content
-func (aee *AgentExecutionEngine) parseDotpromptFrontmatter(dotpromptContent string) (*DotpromptFrontmatter, error) {
-	// Split frontmatter from content
-	parts := strings.SplitN(strings.TrimSpace(dotpromptContent), "\n---\n", 2)
-	if len(parts) < 2 {
-		return &DotpromptFrontmatter{}, nil // No frontmatter
-	}
-	
-	// Remove leading "---" from frontmatter
-	frontmatterYAML := strings.TrimPrefix(parts[0], "---")
-	frontmatterYAML = strings.TrimSpace(frontmatterYAML)
-	
-	if frontmatterYAML == "" {
-		return &DotpromptFrontmatter{}, nil // Empty frontmatter
-	}
-	
-	// Parse YAML frontmatter
-	var frontmatter DotpromptFrontmatter
-	if err := yaml.Unmarshal([]byte(frontmatterYAML), &frontmatter); err != nil {
-		return &frontmatter, fmt.Errorf("failed to parse YAML frontmatter: %w", err)
-	}
-	
-	return &frontmatter, nil
-}
-
-// extractTemplateVariables finds all {{variable}} patterns in the template content
-func (aee *AgentExecutionEngine) extractTemplateVariables(dotpromptContent string) []string {
-	// Extract template content (after frontmatter)
-	parts := strings.SplitN(strings.TrimSpace(dotpromptContent), "\n---\n", 2)
-	templateContent := parts[len(parts)-1] // Use last part (template content)
-	
-	// Find all {{variable}} patterns
-	var variables []string
-	variableMap := make(map[string]bool) // Use map to deduplicate
-	
-	// Simple regex to find {{variable}} patterns
-	start := 0
-	for {
-		openIndex := strings.Index(templateContent[start:], "{{")
-		if openIndex == -1 {
-			break
-		}
-		openIndex += start
-		
-		closeIndex := strings.Index(templateContent[openIndex:], "}}")
-		if closeIndex == -1 {
-			break
-		}
-		closeIndex += openIndex
-		
-		// Extract variable name
-		varContent := strings.TrimSpace(templateContent[openIndex+2 : closeIndex])
-		
-		// Handle simple variable names (no complex handlebars logic)
-		if varContent != "" && !strings.Contains(varContent, " ") && !strings.Contains(varContent, "#") {
-			variableMap[varContent] = true
-		}
-		
-		start = closeIndex + 2
-	}
-	
-	// Convert map to slice
-	for variable := range variableMap {
-		variables = append(variables, variable)
-	}
-	
-	return variables
-}
