@@ -90,13 +90,13 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 
 	logging.Debug("Agent has %d assigned tools for execution", len(assignedTools))
 
-	// Get MCP tools from agent's environment using connection manager
-	allTools, clients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+	// PHASE 1: Get available tools for filtering (discovery only, clients will be disposed)
+	allTools, discoveryClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment MCP tools for agent %d: %w", agent.ID, err)
 	}
-	// Store clients for cleanup
-	aee.activeMCPClients = clients
+	// Cleanup discovery clients immediately - they're only used for tool discovery
+	defer aee.mcpConnManager.CleanupConnections(discoveryClients)
 
 	// Filter to only include tools assigned to this agent and ensure clean tool names
 	logging.Info("DEBUG ExecutionEngine: Filtering %d assigned tools from %d available MCP tools", len(assignedTools), len(allTools))
@@ -222,6 +222,16 @@ Guidelines:
 	// Set max turns to handle complex multi-step analysis (default is 5, increase to 25)
 	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
 	
+	// PHASE 2: Create completely fresh MCP clients for actual execution
+	logging.Info("DEBUG: === CREATING FRESH MCP CLIENTS FOR EXECUTION ===")
+	_, executionClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create fresh MCP clients for execution: %w", err)
+	}
+	// Store execution clients for cleanup after GenKit call
+	aee.activeMCPClients = executionClients
+	logging.Info("DEBUG: Created %d fresh MCP clients for execution", len(executionClients))
+
 	logging.Info("DEBUG: === BEFORE GenKit Generate Call ===")
 	logging.Info("DEBUG: Context timeout: %v", ctx.Err())
 	logging.Info("DEBUG: GenKit app initialized: %v", genkitApp != nil)
@@ -233,6 +243,7 @@ Guidelines:
 		}
 	}
 	logging.Info("DEBUG: Max turns: 25")
+	logging.Info("DEBUG: Fresh execution clients: %d", len(aee.activeMCPClients))
 	logging.Info("DEBUG: Now calling genkit.Generate...")
 	
 	response, err := genkit.Generate(ctx, genkitApp, generateOptions...)
