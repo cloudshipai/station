@@ -1,33 +1,284 @@
 ![Station](./station-logo.png)
 
-# Station - Lightweight Runtime for Deployable Sub-Agents
+# Station - Self-Hosted AI Agent Platform
 
-**A secure, self-hosted platform for building and deploying intelligent sub-agents.**
+**Turn your team's tools into AI agents. Deploy securely. Scale reliably.**
 
 🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
 
 📚 **[Documentation](https://cloudshipai.github.io/station)** - Complete Station documentation and guides
 
-> Lightweight runtime for deployable sub-agents that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
+---
 
-Station is purpose-built for **deployable sub-agents** - the intelligent automation you need for infrastructure monitoring, deployment pipelines, security scanning, and day-to-day tasks that require secure access to internal systems.
+## What is Station?
 
-## Why Station Exists
+Station is a **self-hosted platform** that lets you create AI agents that can use your existing tools, access your systems, and automate your workflows - all running securely in your infrastructure.
 
-When you need agents for internal work, you need more than application-focused agent platforms. You need:
+**Key Benefits:**
+- 🔐 **Self-hosted & secure** - Your data stays in your infrastructure
+- 🛠️ **Use existing tools** - Integrate with databases, APIs, monitoring, deployment tools
+- 📦 **Template & share agents** - Create bundles that teams can easily deploy
+- ⚡ **Lightweight** - Single 45MB binary, runs anywhere
+- 🌍 **Multi-environment** - Separate dev/staging/production contexts
 
-- **Secure Internal Access** - Agents that can safely handle database credentials, API keys, and system-level access
-- **Versionable Deployment** - Deployable agents that integrate with your existing deployment pipelines  
-- **Team-Approved Tools** - Easy way to use and share the tools your team builds and approves
-- **Low Footprint Runtime** - Lightweight system that blends into your infrastructure without overhead
+## Perfect For
 
-**Station provides exactly this** - a lightweight, secure runtime specifically designed for deployable sub-agents.
+**DevOps & Infrastructure Teams**
+- Database monitoring agents with production credentials
+- Automated deployment pipelines with rollback capability  
+- Infrastructure-as-Code management with Terraform/Kubernetes
+- Security scanning and compliance automation
 
-## Core Value: Secure Deployable Sub-Agent Runtime
+**Development Teams**
+- Code review and deployment agents
+- Testing automation and quality assurance
+- Documentation generation and maintenance
+- Project management and workflow automation
 
-### 🧪 **Interactive Development Playground**
+**Operations Teams**  
+- Incident response and alerting automation
+- System monitoring and health checks
+- Log analysis and anomaly detection
+- Customer support automation with internal system access
 
-**NEW**: Station now includes a powerful interactive development environment powered by Firebase Genkit:
+## How Station Works
+
+### 1. **Load Your Tools**
+Station uses the **MCP (Model Context Protocol)** standard to integrate with your existing tools:
+
+```bash
+# Load your team's approved tools
+stn load examples/mcps/aws-cli.json          # AWS infrastructure
+stn load examples/mcps/database-postgres.json # Database access  
+stn load examples/mcps/slack.json            # Team communication
+stn sync production                          # Deploy to environment
+```
+
+### 2. **Create Smart Agents**
+Build agents that can use those tools intelligently:
+
+```bash
+# Create an infrastructure monitoring agent
+stn agent create \
+  --name "Database Monitor" \
+  --description "Monitor production database health and alert on issues"
+
+# Test it locally
+stn agent run 1 "Check database connection pool and alert if over 80% capacity"
+```
+
+### 3. **Template & Deploy**
+Package agents into reusable templates for your team:
+
+```bash
+# Create template from your working environment
+stn template create db-monitor-bundle --env production \
+  --name "Database Monitoring Suite" \
+  --author "DevOps Team"
+
+# Share with your team
+stn template bundle db-monitor-bundle        # Creates .tar.gz
+stn template install db-monitor-bundle.tar.gz staging  # Deploy to staging
+```
+
+## Getting Started
+
+### 1. **Install Station**
+```bash
+# Quick install (recommended) 
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+
+# Or build from source
+git clone https://github.com/cloudshipai/station
+cd station && go build -o stn ./cmd/main
+
+# Or download binary from GitHub releases
+# https://github.com/cloudshipai/station/releases
+```
+
+### 2. **Initialize Your Environment**
+```bash
+# Set up Station with database and encryption
+stn init
+
+# Start with some example tools
+stn load examples/mcps/filesystem.json        # File operations
+stn load examples/mcps/slack.json             # Team notifications  
+stn sync default                              # Deploy to environment
+```
+
+### 3. **Create Your First Agent**
+```bash
+# Create a file management agent
+stn agent create \
+  --name "File Organizer" \
+  --description "Organize and analyze files in project directories"
+
+# Test it out
+stn agent run 1 "Analyze the current directory and organize files by type"
+```
+
+### 4. **Use the Web Interface** *(Optional)*
+```bash
+# Launch Station's terminal interface
+stn ui
+
+# Or start the full web server
+stn serve
+# Then connect via SSH: ssh admin@localhost -p 2222
+```
+
+## Why Choose Station?
+
+### 🔐 **Security First**
+- **Self-hosted** - Your data never leaves your infrastructure
+- **Encrypted secrets** - AES encryption for all sensitive configuration
+- **Environment isolation** - Complete separation of dev/staging/production
+- **Audit logging** - Full tracking of all agent activities
+
+### ⚡ **Developer Friendly** 
+- **Single binary** - 45MB download, zero dependencies
+- **GitOps ready** - Version control agents like infrastructure code
+- **Rich templates** - Share and reuse agent configurations across teams
+- **Multiple interfaces** - CLI, web UI, SSH, REST API, MCP server
+
+### 🛠️ **Enterprise Ready**
+- **Multi-environment** - Separate contexts for different deployment stages
+- **Queue-based execution** - Scalable async processing
+- **Webhook integration** - Connect to existing notification systems
+- **Database replication** - Production backup with Litestream
+
+## Common Use Cases
+
+### **Infrastructure & DevOps**
+```bash
+# Database monitoring with production access
+stn agent create --name "DB Health Monitor" \
+  --description "Monitor connection pools, query performance, disk usage"
+
+# CI/CD pipeline automation
+stn agent create --name "Deployment Pipeline" \
+  --description "Automated deployments with health checks and rollback"
+
+# Infrastructure as Code management  
+stn agent create --name "Terraform Manager" \
+  --description "Plan, apply, and manage infrastructure changes"
+```
+
+### **Security & Compliance**
+```bash
+# Vulnerability scanning and alerting
+stn agent create --name "Security Scanner" \
+  --description "Scan for vulnerabilities and compliance issues"
+
+# Incident response automation
+stn agent create --name "Incident Responder" \
+  --description "Automated incident detection and initial response"
+```
+
+### **Development & Operations**
+```bash
+# Code review and quality assurance
+stn agent create --name "Code Reviewer" \
+  --description "Automated code review with team standards"
+
+# Documentation maintenance
+stn agent create --name "Doc Generator" \
+  --description "Generate and maintain technical documentation"
+```
+
+## Available Tools
+
+Station integrates with **any MCP-compatible tool**. Here are some popular categories:
+
+| **Category** | **Examples** |
+|--------------|--------------|
+| **Infrastructure** | AWS CLI, Kubernetes, Docker, Terraform, SSH |
+| **Databases** | PostgreSQL, MySQL, MongoDB, Redis, SQLite |
+| **Monitoring** | Prometheus, Grafana, System metrics, Log analysis |
+| **Communication** | Slack, PagerDuty, Email, Webhook notifications |
+| **Security** | Vault, Certificate management, Access control |
+| **Files & Storage** | Local files, S3, Git repositories, Configuration management |
+
+```bash
+# Load tools for your agents
+stn load examples/mcps/aws-infrastructure.json
+stn load examples/mcps/database-monitoring.json  
+stn load examples/mcps/team-communication.json
+stn sync production
+```
+
+### **Template System**
+
+Share agents across your team with Station's template system:
+
+```bash
+# Create reusable templates from working environments
+stn template create monitoring-suite --env production \
+  --name "Database Monitoring Suite" --author "DevOps Team"
+
+# Package and share
+stn template bundle monitoring-suite
+stn template install monitoring-suite.tar.gz staging
+
+# Discover community templates
+stn template list --registry community
+```
+
+## Key Commands Reference
+
+### **Agent Management**
+```bash
+stn agent create --name "Agent Name" --env production
+stn agent run <id> "Task description"  
+stn agent list --env production
+stn agent export <id> ./my-agent-bundle
+```
+
+### **Template Operations**  
+```bash
+stn template create my-bundle --env production
+stn template validate my-bundle
+stn template bundle my-bundle  
+stn template install bundle.tar.gz staging
+```
+
+### **Tool & Environment Management**
+```bash
+stn load config.json                    # Load MCP tools
+stn sync production                     # Deploy configurations
+stn status                             # Check system health
+```
+
+### **Server & Interface Options**
+```bash
+stn ui                                 # Terminal interface
+stn serve                             # Web server + SSH  
+stn stdio                             # MCP server mode
+```
+
+## Advanced Features
+
+### **MCP Server Integration**
+
+Station can serve as an MCP server for other AI applications:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+This provides tools like `call_agent`, `create_agent`, `list_agents` to any MCP-compatible application.
+
+### **Interactive Development Playground**
+
+**NEW**: Station includes a powerful interactive development environment powered by Firebase Genkit:
 
 ```bash
 genkit start -- stn develop --env dev
@@ -42,327 +293,20 @@ This launches a complete browser-based development playground where you can:
 
 Perfect for developing and testing agents before deployment.
 
-### 🔧 **Purpose-Built for Internal Tasks**
-
-Unlike application-focused agent platforms, Station is designed for deployable sub-agents that need to:
-
-- Access internal databases with production credentials
-- Monitor infrastructure and alert on issues
-- Automate deployment pipelines with CI/CD system access
-- Perform security scans with elevated permissions
-- Handle incident response with system-level tools
-
-### 🔐 **Security by Design**
-
-- **Self-Hosted** - Complete data sovereignty, no external dependencies beyond AI providers
-- **Encrypted Secrets** - AES encryption for credentials and sensitive configuration
-- **Environment Isolation** - Separate execution contexts for dev/staging/prod
-- **Audit Trail** - Complete tracking of agent deployments and executions
-
-### ⚡ **Lightweight & Integrated**
-
-- **Single 45MB Binary** - No complex infrastructure or dependencies
-- **SQLite Database** - Zero-setup local development, PostgreSQL for production
-- **GitOps Ready** - Version-controlled agent configurations like infrastructure code
-- **Existing Toolchain** - Uses your team's approved MCP tools and integrations
-
-## Quick Start
-
-### 1. Install Station
-```bash
-# Quick install (recommended) 
-curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-
-# Or build from source
-git clone https://github.com/cloudshipai/station
-cd station && go build -o stn ./cmd/main
-
-# Or download binary manually from GitHub releases
-# https://github.com/cloudshipai/station/releases
-```
-
-### 2. Initialize & Configure Tools
-```bash
-# Initialize runtime
-stn init
-
-# Load operational tools (two-step process)
-stn load examples/mcps/aws-cli.json
-stn load examples/mcps/database-postgres.json
-stn load examples/mcps/slack.json
-
-# Sync configurations to keep tools up-to-date
-stn sync production
-```
-
-### 3. Create Deployable Sub-Agents
-```bash
-# Create a database monitoring agent
-stn agent create \
-  --name "Database Monitor" \
-  --description "Monitor production database health and alert on issues"
-
-# Create an infrastructure deployment agent  
-stn agent create \
-  --name "Deploy Pipeline" \
-  --description "Automated deployment pipeline with rollback capability"
-
-# Test locally
-stn agent run 1 "Check database connection pool and alert if over 80% capacity"
-```
-
-### 4. Deploy with Version Control
-```bash
-# Export agents as versioned templates
-stn agent export 1 ./ops-agents/db-monitor
-stn agent export 2 ./ops-agents/deploy-pipeline
-
-# Version control like infrastructure code
-git add ops-agents/
-git commit -m "Add production database monitoring agent"
-git push origin main
-
-# Deploy to production with encrypted secrets
-stn template install ./ops-agents/db-monitor
-```
-
-### 5. Use as MCP Server (Optional)
-```bash
-# Use Station as MCP server for other AI applications
-# Add to your MCP client config (e.g., Claude Desktop):
-{
-  "mcpServers": {
-    "stn": {
-      "command": "stn",
-      "args": ["stdio"]
-    }
-  }
-}
-
-# Then access Station agents from any MCP-compatible AI application
-# Available tools: call_agent, create_agent, list_agents, discover_tools
-```
-
-## Deployable Sub-Agent Use Cases
-
-### **Infrastructure Monitoring**
-```bash
-# Database health monitoring with production credentials
-stn agent create --name "DB Health Monitor" \
-  --description "Monitor connection pools, query performance, disk usage"
-
-# System resource monitoring across environments  
-stn agent create --name "Resource Monitor" \
-  --description "Monitor CPU, memory, disk across development and production"
-```
-
-### **Deployment Automation**
-```bash
-# CI/CD pipeline integration
-stn agent create --name "Deployment Pipeline" \
-  --description "Automated deployments with health checks and rollback"
-
-# Infrastructure as Code management
-stn agent create --name "Terraform Manager" \
-  --description "Plan, apply, and manage infrastructure changes"
-```
-
-### **Security Operations**
-```bash
-# Vulnerability scanning and alerting
-stn agent create --name "Security Scanner" \
-  --description "Scan for vulnerabilities and compliance issues"
-
-# Access monitoring and incident response
-stn agent create --name "Incident Responder" \
-  --description "Automated incident detection and initial response"
-```
-
-## MCP Tool Integration
-
-Station includes **20+ production-ready tools for sub-agents**:
-
-| **Operations** | **Tools** |
-|----------------|-----------|
-| **Infrastructure** | AWS CLI, Kubernetes, Docker, Terraform, SSH |
-| **Databases** | PostgreSQL, MySQL, MongoDB, Redis, SQLite |
-| **Monitoring** | Prometheus, Grafana, System metrics, Log analysis |
-| **Communication** | Slack, PagerDuty, Email, Webhook notifications |
-| **Security** | Vault, Certificate management, Access control |
-| **Files** | Local files, Network storage, Configuration management |
-
-```bash
-# Load toolchains for sub-agents (two-step process)
-stn load examples/mcps/infrastructure-suite.json
-stn sync production  # Keep configurations in sync
-
-# Load monitoring and alerting tools
-stn load examples/mcps/monitoring-stack.json  
-stn sync production
-
-# Load security and compliance tools
-stn load examples/mcps/security-tools.json
-stn sync production
-```
-
-### **Using Station as an MCP Server**
-
-Station can also be used as a standalone MCP server for other AI applications and frameworks. This allows you to integrate Station's agent management capabilities with any MCP-compatible system.
-
-#### **MCP Configuration**
-
-Add Station to your MCP client configuration (e.g., Claude Desktop, other MCP clients):
-
-```json
-{
-  "mcpServers": {
-    "stn": {
-      "command": "stn",
-      "args": [
-        "stdio"
-      ]
-    }
-  }
-}
-```
-
-#### **Available MCP Tools**
-
-When running as an MCP server, Station provides these tools:
-
-- **Agent Management**: `call_agent`, `create_agent`, `list_agents`, `get_agent_details`
-- **Tool Discovery**: `discover_tools`, `list_tools`, `list_mcp_configs`
-- **Environment Management**: `list_environments`
-- **System Integration**: Access to all configured MCP tools across environments
-
-#### **Example Usage**
-
-```bash
-# Start Station MCP server in stdio mode
-stn stdio
-
-# The server provides tools like:
-# - call_agent: Execute any Station agent with a task
-# - create_agent: Create new agents with specific tools
-# - list_agents: Browse available agents across environments
-# - discover_tools: Find available tools in your Station setup
-```
-
-This makes Station a powerful backend for AI applications that need access to your internal tools and agents while maintaining security and environment isolation.
-
-## Agent Templates for Teams
-
-### **Template Structure**
-```
-ops-agents/database-monitor/
-├── bundle/
-│   ├── manifest.json         # MCP dependencies and metadata
-│   ├── agent.json           # Agent configuration with variables
-│   └── variables.schema.json # Variable validation schema
-├── variables/
-│   ├── development.json     # Dev environment values
-│   ├── staging.json        # Staging environment values  
-│   └── production.enc      # Encrypted production secrets
-└── README.md               # Agent documentation
-```
-
-### **Team Workflow**
-```bash
-# Export working sub-agents
-stn agent export 3 ./team-agents/db-monitor --analyze-vars
-
-# Share across team with version control
-git add team-agents/ && git commit -m "Add database monitoring agent v1.0"
-
-# Team members deploy with their environment variables
-stn template install ./team-agents/db-monitor
-
-# Invoke and trigger remote sub-agents via API or MCP
-curl -X POST https://station.company.com/api/v1/agents/3/execute \
-  -d '{"task": "Check database health and alert if issues found"}'
-
-# Or trigger via MCP from other agents
-stn agent run 5 "Coordinate with database monitor agent to run health check"
-```
-
-## Key Commands
-
-### Development & Testing
-```bash
-# Interactive development playground with browser UI
-genkit start -- stn develop --env dev
-
-# Initialize Station in current directory  
-stn init
-
-# Load MCP configurations
-stn load <config-file-or-url>
-stn sync  # Sync all configurations
-```
-
-### Agent Management
-```bash
-# Create agents
-stn agent create --name "My Agent" --env dev
-
-# Run agents with tasks
-stn agent run <id> "Task description"
-
-# Export/import agent bundles
-stn agent export <id> ./path/to/bundle
-stn template install ./path/to/bundle
-```
-
-### Server & UI
-```bash
-# Start full Station server
-stn serve
-
-# Terminal UI interface
-stn ui
-
-# MCP server mode for integrations
-stn stdio
-```
-
-## Architecture
-
-### **Lightweight Runtime**
-- **45MB Binary** - Single executable with embedded SQLite
-- **Low Memory** - 512MB minimum, optimized for container deployment
-- **Multi-Access** - CLI, SSH/TUI, REST API, MCP server interfaces
-
-### **Production Ready**
-- **Queue-Based Execution** - Asynchronous processing with worker pools
-- **Webhook Integration** - Real-time notifications to existing systems
-- **Database Replication** - Litestream integration for production backup
-- **Environment Isolation** - Complete separation of dev/staging/prod contexts
-- **Enhanced AI Providers** - Custom OpenAI plugin with multi-turn conversation fixes
-
-### **Security Architecture**
-- **Self-Hosted** - No external dependencies beyond AI provider APIs
-- **Encrypted Storage** - AES encryption for secrets and sensitive variables
-- **Audit Logging** - Complete deployment and execution tracking
-- **Access Controls** - Role-based permissions with environment boundaries
-
 ## System Requirements
 
-- **OS:** Linux, macOS, Windows
-- **Memory:** 512MB RAM minimum, 1GB recommended
-- **Storage:** 200MB for runtime, 1GB+ for production agent data
+- **OS:** Linux, macOS, Windows  
+- **Memory:** 512MB minimum, 1GB recommended
+- **Storage:** 200MB for binary, 1GB+ for agent data
 - **Database:** SQLite (development) or PostgreSQL (production)
-- **Network:** Outbound HTTPS for AI providers and tool integrations
+- **Network:** Outbound HTTPS for AI providers
 
-## Documentation
+## Resources
 
-- **[Database Replication](docs/DATABASE-REPLICATION.md)** - Production backup with Litestream
-- **[MCP Tool Library](examples/mcps/README.md)** - Available tool integrations
-- **[Agent Templates](examples/agent-templates/README.md)** - Sub-agent patterns and examples
-
-## Community
-
-- **[Issues](https://github.com/cloudshipai/station/issues)** - Bug reports and feature requests
-- **[Discord](https://discord.gg/station-ai)** - Community support and discussions
+- 📚 **[Documentation](https://cloudshipai.github.io/station)** - Complete guides and tutorials
+- 🌐 **[Bundle Registry](https://cloudshipai.github.io/registry)** - Community agent templates
+- 🐛 **[Issues](https://github.com/cloudshipai/station/issues)** - Bug reports and feature requests
+- 💬 **[Discord](https://discord.gg/station-ai)** - Community support and discussions
 
 ## License
 
@@ -370,6 +314,6 @@ stn stdio
 
 ---
 
-**Station - Lightweight Runtime for Deployable Sub-Agents**
+**Station - Self-Hosted AI Agent Platform**
 
-*Secure, versionable, deployable sub-agents for your infrastructure.*
+*Turn your team's tools into AI agents. Deploy securely. Scale reliably.*
