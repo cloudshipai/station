@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/mcp"
 	"station/internal/services"
 	"station/pkg/dotprompt"
 )
@@ -24,7 +24,7 @@ func truncateString(s string, maxLen int) string {
 
 // validateEnvironmentExists checks if file-based environment directory exists
 func (h *MCPHandler) validateEnvironmentExists(envName string) bool {
-	statusService := mcpservice.NewStatusService(nil)
+	statusService := mcp.NewStatusService(nil)
 	return statusService.ValidateEnvironmentExists(envName)
 }
 
@@ -45,7 +45,7 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool) error 
 	styles := getCLIStyles(h.themeManager)
 
 	// Get or create environment
-	envID, err := h.getOrCreateEnvironmentID(repos, environment)
+	_, err = h.getOrCreateEnvironmentID(repos, environment)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environment, err)
 	}
@@ -111,7 +111,7 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 	styles := getCLIStyles(h.themeManager)
 	
 	// Create status service
-	statusService := mcpservice.NewStatusService(repos)
+	statusService := mcp.NewStatusService(repos)
 	
 	// Get environment statuses
 	statuses, err := statusService.GetEnvironmentStatuses(environment)
@@ -133,23 +133,23 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 			for i, fc := range envStatus.FileConfigs {
 				configNames[i] = fc.ConfigName
 			}
-			configList := mcpservice.TruncateString(fmt.Sprintf("%v", configNames), 24)
+			configList := truncateString(fmt.Sprintf("%v", configNames), 24)
 			if len(configNames) == 0 {
 				configList = "none"
 			}
 			
 			status := styles.Info.Render("no agents")
 			fmt.Printf("│ %-14s │ %-27s │ %-24s │ %-14s │\n", 
-				mcpservice.TruncateString(envStatus.Environment.Name, 14), "none", configList, status)
+				truncateString(envStatus.Environment.Name, 14), "none", configList, status)
 		} else {
 			for i, agentStatus := range envStatus.Agents {
 				// Format display
 				envName := ""
 				if i == 0 {
-					envName = mcpservice.TruncateString(envStatus.Environment.Name, 14)
+					envName = truncateString(envStatus.Environment.Name, 14)
 				}
 				
-				configDisplay := mcpservice.TruncateString(fmt.Sprintf("%v", agentStatus.ConfigNames), 24)
+				configDisplay := truncateString(fmt.Sprintf("%v", agentStatus.ConfigNames), 24)
 				if len(agentStatus.ConfigNames) == 0 {
 					configDisplay = "none"
 				}
@@ -167,7 +167,7 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 				
 				fmt.Printf("│ %-14s │ %-27s │ %-24s │ %-14s │\n", 
 					envName,
-					mcpservice.TruncateString(agentStatus.Agent.Name, 27),
+					truncateString(agentStatus.Agent.Name, 27),
 					configDisplay,
 					styledStatus)
 			}
