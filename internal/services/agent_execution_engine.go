@@ -90,13 +90,13 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 
 	logging.Debug("Agent has %d assigned tools for execution", len(assignedTools))
 
-	// PHASE 1: Get available tools for filtering (discovery only, clients will be disposed)
-	allTools, discoveryClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+	// Get available tools and reuse clients for execution (Mac performance fix)
+	allTools, executionClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment MCP tools for agent %d: %w", agent.ID, err)
 	}
-	// Cleanup discovery clients immediately - they're only used for tool discovery
-	defer aee.mcpConnManager.CleanupConnections(discoveryClients)
+	// Store clients for cleanup after execution (reuse discovery clients)
+	aee.activeMCPClients = executionClients
 
 	// Filter to only include tools assigned to this agent and ensure clean tool names
 	logging.Info("DEBUG ExecutionEngine: Filtering %d assigned tools from %d available MCP tools", len(assignedTools), len(allTools))
@@ -222,15 +222,9 @@ Guidelines:
 	// Set max turns to handle complex multi-step analysis (default is 5, increase to 25)
 	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
 	
-	// PHASE 2: Create completely fresh MCP clients for actual execution
-	logging.Info("DEBUG: === CREATING FRESH MCP CLIENTS FOR EXECUTION ===")
-	_, executionClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create fresh MCP clients for execution: %w", err)
-	}
-	// Store execution clients for cleanup after GenKit call
-	aee.activeMCPClients = executionClients
-	logging.Info("DEBUG: Created %d fresh MCP clients for execution", len(executionClients))
+	// Reusing discovery clients for execution (Mac performance optimization)
+	logging.Info("DEBUG: === REUSING DISCOVERY CLIENTS FOR EXECUTION ===")
+	logging.Info("DEBUG: Using %d existing MCP clients for execution", len(aee.activeMCPClients))
 
 	logging.Info("DEBUG: === BEFORE GenKit Generate Call ===")
 	logging.Info("DEBUG: Context timeout: %v", ctx.Err())
@@ -246,11 +240,20 @@ Guidelines:
 	logging.Info("DEBUG: Fresh execution clients: %d", len(aee.activeMCPClients))
 	logging.Info("DEBUG: Now calling genkit.Generate...")
 	
-	response, err := genkit.Generate(ctx, genkitApp, generateOptions...)
+	// Add timeout to GenKit call for Mac debugging
+	genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	
+	logging.Info("DEBUG: *** IMMEDIATE PRE-GENERATE: About to call genkit.Generate ***")
+	response, err := genkit.Generate(genCtx, genkitApp, generateOptions...)
+	logging.Info("DEBUG: *** IMMEDIATE POST-GENERATE: genkit.Generate returned ***")
 	
 	logging.Info("DEBUG: === AFTER GenKit Generate Call ===")
 	logging.Info("DEBUG: GenKit Generate completed, checking results...")
 	logging.Info("DEBUG: Generate error: %v", err)
+	
+	// CRITICAL DEBUG: Verify we reached this point
+	logging.Info("DEBUG: *** CRITICAL CHECKPOINT: Post-Generate section reached successfully ***")
 	if response != nil {
 		logging.Info("DEBUG: Response received: %v", response != nil)
 		logging.Info("DEBUG: Response text length: %d", len(response.Text()))
@@ -334,6 +337,28 @@ Guidelines:
 		logging.Info("DEBUG: Tool Request %d: Name=%s, Ref=%s, Input=%v", i+1, req.Name, req.Ref, req.Input)
 	}
 	
+	// CRITICAL DEBUG: Check if tools are actually being called
+	logging.Info("DEBUG: === CRITICAL TOOL CALLING ANALYSIS ===")
+	logging.Info("DEBUG: ToolRequests() returned %d requests", len(toolRequests))
+	
+	// Check conversation history for tool calls
+	conversationHistory := response.History()
+	logging.Info("DEBUG: Conversation history has %d messages", len(conversationHistory))
+	for i, message := range conversationHistory {
+		logging.Info("DEBUG: Message %d: Role=%s, Content Parts=%d", i, message.Role, len(message.Content))
+		for j, part := range message.Content {
+			if part.IsToolRequest() {
+				logging.Info("DEBUG: *** FOUND TOOL REQUEST in Message %d, Part %d: %s", i, j, part.ToolRequest.Name)
+			}
+			if part.IsToolResponse() {
+				logging.Info("DEBUG: *** FOUND TOOL RESPONSE in Message %d, Part %d: %s", i, j, part.ToolResponse.Name)
+			}
+			if part.IsText() {
+				logging.Info("DEBUG: Text Part %d: %.100s...", j, part.Text)
+			}
+		}
+	}
+	
 	// ENHANCED: Count actual tool usage from request messages (completed calls)
 	totalToolCalls := 0
 	if response.Request != nil {
@@ -350,16 +375,22 @@ Guidelines:
 	var toolCalls []interface{}
 	var steps []interface{}
 	
+	logging.Info("DEBUG: === STARTING TOOL CALL EXTRACTION ===")
+	
 	// Extract tool calls from GenKit conversation history  
 	allToolCalls := []interface{}{}
-	conversationHistory := response.History()
+	// conversationHistory already declared above, reuse it
 	toolCallCounter := 0
 	
-	for _, message := range conversationHistory {
-		for _, part := range message.Content {
+	logging.Info("DEBUG: Extracting from conversation history (%d messages)", len(conversationHistory))
+	
+	for msgIdx, message := range conversationHistory {
+		logging.Info("DEBUG: Processing message %d with role %s (%d parts)", msgIdx, message.Role, len(message.Content))
+		for partIdx, part := range message.Content {
 			if part.IsToolRequest() {
 				toolCallCounter++
 				toolReq := part.ToolRequest
+				logging.Info("DEBUG: *** EXTRACTING TOOL CALL %d: %s (Ref: %s)", toolCallCounter, toolReq.Name, toolReq.Ref)
 				toolCall := map[string]interface{}{
 					"step":           toolCallCounter,
 					"type":           "tool_call",
@@ -370,13 +401,19 @@ Guidelines:
 					"message_role":   string(message.Role),
 				}
 				allToolCalls = append(allToolCalls, toolCall)
+			} else {
+				logging.Info("DEBUG: Part %d in message %d: not a tool request (IsText: %v)", partIdx, msgIdx, part.IsText())
 			}
 		}
 	}
 	
+	logging.Info("DEBUG: Extracted %d tool calls from conversation history", len(allToolCalls))
+	
 	// Fallback to pending tool requests if no completed ones found in history
 	if len(allToolCalls) == 0 {
+		logging.Info("DEBUG: No tool calls found in history, checking pending tool requests (%d)", len(toolRequests))
 		for i, toolReq := range toolRequests {
+			logging.Info("DEBUG: *** FALLBACK TOOL REQUEST %d: %s", i+1, toolReq.Name)
 			toolCall := map[string]interface{}{
 				"step":           i + 1,
 				"type":           "tool_call",
@@ -387,6 +424,9 @@ Guidelines:
 			}
 			allToolCalls = append(allToolCalls, toolCall)
 		}
+		logging.Info("DEBUG: Added %d tool calls from pending requests", len(allToolCalls))
+	} else {
+		logging.Info("DEBUG: Using %d tool calls from conversation history", len(allToolCalls))
 	}
 	
 	toolCalls = allToolCalls
