@@ -91,8 +91,22 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 		return nil, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
 	}
 
-	// 2. Determine paths for this environment  
-	envDir := filepath.Join("environments", environmentName)
+	// 2. Determine paths for this environment
+	// Get the workspace directory from config (e.g., /Users/jaredwolff/.config/station)
+	var workspaceDir string
+	if s.config.Workspace != "" {
+		workspaceDir = s.config.Workspace
+	} else {
+		// Fallback to XDG config directory  
+		configHome := os.Getenv("XDG_CONFIG_HOME")
+		if configHome == "" {
+			homeDir, _ := os.UserHomeDir()
+			configHome = filepath.Join(homeDir, ".config")
+		}
+		workspaceDir = filepath.Join(configHome, "station")
+	}
+	
+	envDir := filepath.Join(workspaceDir, "environments", environmentName)
 	agentsDir := filepath.Join(envDir, "agents")
 
 	// 3. Sync agents from .prompt files
@@ -299,8 +313,8 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 	result.MCPServersProcessed = len(jsonFiles)
 
 	// Create template service once for this environment and reuse it
-	configDir := filepath.Dir(filepath.Dir(envDir)) // Go up to station config dir
-	templateService := NewTemplateVariableService(configDir, s.repos)
+	// Use the same workspaceDir we calculated above (e.g., /Users/jaredwolff/.config/station)
+	templateService := NewTemplateVariableService(workspaceDir, s.repos)
 
 	// Process each JSON template file
 	for _, jsonFile := range jsonFiles {
