@@ -636,6 +636,9 @@ func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt stri
 	logging.Info("DEBUG: Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
 	logging.Info("DEBUG: Rendered content preview: %.200s", renderedPrompt)
 	
+	if len(userVariables) > 0 {
+		logging.Info("DEBUG: Rendered dotprompt with %d user variables", len(userVariables))
+	}
 	return renderedPrompt, nil
 }
 
