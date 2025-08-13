@@ -367,21 +367,32 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 		}
 
 		// Extract and sync MCP servers from the template
-		if err := s.syncMCPServersFromTemplate(ctx, mcpConfig, env.ID, configName, options); err != nil {
-			fmt.Printf("Warning: Failed to sync MCP servers from template %s: %v\n", configName, err)
+		serversCount, err := s.syncMCPServersFromTemplate(ctx, mcpConfig, env.ID, configName, options)
+		if err != nil {
+			fmt.Printf("❌ CRITICAL: Failed to sync MCP servers from template %s: %v\n", configName, err)
+			fmt.Printf("   📄 Template file: %s\n", jsonFile)
+			fmt.Printf("   🔧 This means MCP servers were NOT saved to database\n")
+			fmt.Printf("   ⚠️  Agents using tools from this config will fail\n")
 			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages, 
+				fmt.Sprintf("Template %s: Failed to sync MCP servers - %v", configName, err))
 			continue
 		}
 
-		result.MCPServersConnected++
-		fmt.Printf("Successfully synced template: %s\n", configName)
+		if serversCount > 0 {
+			result.MCPServersConnected += serversCount
+			fmt.Printf("✅ Successfully synced template: %s (%d servers)\n", configName, serversCount)
+		} else {
+			fmt.Printf("ℹ️  Template %s contains no MCP servers (config-only file)\n", configName)
+		}
 	}
 
 	return result, nil
 }
 
 // syncMCPServersFromTemplate extracts MCP servers from a rendered template and updates the database
-func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpConfig map[string]interface{}, envID int64, configName string, options SyncOptions) error {
+// Returns the number of servers successfully synced
+func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpConfig map[string]interface{}, envID int64, configName string, options SyncOptions) (int, error) {
 	// Extract MCP servers section
 	var serversData map[string]interface{}
 	if mcpServers, ok := mcpConfig["mcpServers"].(map[string]interface{}); ok {
@@ -389,10 +400,13 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 	} else if servers, ok := mcpConfig["servers"].(map[string]interface{}); ok {
 		serversData = servers
 	} else {
-		// No MCP servers in this template - that's OK
-		return nil
+		// No MCP servers in this template - that's OK (config-only file)
+		return 0, nil
 	}
 
+	fmt.Printf("   🔍 Processing %d MCP servers from config...\n", len(serversData))
+	successCount := 0
+	
 	// Process each server configuration
 	for serverName, serverConfigRaw := range serversData {
 		if options.DryRun {
@@ -400,15 +414,21 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			continue
 		}
 
+		fmt.Printf("     🖥️  Processing server: %s\n", serverName)
+		
 		// Convert server config to proper format
 		serverConfigBytes, err := json.Marshal(serverConfigRaw)
 		if err != nil {
-			return fmt.Errorf("failed to marshal server config for %s: %w", serverName, err)
+			fmt.Printf("     ❌ Failed to marshal config for server %s: %v\n", serverName, err)
+			fmt.Printf("        Raw config: %+v\n", serverConfigRaw)
+			return successCount, fmt.Errorf("failed to marshal server config for %s: %w", serverName, err)
 		}
 		
 		var serverConfig map[string]interface{}
 		if err := json.Unmarshal(serverConfigBytes, &serverConfig); err != nil {
-			return fmt.Errorf("failed to unmarshal server config for %s: %w", serverName, err)
+			fmt.Printf("     ❌ Failed to unmarshal config for server %s: %v\n", serverName, err)
+			fmt.Printf("        JSON: %s\n", string(serverConfigBytes))
+			return successCount, fmt.Errorf("failed to unmarshal server config for %s: %w", serverName, err)
 		}
 
 		// Extract server properties
@@ -431,10 +451,23 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			}
 		}
 
+		// Validate required server config
+		if command == "" {
+			fmt.Printf("     ❌ Server %s missing required 'command' field\n", serverName)
+			fmt.Printf("        Config: %+v\n", serverConfig)
+			return successCount, fmt.Errorf("server %s missing required 'command' field", serverName)
+		}
+		
+		fmt.Printf("        Command: %s %v\n", command, args)
+		if len(env) > 0 {
+			fmt.Printf("        Environment: %+v\n", env)
+		}
+
 		// Check if server already exists
 		existingServer, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
 		if err != nil {
 			// Server doesn't exist, create new one
+			fmt.Printf("     ➕ Creating new MCP server: %s\n", serverName)
 			newServer := &models.MCPServer{
 				Name:          serverName,
 				Command:       command,
@@ -444,24 +477,32 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			}
 			_, err = s.repos.MCPServers.Create(newServer)
 			if err != nil {
-				return fmt.Errorf("failed to create MCP server %s: %w", serverName, err)
+				fmt.Printf("     ❌ DATABASE ERROR: Failed to create server %s: %v\n", serverName, err)
+				fmt.Printf("        This server will NOT be available for tool discovery\n")
+				return successCount, fmt.Errorf("failed to create MCP server %s: %w", serverName, err)
 			}
-			fmt.Printf("  Created MCP server: %s\n", serverName)
+			fmt.Printf("     ✅ Created MCP server: %s\n", serverName)
 		} else {
 			// Server exists, update it
+			fmt.Printf("     🔄 Updating existing MCP server: %s\n", serverName)
 			existingServer.Command = command
 			existingServer.Args = args
 			existingServer.Env = env
 			
 			err = s.repos.MCPServers.Update(existingServer)
 			if err != nil {
-				return fmt.Errorf("failed to update MCP server %s: %w", serverName, err)
+				fmt.Printf("     ❌ DATABASE ERROR: Failed to update server %s: %v\n", serverName, err)
+				fmt.Printf("        Server config changes will NOT be reflected\n")
+				return successCount, fmt.Errorf("failed to update MCP server %s: %w", serverName, err)
 			}
-			fmt.Printf("  Updated MCP server: %s with new args: %v\n", serverName, args)
+			fmt.Printf("     ✅ Updated MCP server: %s\n", serverName)
 		}
+		
+		successCount++
 	}
 
-	return nil
+	fmt.Printf("   ✅ Successfully synced %d/%d MCP servers from template\n", successCount, len(serversData))
+	return successCount, nil
 }
 
 // Helper type for database operations (until SQLC is working)
