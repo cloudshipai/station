@@ -11,6 +11,32 @@ import (
 	"station/pkg/models"
 )
 
+// extractInt64FromInterface safely extracts int64 from various numeric types
+func extractInt64FromInterface(value interface{}) *int64 {
+	if value == nil {
+		return nil
+	}
+	
+	switch v := value.(type) {
+	case int64:
+		return &v
+	case int:
+		val := int64(v)
+		return &val
+	case int32:
+		val := int64(v)
+		return &val
+	case float64:
+		val := int64(v)
+		return &val
+	case float32:
+		val := int64(v)
+		return &val
+	default:
+		return nil
+	}
+}
+
 // ExecutionRequest represents a request to execute an agent
 type ExecutionRequest struct {
 	AgentID   int64
@@ -274,8 +300,23 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 	ctx, cancel := context.WithTimeout(worker.ctx, 10*time.Minute) // 10-minute timeout
 	defer cancel()
 	
-	// Execute the agent using AgentServiceInterface
-	response, err := worker.ExecutionService.ExecuteAgent(ctx, request.AgentID, request.Task)
+	// Extract user variables from metadata if available
+	var userVariables map[string]interface{}
+	if request.Metadata != nil {
+		if variables, ok := request.Metadata["user_variables"]; ok {
+			if variablesMap, ok := variables.(map[string]interface{}); ok {
+				userVariables = variablesMap
+			}
+		}
+	}
+	if userVariables == nil {
+		userVariables = make(map[string]interface{}) // Default to empty map
+	}
+	
+	// Execute the agent using AgentServiceInterface with variables support
+	log.Printf("DEBUG ExecutionQueue: About to call ExecuteAgent for agent %d with %d variables", request.AgentID, len(userVariables))
+	response, err := worker.ExecutionService.ExecuteAgent(ctx, request.AgentID, request.Task, userVariables)
+	log.Printf("DEBUG ExecutionQueue: ExecuteAgent returned for agent %d, error: %v", request.AgentID, err)
 	
 	endTime := time.Now()
 	
@@ -341,14 +382,15 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 			// Extract response object metadata from Station's OpenAI plugin
 			if tokenUsageValue, exists := response.Extra["token_usage"]; exists {
 				if tokenUsage, ok := tokenUsageValue.(map[string]interface{}); ok {
-					if inputTokens, ok := tokenUsage["input_tokens"].(int64); ok {
-						result.InputTokens = &inputTokens
+					// Handle various numeric types for token usage
+					if inputVal := extractInt64FromInterface(tokenUsage["input_tokens"]); inputVal != nil {
+						result.InputTokens = inputVal
 					}
-					if outputTokens, ok := tokenUsage["output_tokens"].(int64); ok {
-						result.OutputTokens = &outputTokens
+					if outputVal := extractInt64FromInterface(tokenUsage["output_tokens"]); outputVal != nil {
+						result.OutputTokens = outputVal
 					}
-					if totalTokens, ok := tokenUsage["total_tokens"].(int64); ok {
-						result.TotalTokens = &totalTokens
+					if totalVal := extractInt64FromInterface(tokenUsage["total_tokens"]); totalVal != nil {
+						result.TotalTokens = totalVal
 					}
 					log.Printf("Worker %d: Extracted token usage - Input: %v, Output: %v, Total: %v", worker.ID, result.InputTokens, result.OutputTokens, result.TotalTokens)
 				}
@@ -369,9 +411,9 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 			}
 			
 			if toolsUsedValue, exists := response.Extra["tools_used"]; exists {
-				if toolsUsed, ok := toolsUsedValue.(int64); ok {
-					result.ToolsUsed = &toolsUsed
-					log.Printf("Worker %d: Extracted tools used: %d", worker.ID, toolsUsed)
+				if toolsUsed := extractInt64FromInterface(toolsUsedValue); toolsUsed != nil {
+					result.ToolsUsed = toolsUsed
+					log.Printf("Worker %d: Extracted tools used: %d", worker.ID, *toolsUsed)
 				}
 			}
 		} else {

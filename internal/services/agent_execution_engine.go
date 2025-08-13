@@ -56,6 +56,12 @@ func NewAgentExecutionEngine(repos *repositories.Repositories, agentService Agen
 
 // ExecuteAgentViaStdioMCP executes an agent using self-bootstrapping stdio MCP architecture
 func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
+	// Default to empty user variables for backward compatibility
+	return aee.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, map[string]interface{}{})
+}
+
+// ExecuteAgentViaStdioMCPWithVariables executes an agent with user-defined variables for dotprompt rendering
+func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
 	logging.Info("Starting stdio MCP agent execution for agent '%s'", agent.Name)
 
@@ -84,17 +90,19 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 
 	logging.Debug("Agent has %d assigned tools for execution", len(assignedTools))
 
-	// Get MCP tools from agent's environment using connection manager
-	allTools, clients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+	// PHASE 1: Get available tools for filtering (discovery only, clients will be disposed)
+	allTools, discoveryClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment MCP tools for agent %d: %w", agent.ID, err)
 	}
-	// Store clients for cleanup
-	aee.activeMCPClients = clients
+	// Cleanup discovery clients immediately - they're only used for tool discovery
+	defer aee.mcpConnManager.CleanupConnections(discoveryClients)
 
 	// Filter to only include tools assigned to this agent and ensure clean tool names
+	logging.Info("DEBUG ExecutionEngine: Filtering %d assigned tools from %d available MCP tools", len(assignedTools), len(allTools))
 	var tools []ai.ToolRef
 	for _, assignedTool := range assignedTools {
+		logging.Debug("DEBUG ExecutionEngine: Looking for assigned tool: %s", assignedTool.ToolName)
 		for _, mcpTool := range allTools {
 			// Match by tool name - try multiple methods to get tool name  
 			var toolName string
@@ -128,7 +136,8 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 	}
 
 	// Render agent prompt with dotprompt if it contains frontmatter
-	renderedAgentPrompt, err := aee.RenderAgentPromptWithDotprompt(agent.Prompt, task, agent.Name)
+	// Use the provided user-defined variables for dotprompt rendering
+	renderedAgentPrompt, err := aee.RenderAgentPromptWithDotprompt(agent.Prompt, userVariables)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render agent prompt: %w", err)
 	}
@@ -213,7 +222,41 @@ Guidelines:
 	// Set max turns to handle complex multi-step analysis (default is 5, increase to 25)
 	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
 	
+	// PHASE 2: Create completely fresh MCP clients for actual execution
+	logging.Info("DEBUG: === CREATING FRESH MCP CLIENTS FOR EXECUTION ===")
+	_, executionClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create fresh MCP clients for execution: %w", err)
+	}
+	// Store execution clients for cleanup after GenKit call
+	aee.activeMCPClients = executionClients
+	logging.Info("DEBUG: Created %d fresh MCP clients for execution", len(executionClients))
+
+	logging.Info("DEBUG: === BEFORE GenKit Generate Call ===")
+	logging.Info("DEBUG: Context timeout: %v", ctx.Err())
+	logging.Info("DEBUG: GenKit app initialized: %v", genkitApp != nil)
+	logging.Info("DEBUG: Generate options count: %d", len(generateOptions))
+	logging.Info("DEBUG: Tools for generation: %d", len(tools))
+	for i, tool := range tools {
+		if named, ok := tool.(interface{ Name() string }); ok {
+			logging.Info("DEBUG: Tool %d for generation: %s", i+1, named.Name())
+		}
+	}
+	logging.Info("DEBUG: Max turns: 25")
+	logging.Info("DEBUG: Fresh execution clients: %d", len(aee.activeMCPClients))
+	logging.Info("DEBUG: Now calling genkit.Generate...")
+	
 	response, err := genkit.Generate(ctx, genkitApp, generateOptions...)
+	
+	logging.Info("DEBUG: === AFTER GenKit Generate Call ===")
+	logging.Info("DEBUG: GenKit Generate completed, checking results...")
+	logging.Info("DEBUG: Generate error: %v", err)
+	if response != nil {
+		logging.Info("DEBUG: Response received: %v", response != nil)
+		logging.Info("DEBUG: Response text length: %d", len(response.Text()))
+	} else {
+		logging.Info("DEBUG: Response is nil!")
+	}
 	
 	// Debug: Log the response details regardless of error
 	logging.Info("DEBUG: GenKit Generate returned, error: %v", err)
@@ -303,78 +346,134 @@ Guidelines:
 			}
 		}
 	}
-	logging.Info("DEBUG: TOTAL COMPLETED TOOL CALLS FOUND: %d", totalToolCalls)
-	
-	// Debug: Check if response has any tool-related content
-	logging.Info("DEBUG: Response length: %d characters", len(responseText))
-
-	// Extract tool calls directly from GenKit response object (no middleware)
-	logging.Info("DEBUG: Extracting tool calls directly from GenKit response object")
+	// Extract tool calls and execution steps from GenKit response
 	var toolCalls []interface{}
 	var steps []interface{}
 	
-	// FIXED: Use the correct tool calls from completed execution history
-	// Extract from request messages (completed calls) instead of pending toolRequests
+	// Extract tool calls from GenKit conversation history  
 	allToolCalls := []interface{}{}
-	if response.Request != nil {
-		for _, msg := range response.Request.Messages {
-			for _, part := range msg.Content {
-				if part.IsToolRequest() {
-					toolCall := map[string]interface{}{
-						"step":           len(allToolCalls) + 1,
-						"type":           "tool_call",
-						"tool_name":      part.ToolRequest.Name,
-						"tool_input":     part.ToolRequest.Input,
-						"model_name":     cfg.AIModel,
-						"tool_call_id":   part.ToolRequest.Ref,
-					}
-					allToolCalls = append(allToolCalls, toolCall)
+	conversationHistory := response.History()
+	toolCallCounter := 0
+	
+	for _, message := range conversationHistory {
+		for _, part := range message.Content {
+			if part.IsToolRequest() {
+				toolCallCounter++
+				toolReq := part.ToolRequest
+				toolCall := map[string]interface{}{
+					"step":           toolCallCounter,
+					"type":           "tool_call",
+					"tool_name":      toolReq.Name,
+					"tool_input":     toolReq.Input,
+					"tool_call_id":   toolReq.Ref,
+					"model_name":     cfg.AIModel,
+					"message_role":   string(message.Role),
 				}
+				allToolCalls = append(allToolCalls, toolCall)
 			}
 		}
 	}
 	
-	// Fallback to pending tool requests if no completed ones found
-	for i, toolReq := range toolRequests {
-		toolCall := map[string]interface{}{
-			"step":           i + 1,
-			"type":           "tool_call",
-			"tool_name":      toolReq.Name,
-			"tool_input":     toolReq.Input,
-			"model_name":     cfg.AIModel,
-			"tool_call_id":   toolReq.Ref, // Station's fixed plugin preserves proper IDs
+	// Fallback to pending tool requests if no completed ones found in history
+	if len(allToolCalls) == 0 {
+		for i, toolReq := range toolRequests {
+			toolCall := map[string]interface{}{
+				"step":           i + 1,
+				"type":           "tool_call",
+				"tool_name":      toolReq.Name,
+				"tool_input":     toolReq.Input,
+				"model_name":     cfg.AIModel,
+				"tool_call_id":   toolReq.Ref,
+			}
+			allToolCalls = append(allToolCalls, toolCall)
 		}
-		allToolCalls = append(allToolCalls, toolCall)
 	}
 	
-	// Use the corrected tool calls list
 	toolCalls = allToolCalls
 	
-	// Build simple execution steps from response data  
-	if len(toolCalls) > 0 {
-		step := map[string]interface{}{
-			"step":              1,
-			"type":              "tool_execution",
-			"agent_id":          agent.ID,
-			"agent_name":        agent.Name,
-			"model_name":        cfg.AIModel,
-			"tool_calls_count":  len(toolCalls),
-			"tools_used":        len(toolCalls),
+	// Build detailed execution steps from GenKit conversation history
+	stepCounter := 0
+	
+	// Process each message in the conversation history
+	for _, message := range conversationHistory {
+		// Process each part of the message
+		for _, part := range message.Content {
+			if part.IsToolRequest() {
+				stepCounter++
+				toolReq := part.ToolRequest
+				toolRequestStep := map[string]interface{}{
+					"step":          stepCounter,
+					"type":          "tool_request",
+					"agent_id":      agent.ID,
+					"agent_name":    agent.Name,
+					"model_name":    cfg.AIModel,
+					"tool_name":     toolReq.Name,
+					"tool_call_id":  toolReq.Ref,
+					"tool_input":    toolReq.Input,
+					"message_role":  string(message.Role),
+				}
+				steps = append(steps, toolRequestStep)
+				
+			} else if part.IsToolResponse() {
+				stepCounter++
+				toolResp := part.ToolResponse
+				toolResponseStep := map[string]interface{}{
+					"step":          stepCounter,
+					"type":          "tool_response", 
+					"agent_id":      agent.ID,
+					"agent_name":    agent.Name,
+					"model_name":    cfg.AIModel,
+					"tool_name":     toolResp.Name,
+					"tool_call_id":  toolResp.Ref,
+					"tool_output":   toolResp.Output,
+					"message_role":  string(message.Role),
+				}
+				steps = append(steps, toolResponseStep)
+				
+			} else if part.IsText() && message.Role == "model" {
+				// This is the AI's final text response
+				stepCounter++
+				finalResponseStep := map[string]interface{}{
+					"step":           stepCounter,
+					"type":           "model_response",
+					"agent_id":       agent.ID,
+					"agent_name":     agent.Name,
+					"model_name":     cfg.AIModel,
+					"content":        part.Text,
+					"content_length": len(part.Text),
+					"message_role":   string(message.Role),
+				}
+				steps = append(steps, finalResponseStep)
+			}
 		}
-		steps = append(steps, step)
 	}
 	
-	// Add final response step
-	if responseText != "" {
-		finalStep := map[string]interface{}{
-			"step":              len(steps) + 1,
-			"type":              "final_response",
-			"agent_id":          agent.ID,
-			"agent_name":        agent.Name,
-			"model_name":        cfg.AIModel,
-			"content_length":    len(responseText),
+	// Fallback: If no steps were captured from history, add summary steps
+	if len(steps) == 0 {
+		if len(toolCalls) > 0 {
+			step := map[string]interface{}{
+				"step":              1,
+				"type":              "tool_execution_summary",
+				"agent_id":          agent.ID,
+				"agent_name":        agent.Name,
+				"model_name":        cfg.AIModel,
+				"tool_calls_count":  len(toolCalls),
+				"tools_used":        len(toolCalls),
+			}
+			steps = append(steps, step)
 		}
-		steps = append(steps, finalStep)
+		
+		if responseText != "" {
+			finalStep := map[string]interface{}{
+				"step":              len(steps) + 1,
+				"type":              "final_response_summary",
+				"agent_id":          agent.ID,
+				"agent_name":        agent.Name,
+				"model_name":        cfg.AIModel,
+				"content_length":    len(responseText),
+			}
+			steps = append(steps, finalStep)
+		}
 	}
 
 	// Convert to database-compatible types
@@ -517,20 +616,26 @@ func (aee *AgentExecutionEngine) TestStdioMCPConnection(ctx context.Context) err
 }
 
 // RenderAgentPromptWithDotprompt renders agent prompt with dotprompt if it contains frontmatter
-func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt, task, agentName string) (string, error) {
+func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt string, userVariables map[string]interface{}) (string, error) {
 	// Check if this is a dotprompt with YAML frontmatter
 	if !aee.isDotpromptContent(agentPrompt) {
 		// Not a dotprompt, return as-is
+		logging.Info("DEBUG: Agent prompt is NOT dotprompt, returning as-is")
 		return agentPrompt, nil
 	}
 
+	logging.Info("DEBUG: Agent prompt IS dotprompt, rendering with %d variables", len(userVariables))
+	
 	// Do inline dotprompt rendering to avoid import cycle
-	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, task, agentName)
+	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, userVariables)
 	if err != nil {
+		logging.Info("DEBUG: Dotprompt rendering failed: %v", err)
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 
-	logging.Info("DEBUG: Rendered dotprompt for agent '%s'", agentName)
+	logging.Info("DEBUG: Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
+	logging.Info("DEBUG: Rendered content preview: %.200s", renderedPrompt)
+	
 	return renderedPrompt, nil
 }
 
@@ -542,20 +647,14 @@ func (aee *AgentExecutionEngine) isDotpromptContent(prompt string) bool {
 }
 
 // renderDotpromptInline renders dotprompt content inline to avoid import cycles
-func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent, task, agentName string) (string, error) {
+func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent string, userVariables map[string]interface{}) (string, error) {
 	// 1. Create dotprompt instance
 	dp := dotprompt.NewDotprompt(nil) // Use default options
 	
-	// 2. Prepare data for rendering
+	// 2. Prepare data for rendering with user-defined variables only
 	data := &dotprompt.DataArgument{
-		Input: map[string]any{
-			"TASK":       task,
-			"AGENT_NAME": agentName,
-			"ENVIRONMENT": "default", // TODO: get from agent config
-		},
-		Context: map[string]any{
-			"agent_name": agentName,
-		},
+		Input:   userVariables, // User-defined variables like {{my_folder}}, {{my_var}}
+		Context: map[string]any{}, // Keep context empty unless needed
 	}
 	
 	// 3. Render the template  
@@ -564,13 +663,13 @@ func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent, task, a
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 	
-	// 4. Convert messages to text (for now, until we implement full ai.Generate)
+	// 4. Convert messages to text (extract just the content, no role prefixes)
 	var renderedText strings.Builder
 	for i, msg := range rendered.Messages {
 		if i > 0 {
 			renderedText.WriteString("\n\n")
 		}
-		renderedText.WriteString(fmt.Sprintf("[%s]: ", msg.Role))
+		// Don't include role prefix - just the content
 		for _, part := range msg.Content {
 			if textPart, ok := part.(*dotprompt.TextPart); ok {
 				renderedText.WriteString(textPart.Text)
@@ -580,3 +679,70 @@ func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent, task, a
 	
 	return renderedText.String(), nil
 }
+
+// AgentSchema represents the input/output schema for an agent
+type AgentSchema struct {
+	AgentID      int64                  `json:"agent_id"`
+	AgentName    string                 `json:"agent_name"`
+	HasSchema    bool                   `json:"has_schema"`
+	InputSchema  map[string]interface{} `json:"input_schema,omitempty"`
+	OutputSchema map[string]interface{} `json:"output_schema,omitempty"`
+	Variables    []string               `json:"variables,omitempty"` // Available template variables
+}
+
+// GetAgentSchema extracts schema information from agent's dotprompt content using GenKit's parser
+func (aee *AgentExecutionEngine) GetAgentSchema(agent *models.Agent) (*AgentSchema, error) {
+	schema := &AgentSchema{
+		AgentID:   agent.ID,
+		AgentName: agent.Name,
+		HasSchema: false,
+		Variables: []string{},
+	}
+	
+	if !aee.isDotpromptContent(agent.Prompt) {
+		// Simple text prompt - no schema
+		return schema, nil
+	}
+	
+	// Use GenKit's dotprompt parser to properly parse the template
+	parsedPrompt, err := dotprompt.ParseDocument(agent.Prompt)
+	if err != nil {
+		return schema, fmt.Errorf("failed to parse dotprompt document: %w", err)
+	}
+	
+	schema.HasSchema = true
+	
+	// Extract input schema from parsed metadata
+	if parsedPrompt.Input.Schema != nil {
+		// Schema is of type 'any', so we need to properly handle it
+		if schemaMap, ok := parsedPrompt.Input.Schema.(map[string]interface{}); ok {
+			schema.InputSchema = schemaMap
+			
+			// Extract variable names from the input schema
+			for varName := range schemaMap {
+				schema.Variables = append(schema.Variables, varName)
+			}
+		} else {
+			// Store the raw schema even if it's not a map
+			if schemaAny, ok := parsedPrompt.Input.Schema.(interface{}); ok {
+				// Try to convert to map[string]interface{} for JSON serialization
+				schema.InputSchema = map[string]interface{}{"schema": schemaAny}
+			}
+		}
+	}
+	
+	// Extract output schema from parsed metadata
+	if parsedPrompt.Output.Schema != nil {
+		if schemaMap, ok := parsedPrompt.Output.Schema.(map[string]interface{}); ok {
+			schema.OutputSchema = schemaMap
+		} else {
+			// Store the raw schema even if it's not a map
+			if schemaAny, ok := parsedPrompt.Output.Schema.(interface{}); ok {
+				schema.OutputSchema = map[string]interface{}{"schema": schemaAny}
+			}
+		}
+	}
+	
+	return schema, nil
+}
+
