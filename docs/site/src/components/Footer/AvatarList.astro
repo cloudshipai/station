@@ -5,8 +5,8 @@ type Props = {
 }
 const { path } = Astro.props
 const resolvedPath = `${path}`
-const url = `https://api.github.com/repos/advanced-astro/astro-docs-template/commits?path=${resolvedPath}`
-const commitsURL = `https://github.com/advanced-astro/astro-docs-template/commits/main/${resolvedPath}`
+const url = `https://api.github.com/repos/cloudshipai/station/commits?path=${resolvedPath}`
+const commitsURL = `https://github.com/cloudshipai/station/commits/main/${resolvedPath}`
 
 type Commit = {
   author: {
@@ -30,7 +30,7 @@ async function getCommits(url: string) {
       method: 'GET',
       headers: {
         Authorization: auth,
-        'User-Agent': 'astro-docs/1.0'
+        'User-Agent': 'station-docs/1.0'
       }
     })
 

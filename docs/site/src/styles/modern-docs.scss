@@ -1,0 +1,791 @@
+/* Modern Documentation Styling - Inspired by Airbnb and best practices */
+
+/* Enhanced sidebar styling - work with new layout */
+#grid-left {
+  background-color: var(--theme-bg);
+  
+  /* Ensure proper flex container for scrolling */
+  .grid-sidebar {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+#grid-right {
+  background-color: var(--theme-bg);
+  
+  /* Ensure proper flex container for scrolling */
+  .grid-sidebar {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Force proper height inheritance for sidebar containers */
+.layout {
+  min-height: 0; /* Critical for flex children to be scrollable */
+}
+
+.grid-sidebar {
+  min-height: 0; /* Critical for flex children to be scrollable */
+}
+
+/* Enhanced header styling */
+header {
+  border-bottom: 1px solid var(--theme-sidebar-border) !important;
+  box-shadow: var(--theme-shadow-sm) !important;
+  z-index: 1000 !important;
+}
+
+/* Enhanced footer styling */
+footer {
+  border-top: 1px solid var(--theme-divider) !important;
+  background: var(--theme-bg-offset) !important;
+  margin-top: auto !important;
+  padding: 2rem !important;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1) !important;
+  
+  @media (max-width: 768px) {
+    padding: 1.5rem 1rem !important;
+    margin-top: 2rem !important;
+  }
+}
+
+/* Enhanced mobile menu styling */
+@media (max-width: 49.99em) {
+  .mobile-sidebar-toggle #grid-left {
+    box-shadow: var(--theme-shadow-lg) !important;
+    background: var(--theme-bg) !important;
+  }
+  
+  .mobile-sidebar-toggle::after {
+    content: '' !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    z-index: 998 !important;
+  }
+}
+
+/* Enhanced Table of Contents */
+.sidebar-nav {
+  overflow-x: hidden;
+  min-width: 0;
+  
+  .heading {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--theme-text-light);
+    margin: 0 0 1rem 0;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--theme-toc-border);
+    padding-bottom: 0.75rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+  
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+    
+    li {
+      margin: 0;
+      min-width: 0;
+      
+      a {
+        display: block;
+        padding: 0.5rem 1rem;
+        margin: 0.125rem 0.5rem;
+        border-radius: var(--theme-radius-sm);
+        text-decoration: none;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--theme-text-light);
+        border-left: 2px solid transparent;
+        transition: all 0.2s ease;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+        white-space: normal;
+        min-width: 0;
+        max-width: 100%;
+        
+        &:hover {
+          background: var(--theme-toc-hover);
+          color: var(--theme-text);
+          border-left-color: var(--theme-accent);
+        }
+      }
+      
+      &.current-header-link a {
+        background: var(--theme-toc-active);
+        color: var(--theme-accent);
+        border-left-color: var(--theme-accent);
+        font-weight: 500;
+      }
+      
+      &.depth-2 a {
+        padding-left: 1rem;
+        font-weight: 500;
+      }
+      
+      &.depth-3 a {
+        padding-left: 1.5rem;
+        font-size: 0.8125rem;
+        color: var(--theme-text-lighter);
+      }
+      
+      &.depth-4 a {
+        padding-left: 2rem;
+        font-size: 0.75rem;
+        color: var(--theme-text-lighter);
+      }
+    }
+  }
+}
+
+/* Enhanced Sidebar Navigation */
+.nav-groups {
+  padding: 1.5rem;
+  
+  .nav-group {
+    margin-bottom: 2rem;
+    
+    h2 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--theme-text-light);
+      margin: 0 0 0.75rem 0;
+      padding: 0 0 0.5rem 0;
+      border-bottom: 1px solid var(--theme-divider);
+    }
+    
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      
+      .nav-link a {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        margin: 0.125rem 0;
+        border-radius: var(--theme-radius-sm);
+        text-decoration: none;
+        font-size: 0.9rem;
+        font-weight: 450;
+        color: var(--theme-text);
+        transition: all 0.2s ease;
+        border-left: 3px solid transparent;
+        
+        &:hover {
+          background: var(--theme-bg-hover);
+          border-left-color: var(--theme-accent);
+          transform: translateX(2px);
+        }
+        
+        &[aria-current="page"] {
+          background: var(--theme-toc-active);
+          color: var(--theme-accent);
+          border-left-color: var(--theme-accent);
+          font-weight: 600;
+        }
+      }
+    }
+  }
+}
+
+/* Modern Content Typography */
+article {
+  h1, h2, h3, h4, h5, h6 {
+    scroll-margin-top: 2rem;
+    
+    &:hover .anchor-link {
+      opacity: 1;
+    }
+  }
+  
+  h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0 0 1.5rem 0;
+    letter-spacing: -0.02em;
+  }
+  
+  h2 {
+    font-size: 1.875rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 2.5rem 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--theme-divider);
+  }
+  
+  h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 2rem 0 1rem 0;
+  }
+  
+  p {
+    line-height: 1.75;
+    margin: 1.25rem 0;
+    color: var(--theme-text);
+  }
+  
+  ul, ol {
+    line-height: 1.75;
+    margin: 1.25rem 0;
+    padding-left: 1.5rem;
+    
+    li {
+      margin: 0.5rem 0;
+    }
+  }
+  
+  blockquote {
+    border-left: 4px solid var(--theme-accent);
+    background: var(--theme-bg-offset);
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 0 var(--theme-radius-md) var(--theme-radius-md) 0;
+    
+    p:first-child {
+      margin-top: 0;
+    }
+    
+    p:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+/* Enhanced Code Blocks */
+pre {
+  background: var(--theme-code-bg);
+  border-radius: var(--theme-radius-lg);
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  box-shadow: var(--theme-shadow-sm);
+  border: 1px solid var(--theme-divider);
+  
+  code {
+    color: var(--theme-code-text);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+}
+
+code:not(pre code) {
+  background: var(--theme-code-inline-bg);
+  color: var(--theme-code-inline-text);
+  padding: 0.25rem 0.375rem;
+  border-radius: var(--theme-radius-sm);
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+/* Modern Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  border-radius: var(--theme-radius-md);
+  overflow: hidden;
+  box-shadow: var(--theme-shadow-sm);
+  border: 1px solid var(--theme-divider);
+  
+  th {
+    background: var(--theme-bg-offset);
+    font-weight: 600;
+    text-align: left;
+    padding: 1rem;
+    border-bottom: 2px solid var(--theme-divider);
+  }
+  
+  td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--theme-divider);
+    
+    &:first-child {
+      font-weight: 500;
+    }
+  }
+  
+  tr:last-child td {
+    border-bottom: none;
+  }
+  
+  tr:nth-child(even) {
+    background: var(--theme-bg-offset);
+  }
+}
+
+/* Enhanced Mermaid Diagrams with Zoom Controls */
+.mermaid-zoom-container {
+  position: relative;
+  margin: 2rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--theme-divider);
+  background: var(--theme-bg);
+  overflow: auto;
+  max-height: 80vh;
+  
+  &:hover .zoom-controls {
+    opacity: 1 !important;
+  }
+  
+  .zoom-controls {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    z-index: 10;
+    
+    .zoom-btn {
+      background: rgba(255,255,255,0.9);
+      color: var(--theme-text);
+      border: 1px solid var(--theme-divider);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(4px);
+      
+      &.active {
+        background: var(--theme-accent) !important;
+        color: white !important;
+      }
+      
+      &:hover:not(.active) {
+        background: rgba(255,255,255,1);
+        transform: translateY(-1px);
+      }
+    }
+  }
+}
+
+.mermaid {
+  text-align: center;
+  cursor: zoom-in;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  padding: 1rem;
+  margin: 0;
+  
+  &.zoom-enabled {
+    &.zoomed {
+      cursor: zoom-out;
+      position: relative;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+  }
+}
+
+/* Standalone mermaid diagrams (fallback) */
+.mermaid:not(.mermaid-zoom-container .mermaid) {
+  margin: 2rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--theme-divider);
+  background: var(--theme-bg);
+}
+
+/* Full Screen Modal */
+.fullscreen-modal {
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+}
+
+/* Clean Image Styling */
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--theme-radius-md);
+  
+  /* Only add zoom cursor to standalone images, not SVGs in diagrams */
+  &:not(.mermaid svg, .mermaid img) {
+    cursor: zoom-in;
+    transition: all 0.3s ease;
+    box-shadow: var(--theme-shadow-sm);
+    
+    &:hover {
+      box-shadow: var(--theme-shadow-md);
+      transform: translateY(-2px);
+    }
+  }
+}
+
+
+/* Simple Search Styling */
+.simple-search {
+  position: relative;
+  width: 100%;
+}
+
+.search-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  animation: modalFadeIn 0.2s ease;
+}
+
+.search-modal-content {
+  background: var(--theme-bg);
+  border: 1px solid var(--theme-divider);
+  border-radius: var(--theme-radius-lg);
+  box-shadow: var(--theme-shadow-lg);
+  width: 90vw;
+  max-width: 600px;
+  max-height: 70vh;
+  overflow: hidden;
+  animation: modalSlideIn 0.2s ease;
+}
+
+.search-input-container {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid var(--theme-divider);
+  gap: 0.75rem;
+}
+
+.search-icon {
+  color: var(--theme-text-light);
+  flex-shrink: 0;
+}
+
+.search-modal-input {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--theme-text);
+  font-size: 1rem;
+  outline: none;
+  
+  &::placeholder {
+    color: var(--theme-text-light);
+  }
+}
+
+.search-close {
+  background: none;
+  border: none;
+  color: var(--theme-text-light);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--theme-radius-sm);
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: var(--theme-bg-hover);
+    color: var(--theme-text);
+  }
+}
+
+.search-results {
+  max-height: 400px;
+  overflow-y: auto;
+  
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  
+  li {
+    border-bottom: 1px solid var(--theme-divider);
+    
+    &:last-child {
+      border-bottom: none;
+    }
+    
+    a {
+      display: block;
+      padding: 1rem;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.2s ease;
+      
+      &:hover {
+        background: var(--theme-bg-hover);
+      }
+    }
+  }
+  
+  .result-title {
+    font-weight: 600;
+    color: var(--theme-text);
+    margin-bottom: 0.25rem;
+  }
+  
+  .result-content {
+    font-size: 0.875rem;
+    color: var(--theme-text-light);
+    line-height: 1.4;
+  }
+  
+  .no-results {
+    padding: 2rem;
+    text-align: center;
+    color: var(--theme-text-light);
+    font-style: italic;
+  }
+  
+  .search-tips {
+    padding: 1.5rem;
+    
+    .tip {
+      padding: 0.5rem 0;
+      font-size: 0.875rem;
+      color: var(--theme-text-light);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+  }
+}
+
+/* Enhanced Search Styling */
+.search-input {
+  background: var(--theme-bg) !important;
+  border: 1px solid var(--theme-divider) !important;
+  border-radius: var(--theme-radius-lg) !important;
+  padding: 0.75rem 1rem !important;
+  font-size: 0.875rem !important;
+  color: var(--theme-text) !important;
+  box-shadow: var(--theme-shadow-sm) !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  
+  &:hover {
+    box-shadow: var(--theme-shadow-md) !important;
+    border-color: var(--theme-accent) !important;
+    transform: translateY(-1px) !important;
+  }
+  
+  &:focus {
+    outline: 2px solid var(--theme-accent) !important;
+    outline-offset: 2px !important;
+    border-color: var(--theme-accent) !important;
+  }
+  
+  svg {
+    color: var(--theme-text-light) !important;
+    flex-shrink: 0 !important;
+  }
+  
+  span:not(.search-hint) {
+    color: var(--theme-text-light) !important;
+    font-weight: 400 !important;
+  }
+}
+
+.search-hint {
+  background: var(--theme-bg-offset) !important;
+  border: 1px solid var(--theme-divider) !important;
+  border-radius: var(--theme-radius-sm) !important;
+  color: var(--theme-text-light) !important;
+  font-family: var(--font-mono) !important;
+  padding: 0.25rem 0.375rem !important;
+  font-size: 0.75rem !important;
+  
+  kbd {
+    background: none !important;
+    border: none !important;
+    color: inherit !important;
+    font-size: inherit !important;
+    padding: 0 !important;
+  }
+}
+
+.search-item {
+  max-width: 350px !important;
+  
+  @media (max-width: 768px) {
+    max-width: 200px !important;
+  }
+}
+
+
+/* Smooth transitions for theme switching */
+* {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Better focus styles */
+*:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
+/* Enhanced responsive design */
+@media (max-width: 768px) {
+  .sidebar-nav {
+    padding: 1rem;
+    
+    .heading {
+      font-size: 0.8125rem;
+    }
+  }
+  
+  .nav-groups .nav-group h2 {
+    font-size: 0.8125rem;
+  }
+  
+  article {
+    h1 {
+      font-size: 1.875rem;
+      margin: 0 0 1rem 0;
+    }
+    
+    h2 {
+      font-size: 1.5rem;
+      margin: 2rem 0 0.75rem 0;
+    }
+    
+    h3 {
+      font-size: 1.25rem;
+      margin: 1.5rem 0 0.75rem 0;
+    }
+    
+    p {
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+  }
+  
+  /* Mobile-specific table styling */
+  table {
+    font-size: 0.875rem;
+    
+    th, td {
+      padding: 0.75rem 0.5rem;
+    }
+  }
+  
+  /* Mobile code blocks */
+  pre {
+    padding: 1rem;
+    font-size: 0.8125rem;
+    overflow-x: auto;
+    
+    code {
+      font-size: 0.8125rem;
+    }
+  }
+  
+  /* Mobile search adjustments */
+  .search-input {
+    padding: 0.625rem 0.875rem !important;
+    font-size: 0.8125rem !important;
+    
+    svg {
+      width: 16px !important;
+      height: 16px !important;
+    }
+  }
+  
+  .search-hint {
+    display: none !important;
+  }
+  
+  /* Mobile theme toggle */
+  .theme-toggle {
+    padding: 0.375rem !important;
+    
+    > label {
+      padding: 0.25rem !important;
+    }
+    
+    svg {
+      width: 16px !important;
+      height: 16px !important;
+    }
+  }
+  
+  /* Mobile mermaid diagrams */
+  .mermaid-expandable {
+    margin: 1rem 0;
+    
+    .expand-btn {
+      top: 0.5rem;
+      right: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.75rem;
+    }
+    
+    .mermaid {
+      padding: 1rem;
+    }
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  #grid-main {
+    padding: 1rem 0.5rem !important;
+  }
+  
+  article {
+    h1 {
+      font-size: 1.5rem;
+    }
+    
+    h2 {
+      font-size: 1.25rem;
+    }
+    
+    h3 {
+      font-size: 1.125rem;
+    }
+  }
+  
+  .search-input {
+    padding: 0.5rem 0.75rem !important;
+    gap: 0.375rem !important;
+  }
+  
+  /* Ultra compact theme toggle for very small screens */
+  .theme-toggle {
+    gap: 0.125rem !important;
+  }
+}

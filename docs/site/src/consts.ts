@@ -30,44 +30,97 @@ export const ALGOLIA = {
 
 export type Sidebar = Record<
   (typeof KNOWN_LANGUAGE_CODES)[number],
-  Record<string, { text: string; link: string }[]>
+  Record<string, SidebarSection>
 >
+export type SidebarItem = {
+  text: string;
+  link: string;
+  badge?: string;
+  children?: SidebarItem[];
+}
+
+export type SidebarSection = {
+  text: string;
+  collapsed?: boolean;
+  items: SidebarItem[];
+}
+
 export const SIDEBAR: Sidebar = {
   en: {
-    'Getting Started': [
-      { text: 'Introduction', link: 'en/introduction' },
-      { text: 'Why Station', link: 'en/why-station' },
-      { text: 'Quick Start', link: 'en/quickstart' },
-      { text: 'Installation', link: 'en/installation' }
-    ],
-    'Core Concepts': [
-      { text: 'Architecture', link: 'en/architecture' },
-      { text: 'Intelligent Agents', link: 'en/intelligent-agents' },
-      { text: 'MCP Integration', link: 'en/mcp-integration' },
-      { text: 'Environment Management', link: 'en/environments' }
-    ],
-    'Templates & Bundles': [
-      { text: 'Template System', link: 'en/templates' },
-      { text: 'Bundle Registry', link: 'en/registry' },
-      { text: 'Creating Bundles', link: 'en/creating-bundles' },
-      { text: 'Publishing Bundles', link: 'en/publishing-bundles' }
-    ],
-    'Use Cases': [
-      { text: 'Infrastructure Monitoring', link: 'en/use-cases/monitoring' },
-      { text: 'Deployment Automation', link: 'en/use-cases/deployment' },
-      { text: 'Security Operations', link: 'en/use-cases/security' }
-    ],
-    'Deployment': [
-      { text: 'Production Setup', link: 'en/deployment/production' },
-      { text: 'Docker Deployment', link: 'en/deployment/docker' },
-      { text: 'Database Replication', link: 'en/deployment/replication' },
-      { text: 'Security Configuration', link: 'en/deployment/security' }
-    ],
-    'API Reference': [
-      { text: 'CLI Commands', link: 'en/api/cli' },
-      { text: 'REST API', link: 'en/api/rest' },
-      { text: 'WebSocket API', link: 'en/api/websocket' },
-      { text: 'MCP Tools', link: 'en/api/mcp-tools' }
-    ]
+    'Getting Started': {
+      collapsed: false,
+      items: [
+        { text: 'Introduction', link: 'en/introduction' },
+        { text: 'MCP Quick Start', link: 'en/mcp-quickstart', badge: 'Start Here' },
+        { text: 'Why Station', link: 'en/why-station' },
+        { text: 'Installation', link: 'en/installation' }
+      ]
+    },
+    'MCP Integration': {
+      collapsed: false,
+      items: [
+        { text: 'Overview', link: 'en/mcp/overview' },
+        { 
+          text: 'Claude Desktop Setup', 
+          link: 'en/mcp/claude-desktop',
+          children: [
+            { text: 'Basic Configuration', link: 'en/mcp/claude-desktop/basic' },
+            { text: 'Advanced Settings', link: 'en/mcp/claude-desktop/advanced' }
+          ]
+        },
+        { text: 'MCP Tools & Commands', link: 'en/mcp/tools' },
+        { text: 'Agent Interaction', link: 'en/mcp/agents' },
+        { text: 'Other MCP Clients', link: 'en/mcp/other-clients' }
+      ]
+    },
+    'Agent Management': {
+      collapsed: false,
+      items: [
+        { 
+          text: 'Creating Agents', 
+          link: 'en/agents/creating',
+          children: [
+            { text: 'Basic Agent Setup', link: 'en/agents/creating/basic' },
+            { text: 'Template Variables', link: 'en/agents/creating/variables' },
+            { text: 'Tool Assignment', link: 'en/agents/creating/tools' }
+          ]
+        },
+        { text: 'Agent Configuration', link: 'en/agents/config' },
+        { text: 'Environment Isolation', link: 'en/agents/environments' },
+        { text: 'Monitoring & Logs', link: 'en/agents/monitoring' }
+      ]
+    },
+    'CLI Management': {
+      collapsed: true,
+      items: [
+        { text: 'Setup & Configuration', link: 'en/cli/setup' },
+        { 
+          text: 'Tool Management', 
+          link: 'en/cli/tools',
+          children: [
+            { text: 'Installing Tools', link: 'en/cli/tools/installing' },
+            { text: 'Custom Tools', link: 'en/cli/tools/custom' }
+          ]
+        },
+        { text: 'Template System', link: 'en/cli/templates' },
+        { text: 'Advanced Commands', link: 'en/cli/advanced' }
+      ]
+    },
+    'Templates & Bundles': {
+      collapsed: true,
+      items: [
+        { text: 'Bundle Registry', link: 'en/bundles/registry', badge: 'Browse' },
+        { text: 'Creating Bundles', link: 'en/bundles/creating' },
+        { text: 'Publishing Bundles', link: 'en/bundles/publishing' }
+      ]
+    },
+    'Deployment': {
+      collapsed: true,
+      items: [
+        { text: 'Production Setup', link: 'en/deployment/production' },
+        { text: 'Security Configuration', link: 'en/deployment/security' },
+        { text: 'Monitoring & Observability', link: 'en/deployment/monitoring' }
+      ]
+    }
   }
 }

@@ -1,0 +1,272 @@
+---
+title: Claude Desktop Setup
+description: Complete guide to connecting Station with Claude Desktop via MCP
+---
+
+# Claude Desktop Setup
+
+This guide covers everything you need to know about connecting Station to Claude Desktop via the Model Context Protocol (MCP). Once connected, you'll be able to create, manage, and run Station agents directly through Claude conversations.
+
+## Prerequisites
+
+- Station installed and initialized (`stn init` completed)
+- Claude Desktop application installed
+- At least one Station agent or bundle installed
+
+## Configuration File Location
+
+The Claude Desktop MCP configuration file is located at:
+
+### macOS
+```
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+
+### Windows  
+```
+%APPDATA%\Claude\claude_desktop_config.json
+```
+
+### Linux
+```
+~/.config/Claude/claude_desktop_config.json
+```
+
+## Basic Station MCP Configuration
+
+Add Station to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+## Advanced Configuration Options
+
+### Custom Station Path
+
+If Station is not in your PATH or you want to specify a particular installation:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "/usr/local/bin/stn",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+### Environment-Specific Configuration
+
+Connect to a specific Station environment:
+
+```json
+{
+  "mcpServers": {
+    "station-prod": {
+      "command": "stn",
+      "args": ["stdio", "--env", "production"]
+    },
+    "station-dev": {
+      "command": "stn", 
+      "args": ["stdio", "--env", "development"]
+    }
+  }
+}
+```
+
+### Debug Mode
+
+Enable verbose logging for troubleshooting:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio", "--debug"]
+    }
+  }
+}
+```
+
+## Multiple Station Instances
+
+You can connect to multiple Station installations or environments:
+
+```json
+{
+  "mcpServers": {
+    "station-local": {
+      "command": "stn",
+      "args": ["stdio"]
+    },
+    "station-remote": {
+      "command": "ssh",
+      "args": ["user@server.com", "stn", "stdio"]
+    },
+    "station-docker": {
+      "command": "docker",
+      "args": ["exec", "station-container", "stn", "stdio"]
+    }
+  }
+}
+```
+
+## Verification
+
+After updating the configuration and restarting Claude Desktop:
+
+### 1. Test Connection
+
+Ask Claude Desktop:
+```
+Are Station MCP tools available?
+```
+
+Claude should respond with a list of available Station tools.
+
+### 2. Test Agent Listing
+
+```
+List my Station agents
+```
+
+You should see a list of your configured agents.
+
+### 3. Test Agent Execution
+
+```
+Create a test agent and run it with a simple task
+```
+
+## Available MCP Tools
+
+Once connected, these Station tools become available in Claude Desktop:
+
+### Agent Management
+- **`call_agent`** - Execute any Station agent with a task
+- **`create_agent`** - Create new agents with specific tools and configuration
+- **`list_agents`** - Browse available agents across environments
+- **`get_agent_details`** - Get detailed information about a specific agent
+- **`update_agent`** - Modify existing agent configuration
+
+### Tool & Environment Discovery
+- **`discover_tools`** - Find available tools in your Station setup
+- **`list_tools`** - Browse all MCP tools by environment
+- **`list_environments`** - Show available Station environments
+- **`list_mcp_configs`** - View loaded MCP server configurations
+
+### System Integration
+- Plus all tools configured in your Station bundles (filesystem, AWS, databases, etc.)
+
+## Common Use Cases
+
+### Infrastructure Management
+```
+Create a Station agent that monitors disk usage and alerts when any partition exceeds 80% capacity
+```
+
+### Deployment Automation
+```
+Run my deployment agent to update the staging environment with the latest code
+```
+
+### Security Operations
+```
+List all Station agents related to security scanning and run a full security audit
+```
+
+### Development Workflow
+```
+Create an agent that can manage my development database - backing up before schema changes and restoring if needed
+```
+
+## Troubleshooting
+
+### Station Not Appearing
+
+1. **Verify Station is working:**
+   ```bash
+   stn --version
+   stn agent list
+   ```
+
+2. **Test MCP directly:**
+   ```bash
+   echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | stn stdio
+   ```
+
+3. **Check configuration file syntax:**
+   Use a JSON validator to ensure your `claude_desktop_config.json` is valid.
+
+4. **Restart Claude Desktop completely:**
+   Quit the application entirely and relaunch.
+
+### Permission Issues
+
+```bash
+# Ensure Station binary has execute permissions
+chmod +x $(which stn)
+
+# Check Station workspace permissions
+ls -la ~/.station/
+```
+
+### Connection Timeouts
+
+If Station MCP responses are slow:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio", "--timeout", "30s"]
+    }
+  }
+}
+```
+
+### Multiple Environments Not Working
+
+Ensure each environment is properly configured:
+
+```bash
+stn env list
+stn sync production
+stn sync development
+```
+
+## Security Considerations
+
+### Network Access
+Station MCP connections are local-only by default. For remote Station instances, use secure protocols like SSH.
+
+### Environment Isolation
+Use separate MCP server entries for different environments to prevent accidental cross-environment operations.
+
+### Audit Logging
+All MCP interactions are logged in Station's audit trail:
+
+```bash
+stn logs audit --filter mcp
+```
+
+## Next Steps
+
+- **[MCP Tools & Commands →](/station/en/mcp/tools)** - Learn what you can do with Station via MCP
+- **[Agent Interaction Guide →](/station/en/mcp/agents)** - Master agent management through Claude Desktop
+- **[Other MCP Clients →](/station/en/mcp/other-clients)** - Connect Station to other MCP-compatible tools
+
+---
+
+**Pro Tip**: You can bookmark common agent tasks in Claude Desktop by saving conversations with Station agent commands. This creates reusable workflows for infrastructure management, deployment, and monitoring tasks.

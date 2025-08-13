@@ -1,6 +1,7 @@
 ---
 import { getLanguageFromURL } from '../../languages'
 import { SIDEBAR } from '../../consts'
+import type { SidebarItem } from '../../consts'
 
 type Props = {
   currentPage: string
@@ -12,111 +13,421 @@ const currentPageMatch = currentPage.endsWith('/')
   : currentPage.slice(1)
 const langCode = getLanguageFromURL(currentPage)
 const sidebar = SIDEBAR[langCode]
+
+// Helper function to render navigation items
+function renderNavItem(item: SidebarItem, depth = 0) {
+  const url = import.meta.env.BASE_URL + item.link
+  const isActive = currentPageMatch === item.link
+  const hasChildren = item.children && item.children.length > 0
+  const depthClass = depth > 0 ? `nav-item-depth-${depth}` : ''
+  
+  return {
+    item,
+    url,
+    isActive,
+    hasChildren,
+    depthClass,
+    children: hasChildren ? item.children!.map(child => renderNavItem(child, depth + 1)) : []
+  }
+}
+
+// Process all navigation items
+const processedSidebar = Object.entries(sidebar).map(([header, section]) => ({
+  header,
+  section,
+  items: section.items.map(item => renderNavItem(item))
+}))
 ---
 
-<nav aria-labelledby="grid-left">
-  <ul class="nav-groups">
-    {
-      Object.entries(sidebar).map(([header, children]) => (
-        <li>
-          <div class="nav-group">
-            <h2>{header}</h2>
-            <ul>
-              {children.map((child) => {
-                const url = import.meta.env.BASE_URL + child.link
-                return (
-                  <li class="nav-link">
-                    <a
-                      href={url}
-                      aria-current={
-                        currentPageMatch === child.link ? 'page' : false
-                      }
-                    >
-                      {child.text}
-                    </a>
-                  </li>
-                )
-              })}
-            </ul>
+<nav aria-labelledby="grid-left" class="modern-nav">
+  <div class="nav-groups">
+    {processedSidebar.map(({ header, section, items }) => (
+      <div class="nav-group">
+        <button 
+          class="nav-group-header"
+          data-target={`nav-section-${header.replace(/\s+/g, '-').toLowerCase()}`}
+          aria-expanded={!section.collapsed}
+        >
+          <div class="nav-group-header-content">
+            <svg class="nav-group-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M5.708 8.055c-.268.1-.445.246-.568.469a.96.96 0 0 0-.007.939c.155.28 6.168 6.289 6.427 6.422.268.137.634.13.903-.018.28-.155 6.289-6.168 6.422-6.427.215-.42.064-1.001-.324-1.248-.344-.218-.667-.24-1.011-.069-.115.057-1.041.954-2.86 2.77L12 13.579l-2.69-2.686C7.441 9.028 6.567 8.181 6.445 8.12c-.223-.111-.538-.139-.737-.065" fill-rule="evenodd"></path>
+            </svg>
+            <h2 class="nav-group-title">{header}</h2>
           </div>
-        </li>
-      ))
-    }
-  </ul>
+        </button>
+        <div 
+          class={`nav-group-content ${section.collapsed ? 'nav-group-collapsed' : ''}`}
+          id={`nav-section-${header.replace(/\s+/g, '-').toLowerCase()}`}
+        >
+          <ul class="nav-items">
+            {items.map((navItem) => (
+              <li class={`nav-item ${navItem.depthClass}`}>
+                <div class="nav-item-content">
+                  {navItem.hasChildren && (
+                    <button 
+                      class="nav-expand-button" 
+                      data-target={`nav-children-${navItem.item.link.replace(/[^a-zA-Z0-9]/g, '-')}`}
+                      aria-expanded="true"
+                    >
+                      <svg class="nav-expand-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M5.708 8.055c-.268.1-.445.246-.568.469a.96.96 0 0 0-.007.939c.155.28 6.168 6.289 6.427 6.422.268.137.634.13.903-.018.28-.155 6.289-6.168 6.422-6.427.215-.42.064-1.001-.324-1.248-.344-.218-.667-.24-1.011-.069-.115.057-1.041.954-2.86 2.77L12 13.579l-2.69-2.686C7.441 9.028 6.567 8.181 6.445 8.12c-.223-.111-.538-.139-.737-.065" fill-rule="evenodd"></path>
+                      </svg>
+                    </button>
+                  )}
+                  <a
+                    href={navItem.url}
+                    class={`nav-link ${navItem.isActive ? 'nav-link-active' : ''}`}
+                    aria-current={navItem.isActive ? 'page' : 'false'}
+                  >
+                    <span class="nav-link-text">{navItem.item.text}</span>
+                    {navItem.item.badge && (
+                      <span class="nav-badge">{navItem.item.badge}</span>
+                    )}
+                  </a>
+                </div>
+                {navItem.hasChildren && (
+                  <ul 
+                    class="nav-children" 
+                    id={`nav-children-${navItem.item.link.replace(/[^a-zA-Z0-9]/g, '-')}`}
+                  >
+                    {navItem.children.map((childNavItem) => (
+                      <li class={`nav-item ${childNavItem.depthClass}`}>
+                        <div class="nav-item-content">
+                          <a
+                            href={childNavItem.url}
+                            class={`nav-link ${childNavItem.isActive ? 'nav-link-active' : ''}`}
+                            aria-current={childNavItem.isActive ? 'page' : 'false'}
+                          >
+                            <span class="nav-link-text">{childNavItem.item.text}</span>
+                            {childNavItem.item.badge && (
+                              <span class="nav-badge">{childNavItem.item.badge}</span>
+                            )}
+                          </a>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    ))}
+  </div>
 </nav>
 
 <script is:inline>
   window.addEventListener('DOMContentLoaded', () => {
+    // Auto-scroll to active item
     var target = document.querySelector('[aria-current="page"]')
     if (target && target.offsetTop > window.innerHeight - 100) {
-      document.querySelector('.nav-groups').scrollTop = target.offsetTop
+      const sidebar = document.querySelector('#grid-left')
+      if (sidebar) {
+        sidebar.scrollTop = target.offsetTop - 100
+      }
     }
+
+    // Handle collapsible navigation
+    function setupNavigation() {
+      // Handle group headers
+      document.querySelectorAll('.nav-group-header').forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.preventDefault()
+          const target = button.getAttribute('data-target')
+          const content = document.getElementById(target)
+          const isExpanded = button.getAttribute('aria-expanded') === 'true'
+          
+          button.setAttribute('aria-expanded', (!isExpanded).toString())
+          if (content) {
+            if (isExpanded) {
+              content.classList.add('nav-group-collapsed')
+            } else {
+              content.classList.remove('nav-group-collapsed')
+            }
+          }
+        })
+      })
+
+      // Handle item expansion buttons
+      document.querySelectorAll('.nav-expand-button').forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          
+          const target = button.getAttribute('data-target')
+          const children = document.getElementById(target)
+          const isExpanded = button.getAttribute('aria-expanded') === 'true'
+          
+          button.setAttribute('aria-expanded', !isExpanded)
+          if (children) {
+            children.classList.toggle('nav-children-collapsed')
+          }
+        })
+      })
+    }
+
+    setupNavigation()
   })
 </script>
 
 <style>
-  nav {
+  .modern-nav {
     width: 100%;
-    margin-right: 1rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    font-size: 0.875rem;
   }
 
   .nav-groups {
-    height: 100%;
-    padding: 2rem 0;
-    overflow-x: visible;
+    flex: 1;
     overflow-y: auto;
-    max-height: 100vh;
+    overflow-x: hidden;
+    padding: 1rem 0;
+    min-height: 0;
   }
 
-  .nav-groups > li + li {
-    margin-top: 2rem;
+  /* Group Styling */
+  .nav-group {
+    margin-bottom: 2rem;
   }
 
-  .nav-groups > :first-child {
-    padding-top: var(--doc-padding);
+  .nav-group:last-child {
+    margin-bottom: 0;
   }
 
-  .nav-groups > :last-child {
-    padding-bottom: 2rem;
-    margin-bottom: var(--theme-navbar-height);
+  .nav-group-header {
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0.5rem 1rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .nav-group-header:hover {
+    background: var(--theme-bg-hover, rgba(255, 255, 255, 0.05));
+  }
+
+  .nav-group-header-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .nav-group-icon {
+    color: var(--theme-text-light, #94a3b8);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+    transform: rotate(-90deg); /* Default to pointing right when closed */
+  }
+
+  .nav-group-header[aria-expanded="true"] .nav-group-icon {
+    transform: rotate(0deg); /* Point down when open */
+  }
+
+  .nav-group-header[aria-expanded="false"] .nav-group-icon {
+    transform: rotate(-90deg); /* Point right when closed */
   }
 
   .nav-group-title {
-    font-size: 1rem;
-    font-weight: bold;
-    padding: 0.1rem 1rem;
-    text-transform: uppercase;
-    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--theme-text, #ffffff);
+    margin: 0;
+    line-height: 1.2;
   }
 
-  .nav-link a {
-    font-size: 1rem;
-    margin: 1px;
-    padding: 0.3rem 1rem;
+  /* Group Content */
+  .nav-group-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.2s ease;
+    max-height: 2000px;
+    opacity: 1;
+  }
+
+  .nav-group-collapsed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+  }
+
+  /* Navigation Items */
+  .nav-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-item {
+    margin: 0;
+  }
+
+  .nav-item-content {
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+
+  .nav-expand-button {
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    margin-right: 0.25rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+  }
+
+  .nav-expand-button:hover {
+    background: var(--theme-bg-hover, rgba(255, 255, 255, 0.05));
+  }
+
+  .nav-expand-icon {
+    color: var(--theme-text-light, #94a3b8);
+    transition: transform 0.2s ease;
+    transform: rotate(-90deg); /* Default to pointing right when closed */
+  }
+
+  .nav-expand-button[aria-expanded="true"] .nav-expand-icon {
+    transform: rotate(0deg); /* Point down when open */
+  }
+
+  .nav-expand-button[aria-expanded="false"] .nav-expand-icon {
+    transform: rotate(-90deg); /* Point right when closed */
+  }
+
+  /* Navigation Links */
+  .nav-link {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     text-decoration: none;
-    display: block;
+    color: var(--theme-text-light, #94a3b8);
+    padding: 0.5rem 1rem;
+    margin: 0 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    font-weight: 450;
+    line-height: 1.4;
   }
 
-  .nav-link a:hover,
-  .nav-link a:focus {
-    background-color: var(--theme-bg-hover);
+  .nav-link:hover {
+    color: var(--theme-text, #ffffff);
+    background: var(--theme-bg-hover, rgba(255, 255, 255, 0.05));
+    transform: translateX(2px);
   }
 
-  .nav-link a[aria-current='page'] {
-    color: var(--theme-text-accent);
-    background-color: var(--theme-bg-accent);
+  .nav-link-active {
+    color: var(--theme-accent, #3b82f6) !important;
+    background: var(--theme-bg-accent, rgba(59, 130, 246, 0.1)) !important;
+    font-weight: 500;
+  }
+
+  .nav-link-text {
+    flex: 1;
+  }
+
+  /* Badges */
+  .nav-badge {
+    background: var(--theme-accent, #3b82f6);
+    color: white;
+    font-size: 0.6875rem;
     font-weight: 600;
+    padding: 0.125rem 0.375rem;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
   }
 
-  @media (min-width: 50em) {
+  /* Nested Children */
+  .nav-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    padding-left: 1.5rem;
+    border-left: 1px solid var(--theme-divider, rgba(255, 255, 255, 0.1));
+    margin-left: 1rem;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.2s ease;
+    max-height: 1000px;
+    opacity: 1;
+  }
+
+  .nav-children-collapsed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .nav-item-depth-1 .nav-link {
+    font-size: 0.8125rem;
+    padding: 0.375rem 1rem;
+    color: var(--theme-text-lighter, #64748b);
+  }
+
+  .nav-item-depth-1 .nav-link:hover {
+    color: var(--theme-text-light, #94a3b8);
+  }
+
+  /* Responsive Design */
+  @media (max-width: 767px) {
     .nav-groups {
-      padding: 0;
+      padding: 0.5rem 0;
     }
+
+    .nav-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .nav-group-header {
+      padding: 0.625rem 0.75rem;
+      margin: 0 0.25rem;
+    }
+
+    .nav-group-title {
+      font-size: 0.75rem;
+    }
+
+    .nav-link {
+      padding: 0.375rem 0.75rem;
+      margin: 0 0.25rem;
+    }
+
+    .nav-children {
+      padding-left: 1rem;
+      margin-left: 0.5rem;
+    }
+  }
+
+  /* Scrollbar Styling */
+  .nav-groups::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .nav-groups::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .nav-groups::-webkit-scrollbar-thumb {
+    background: var(--theme-text-lighter, rgba(255, 255, 255, 0.2));
+    border-radius: 3px;
+  }
+
+  .nav-groups::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-text-light, rgba(255, 255, 255, 0.3));
   }
 </style>
 
 <style is:global>
-  :root.theme-dark .nav-link a[aria-current='page'] {
-    color: hsla(var(--color-base-white), 100%, 1);
+  :root.theme-dark .nav-link-active {
+    color: var(--theme-accent, #60a5fa) !important;
+    background: var(--theme-bg-accent, rgba(96, 165, 250, 0.15)) !important;
   }
 </style>

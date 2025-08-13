@@ -1,0 +1,281 @@
+---
+title: MCP Tools & Commands
+description: Complete reference for Station MCP tools and what you can accomplish through Claude Desktop
+---
+
+# MCP Tools & Commands
+
+Once Station is connected to Claude Desktop via MCP, you have access to powerful tools for agent management and system integration. This page shows you exactly what you can accomplish and provides practical examples.
+
+## Core Station MCP Tools
+
+### Agent Management Tools
+
+#### `call_agent` - Execute Station Agents
+**Purpose**: Run any Station agent with a specific task  
+**What it does**: Executes an agent and returns the complete result including tool usage, steps taken, and duration
+
+**Example Commands**:
+```
+Run Station agent disk-monitor with the task: check disk usage and alert if any partition is over 80%
+
+Execute my database monitoring agent to check connection pool status
+
+Call agent deployment-pipeline to deploy the latest code to staging environment
+```
+
+#### `create_agent` - Create New Agents
+**Purpose**: Create new Station agents with specific tools and configuration  
+**What it does**: Sets up a new agent with dotprompt configuration, tool assignments, and environment settings
+
+**Example Commands**:
+```
+Create a new Station agent named "Security Scanner" that uses filesystem and network tools to scan for vulnerabilities
+
+Create an agent for monitoring AWS resources using the AWS CLI tools, max 10 steps
+
+Set up a database backup agent that can access PostgreSQL and S3 storage tools
+```
+
+#### `list_agents` - Browse Available Agents  
+**Purpose**: Show all agents across environments with their status and capabilities  
+**What it does**: Returns agent details including ID, name, environment, tools, and recent activity
+
+**Example Commands**:
+```
+List all my Station agents
+
+Show me agents in the production environment
+
+What agents do I have for infrastructure monitoring?
+```
+
+#### `get_agent_details` - Agent Information
+**Purpose**: Get detailed information about a specific agent  
+**What it does**: Returns complete agent configuration, tool assignments, execution history, and performance metrics
+
+**Example Commands**:
+```
+Show me details for Station agent security-scanner
+
+Get the configuration and recent runs for my deployment agent
+
+What tools does agent filesystem-monitor have access to?
+```
+
+### Tool & Environment Discovery
+
+#### `discover_tools` - Find Available Tools
+**Purpose**: Discover what MCP tools are available in your Station setup  
+**What it does**: Scans environments and returns available tools with descriptions and capabilities
+
+**Example Commands**:
+```
+What MCP tools are available in my Station setup?
+
+Show me all filesystem tools I can assign to agents
+
+List database tools available for agent creation
+```
+
+#### `list_tools` - Browse Tools by Environment
+**Purpose**: List tools filtered by environment or server  
+**What it does**: Shows detailed tool information including parameters, descriptions, and which agents use them
+
+**Example Commands**:
+```
+List all tools in the production environment
+
+Show me what tools are available from the AWS MCP server
+
+What monitoring tools can I use in development?
+```
+
+#### `list_environments` - Environment Overview  
+**Purpose**: Show available Station environments  
+**What it does**: Returns environment details including tool counts, agent counts, and configuration status
+
+**Example Commands**:
+```
+What Station environments do I have configured?
+
+Show me the difference between my dev and prod environments
+```
+
+## Practical Usage Patterns
+
+### Infrastructure Management
+
+**System Monitoring Setup**:
+```
+Create a Station agent that monitors system resources every hour and alerts via Slack when CPU exceeds 90% or disk space is low
+```
+
+**Log Analysis**:
+```
+Run my log analysis agent to scan the last 24 hours of application logs for errors and generate a summary report
+```
+
+**Database Health Checks**:
+```
+Execute agent db-health-monitor to check database connection pools, slow queries, and disk usage across all production databases
+```
+
+### Deployment & CI/CD
+
+**Automated Deployments**:
+```
+Create a deployment agent that can pull latest code, run tests, and deploy to staging with rollback capability
+```
+
+**Infrastructure as Code**:
+```
+Run my Terraform agent to plan and apply infrastructure changes for the new microservice
+```
+
+**Health Checks After Deployment**:
+```
+Execute the health check agent to verify all services are responding correctly after the deployment
+```
+
+### Security Operations
+
+**Vulnerability Scanning**:
+```
+Create a security agent that scans container images for vulnerabilities and checks for exposed secrets
+```
+
+**Compliance Auditing**:
+```
+Run agent compliance-auditor to perform a full compliance audit of our AWS infrastructure against SOC2 requirements
+```
+
+**Access Review**:
+```
+Execute the access review agent to audit user permissions and flag any overprivileged accounts
+```
+
+### Development Workflow
+
+**Code Quality Checks**:
+```
+Create an agent that runs linting, security scanning, and test coverage analysis on pull requests
+```
+
+**Database Management**:
+```
+Run my database agent to create a backup before the schema migration and set up the new tables
+```
+
+**Environment Synchronization**:
+```
+Execute the sync agent to update development environment with anonymized production data
+```
+
+## Advanced MCP Integration
+
+### Multi-Step Workflows
+
+Station agents can handle complex multi-step workflows:
+
+```
+Create a deployment agent that:
+1. Runs full test suite
+2. Builds and scans container images
+3. Updates staging environment
+4. Runs integration tests
+5. Promotes to production if tests pass
+6. Sends Slack notifications at each step
+```
+
+### Cross-Environment Operations
+
+```
+List agents in both development and production environments and show me which ones need to be synchronized
+
+Create matching monitoring agents in dev and prod with environment-specific thresholds
+```
+
+### Tool Integration
+
+Agents can use multiple tools in combination:
+
+```
+Create an incident response agent that can:
+- Read logs from multiple systems
+- Query databases for error patterns  
+- Update PagerDuty incidents
+- Send status updates to Slack
+- Generate post-mortem reports
+```
+
+## Tool Assignment Examples
+
+When creating agents, you can specify exactly which tools they need:
+
+### Filesystem & System Tools
+```
+Create an agent with file operations, directory listing, and system monitoring tools
+```
+
+### Database Tools
+```
+Set up an agent with PostgreSQL, MySQL, and Redis tools for database operations
+```
+
+### Cloud Provider Tools  
+```
+Create an AWS infrastructure agent with EC2, S3, RDS, and CloudWatch access
+```
+
+### Communication Tools
+```
+Build a notification agent that can use Slack, email, and PagerDuty integrations
+```
+
+## Monitoring Agent Performance
+
+Track your agents through Claude Desktop:
+
+```
+Show me execution metrics for agent terraform-analyzer over the last week
+
+Which agents are using the most resources?
+
+Get performance details for my most frequently run agents
+```
+
+## Troubleshooting Through MCP
+
+Debug agent issues directly through Claude Desktop:
+
+```
+Check the configuration and recent error logs for agent deployment-pipeline
+
+List all failed agent runs in the last 24 hours
+
+Show me which agents have tool assignment issues
+```
+
+## Security & Audit
+
+Station provides complete audit trails accessible via MCP:
+
+```
+Show me all agent executions in the production environment today
+
+List which users have created or modified agents this week
+
+Get audit logs for any agents that accessed sensitive database credentials
+```
+
+## Next Steps
+
+- **[Agent Interaction Guide →](/station/en/mcp/agents)** - Learn advanced agent management patterns
+- **[Creating Custom Agents →](/station/en/agents/creating)** - Build agents for your specific needs  
+- **[Bundle Registry →](https://cloudshipai.github.io/registry)** - Install pre-built agent bundles
+- **[Other MCP Clients →](/station/en/mcp/other-clients)** - Connect Station to additional tools
+
+---
+
+**Remember**: All Station MCP interactions provide rich context and detailed results. Ask follow-up questions to drill down into specifics, and Claude Desktop will help you manage your infrastructure through Station's intelligent agents.

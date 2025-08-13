@@ -1,0 +1,134 @@
+---
+title: MCP Quick Start
+description: Get Station agents running in Claude Desktop in under 5 minutes
+---
+
+# MCP Quick Start
+
+Get Station agents running in Claude Desktop (or Claude Code) in under 5 minutes. This is the fastest way to start using Station's deployable sub-agents.
+
+## The 5-Minute Setup
+
+### 1. Install Station Binary
+
+```bash
+# Quick install (recommended)
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+
+# Verify installation
+stn --version
+```
+
+### 2. Initialize Station
+
+```bash
+stn init
+```
+
+This creates your Station workspace and initializes the local database.
+
+### 3. Install a Ready-to-Use Bundle
+
+Instead of creating agents from scratch, let's install a pre-built bundle:
+
+```bash
+# Install filesystem operations bundle
+stn template install https://github.com/cloudshipai/registry/raw/main/bundles/filesystem-bundle/filesystem-bundle.tar.gz
+
+# Or install infrastructure monitoring bundle (if available)
+stn template install https://github.com/cloudshipai/registry/raw/main/bundles/infrastructure-bundle/infrastructure-bundle.tar.gz
+```
+
+### 4. Sync Configuration
+
+```bash
+stn sync production
+```
+
+This ensures all tools and agents are properly configured and ready.
+
+### 5. Add Station to Claude Desktop
+
+Add this to your Claude Desktop MCP configuration file:
+
+**Location of config file:**
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Add this configuration:**
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+### 6. Restart Claude Desktop
+
+Close and reopen Claude Desktop. You should now see Station tools available.
+
+## Start Using Station Agents
+
+Once connected, you can immediately start using Station agents through Claude Desktop:
+
+### List Available Agents
+```
+List my Station agents
+```
+
+### Create a New Agent
+```
+Create a new Station agent for monitoring disk usage with these tools: file operations
+```
+
+### Run an Existing Agent
+```
+Run Station agent filesystem-scanner with the task: check current directory structure and report any large files over 100MB
+```
+
+### Manage Tools and Bundles
+```
+Show me what MCP tools are available in my Station setup
+```
+
+## What Just Happened?
+
+In these 5 steps, you've:
+
+1. **Installed** a lightweight 45MB Station runtime
+2. **Loaded** pre-built agents with production-ready tools  
+3. **Connected** Station to Claude Desktop via MCP protocol
+4. **Gained access** to deployable sub-agents that can handle infrastructure, monitoring, deployment, and security tasks
+
+## Next Steps
+
+- **[Claude Desktop Setup Guide →](/station/en/mcp/claude-desktop)** - Detailed MCP configuration options
+- **[Browse Bundle Registry →](https://cloudshipai.github.io/registry)** - Discover more pre-built bundles
+- **[Agent Interaction Guide →](/station/en/mcp/agents)** - Learn advanced agent management via MCP
+- **[Create Custom Agents →](/station/en/agents/creating)** - Build agents for your specific needs
+
+## Troubleshooting
+
+### Station not showing up in Claude Desktop?
+1. Verify `stn stdio` works: `echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | stn stdio`
+2. Check Claude Desktop config file syntax with a JSON validator
+3. Make sure Claude Desktop was fully restarted after config changes
+
+### No agents available?
+1. Run `stn agent list` to verify agents are created
+2. Run `stn sync production` to ensure configurations are up-to-date
+3. Install a bundle if you haven't: `stn template install <bundle-url>`
+
+### Permission issues?
+1. Ensure Station binary has execute permissions: `chmod +x $(which stn)`
+2. Check that Station can write to its workspace directory
+
+---
+
+**You're now ready to deploy intelligent sub-agents through Claude Desktop!**
+
+The agents you create can handle sensitive internal tasks like database monitoring, deployment automation, and security scanning - all while maintaining secure access controls and audit trails.

@@ -72,26 +72,45 @@ const TableOfContents: FunctionalComponent<{ headings: MarkdownHeading[] }> = ({
   }
 
   return (
-    <>
-      <h2 id={onThisPageID} className="heading">
-        On this page
-      </h2>
-      <ul ref={toc}>
-        {headings
-          .filter(({ depth }) => depth > 1 && depth < 4)
-          .map((heading) => (
-            <li
-              className={`header-link depth-${heading.depth} ${
-                currentID === heading.slug ? 'current-header-link' : ''
-              }`.trim()}
-            >
-              <a href={`#${heading.slug}`} onClick={onLinkClick}>
-                {unescape(heading.text)}
-              </a>
-            </li>
-          ))}
-      </ul>
-    </>
+    <div className="modern-toc">
+      <div className="toc-header">
+        <svg className="toc-header-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/>
+        </svg>
+        <h2 id={onThisPageID} className="toc-heading">
+          On this page
+        </h2>
+      </div>
+      
+      {headings.filter(({ depth }) => depth > 1 && depth < 4).length > 0 ? (
+        <div className="toc-content">
+          <ul ref={toc} className="toc-list">
+            {headings
+              .filter(({ depth }) => depth > 1 && depth < 4)
+              .map((heading) => (
+                <li
+                  key={heading.slug}
+                  className={`toc-item depth-${heading.depth} ${
+                    currentID === heading.slug ? 'toc-item-active' : ''
+                  }`.trim()}
+                >
+                  <a 
+                    href={`#${heading.slug}`} 
+                    className="toc-link"
+                    onClick={onLinkClick}
+                  >
+                    <span className="toc-link-text">{unescape(heading.text)}</span>
+                  </a>
+                </li>
+              ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="toc-empty">
+          <p className="toc-empty-text">No headings found</p>
+        </div>
+      )}
+    </div>
   )
 }
 

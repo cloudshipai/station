@@ -5,15 +5,26 @@ description: Station - Lightweight Runtime for Deployable Sub-Agents
 
 # Station
 
-Station is a lightweight, secure runtime specifically designed for **deployable sub-agents** that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
+**A secure, self-hosted platform for building and deploying intelligent sub-agents.**
 
-## What is Station?
+🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
 
-Station is purpose-built for the intelligent automation you need for:
-- Infrastructure monitoring and alerting
-- Deployment pipeline automation
-- Security scanning and compliance
-- Day-to-day operational tasks requiring secure system access
+📚 **[Documentation](https://cloudshipai.github.io/station)** - Complete Station documentation and guides
+
+> Lightweight runtime for deployable sub-agents that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
+
+Station is purpose-built for **deployable sub-agents** - the intelligent automation you need for infrastructure monitoring, deployment pipelines, security scanning, and day-to-day tasks that require secure access to internal systems.
+
+## Why Station Exists
+
+When you need agents for internal work, you need more than application-focused agent platforms. You need:
+
+- **Secure Internal Access** - Agents that can safely handle database credentials, API keys, and system-level access
+- **Versionable Deployment** - Deployable agents that integrate with your existing deployment pipelines  
+- **Team-Approved Tools** - Easy way to use and share the tools your team builds and approves
+- **Low Footprint Runtime** - Lightweight system that blends into your infrastructure without overhead
+
+**Station provides exactly this** - a lightweight, secure runtime specifically designed for deployable sub-agents.
 
 ## Key Features
 
@@ -25,29 +36,44 @@ Station is purpose-built for the intelligent automation you need for:
 
 ### ⚡ Lightweight & Integrated
 - **Single 45MB Binary** - No complex infrastructure or dependencies
-- **SQLite Database** - Zero-setup local development, PostgreSQL for production
+- **SQLite + Litestream** - Zero-setup database with automatic replication for production
 - **GitOps Ready** - Version-controlled agent configurations like infrastructure code
 - **Existing Toolchain** - Uses your team's approved MCP tools and integrations
 
 ### 🔧 MCP Integration
-- **20+ Built-in Tools** - Filesystem, AWS, databases, monitoring, communication
-- **Tool Discovery** - Automatic MCP server detection and configuration
-- **Configuration Management** - File-based GitOps-ready configs
-- **Custom Tools** - Easy integration of your internal tools
+- **Connects to Any MCP Client** - Claude Desktop, Cursor, VS Code, and more
+- **Variable Templates** - Easy sharing with parameterized configurations
+- **Git-Backed Registries** - Install bundles directly from GitHub repositories
+- **Add Any MCP Tools** - Assign filesystem, AWS, database, or custom tools to agents
 
 ## Quick Start
 
 ```bash
 # Install Station
-curl -sSL https://getstation.cloudshipai.com | bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 
-# Initialize and create your first agent
+# Initialize and configure your first agent
 stn init
-stn agent create --name "System Monitor" --description "Monitor system resources"
-
-# Test your agent
-stn agent run 1 "Check current disk usage and memory status"
+stn template install https://github.com/cloudshipai/registry/raw/main/bundles/filesystem-bundle/filesystem-bundle.tar.gz
+stn sync production
 ```
+
+**Add to Claude Desktop MCP config:**
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+**Then use Station agents directly in Claude:**
+- "List my Station agents"
+- "Create a database monitoring agent"
+- "Run agent terraform-analyzer to check infrastructure changes"
 
 ## Architecture Overview
 
@@ -56,13 +82,64 @@ Station provides multiple interfaces for agent management:
 - **CLI** - Command-line interface for development and scripting
 - **REST API** - HTTP API for integration with existing systems  
 - **SSH/TUI** - Terminal-based admin interface
-- **WebSocket** - Real-time updates and streaming responses
+- **MCP Server** - Model Context Protocol for AI client integration
+
+```mermaid
+graph TB
+    %%{init: {"theme": "default", "themeVariables": {"fontSize": "14px"}, "flowchart": {"curve": "basis", "padding": 20}}}%%
+    subgraph "Station Runtime"
+        CLI["stn CLI Commands"]
+        SSH["SSH Terminal UI"]
+        HTTP["HTTP API Server"]
+        MCP["MCP Server"]
+    end
+    
+    subgraph "Core Services"
+        Scheduler["SchedulerService"]
+        ExecutionQueue["ExecutionQueueService"]
+        Webhook["WebhookService"]
+        Agent["AgentService"]
+        ToolDiscovery["ToolDiscoveryService"]
+    end
+    
+    subgraph "Data Layer"
+        Repository["Repository Layer"]
+        Config["Config Files"]
+        SQLite["SQLite Database"]
+    end
+    
+    subgraph "AI & Integration"
+        GenKit["GenKit Framework"]
+        ExternalMCP["External MCP Servers"]
+        Gemini["Gemini Provider"]
+        OpenAI["OpenAI Provider"]
+    end
+    
+    CLI --> Agent
+    SSH --> Agent
+    HTTP --> Agent
+    MCP --> Agent
+    
+    Agent --> ExecutionQueue
+    Agent --> ToolDiscovery
+    ExecutionQueue --> Scheduler
+    Scheduler --> Webhook
+    
+    Agent --> Repository
+    Repository --> Config
+    Repository --> SQLite
+    
+    Agent --> GenKit
+    ToolDiscovery --> ExternalMCP
+    GenKit --> Gemini
+    GenKit --> OpenAI
+```
 
 All interfaces connect to the core agent management system with MCP tool integration, configuration management, and security services.
 
 ## Next Steps
 
-- [Learn why Station is different →](/en/why-station)
-- [Follow the installation guide →](/en/installation)  
-- [Understand the architecture →](/en/architecture)
-- [Browse ready-to-use bundles](https://cloudshipai.github.io/registry)
+- [Get Station running in 5 minutes →](/station/en/mcp-quickstart)
+- [Complete Claude Desktop setup →](/station/en/mcp/claude-desktop)
+- [Learn what you can do via MCP →](/station/en/mcp/tools)
+- [Browse ready-to-use bundles →](https://cloudshipai.github.io/registry)
