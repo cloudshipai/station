@@ -193,6 +193,7 @@ func init() {
 	templateCreateCmd.Flags().String("name", "", "Bundle name (defaults to directory name)")
 	templateCreateCmd.Flags().String("author", "", "Bundle author")
 	templateCreateCmd.Flags().String("description", "", "Bundle description")
+	templateCreateCmd.Flags().String("env", "", "Create bundle from existing environment (scans MCP configs, agents, and variables)")
 	
 	templateBundleCmd.Flags().String("output", "", "Output path for package (defaults to bundle-name.tar.gz)")
 	templateBundleCmd.Flags().Bool("validate", true, "Validate bundle before packaging")
