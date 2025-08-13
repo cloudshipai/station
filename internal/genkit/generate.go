@@ -413,8 +413,69 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 	}
 	logging.Debug("Station GenKit: OpenAI API call successful, processing response...")
 
+	// For OpenAI, we need to reconstruct the conversation history from the messages
+	// This enables GenKit's response.History() to work properly for step capture
+	historyMessages := make([]*ai.Message, 0)
+	
+	// Add system message if present
+	for _, msg := range g.request.Messages {
+		if msg.OfSystem != nil {
+			historyMessages = append(historyMessages, &ai.Message{
+				Role:    ai.RoleSystem,
+				Content: []*ai.Part{ai.NewTextPart("System message")},
+			})
+			break
+		}
+	}
+	
+	// Add user message if present
+	for _, msg := range g.request.Messages {
+		if msg.OfUser != nil {
+			historyMessages = append(historyMessages, &ai.Message{
+				Role:    ai.RoleUser,
+				Content: []*ai.Part{ai.NewTextPart("User message")},
+			})
+			break
+		}
+	}
+	
+	// Add assistant messages with tool calls
+	for _, msg := range g.request.Messages {
+		if msg.OfAssistant != nil && len(msg.OfAssistant.ToolCalls) > 0 {
+			assistantMsg := &ai.Message{
+				Role:    ai.RoleModel,
+				Content: make([]*ai.Part, 0),
+			}
+			// Add tool calls from assistant message
+			for _, tc := range msg.OfAssistant.ToolCalls {
+				assistantMsg.Content = append(assistantMsg.Content, ai.NewToolRequestPart(&ai.ToolRequest{
+					Ref:   tc.ID,
+					Name:  tc.Function.Name,
+					Input: jsonStringToMap(tc.Function.Arguments),
+				}))
+			}
+			historyMessages = append(historyMessages, assistantMsg)
+		}
+	}
+	
+	// Add tool responses
+	for _, msg := range g.request.Messages {
+		if msg.OfTool != nil {
+			historyMessages = append(historyMessages, &ai.Message{
+				Role:    ai.RoleTool,
+				Content: []*ai.Part{ai.NewToolResponsePart(&ai.ToolResponse{
+					Ref:    msg.OfTool.ToolCallID,
+					Name:   "tool_response",
+					Output: map[string]interface{}{"response": "Tool response data"},
+				})},
+			})
+		}
+	}
+
 	resp := &ai.ModelResponse{
-		Request: &ai.ModelRequest{},
+		Request: &ai.ModelRequest{
+			Messages: historyMessages,
+		},
 		Usage: &ai.GenerationUsage{
 			InputTokens:  int(completion.Usage.PromptTokens),
 			OutputTokens: int(completion.Usage.CompletionTokens),

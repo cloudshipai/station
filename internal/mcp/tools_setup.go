@@ -43,8 +43,16 @@ func (s *Server) setupTools() {
 		mcp.WithNumber("timeout", mcp.Description("Execution timeout in seconds (default: 300)")),
 		mcp.WithBoolean("store_run", mcp.Description("Store execution results in runs history (default: true)")),
 		mcp.WithObject("context", mcp.Description("Additional context to provide to the agent")),
+		mcp.WithObject("variables", mcp.Description("Variables for dotprompt rendering (e.g., {\"my_folder\": \"/tmp\", \"target_file\": \"log.txt\"})")),
 	)
 	s.mcpServer.AddTool(callAgentTool, s.handleCallAgent)
+
+	// Agent schema discovery tool
+	getAgentSchemaTool := mcp.NewTool("get_agent_schema",
+		mcp.WithDescription("Get input schema and available variables for an agent's dotprompt template"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to get schema for")),
+	)
+	s.mcpServer.AddTool(getAgentSchemaTool, s.handleGetAgentSchema)
 
 	// Agent deletion tool
 	deleteAgentTool := mcp.NewTool("delete_agent",
@@ -129,5 +137,5 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(exportAgentTool, s.handleExportAgent)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 15)
+	log.Printf("MCP tools setup complete - %d tools registered", 16)
 }

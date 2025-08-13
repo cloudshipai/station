@@ -39,6 +39,27 @@ type MCPConnectionManager struct {
 	cacheMutex       sync.RWMutex
 }
 
+// debugLogToFile writes debug messages to a file for investigation
+func debugLogToFile(message string) {
+	logFile := "/home/epuerta/projects/hack/station/debug-mcp-connection.log"
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	f.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, message))
+}
+
+// getMapKeys returns the keys of a map for debugging
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // NewMCPConnectionManager creates a new MCP connection manager
 func NewMCPConnectionManager(repos *repositories.Repositories, genkitApp *genkit.Genkit) *MCPConnectionManager {
 	return &MCPConnectionManager{
@@ -51,14 +72,9 @@ func NewMCPConnectionManager(repos *repositories.Repositories, genkitApp *genkit
 // GetEnvironmentMCPTools connects to MCP servers from file configs and gets their tools
 // This replaces the large method in IntelligentAgentCreator
 func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, []*mcp.GenkitMCPClient, error) {
-	// Check cache first
-	mcm.cacheMutex.RLock()
-	if cached, exists := mcm.toolCache[environmentID]; exists && cached.IsValid() {
-		mcm.cacheMutex.RUnlock()
-		logging.Debug("Using cached MCP tools for environment %d (%d tools)", environmentID, len(cached.Tools))
-		return cached.Tools, cached.Clients, nil
-	}
-	mcm.cacheMutex.RUnlock()
+	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
+	// Always create fresh connections for each execution
+	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: CACHE COMPLETELY DISABLED - creating fresh connections")
 
 	// Get file-based MCP configurations for this environment
 	environment, err := mcm.repos.Environments.GetByID(environmentID)
@@ -66,64 +82,91 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 		return nil, nil, fmt.Errorf("failed to get environment %d: %w", environmentID, err)
 	}
 
-	logging.Info("Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
+	msg := fmt.Sprintf("Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
+	logging.Info("DEBUG MCPCONNMGR: %s", msg)
+	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg)
 
 	// Get file configs for this environment
 	fileConfigs, err := mcm.repos.FileMCPConfigs.ListByEnvironment(environmentID)
 	if err != nil {
+		msg := fmt.Sprintf("FAILED to get file configs for environment %d: %v", environmentID, err)
+		logging.Info("DEBUG MCPCONNMGR: %s", msg)
+		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg)
 		return nil, nil, fmt.Errorf("failed to get file configs for environment %d: %w", environmentID, err)
 	}
 
-	logging.Debug("Database query returned %d file configs for environment %d", len(fileConfigs), environmentID)
+	msg2 := fmt.Sprintf("Database query returned %d file configs for environment %d", len(fileConfigs), environmentID)
+	logging.Info("DEBUG MCPCONNMGR: %s", msg2)
+	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg2)
+	
+	for i, fc := range fileConfigs {
+		fcMsg := fmt.Sprintf("File config %d: name='%s', path='%s', env_id=%d", i, fc.ConfigName, fc.TemplatePath, fc.EnvironmentID)
+		logging.Info("DEBUG MCPCONNMGR: %s", fcMsg)
+		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcMsg)
+	}
 
 	var allTools []ai.Tool
 	var allClients []*mcp.GenkitMCPClient
 
 	// Connect to each MCP server from file configs and get their tools
-	for _, fileConfig := range fileConfigs {
+	processMsg := fmt.Sprintf("Processing %d file configs for tool discovery", len(fileConfigs))
+	logging.Info("DEBUG MCPCONNMGR: %s", processMsg)
+	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + processMsg)
+	
+	for i, fileConfig := range fileConfigs {
+		fcProcessMsg := fmt.Sprintf("Processing file config %d: %s", i+1, fileConfig.ConfigName)
+		logging.Info("DEBUG MCPCONNMGR: %s", fcProcessMsg)
+		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcProcessMsg)
+		
 		tools, clients := mcm.processFileConfig(ctx, fileConfig)
+		
+		fcResultMsg := fmt.Sprintf("File config %d returned %d tools and %d clients", i+1, len(tools), len(clients))
+		logging.Info("DEBUG MCPCONNMGR: %s", fcResultMsg)
+		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcResultMsg)
+		
 		allTools = append(allTools, tools...)
 		allClients = append(allClients, clients...)
 	}
 
-	logging.Debug("Total tools discovered from all file config servers: %d", len(allTools))
+	totalToolsMsg := fmt.Sprintf("Total tools discovered from all file config servers: %d", len(allTools))
+	totalClientsMsg := fmt.Sprintf("Total clients created: %d", len(allClients))
+	logging.Info("DEBUG MCPCONNMGR: %s", totalToolsMsg)
+	logging.Info("DEBUG MCPCONNMGR: %s", totalClientsMsg)
+	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + totalToolsMsg)
+	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + totalClientsMsg)
 	
-	// Cache the results for 5 minutes
-	mcm.cacheMutex.Lock()
-	mcm.toolCache[environmentID] = &EnvironmentToolCache{
-		Tools:    allTools,
-		Clients:  allClients,
-		CachedAt: time.Now(),
-		ValidFor: 5 * time.Minute,
-	}
-	mcm.cacheMutex.Unlock()
-	logging.Debug("Cached MCP tools for environment %d", environmentID)
+	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
+	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: NOT CACHING - fresh connections every time")
 	
 	return allTools, allClients, nil
 }
 
 // processFileConfig handles a single file config and returns tools and clients
 func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConfig *repositories.FileConfigRecord) ([]ai.Tool, []*mcp.GenkitMCPClient) {
-	logging.Debug("Processing file config: %s", fileConfig.ConfigName)
+	logging.Info("DEBUG MCPCONNMGR processFileConfig: Processing file config: %s", fileConfig.ConfigName)
 	
 	// Make template path absolute
 	configDir := os.ExpandEnv("$HOME/.config/station")
 	absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
+	logging.Info("DEBUG MCPCONNMGR processFileConfig: Reading config file: %s", absolutePath)
 	
 	// Read and process the config file
 	rawContent, err := os.ReadFile(absolutePath)
 	if err != nil {
-		logging.Debug("Failed to read file config %s: %v", fileConfig.ConfigName, err)
+		logging.Info("DEBUG MCPCONNMGR processFileConfig: FAILED to read file config %s from path %s: %v", fileConfig.ConfigName, absolutePath, err)
 		return nil, nil
 	}
+	logging.Info("DEBUG MCPCONNMGR processFileConfig: Successfully read %d bytes from config file", len(rawContent))
 
 	// Process template variables
+	logging.Info("DEBUG MCPCONNMGR processFileConfig: Processing template variables for config: %s", fileConfig.ConfigName)
 	templateService := NewTemplateVariableService(configDir, mcm.repos)
 	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 	if err != nil {
-		logging.Debug("Failed to process template variables for %s: %v", fileConfig.ConfigName, err)
+		logging.Info("DEBUG MCPCONNMGR processFileConfig: FAILED to process template variables for %s: %v", fileConfig.ConfigName, err)
 		return nil, nil
 	}
+	logging.Info("DEBUG MCPCONNMGR processFileConfig: Template processing successful, rendered content length: %d", len(result.RenderedContent))
 
 	// Parse the config
 	var rawConfig map[string]interface{}
@@ -133,13 +176,18 @@ func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConf
 	}
 
 	// Extract servers
+	logging.Info("DEBUG MCPCONNMGR processFileConfig: Parsing servers from config: %s", fileConfig.ConfigName)
+	logging.Info("DEBUG MCPCONNMGR processFileConfig: Available top-level keys: %v", getMapKeys(rawConfig))
+	
 	var serversData map[string]interface{}
 	if mcpServers, ok := rawConfig["mcpServers"].(map[string]interface{}); ok {
 		serversData = mcpServers
+		logging.Info("DEBUG MCPCONNMGR processFileConfig: Found 'mcpServers' section with %d servers", len(serversData))
 	} else if servers, ok := rawConfig["servers"].(map[string]interface{}); ok {
 		serversData = servers
+		logging.Info("DEBUG MCPCONNMGR processFileConfig: Found 'servers' section with %d servers", len(serversData))
 	} else {
-		logging.Debug("No MCP servers found in config %s", fileConfig.ConfigName)
+		logging.Info("DEBUG MCPCONNMGR processFileConfig: NO MCP servers found in config %s - available keys: %v", fileConfig.ConfigName, getMapKeys(rawConfig))
 		return nil, nil
 	}
 
@@ -216,16 +264,20 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 
 	// Use main context directly - don't create timeout context that could break connection
 	// The MCP client internally handles timeouts appropriately
+	logging.Info("DEBUG MCPCONNMGR connectToMCPServer: About to call GetActiveTools for server: %s", serverName)
 	serverTools, err := mcpClient.GetActiveTools(ctx, mcm.genkitApp)
 	
 	// NOTE: Connection stays alive for tool execution during Generate() calls
 	
 	if err != nil {
-		logging.Debug("Failed to get tools from %s: %v", serverName, err)
+		logging.Info("DEBUG MCPCONNMGR connectToMCPServer: FAILED to get tools from %s: %v", serverName, err)
 		return nil, mcpClient // Return client for cleanup even on error
 	}
 
-	logging.Debug("Successfully discovered %d tools from server: %s", len(serverTools), serverName)
+	logging.Info("DEBUG MCPCONNMGR connectToMCPServer: Successfully discovered %d tools from server: %s", len(serverTools), serverName)
+	for i, tool := range serverTools {
+		logging.Info("DEBUG MCPCONNMGR connectToMCPServer: Tool %d from %s: %s", i+1, serverName, tool.Name())
+	}
 	return serverTools, mcpClient
 }
 

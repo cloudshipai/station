@@ -30,6 +30,32 @@ import (
 	"station/pkg/dotprompt"
 )
 
+// extractInt64FromTokenUsage safely extracts int64 from various numeric types in token usage
+func extractInt64FromTokenUsage(value interface{}) *int64 {
+	if value == nil {
+		return nil
+	}
+	
+	switch v := value.(type) {
+	case int64:
+		return &v
+	case int:
+		val := int64(v)
+		return &val
+	case int32:
+		val := int64(v)
+		return &val
+	case float64:
+		val := int64(v)
+		return &val
+	case float32:
+		val := int64(v)
+		return &val
+	default:
+		return nil
+	}
+}
+
 // AgentHandler handles agent-related CLI commands
 type AgentHandler struct {
 	themeManager *theme.ThemeManager
@@ -421,30 +447,24 @@ func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment 
 	completedAt := time.Now()
 	durationSeconds := result.Duration.Seconds()
 	
-	// Extract token usage from result
+	// Extract token usage from result using robust type conversion
 	var inputTokens, outputTokens, totalTokens *int64
 	var toolsUsed *int64
 	
 	if result.TokenUsage != nil {
-		if inputVal, ok := result.TokenUsage["input_tokens"].(int64); ok {
-			inputTokens = &inputVal
-		} else if inputFloat, ok := result.TokenUsage["input_tokens"].(float64); ok {
-			inputVal := int64(inputFloat)
-			inputTokens = &inputVal
+		// Handle input_tokens with multiple numeric types
+		if inputVal := extractInt64FromTokenUsage(result.TokenUsage["input_tokens"]); inputVal != nil {
+			inputTokens = inputVal
 		}
 		
-		if outputVal, ok := result.TokenUsage["output_tokens"].(int64); ok {
-			outputTokens = &outputVal
-		} else if outputFloat, ok := result.TokenUsage["output_tokens"].(float64); ok {
-			outputVal := int64(outputFloat)
-			outputTokens = &outputVal
+		// Handle output_tokens with multiple numeric types
+		if outputVal := extractInt64FromTokenUsage(result.TokenUsage["output_tokens"]); outputVal != nil {
+			outputTokens = outputVal
 		}
 		
-		if totalVal, ok := result.TokenUsage["total_tokens"].(int64); ok {
-			totalTokens = &totalVal
-		} else if totalFloat, ok := result.TokenUsage["total_tokens"].(float64); ok {
-			totalVal := int64(totalFloat)
-			totalTokens = &totalVal
+		// Handle total_tokens with multiple numeric types
+		if totalVal := extractInt64FromTokenUsage(result.TokenUsage["total_tokens"]); totalVal != nil {
+			totalTokens = totalVal
 		}
 	}
 	

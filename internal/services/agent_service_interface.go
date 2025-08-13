@@ -10,7 +10,8 @@ import (
 // This ensures compatibility with ExecutionQueueService and MCP server handlers
 type AgentServiceInterface interface {
 	// Core agent execution - used by ExecutionQueueService and MCP server
-	ExecuteAgent(ctx context.Context, agentID int64, task string) (*Message, error)
+	// userVariables is optional - pass nil or empty map for no variables
+	ExecuteAgent(ctx context.Context, agentID int64, task string, userVariables map[string]interface{}) (*Message, error)
 	
 	// Agent management - used by MCP server
 	CreateAgent(ctx context.Context, config *AgentConfig) (*models.Agent, error)

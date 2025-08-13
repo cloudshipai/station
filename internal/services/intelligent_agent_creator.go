@@ -27,9 +27,18 @@ func (iac *IntelligentAgentCreator) CreateIntelligentAgent(ctx context.Context, 
 	return iac.service.CreateIntelligentAgent(ctx, req)
 }
 
-// ExecuteAgentViaStdioMCP executes an agent using the MCP architecture
-func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
-	return iac.service.ExecuteAgentViaStdioMCP(ctx, agent, task, runID)
+// ExecuteAgentViaStdioMCP executes an agent using the MCP architecture with optional user variables
+func (iac *IntelligentAgentCreator) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables ...map[string]interface{}) (*AgentExecutionResult, error) {
+	// Handle optional userVariables parameter for backward compatibility
+	var variables map[string]interface{}
+	if len(userVariables) > 0 {
+		variables = userVariables[0]
+	}
+	if variables == nil {
+		variables = make(map[string]interface{})
+	}
+	
+	return iac.service.ExecuteAgentViaStdioMCP(ctx, agent, task, runID, variables)
 }
 
 // TestStdioMCPConnection tests the MCP connection for debugging

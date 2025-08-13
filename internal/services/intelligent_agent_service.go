@@ -27,9 +27,18 @@ func (ias *IntelligentAgentService) CreateIntelligentAgent(ctx context.Context, 
 	return ias.planGenerator.CreateIntelligentAgent(ctx, req)
 }
 
-// ExecuteAgentViaStdioMCP executes an agent using the MCP architecture
-func (ias *IntelligentAgentService) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
-	return ias.executionEngine.ExecuteAgentViaStdioMCP(ctx, agent, task, runID)
+// ExecuteAgentViaStdioMCP executes an agent using the MCP architecture with optional user variables
+func (ias *IntelligentAgentService) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables ...map[string]interface{}) (*AgentExecutionResult, error) {
+	// Handle optional userVariables parameter for backward compatibility
+	var variables map[string]interface{}
+	if len(userVariables) > 0 {
+		variables = userVariables[0]
+	}
+	if variables == nil {
+		variables = make(map[string]interface{})
+	}
+	
+	return ias.executionEngine.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, variables)
 }
 
 // TestStdioMCPConnection tests the MCP connection for debugging
