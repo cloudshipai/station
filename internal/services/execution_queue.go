@@ -274,8 +274,21 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 	ctx, cancel := context.WithTimeout(worker.ctx, 10*time.Minute) // 10-minute timeout
 	defer cancel()
 	
-	// Execute the agent using AgentServiceInterface
-	response, err := worker.ExecutionService.ExecuteAgent(ctx, request.AgentID, request.Task)
+	// Extract user variables from metadata if available
+	var userVariables map[string]interface{}
+	if request.Metadata != nil {
+		if variables, ok := request.Metadata["user_variables"]; ok {
+			if variablesMap, ok := variables.(map[string]interface{}); ok {
+				userVariables = variablesMap
+			}
+		}
+	}
+	if userVariables == nil {
+		userVariables = make(map[string]interface{}) // Default to empty map
+	}
+	
+	// Execute the agent using AgentServiceInterface with variables support
+	response, err := worker.ExecutionService.ExecuteAgent(ctx, request.AgentID, request.Task, userVariables)
 	
 	endTime := time.Now()
 	
