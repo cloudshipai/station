@@ -137,7 +137,10 @@ Examples:
 	templateCreateCmd = &cobra.Command{
 		Use:   "create <path>",
 		Short: "Create a new template bundle",
-		Long:  "Create a new template bundle with scaffolding for MCP server configurations",
+		Long:  "Create a new template bundle with scaffolding for MCP server configurations, or create from an existing environment",
+		Example: `  stn template create my-bundle                    # Create empty bundle
+  stn template create my-bundle --env default        # Create from default environment
+  stn template create my-bundle --env production     # Create from production environment`,
 		Args:  cobra.ExactArgs(1),
 		RunE:  runTemplateCreate,
 	}
