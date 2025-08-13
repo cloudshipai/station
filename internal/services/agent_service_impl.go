@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"station/internal/db/repositories"
 	"station/pkg/models"
@@ -26,16 +27,30 @@ func NewAgentService(repos *repositories.Repositories) *AgentService {
 	return service
 }
 
-// ExecuteAgent executes an agent with a specific task
-func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task string) (*Message, error) {
+// ExecuteAgent executes an agent with a specific task and optional user variables
+func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task string, userVariables map[string]interface{}) (*Message, error) {
+	// Default to empty variables if nil provided
+	if userVariables == nil {
+		userVariables = make(map[string]interface{})
+	}
+	
 	// Get the agent details
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
 	}
 
-	// Execute using IntelligentAgentCreator with stdio MCP
-	result, err := s.creator.ExecuteAgentViaStdioMCP(ctx, agent, task, 0) // Run ID 0 for MCP calls
+	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with %d variables", agent.ID, agent.Name, len(userVariables))
+	
+	// CRITICAL FIX: Create fresh execution context like CLI does
+	// This prevents shared state issues that cause STDIO pipe transport failures
+	log.Printf("DEBUG AgentService: Creating fresh execution context to avoid shared state issues")
+	freshCreator := NewIntelligentAgentCreator(s.repos, nil) // Fresh creator instance
+	
+	// Execute using fresh IntelligentAgentCreator with stdio MCP and user variables
+	result, err := freshCreator.ExecuteAgentViaStdioMCP(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
+	
+	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
 	}
@@ -45,6 +60,11 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 		"agent_id":     agent.ID,
 		"agent_name":   agent.Name,
 		"steps_taken":  result.StepsTaken,
+	}
+	
+	// Include variables in response for tracking if provided
+	if len(userVariables) > 0 {
+		extra["user_variables"] = userVariables
 	}
 	
 	// Add tool calls and execution steps directly (they're already *models.JSONArray)
