@@ -184,14 +184,35 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 	timeout := request.GetInt("timeout", 300)
 	storeRun := request.GetBool("store_run", true)
 	
+	// Extract variables for dotprompt rendering
+	var userVariables map[string]interface{}
+	if request.Params.Arguments != nil {
+		if argsMap, ok := request.Params.Arguments.(map[string]interface{}); ok {
+			if variablesArg, ok := argsMap["variables"]; ok {
+				if variables, ok := variablesArg.(map[string]interface{}); ok {
+					userVariables = variables
+				}
+			}
+		}
+	}
+	if userVariables == nil {
+		userVariables = make(map[string]interface{}) // Default to empty map
+	}
+	
 	// Use execution queue for proper tracing and storage
 	var runID int64
 	var response *services.Message
 	var execErr error
 	
 	if s.executionQueue != nil {
+		// Prepare metadata with user variables for dotprompt rendering
+		metadata := map[string]interface{}{
+			"source": "mcp",
+			"user_variables": userVariables,
+		}
+		
 		// Queue the execution for detailed tracing
-		runID, execErr = s.executionQueue.QueueExecution(agentID, userID, task, nil)
+		runID, execErr = s.executionQueue.QueueExecution(agentID, userID, task, metadata)
 		if execErr != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to queue agent execution: %v", execErr)), nil
 		}
@@ -240,7 +261,7 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 		// Debug logging
 		fmt.Printf("DEBUG MCP: About to execute agent %d with task: %s\n", agentID, task)
 		
-		response, execErr = s.agentService.ExecuteAgent(ctx, agentID, task)
+		response, execErr = s.agentService.ExecuteAgent(ctx, agentID, task, userVariables)
 		if execErr != nil {
 			fmt.Printf("DEBUG MCP: Agent execution failed: %v\n", execErr)
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
@@ -279,6 +300,43 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 	
 	resultJSON, _ := json.MarshalIndent(result, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleGetAgentSchema(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract agent ID parameter
+	agentIDStr, err := request.RequireString("agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
+	}
+	
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError("Invalid agent_id format"), nil
+	}
+	
+	// Get the agent
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+	}
+	
+	// Create an agent execution engine to parse the schema
+	agentService := services.NewAgentService(s.repos)
+	executionEngine := services.NewAgentExecutionEngine(s.repos, agentService)
+	
+	// Get the agent schema
+	schema, err := executionEngine.GetAgentSchema(agent)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get agent schema: %v", err)), nil
+	}
+	
+	// Return schema as JSON
+	schemaJSON, err := json.MarshalIndent(schema, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal schema: %v", err)), nil
+	}
+	
+	return mcp.NewToolResultText(string(schemaJSON)), nil
 }
 
 func (s *Server) handleDeleteAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

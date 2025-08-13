@@ -15,6 +15,7 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	"github.com/google/dotprompt/go/dotprompt"
+	"gopkg.in/yaml.v3"
 )
 
 // AgentExecutionResult contains the result of an agent execution
@@ -56,6 +57,12 @@ func NewAgentExecutionEngine(repos *repositories.Repositories, agentService Agen
 
 // ExecuteAgentViaStdioMCP executes an agent using self-bootstrapping stdio MCP architecture
 func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
+	// Default to empty user variables for backward compatibility
+	return aee.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, map[string]interface{}{})
+}
+
+// ExecuteAgentViaStdioMCPWithVariables executes an agent with user-defined variables for dotprompt rendering
+func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
 	logging.Info("Starting stdio MCP agent execution for agent '%s'", agent.Name)
 
@@ -128,8 +135,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 	}
 
 	// Render agent prompt with dotprompt if it contains frontmatter
-	// TODO: Accept user-defined variables payload here
-	userVariables := map[string]interface{}{} // Empty for now, will be populated from CLI/API
+	// Use the provided user-defined variables for dotprompt rendering
 	renderedAgentPrompt, err := aee.RenderAgentPromptWithDotprompt(agent.Prompt, userVariables)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render agent prompt: %w", err)
@@ -577,4 +583,122 @@ func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent string, 
 	}
 	
 	return renderedText.String(), nil
+}
+
+// AgentSchema represents the input/output schema for an agent
+type AgentSchema struct {
+	AgentID      int64                  `json:"agent_id"`
+	AgentName    string                 `json:"agent_name"`
+	HasSchema    bool                   `json:"has_schema"`
+	InputSchema  map[string]interface{} `json:"input_schema,omitempty"`
+	OutputSchema map[string]interface{} `json:"output_schema,omitempty"`
+	Variables    []string               `json:"variables,omitempty"` // Available template variables
+}
+
+// GetAgentSchema extracts schema information from agent's dotprompt content
+func (aee *AgentExecutionEngine) GetAgentSchema(agent *models.Agent) (*AgentSchema, error) {
+	schema := &AgentSchema{
+		AgentID:   agent.ID,
+		AgentName: agent.Name,
+		HasSchema: false,
+		Variables: []string{},
+	}
+	
+	if !aee.isDotpromptContent(agent.Prompt) {
+		// Simple text prompt - no schema
+		return schema, nil
+	}
+	
+	// Parse dotprompt frontmatter to extract schema
+	frontmatter, err := aee.parseDotpromptFrontmatter(agent.Prompt)
+	if err != nil {
+		return schema, fmt.Errorf("failed to parse dotprompt frontmatter: %w", err)
+	}
+	
+	schema.HasSchema = true
+	schema.InputSchema = frontmatter.Input
+	schema.OutputSchema = frontmatter.Output
+	
+	// Extract available variables from the template content
+	variables := aee.extractTemplateVariables(agent.Prompt)
+	schema.Variables = variables
+	
+	return schema, nil
+}
+
+// DotpromptFrontmatter represents the parsed YAML frontmatter
+type DotpromptFrontmatter struct {
+	Input  map[string]interface{} `yaml:"input"`
+	Output map[string]interface{} `yaml:"output"`
+	Model  string                 `yaml:"model"`
+	Tools  []string               `yaml:"tools"`
+}
+
+// parseDotpromptFrontmatter extracts and parses YAML frontmatter from dotprompt content
+func (aee *AgentExecutionEngine) parseDotpromptFrontmatter(dotpromptContent string) (*DotpromptFrontmatter, error) {
+	// Split frontmatter from content
+	parts := strings.SplitN(strings.TrimSpace(dotpromptContent), "\n---\n", 2)
+	if len(parts) < 2 {
+		return &DotpromptFrontmatter{}, nil // No frontmatter
+	}
+	
+	// Remove leading "---" from frontmatter
+	frontmatterYAML := strings.TrimPrefix(parts[0], "---")
+	frontmatterYAML = strings.TrimSpace(frontmatterYAML)
+	
+	if frontmatterYAML == "" {
+		return &DotpromptFrontmatter{}, nil // Empty frontmatter
+	}
+	
+	// Parse YAML frontmatter
+	var frontmatter DotpromptFrontmatter
+	if err := yaml.Unmarshal([]byte(frontmatterYAML), &frontmatter); err != nil {
+		return &frontmatter, fmt.Errorf("failed to parse YAML frontmatter: %w", err)
+	}
+	
+	return &frontmatter, nil
+}
+
+// extractTemplateVariables finds all {{variable}} patterns in the template content
+func (aee *AgentExecutionEngine) extractTemplateVariables(dotpromptContent string) []string {
+	// Extract template content (after frontmatter)
+	parts := strings.SplitN(strings.TrimSpace(dotpromptContent), "\n---\n", 2)
+	templateContent := parts[len(parts)-1] // Use last part (template content)
+	
+	// Find all {{variable}} patterns
+	var variables []string
+	variableMap := make(map[string]bool) // Use map to deduplicate
+	
+	// Simple regex to find {{variable}} patterns
+	start := 0
+	for {
+		openIndex := strings.Index(templateContent[start:], "{{")
+		if openIndex == -1 {
+			break
+		}
+		openIndex += start
+		
+		closeIndex := strings.Index(templateContent[openIndex:], "}}")
+		if closeIndex == -1 {
+			break
+		}
+		closeIndex += openIndex
+		
+		// Extract variable name
+		varContent := strings.TrimSpace(templateContent[openIndex+2 : closeIndex])
+		
+		// Handle simple variable names (no complex handlebars logic)
+		if varContent != "" && !strings.Contains(varContent, " ") && !strings.Contains(varContent, "#") {
+			variableMap[varContent] = true
+		}
+		
+		start = closeIndex + 2
+	}
+	
+	// Convert map to slice
+	for variable := range variableMap {
+		variables = append(variables, variable)
+	}
+	
+	return variables
 }
