@@ -262,10 +262,12 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		return nil, nil
 	}
 
-	// Use main context directly - don't create timeout context that could break connection
-	// The MCP client internally handles timeouts appropriately
+	// Add timeout for Mac debugging - MCP GetActiveTools can hang on macOS
+	toolCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	
 	logging.Info("DEBUG MCPCONNMGR connectToMCPServer: About to call GetActiveTools for server: %s", serverName)
-	serverTools, err := mcpClient.GetActiveTools(ctx, mcm.genkitApp)
+	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
 	
 	// NOTE: Connection stays alive for tool execution during Generate() calls
 	
