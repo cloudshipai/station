@@ -81,14 +81,40 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool) error 
 	fmt.Printf("  • MCP Servers: %d processed, %d connected\n", result.MCPServersProcessed, result.MCPServersConnected)
 	fmt.Printf("  • Agents: %d processed, %d synced\n", result.AgentsProcessed, result.AgentsSynced)
 
+	// Show failed servers if any
+	failedServers := result.MCPServersProcessed - result.MCPServersConnected
+	if failedServers > 0 {
+		fmt.Printf("  • ❌ MCP Servers FAILED: %d (NOT saved to database)\n", failedServers)
+		fmt.Printf("     ⚠️  These servers will NOT provide tools for agents\n")
+	}
+
 	if result.ValidationErrors > 0 {
 		fmt.Printf("  • ⚠️  Validation Errors: %d\n", result.ValidationErrors)
 		for _, errMsg := range result.ValidationMessages {
 			fmt.Printf("    - %s\n", styles.Error.Render(errMsg))
 		}
-		fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed with validation errors!"))
+		
+		if failedServers > 0 {
+			fmt.Printf("\n❌ %s\n", styles.Error.Render("CRITICAL: Some MCP servers failed to sync!"))
+			fmt.Printf("💡 Check server configurations and ensure MCP servers start correctly\n")
+			fmt.Printf("💡 Agents using tools from failed servers will not work\n")
+		} else {
+			fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed with validation errors!"))
+		}
 	} else {
-		fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
+		if failedServers > 0 {
+			fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed but some servers failed!"))
+		} else {
+			fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
+		}
+	}
+
+	// Always show debug log location for troubleshooting
+	homeDir, _ := os.UserHomeDir()
+	debugLogPath := fmt.Sprintf("%s/.config/station/debug-mcp-sync.log", homeDir)
+	if result.ValidationErrors > 0 || failedServers > 0 {
+		fmt.Printf("\n🔍 Detailed debug logs available at: %s\n", debugLogPath)
+		fmt.Printf("💡 Use 'tail -f %s' to monitor MCP sync issues\n", debugLogPath)
 	}
 
 	return nil
