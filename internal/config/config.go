@@ -103,7 +103,6 @@ func Load() (*Config, error) {
 	if cfg.EncryptionKey == "" {
 		return nil, fmt.Errorf("encryption key is required - either in config file or ENCRYPTION_KEY environment variable")
 	}
-
 	return cfg, nil
 }
 
