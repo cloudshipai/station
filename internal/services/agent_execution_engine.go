@@ -346,78 +346,134 @@ Guidelines:
 			}
 		}
 	}
-	logging.Info("DEBUG: TOTAL COMPLETED TOOL CALLS FOUND: %d", totalToolCalls)
-	
-	// Debug: Check if response has any tool-related content
-	logging.Info("DEBUG: Response length: %d characters", len(responseText))
-
-	// Extract tool calls directly from GenKit response object (no middleware)
-	logging.Info("DEBUG: Extracting tool calls directly from GenKit response object")
+	// Extract tool calls and execution steps from GenKit response
 	var toolCalls []interface{}
 	var steps []interface{}
 	
-	// FIXED: Use the correct tool calls from completed execution history
-	// Extract from request messages (completed calls) instead of pending toolRequests
+	// Extract tool calls from GenKit conversation history  
 	allToolCalls := []interface{}{}
-	if response.Request != nil {
-		for _, msg := range response.Request.Messages {
-			for _, part := range msg.Content {
-				if part.IsToolRequest() {
-					toolCall := map[string]interface{}{
-						"step":           len(allToolCalls) + 1,
-						"type":           "tool_call",
-						"tool_name":      part.ToolRequest.Name,
-						"tool_input":     part.ToolRequest.Input,
-						"model_name":     cfg.AIModel,
-						"tool_call_id":   part.ToolRequest.Ref,
-					}
-					allToolCalls = append(allToolCalls, toolCall)
+	conversationHistory := response.History()
+	toolCallCounter := 0
+	
+	for _, message := range conversationHistory {
+		for _, part := range message.Content {
+			if part.IsToolRequest() {
+				toolCallCounter++
+				toolReq := part.ToolRequest
+				toolCall := map[string]interface{}{
+					"step":           toolCallCounter,
+					"type":           "tool_call",
+					"tool_name":      toolReq.Name,
+					"tool_input":     toolReq.Input,
+					"tool_call_id":   toolReq.Ref,
+					"model_name":     cfg.AIModel,
+					"message_role":   string(message.Role),
 				}
+				allToolCalls = append(allToolCalls, toolCall)
 			}
 		}
 	}
 	
-	// Fallback to pending tool requests if no completed ones found
-	for i, toolReq := range toolRequests {
-		toolCall := map[string]interface{}{
-			"step":           i + 1,
-			"type":           "tool_call",
-			"tool_name":      toolReq.Name,
-			"tool_input":     toolReq.Input,
-			"model_name":     cfg.AIModel,
-			"tool_call_id":   toolReq.Ref, // Station's fixed plugin preserves proper IDs
+	// Fallback to pending tool requests if no completed ones found in history
+	if len(allToolCalls) == 0 {
+		for i, toolReq := range toolRequests {
+			toolCall := map[string]interface{}{
+				"step":           i + 1,
+				"type":           "tool_call",
+				"tool_name":      toolReq.Name,
+				"tool_input":     toolReq.Input,
+				"model_name":     cfg.AIModel,
+				"tool_call_id":   toolReq.Ref,
+			}
+			allToolCalls = append(allToolCalls, toolCall)
 		}
-		allToolCalls = append(allToolCalls, toolCall)
 	}
 	
-	// Use the corrected tool calls list
 	toolCalls = allToolCalls
 	
-	// Build simple execution steps from response data  
-	if len(toolCalls) > 0 {
-		step := map[string]interface{}{
-			"step":              1,
-			"type":              "tool_execution",
-			"agent_id":          agent.ID,
-			"agent_name":        agent.Name,
-			"model_name":        cfg.AIModel,
-			"tool_calls_count":  len(toolCalls),
-			"tools_used":        len(toolCalls),
+	// Build detailed execution steps from GenKit conversation history
+	stepCounter := 0
+	
+	// Process each message in the conversation history
+	for _, message := range conversationHistory {
+		// Process each part of the message
+		for _, part := range message.Content {
+			if part.IsToolRequest() {
+				stepCounter++
+				toolReq := part.ToolRequest
+				toolRequestStep := map[string]interface{}{
+					"step":          stepCounter,
+					"type":          "tool_request",
+					"agent_id":      agent.ID,
+					"agent_name":    agent.Name,
+					"model_name":    cfg.AIModel,
+					"tool_name":     toolReq.Name,
+					"tool_call_id":  toolReq.Ref,
+					"tool_input":    toolReq.Input,
+					"message_role":  string(message.Role),
+				}
+				steps = append(steps, toolRequestStep)
+				
+			} else if part.IsToolResponse() {
+				stepCounter++
+				toolResp := part.ToolResponse
+				toolResponseStep := map[string]interface{}{
+					"step":          stepCounter,
+					"type":          "tool_response", 
+					"agent_id":      agent.ID,
+					"agent_name":    agent.Name,
+					"model_name":    cfg.AIModel,
+					"tool_name":     toolResp.Name,
+					"tool_call_id":  toolResp.Ref,
+					"tool_output":   toolResp.Output,
+					"message_role":  string(message.Role),
+				}
+				steps = append(steps, toolResponseStep)
+				
+			} else if part.IsText() && message.Role == "model" {
+				// This is the AI's final text response
+				stepCounter++
+				finalResponseStep := map[string]interface{}{
+					"step":           stepCounter,
+					"type":           "model_response",
+					"agent_id":       agent.ID,
+					"agent_name":     agent.Name,
+					"model_name":     cfg.AIModel,
+					"content":        part.Text,
+					"content_length": len(part.Text),
+					"message_role":   string(message.Role),
+				}
+				steps = append(steps, finalResponseStep)
+			}
 		}
-		steps = append(steps, step)
 	}
 	
-	// Add final response step
-	if responseText != "" {
-		finalStep := map[string]interface{}{
-			"step":              len(steps) + 1,
-			"type":              "final_response",
-			"agent_id":          agent.ID,
-			"agent_name":        agent.Name,
-			"model_name":        cfg.AIModel,
-			"content_length":    len(responseText),
+	// Fallback: If no steps were captured from history, add summary steps
+	if len(steps) == 0 {
+		if len(toolCalls) > 0 {
+			step := map[string]interface{}{
+				"step":              1,
+				"type":              "tool_execution_summary",
+				"agent_id":          agent.ID,
+				"agent_name":        agent.Name,
+				"model_name":        cfg.AIModel,
+				"tool_calls_count":  len(toolCalls),
+				"tools_used":        len(toolCalls),
+			}
+			steps = append(steps, step)
 		}
-		steps = append(steps, finalStep)
+		
+		if responseText != "" {
+			finalStep := map[string]interface{}{
+				"step":              len(steps) + 1,
+				"type":              "final_response_summary",
+				"agent_id":          agent.ID,
+				"agent_name":        agent.Name,
+				"model_name":        cfg.AIModel,
+				"content_length":    len(responseText),
+			}
+			steps = append(steps, finalStep)
+		}
 	}
 
 	// Convert to database-compatible types
