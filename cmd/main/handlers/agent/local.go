@@ -23,6 +23,7 @@ import (
 	"station/pkg/models"
 )
 
+
 // CLIStyles contains all styled components for the CLI
 type CLIStyles struct {
 	Title    lipgloss.Style
@@ -701,31 +702,38 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	completedAt := time.Now()
 	durationSeconds := result.Duration.Seconds()
 	
-	// Extract token usage from result
+	// Extract token usage from result using robust type conversion
 	var inputTokens, outputTokens, totalTokens *int64
 	var toolsUsed *int64
 	
 	if result.TokenUsage != nil {
-		if inputVal, ok := result.TokenUsage["input_tokens"].(int64); ok {
-			inputTokens = &inputVal
-		} else if inputFloat, ok := result.TokenUsage["input_tokens"].(float64); ok {
-			inputVal := int64(inputFloat)
-			inputTokens = &inputVal
+		fmt.Printf("DEBUG CLI: TokenUsage map contains: %+v\n", result.TokenUsage)
+		
+		// Handle input_tokens with multiple numeric types
+		if inputVal := extractInt64FromTokenUsage(result.TokenUsage["input_tokens"]); inputVal != nil {
+			inputTokens = inputVal
+			fmt.Printf("DEBUG CLI: Extracted input_tokens: %d\n", *inputTokens)
+		} else {
+			fmt.Printf("DEBUG CLI: Failed to extract input_tokens from: %+v (type: %T)\n", result.TokenUsage["input_tokens"], result.TokenUsage["input_tokens"])
 		}
 		
-		if outputVal, ok := result.TokenUsage["output_tokens"].(int64); ok {
-			outputTokens = &outputVal
-		} else if outputFloat, ok := result.TokenUsage["output_tokens"].(float64); ok {
-			outputVal := int64(outputFloat)
-			outputTokens = &outputVal
+		// Handle output_tokens with multiple numeric types
+		if outputVal := extractInt64FromTokenUsage(result.TokenUsage["output_tokens"]); outputVal != nil {
+			outputTokens = outputVal
+			fmt.Printf("DEBUG CLI: Extracted output_tokens: %d\n", *outputTokens)
+		} else {
+			fmt.Printf("DEBUG CLI: Failed to extract output_tokens from: %+v (type: %T)\n", result.TokenUsage["output_tokens"], result.TokenUsage["output_tokens"])
 		}
 		
-		if totalVal, ok := result.TokenUsage["total_tokens"].(int64); ok {
-			totalTokens = &totalVal
-		} else if totalFloat, ok := result.TokenUsage["total_tokens"].(float64); ok {
-			totalVal := int64(totalFloat)
-			totalTokens = &totalVal
+		// Handle total_tokens with multiple numeric types
+		if totalVal := extractInt64FromTokenUsage(result.TokenUsage["total_tokens"]); totalVal != nil {
+			totalTokens = totalVal
+			fmt.Printf("DEBUG CLI: Extracted total_tokens: %d\n", *totalTokens)
+		} else {
+			fmt.Printf("DEBUG CLI: Failed to extract total_tokens from: %+v (type: %T)\n", result.TokenUsage["total_tokens"], result.TokenUsage["total_tokens"])
 		}
+	} else {
+		fmt.Printf("DEBUG CLI: result.TokenUsage is nil\n")
 	}
 	
 	if result.ToolsUsed > 0 {
