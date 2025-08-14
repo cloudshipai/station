@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
 	"station/internal/db/repositories"
 	"station/pkg/models"
@@ -173,13 +175,58 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *A
 
 // DeleteAgent deletes an agent
 func (s *AgentService) DeleteAgent(ctx context.Context, agentID int64) error {
+	// Get agent details before deletion for file cleanup
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent %d for deletion: %w", agentID, err)
+	}
+
+	// Get environment name for file path construction
+	environment, err := s.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		return fmt.Errorf("failed to get environment %d for agent %d: %w", agent.EnvironmentID, agentID, err)
+	}
+
 	// Clear tool assignments first
 	if err := s.repos.AgentTools.Clear(agentID); err != nil {
 		return fmt.Errorf("failed to clear tool assignments: %w", err)
 	}
 	
-	// Delete the agent
-	return s.repos.Agents.Delete(agentID)
+	// Delete the agent from database
+	if err := s.repos.Agents.Delete(agentID); err != nil {
+		return fmt.Errorf("failed to delete agent from database: %w", err)
+	}
+
+	// Clean up .prompt file from filesystem
+	if err := s.deleteAgentPromptFile(agent.Name, environment.Name); err != nil {
+		log.Printf("Warning: Failed to delete .prompt file for agent %s: %v", agent.Name, err)
+		// Don't fail the entire operation if file cleanup fails
+	}
+
+	return nil
+}
+
+// deleteAgentPromptFile removes the .prompt file for an agent from the filesystem
+func (s *AgentService) deleteAgentPromptFile(agentName, environmentName string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	promptFilePath := filepath.Join(homeDir, ".config", "station", "environments", environmentName, "agents", agentName+".prompt")
+	
+	// Check if file exists before attempting deletion
+	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {
+		return nil // Not an error if file doesn't exist
+	}
+
+	// Remove the .prompt file
+	if err := os.Remove(promptFilePath); err != nil {
+		return fmt.Errorf("failed to delete .prompt file %s: %w", promptFilePath, err)
+	}
+
+	log.Printf("Successfully deleted .prompt file: %s", promptFilePath)
+	return nil
 }
 
 // InitializeMCP initializes MCP for the agent service
