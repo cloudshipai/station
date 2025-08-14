@@ -79,9 +79,9 @@ graph LR
     end
     
     subgraph "Access Methods"
-        CLI_Access[CLI<br/>stn agent run 1<br/>monitor project]
+        CLI_Access[CLI<br/>stn agent run name task<br/>Direct execution]
         MCP_Access[MCP Claude<br/>Run file monitor<br/>on current project]
-        API_Access[REST API<br/>POST agents/1/queue<br/>task monitor]
+        API_Access[REST API<br/>POST agents/1/queue<br/>JSON task payload]
     end
     
     FS --> A1
@@ -157,14 +157,14 @@ graph TD
 
 ### CLI Access
 ```bash
-# Direct agent execution
-stn agent run 1 "Monitor the current project directory"
+# Direct agent execution by name
+stn agent run "File Monitor" "Monitor the current project directory"
 
 # List available agents
 stn agent list
 
 # Create new agent
-stn agent create --name "Security Scanner" --description "Scans for vulnerabilities"
+stn agent create "Security Scanner" "Scans for vulnerabilities in code and dependencies"
 ```
 
 ### MCP Access (Claude Desktop)
