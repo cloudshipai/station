@@ -723,8 +723,9 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 		return fmt.Errorf("agent '%s' not found in environment '%s'", agentName, environment)
 	}
 
-	// Delete the agent
-	err = repos.Agents.Delete(agent.ID)
+	// Delete the agent using AgentService for proper file cleanup
+	agentService := services.NewAgentService(repos)
+	err = agentService.DeleteAgent(context.Background(), agent.ID)
 	if err != nil {
 		return fmt.Errorf("failed to delete agent: %w", err)
 	}
