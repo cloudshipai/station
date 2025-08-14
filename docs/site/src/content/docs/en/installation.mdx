@@ -13,12 +13,7 @@ The easiest way to install Station is using our installation script:
 
 ### Linux / macOS
 ```bash
-curl -sSL https://getstation.cloudshipai.com | bash
-```
-
-### Windows (PowerShell)
-```powershell
-iwr -useb https://getstation.cloudshipai.com/install.ps1 | iex
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
 This script will:
@@ -29,31 +24,6 @@ This script will:
 
 ## Manual Installation
 
-### Download from GitHub Releases
-
-1. Visit the [latest release page](https://github.com/cloudshipai/station/releases/latest)
-2. Download the archive for your platform:
-   - `station_linux_amd64.tar.gz` (Linux x64)
-   - `station_linux_arm64.tar.gz` (Linux ARM64) 
-   - `station_darwin_amd64.tar.gz` (macOS Intel)
-   - `station_darwin_arm64.tar.gz` (macOS Apple Silicon)
-   - `station_windows_amd64.zip` (Windows x64)
-
-3. Extract and install:
-
-**Linux / macOS:**
-```bash
-tar -xzf station_*.tar.gz
-sudo mv stn /usr/local/bin/
-chmod +x /usr/local/bin/stn
-```
-
-**Windows:**
-```powershell
-Expand-Archive station_*.zip
-# Move stn.exe to a directory in your PATH
-```
-
 ### Build from Source
 
 Requirements:
@@ -63,10 +33,10 @@ Requirements:
 ```bash
 git clone https://github.com/cloudshipai/station
 cd station
-make install
+make local-install
 ```
 
-This will build and install Station to `$GOPATH/bin/stn`.
+This will build Station and install it to `~/.local/bin/stn`.
 
 ## Verify Installation
 
@@ -87,9 +57,9 @@ Platform: linux/amd64
 
 Now that Station is installed:
 
-1. **[Initialize Station](/en/quickstart#1-initialize-station)** - Set up your first environment
-2. **[Quick Start Guide](/en/quickstart)** - Create and run your first agent
-3. **[Architecture Overview](/en/architecture)** - Understand how Station works
+1. **[Initialize Station](/station/en/quickstart#1-initialize-station)** - Set up your first environment
+2. **[Quick Start Guide](/station/en/quickstart)** - Create and run your first agent
+3. **[Architecture Overview](/station/en/architecture)** - Understand how Station works
 
 ## Troubleshooting
 
@@ -135,7 +105,5 @@ If your platform isn't supported, try [building from source](#build-from-source)
 ## System Requirements
 
 - **OS**: Linux, macOS, Windows
-- **Memory**: 512MB RAM minimum, 1GB recommended
-- **Storage**: 200MB for runtime, 1GB+ for production data
-- **Database**: SQLite (development) or PostgreSQL (production)
-- **Network**: Outbound HTTPS for AI providers and tool integrations
+- **Database**: SQLite (built-in, no setup required)
+- **Network**: Outbound HTTPS for AI providers and MCP tool integrations

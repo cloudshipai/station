@@ -1,0 +1,51 @@
+---
+title: Other MCP Clients
+description: Connecting Station to MCP clients beyond Claude Desktop
+---
+
+# Other MCP Clients
+
+## 🚧 Coming Soon
+
+This page is under construction. We're working on comprehensive documentation for connecting Station to various MCP clients beyond Claude Desktop.
+
+## What This Will Cover
+
+- **Cursor Integration** - Setting up Station with Cursor editor
+- **VS Code Extensions** - MCP extensions that work with Station
+- **Custom MCP Clients** - Building your own MCP clients
+- **API Integration** - Using Station's MCP API directly
+- **Third-party Tools** - Other tools that support MCP protocol
+
+## Quick Reference
+
+Station works with any MCP-compatible client:
+
+**stdio Mode (recommended for local clients):**
+```json
+{
+  "command": "stn",
+  "args": ["stdio"]
+}
+```
+
+**HTTP Mode (for remote clients):**
+```bash
+# Start Station MCP server
+stn serve --mcp-port 3000
+
+# Connect via HTTP
+# URL: http://localhost:3000/mcp
+```
+
+## Supported Clients
+
+- **Claude Desktop** - Primary integration (see dedicated guide)
+- **Claude Code** - Same configuration as Claude Desktop
+- **Cursor** - MCP support (configuration needed)
+- **Custom Clients** - Any tool implementing MCP protocol
+
+## Next Steps
+
+- **[Claude Desktop Setup](/station/en/mcp/claude-desktop)** - Detailed Claude integration
+- **[MCP Tools & Commands](/station/en/mcp/tools)** - Available MCP tools

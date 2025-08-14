@@ -27,27 +27,95 @@ stn init
 
 This creates your Station workspace and initializes the local database.
 
-### 3. Install a Ready-to-Use Bundle
+### 3. Create and Load an MCP Configuration
 
-Instead of creating agents from scratch, let's install a pre-built bundle:
+Let's create a filesystem MCP config so your agents can work with files:
 
-```bash
-# Install filesystem operations bundle
-stn template install https://github.com/cloudshipai/registry/raw/main/bundles/filesystem-bundle/filesystem-bundle.tar.gz
-
-# Or install infrastructure monitoring bundle (if available)
-stn template install https://github.com/cloudshipai/registry/raw/main/bundles/infrastructure-bundle/infrastructure-bundle.tar.gz
+**Create `filesystem-mcp.json`:**
+```json
+{
+  "name": "Filesystem MCP",
+  "description": "Basic filesystem operations",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@latest",
+        "{{ .ALLOWED_PATH }}"
+      ]
+    }
+  }
+}
 ```
 
-### 4. Sync Configuration
-
+**Load the configuration:**
 ```bash
-stn sync production
+stn load filesystem-mcp.json --env default
 ```
 
-This ensures all tools and agents are properly configured and ready.
+**Output:**
+```
+╭────────────────────────────────╮
+│                                │
+│  📂 Loading MCP Configuration  │
+│                                │
+╰────────────────────────────────╯
 
-### 5. Add Station to Claude Desktop
+📄 Found config file: filesystem-mcp.json
+🔧 Found 1 MCP server(s)
+📝 Config name: Filesystem MCP-20250814-095146
+🌍 Environment: default
+📁 Creating file-based configuration...
+✅ Saved template file: ~/.config/station/environments/default/filesystem_mcp.json
+✅ Created file-based config: Filesystem MCP in environment default
+
+╭──────────────────────────────────────────╮
+│                                          │
+│  🎉✨🎊                                  │
+│  MCP Configuration Loaded Successfully!  │
+│  🎉✨🎊                                  │
+│                                          │
+╰──────────────────────────────────────────╯
+```
+
+**Create variables file:**
+```bash
+# Create variables.yml with the template variable
+echo "ALLOWED_PATH: /home/user/projects" > ~/.config/station/environments/default/variables.yml
+```
+
+**Sync to discover tools:**
+```bash
+stn sync default
+```
+
+**Output:**
+```
+╭─────────────────────────────╮
+│                             │
+│  🔄 MCP Configuration Sync  │
+│                             │
+╰─────────────────────────────╯
+
+🔍 Scanning file-based configs in environment 'default'...
+Processing MCP template: filesystem_mcp
+   🖥️  Processing server: filesystem
+      Command: npx [-y @modelcontextprotocol/server-filesystem@latest /home/user/projects]
+   ✅ Created MCP server: filesystem
+
+✅ MCP SUCCESS: Discovered 14 tools from server 'filesystem'
+   🔧 Tool 1: __read_text_file
+   🔧 Tool 2: __list_directory  
+   🔧 Tool 3: __directory_tree
+   🔧 Tool 4: __write_file
+   🔧 Tool 5: __edit_file
+   [... 9 more tools discovered]
+
+✅ Sync completed successfully!
+```
+
+### 4. Add Station to Claude Desktop
 
 Add this to your Claude Desktop MCP configuration file:
 
@@ -67,7 +135,7 @@ Add this to your Claude Desktop MCP configuration file:
 }
 ```
 
-### 6. Restart Claude Desktop
+### 5. Restart Claude Desktop
 
 Close and reopen Claude Desktop. You should now see Station tools available.
 
@@ -75,34 +143,67 @@ Close and reopen Claude Desktop. You should now see Station tools available.
 
 Once connected, you can immediately start using Station agents through Claude Desktop:
 
-### List Available Agents
-```
-List my Station agents
+### Create Your First Agent
+
+**You:** `"Create a code review agent that can analyze files and provide feedback"`
+
+**Claude Response:**
+```json
+{
+  "agent": {
+    "description": "A basic agent that reviews code files and provides feedback",
+    "environment_id": 1,
+    "id": 53,
+    "name": "Simple Code Reviewer"
+  },
+  "message": "Agent 'Simple Code Reviewer' created successfully",
+  "tool_assignment": {
+    "assigned_count": 2,
+    "assigned_tools": ["__read_text_file", "__list_directory"],
+    "status": "success"
+  }
+}
 ```
 
-### Create a New Agent
+*Claude automatically selected the right tools from your MCP servers!*
+
+### Run Your Agent
+
+**You:** `"Run my code review agent to analyze the current project structure"`
+
+**Agent Response:**
 ```
-Create a new Station agent for monitoring disk usage with these tools: file operations
+I inspected the repository root and analyzed the project structure...
+
+What I see:
+- Project identity: This is a Go-based runtime/CLI project called 'Station'  
+- Language/build: go.mod, go.sum — Go project with cmd/, internal/, pkg/ layout
+- Runtime assets: stn — built CLI binary, station.db — SQLite database
+- Deployment: docker/, Dockerfile, .goreleaser.yml — containerized deployment
+
+Brief summary: This is a Go-based, self-hosted runtime that provides a 
+lightweight platform for deploying and running 'sub-agents'...
 ```
 
-### Run an Existing Agent
-```
-Run Station agent filesystem-scanner with the task: check current directory structure and report any large files over 100MB
-```
+*Full comprehensive analysis with complete tool usage - nothing truncated.*
 
-### Manage Tools and Bundles
-```
-Show me what MCP tools are available in my Station setup
-```
+### List Your Agents
+
+**You:** `"List all my Station agents"`
+
+**Response:** Shows all your created agents with IDs, names, descriptions, and tool assignments.
 
 ## What Just Happened?
 
 In these 5 steps, you've:
 
-1. **Installed** a lightweight 45MB Station runtime
-2. **Loaded** pre-built agents with production-ready tools  
+1. **Installed** a lightweight Station runtime and initialized your workspace
+2. **Loaded** MCP tools (filesystem operations) that agents can use
 3. **Connected** Station to Claude Desktop via MCP protocol
-4. **Gained access** to deployable sub-agents that can handle infrastructure, monitoring, deployment, and security tasks
+4. **Created** your first deployable sub-agent through natural conversation
+5. **Executed** the agent and saw complete, untruncated responses
+
+Your agents can now combine tools from multiple MCP servers and be deployed across environments as `.prompt` files!
 
 ## Next Steps
 
@@ -118,14 +219,15 @@ In these 5 steps, you've:
 2. Check Claude Desktop config file syntax with a JSON validator
 3. Make sure Claude Desktop was fully restarted after config changes
 
-### No agents available?
-1. Run `stn agent list` to verify agents are created
-2. Run `stn sync production` to ensure configurations are up-to-date
-3. Install a bundle if you haven't: `stn template install <bundle-url>`
+### No MCP tools available for agent creation?
+1. Load some tools first: `stn load examples/mcps/filesystem.json`
+2. Sync the configuration: `stn sync default`
+3. Restart Claude Desktop after loading new tools
 
-### Permission issues?
-1. Ensure Station binary has execute permissions: `chmod +x $(which stn)`
-2. Check that Station can write to its workspace directory
+### Agent creation failing?
+1. Make sure you have MCP tools loaded (agents need tools to be useful)
+2. Verify Station initialization completed: `stn status`
+3. Check if the environment exists: `stn mcp environments list`
 
 ---
 
