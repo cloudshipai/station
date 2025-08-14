@@ -1,0 +1,43 @@
+---
+title: Environment Isolation
+description: Managing agents across different environments
+---
+
+# Environment Isolation
+
+## 🚧 Coming Soon
+
+This page is under construction. We're working on comprehensive documentation for managing agents across multiple environments.
+
+## What This Will Cover
+
+- **Environment Setup** - Creating and configuring dev, staging, and production environments
+- **Agent Isolation** - How agents are isolated between environments
+- **Variable Management** - Environment-specific configuration variables
+- **Tool Access Control** - Different tool permissions per environment
+- **Cross-Environment Workflows** - Promoting agents between environments
+
+## Quick Reference
+
+Each environment has its own configuration directory:
+
+```
+~/.config/station/environments/
+├── development/
+│   ├── agents/
+│   ├── variables.yml
+│   └── *.json (MCP configs)
+├── staging/
+└── production/
+```
+
+## Key Concepts
+
+- **Environment Isolation**: Agents belong to specific environments
+- **Independent Tool Pools**: Each environment has its own MCP tool configuration
+- **Variable Resolution**: Same MCP templates, different variable values per environment
+
+## Next Steps
+
+- **[Agent Management Overview](/station/en/agents/overview)** - See environment isolation in action
+- **[MCP Integration Overview](/station/en/mcp/overview)** - Understanding template variable resolution
