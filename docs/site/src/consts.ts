@@ -62,22 +62,14 @@ export const SIDEBAR: Sidebar = {
         { text: 'Overview', link: 'en/mcp/overview' },
         { text: 'Claude Desktop Setup', link: 'en/mcp/claude-desktop' },
         { text: 'MCP Tools & Commands', link: 'en/mcp/tools' },
-        { text: 'Agent Interaction', link: 'en/mcp/agents' },
         { text: 'Other MCP Clients', link: 'en/mcp/other-clients' }
       ]
     },
     'Agent Management': {
       collapsed: false,
       items: [
-        { 
-          text: 'Creating Agents', 
-          link: 'en/agents/creating',
-          children: [
-            { text: 'Basic Agent Setup', link: 'en/agents/creating/basic' },
-            { text: 'Template Variables', link: 'en/agents/creating/variables' },
-            { text: 'Tool Assignment', link: 'en/agents/creating/tools' }
-          ]
-        },
+        { text: 'Overview', link: 'en/agents/overview' },
+        { text: 'Creating Agents', link: 'en/agents/creating' },
         { text: 'Agent Configuration', link: 'en/agents/config' },
         { text: 'Environment Isolation', link: 'en/agents/environments' },
         { text: 'Monitoring & Logs', link: 'en/agents/monitoring' }
