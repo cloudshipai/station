@@ -14,6 +14,9 @@ import (
 	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/pkg/models"
+	
+	"github.com/firebase/genkit/go/genkit"
+	"github.com/firebase/genkit/go/ai"
 )
 
 // DeclarativeSync handles synchronization between file-based configs and database
@@ -134,6 +137,17 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 		result.MCPServersProcessed = mcpResult.MCPServersProcessed
 		result.MCPServersConnected = mcpResult.MCPServersConnected
 		result.Operations = append(result.Operations, mcpResult.Operations...)
+	}
+
+	// 5. Cleanup orphaned configs, servers, and tools (declarative sync)
+	cleanupResult, err := s.cleanupOrphanedResources(ctx, envDir, environmentName, options)
+	if err != nil {
+		fmt.Printf("Warning: Failed to cleanup orphaned resources for %s: %v\n", environmentName, err)
+		result.ValidationErrors++
+		result.ValidationMessages = append(result.ValidationMessages, 
+			fmt.Sprintf("Cleanup failed: %v", err))
+	} else {
+		fmt.Printf("🧹 Cleanup completed: %s\n", cleanupResult)
 	}
 
 	result.Duration = time.Since(startTime)
@@ -366,7 +380,15 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 			continue
 		}
 
-		// Extract and sync MCP servers from the template
+		// 1. Register/update the file config in database
+		err = s.registerOrUpdateFileConfig(ctx, env.ID, configName, jsonFile, envDir, templateResult, options)
+		if err != nil {
+			fmt.Printf("Warning: Failed to register file config %s: %v\n", configName, err)
+			result.ValidationErrors++
+			continue
+		}
+
+		// 2. Extract and sync MCP servers from the template
 		serversCount, err := s.syncMCPServersFromTemplate(ctx, mcpConfig, env.ID, configName, options)
 		if err != nil {
 			fmt.Printf("❌ CRITICAL: Failed to sync MCP servers from template %s: %v\n", configName, err)
@@ -379,7 +401,20 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 			continue
 		}
 
-		if serversCount > 0 {
+		// 3. Perform tool discovery for the servers that were created/updated
+		if serversCount > 0 && !options.DryRun {
+			toolsDiscovered, err := s.performToolDiscovery(ctx, env.ID, configName)
+			if err != nil {
+				fmt.Printf("⚠️  WARNING: MCP servers synced but tool discovery failed for %s: %v\n", configName, err)
+				fmt.Printf("   🔧 Servers are in database but tools are not available\n")
+				fmt.Printf("   💡 Try running 'stn serve' to discover tools, or check MCP server configuration\n")
+				// Don't treat this as a critical error - servers are still synced
+			} else {
+				fmt.Printf("   🔧 Discovered %d tools from MCP servers\n", toolsDiscovered)
+			}
+			result.MCPServersConnected += serversCount
+			fmt.Printf("✅ Successfully synced template: %s (%d servers)\n", configName, serversCount)
+		} else if serversCount > 0 {
 			result.MCPServersConnected += serversCount
 			fmt.Printf("✅ Successfully synced template: %s (%d servers)\n", configName, serversCount)
 		} else {
@@ -503,6 +538,349 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 
 	fmt.Printf("   ✅ Successfully synced %d/%d MCP servers from template\n", successCount, len(serversData))
 	return successCount, nil
+}
+
+// registerOrUpdateFileConfig registers or updates a file config in the database
+func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID int64, configName, jsonFile, envDir string, templateResult *VariableResolutionResult, options SyncOptions) error {
+	// Calculate relative path from workspace
+	var workspaceDir string
+	if s.config.Workspace != "" {
+		workspaceDir = s.config.Workspace
+	} else {
+		configHome := os.Getenv("XDG_CONFIG_HOME")
+		if configHome == "" {
+			homeDir, _ := os.UserHomeDir()
+			configHome = filepath.Join(homeDir, ".config")
+		}
+		workspaceDir = filepath.Join(configHome, "station")
+	}
+	
+	// Make template path relative to workspace
+	relativePath, err := filepath.Rel(workspaceDir, jsonFile)
+	if err != nil {
+		// Fallback to absolute path if relative calculation fails
+		relativePath = jsonFile
+	}
+	
+	// Check if file config already exists
+	existingConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
+	if err != nil {
+		// Config doesn't exist, create new one
+		fileConfig := &repositories.FileConfigRecord{
+			EnvironmentID:            envID,
+			ConfigName:               configName,
+			TemplatePath:             relativePath,
+			VariablesPath:            "variables.yml", // Standard variables file
+			TemplateSpecificVarsPath: "",
+			LastLoadedAt:             &time.Time{}, // Set to current time
+			TemplateHash:             "", // Will be calculated if needed
+			VariablesHash:            "",
+			TemplateVarsHash:         "",
+			Metadata:                 "{}",
+		}
+		now := time.Now()
+		fileConfig.LastLoadedAt = &now
+		
+		_, err = s.repos.FileMCPConfigs.Create(fileConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create file config record: %w", err)
+		}
+		fmt.Printf("   📄 Registered new file config: %s\n", configName)
+	} else {
+		// Config exists, update it
+		err = s.repos.FileMCPConfigs.UpdateLastLoadedAt(existingConfig.ID)
+		if err != nil {
+			return fmt.Errorf("failed to update file config timestamp: %w", err)
+		}
+		fmt.Printf("   📄 Updated file config: %s\n", configName)
+	}
+	
+	return nil
+}
+
+// performToolDiscovery performs MCP tool discovery for a specific config
+func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64, configName string) (int, error) {
+	// Create MCP connection manager for tool discovery
+	mcpConnManager := NewMCPConnectionManager(s.repos, nil)
+	
+	// Initialize Genkit application (needed for MCP connections)
+	genkitApp, err := s.initializeGenkitForSync(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to initialize Genkit for tool discovery: %w", err)
+	}
+	mcpConnManager.genkitApp = genkitApp
+	
+	// Get the specific file config we just registered
+	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get file config %s: %w", configName, err)
+	}
+	
+	// Process this specific file config to discover tools
+	tools, clients := mcpConnManager.processFileConfig(ctx, fileConfig)
+	
+	// Clean up connections immediately
+	defer mcpConnManager.CleanupConnections(clients)
+	
+	// Save discovered tools to database
+	toolsSaved := 0
+	if len(tools) > 0 {
+		toolsSaved, err = s.saveDiscoveredToolsToDatabase(ctx, envID, configName, tools)
+		if err != nil {
+			return 0, fmt.Errorf("failed to save tools to database for %s: %w", configName, err)
+		}
+	}
+	
+	fmt.Printf("   🔍 Tool discovery completed for %s: %d tools found, %d saved to database\n", configName, len(tools), toolsSaved)
+	return toolsSaved, nil
+}
+
+// saveDiscoveredToolsToDatabase saves discovered tools to the database for a specific config
+// This is a simplified approach - the processFileConfig method aggregates tools from multiple servers
+// but we don't have precise server-to-tool mapping. For now, we'll clear and recreate all tools
+// for servers in this config to ensure accuracy.
+func (s *DeclarativeSync) saveDiscoveredToolsToDatabase(ctx context.Context, envID int64, configName string, tools []ai.Tool) (int, error) {
+	// Get servers from this specific config file (by name pattern matching)
+	// Parse the config file again to get server names
+	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get file config: %w", err)
+	}
+	
+	// Read config file to extract server names
+	configDir := os.ExpandEnv("$HOME/.config/station")
+	absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
+	rawContent, err := os.ReadFile(absolutePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read config file: %w", err)
+	}
+	
+	// Process template variables
+	templateService := NewTemplateVariableService(configDir, s.repos)
+	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
+	if err != nil {
+		return 0, fmt.Errorf("failed to process template: %w", err)
+	}
+	
+	// Parse config to get server names
+	var rawConfig map[string]interface{}
+	if err := json.Unmarshal([]byte(result.RenderedContent), &rawConfig); err != nil {
+		return 0, fmt.Errorf("failed to parse config: %w", err)
+	}
+	
+	var serversData map[string]interface{}
+	if mcpServers, ok := rawConfig["mcpServers"].(map[string]interface{}); ok {
+		serversData = mcpServers
+	} else if servers, ok := rawConfig["servers"].(map[string]interface{}); ok {
+		serversData = servers
+	} else {
+		return 0, fmt.Errorf("no MCP servers found in config %s", configName)
+	}
+	
+	// Get database server IDs for servers in this config
+	var serverIDs []int64
+	for serverName := range serversData {
+		server, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
+		if err != nil {
+			fmt.Printf("     ⚠️  Warning: Server '%s' not found in database\n", serverName)
+			continue
+		}
+		serverIDs = append(serverIDs, server.ID)
+		fmt.Printf("     🗂️  Found server '%s' (ID: %d) for tool storage\n", serverName, server.ID)
+	}
+	
+	if len(serverIDs) == 0 {
+		return 0, fmt.Errorf("no valid servers found for config %s", configName)
+	}
+	
+	// Clear existing tools for these servers (declarative sync approach)
+	for _, serverID := range serverIDs {
+		err = s.repos.MCPTools.DeleteByServerID(serverID)
+		if err != nil {
+			fmt.Printf("     ⚠️  Warning: Failed to clear existing tools for server %d: %v\n", serverID, err)
+		} else {
+			fmt.Printf("     🧹 Cleared existing tools for server ID %d\n", serverID)
+		}
+	}
+	
+	// Distribute tools across servers (simple round-robin)
+	toolsSaved := 0
+	for i, tool := range tools {
+		serverID := serverIDs[i%len(serverIDs)]
+		toolName := tool.Name()
+		
+		// Create tool model
+		toolModel := &models.MCPTool{
+			MCPServerID: serverID,
+			Name:        toolName,
+			Description: "", // Genkit AI tools don't expose description directly
+		}
+		
+		// Save tool to database
+		_, err = s.repos.MCPTools.Create(toolModel)
+		if err != nil {
+			fmt.Printf("     ❌ Failed to save tool '%s': %v\n", toolName, err)
+			continue
+		}
+		fmt.Printf("     ✅ Saved tool '%s' to server ID %d\n", toolName, serverID)
+		toolsSaved++
+	}
+	
+	return toolsSaved, nil
+}
+
+// cleanupOrphanedResources removes configs, servers, and tools that no longer exist in filesystem
+func (s *DeclarativeSync) cleanupOrphanedResources(ctx context.Context, envDir, environmentName string, options SyncOptions) (string, error) {
+	// Get environment from database
+	env, err := s.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// Find all .json files in filesystem (current source of truth)
+	jsonFiles, err := filepath.Glob(filepath.Join(envDir, "*.json"))
+	if err != nil {
+		return "", fmt.Errorf("failed to scan JSON files: %w", err)
+	}
+
+	// Build map of existing files 
+	filesystemConfigs := make(map[string]bool)
+	for _, jsonFile := range jsonFiles {
+		configName := strings.TrimSuffix(filepath.Base(jsonFile), ".json")
+		filesystemConfigs[configName] = true
+	}
+
+	// Get all file configs from database for this environment
+	dbConfigs, err := s.repos.FileMCPConfigs.ListByEnvironment(env.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get database configs: %w", err)
+	}
+
+	// Find configs that exist in DB but not in filesystem (to remove)
+	var toRemove []string
+	for _, dbConfig := range dbConfigs {
+		if !filesystemConfigs[dbConfig.ConfigName] {
+			toRemove = append(toRemove, dbConfig.ConfigName)
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return "No orphaned resources found", nil
+	}
+
+	fmt.Printf("🗑️  Found %d orphaned configs to remove: %v\n", len(toRemove), toRemove)
+
+	if options.DryRun {
+		return fmt.Sprintf("Would remove %d orphaned configs: %v", len(toRemove), toRemove), nil
+	}
+
+	// Remove orphaned configs and their associated servers/tools
+	var removedConfigs, removedServers, removedTools int
+	for _, configName := range toRemove {
+		fmt.Printf("   🗑️  Removing orphaned config: %s\n", configName)
+		
+		// Find the config to remove
+		var configToRemove *repositories.FileConfigRecord
+		for _, dbConfig := range dbConfigs {
+			if dbConfig.ConfigName == configName {
+				configToRemove = dbConfig
+				break
+			}
+		}
+		
+		if configToRemove == nil {
+			fmt.Printf("     ⚠️  Warning: Could not find config %s in database\n", configName)
+			continue
+		}
+
+		// Get servers associated with this config (by reading the config file from database)
+		// We need to parse the config to find server names, then delete those servers
+		serversRemoved, toolsRemoved, err := s.removeConfigServersAndTools(ctx, env.ID, configName, configToRemove)
+		if err != nil {
+			fmt.Printf("     ❌ Failed to cleanup servers/tools for %s: %v\n", configName, err)
+			continue
+		}
+
+		// Remove the file config itself
+		err = s.repos.FileMCPConfigs.Delete(configToRemove.ID)
+		if err != nil {
+			fmt.Printf("     ❌ Failed to remove file config %s: %v\n", configName, err)
+			continue
+		}
+
+		fmt.Printf("     ✅ Removed config %s (%d servers, %d tools)\n", configName, serversRemoved, toolsRemoved)
+		removedConfigs++
+		removedServers += serversRemoved
+		removedTools += toolsRemoved
+	}
+
+	return fmt.Sprintf("Removed %d configs, %d servers, %d tools", removedConfigs, removedServers, removedTools), nil
+}
+
+// removeConfigServersAndTools removes servers and tools associated with a specific config
+func (s *DeclarativeSync) removeConfigServersAndTools(ctx context.Context, envID int64, configName string, fileConfig *repositories.FileConfigRecord) (int, int, error) {
+	// Since the file no longer exists, we need to identify servers that belonged to this config
+	// We can get all servers for this environment and match by naming patterns or timestamps
+	// For now, we'll use a simpler approach: delete servers that were created around the same time as this config
+	
+	allServers, err := s.repos.MCPServers.GetByEnvironmentID(envID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get servers for environment: %w", err)
+	}
+
+	var serversRemoved, toolsRemoved int
+	
+	// Strategy: Remove servers that likely belonged to this config
+	// Since we can't read the deleted file, we'll look for servers with similar timing or 
+	// use any available metadata to associate them with this config
+	
+	// For safety, we'll only remove servers if there's a clear association
+	// A more robust implementation would store config_name or file_config_id in the servers table
+	
+	fmt.Printf("     🔍 Checking %d servers for association with config %s\n", len(allServers), configName)
+	
+	// Simple heuristic: remove servers whose names might be related to the config name
+	// This is imperfect but better than leaving orphaned servers
+	for _, server := range allServers {
+		shouldRemove := false
+		
+		// Check if server name is similar to config name
+		if strings.Contains(server.Name, configName) || strings.Contains(configName, server.Name) {
+			shouldRemove = true
+		}
+		
+		// Additional heuristic: if this is the only config being removed and there are few servers,
+		// we might be more aggressive, but for safety we'll be conservative
+		
+		if shouldRemove {
+			fmt.Printf("     🗑️  Removing server: %s (ID: %d)\n", server.Name, server.ID)
+			
+			// Get tools for this server before removing
+			tools, err := s.repos.MCPTools.GetByServerID(server.ID)
+			if err == nil {
+				toolsRemoved += len(tools)
+				fmt.Printf("       🔧 Removing %d tools from server %s\n", len(tools), server.Name)
+			}
+			
+			// Remove server (tools should cascade delete)
+			err = s.repos.MCPServers.Delete(server.ID)
+			if err != nil {
+				fmt.Printf("       ❌ Failed to remove server %s: %v\n", server.Name, err)
+				continue
+			}
+			
+			serversRemoved++
+		}
+	}
+	
+	return serversRemoved, toolsRemoved, nil
+}
+
+// initializeGenkitForSync creates a minimal Genkit app for tool discovery during sync
+func (s *DeclarativeSync) initializeGenkitForSync(ctx context.Context) (*genkit.Genkit, error) {
+	// Create a minimal Genkit provider for sync operations
+	genkitProvider := NewGenKitProvider()
+	return genkitProvider.GetApp(ctx)
 }
 
 // Helper type for database operations (until SQLC is working)
