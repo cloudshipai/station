@@ -24,19 +24,31 @@ graph LR
         Station[Station Runtime]
     end
     
-    subgraph "MCP Ecosystem"
-        FileSystem[Filesystem MCP]
-        Database[Database MCP] 
-        Cloud[Cloud MCP]
+    subgraph "Sub-Agents"
+        Agent1["File Monitor<br/>📁 list_directory<br/>📄 read_text_file"]
+        Agent2["Code Reviewer<br/>🔍 search_files<br/>📝 edit_file"]
+        Agent3["Deploy Agent<br/>🐳 docker_exec<br/>☸️ kubectl_apply"]
+    end
+    
+    subgraph "Dev Environment MCP Pool"
+        FS[Filesystem MCP]
+        Docker[Docker MCP]
+        K8s[Kubernetes MCP]
+        DB[Database MCP]
         Custom[Custom Tools]
     end
     
     Claude --> Station
     Cursor --> Station
-    Station --> FileSystem
-    Station --> Database
-    Station --> Cloud
-    Station --> Custom
+    Station --> Agent1
+    Station --> Agent2
+    Station --> Agent3
+    
+    Agent1 --> FS
+    Agent2 --> FS
+    Agent3 --> Docker
+    Agent3 --> K8s
+    Agent1 --> DB
 ```
 
 **Key Benefits:**
