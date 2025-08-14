@@ -903,9 +903,7 @@ func (h *AgentHandler) generateDotpromptContent(agent *models.Agent, tools []*mo
 	if agent.MaxSteps > 0 {
 		content.WriteString(fmt.Sprintf("    max_steps: %d\n", agent.MaxSteps))
 	}
-	content.WriteString("    timeout_seconds: 120\n")
-	content.WriteString("    max_retries: 3\n")
-	content.WriteString("    priority: \"medium\"\n")
+	content.WriteString(fmt.Sprintf("    environment: \"%s\"\n", environment))
 	content.WriteString("---\n\n")
 	
 	// Template content
