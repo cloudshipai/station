@@ -60,14 +60,7 @@ export const SIDEBAR: Sidebar = {
       collapsed: false,
       items: [
         { text: 'Overview', link: 'en/mcp/overview' },
-        { 
-          text: 'Claude Desktop Setup', 
-          link: 'en/mcp/claude-desktop',
-          children: [
-            { text: 'Basic Configuration', link: 'en/mcp/claude-desktop/basic' },
-            { text: 'Advanced Settings', link: 'en/mcp/claude-desktop/advanced' }
-          ]
-        },
+        { text: 'Claude Desktop Setup', link: 'en/mcp/claude-desktop' },
         { text: 'MCP Tools & Commands', link: 'en/mcp/tools' },
         { text: 'Agent Interaction', link: 'en/mcp/agents' },
         { text: 'Other MCP Clients', link: 'en/mcp/other-clients' }
