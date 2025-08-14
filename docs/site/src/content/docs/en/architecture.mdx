@@ -34,8 +34,7 @@ graph TB
     end
     
     subgraph "Data Layer"
-        SQLite[(SQLite<br/>Development)]
-        PostgreSQL[(PostgreSQL<br/>Production)]
+        SQLite[(SQLite Database<br/>Built-in)]
         ConfigFiles[Config Files<br/>.json/.yml]
         SecretStore[Encrypted Secrets<br/>AES-256]
         AuditLog[Audit Logs<br/>JSON Lines]
@@ -67,7 +66,6 @@ graph TB
     
     ConfigSvc --> ConfigFiles
     SecuritySvc --> SQLite
-    SecuritySvc --> PostgreSQL
     SecuritySvc --> SecretStore
     SecuritySvc --> AuditLog
     
@@ -80,11 +78,11 @@ graph TB
 ## Core Components
 
 ### 🏗️ Lightweight Runtime
-**45MB Binary** with embedded SQLite for development
+**Single Binary** with embedded SQLite
 
-- **Low Memory Footprint** - 512MB minimum
+- **Low Memory Footprint** - Minimal resource usage
 - **Container Optimized** - Perfect for Docker/K8s
-- **Multi-Interface** - CLI, REST, SSH, WebSocket
+- **Multi-Interface** - CLI, REST, SSH, WebSocket, MCP
 - **Production Ready** - Queue-based execution
 
 ### 🤖 Agent Management
@@ -166,7 +164,7 @@ Station follows a standard configuration layout for predictable deployment:
 # Production (configurable)
 /opt/station/
 ├── config/                  # Configuration files
-├── data/                    # PostgreSQL data
+├── data/                    # SQLite database
 ├── logs/                    # Application logs
 └── backup/                  # Database backups
 ```
@@ -184,13 +182,13 @@ graph LR
     end
     
     subgraph "Staging"
-        StageDB[(SQLite/PostgreSQL<br/>Staging)]
+        StageDB[(SQLite<br/>Staging)]
         StageAgents[Staging Agents<br/>Safe tools]
         StageVars[Staging Variables<br/>Test credentials]
     end
     
     subgraph "Production"
-        ProdDB[(PostgreSQL<br/>Production)]
+        ProdDB[(SQLite<br/>Production)]
         ProdAgents[Production Agents<br/>All tools]
         ProdVars[Production Variables<br/>Real credentials]
     end
@@ -251,90 +249,50 @@ graph TB
 
 ### Production Deployment
 
+Station is designed for simple, secure deployments:
+
 ```mermaid
 graph TB
     subgraph "Production Environment"
-        LB[Load Balancer<br/>HAProxy/nginx]
-        
-        subgraph "Station Cluster"
-            Station1[Station Instance 1<br/>Primary]
-            Station2[Station Instance 2<br/>Replica]
-            Station3[Station Instance 3<br/>Replica]
-        end
-        
-        subgraph "Data Layer"
-            PGPrimary[(PostgreSQL<br/>Primary)]
-            PGReplica[(PostgreSQL<br/>Read Replica)]
-            Redis[(Redis<br/>Session store)]
-        end
-        
-        subgraph "Monitoring"
-            Prometheus[Prometheus<br/>Metrics]
-            Grafana[Grafana<br/>Dashboards]
-            AlertManager[Alert Manager<br/>Notifications]
-        end
+        Station[Station Binary<br/>stn daemon]
+        SQLiteDB[(SQLite Database<br/>Persistent storage)]
+        ConfigDir[Configuration<br/>File-based configs]
+        SecretsStore[Encrypted Secrets<br/>AES-256]
     end
     
-    LB --> Station1
-    LB --> Station2
-    LB --> Station3
-    
-    Station1 --> PGPrimary
-    Station2 --> PGReplica
-    Station3 --> PGReplica
-    
-    Station1 --> Redis
-    Station2 --> Redis
-    Station3 --> Redis
-    
-    Station1 --> Prometheus
-    Station2 --> Prometheus
-    Station3 --> Prometheus
-    
-    Prometheus --> Grafana
-    Prometheus --> AlertManager
+    Station --> SQLiteDB
+    Station --> ConfigDir
+    Station --> SecretsStore
 ```
 
-## Performance Characteristics
+## Key Features
 
-### 📈 Scalability
-- **Agent Concurrency**: 100+ concurrent agent executions
-- **API Throughput**: 1000+ requests/second
-- **Database**: Scales from SQLite to PostgreSQL cluster
-- **Memory**: Linear scaling with agent count
+### 🚀 Lightweight & Fast
+- **Single Binary** - No complex dependencies
+- **SQLite Database** - Built-in, no setup required
+- **Fast Startup** - Ready in seconds
+- **Low Resource Usage** - Minimal memory footprint
 
-### ⚡ Response Times
-- **Agent Start**: Less than 500ms for simple agents
-- **API Latency**: Less than 100ms for status queries  
-- **SSH Connection**: Less than 200ms for terminal access
-- **Tool Execution**: Depends on MCP server performance
-
-### 💾 Resource Usage
-- **Binary Size**: 45MB (includes embedded SQLite)
-- **Memory Usage**: 128MB base + 50MB per active agent
-- **Disk Space**: 100MB + logs and database
-- **CPU Usage**: Less than 5% idle, scales with agent activity
-
-### 🔄 Reliability
-- **Uptime**: 99.9%+ with proper deployment
-- **Error Recovery**: Automatic agent restart on failure
-- **Data Integrity**: ACID compliance with PostgreSQL
-- **Backup**: Automated database backup and restore
+### 🔄 Reliable Operation
+- **Queue-based Execution** - Background processing
+- **Error Recovery** - Automatic agent restart on failure
+- **Data Integrity** - ACID compliance with SQLite
+- **Comprehensive Logging** - Full execution audit trail
 
 ## Technology Stack
 
-**Runtime:** Go 1.21+, SQLite/PostgreSQL, HTTP/WebSocket servers
+**Runtime:** Go 1.21+, SQLite, HTTP/WebSocket servers
 
 **Security:** AES-256, PBKDF2, TLS 1.3, JWT tokens
 
 **Protocols:** HTTP/2, WebSocket, SSH, MCP (Model Context Protocol)
 
-**Storage:** SQLite (dev), PostgreSQL (prod), Git (configs)
+**Storage:** SQLite database, Git-tracked configs
 
 **Deployment:** Docker, Kubernetes, systemd, GitHub Actions
 
 ## Next Steps
 
-- **[Quick Start](/en/quickstart)** - Get Station running locally and create your first agent
-- **[MCP Integration](/en/mcp-integration)** - Learn how Station integrates with Model Context Protocol servers
-- **[Production Setup](/en/deployment/production)** - Deploy Station in production with proper security and monitoring
+- **[Quick Start](/station/en/quickstart)** - Get Station running locally and create your first agent
+- **[MCP Quick Start](/station/en/mcp-quickstart)** - Get running with Claude Desktop in 5 minutes
+- **[Why Station?](/station/en/why-station)** - Understand the use cases and benefits
