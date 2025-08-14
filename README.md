@@ -1,261 +1,339 @@
 ![Station](./station-logo.png)
 
-# Station - Self-Hosted AI Agent Platform
+# Station - Lightweight Runtime for Deployable Sub-Agents
 
-**Turn your team's tools into AI agents. Deploy securely. Scale reliably.**
+**A secure, self-hosted platform for building and deploying intelligent sub-agents.**
 
 🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
 
 📚 **[Documentation](https://cloudshipai.github.io/station)** - Complete Station documentation and guides
 
+> Lightweight runtime for deployable sub-agents that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
+
 ---
 
-## What is Station?
+Station is purpose-built for **deployable sub-agents** - the intelligent automation you need for infrastructure monitoring, deployment pipelines, security scanning, and day-to-day tasks that require secure access to internal systems.
 
-Station is a **self-hosted platform** that lets you create AI agents that can use your existing tools, access your systems, and automate your workflows - all running securely in your infrastructure.
+## Why Station Exists
 
-**Key Benefits:**
-- 🔐 **Self-hosted & secure** - Your data stays in your infrastructure
-- 🛠️ **Use existing tools** - Integrate with databases, APIs, monitoring, deployment tools
-- 📦 **Template & share agents** - Create bundles that teams can easily deploy
-- ⚡ **Lightweight** - Single 45MB binary, runs anywhere
-- 🌍 **Multi-environment** - Separate dev/staging/production contexts
+When you need agents for internal work, you need more than application-focused agent platforms. You need:
 
-## Perfect For
+- **Own Your Agents** - Complete control over your agents without vendor lock-in or external dependencies
+- **Secure Internal Access** - Agents that can safely handle database credentials, API keys, and system-level access
+- **Versionable Deployment** - Deployable agents that integrate with your existing deployment pipelines  
+- **Team-Approved Tools** - Easy way to use and share the tools your team builds and approves
+- **Low Footprint Runtime** - Lightweight system that blends into your infrastructure without overhead
 
-**DevOps & Infrastructure Teams**
-- Database monitoring agents with production credentials
-- Automated deployment pipelines with rollback capability  
-- Infrastructure-as-Code management with Terraform/Kubernetes
-- Security scanning and compliance automation
+**Station provides exactly this** - a lightweight, secure runtime specifically designed for deployable sub-agents.
 
-**Development Teams**
-- Code review and deployment agents
-- Testing automation and quality assurance
-- Documentation generation and maintenance
-- Project management and workflow automation
+## Core Value: Secure Deployable Sub-Agent Runtime
 
-**Operations Teams**  
-- Incident response and alerting automation
-- System monitoring and health checks
-- Log analysis and anomaly detection
-- Customer support automation with internal system access
+### 🔧 **Purpose-Built for Internal Tasks**
+
+Unlike application-focused agent platforms, Station is designed for deployable sub-agents that need to:
+
+- Access internal databases with production credentials
+- Monitor infrastructure and alert on issues
+- Automate deployment pipelines with CI/CD system access
+- Perform security scans with elevated permissions
+- Handle incident response with system-level tools
+
+### 🔐 **Security by Design**
+
+- **Self-Hosted** - Complete data sovereignty, no external dependencies beyond AI providers
+- **Encrypted Secrets** - AES encryption for credentials and sensitive configuration
+- **Environment Isolation** - Separate execution contexts for dev/staging/prod
+- **Audit Trail** - Complete tracking of agent deployments and executions
+
+### ⚡ **Lightweight & Integrated**
+
+- **Single 45MB Binary** - No complex infrastructure or dependencies
+- **SQLite Database** - Zero-setup local development, PostgreSQL for production
+- **GitOps Ready** - Version-controlled agent configurations like infrastructure code
+- **Existing Toolchain** - Uses your team's approved MCP tools and integrations
 
 ## How Station Works
 
-### 1. **Load Your Tools**
-Station uses the **MCP (Model Context Protocol)** standard to integrate with your existing tools:
+### 1. **Create Agents in Claude Desktop**
+Connect Station to Claude Desktop via MCP - then create agents naturally:
 
-```bash
-# Load your team's approved tools
-stn load examples/mcps/aws-cli.json          # AWS infrastructure
-stn load examples/mcps/database-postgres.json # Database access  
-stn load examples/mcps/slack.json            # Team communication
-stn sync production                          # Deploy to environment
+**Input:** `"Create a code review agent that can analyze files and provide feedback"`
+
+**Output:**
+```json
+{
+  "agent": {
+    "description": "A basic agent that reviews code files and provides feedback",
+    "environment_id": 1,
+    "id": 53,
+    "max_steps": 5,
+    "name": "Simple Code Reviewer"
+  },
+  "message": "Agent 'Simple Code Reviewer' created successfully",
+  "tool_assignment": {
+    "assigned_count": 2,
+    "assigned_tools": ["__read_text_file", "__list_directory"],
+    "status": "success"
+  }
+}
 ```
 
-### 2. **Create Smart Agents**
-Build agents that can use those tools intelligently:
+*Claude automatically selects the right tools from all your registered MCP servers (filesystem, Slack, AWS, databases, etc.) based on the agent's purpose. No manual tool configuration needed.*
 
-```bash
-# Create an infrastructure monitoring agent
-stn agent create \
-  --name "Database Monitor" \
-  --description "Monitor production database health and alert on issues"
+### 2. **Run Agents & Get Full Responses**
+Execute agents through Claude and see complete results (no truncation):
 
-# Test it locally
-stn agent run 1 "Check database connection pool and alert if over 80% capacity"
+**Input:** `"Analyze the current project structure and tell me what you see. Provide a brief summary of what type of project this appears to be."`
+
+**Output:**
+```json
+{
+  "execution": {
+    "agent_id": 25,
+    "response": "I inspected the repository root and opened the README to understand the project...
+    
+    What I see (top-level items and purpose)
+    - Project identity: README.md — Station: lightweight runtime for deployable sub-agents
+    - Language/build: go.mod, go.sum — Go project with cmd/, internal/, pkg/ layout
+    - Runtime assets: stn — built CLI binary, station.db — SQLite database
+    - Deployment: docker/, Dockerfile, .goreleaser.yml — containerized deployment
+    
+    Brief summary: This is a Go-based, self-hosted runtime/CLI project called 'Station' 
+    that provides a lightweight platform for deploying and running 'sub-agents'. 
+    It's designed as a single binary with SQLite for development...",
+    "run_id": 70,
+    "success": true
+  }
+}
 ```
 
-### 3. **Template & Deploy**
-Package agents into reusable templates for your team:
+*Full comprehensive analysis with complete tool usage - nothing truncated.*
 
+### 3. **Export Your Environment as a Bundle**
+Package your entire setup - agents, tools, configs - for deployment elsewhere:
+
+**Input:**
 ```bash
-# Create template from your working environment
-stn template create db-monitor-bundle --env production \
-  --name "Database Monitoring Suite" \
-  --author "DevOps Team"
+stn template create readme-demo-bundle --env default --name "README Demo Bundle" --author "Demo Team" --description "Template bundle for README demonstration"
+```
 
-# Share with your team
-stn template bundle db-monitor-bundle        # Creates .tar.gz
-stn template install db-monitor-bundle.tar.gz staging  # Deploy to staging
+**Output:**
+```
+╭──────────────────────────────────────────────╮
+│                                              │
+│  📦 Create Template Bundle from Environment  │
+│                                              │
+╰──────────────────────────────────────────────╯
+
+🌍 Scanning environment: default
+📂 Scanning environment directory: /home/epuerta/.config/station/environments/default
+   ✅ MCP Config: aws-cost
+   ✅ MCP Config: aws
+   ✅ MCP Config: container-use  
+   ✅ MCP Config: ntfy
+   ✅ MCP Config: slack-test
+   ✅ MCP Config: template
+   📡 Found 6 MCP configuration(s)
+   ✅ Agent Prompt: CodeAnalyzer
+   ✅ Agent Prompt: DeploymentHelper
+   ✅ Agent Prompt: File Management Agent
+   [... 9 more agents]
+   🤖 Found 12 agent prompt(s)
+   📄 Loaded existing variables from variables.yml
+   📝 Found 6 template variable(s)
+✅ Bundle created successfully from environment 'default'
+```
+
+**Input:**
+```bash
+stn template bundle readme-demo-bundle
+```
+
+**Output:**
+```
+╭──────────────────────────────╮
+│                              │
+│  📦 Package Template Bundle  │
+│                              │
+╰──────────────────────────────╯
+
+✅ Bundle packaging: SUCCESS
+📦 Package created: readme-demo-bundle.tar.gz
+📊 Package size: 10 B
+
+🚀 Your bundle is ready for distribution!
+📤 You can now upload it to a registry or share directly
+```
+
+**Input:**
+```bash
+stn template install readme-demo-bundle.tar.gz test-template-install
+```
+
+**Output:**
+```
+╭──────────────────────────────╮
+│                              │
+│  📥 Install Template Bundle  │
+│                              │
+╰──────────────────────────────╯
+
+🎯 Installing 'readme-demo-bundle.tar.gz' into environment 'test-template-install'
+
+📦 Extracting bundle...
+⚙️  Installing MCP configuration...
+   ✅ Installed MCP config: template.json
+🤖 Installing agents...
+   ✅ Installed agent: CodeAnalyzer.prompt
+   ✅ Installed agent: DeploymentHelper.prompt  
+   ✅ Installed agent: File Management Agent.prompt
+   [... 9 more agents]
+📝 Installing example variables...
+   ✅ Created variables.yml from development example
+✅ Bundle 'readme-demo-bundle.tar.gz' installed successfully!
+📋 Next steps:
+   1. Run 'stn sync test-template-install' to load MCP configs and agents
 ```
 
 ## Getting Started
 
 ### 1. **Install Station**
 ```bash
-# Quick install (recommended) 
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-
-# Or build from source
-git clone https://github.com/cloudshipai/station
-cd station && go build -o stn ./cmd/main
-
-# Or download binary from GitHub releases
-# https://github.com/cloudshipai/station/releases
+stn init  # Set up database and encryption
 ```
 
-### 2. **Initialize Your Environment**
-```bash
-# Set up Station with database and encryption
-stn init
+### 2. **Connect to Claude Desktop (or Claude Code)**
+Add Station as an MCP server in your Claude configuration:
 
-# Start with some example tools
-stn load examples/mcps/filesystem.json        # File operations
-stn load examples/mcps/slack.json             # Team notifications  
-stn sync default                              # Deploy to environment
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
 ```
 
-### 3. **Create Your First Agent**
-```bash
-# Create a file management agent
-stn agent create \
-  --name "File Organizer" \
-  --description "Organize and analyze files in project directories"
+### 3. **Start Creating Agents Through Claude**
+Talk to Claude naturally - Station tools are automatically available:
 
-# Test it out
-stn agent run 1 "Analyze the current directory and organize files by type"
+```
+You: "Create a security audit agent that can scan files and post alerts to Slack"
+
+Claude: I'll create that agent with the necessary tools.
+✅ Agent created with file scanning and Slack integration
+✅ Ready to execute: "Run security scan on /etc directory"
 ```
 
-### 4. **Use the Web Interface** *(Optional)*
-```bash
-# Launch Station's terminal interface
-stn ui
+### 4. **Export & Deploy Your Setup**
+When you have agents working, package everything for deployment:
 
-# Or start the full web server
-stn serve
-# Then connect via SSH: ssh admin@localhost -p 2222
+```
+You: "Export this entire environment as a bundle for production deployment"
+
+Claude: I'll export your complete environment.
+✅ Created bundle with 12 agents and 6 MCP servers  
+✅ Package: production-environment.tar.gz ready for deployment
 ```
 
-## Why Choose Station?
+## What is a Deployable Sub-Agent?
 
-### 🔐 **Security First**
-- **Self-hosted** - Your data never leaves your infrastructure
-- **Encrypted secrets** - AES encryption for all sensitive configuration
-- **Environment isolation** - Complete separation of dev/staging/production
-- **Audit logging** - Full tracking of all agent activities
+A sub-agent is simple: **a .prompt file + MCP tools**. Everything you need is in the dotprompt.
 
-### ⚡ **Developer Friendly** 
-- **Single binary** - 45MB download, zero dependencies
-- **GitOps ready** - Version control agents like infrastructure code
-- **Rich templates** - Share and reuse agent configurations across teams
-- **Multiple interfaces** - CLI, web UI, SSH, REST API, MCP server
+### **Example: A Real Sub-Agent**
 
-### 🛠️ **Enterprise Ready**
-- **Multi-environment** - Separate contexts for different deployment stages
-- **Queue-based execution** - Scalable async processing
-- **Webhook integration** - Connect to existing notification systems
-- **Database replication** - Production backup with Litestream
+Here's `TestAgent.prompt` from our environment:
 
-## Common Use Cases
+```yaml
+---
+model: "gemini-2.0-flash-exp"
+config:
+  temperature: 0.3
+  max_tokens: 2000
+metadata:
+  name: "TestAgent"
+  description: "A simple test agent for debugging sync functionality"
+  version: "1.0.0"
+tools:
+  - "__read_file"
+  - "__list_directory"
+station:
+  execution_metadata:
+    max_steps: 5
+    environment: "default"
+---
 
-### **Infrastructure & DevOps**
-```bash
-# Database monitoring with production access
-stn agent create --name "DB Health Monitor" \
-  --description "Monitor connection pools, query performance, disk usage"
-
-# CI/CD pipeline automation
-stn agent create --name "Deployment Pipeline" \
-  --description "Automated deployments with health checks and rollback"
-
-# Infrastructure as Code management  
-stn agent create --name "Terraform Manager" \
-  --description "Plan, apply, and manage infrastructure changes"
+You are a test agent designed to verify that the agent sync functionality is working correctly.
 ```
 
-### **Security & Compliance**
-```bash
-# Vulnerability scanning and alerting
-stn agent create --name "Security Scanner" \
-  --description "Scan for vulnerabilities and compliance issues"
+That's it. **Agent defined, tools assigned, ready to deploy.**
 
-# Incident response automation
-stn agent create --name "Incident Responder" \
-  --description "Automated incident detection and initial response"
+## Environment Organization
+
+Station organizes everything by **environment** (dev/staging/production):
+
+```
+~/.config/station/environments/
+├── default/
+│   ├── agents/
+│   │   ├── TestAgent.prompt
+│   │   ├── SecurityScanner.prompt
+│   │   └── DatabaseMonitor.prompt
+│   ├── template.json        # MCP server configs
+│   └── variables.yml        # Environment-specific variables
+├── staging/
+│   ├── agents/
+│   └── template.json
+└── production/
+    ├── agents/
+    └── template.json
 ```
 
-### **Development & Operations**
-```bash
-# Code review and quality assurance
-stn agent create --name "Code Reviewer" \
-  --description "Automated code review with team standards"
+## Templated MCP Configurations
 
-# Documentation maintenance
-stn agent create --name "Doc Generator" \
-  --description "Generate and maintain technical documentation"
+MCP servers are configured with templates so you can share and install them:
+
+**Example: `template.json`**
+```json
+{
+  "description": "Essential filesystem operations with MCP server integration",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y", 
+        "@modelcontextprotocol/server-filesystem@latest",
+        "{{ .ROOT_PATH }}"
+      ]
+    }
+  },
+  "name": "filesystem-updated"
+}
 ```
 
-## Available Tools
-
-Station integrates with **any MCP-compatible tool**. Here are some popular categories:
-
-| **Category** | **Examples** |
-|--------------|--------------|
-| **Infrastructure** | AWS CLI, Kubernetes, Docker, Terraform, SSH |
-| **Databases** | PostgreSQL, MySQL, MongoDB, Redis, SQLite |
-| **Monitoring** | Prometheus, Grafana, System metrics, Log analysis |
-| **Communication** | Slack, PagerDuty, Email, Webhook notifications |
-| **Security** | Vault, Certificate management, Access control |
-| **Files & Storage** | Local files, S3, Git repositories, Configuration management |
-
-```bash
-# Load tools for your agents
-stn load examples/mcps/aws-infrastructure.json
-stn load examples/mcps/database-monitoring.json  
-stn load examples/mcps/team-communication.json
-stn sync production
+**Environment Variables: `variables.yml`**
+```yaml
+ROOT_PATH: "/home/user/projects"
+AWS_REGION: "us-east-1"
+SLACK_CHANNEL: "#alerts"
 ```
 
-### **Template System**
+## The Complete Picture
 
-Share agents across your team with Station's template system:
+1. **Define your tools** in `template.json` (MCP servers)
+2. **Create agents** in `.prompt` files (combine tools + AI prompt)  
+3. **Set environment variables** in `variables.yml`
+4. **Deploy as bundle** - everything travels together
 
-```bash
-# Create reusable templates from working environments
-stn template create monitoring-suite --env production \
-  --name "Database Monitoring Suite" --author "DevOps Team"
+Your agents can combine tools from multiple MCP servers:
+- `__read_file` + `__list_directory` (from filesystem server)
+- `__slack_post_message` (from Slack server)  
+- `__get_cost_and_usage` (from AWS server)
 
-# Package and share
-stn template bundle monitoring-suite
-stn template install monitoring-suite.tar.gz staging
-
-# Discover community templates
-stn template list --registry community
-```
-
-## Key Commands Reference
-
-### **Agent Management**
-```bash
-stn agent create --name "Agent Name" --env production
-stn agent run <id> "Task description"  
-stn agent list --env production
-stn agent export <id> ./my-agent-bundle
-```
-
-### **Template Operations**  
-```bash
-stn template create my-bundle --env production
-stn template validate my-bundle
-stn template bundle my-bundle  
-stn template install bundle.tar.gz staging
-```
-
-### **Tool & Environment Management**
-```bash
-stn load config.json                    # Load MCP tools
-stn sync production                     # Deploy configurations
-stn status                             # Check system health
-```
-
-### **Server & Interface Options**
-```bash
-stn ui                                 # Terminal interface
-stn serve                             # Web server + SSH  
-stn stdio                             # MCP server mode
-```
+**Everything you need is in the dotprompt** - portable, versionable, deployable.
 
 ## Advanced Features
 
