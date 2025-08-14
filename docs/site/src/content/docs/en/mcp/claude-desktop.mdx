@@ -189,16 +189,19 @@ You can combine stdio and SSE modes as needed:
 }
 ```
 
-## SSH Tunneling for Remote stdio
+## Remote Station Access
 
-For secure remote connections with stdio mode:
+For remote Station instances, use SSE mode instead of stdio:
 
-```json
+```bash
+# On remote server
+stn serve --mcp-port 3000
+
+# In Claude Desktop config
 {
   "mcpServers": {
     "station-remote": {
-      "command": "ssh",
-      "args": ["user@server.com", "stn", "stdio"]
+      "url": "https://remote-server.com:3000/mcp"
     }
   }
 }
