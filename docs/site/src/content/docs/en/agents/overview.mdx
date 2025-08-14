@@ -67,21 +67,21 @@ This diagram shows the detailed relationships between each component:
 ```mermaid
 graph LR
     subgraph "MCP Layer"
-        FS[Filesystem MCP<br/>📁 list_directory<br/>📄 read_text_file<br/>📝 write_file]
-        DB[Database MCP<br/>🗄️ query_db<br/>📊 get_schema<br/>🔍 search_records]
-        Docker[Docker MCP<br/>🐳 docker_exec<br/>📋 list_containers<br/>🚀 deploy_service]
+        FS[Filesystem MCP<br/>list_directory<br/>read_text_file<br/>write_file]
+        DB[Database MCP<br/>query_db<br/>get_schema<br/>search_records]
+        Docker[Docker MCP<br/>docker_exec<br/>list_containers<br/>deploy_service]
     end
     
     subgraph "Agent Definitions"
-        A1["File Monitor Agent<br/>📁 list_directory<br/>📄 read_text_file"]
-        A2["Code Reviewer<br/>🔍 search_files<br/>📝 edit_file<br/>📋 analyze_code"]
-        A3["Deploy Agent<br/>🐳 docker_exec<br/>🚀 deploy_service<br/>📊 health_check"]
+        A1[File Monitor Agent<br/>list_directory<br/>read_text_file]
+        A2[Code Reviewer<br/>search_files<br/>edit_file<br/>analyze_code]
+        A3[Deploy Agent<br/>docker_exec<br/>deploy_service<br/>health_check]
     end
     
     subgraph "Access Methods"
-        CLI_Access[CLI<br/>stn agent run 1<br/>"monitor /project"]
-        MCP_Access[MCP/Claude<br/>"Run file monitor<br/>on current project"]
-        API_Access[REST API<br/>POST /agents/1/queue<br/>{"task": "monitor"}]
+        CLI_Access[CLI<br/>stn agent run 1<br/>monitor project]
+        MCP_Access[MCP Claude<br/>Run file monitor<br/>on current project]
+        API_Access[REST API<br/>POST agents/1/queue<br/>task monitor]
     end
     
     FS --> A1
@@ -109,27 +109,27 @@ This shows how the file system maps to the logical components:
 ```mermaid
 graph TD
     subgraph "Configuration Files"
-        ConfigDir[~/.config/station/environments/default/]
+        ConfigDir[Config Directory<br/>environments/default/]
         
         subgraph "MCP Configs"
-            FSConfig[filesystem_mcp.json<br/>Template with {{ .ALLOWED_PATH }}]
-            DBConfig[database_mcp.json<br/>Template with {{ .DB_URL }}]
-            DockerConfig[docker_mcp.json<br/>Template with {{ .DOCKER_HOST }}]
+            FSConfig[filesystem_mcp.json<br/>Template with variables]
+            DBConfig[database_mcp.json<br/>Template with variables]
+            DockerConfig[docker_mcp.json<br/>Template with variables]
         end
         
         subgraph "Variables & Agents"
-            VarFile[variables.yml<br/>ALLOWED_PATH: /projects<br/>DB_URL: sqlite://db<br/>DOCKER_HOST: unix://]
+            VarFile[variables.yml<br/>ALLOWED_PATH: /projects<br/>DB_URL: sqlite://db]
             AgentDir[agents/]
-            Agent1[agents/file-monitor.prompt]
-            Agent2[agents/code-reviewer.prompt] 
-            Agent3[agents/deploy-agent.prompt]
+            Agent1[file-monitor.prompt]
+            Agent2[code-reviewer.prompt] 
+            Agent3[deploy-agent.prompt]
         end
     end
     
     subgraph "Runtime Process"
         SyncCmd[stn sync default]
-        Database[(SQLite Database<br/>Resolved configs<br/>Agent definitions<br/>Tool assignments)]
-        Runtime[Station Runtime<br/>Agent Execution<br/>Tool Resolution]
+        Database[SQLite Database<br/>Resolved configs<br/>Agent definitions]
+        Runtime[Station Runtime<br/>Agent Execution]
     end
     
     ConfigDir --> FSConfig
