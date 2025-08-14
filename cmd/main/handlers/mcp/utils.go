@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,8 @@ import (
 
 	"station/internal/db"
 	"station/internal/db/repositories"
-	mcpservice "station/internal/mcp"
+	"station/internal/mcp"
+	"station/internal/services"
 	"station/pkg/dotprompt"
 )
 
@@ -22,7 +24,7 @@ func truncateString(s string, maxLen int) string {
 
 // validateEnvironmentExists checks if file-based environment directory exists
 func (h *MCPHandler) validateEnvironmentExists(envName string) bool {
-	statusService := mcpservice.NewStatusService(nil)
+	statusService := mcp.NewStatusService(nil)
 	return statusService.ValidateEnvironmentExists(envName)
 }
 
@@ -43,118 +45,76 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool) error 
 	styles := getCLIStyles(h.themeManager)
 
 	// Get or create environment
-	envID, err := h.getOrCreateEnvironmentID(repos, environment)
+	_, err = h.getOrCreateEnvironmentID(repos, environment)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environment, err)
 	}
 	
-	// Create config syncer
-	syncer := mcpservice.NewConfigSyncer(repos)
+	// Create declarative sync service
+	declarativeSync := services.NewDeclarativeSync(repos, cfg)
 	
-	fmt.Printf("🔍 Scanning database configs in environment '%s'...\n", environment)
+	fmt.Printf("🔍 Scanning file-based configs in environment '%s'...\n", environment)
 	
-	// Perform sync using the service
-	options := mcpservice.SyncOptions{
-		DryRun: dryRun,
+	// Perform sync using the declarative sync service
+	options := services.SyncOptions{
+		DryRun:      dryRun,
+		Validate:    false,
+		Interactive: true,
+		Verbose:     false,
 	}
 	
-	result, err := syncer.Sync(environment, envID, options)
+	result, err := declarativeSync.SyncEnvironment(context.Background(), environment, options)
 	if err != nil {
 		return fmt.Errorf("sync failed: %w", err)
 	}
 	
-	// Phase 2: Sync .prompt files (agents depend on MCP configs)
-	agentsSynced, err := h.syncAgentPromptFiles(repos, environment, envID, dryRun)
-	if err != nil {
-		return fmt.Errorf("agent sync failed: %w", err)
-	}
+	// Note: Agent syncing is now handled by the DeclarativeSync service
 	
-	// Display results
-	if len(result.SyncedConfigs) > 0 {
-		fmt.Printf("\n📥 Configs to sync:\n")
-		for _, name := range result.SyncedConfigs {
-			fmt.Printf("  • %s\n", styles.Success.Render(name))
-		}
-	}
-	
-	if agentsSynced > 0 {
-		fmt.Printf("\n🤖 Agents synced: %d\n", agentsSynced)
-	}
-
-	if len(result.RemovedConfigs) > 0 {
-		fmt.Printf("\n🗑️  Configs to remove:\n")
-		for _, name := range result.RemovedConfigs {
-			fmt.Printf("  • %s\n", styles.Error.Render(name))
-		}
-	}
-
-	if len(result.SyncedConfigs) == 0 && len(result.RemovedConfigs) == 0 {
-		fmt.Printf("\n✅ %s\n", styles.Success.Render("All configurations are up to date"))
-		return nil
-	}
-
+	// Display simplified results for the new declarative sync
 	if dryRun {
-		fmt.Printf("\n🔍 %s\n", styles.Info.Render("Dry run complete - no changes made"))
+		fmt.Printf("\n🔍 %s\n", styles.Success.Render("Dry run complete - no changes made"))
 		return nil
 	}
 
-	// Show sync progress
-	fmt.Printf("\n🔄 Syncing configurations...\n")
+	// Display results from the declarative sync
+	fmt.Printf("\n📊 Sync Results:\n")
+	fmt.Printf("  • MCP Servers: %d processed, %d connected\n", result.MCPServersProcessed, result.MCPServersConnected)
+	fmt.Printf("  • Agents: %d processed, %d synced\n", result.AgentsProcessed, result.AgentsSynced)
 
-	// Show individual config results
-	for _, configName := range result.SyncedConfigs {
-		// Check if this config had an error
-		hasError := false
-		for _, syncError := range result.SyncErrors {
-			if syncError.ConfigName == configName {
-				fmt.Printf("  📥 Loading %s... %s\n", configName, styles.Error.Render("❌"))
-				hasError = true
-				break
-			}
-		}
-		if !hasError {
-			fmt.Printf("  📥 Loading %s... %s\n", configName, styles.Success.Render("✅"))
-		}
+	// Show failed servers if any
+	failedServers := result.MCPServersProcessed - result.MCPServersConnected
+	if failedServers > 0 {
+		fmt.Printf("  • ❌ MCP Servers FAILED: %d (NOT saved to database)\n", failedServers)
+		fmt.Printf("     ⚠️  These servers will NOT provide tools for agents\n")
 	}
 
-	for _, configName := range result.RemovedConfigs {
-		fmt.Printf("  🗑️  Removing %s... %s\n", configName, styles.Success.Render("✅"))
-	}
-
-	// Summary
-	if len(result.SyncErrors) > 0 {
-		fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed with errors!"))
-		fmt.Printf("📊 Summary:\n")
-		fmt.Printf("  • Synced: %d configs\n", len(result.SyncedConfigs)-len(result.SyncErrors))
-		fmt.Printf("  • Failed: %d configs\n", len(result.SyncErrors))
-		fmt.Printf("  • Removed: %d configs\n", len(result.RemovedConfigs))
-		if result.OrphanedToolsRemoved > 0 {
-			fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", result.OrphanedToolsRemoved)
-		}
-		if len(result.AffectedAgents) > 0 {
-			fmt.Printf("  • Affected agents: %v\n", result.AffectedAgents)
-			fmt.Printf("  • ⚠️  Agent health may be impacted - check agent logs for details\n")
+	if result.ValidationErrors > 0 {
+		fmt.Printf("  • ⚠️  Validation Errors: %d\n", result.ValidationErrors)
+		for _, errMsg := range result.ValidationMessages {
+			fmt.Printf("    - %s\n", styles.Error.Render(errMsg))
 		}
 		
-		fmt.Printf("\n❌ Sync Errors:\n")
-		for _, syncError := range result.SyncErrors {
-			fmt.Printf("  • %s: %s\n", syncError.ConfigName, styles.Error.Render(syncError.Error.Error()))
+		if failedServers > 0 {
+			fmt.Printf("\n❌ %s\n", styles.Error.Render("CRITICAL: Some MCP servers failed to sync!"))
+			fmt.Printf("💡 Check server configurations and ensure MCP servers start correctly\n")
+			fmt.Printf("💡 Agents using tools from failed servers will not work\n")
+		} else {
+			fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed with validation errors!"))
 		}
-		
-		// Don't return error - partial success is still useful
-		return nil
 	} else {
-		fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
-		fmt.Printf("📊 Summary:\n")
-		fmt.Printf("  • Synced: %d configs\n", len(result.SyncedConfigs))
-		fmt.Printf("  • Removed: %d configs\n", len(result.RemovedConfigs))
-		if result.OrphanedToolsRemoved > 0 {
-			fmt.Printf("  • Cleaned up: %d orphaned agent tools\n", result.OrphanedToolsRemoved)
+		if failedServers > 0 {
+			fmt.Printf("\n⚠️ %s\n", styles.Error.Render("Sync completed but some servers failed!"))
+		} else {
+			fmt.Printf("\n✅ %s\n", styles.Success.Render("Sync completed successfully!"))
 		}
-		if len(result.AffectedAgents) > 0 {
-			fmt.Printf("  • Affected agents: %v\n", result.AffectedAgents)
-			fmt.Printf("  • ⚠️  Agent health may be impacted - check agent logs for details\n")
-		}
+	}
+
+	// Always show debug log location for troubleshooting
+	homeDir, _ := os.UserHomeDir()
+	debugLogPath := fmt.Sprintf("%s/.config/station/debug-mcp-sync.log", homeDir)
+	if result.ValidationErrors > 0 || failedServers > 0 {
+		fmt.Printf("\n🔍 Detailed debug logs available at: %s\n", debugLogPath)
+		fmt.Printf("💡 Use 'tail -f %s' to monitor MCP sync issues\n", debugLogPath)
 	}
 
 	return nil
@@ -177,7 +137,7 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 	styles := getCLIStyles(h.themeManager)
 	
 	// Create status service
-	statusService := mcpservice.NewStatusService(repos)
+	statusService := mcp.NewStatusService(repos)
 	
 	// Get environment statuses
 	statuses, err := statusService.GetEnvironmentStatuses(environment)
@@ -199,23 +159,23 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 			for i, fc := range envStatus.FileConfigs {
 				configNames[i] = fc.ConfigName
 			}
-			configList := mcpservice.TruncateString(fmt.Sprintf("%v", configNames), 24)
+			configList := truncateString(fmt.Sprintf("%v", configNames), 24)
 			if len(configNames) == 0 {
 				configList = "none"
 			}
 			
 			status := styles.Info.Render("no agents")
 			fmt.Printf("│ %-14s │ %-27s │ %-24s │ %-14s │\n", 
-				mcpservice.TruncateString(envStatus.Environment.Name, 14), "none", configList, status)
+				truncateString(envStatus.Environment.Name, 14), "none", configList, status)
 		} else {
 			for i, agentStatus := range envStatus.Agents {
 				// Format display
 				envName := ""
 				if i == 0 {
-					envName = mcpservice.TruncateString(envStatus.Environment.Name, 14)
+					envName = truncateString(envStatus.Environment.Name, 14)
 				}
 				
-				configDisplay := mcpservice.TruncateString(fmt.Sprintf("%v", agentStatus.ConfigNames), 24)
+				configDisplay := truncateString(fmt.Sprintf("%v", agentStatus.ConfigNames), 24)
 				if len(agentStatus.ConfigNames) == 0 {
 					configDisplay = "none"
 				}
@@ -233,7 +193,7 @@ func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
 				
 				fmt.Printf("│ %-14s │ %-27s │ %-24s │ %-14s │\n", 
 					envName,
-					mcpservice.TruncateString(agentStatus.Agent.Name, 27),
+					truncateString(agentStatus.Agent.Name, 27),
 					configDisplay,
 					styledStatus)
 			}
