@@ -32,9 +32,13 @@ The Claude Desktop MCP configuration file is located at:
 ~/.config/Claude/claude_desktop_config.json
 ```
 
-## Basic Station MCP Configuration
+## Station MCP Configuration
 
-Add Station to your `claude_desktop_config.json`:
+Station supports two connection modes with Claude Desktop:
+
+### Option 1: stdio Mode (Recommended)
+
+Direct process communication via stdin/stdout:
 
 ```json
 {
@@ -47,9 +51,40 @@ Add Station to your `claude_desktop_config.json`:
 }
 ```
 
+### Option 2: SSE Mode (Server-Sent Events)
+
+HTTP-based connection for remote or containerized setups:
+
+**1. Start Station MCP server:**
+```bash
+stn serve --port 3000
+```
+
+**2. Configure Claude Desktop:**
+```json
+{
+  "mcpServers": {
+    "station": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+**For remote Station instances:**
+```json
+{
+  "mcpServers": {
+    "station-remote": {
+      "url": "https://your-station-server.com:3000/mcp"
+    }
+  }
+}
+```
+
 ## Advanced Configuration Options
 
-### Custom Station Path
+### Custom Station Path (stdio mode)
 
 If Station is not in your PATH or you want to specify a particular installation:
 
@@ -64,20 +99,47 @@ If Station is not in your PATH or you want to specify a particular installation:
 }
 ```
 
-### Environment-Specific Configuration
+### Multiple Station Instances
 
-Connect to a specific Station environment:
+For different environments, you'll need separate Station instances or configurations:
 
+**stdio mode with different Station workspaces:**
 ```json
 {
   "mcpServers": {
     "station-prod": {
       "command": "stn",
-      "args": ["stdio", "--env", "production"]
+      "args": ["stdio"],
+      "env": {
+        "XDG_CONFIG_HOME": "/opt/station-prod"
+      }
     },
     "station-dev": {
       "command": "stn", 
-      "args": ["stdio", "--env", "development"]
+      "args": ["stdio"],
+      "env": {
+        "XDG_CONFIG_HOME": "/opt/station-dev"
+      }
+    }
+  }
+}
+```
+
+**SSE mode with different ports/instances:**
+```bash
+# Start servers with different configs
+XDG_CONFIG_HOME=/opt/station-prod stn serve --mcp-port 3000
+XDG_CONFIG_HOME=/opt/station-dev stn serve --mcp-port 3001
+```
+
+```json
+{
+  "mcpServers": {
+    "station-prod": {
+      "url": "http://localhost:3000/mcp"
+    },
+    "station-dev": {
+      "url": "http://localhost:3001/mcp"
     }
   }
 }
@@ -85,8 +147,7 @@ Connect to a specific Station environment:
 
 ### Debug Mode
 
-Enable verbose logging for troubleshooting:
-
+**stdio mode:**
 ```json
 {
   "mcpServers": {
@@ -98,9 +159,14 @@ Enable verbose logging for troubleshooting:
 }
 ```
 
-## Multiple Station Instances
+**SSE mode:**
+```bash
+stn serve --debug --mcp-port 3000
+```
 
-You can connect to multiple Station installations or environments:
+## Mixed Mode Configuration
+
+You can combine stdio and SSE modes as needed:
 
 ```json
 {
@@ -110,12 +176,29 @@ You can connect to multiple Station installations or environments:
       "args": ["stdio"]
     },
     "station-remote": {
-      "command": "ssh",
-      "args": ["user@server.com", "stn", "stdio"]
+      "url": "https://remote-station.company.com:3000/mcp"
     },
     "station-docker": {
       "command": "docker",
       "args": ["exec", "station-container", "stn", "stdio"]
+    },
+    "station-k8s": {
+      "url": "https://station-service.namespace.svc.cluster.local:3000/mcp"
+    }
+  }
+}
+```
+
+## SSH Tunneling for Remote stdio
+
+For secure remote connections with stdio mode:
+
+```json
+{
+  "mcpServers": {
+    "station-remote": {
+      "command": "ssh",
+      "args": ["user@server.com", "stn", "stdio"]
     }
   }
 }
@@ -147,6 +230,19 @@ You should see a list of your configured agents.
 ```
 Create a test agent and run it with a simple task
 ```
+
+### 4. Verify SSE Mode (if using stn serve)
+
+Check that Station server is running:
+```bash
+# Check if server is responding
+curl http://localhost:3000/mcp
+
+# View server logs
+stn serve --port 3000 --debug
+```
+
+You should see MCP protocol messages in the server logs when Claude Desktop connects.
 
 ## Available MCP Tools
 
@@ -200,9 +296,22 @@ Create an agent that can manage my development database - backing up before sche
    stn agent list
    ```
 
-2. **Test MCP directly:**
+2. **Test MCP connection directly:**
+   
+   **stdio mode:**
    ```bash
    echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | stn stdio
+   ```
+   
+   **SSE mode:**
+   ```bash
+   # Start server
+   stn serve --port 3000 --debug
+   
+   # Test endpoint (in another terminal)
+   curl -X POST http://localhost:3000/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
    ```
 
 3. **Check configuration file syntax:**
@@ -225,15 +334,42 @@ ls -la ~/.station/
 
 If Station MCP responses are slow:
 
+**stdio mode:**
 ```json
 {
   "mcpServers": {
     "station": {
       "command": "stn",
-      "args": ["stdio", "--timeout", "30s"]
+      "args": ["stdio"]
     }
   }
 }
+```
+
+**SSE mode:**
+```bash
+# Check server configuration - no timeout flags available in current CLI
+stn serve --mcp-port 3000 --debug
+```
+
+### SSE Mode Issues
+
+**Server not starting:**
+```bash
+# Check if port is already in use
+netstat -tulpn | grep :3000
+
+# Try a different port
+stn serve --mcp-port 3001
+```
+
+**Connection refused:**
+```bash
+# Check server status
+curl -v http://localhost:3000/mcp
+
+# Check server logs
+stn serve --mcp-port 3000 --debug
 ```
 
 ### Multiple Environments Not Working
