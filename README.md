@@ -4,11 +4,46 @@
 
 **A secure, self-hosted platform for building and deploying intelligent sub-agents.**
 
+```mermaid
+graph LR
+    subgraph "Development Environment"
+        Claude[Claude Code]
+        Cursor[Cursor]
+        Station[Station Runtime]
+    end
+    
+    subgraph "Sub-Agents"
+        Agent1["File Monitor<br/>📁 list_directory<br/>📄 read_text_file"]
+        Agent2["Code Reviewer<br/>🔍 search_files<br/>📝 edit_file"]
+        Agent3["Deploy Agent<br/>🐳 docker_exec<br/>☸️ kubectl_apply"]
+    end
+    
+    subgraph "Dev Environment MCP Pool"
+        FS[Filesystem MCP]
+        Docker[Docker MCP]
+        K8s[Kubernetes MCP]
+        DB[Database MCP]
+        Custom[Custom Tools]
+    end
+    
+    Claude --> Station
+    Cursor --> Station
+    Station --> Agent1
+    Station --> Agent2
+    Station --> Agent3
+    
+    Agent1 --> FS
+    Agent2 --> FS
+    Agent3 --> Docker
+    Agent3 --> K8s
+    Agent1 --> DB
+```
+
 🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
 
 📚 **[Documentation](https://cloudshipai.github.io/station)** - Complete Station documentation and guides
 
-> Lightweight runtime for deployable sub-agents that need to access internal systems, run deep in your infrastructure, and integrate seamlessly with your existing deployment processes.
+> Station is an MCP runtime that augments your Claude Code and Cursor development experience by providing an agnostic runtime for your sub-agents - with centralized management, environment isolation, and server deployment capabilities.
 
 ---
 
@@ -249,7 +284,7 @@ Here's `TestAgent.prompt` from our environment:
 
 ```yaml
 ---
-model: "gemini-2.0-flash-exp"
+model: "gemini-2.5-flash"
 config:
   temperature: 0.3
   max_tokens: 2000
