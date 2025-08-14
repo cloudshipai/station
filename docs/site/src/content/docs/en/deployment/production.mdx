@@ -1,0 +1,44 @@
+---
+title: Production Setup
+description: Deploying Station in production environments
+---
+
+# Production Setup
+
+## 🚧 Coming Soon
+
+This page is under construction. We're working on comprehensive documentation for deploying Station in production environments.
+
+## What This Will Cover
+
+- **Production Architecture** - Recommended production deployment patterns
+- **Server Configuration** - Configuring Station for production workloads
+- **Database Setup** - Production database configuration and backups
+- **Load Balancing** - Scaling Station across multiple instances
+- **Container Deployment** - Docker and Kubernetes deployment guides
+
+## Quick Reference
+
+Basic production server setup:
+
+```bash
+# Start Station server with production settings
+stn serve --api-port 8080 --mcp-port 3000 --ssh-port 2222
+
+# Run in background with systemd (example)
+sudo systemctl enable station
+sudo systemctl start station
+```
+
+## Production Checklist
+
+- [ ] **Security Configuration** - Enable authentication and access controls
+- [ ] **Database Backup** - Automated backup strategy
+- [ ] **Monitoring Setup** - Logging and metrics collection
+- [ ] **Network Security** - Firewall and TLS configuration
+- [ ] **Update Strategy** - Plan for Station updates and maintenance
+
+## Next Steps
+
+- **[Security Configuration](/station/en/deployment/security)** - Secure your production deployment
+- **[Monitoring & Observability](/station/en/deployment/monitoring)** - Monitor production systems
