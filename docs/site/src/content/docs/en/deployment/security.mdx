@@ -1,0 +1,47 @@
+---
+title: Security Configuration
+description: Securing Station deployments and agent operations
+---
+
+# Security Configuration
+
+## 🚧 Coming Soon
+
+This page is under construction. We're working on comprehensive documentation for securing Station deployments and agent operations.
+
+## What This Will Cover
+
+- **Authentication & Authorization** - User access control and permissions
+- **Network Security** - TLS, firewall, and network isolation
+- **Secret Management** - Secure handling of credentials and API keys
+- **Agent Security** - Controlling agent access to sensitive resources
+- **Audit & Compliance** - Logging and monitoring for security compliance
+
+## Quick Reference
+
+Security considerations for Station:
+
+```bash
+# Run with authentication enabled
+stn serve --auth-required
+
+# Check audit logs
+stn logs audit --filter security
+
+# Manage access keys
+stn key generate
+stn key list
+```
+
+## Security Best Practices
+
+- **Principle of Least Privilege** - Give agents minimal necessary permissions
+- **Environment Isolation** - Separate dev/staging/production access
+- **Credential Rotation** - Regular rotation of API keys and secrets
+- **Network Segmentation** - Isolate Station from sensitive networks
+- **Regular Updates** - Keep Station and dependencies updated
+
+## Next Steps
+
+- **[Production Setup](/station/en/deployment/production)** - General production deployment
+- **[Monitoring & Observability](/station/en/deployment/monitoring)** - Monitor security events

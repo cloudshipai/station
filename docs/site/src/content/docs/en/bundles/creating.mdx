@@ -1,0 +1,52 @@
+---
+title: Creating Bundles
+description: How to create and package Station template bundles
+---
+
+# Creating Bundles
+
+## 🚧 Coming Soon
+
+This page is under construction. We're working on comprehensive documentation for creating and packaging Station template bundles.
+
+## What This Will Cover
+
+- **Bundle Structure** - Organizing agents, tools, and configurations
+- **Template Creation** - Creating reusable template configurations
+- **Variable Management** - Designing flexible template variables
+- **Bundle Packaging** - Creating distributable bundle archives
+- **Testing & Validation** - Ensuring bundles work across environments
+
+## Quick Reference
+
+Bundle creation workflow:
+
+```bash
+# Export current environment to template
+stn template create --env default
+
+# Bundle the template for distribution
+stn template bundle template-directory/
+
+# Test bundle installation
+stn template install bundle.tar.gz --env test
+```
+
+## Example Bundle Structure
+
+```
+my-bundle/
+├── agents/
+│   ├── file-monitor.prompt
+│   └── log-analyzer.prompt
+├── mcp-configs/
+│   ├── filesystem.json
+│   └── logs.json
+├── variables.yml
+└── README.md
+```
+
+## Next Steps
+
+- **[Bundle Registry](/station/en/bundles/registry)** - Discover existing bundles
+- **[Publishing Bundles](/station/en/bundles/publishing)** - Share your bundles
