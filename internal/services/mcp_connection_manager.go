@@ -41,10 +41,20 @@ type MCPConnectionManager struct {
 
 // debugLogToFile writes debug messages to a file for investigation
 func debugLogToFile(message string) {
-	logFile := "/home/epuerta/projects/hack/station/debug-mcp-connection.log"
+	// Use user's home directory for cross-platform compatibility
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return // Silently fail if can't get home dir
+	}
+	logFile := fmt.Sprintf("%s/.config/station/debug-mcp-sync.log", homeDir)
+	
+	// Ensure directory exists
+	logDir := fmt.Sprintf("%s/.config/station", homeDir)
+	os.MkdirAll(logDir, 0755)
+	
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return
+		return // Silently fail if can't write
 	}
 	defer f.Close()
 	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
@@ -262,22 +272,46 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		return nil, nil
 	}
 
-	// Use main context directly - don't create timeout context that could break connection
-	// The MCP client internally handles timeouts appropriately
+	// Add timeout for Mac debugging - MCP GetActiveTools can hang on macOS
+	toolCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	
 	logging.Info("DEBUG MCPCONNMGR connectToMCPServer: About to call GetActiveTools for server: %s", serverName)
-	serverTools, err := mcpClient.GetActiveTools(ctx, mcm.genkitApp)
+	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
 	
 	// NOTE: Connection stays alive for tool execution during Generate() calls
 	
 	if err != nil {
-		logging.Info("DEBUG MCPCONNMGR connectToMCPServer: FAILED to get tools from %s: %v", serverName, err)
+		// Enhanced error logging for tool discovery failures
+		logging.Info("❌ CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
+		logging.Info("   🔧 Server command/config may be invalid or server may not be responding")
+		logging.Info("   📡 This means NO TOOLS will be available from this server")
+		logging.Info("   ⚠️  Agents depending on tools from '%s' will fail during execution", serverName)
+		logging.Info("   🔍 Check server configuration and ensure the MCP server starts correctly")
+		
+		// Log additional debugging info
+		debugLogToFile(fmt.Sprintf("CRITICAL: Tool discovery FAILED for server '%s' - Error: %v", serverName, err))
+		debugLogToFile(fmt.Sprintf("IMPACT: NO TOOLS from server '%s' will be available in database", serverName))
+		debugLogToFile(fmt.Sprintf("ACTION NEEDED: Verify server config and manual test: %s", serverName))
+		
 		return nil, mcpClient // Return client for cleanup even on error
 	}
 
-	logging.Info("DEBUG MCPCONNMGR connectToMCPServer: Successfully discovered %d tools from server: %s", len(serverTools), serverName)
+	logging.Info("✅ MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
+	debugLogToFile(fmt.Sprintf("SUCCESS: Server '%s' provided %d tools", serverName, len(serverTools)))
+	
 	for i, tool := range serverTools {
-		logging.Info("DEBUG MCPCONNMGR connectToMCPServer: Tool %d from %s: %s", i+1, serverName, tool.Name())
+		toolName := tool.Name()
+		logging.Info("   🔧 Tool %d: %s", i+1, toolName)
+		debugLogToFile(fmt.Sprintf("TOOL DISCOVERED: %s from server %s", toolName, serverName))
 	}
+	
+	if len(serverTools) == 0 {
+		logging.Info("⚠️  WARNING: Server '%s' connected successfully but provided ZERO tools", serverName)
+		logging.Info("   This may indicate a server configuration issue or empty tool catalog")
+		debugLogToFile(fmt.Sprintf("WARNING: Server '%s' connected but provided zero tools", serverName))
+	}
+	
 	return serverTools, mcpClient
 }
 
