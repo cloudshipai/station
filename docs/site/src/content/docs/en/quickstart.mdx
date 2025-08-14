@@ -12,36 +12,20 @@ Get Station up and running in minutes and deploy your first intelligent sub-agen
 ### Automatic Install (Recommended)
 
 ```bash
-curl -sSL https://getstation.cloudshipai.com | bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
 This script automatically detects your platform and installs the latest version.
 
-### Manual Download
-
-Download for your platform from [GitHub Releases](https://github.com/cloudshipai/station/releases/latest)
-
-**Linux x64:**
-```bash
-wget https://github.com/cloudshipai/station/releases/latest/download/station_linux_amd64.tar.gz
-tar -xzf station_linux_amd64.tar.gz
-sudo mv stn /usr/local/bin/
-```
-
-**macOS:**
-```bash
-wget https://github.com/cloudshipai/station/releases/latest/download/station_darwin_amd64.tar.gz
-tar -xzf station_darwin_amd64.tar.gz
-sudo mv stn /usr/local/bin/
-```
-
-### Build from Source
+### Manual Installation
 
 ```bash
 git clone https://github.com/cloudshipai/station
 cd station
-make install
+make local-install
 ```
+
+This will build Station and install it to `~/.local/bin/stn`.
 
 ## Setup Workflow
 
@@ -58,14 +42,32 @@ This creates the Station configuration directory and initializes the database.
 Station works with Model Context Protocol (MCP) servers. Load some essential tools:
 
 ```bash
-# Load filesystem tools
-stn load examples/mcps/filesystem.json
+# Create filesystem MCP config
+cat > filesystem-mcp.json << 'EOF'
+{
+  "name": "Filesystem MCP",
+  "description": "Basic filesystem operations",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@latest",
+        "{{ .ALLOWED_PATH }}"
+      ]
+    }
+  }
+}
+EOF
 
-# Load database tools  
-stn load examples/mcps/postgres.json
+# Load the configuration
+stn load filesystem-mcp.json --env default
 
-# Sync configurations to make tools available
-stn sync production
+# Create variables for template resolution
+echo "ALLOWED_PATH: /home/user/projects" > ~/.config/station/environments/default/variables.yml
+
+# Sync to discover tools
+stn sync default
 ```
 
 ### 3. Create Your First Agent
@@ -82,17 +84,27 @@ stn agent create \
 stn agent run 1 "Check current disk usage and memory status"
 ```
 
-### 5. Install from Bundle Registry
+### 5. Connect to Claude Desktop
 
-Browse and install pre-built bundles from the [Bundle Registry](https://cloudshipai.github.io/registry):
+Add Station to your Claude Desktop MCP configuration:
 
-```bash
-# Install a filesystem bundle
-stn template install https://cloudshipai.github.io/registry/bundles/filesystem-bundle.tar.gz
+**Location:**
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`
 
-# Sync to load the agents and tools
-stn sync production
+**Configuration:**
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
 ```
+
+Restart Claude Desktop and you can now create and run agents through natural conversation.
 
 ## Access Methods
 
@@ -144,15 +156,15 @@ Real-time updates and streaming responses for agent execution and system events.
 
 ## Next Steps
 
-- **[Learn the Architecture](/en/architecture)** - Understand how Station manages agents and tools
-- **[Explore Use Cases](/en/use-cases/monitoring)** - See real-world examples  
-- **[Create Bundles](/en/creating-bundles)** - Package and share your agents
-- **[Production Setup](/en/deployment/production)** - Deploy Station in production
+- **[Learn the Architecture](/station/en/architecture)** - Understand how Station manages agents and tools
+- **[MCP Quick Start](/station/en/mcp-quickstart)** - Get running with Claude Desktop in 5 minutes
+- **[Create Bundles](/station/en/creating-bundles)** - Package and share your agents
+- **[Why Station?](/station/en/why-station)** - Understand the use cases
 
 ## System Requirements
 
 - **OS**: Linux, macOS, Windows
 - **Memory**: 512MB RAM minimum, 1GB recommended  
 - **Storage**: 200MB for runtime, 1GB+ for production data
-- **Database**: SQLite (development) or PostgreSQL (production)
+- **Database**: SQLite (built-in, no setup required)
 - **Network**: Outbound HTTPS for AI providers and tool integrations
