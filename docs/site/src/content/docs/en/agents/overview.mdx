@@ -193,28 +193,26 @@ curl http://localhost:8080/api/v1/agents
 
 ## Environment Isolation
 
-Agents and tools are isolated by environment:
+Each environment has its own agents and tool configurations:
 
 ```mermaid
 graph TD
     subgraph "Development Environment"
-        DevTools[Dev Tools<br/>Local filesystem<br/>Test database<br/>Mock services]
-        DevAgents[Dev Agents<br/>Safe operations<br/>Sandbox data]
+        DevConfig[dev/variables.yml<br/>ALLOWED_PATH: /home/dev<br/>DB_URL: sqlite://dev.db]
+        DevTools[Dev Tool Pool<br/>Local filesystem<br/>Test database<br/>Mock services]
+        DevAgents[dev/agents/<br/>file-monitor.prompt<br/>code-reviewer.prompt]
     end
     
     subgraph "Production Environment"  
-        ProdTools[Prod Tools<br/>Production filesystem<br/>Live database<br/>Real services]
-        ProdAgents[Prod Agents<br/>Restricted operations<br/>Real data]
+        ProdConfig[prod/variables.yml<br/>ALLOWED_PATH: /opt/data<br/>DB_URL: postgres://prod]
+        ProdTools[Prod Tool Pool<br/>Production filesystem<br/>Live database<br/>Real services]
+        ProdAgents[prod/agents/<br/>file-monitor.prompt<br/>code-reviewer.prompt]
     end
     
-    subgraph "Agent Templates"
-        Template[Same .prompt Files<br/>Different tool access<br/>per environment]
-    end
-    
-    Template --> DevAgents
-    Template --> ProdAgents
-    
+    DevConfig --> DevTools
     DevTools --> DevAgents
+    
+    ProdConfig --> ProdTools
     ProdTools --> ProdAgents
 ```
 
@@ -231,9 +229,10 @@ graph TD
 - Tool pools are environment-specific
 
 ### **Agent Portability**
-- Agents defined in `.prompt` files are version-controllable
-- Export agents from one environment, import to another
-- GitOps-ready agent deployment
+- Agents defined in `.prompt` files are version-controllable within their environment
+- Each environment has its own copy of agent `.prompt` files
+- Agents can be copied between environments but exist independently in each
+- GitOps-ready agent deployment per environment
 
 ### **Multiple Access Methods**
 - **CLI**: Direct command-line agent execution
