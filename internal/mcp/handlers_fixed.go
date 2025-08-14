@@ -356,8 +356,9 @@ func (s *Server) handleDeleteAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
 	}
 
-	// Delete the agent
-	err = s.repos.Agents.Delete(agentID)
+	// Delete the agent using AgentService for proper file cleanup
+	agentService := services.NewAgentService(s.repos)
+	err = agentService.DeleteAgent(ctx, agentID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to delete agent: %v", err)), nil
 	}
