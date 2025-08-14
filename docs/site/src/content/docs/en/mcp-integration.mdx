@@ -5,231 +5,228 @@ description: Model Context Protocol integration and tool management
 
 # MCP Integration
 
-Station is built around the Model Context Protocol (MCP), enabling seamless integration with a wide ecosystem of tools and services that agents can use to perform real-world tasks.
+Station is primarily an **MCP runtime** that augments your Claude Code and Cursor development experience by providing an agnostic runtime for your sub-agents.
 
-## What is MCP?
+## Station as MCP Runtime
 
-The **Model Context Protocol** is a standard that allows AI agents to securely connect to external tools and data sources. Station uses MCP to provide agents with access to:
+Rather than managing agents in various platforms, Station gives you:
 
-- File systems and databases
-- Cloud services (AWS, GCP, Azure)
-- Development tools (Git, Docker, Kubernetes)  
-- Communication platforms (Slack, email)
-- Monitoring and observability tools
+- **Centralized Agent Management** - One place to create, manage, and monitor all your sub-agents
+- **Environment Isolation** - Separate agents and MCP tools by dev/staging/production environments  
+- **Server Deployment** - Deploy Station as a persistent server for background agent operations
+- **Universal MCP Client** - Works with any MCP-compatible tools and servers
 
-## Available MCP Tools
-
-Station includes 20+ production-ready MCP integrations:
-
-### Infrastructure Tools
-- **AWS CLI** - Complete AWS service management
-- **Kubernetes** - Cluster and workload management  
-- **Docker** - Container operations and management
-- **SSH** - Secure remote server access
-- **Terraform** - Infrastructure as code operations
-
-### Database Tools
-- **PostgreSQL** - Database queries and administration
-- **MySQL** - Database operations and monitoring
-- **MongoDB** - NoSQL database management
-- **Redis** - In-memory data structure operations
-- **SQLite** - Lightweight database operations
-
-### Monitoring & Observability
-- **Prometheus** - Metrics collection and querying
-- **Grafana** - Dashboard and visualization management
-- **System Metrics** - CPU, memory, disk monitoring
-- **Log Analysis** - Log parsing and analysis
-- **Health Checks** - Service availability monitoring
-
-### Communication & Notifications
-- **Slack** - Team communication and notifications
-- **Email** - SMTP email sending
-- **PagerDuty** - Incident management and alerting
-- **Webhooks** - HTTP-based notifications
-- **Discord** - Community and team chat
-
-### Development & DevOps
-- **Git** - Version control operations
-- **GitHub/GitLab** - Repository management and CI/CD
-- **Jenkins** - Build automation and deployment
-- **Jira** - Issue tracking and project management
-- **Confluence** - Documentation and knowledge base
-
-## Loading MCP Tools
-
-### Install MCP Servers
-```bash
-# Load filesystem tools
-stn load examples/mcps/filesystem.json
-
-# Load AWS tools  
-stn load examples/mcps/aws-cli.json
-
-# Load database tools
-stn load examples/mcps/postgres.json
-
-# Load communication tools
-stn load examples/mcps/slack.json
+```mermaid
+graph LR
+    subgraph "Development Environment"
+        Claude[Claude Code]
+        Cursor[Cursor]
+        Station[Station Runtime]
+    end
+    
+    subgraph "MCP Ecosystem"
+        FileSystem[Filesystem MCP]
+        Database[Database MCP] 
+        Cloud[Cloud MCP]
+        Custom[Custom Tools]
+    end
+    
+    Claude --> Station
+    Cursor --> Station
+    Station --> FileSystem
+    Station --> Database
+    Station --> Cloud
+    Station --> Custom
 ```
 
-### Sync Configuration
-After loading MCP servers, sync them to make tools available:
-```bash
-stn sync production
-```
+**Key Benefits:**
+- **Tool Reuse** - Share MCP servers across all your development tools
+- **Agent Portability** - Export agents as `.prompt` files for version control
+- **Background Execution** - Long-running agents that work while you code
+- **Multi-Environment** - Same agent, different tools per environment
 
-## MCP Configuration
+## MCP Templates & Variable Resolution
 
-### Server Configuration Files
-MCP servers are configured through JSON files:
+Station treats **MCP configurations as templates** with environment-specific variable resolution. This allows you to define MCP servers once and deploy them across multiple environments with different settings.
+
+### Template System
+
+MCP configurations support **Go template syntax** for dynamic values:
 
 ```json
 {
-  "name": "postgresql",
-  "description": "PostgreSQL database operations",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-postgres@latest"],
-  "env": {
-    "POSTGRES_CONNECTION_STRING": "{{ .DATABASE_URL }}"
-  },
-  "disabled": false,
-  "autoApprove": [
-    "query",
-    "schema"
-  ]
-}
-```
-
-### Environment Variables
-Use template variables for environment-specific configuration:
-```yaml
-# variables.yml
-DATABASE_URL: "postgresql://user:pass@localhost:5432/mydb"
-SLACK_TOKEN: "{{ .SLACK_BOT_TOKEN }}"
-AWS_REGION: "us-west-2"
-```
-
-## Tool Discovery
-
-Station automatically discovers available tools when agents start:
-
-```bash
-stn agent run 1 "What tools do I have available?"
-```
-
-Agents receive tool definitions including:
-- Tool name and description
-- Required parameters
-- Expected response format
-- Usage examples
-
-## Tool Usage in Agents
-
-Agents can use tools through natural language:
-
-```bash
-stn agent run 1 "Check the disk usage on the production database server and alert the team if it's over 80%"
-```
-
-The agent will:
-1. Use SSH tools to connect to the database server
-2. Use system monitoring tools to check disk usage
-3. Use Slack tools to send alerts if thresholds are exceeded
-
-## Security & Permissions
-
-### Tool Access Control
-```json
-{
-  "autoApprove": ["read", "query"],
-  "requireApproval": ["write", "delete", "create"],
-  "forbidden": ["drop", "truncate"]
-}
-```
-
-### Environment Isolation
-Tools are isolated by environment:
-- **Development** - Full tool access, sandbox data
-- **Staging** - Limited write access, test data  
-- **Production** - Restricted access, real data
-
-### Audit Logging
-All tool usage is logged:
-- Which agent used which tool
-- Tool parameters and responses
-- Timestamp and execution context
-- Success/failure status
-
-## Custom MCP Servers
-
-### Creating Custom Tools
-```javascript
-// custom-mcp-server.js
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-
-const server = new Server({
-  name: "custom-tools",
-  version: "1.0.0"
-});
-
-server.tool("deploy-service", async (params) => {
-  // Custom deployment logic
-  return { success: true, deploymentId: "dep-123" };
-});
-
-server.listen();
-```
-
-### Registering Custom Servers
-```json
-{
-  "name": "custom-deployment",
-  "description": "Custom deployment tools",
-  "command": "node",
-  "args": ["./custom-mcp-server.js"],
-  "env": {
-    "DEPLOY_TOKEN": "{{ .DEPLOYMENT_TOKEN }}"
+  "name": "Filesystem MCP",
+  "description": "Basic filesystem operations",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@latest",
+        "{{ .ALLOWED_PATH }}"
+      ]
+    }
   }
 }
 ```
 
-## Tool Development Guidelines
+### Variable Resolution with `stn sync`
 
-### Best Practices
-- **Idempotent Operations** - Safe to run multiple times
-- **Clear Error Messages** - Helpful failure information
-- **Comprehensive Logging** - Detailed execution traces
-- **Parameter Validation** - Validate inputs before execution
+When you run `stn sync`, Station automatically resolves template variables:
 
-### Security Considerations
-- **Input Sanitization** - Prevent injection attacks
-- **Rate Limiting** - Prevent abuse and overload
-- **Access Controls** - Verify permissions before execution
-- **Sensitive Data** - Encrypt secrets and credentials
-
-## Troubleshooting
-
-### Tool Connection Issues
 ```bash
-# Check MCP server status
-stn mcp status
-
-# Test tool connectivity
-stn mcp test postgresql
-
-# View tool definitions
-stn mcp list tools
+stn sync default
 ```
 
-### Common Issues
-- **Connection timeouts** - Check network and firewall settings
-- **Authentication failures** - Verify credentials and tokens  
-- **Permission errors** - Check access controls and roles
-- **Missing dependencies** - Ensure MCP servers are properly installed
+**Station will:**
+1. **Look for `variables.yml`** in your environment directory
+2. **Prompt for missing variables** if not found in the file
+3. **Resolve all templates** using the variables
+4. **Discover tools** from resolved MCP servers
+
+**Example workflow:**
+```bash
+# Load template
+stn load filesystem-mcp.json --env production
+
+# Create variables file (or Station will prompt)
+echo "ALLOWED_PATH: /opt/production/data" > ~/.config/station/environments/production/variables.yml
+
+# Sync resolves variables and discovers tools
+stn sync production
+```
+
+### Environment-Specific Configuration
+
+The same MCP template works across environments with different variables:
+
+```yaml
+# ~/.config/station/environments/development/variables.yml
+ALLOWED_PATH: "/home/user/dev-projects"
+API_ENDPOINT: "http://localhost:3000"
+DEBUG_MODE: "true"
+```
+
+```yaml
+# ~/.config/station/environments/production/variables.yml  
+ALLOWED_PATH: "/opt/production/data"
+API_ENDPOINT: "https://api.company.com"
+DEBUG_MODE: "false"
+```
+
+Same template, completely different tool behavior per environment!
+
+## Loading MCP Configurations
+
+### Create MCP Template
+
+Create a new MCP configuration file:
+
+```bash
+# Create filesystem MCP template
+cat > filesystem-mcp.json << 'EOF'
+{
+  "name": "Filesystem MCP",
+  "description": "Basic filesystem operations",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@latest",
+        "{{ .ALLOWED_PATH }}"
+      ]
+    }
+  }
+}
+EOF
+```
+
+### Load Into Environment
+
+```bash
+# Load configuration into specific environment
+stn load filesystem-mcp.json --env default
+```
+
+**Output:**
+```
+╭────────────────────────────────╮
+│                                │
+│  📂 Loading MCP Configuration  │
+│                                │
+╰────────────────────────────────╯
+
+📄 Found config file: filesystem-mcp.json
+🔧 Found 1 MCP server(s)
+📝 Config name: Filesystem MCP-20250814-095146
+🌍 Environment: default
+📁 Creating file-based configuration...
+✅ Saved template file: ~/.config/station/environments/default/filesystem_mcp.json
+```
+
+### Sync & Discover Tools
+
+```bash
+# Sync resolves templates and discovers tools
+stn sync default
+```
+
+**Output:**
+```
+✅ MCP SUCCESS: Discovered 14 tools from server 'filesystem'
+   🔧 Tool 1: __read_text_file
+   🔧 Tool 2: __list_directory  
+   🔧 Tool 3: __directory_tree
+   🔧 Tool 4: __write_file
+   🔧 Tool 5: __edit_file
+   [... 9 more tools discovered]
+```
+
+## Agent Integration
+
+Once MCP tools are loaded and synced, your agents can automatically access them:
+
+### Through Claude Desktop/Code
+
+**You:** *"Create an agent that monitors project files and reports changes"*
+
+**Station Response:**
+```json
+{
+  "agent": {
+    "id": 42,
+    "name": "File Change Monitor",
+    "description": "Monitors project files and reports changes"
+  },
+  "tool_assignment": {
+    "assigned_count": 5,
+    "assigned_tools": [
+      "__list_directory",
+      "__read_text_file", 
+      "__directory_tree",
+      "__get_file_info",
+      "__search_files"
+    ],
+    "status": "success"
+  }
+}
+```
+
+Station automatically assigned the right filesystem tools based on what's available in your environment!
+
+### Environment Isolation in Action
+
+The same agent works differently per environment:
+
+- **Development**: Agent accesses `/home/user/projects` (from dev variables.yml)
+- **Production**: Same agent accesses `/opt/production/data` (from prod variables.yml)
+
+**Same agent logic, completely different data sources.**
 
 ## Next Steps
 
-- **[Environment Management](/en/environments)** - Configure tools per environment
-- **[Creating Bundles](/en/creating-bundles)** - Package tools with agents
-- **[Architecture](/en/architecture)** - Understand MCP integration architecture
+- **[MCP Quick Start](/station/en/mcp-quickstart)** - Get running with Claude Desktop in 5 minutes  
+- **[Agent Management](/station/en/agents/creating)** - Create and manage your agents
+- **[Environment Setup](/station/en/environments)** - Configure multiple environments
+- **[Architecture Overview](/station/en/architecture)** - Understand Station's MCP runtime architecture
