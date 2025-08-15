@@ -2,6 +2,8 @@
 
 # Station - Lightweight Runtime for Deployable Sub-Agents
 
+> ⚠️ **Beta Release**: Station is currently in beta. Breaking changes may occur between versions. Please pin to specific versions in production environments.
+
 **A secure, self-hosted platform for building and deploying intelligent sub-agents.**
 
 ```mermaid
@@ -238,7 +240,39 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 stn init  # Set up database and encryption
 ```
 
-### 2. **Connect to Claude Desktop (or Claude Code)**
+### Quick Start: MCP Tools Setup
+
+**Option A: Ship CLI Integration (Recommended)**
+```bash
+# Bootstrap with ship CLI for instant filesystem access
+stn init --ship
+```
+This automatically installs the [ship CLI](https://github.com/cloudshipai/ship) and configures filesystem MCP tools for secure file operations.
+
+**Option B: Add Your Own MCP Templates**
+```bash
+# Open editor to paste any MCP configuration
+stn mcp add filesystem
+
+# Example: Paste this configuration and save
+{
+  "name": "Filesystem Tools",
+  "description": "Essential filesystem operations",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "{{ .ROOT_PATH }}"]
+    }
+  }
+}
+
+# Sync your templates to activate tools
+stn sync
+```
+
+Both approaches give you MCP tools ready for agent creation!
+
+### 3. **Connect to Claude Desktop (or Claude Code)**
 Add Station as an MCP server in your Claude configuration:
 
 ```json
@@ -252,7 +286,7 @@ Add Station as an MCP server in your Claude configuration:
 }
 ```
 
-### 3. **Start Creating Agents Through Claude**
+### 4. **Start Creating Agents Through Claude**
 Talk to Claude naturally - Station tools are automatically available:
 
 ```
@@ -263,7 +297,7 @@ Claude: I'll create that agent with the necessary tools.
 ✅ Ready to execute: "Run security scan on /etc directory"
 ```
 
-### 4. **Export & Deploy Your Setup**
+### 5. **Export & Deploy Your Setup**
 When you have agents working, package everything for deployment:
 
 ```

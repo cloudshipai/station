@@ -65,9 +65,21 @@ Examples:
 	}
 
 	mcpAddCmd = &cobra.Command{
-		Use:   "add",
-		Short: "Add a single MCP server to an existing configuration",
-		Long:  "Add a single MCP server to an existing configuration by specifying config ID or name",
+		Use:   "add [config-name]",
+		Short: "Add a new MCP configuration via editor",
+		Long: `Add a new MCP configuration by opening your default editor.
+
+This command opens your default text editor (vim, nano, code, etc.) where you can:
+1. Paste an MCP configuration from documentation or examples
+2. Use template variables that will be detected automatically
+3. Save and close to create the configuration file
+
+The configuration will be saved as <config-name>.json in your current environment.
+When you run 'stn sync', you'll be prompted for any template variables found.
+
+Examples:
+  stn mcp add filesystem          # Creates filesystem.json via editor
+  stn mcp add --env prod database # Creates database.json in prod environment`,
 		RunE:  runMCPAdd,
 	}
 

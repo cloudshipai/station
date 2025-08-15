@@ -24,6 +24,7 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"station/cmd/main/handlers"
+	"station/cmd/main/handlers/load"
 	"station/cmd/main/handlers/mcp"
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -212,14 +213,20 @@ func runUI(cmd *cobra.Command, args []string) error {
 
 // runMCPAdd implements the "station mcp add" command
 func runMCPAdd(cmd *cobra.Command, args []string) error {
-	// Check if interactive mode is requested
-	interactive, _ := cmd.Flags().GetBool("interactive")
+	environment, _ := cmd.Flags().GetString("environment")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	
-	if interactive {
-		return runMCPAddInteractive(cmd, args)
+	// Get config name from args or generate default
+	var configName string
+	if len(args) > 0 {
+		configName = args[0]
+	} else {
+		configName = "new-mcp-config"
 	}
 	
-	return runMCPAddFlags(cmd, args)
+	// Use the load handler's editor functionality
+	loadHandler := load.NewLoadHandler(themeManager)
+	return loadHandler.HandleMCPEditor(endpoint, environment, configName)
 }
 
 // runMCPAddFlags handles flag-based mode
