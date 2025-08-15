@@ -130,6 +130,7 @@ func init() {
 	// Init command flags
 	initCmd.Flags().Bool("replicate", false, "Set up Litestream database replication for production deployments")
 	initCmd.Flags().StringP("config", "c", "", "Path to configuration file (sets workspace to config file's directory)")
+	initCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")

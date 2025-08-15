@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -27,7 +28,8 @@ var (
 		Long: `Initialize Station with configuration files and optional database replication.
 
 By default, sets up Station for local development with SQLite database.
-Use --replicate flag to also configure Litestream for database replication to cloud storage.`,
+Use --replicate flag to also configure Litestream for database replication to cloud storage.
+Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access.`,
 		RunE:  runInit,
 	}
 
@@ -401,6 +403,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	
 	// Check if replication setup is requested
 	replicationSetup, _ := cmd.Flags().GetBool("replicate")
+	
+	// Check if ship setup is requested
+	shipSetup, _ := cmd.Flags().GetBool("ship")
 
 	fmt.Printf("🔧 Initializing Station configuration...\n")
 	fmt.Printf("Config file: %s\n", configFile)
@@ -477,6 +482,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize default environment: %w", err)
 	}
 
+	// Set up ship CLI MCP integration if requested
+	if shipSetup {
+		fmt.Printf("🚢 Setting up ship CLI MCP integration...\n")
+		if err := setupShipIntegration(workspaceDir); err != nil {
+			return fmt.Errorf("failed to set up ship integration: %w", err)
+		}
+	}
+
 	// Set up Litestream replication configuration if requested
 	if replicationSetup {
 		if err := setupReplicationConfiguration(configDir); err != nil {
@@ -489,6 +502,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(workspaceDir, "environments", "default"))
+	
+	// Run ship sync after everything is set up
+	if shipSetup {
+		fmt.Printf("🚢 Ship integration: Filesystem MCP tools configured\n")
+		fmt.Printf("🔄 Syncing MCP tools...\n")
+		if err := runSyncForEnvironment("default"); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to sync MCP tools: %v\n", err)
+			fmt.Printf("   Run 'stn sync default' manually to complete setup\n")
+		} else {
+			fmt.Printf("✅ Ship MCP tools synced successfully\n")
+		}
+	}
 	
 	if replicationSetup {
 		fmt.Printf("🔄 Replication setup: Litestream configuration created at %s\n", filepath.Join(configDir, "litestream.yml"))
@@ -504,7 +529,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\n🚀 You can now run 'station serve' to launch the server\n")
 		fmt.Printf("🔗 Connect via SSH: ssh admin@localhost -p 2222\n")
 		fmt.Printf("\n📖 Next steps:\n")
-		fmt.Printf("   • Run 'stn mcp init' to create sample configurations\n")
+		if !shipSetup {
+			fmt.Printf("   • Run 'stn mcp init' to create sample configurations\n")
+			fmt.Printf("   • Run 'stn init --ship' to bootstrap with ship CLI MCP integration\n")
+		}
 		fmt.Printf("   • Run 'stn mcp env list' to see your environments\n")
 		fmt.Printf("   • Use 'stn init --replicate' for database replication setup\n")
 	}
@@ -693,5 +721,71 @@ func runSync(cmd *cobra.Command, args []string) error {
 	
 	// Use the existing MCP sync functionality but make it more general
 	// For now, delegate to runMCPSync but we can expand this later
+	return runMCPSync(cmd, args)
+}
+
+// setupShipIntegration checks for ship CLI and sets up MCP configuration
+func setupShipIntegration(workspaceDir string) error {
+	// Check if ship CLI is installed
+	fmt.Printf("   🔍 Checking for ship CLI installation...\n")
+	
+	_, err := exec.LookPath("ship")
+	if err != nil {
+		fmt.Printf("   📦 ship CLI not found, installing...\n")
+		if err := installShipCLI(); err != nil {
+			return fmt.Errorf("failed to install ship CLI: %w", err)
+		}
+		fmt.Printf("   ✅ ship CLI installed successfully\n")
+	} else {
+		fmt.Printf("   ✅ ship CLI already installed\n")
+	}
+	
+	// Create ship MCP configuration in default environment
+	fmt.Printf("   🔧 Creating ship MCP configuration...\n")
+	defaultEnvDir := filepath.Join(workspaceDir, "environments", "default")
+	mcpConfigPath := filepath.Join(defaultEnvDir, "mcp.json")
+	
+	shipMCPConfig := `{
+  "mcpServers": {
+    "station": {
+      "command": "ship",
+      "args": ["mcp", "filesystem"]
+    }
+  }
+}`
+	
+	if err := os.WriteFile(mcpConfigPath, []byte(shipMCPConfig), 0644); err != nil {
+		return fmt.Errorf("failed to create ship MCP configuration: %w", err)
+	}
+	
+	fmt.Printf("   ✅ Created ship MCP configuration at %s\n", mcpConfigPath)
+	
+	fmt.Printf("   ✅ Ship MCP integration setup complete\n")
+	return nil
+}
+
+// installShipCLI installs the ship CLI using the official installer
+func installShipCLI() error {
+	cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	return cmd.Run()
+}
+
+// runSyncForEnvironment runs sync for a specific environment
+func runSyncForEnvironment(environment string) error {
+	// Reload viper configuration to ensure database path is set correctly
+	configDir := getXDGConfigDir()
+	configFile := filepath.Join(configDir, "config.yaml")
+	viper.SetConfigFile(configFile)
+	if err := viper.ReadInConfig(); err != nil {
+		return fmt.Errorf("failed to read config for sync: %w", err)
+	}
+	
+	// Create a mock command to pass to runMCPSync
+	cmd := &cobra.Command{}
+	args := []string{environment}
+	
 	return runMCPSync(cmd, args)
 }
