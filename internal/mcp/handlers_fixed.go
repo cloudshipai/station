@@ -457,15 +457,69 @@ func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolR
 }
 
 func (s *Server) handleListTools(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract pagination parameters
+	limit := request.GetInt("limit", 50)
+	offset := request.GetInt("offset", 0)
+	
+	// Extract optional filters
+	environmentID := request.GetString("environment_id", "")
+	search := request.GetString("search", "")
+
 	tools, err := s.repos.MCPTools.GetAllWithDetails()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to list tools: %v", err)), nil
 	}
 
+	// Apply search filter if provided
+	if search != "" {
+		filteredTools := make([]*models.MCPToolWithDetails, 0)
+		searchLower := strings.ToLower(search)
+		for _, tool := range tools {
+			if strings.Contains(strings.ToLower(tool.Name), searchLower) ||
+				strings.Contains(strings.ToLower(tool.Description), searchLower) {
+				filteredTools = append(filteredTools, tool)
+			}
+		}
+		tools = filteredTools
+	}
+
+	// Apply environment filter if provided
+	if environmentID != "" {
+		filteredTools := make([]*models.MCPToolWithDetails, 0)
+		for _, tool := range tools {
+			if fmt.Sprintf("%d", tool.EnvironmentID) == environmentID {
+				filteredTools = append(filteredTools, tool)
+			}
+		}
+		tools = filteredTools
+	}
+
+	totalCount := len(tools)
+
+	// Apply pagination
+	start := offset
+	if start > totalCount {
+		start = totalCount
+	}
+	
+	end := start + limit
+	if end > totalCount {
+		end = totalCount
+	}
+
+	paginatedTools := tools[start:end]
+
 	response := map[string]interface{}{
 		"success": true,
-		"tools":   tools,
-		"count":   len(tools),
+		"tools":   paginatedTools,
+		"pagination": map[string]interface{}{
+			"count":        len(paginatedTools),
+			"total":        totalCount,
+			"limit":        limit,
+			"offset":       offset,
+			"has_more":     end < totalCount,
+			"next_offset":  end,
+		},
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
