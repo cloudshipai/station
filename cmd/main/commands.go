@@ -760,6 +760,20 @@ func setupShipIntegration(workspaceDir string) error {
 	
 	fmt.Printf("   ✅ Created ship MCP configuration at %s\n", mcpConfigPath)
 	
+	// Create variables.yml file for template variables
+	variablesPath := filepath.Join(defaultEnvDir, "variables.yml")
+	defaultVariables := `# Environment variables for ship MCP integration
+# Add any template variables needed for your ship MCP server here
+# Example:
+# ROOT_PATH: "/home/user/projects"
+# ALLOWED_DIRECTORIES: "/tmp,/home/user/workspace"
+`
+	
+	if err := os.WriteFile(variablesPath, []byte(defaultVariables), 0644); err != nil {
+		return fmt.Errorf("failed to create variables.yml: %w", err)
+	}
+	
+	fmt.Printf("   ✅ Created variables.yml at %s\n", variablesPath)
 	fmt.Printf("   ✅ Ship MCP integration setup complete\n")
 	return nil
 }
