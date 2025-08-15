@@ -727,21 +727,15 @@ func runSync(cmd *cobra.Command, args []string) error {
 // setupShipIntegration checks for ship CLI and sets up MCP configuration
 func setupShipIntegration(workspaceDir string) error {
 	// Check if ship CLI is installed
-	fmt.Printf("   🔍 Checking for ship CLI installation...\n")
-	
 	_, err := exec.LookPath("ship")
 	if err != nil {
-		fmt.Printf("   📦 ship CLI not found, installing...\n")
+		fmt.Printf("   📦 Installing ship CLI...\n")
 		if err := installShipCLI(); err != nil {
 			return fmt.Errorf("failed to install ship CLI: %w", err)
 		}
-		fmt.Printf("   ✅ ship CLI installed successfully\n")
-	} else {
-		fmt.Printf("   ✅ ship CLI already installed\n")
 	}
 	
 	// Create ship MCP configuration in default environment
-	fmt.Printf("   🔧 Creating ship MCP configuration...\n")
 	defaultEnvDir := filepath.Join(workspaceDir, "environments", "default")
 	mcpConfigPath := filepath.Join(defaultEnvDir, "mcp.json")
 	
@@ -758,8 +752,6 @@ func setupShipIntegration(workspaceDir string) error {
 		return fmt.Errorf("failed to create ship MCP configuration: %w", err)
 	}
 	
-	fmt.Printf("   ✅ Created ship MCP configuration at %s\n", mcpConfigPath)
-	
 	// Create variables.yml file for template variables
 	variablesPath := filepath.Join(defaultEnvDir, "variables.yml")
 	defaultVariables := `# Environment variables for ship MCP integration
@@ -773,8 +765,7 @@ func setupShipIntegration(workspaceDir string) error {
 		return fmt.Errorf("failed to create variables.yml: %w", err)
 	}
 	
-	fmt.Printf("   ✅ Created variables.yml at %s\n", variablesPath)
-	fmt.Printf("   ✅ Ship MCP integration setup complete\n")
+	fmt.Printf("   ✅ Ship MCP integration configured\n")
 	return nil
 }
 
