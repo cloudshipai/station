@@ -149,14 +149,8 @@ func init() {
 	loadCmd.Flags().BoolP("editor", "e", false, "Open editor to paste template configuration")
 	
 	// MCP Add command flags
+	mcpAddCmd.Flags().StringP("environment", "e", "default", "Environment to add configuration to")
 	mcpAddCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	mcpAddCmd.Flags().String("environment", "default", "Environment name")
-	mcpAddCmd.Flags().String("config-id", "", "Config ID to add server to (format: id or configname)")
-	mcpAddCmd.Flags().String("server-name", "", "Name for the new MCP server")
-	mcpAddCmd.Flags().String("command", "", "Command to run the MCP server")
-	mcpAddCmd.Flags().StringSlice("args", []string{}, "Arguments for the MCP server command")
-	mcpAddCmd.Flags().StringToString("env", map[string]string{}, "Environment variables (key=value)")
-	mcpAddCmd.Flags().BoolP("interactive", "i", false, "Interactive mode with forms")
 	
 	// MCP command flags
 	mcpListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
