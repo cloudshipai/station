@@ -1,6 +1,8 @@
 package load
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"station/internal/logging"
 )
 
 // handleEditorMode opens an editor for the user to paste configuration
@@ -150,6 +153,58 @@ func (e *EditorService) OpenEditorWithTemplate() (string, error) {
 	return e.openEditor(template, "json")
 }
 
+// OpenMCPEditorTemplate opens editor with a clean MCP template
+func (e *EditorService) OpenMCPEditorTemplate() (string, error) {
+	template := `{
+  "name": "My MCP Server",
+  "description": "Description of what this MCP server provides",
+  "mcpServers": {
+    "server-name": {
+      "command": "your-command-here",
+      "args": ["arg1", "arg2"],
+      "env": {
+        "API_KEY": "{{ .API_KEY }}",
+        "DATABASE_URL": "{{ .DATABASE_URL }}"
+      }
+    }
+  }
+}
+
+# Instructions:
+# 1. Replace the example above with your actual MCP server configuration
+# 2. Common MCP server examples:
+#
+#    Filesystem MCP:
+#    "filesystem": {
+#      "command": "npx",
+#      "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "{{ .ALLOWED_PATH }}"]
+#    }
+#
+#    Database MCP:
+#    "database": {
+#      "command": "npx", 
+#      "args": ["-y", "@modelcontextprotocol/server-sqlite@latest", "{{ .DATABASE_PATH }}"]
+#    }
+#
+#    Custom server:
+#    "my-server": {
+#      "command": "python",
+#      "args": ["{{ .SERVER_SCRIPT_PATH }}"],
+#      "env": {
+#        "CONFIG_PATH": "{{ .CONFIG_PATH }}"
+#      }
+#    }
+#
+# 3. Use template variables for values that change per environment:
+#    • {{ .VARIABLE_NAME }} - Go template format (recommended)
+#    • Variables will be prompted during 'stn sync'
+#
+# 4. Save and close when done. Quit without saving (:q) to cancel.
+# 5. Delete these instruction lines before saving`
+
+	return e.openEditor(template, "json")
+}
+
 // ValidateJSON validates JSON content
 func (e *EditorService) ValidateJSON(content string) error {
 	var js json.RawMessage
@@ -171,11 +226,15 @@ func (e *EditorService) openEditor(initialContent, extension string) (string, er
 	}
 	tmpFile.Close()
 
+	// Calculate hash of initial content to detect changes
+	initialHash := e.hashContent(initialContent)
+
 	// Get editor
 	editor := e.getEditor()
 
-	fmt.Printf("📝 Opening editor: %s\n", editor)
-	fmt.Printf("💡 Paste your MCP configuration template and save to continue...\n")
+	logging.Info("📝 Opening editor: %s", editor)
+	logging.Info("💡 Paste your MCP configuration template and save to continue...")
+	logging.Info("💡 To cancel, quit without saving (e.g., :q in vim, Ctrl+X in nano)")
 
 	// Open editor
 	cmd := exec.Command(editor, tmpFile.Name())
@@ -187,13 +246,39 @@ func (e *EditorService) openEditor(initialContent, extension string) (string, er
 		return "", fmt.Errorf("editor command failed: %w", err)
 	}
 
-	// Read content
+	// Read content after editing
 	content, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		return "", fmt.Errorf("failed to read edited content: %w", err)
 	}
 
-	return strings.TrimSpace(string(content)), nil
+	finalContent := strings.TrimSpace(string(content))
+	finalHash := e.hashContent(finalContent)
+
+	// If content hash hasn't changed, user didn't make meaningful changes
+	if finalHash == initialHash {
+		return "", nil // Return empty string to indicate no changes
+	}
+
+	return finalContent, nil
+}
+
+// hashContent creates a SHA256 hash of normalized content for comparison
+func (e *EditorService) hashContent(content string) string {
+	// Normalize content by trimming whitespace and removing empty lines
+	lines := strings.Split(content, "\n")
+	var normalizedLines []string
+	
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			normalizedLines = append(normalizedLines, trimmed)
+		}
+	}
+	
+	normalizedContent := strings.Join(normalizedLines, "\n")
+	hash := sha256.Sum256([]byte(normalizedContent))
+	return hex.EncodeToString(hash[:])
 }
 
 // getEditor determines which editor to use
@@ -314,5 +399,54 @@ func (h *LoadHandler) handleInteractiveEditor(endpoint, environment, configName 
 	fmt.Printf("🌍 Environment: %s\n", environment)
 
 	// Upload the configuration using the file-based system
+	return h.uploadConfiguration(&config, endpoint, environment, configName)
+}
+
+// HandleMCPEditor opens an editor for creating new MCP configurations
+func (h *LoadHandler) HandleMCPEditor(endpoint, environment, configName string) error {
+	styles := getCLIStyles(h.themeManager)
+
+	fmt.Println(styles.Info.Render("📝 Opening editor for new MCP configuration..."))
+	logging.Info("💾 Config will be saved as: %s.json", configName)
+	logging.Info("🌍 Environment: %s", environment)
+
+	// Import editor service
+	editorService := &EditorService{}
+
+	// Open editor with MCP-specific template
+	content, err := editorService.OpenMCPEditorTemplate()
+	if err != nil {
+		return fmt.Errorf("failed to open editor: %w", err)
+	}
+
+	if strings.TrimSpace(content) == "" {
+		fmt.Println(styles.Info.Render("⚠️  Editor closed without saving. Operation cancelled."))
+		return nil
+	}
+
+	// Clean up the content (remove instruction comments)
+	content = h.cleanEditorContent(content)
+
+	// Validate JSON
+	if err := editorService.ValidateJSON(content); err != nil {
+		fmt.Printf("%s Invalid JSON format. Please check your configuration.\n", styles.Error.Render("❌"))
+		return err
+	}
+
+	fmt.Println(styles.Success.Render("✅ Configuration received successfully!"))
+
+	// Parse the configuration
+	var config LoadMCPConfig
+	if err := json.Unmarshal([]byte(content), &config); err != nil {
+		return fmt.Errorf("failed to parse configuration: %w", err)
+	}
+
+	// Set the config name from the provided argument
+	if config.Name == "" {
+		config.Name = configName
+	}
+
+	// Save the configuration directly without any AI processing
+	// Template variables will be handled during 'stn sync'
 	return h.uploadConfiguration(&config, endpoint, environment, configName)
 }
