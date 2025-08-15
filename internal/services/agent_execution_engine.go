@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -45,11 +46,19 @@ type AgentExecutionEngine struct {
 
 // NewAgentExecutionEngine creates a new agent execution engine
 func NewAgentExecutionEngine(repos *repositories.Repositories, agentService AgentServiceInterface) *AgentExecutionEngine {
+	mcpConnManager := NewMCPConnectionManager(repos, nil)
+	
+	// Check environment variable for connection pooling
+	if os.Getenv("STATION_MCP_POOLING") == "true" {
+		mcpConnManager.EnableConnectionPooling()
+		logging.Info("🏊 MCP connection pooling enabled via STATION_MCP_POOLING environment variable")
+	}
+	
 	return &AgentExecutionEngine{
 		repos:             repos,
 		agentService:      agentService,
 		genkitProvider:    NewGenKitProvider(),
-		mcpConnManager:    NewMCPConnectionManager(repos, nil),
+		mcpConnManager:    mcpConnManager,
 		telemetryManager:  NewTelemetryManager(),
 	}
 }
@@ -80,6 +89,11 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 	
 	// Update MCP connection manager with GenKit app
 	aee.mcpConnManager.genkitApp = genkitApp
+	
+	// Initialize server pool if pooling is enabled (one-time initialization)
+	if err := aee.mcpConnManager.InitializeServerPool(ctx); err != nil {
+		logging.Info("Warning: Failed to initialize MCP server pool: %v", err)
+	}
 
 	// Let Genkit handle tracing automatically - no need for custom span wrapping
 	// Get tools assigned to this specific agent
