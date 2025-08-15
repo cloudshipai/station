@@ -131,6 +131,9 @@ func init() {
 	initCmd.Flags().Bool("replicate", false, "Set up Litestream database replication for production deployments")
 	initCmd.Flags().StringP("config", "c", "", "Path to configuration file (sets workspace to config file's directory)")
 	initCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
+	initCmd.Flags().String("provider", "", "AI provider (openai, gemini, custom) - if not set, shows interactive selection")
+	initCmd.Flags().String("model", "", "AI model name - if not set, shows interactive selection based on provider")
+	initCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
