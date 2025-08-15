@@ -91,6 +91,12 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(listPromptsTool, s.handleListPrompts)
 
+	getPromptTool := mcp.NewTool("get_prompt",
+		mcp.WithDescription("Get the content of a specific MCP prompt"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the prompt to retrieve")),
+	)
+	s.mcpServer.AddTool(getPromptTool, s.handleGetPrompt)
+
 	// Agent and environment listing
 	listEnvironmentsTool := mcp.NewTool("list_environments",
 		mcp.WithDescription("List all available environments"),
@@ -139,5 +145,30 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(exportAgentTool, s.handleExportAgent)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 16)
+	exportAgentsTool := mcp.NewTool("export_agents",
+		mcp.WithDescription("Export all agents in an environment to dotprompt format"),
+		mcp.WithString("environment_id", mcp.Description("Environment ID to export agents from (defaults to all environments)")),
+		mcp.WithString("output_directory", mcp.Description("Directory to export agents to (defaults to current environment's agents directory)")),
+		mcp.WithBoolean("enabled_only", mcp.Description("Export only enabled agents (default: false)")),
+	)
+	s.mcpServer.AddTool(exportAgentsTool, s.handleExportAgents)
+
+	// Agent run management tools
+	listRunsTool := mcp.NewTool("list_runs",
+		mcp.WithDescription("List agent execution runs with pagination support"),
+		mcp.WithString("agent_id", mcp.Description("Filter by specific agent ID")),
+		mcp.WithString("status", mcp.Description("Filter by run status (success, error, running)")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of runs to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of runs to skip for pagination (default: 0)")),
+	)
+	s.mcpServer.AddTool(listRunsTool, s.handleListRuns)
+
+	inspectRunTool := mcp.NewTool("inspect_run",
+		mcp.WithDescription("Get detailed information about a specific agent run"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("ID of the run to inspect")),
+		mcp.WithBoolean("verbose", mcp.Description("Include detailed tool calls and execution steps (default: true)")),
+	)
+	s.mcpServer.AddTool(inspectRunTool, s.handleInspectRun)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 20)
 }
