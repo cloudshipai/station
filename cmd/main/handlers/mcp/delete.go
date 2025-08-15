@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,11 +43,13 @@ func (h *MCPHandler) deleteMCPConfigLocal(configID, environment string, confirm 
 	var config *repositories.FileConfigRecord
 	if configByName, err := repos.FileMCPConfigs.GetByEnvironmentAndName(env.ID, configID); err == nil {
 		config = configByName
+		log.Printf("Found config by name: %s (ID: %d)", config.ConfigName, config.ID)
 	} else {
 		// Try parsing as ID
 		if id, parseErr := strconv.ParseInt(configID, 10, 64); parseErr == nil {
 			if configByID, err := repos.FileMCPConfigs.GetByID(id); err == nil {
 				config = configByID
+				log.Printf("Found config by ID: %d (Name: %s)", config.ID, config.ConfigName)
 			}
 		}
 	}
@@ -55,14 +58,37 @@ func (h *MCPHandler) deleteMCPConfigLocal(configID, environment string, confirm 
 		return fmt.Errorf("config '%s' not found", configID)
 	}
 
-	// Note: Tools should be cascade deleted with the configuration
-	// For now, we'll just show a generic message about associated data
+	// Count associated servers and tools that will be cascade deleted
+	servers, err := repos.MCPServers.GetByEnvironmentID(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get servers: %w", err)
+	}
+	
+	// Count servers associated with this config
+	associatedServers := 0
+	totalTools := 0
+	for _, server := range servers {
+		if server.FileConfigID != nil && *server.FileConfigID == config.ID {
+			associatedServers++
+			// Count tools for this server
+			tools, err := repos.MCPTools.GetByServerID(server.ID)
+			if err == nil {
+				totalTools += len(tools)
+			}
+		}
+	}
 
 	// Show confirmation prompt if not already confirmed
 	if !confirm {
 		fmt.Printf("\n⚠️  This will delete:\n")
 		fmt.Printf("• Configuration: %s (ID: %d)\n", config.ConfigName, config.ID)
-		fmt.Printf("• All associated servers and tools\n")
+		if associatedServers > 0 {
+			fmt.Printf("• %d MCP servers\n", associatedServers)
+		}
+		if totalTools > 0 {
+			fmt.Printf("• %d tools\n", totalTools)
+		}
+		fmt.Printf("• Template file and variables\n")
 		fmt.Print("\nAre you sure? [y/N]: ")
 		
 		var response string
@@ -89,13 +115,13 @@ func (h *MCPHandler) deleteMCPConfigLocal(configID, environment string, confirm 
 	// Delete template file
 	templatePath := filepath.Join(envDir, config.ConfigName+".json")
 	if err := os.Remove(templatePath); err == nil {
-		fmt.Printf("   Deleted template file: %s\n", templatePath)
+		log.Printf("Deleted template file: %s", templatePath)
 	}
 	
 	// Delete template-specific variables if they exist
 	templateVarsPath := filepath.Join(envDir, config.ConfigName+".vars.yml")
 	if err := os.Remove(templateVarsPath); err == nil {
-		fmt.Printf("   Deleted template variables: %s\n", templateVarsPath)
+		log.Printf("Deleted template variables: %s", templateVarsPath)
 	}
 
 	styles := getCLIStyles(h.themeManager)

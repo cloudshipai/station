@@ -2,23 +2,15 @@ package services
 
 import (
 	"context"
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/pkg/models"
-	
-	"github.com/firebase/genkit/go/genkit"
-	"github.com/firebase/genkit/go/ai"
-	"gopkg.in/yaml.v2"
 )
 
 // DeclarativeSync handles synchronization between file-based configs and database
@@ -160,399 +152,12 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	return result, nil
 }
 
-// syncAgents handles synchronization of agent .prompt files
-func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environmentName string, options SyncOptions) (*SyncResult, error) {
-	
-	result := &SyncResult{
-		Environment:        environmentName,
-		Operations:         []SyncOperation{},
-		ValidationMessages: []string{},
-	}
-
-	// Check if agents directory exists
-	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
-		fmt.Printf("Debug: Agents directory does not exist: %s\n", agentsDir)
-		return result, nil
-	}
-
-	// Find all .prompt files
-	promptFiles, err := filepath.Glob(filepath.Join(agentsDir, "*.prompt"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan agent files: %w", err)
-	}
-
-	result.AgentsProcessed = len(promptFiles)
-
-	// Process each .prompt file
-	for _, promptFile := range promptFiles {
-		agentName := strings.TrimSuffix(filepath.Base(promptFile), ".prompt")
-		
-			operation, err := s.syncSingleAgent(ctx, promptFile, agentName, environmentName, options)
-		if err != nil {
-			result.ValidationErrors++
-			result.ValidationMessages = append(result.ValidationMessages, 
-				fmt.Sprintf("Agent '%s': %v", agentName, err))
-			
-			result.Operations = append(result.Operations, SyncOperation{
-				Type:        OpTypeError,
-				Target:      agentName,
-				Description: fmt.Sprintf("Failed to sync agent: %v", err),
-				Error:       err,
-			})
-			continue
-		}
-
-		result.Operations = append(result.Operations, *operation)
-		
-		switch operation.Type {
-		case OpTypeCreate, OpTypeUpdate:
-			result.AgentsSynced++
-		case OpTypeSkip:
-			result.AgentsSkipped++
-		}
-	}
-
-	// Cleanup orphaned agents (declarative: filesystem is source of truth)
-	if !options.DryRun {
-		orphanedCount, err := s.cleanupOrphanedAgents(ctx, agentsDir, environmentName, promptFiles)
-		if err != nil {
-			fmt.Printf("Warning: Failed to cleanup orphaned agents: %v\n", err)
-		} else if orphanedCount > 0 {
-			fmt.Printf("🧹 Removed %d orphaned agent(s) from database\n", orphanedCount)
-		}
-	}
-
-	return result, nil
-}
-
-// syncSingleAgent synchronizes a single agent .prompt file
-func (s *DeclarativeSync) syncSingleAgent(ctx context.Context, filePath, agentName, environmentName string, options SyncOptions) (*SyncOperation, error) {
-	// 1. Basic file validation
-	if _, err := os.Stat(filePath); err != nil {
-		return nil, fmt.Errorf("prompt file not found: %w", err)
-	}
-
-	// 2. Read and parse .prompt file
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read prompt file: %w", err)
-	}
-
-	config, promptContent, err := s.parseDotPrompt(string(content))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse prompt file: %w", err)
-	}
-
-	// 3. Calculate file checksum
-	checksum, err := s.calculateFileChecksum(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate checksum: %w", err)
-	}
-
-	// 4. Get environment
-	env, err := s.repos.Environments.GetByName(environmentName)
-	if err != nil {
-		return nil, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
-	}
-
-	// 5. Check if agent already exists in database
-	existingAgent, err := s.findAgentByName(agentName, env.ID)
-	if err != nil && err.Error() != "agent not found" {
-		return nil, fmt.Errorf("failed to check existing agent: %w", err)
-	}
-
-	// 6. If dry-run, just report what would be done
-	if options.DryRun {
-		if existingAgent != nil {
-			return &SyncOperation{
-				Type:        OpTypeUpdate,
-				Target:      agentName,
-				Description: "Would update agent from .prompt file",
-			}, nil
-		}
-		return &SyncOperation{
-			Type:        OpTypeCreate,
-			Target:      agentName,
-			Description: "Would create agent from .prompt file",
-		}, nil
-	}
-
-	// 7. Create or update agent
-	if existingAgent != nil {
-		// Update existing agent
-		return s.updateAgentFromFile(ctx, existingAgent, config, promptContent, checksum)
-	} else {
-		// Create new agent
-		return s.createAgentFromFile(ctx, filePath, agentName, environmentName, config, promptContent, checksum)
-	}
-}
-
 // validateMCPDependencies validates that all MCP dependencies are available
 func (s *DeclarativeSync) validateMCPDependencies(environmentName string) error {
 	// For now, skip complex validation to avoid circular imports
 	// TODO: Implement proper MCP dependency validation
 	fmt.Printf("Debug: Skipping MCP dependency validation for environment: %s\n", environmentName)
 	return nil
-}
-
-// DotPromptConfig represents the YAML frontmatter in a .prompt file
-type DotPromptConfig struct {
-	Model       string                 `yaml:"model"`
-	Config      map[string]interface{} `yaml:"config"`
-	Tools       []string               `yaml:"tools"`
-	Metadata    map[string]interface{} `yaml:"metadata"`
-	Station     map[string]interface{} `yaml:"station"`
-	Input       map[string]interface{} `yaml:"input"`
-	Output      map[string]interface{} `yaml:"output"`
-}
-
-// parseDotPrompt parses a .prompt file with YAML frontmatter and prompt content
-func (s *DeclarativeSync) parseDotPrompt(content string) (*DotPromptConfig, string, error) {
-	// Split on the first occurrence of "---" after the initial "---"
-	parts := strings.Split(content, "---")
-	if len(parts) < 3 {
-		// No frontmatter, treat entire content as prompt
-		return &DotPromptConfig{}, content, nil
-	}
-
-	// Extract YAML frontmatter (first part after initial ---)
-	yamlContent := strings.TrimSpace(parts[1])
-	
-	// Extract prompt content (everything after second ---)
-	promptContent := strings.TrimSpace(strings.Join(parts[2:], "---"))
-
-	// Parse YAML frontmatter
-	var config DotPromptConfig
-	if yamlContent != "" {
-		if err := yaml.Unmarshal([]byte(yamlContent), &config); err != nil {
-			return nil, "", fmt.Errorf("failed to parse YAML frontmatter: %w", err)
-		}
-	}
-
-	return &config, promptContent, nil
-}
-
-// findAgentByName finds an agent by name in the specified environment
-func (s *DeclarativeSync) findAgentByName(agentName string, environmentID int64) (*models.Agent, error) {
-	agents, err := s.repos.Agents.ListByEnvironment(environmentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list agents: %w", err)
-	}
-
-	for _, agent := range agents {
-		if agent.Name == agentName {
-			return agent, nil
-		}
-	}
-
-	return nil, fmt.Errorf("agent not found")
-}
-
-// createAgentFromFile creates a new agent in the database from a .prompt file
-func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, agentName, environmentName string, config *DotPromptConfig, promptContent, checksum string) (*SyncOperation, error) {
-	env, err := s.repos.Environments.GetByName(environmentName)
-	if err != nil {
-		return nil, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
-	}
-
-	// Extract configuration values with defaults
-	maxSteps := int64(5) // default
-	if config.Metadata != nil {
-		if steps, ok := config.Metadata["max_steps"]; ok {
-			switch v := steps.(type) {
-			case int:
-				maxSteps = int64(v)
-			case int64:
-				maxSteps = v
-			case string:
-				if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
-					maxSteps = parsed
-				}
-			}
-		}
-	}
-
-	description := ""
-	if config.Metadata != nil {
-		if desc, ok := config.Metadata["description"].(string); ok {
-			description = desc
-		}
-	}
-
-	// Create agent using individual parameters
-	createdAgent, err := s.repos.Agents.Create(
-		agentName,
-		description,
-		promptContent,
-		maxSteps,
-		env.ID,
-		1, // createdBy - system user
-		nil, // cronSchedule
-		true, // scheduleEnabled
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create agent: %w", err)
-	}
-
-	// Assign tools if specified
-	if len(config.Tools) > 0 {
-		for _, toolName := range config.Tools {
-			// Find tool by name in environment
-			tool, err := s.repos.MCPTools.FindByNameInEnvironment(env.ID, toolName)
-			if err != nil {
-				fmt.Printf("Warning: Tool %s not found in environment: %v\n", toolName, err)
-				continue
-			}
-
-			// Assign tool to agent
-			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
-			if err != nil {
-				fmt.Printf("Warning: Failed to assign tool %s to agent: %v\n", toolName, err)
-			}
-		}
-	}
-
-	fmt.Printf("✅ Created agent: %s\n", agentName)
-	return &SyncOperation{
-		Type:        OpTypeCreate,
-		Target:      agentName,
-		Description: fmt.Sprintf("Created agent from .prompt file"),
-	}, nil
-}
-
-// updateAgentFromFile updates an existing agent in the database from a .prompt file
-func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent *models.Agent, config *DotPromptConfig, promptContent, checksum string) (*SyncOperation, error) {
-	// Extract configuration values with defaults
-	maxSteps := existingAgent.MaxSteps // keep existing
-	if config.Metadata != nil {
-		if steps, ok := config.Metadata["max_steps"]; ok {
-			switch v := steps.(type) {
-			case int:
-				maxSteps = int64(v)
-			case int64:
-				maxSteps = v
-			case string:
-				if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
-					maxSteps = parsed
-				}
-			}
-		}
-	}
-
-	description := existingAgent.Description // keep existing
-	if config.Metadata != nil {
-		if desc, ok := config.Metadata["description"].(string); ok {
-			description = desc
-		}
-	}
-
-	// Check if anything actually changed
-	needsUpdate := false
-	if existingAgent.Prompt != promptContent {
-		needsUpdate = true
-	}
-	if existingAgent.MaxSteps != maxSteps {
-		needsUpdate = true
-	}
-	if existingAgent.Description != description {
-		needsUpdate = true
-	}
-
-	if !needsUpdate {
-		return &SyncOperation{
-			Type:        OpTypeSkip,
-			Target:      existingAgent.Name,
-			Description: "Agent is up to date",
-		}, nil
-	}
-
-	// Update agent using individual parameters
-	err := s.repos.Agents.Update(
-		existingAgent.ID,
-		existingAgent.Name,
-		description,
-		promptContent,
-		maxSteps,
-		nil, // cronSchedule
-		true, // scheduleEnabled
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update agent: %w", err)
-	}
-
-	// Update tool assignments if specified
-	if len(config.Tools) > 0 {
-		// Clear existing assignments
-		err = s.repos.AgentTools.Clear(existingAgent.ID)
-		if err != nil {
-			fmt.Printf("Warning: Failed to clear existing tool assignments: %v\n", err)
-		}
-
-		// Assign new tools
-		for _, toolName := range config.Tools {
-			// Find tool by name in environment
-			tool, err := s.repos.MCPTools.FindByNameInEnvironment(existingAgent.EnvironmentID, toolName)
-			if err != nil {
-				fmt.Printf("Warning: Tool %s not found in environment: %v\n", toolName, err)
-				continue
-			}
-
-			// Assign tool to agent
-			_, err = s.repos.AgentTools.AddAgentTool(existingAgent.ID, tool.ID)
-			if err != nil {
-				fmt.Printf("Warning: Failed to assign tool %s to agent: %v\n", toolName, err)
-			}
-		}
-	}
-
-	fmt.Printf("🔄 Updated agent: %s\n", existingAgent.Name)
-	return &SyncOperation{
-		Type:        OpTypeUpdate,
-		Target:      existingAgent.Name,
-		Description: fmt.Sprintf("Updated agent from .prompt file"),
-	}, nil
-}
-
-// cleanupOrphanedAgents removes agents from database that don't have corresponding .prompt files
-func (s *DeclarativeSync) cleanupOrphanedAgents(ctx context.Context, agentsDir, environmentName string, promptFiles []string) (int, error) {
-	env, err := s.repos.Environments.GetByName(environmentName)
-	if err != nil {
-		return 0, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
-	}
-
-	// Get all agents from database for this environment
-	dbAgents, err := s.repos.Agents.ListByEnvironment(env.ID)
-	if err != nil {
-		return 0, fmt.Errorf("failed to list agents from database: %w", err)
-	}
-
-	// Build set of agent names that have .prompt files
-	promptAgentNames := make(map[string]bool)
-	for _, promptFile := range promptFiles {
-		agentName := strings.TrimSuffix(filepath.Base(promptFile), ".prompt")
-		promptAgentNames[agentName] = true
-	}
-
-	// Find orphaned agents (in DB but not in filesystem)
-	orphanedCount := 0
-	agentService := NewAgentService(s.repos)
-
-	for _, dbAgent := range dbAgents {
-		if !promptAgentNames[dbAgent.Name] {
-			// This agent exists in DB but has no corresponding .prompt file
-			fmt.Printf("🗑️  Removing orphaned agent: %s\n", dbAgent.Name)
-			
-			err := agentService.DeleteAgent(ctx, dbAgent.ID)
-			if err != nil {
-				fmt.Printf("Warning: Failed to delete orphaned agent %s: %v\n", dbAgent.Name, err)
-				continue
-			}
-			
-			orphanedCount++
-		}
-	}
-
-	return orphanedCount, nil
 }
 
 // syncMCPConfig handles MCP configuration synchronization
@@ -575,22 +180,6 @@ func (s *DeclarativeSync) syncMCPConfig(ctx context.Context, configPath, environ
 	})
 
 	return result, nil
-}
-
-// calculateFileChecksum calculates MD5 checksum of a file
-func (s *DeclarativeSync) calculateFileChecksum(filePath string) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	hash := md5.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
 // syncMCPTemplateFiles processes individual JSON template files in the environment directory
@@ -633,7 +222,8 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 
 	// Process each JSON template file
 	for _, jsonFile := range jsonFiles {
-		configName := strings.TrimSuffix(filepath.Base(jsonFile), ".json")
+		configName := filepath.Base(jsonFile)
+		configName = configName[:len(configName)-len(filepath.Ext(configName))] // Remove extension
 		
 		fmt.Printf("Processing MCP template: %s\n", configName)
 		
@@ -787,6 +377,12 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			fmt.Printf("        Environment: %+v\n", env)
 		}
 
+		// Get the file config ID for proper cascade deletion
+		fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
+		if err != nil {
+			return successCount, fmt.Errorf("failed to get file config for %s: %w", configName, err)
+		}
+
 		// Check if server already exists
 		existingServer, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
 		if err != nil {
@@ -798,6 +394,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 				Args:          args,
 				Env:           env,
 				EnvironmentID: envID,
+				FileConfigID:  &fileConfig.ID,
 			}
 			_, err = s.repos.MCPServers.Create(newServer)
 			if err != nil {
@@ -812,6 +409,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			existingServer.Command = command
 			existingServer.Args = args
 			existingServer.Env = env
+			existingServer.FileConfigID = &fileConfig.ID
 			
 			err = s.repos.MCPServers.Update(existingServer)
 			if err != nil {
@@ -885,291 +483,6 @@ func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID 
 	}
 	
 	return nil
-}
-
-// performToolDiscovery performs MCP tool discovery for a specific config
-func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64, configName string) (int, error) {
-	// Create MCP connection manager for tool discovery
-	mcpConnManager := NewMCPConnectionManager(s.repos, nil)
-	
-	// Initialize Genkit application (needed for MCP connections)
-	genkitApp, err := s.initializeGenkitForSync(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to initialize Genkit for tool discovery: %w", err)
-	}
-	mcpConnManager.genkitApp = genkitApp
-	
-	// Get the specific file config we just registered
-	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get file config %s: %w", configName, err)
-	}
-	
-	// Process this specific file config to discover tools
-	tools, clients := mcpConnManager.processFileConfig(ctx, fileConfig)
-	
-	// Clean up connections immediately
-	defer mcpConnManager.CleanupConnections(clients)
-	
-	// Save discovered tools to database
-	toolsSaved := 0
-	if len(tools) > 0 {
-		toolsSaved, err = s.saveDiscoveredToolsToDatabase(ctx, envID, configName, tools)
-		if err != nil {
-			return 0, fmt.Errorf("failed to save tools to database for %s: %w", configName, err)
-		}
-	}
-	
-	fmt.Printf("   🔍 Tool discovery completed for %s: %d tools found, %d saved to database\n", configName, len(tools), toolsSaved)
-	return toolsSaved, nil
-}
-
-// saveDiscoveredToolsToDatabase saves discovered tools to the database for a specific config
-// This is a simplified approach - the processFileConfig method aggregates tools from multiple servers
-// but we don't have precise server-to-tool mapping. For now, we'll clear and recreate all tools
-// for servers in this config to ensure accuracy.
-func (s *DeclarativeSync) saveDiscoveredToolsToDatabase(ctx context.Context, envID int64, configName string, tools []ai.Tool) (int, error) {
-	// Get servers from this specific config file (by name pattern matching)
-	// Parse the config file again to get server names
-	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get file config: %w", err)
-	}
-	
-	// Read config file to extract server names
-	configDir := os.ExpandEnv("$HOME/.config/station")
-	absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
-	rawContent, err := os.ReadFile(absolutePath)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read config file: %w", err)
-	}
-	
-	// Process template variables
-	templateService := NewTemplateVariableService(configDir, s.repos)
-	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
-	if err != nil {
-		return 0, fmt.Errorf("failed to process template: %w", err)
-	}
-	
-	// Parse config to get server names
-	var rawConfig map[string]interface{}
-	if err := json.Unmarshal([]byte(result.RenderedContent), &rawConfig); err != nil {
-		return 0, fmt.Errorf("failed to parse config: %w", err)
-	}
-	
-	var serversData map[string]interface{}
-	if mcpServers, ok := rawConfig["mcpServers"].(map[string]interface{}); ok {
-		serversData = mcpServers
-	} else if servers, ok := rawConfig["servers"].(map[string]interface{}); ok {
-		serversData = servers
-	} else {
-		return 0, fmt.Errorf("no MCP servers found in config %s", configName)
-	}
-	
-	// Get database server IDs for servers in this config
-	var serverIDs []int64
-	for serverName := range serversData {
-		server, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
-		if err != nil {
-			fmt.Printf("     ⚠️  Warning: Server '%s' not found in database\n", serverName)
-			continue
-		}
-		serverIDs = append(serverIDs, server.ID)
-		fmt.Printf("     🗂️  Found server '%s' (ID: %d) for tool storage\n", serverName, server.ID)
-	}
-	
-	if len(serverIDs) == 0 {
-		return 0, fmt.Errorf("no valid servers found for config %s", configName)
-	}
-	
-	// Clear existing tools for these servers (declarative sync approach)
-	for _, serverID := range serverIDs {
-		err = s.repos.MCPTools.DeleteByServerID(serverID)
-		if err != nil {
-			fmt.Printf("     ⚠️  Warning: Failed to clear existing tools for server %d: %v\n", serverID, err)
-		} else {
-			fmt.Printf("     🧹 Cleared existing tools for server ID %d\n", serverID)
-		}
-	}
-	
-	// Distribute tools across servers (simple round-robin)
-	toolsSaved := 0
-	for i, tool := range tools {
-		serverID := serverIDs[i%len(serverIDs)]
-		toolName := tool.Name()
-		
-		// Create tool model
-		toolModel := &models.MCPTool{
-			MCPServerID: serverID,
-			Name:        toolName,
-			Description: "", // Genkit AI tools don't expose description directly
-		}
-		
-		// Save tool to database
-		_, err = s.repos.MCPTools.Create(toolModel)
-		if err != nil {
-			fmt.Printf("     ❌ Failed to save tool '%s': %v\n", toolName, err)
-			continue
-		}
-		fmt.Printf("     ✅ Saved tool '%s' to server ID %d\n", toolName, serverID)
-		toolsSaved++
-	}
-	
-	return toolsSaved, nil
-}
-
-// cleanupOrphanedResources removes configs, servers, and tools that no longer exist in filesystem
-func (s *DeclarativeSync) cleanupOrphanedResources(ctx context.Context, envDir, environmentName string, options SyncOptions) (string, error) {
-	// Get environment from database
-	env, err := s.repos.Environments.GetByName(environmentName)
-	if err != nil {
-		return "", fmt.Errorf("failed to get environment: %w", err)
-	}
-
-	// Find all .json files in filesystem (current source of truth)
-	jsonFiles, err := filepath.Glob(filepath.Join(envDir, "*.json"))
-	if err != nil {
-		return "", fmt.Errorf("failed to scan JSON files: %w", err)
-	}
-
-	// Build map of existing files 
-	filesystemConfigs := make(map[string]bool)
-	for _, jsonFile := range jsonFiles {
-		configName := strings.TrimSuffix(filepath.Base(jsonFile), ".json")
-		filesystemConfigs[configName] = true
-	}
-
-	// Get all file configs from database for this environment
-	dbConfigs, err := s.repos.FileMCPConfigs.ListByEnvironment(env.ID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get database configs: %w", err)
-	}
-
-	// Find configs that exist in DB but not in filesystem (to remove)
-	var toRemove []string
-	for _, dbConfig := range dbConfigs {
-		if !filesystemConfigs[dbConfig.ConfigName] {
-			toRemove = append(toRemove, dbConfig.ConfigName)
-		}
-	}
-
-	if len(toRemove) == 0 {
-		return "No orphaned resources found", nil
-	}
-
-	fmt.Printf("🗑️  Found %d orphaned configs to remove: %v\n", len(toRemove), toRemove)
-
-	if options.DryRun {
-		return fmt.Sprintf("Would remove %d orphaned configs: %v", len(toRemove), toRemove), nil
-	}
-
-	// Remove orphaned configs and their associated servers/tools
-	var removedConfigs, removedServers, removedTools int
-	for _, configName := range toRemove {
-		fmt.Printf("   🗑️  Removing orphaned config: %s\n", configName)
-		
-		// Find the config to remove
-		var configToRemove *repositories.FileConfigRecord
-		for _, dbConfig := range dbConfigs {
-			if dbConfig.ConfigName == configName {
-				configToRemove = dbConfig
-				break
-			}
-		}
-		
-		if configToRemove == nil {
-			fmt.Printf("     ⚠️  Warning: Could not find config %s in database\n", configName)
-			continue
-		}
-
-		// Get servers associated with this config (by reading the config file from database)
-		// We need to parse the config to find server names, then delete those servers
-		serversRemoved, toolsRemoved, err := s.removeConfigServersAndTools(ctx, env.ID, configName, configToRemove)
-		if err != nil {
-			fmt.Printf("     ❌ Failed to cleanup servers/tools for %s: %v\n", configName, err)
-			continue
-		}
-
-		// Remove the file config itself
-		err = s.repos.FileMCPConfigs.Delete(configToRemove.ID)
-		if err != nil {
-			fmt.Printf("     ❌ Failed to remove file config %s: %v\n", configName, err)
-			continue
-		}
-
-		fmt.Printf("     ✅ Removed config %s (%d servers, %d tools)\n", configName, serversRemoved, toolsRemoved)
-		removedConfigs++
-		removedServers += serversRemoved
-		removedTools += toolsRemoved
-	}
-
-	return fmt.Sprintf("Removed %d configs, %d servers, %d tools", removedConfigs, removedServers, removedTools), nil
-}
-
-// removeConfigServersAndTools removes servers and tools associated with a specific config
-func (s *DeclarativeSync) removeConfigServersAndTools(ctx context.Context, envID int64, configName string, fileConfig *repositories.FileConfigRecord) (int, int, error) {
-	// Since the file no longer exists, we need to identify servers that belonged to this config
-	// We can get all servers for this environment and match by naming patterns or timestamps
-	// For now, we'll use a simpler approach: delete servers that were created around the same time as this config
-	
-	allServers, err := s.repos.MCPServers.GetByEnvironmentID(envID)
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get servers for environment: %w", err)
-	}
-
-	var serversRemoved, toolsRemoved int
-	
-	// Strategy: Remove servers that likely belonged to this config
-	// Since we can't read the deleted file, we'll look for servers with similar timing or 
-	// use any available metadata to associate them with this config
-	
-	// For safety, we'll only remove servers if there's a clear association
-	// A more robust implementation would store config_name or file_config_id in the servers table
-	
-	fmt.Printf("     🔍 Checking %d servers for association with config %s\n", len(allServers), configName)
-	
-	// Simple heuristic: remove servers whose names might be related to the config name
-	// This is imperfect but better than leaving orphaned servers
-	for _, server := range allServers {
-		shouldRemove := false
-		
-		// Check if server name is similar to config name
-		if strings.Contains(server.Name, configName) || strings.Contains(configName, server.Name) {
-			shouldRemove = true
-		}
-		
-		// Additional heuristic: if this is the only config being removed and there are few servers,
-		// we might be more aggressive, but for safety we'll be conservative
-		
-		if shouldRemove {
-			fmt.Printf("     🗑️  Removing server: %s (ID: %d)\n", server.Name, server.ID)
-			
-			// Get tools for this server before removing
-			tools, err := s.repos.MCPTools.GetByServerID(server.ID)
-			if err == nil {
-				toolsRemoved += len(tools)
-				fmt.Printf("       🔧 Removing %d tools from server %s\n", len(tools), server.Name)
-			}
-			
-			// Remove server (tools should cascade delete)
-			err = s.repos.MCPServers.Delete(server.ID)
-			if err != nil {
-				fmt.Printf("       ❌ Failed to remove server %s: %v\n", server.Name, err)
-				continue
-			}
-			
-			serversRemoved++
-		}
-	}
-	
-	return serversRemoved, toolsRemoved, nil
-}
-
-// initializeGenkitForSync creates a minimal Genkit app for tool discovery during sync
-func (s *DeclarativeSync) initializeGenkitForSync(ctx context.Context) (*genkit.Genkit, error) {
-	// Create a minimal Genkit provider for sync operations
-	genkitProvider := NewGenKitProvider()
-	return genkitProvider.GetApp(ctx)
 }
 
 // Helper type for database operations (until SQLC is working)
