@@ -533,12 +533,69 @@ func (s *Server) handleListPrompts(ctx context.Context, request mcp.CallToolRequ
 		{"name": "create_devops_monitor_agent", "description": "Guide for DevOps monitoring agents"},
 		{"name": "create_security_scan_agent", "description": "Guide for security scanning agents"},
 		{"name": "create_data_processing_agent", "description": "Guide for data processing agents"},
+		{"name": "export_agents_guide", "description": "Guide for exporting agents to .prompt files"},
+		{"name": "station_mcp_tools_guide", "description": "Comprehensive guide to using Station's MCP tools"},
 	}
 
 	response := map[string]interface{}{
 		"success": true,
 		"prompts": prompts,
 		"count":   len(prompts),
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleGetPrompt(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	promptName, err := request.RequireString("name")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'name' parameter: %v", err)), nil
+	}
+
+	var promptContent string
+	var found bool
+
+	switch promptName {
+	case "export_agents_guide":
+		promptContent = "# Agent Export Guide\n\nStation provides multiple ways to export agents to .prompt files for version control and deployment.\n\n## Export Single Agent\n\nUse the export_agent tool to export a specific agent:\n\n```json\n{\n  \"tool\": \"export_agent\",\n  \"parameters\": {\n    \"agent_id\": \"42\",\n    \"output_path\": \"/path/to/agent.prompt\"  // Optional\n  }\n}\n```\n\n## Export All Agents\n\nUse the export_agents tool to export multiple agents at once:\n\n```json\n{\n  \"tool\": \"export_agents\",\n  \"parameters\": {\n    \"environment_id\": \"1\",              // Optional: filter by environment\n    \"output_directory\": \"/path/to/dir\", // Optional: custom output directory\n    \"enabled_only\": true                // Optional: only export enabled agents\n  }\n}\n```\n\n## Export Format\n\nExported agents are saved as .prompt files with YAML frontmatter:\n\n```yaml\n---\nmodel: \"gemini-2.0-flash-exp\"\nconfig:\n  temperature: 0.3\n  max_tokens: 2000\nmetadata:\n  name: \"Agent Name\"\n  description: \"Agent description\"\n  version: \"1.0.0\"\ntools:\n  - \"tool_name_1\"\n  - \"tool_name_2\"\nstation:\n  execution_metadata:\n    max_steps: 5\n    environment: \"production\"\n    agent_id: 42\n---\n\nYour agent prompt content goes here...\n```\n\n## Benefits\n\n- **Version Control**: Track agent changes in git\n- **Deployment**: Deploy agents across environments\n- **Backup**: Preserve agent configurations\n- **Sharing**: Share agents with team members"
+		found = true
+
+	case "station_mcp_tools_guide":
+		promptContent = "# Station MCP Tools Guide\n\nStation provides 20 MCP tools for complete agent lifecycle management through Claude Desktop, Claude Code, or any MCP client.\n\n## Key Tools\n\n- **create_agent**: Create new AI agents\n- **list_agents**: List all agents with filters\n- **call_agent**: Execute agents with advanced options\n- **export_agent**: Export single agent to .prompt file\n- **export_agents**: Export multiple agents at once\n- **list_tools**: List available MCP tools with pagination\n- **list_runs**: List agent execution runs\n- **inspect_run**: Get detailed run information\n\n## Usage Example\n\n```json\n{\n  \"tool\": \"create_agent\",\n  \"parameters\": {\n    \"name\": \"Database Monitor\",\n    \"description\": \"Monitors database health\",\n    \"prompt\": \"You are a database monitoring specialist...\",\n    \"environment_id\": \"1\",\n    \"tool_names\": [\"postgres_query\", \"slack_notify\"]\n  }\n}\n```\n\n## Best Practices\n\n1. Start with simple prompts and add complexity gradually\n2. Only assign tools the agent actually needs\n3. Use different environments for dev/staging/prod\n4. Export agents regularly for version control\n5. Use pagination for large datasets"
+		found = true
+
+	default:
+		// For other existing prompts, return placeholder content
+		switch promptName {
+		case "create_comprehensive_agent":
+			promptContent = "Guide for creating well-structured AI agents with proper tool assignments and configuration."
+			found = true
+		case "create_logs_analysis_agent":
+			promptContent = "Guide for creating agents that analyze AWS CloudWatch logs and application logs."
+			found = true
+		case "create_devops_monitor_agent":
+			promptContent = "Guide for creating DevOps monitoring agents for infrastructure and deployment monitoring."
+			found = true
+		case "create_security_scan_agent":
+			promptContent = "Guide for creating security scanning agents for vulnerability detection and compliance."
+			found = true
+		case "create_data_processing_agent":
+			promptContent = "Guide for creating data processing agents for ETL operations and data transformation."
+			found = true
+		}
+	}
+
+	if !found {
+		return mcp.NewToolResultError(fmt.Sprintf("Prompt '%s' not found", promptName)), nil
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"prompt": map[string]interface{}{
+			"name":    promptName,
+			"content": promptContent,
+		},
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
@@ -904,5 +961,281 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 	content.WriteString("\n")
 
 	return content.String()
+}
+
+func (s *Server) handleExportAgents(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Get optional parameters
+	environmentIDStr := request.GetString("environment_id", "")
+	outputDirectory := request.GetString("output_directory", "")
+	enabledOnly := request.GetBool("enabled_only", false)
+	
+	var agents []*models.Agent
+	var err error
+	
+	// Get agents based on environment filter
+	if environmentIDStr != "" {
+		environmentID, parseErr := strconv.ParseInt(environmentIDStr, 10, 64)
+		if parseErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid environment_id format: %v", parseErr)), nil
+		}
+		agents, err = s.repos.Agents.ListByEnvironment(environmentID)
+	} else {
+		agents, err = s.repos.Agents.List()
+	}
+	
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to list agents: %v", err)), nil
+	}
+	
+	// Filter enabled agents if requested
+	if enabledOnly {
+		var enabledAgents []*models.Agent
+		for _, agent := range agents {
+			if agent.ScheduleEnabled {
+				enabledAgents = append(enabledAgents, agent)
+			}
+		}
+		agents = enabledAgents
+	}
+	
+	if len(agents) == 0 {
+		return mcp.NewToolResultText("No agents found to export"), nil
+	}
+	
+	// Export each agent
+	var exportedAgents []map[string]interface{}
+	var failedExports []map[string]interface{}
+	
+	for _, agent := range agents {
+		// Get environment info
+		environment, err := s.repos.Environments.GetByID(agent.EnvironmentID)
+		if err != nil {
+			failedExports = append(failedExports, map[string]interface{}{
+				"agent_id": agent.ID,
+				"name":     agent.Name,
+				"error":    fmt.Sprintf("Environment not found: %v", err),
+			})
+			continue
+		}
+		
+		// Get agent tools
+		tools, err := s.repos.AgentTools.ListAgentTools(agent.ID)
+		if err != nil {
+			failedExports = append(failedExports, map[string]interface{}{
+				"agent_id": agent.ID,
+				"name":     agent.Name,
+				"error":    fmt.Sprintf("Failed to get agent tools: %v", err),
+			})
+			continue
+		}
+		
+		// Generate dotprompt content
+		dotpromptContent := s.generateDotpromptContent(agent, tools, environment.Name)
+		
+		// Determine output file path
+		var outputPath string
+		if outputDirectory != "" {
+			outputPath = fmt.Sprintf("%s/%s.prompt", outputDirectory, agent.Name)
+		} else {
+			homeDir := os.Getenv("HOME")
+			if homeDir == "" {
+				var homeErr error
+				homeDir, homeErr = os.UserHomeDir()
+				if homeErr != nil {
+					failedExports = append(failedExports, map[string]interface{}{
+						"agent_id": agent.ID,
+						"name":     agent.Name,
+						"error":    fmt.Sprintf("Failed to get user home directory: %v", homeErr),
+					})
+					continue
+				}
+			}
+			outputPath = fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment.Name, agent.Name)
+		}
+		
+		// Ensure directory exists
+		agentsDir := filepath.Dir(outputPath)
+		if err := os.MkdirAll(agentsDir, 0755); err != nil {
+			failedExports = append(failedExports, map[string]interface{}{
+				"agent_id": agent.ID,
+				"name":     agent.Name,
+				"error":    fmt.Sprintf("Failed to create agents directory: %v", err),
+			})
+			continue
+		}
+		
+		// Write .prompt file to filesystem
+		if err := os.WriteFile(outputPath, []byte(dotpromptContent), 0644); err != nil {
+			failedExports = append(failedExports, map[string]interface{}{
+				"agent_id": agent.ID,
+				"name":     agent.Name,
+				"error":    fmt.Sprintf("Failed to write .prompt file: %v", err),
+			})
+			continue
+		}
+		
+		exportedAgents = append(exportedAgents, map[string]interface{}{
+			"agent_id":    agent.ID,
+			"name":        agent.Name,
+			"environment": environment.Name,
+			"filepath":    outputPath,
+			"tools_count": len(tools),
+		})
+	}
+	
+	response := map[string]interface{}{
+		"success":          true,
+		"message":          fmt.Sprintf("Exported %d agents successfully", len(exportedAgents)),
+		"exported_count":   len(exportedAgents),
+		"failed_count":     len(failedExports),
+		"exported_agents":  exportedAgents,
+	}
+	
+	if len(failedExports) > 0 {
+		response["failed_exports"] = failedExports
+	}
+	
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleListRuns(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract pagination parameters
+	limit := request.GetInt("limit", 50)
+	offset := request.GetInt("offset", 0)
+	
+	// Extract optional filters
+	agentIDStr := request.GetString("agent_id", "")
+	status := request.GetString("status", "")
+
+	// Get all runs - we'll filter and paginate manually since we need filtering capability
+	var allRuns []*models.AgentRunWithDetails
+	var err error
+
+	if agentIDStr != "" {
+		// Filter by specific agent
+		agentID, parseErr := strconv.ParseInt(agentIDStr, 10, 64)
+		if parseErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid agent_id format: %v", parseErr)), nil
+		}
+		
+		// Get basic runs for this agent, then convert to detailed format
+		basicRuns, err := s.repos.AgentRuns.ListByAgent(agentID)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to list runs for agent: %v", err)), nil
+		}
+		
+		// Convert to detailed format
+		allRuns = make([]*models.AgentRunWithDetails, len(basicRuns))
+		for i, run := range basicRuns {
+			allRuns[i] = &models.AgentRunWithDetails{
+				AgentRun:   *run,
+				AgentName:  "Unknown", // Could be enhanced to fetch agent name
+				Username:  "Unknown", // Could be enhanced to fetch user email
+			}
+		}
+	} else {
+		// Get recent runs (no agent filter)
+		allRuns, err = s.repos.AgentRuns.ListRecent(1000) // Get large number, then filter/paginate
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to list runs: %v", err)), nil
+		}
+	}
+
+	// Apply status filter if provided
+	if status != "" {
+		filteredRuns := make([]*models.AgentRunWithDetails, 0)
+		for _, run := range allRuns {
+			if strings.ToLower(run.Status) == strings.ToLower(status) {
+				filteredRuns = append(filteredRuns, run)
+			}
+		}
+		allRuns = filteredRuns
+	}
+
+	totalCount := len(allRuns)
+
+	// Apply pagination
+	start := offset
+	if start > totalCount {
+		start = totalCount
+	}
+	
+	end := start + limit
+	if end > totalCount {
+		end = totalCount
+	}
+
+	paginatedRuns := allRuns[start:end]
+
+	response := map[string]interface{}{
+		"success": true,
+		"runs":    paginatedRuns,
+		"pagination": map[string]interface{}{
+			"count":        len(paginatedRuns),
+			"total":        totalCount,
+			"limit":        limit,
+			"offset":       offset,
+			"has_more":     end < totalCount,
+			"next_offset":  end,
+		},
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleInspectRun(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	runIDStr, err := request.RequireString("run_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'run_id' parameter: %v", err)), nil
+	}
+
+	runID, err := strconv.ParseInt(runIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid run_id format: %v", err)), nil
+	}
+
+	verbose := request.GetBool("verbose", true)
+
+	// Get detailed run information
+	run, err := s.repos.AgentRuns.GetByIDWithDetails(runID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get run details: %v", err)), nil
+	}
+
+	if run == nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Run with ID %d not found", runID)), nil
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"run":     run,
+	}
+
+	// Add detailed information if verbose is true
+	if verbose {
+		response["detailed"] = map[string]interface{}{
+			"has_tool_calls":      run.ToolCalls != nil,
+			"has_execution_steps": run.ExecutionSteps != nil,
+			"tool_calls_count":    0,
+			"execution_steps_count": 0,
+		}
+
+		if run.ToolCalls != nil {
+			// Count tool calls if available
+			toolCalls := *run.ToolCalls
+			response["detailed"].(map[string]interface{})["tool_calls_count"] = len(toolCalls)
+		}
+
+		if run.ExecutionSteps != nil {
+			// Count execution steps if available  
+			execSteps := *run.ExecutionSteps
+			response["detailed"].(map[string]interface{})["execution_steps_count"] = len(execSteps)
+		}
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
 }
 
