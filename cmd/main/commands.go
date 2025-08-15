@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/logging"
 )
 
 // Command definitions
@@ -495,10 +498,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Set up ship CLI MCP integration if requested
+	shipSetupSucceeded := false
 	if shipSetup {
 		fmt.Printf("🚢 Setting up ship CLI MCP integration...\n")
 		if err := setupShipIntegration(workspaceDir); err != nil {
-			return fmt.Errorf("failed to set up ship integration: %w", err)
+			logging.Info("⚠️  Ship CLI setup failed: %v", err)
+			logging.Info("💡 Alternative: Use 'stn mcp add filesystem' to manually configure filesystem tools")
+			logging.Info("   Or install ship CLI manually: curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash")
+			// Don't return error, continue with normal init
+		} else {
+			shipSetupSucceeded = true
 		}
 	}
 
@@ -515,15 +524,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(workspaceDir, "environments", "default"))
 	
-	// Run ship sync after everything is set up
-	if shipSetup {
-		fmt.Printf("🚢 Ship integration: Filesystem MCP tools configured\n")
-		fmt.Printf("🔄 Syncing MCP tools...\n")
+	// Run ship sync after everything is set up (only if ship setup succeeded)
+	if shipSetupSucceeded {
+		logging.Info("🚢 Ship integration: Filesystem MCP tools configured")
+		logging.Info("🔄 Syncing MCP tools...")
 		if err := runSyncForEnvironment("default"); err != nil {
-			fmt.Printf("⚠️  Warning: Failed to sync MCP tools: %v\n", err)
-			fmt.Printf("   Run 'stn sync default' manually to complete setup\n")
+			logging.Info("⚠️  Warning: Failed to sync MCP tools: %v", err)
+			logging.Info("   Run 'stn sync default' manually to complete setup")
 		} else {
-			fmt.Printf("✅ Ship MCP tools synced successfully\n")
+			logging.Info("✅ Ship MCP tools synced successfully")
 		}
 	}
 	
@@ -736,18 +745,15 @@ func runSync(cmd *cobra.Command, args []string) error {
 	return runMCPSync(cmd, args)
 }
 
-// setupShipIntegration checks for ship CLI and sets up MCP configuration
+// setupShipIntegration installs latest ship CLI and sets up MCP configuration
 func setupShipIntegration(workspaceDir string) error {
-	// Check if ship CLI is installed
-	_, err := exec.LookPath("ship")
-	if err != nil {
-		fmt.Printf("   📦 Installing ship CLI...\n")
-		if err := installShipCLI(); err != nil {
-			return fmt.Errorf("failed to install ship CLI: %w", err)
-		}
+	// Always install latest ship CLI
+	logging.Info("   📦 Installing latest ship CLI...")
+	if err := installShipCLI(); err != nil {
+		return fmt.Errorf("failed to install ship CLI: %w", err)
 	}
 	
-	// Create ship MCP configuration in default environment
+	// Create filesystem MCP configuration in default environment
 	defaultEnvDir := filepath.Join(workspaceDir, "environments", "default")
 	mcpConfigPath := filepath.Join(defaultEnvDir, "mcp.json")
 	
@@ -766,7 +772,7 @@ func setupShipIntegration(workspaceDir string) error {
 	
 	// Create variables.yml file for template variables
 	variablesPath := filepath.Join(defaultEnvDir, "variables.yml")
-	defaultVariables := `# Environment variables for ship MCP integration
+	defaultVariables := `# Environment variables for ship MCP integration  
 # Add any template variables needed for your ship MCP server here
 # Example:
 # ROOT_PATH: "/home/user/projects"
@@ -777,17 +783,26 @@ func setupShipIntegration(workspaceDir string) error {
 		return fmt.Errorf("failed to create variables.yml: %w", err)
 	}
 	
-	fmt.Printf("   ✅ Ship MCP integration configured\n")
+	logging.Info("   ✅ Ship MCP integration configured")
 	return nil
 }
 
 // installShipCLI installs the ship CLI using the official installer
 func installShipCLI() error {
-	cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash")
+	// Add timeout to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	
+	cmd := exec.CommandContext(ctx, "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	
-	return cmd.Run()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("ship CLI installation timed out after 2 minutes. Please install manually or check your internet connection")
+	}
+	
+	return err
 }
 
 // runSyncForEnvironment runs sync for a specific environment
