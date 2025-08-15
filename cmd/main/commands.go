@@ -28,9 +28,20 @@ var (
 	initCmd = &cobra.Command{
 		Use:   "init",
 		Short: "Initialize Station configuration",
-		Long: `Initialize Station with configuration files and optional database replication.
+		Long: `Initialize Station with configuration files and interactive AI provider setup.
 
-By default, sets up Station for local development with SQLite database.
+By default, sets up Station for local development with SQLite database and guides you through
+selecting an AI provider (OpenAI, Gemini, or custom) with an interactive interface.
+
+Features:
+• Interactive AI provider and model selection with beautiful TUI
+• Environment variable detection (OPENAI_API_KEY, GEMINI_API_KEY)
+• Support for custom providers (Anthropic, Ollama, local models)
+• Optional database replication setup with Litestream
+• Ship CLI integration for instant filesystem MCP tools
+
+Use --provider and --model flags to skip interactive setup.
+Use --yes flag to use sensible defaults without any prompts.
 Use --replicate flag to also configure Litestream for database replication to cloud storage.
 Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access.`,
 		RunE:  runInit,
@@ -422,10 +433,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Check if ship setup is requested
 	shipSetup, _ := cmd.Flags().GetBool("ship")
 
+	// Check existing config to avoid interactive mode
+	_, err := os.Stat(configFile)
+	configExists := err == nil
+
 	fmt.Printf("🔧 Initializing Station configuration...\n")
 	fmt.Printf("Config file: %s\n", configFile)
 	if workspaceDir != configDir {
 		fmt.Printf("Workspace directory: %s\n", workspaceDir)
+	}
+	
+	if configExists {
+		fmt.Printf("⚠️  Configuration already exists - skipping interactive setup\n")
 	}
 	
 	if replicationSetup {
@@ -452,6 +471,40 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	_ = key // Use the raw key if needed elsewhere
 
+	// Provider and model setup
+	var providerConfig *ProviderConfig
+	provider, _ := cmd.Flags().GetString("provider")
+	model, _ := cmd.Flags().GetString("model")
+	useDefaults, _ := cmd.Flags().GetBool("yes")
+
+	if !configExists && !useDefaults && provider == "" {
+		// Interactive provider setup
+		providerConfig, err = setupProviderInteractively()
+		if err != nil {
+			fmt.Printf("⚠️  Provider setup failed: %v\n", err)
+			fmt.Printf("💡 Using defaults: provider=%s, model=%s\n", defaultProvider, defaultModel)
+			providerConfig = &ProviderConfig{Provider: defaultProvider, Model: defaultModel}
+		}
+	} else {
+		// Use flags, defaults, or skip if config exists
+		if provider == "" {
+			provider = defaultProvider
+		}
+		if model == "" {
+			if provider == "openai" {
+				model = "gpt-5-mini"
+			} else {
+				model = defaultModel
+			}
+		}
+		providerConfig = &ProviderConfig{Provider: provider, Model: model}
+		
+		if !configExists {
+			fmt.Printf("🤖 Using AI provider: %s\n", providerConfig.Provider)
+			fmt.Printf("   Model: %s\n", providerConfig.Model)
+		}
+	}
+
 	// Set default configuration
 	viper.Set("encryption_key", encryptionKey)
 	viper.Set("ssh_port", 2222)
@@ -461,6 +514,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	viper.Set("admin_username", "admin")
 	viper.Set("debug", false)
 	viper.Set("local_mode", true) // Default to local mode
+	
+	// Set AI provider configuration
+	if !configExists {
+		viper.Set("ai_provider", providerConfig.Provider)
+		viper.Set("ai_model", providerConfig.Model)
+	}
 	
 	// Set workspace and database paths
 	if workspaceDir != configDir {
@@ -518,11 +577,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Printf("✅ Configuration initialized successfully!\n")
+	fmt.Printf("\n🎉 Station initialized successfully!\n\n")
 	fmt.Printf("📁 Config file: %s\n", configFile)
 	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(workspaceDir, "environments", "default"))
+	
+	if !configExists {
+		fmt.Printf("🤖 AI Provider: %s\n", providerConfig.Provider)
+		fmt.Printf("🧠 Model: %s\n", providerConfig.Model)
+	}
 	
 	// Run ship sync after everything is set up (only if ship setup succeeded)
 	if shipSetupSucceeded {
