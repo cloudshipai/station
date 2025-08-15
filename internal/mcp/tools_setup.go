@@ -170,5 +170,20 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(inspectRunTool, s.handleInspectRun)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 20)
+	// Environment management tools
+	createEnvironmentTool := mcp.NewTool("create_environment",
+		mcp.WithDescription("Create a new environment with file-based configuration"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the environment")),
+		mcp.WithString("description", mcp.Description("Description of the environment")),
+	)
+	s.mcpServer.AddTool(createEnvironmentTool, s.handleCreateEnvironment)
+
+	deleteEnvironmentTool := mcp.NewTool("delete_environment",
+		mcp.WithDescription("Delete an environment and all its associated data"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the environment to delete")),
+		mcp.WithBoolean("confirm", mcp.Required(), mcp.Description("Confirmation flag - must be true to proceed")),
+	)
+	s.mcpServer.AddTool(deleteEnvironmentTool, s.handleDeleteEnvironment)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 22)
 }
