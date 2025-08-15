@@ -823,7 +823,7 @@ func setupShipIntegration(workspaceDir string) error {
 	
 	shipMCPConfig := `{
   "mcpServers": {
-    "station": {
+    "filesystem": {
       "command": "ship",
       "args": ["mcp", "filesystem"]
     }
