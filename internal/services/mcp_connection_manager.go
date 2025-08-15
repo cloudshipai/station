@@ -36,6 +36,7 @@ type MCPServerPool struct {
 	serverConfigs map[string]interface{}          // serverKey -> config for restart
 	tools         map[string][]ai.Tool            // serverKey -> cached tools
 	mutex         sync.RWMutex
+	initialized   bool                            // prevent multiple initializations
 }
 
 // NewMCPServerPool creates a new server pool
@@ -111,6 +112,15 @@ func (mcm *MCPConnectionManager) InitializeServerPool(ctx context.Context) error
 	if !mcm.poolingEnabled {
 		return nil // Skip if pooling disabled
 	}
+	
+	// Check if already initialized
+	mcm.serverPool.mutex.Lock()
+	if mcm.serverPool.initialized {
+		mcm.serverPool.mutex.Unlock()
+		return nil
+	}
+	mcm.serverPool.initialized = true
+	mcm.serverPool.mutex.Unlock()
 	
 	logging.Info("Initializing MCP server pool...")
 	
