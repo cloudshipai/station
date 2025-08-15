@@ -77,9 +77,11 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(listMCPConfigsTool, s.handleListMCPConfigs)
 
 	listToolsTool := mcp.NewTool("list_tools",
-		mcp.WithDescription("List available MCP tools"),
+		mcp.WithDescription("List available MCP tools with pagination support"),
 		mcp.WithString("environment_id", mcp.Description("Filter by environment ID")),
 		mcp.WithString("search", mcp.Description("Search term to filter tools")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of tools to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of tools to skip for pagination (default: 0)")),
 	)
 	s.mcpServer.AddTool(listToolsTool, s.handleListTools)
 
