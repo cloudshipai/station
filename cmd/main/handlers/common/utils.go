@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 	"station/internal/config"
 	"station/internal/theme"
 )
@@ -59,47 +58,9 @@ func GetCLIStyles(themeManager *theme.ThemeManager) CLIStyles {
 	}
 }
 
-// LoadStationConfig loads the Station configuration
+// LoadStationConfig loads the Station configuration using the main config.Load() function
 func LoadStationConfig() (*config.Config, error) {
-	// Try to load config from various locations
-	viper.SetConfigName("station")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("$HOME/.station")
-	viper.AddConfigPath("/etc/station")
-
-	// Set default values - use config package to get proper XDG path
-	defaultDBPath := config.GetDatabasePath()
-	viper.SetDefault("database_url", defaultDBPath)
-	viper.SetDefault("server.host", "localhost")
-	viper.SetDefault("server.port", 8080)
-
-	// Read environment variables
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("STATION")
-
-	// Read config file
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("error reading config file: %w", err)
-		}
-		// Config file not found is OK, we'll use defaults
-	}
-
-	encryptionKey := viper.GetString("encryption_key")
-	if encryptionKey == "" {
-		return nil, fmt.Errorf("no encryption key found. Run 'station init' first")
-	}
-
-	cfg := &config.Config{
-		DatabaseURL:   viper.GetString("database_url"),
-		APIPort:       viper.GetInt("api_port"),
-		SSHPort:       viper.GetInt("ssh_port"),
-		MCPPort:       viper.GetInt("mcp_port"),
-		EncryptionKey: encryptionKey,
-	}
-
-	return cfg, nil
+	return config.Load()
 }
 
 // GetAPIKeyFromEnv retrieves API key from environment variables
