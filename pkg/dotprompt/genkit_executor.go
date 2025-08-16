@@ -134,10 +134,9 @@ func (e *GenKitExecutor) RenderDotpromptContent(dotpromptContent, task, agentNam
 	// 1. Create dotprompt instance
 	dp := dotprompt.NewDotprompt(nil) // Use default options
 	
-	// 2. Prepare data for rendering
+	// 2. Prepare data for rendering with only agent metadata (no task duplication)
 	data := &dotprompt.DataArgument{
 		Input: map[string]any{
-			"TASK":       task,
 			"AGENT_NAME": agentName,
 			"ENVIRONMENT": "default", // TODO: get from agent config
 		},
