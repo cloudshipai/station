@@ -180,7 +180,7 @@ func runMainServer() error {
 	localMode := viper.GetBool("local_mode")
 	
 	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc, localMode)
-	mcpServer := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, localMode)
+	mcpServer := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
 	apiServer := api.New(cfg, database, localMode)
 	
 	// Initialize ToolDiscoveryService for API config uploads

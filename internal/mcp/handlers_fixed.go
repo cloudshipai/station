@@ -923,9 +923,15 @@ func (s *Server) handleExportAgent(ctx context.Context, request mcp.CallToolRequ
 func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environment string) string {
 	var content strings.Builder
 
+	// Get configured model from Station config, fallback to default
+	modelName := "gemini-1.5-flash" // default fallback
+	if s.config != nil && s.config.AIModel != "" {
+		modelName = s.config.AIModel
+	}
+
 	// YAML frontmatter
 	content.WriteString("---\n")
-	content.WriteString("model: \"gemini-2.0-flash-exp\"\n")
+	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
 	content.WriteString("config:\n")
 	content.WriteString("  temperature: 0.3\n")
 	content.WriteString("  max_tokens: 2000\n")

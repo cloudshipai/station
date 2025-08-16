@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"station/internal/auth"
+	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
@@ -24,10 +25,11 @@ type Server struct {
 	executionQueue   *services.ExecutionQueueService
 	authService      *auth.AuthService
 	repos            *repositories.Repositories
+	config           *config.Config
 	localMode        bool
 }
 
-func NewServer(database db.Database, agentService services.AgentServiceInterface, executionQueue *services.ExecutionQueueService, repos *repositories.Repositories, localMode bool) *Server {
+func NewServer(database db.Database, agentService services.AgentServiceInterface, executionQueue *services.ExecutionQueueService, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
 	// Create MCP server using the official mcp-go library
 	mcpServer := server.NewMCPServer(
 		"Station MCP Server",
@@ -55,6 +57,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		executionQueue:   executionQueue,
 		authService:      authService,
 		repos:            repos,
+		config:           cfg,
 		localMode:        localMode,
 	}
 
