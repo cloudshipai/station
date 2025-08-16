@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -92,13 +93,29 @@ func getMapKeys(m map[string]interface{}) []string {
 
 // NewMCPConnectionManager creates a new MCP connection manager
 func NewMCPConnectionManager(repos *repositories.Repositories, genkitApp *genkit.Genkit) *MCPConnectionManager {
+	// Default to pooling enabled for better performance
+	poolingEnabled := getEnvBoolOrDefault("STATION_MCP_POOLING", true)
+	
 	return &MCPConnectionManager{
 		repos:          repos,
 		genkitApp:      genkitApp,
 		toolCache:      make(map[int64]*EnvironmentToolCache),
 		serverPool:     NewMCPServerPool(),
-		poolingEnabled: false, // Start disabled for surgical rollout
+		poolingEnabled: poolingEnabled,
 	}
+}
+
+// getEnvBoolOrDefault gets a boolean environment variable with a default value
+func getEnvBoolOrDefault(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		switch strings.ToLower(value) {
+		case "true", "1", "yes", "on":
+			return true
+		case "false", "0", "no", "off":
+			return false
+		}
+	}
+	return defaultValue
 }
 
 // EnableConnectionPooling enables the connection pooling feature
@@ -125,7 +142,7 @@ func (mcm *MCPConnectionManager) InitializeServerPool(ctx context.Context) error
 	logging.Info("Initializing MCP server pool...")
 	
 	// Get all environments
-	environments, err := mcm.repos.Environments.ListAll()
+	environments, err := mcm.repos.Environments.List()
 	if err != nil {
 		return fmt.Errorf("failed to get environments for server pool: %w", err)
 	}
@@ -332,6 +349,13 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 	}
 	
 	logging.Info("✅ MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
+	
+	// DEBUG: Log actual tool names returned by MCP server
+	logging.Info("🔍 DEBUG: Tool names returned by MCP server '%s':", serverName)
+	for i, tool := range serverTools {
+		toolName := tool.Name()
+		logging.Info("   🔧 MCP Tool %d: '%s'", i+1, toolName)
+	}
 	return mcpClient, serverTools, nil
 }
 
@@ -391,6 +415,9 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	if mcm.poolingEnabled {
 		return mcm.getPooledEnvironmentMCPTools(ctx, environmentID)
 	}
+	
+	// Using legacy connection model (deprecated)
+	logging.Info("⚠️  Using legacy MCP connection model (deprecated). Enable pooling with STATION_MCP_POOLING=true for better performance.")
 	
 	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
 	// Always create fresh connections for each execution
