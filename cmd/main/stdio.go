@@ -92,7 +92,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 
 	// Create MCP server with the same functionality as HTTP mode
 	// Note: stdio mode doesn't use execution queue, pass nil for direct execution
-	mcpServer := mcp.NewServer(database, agentSvc, nil, repos, localMode)
+	mcpServer := mcp.NewServer(database, agentSvc, nil, repos, cfg, localMode)
 
 	// Log startup message to stderr (so it doesn't interfere with stdio protocol)
 	fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in stdio mode\n")
