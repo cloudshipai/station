@@ -54,10 +54,18 @@ func (p *Parser) Parse(content string) (*ParsedPrompt, error) {
 	}, nil
 }
 
-// isDotpromptContent checks if the content has YAML frontmatter
+// isDotpromptContent checks if the content has YAML frontmatter or multi-role syntax
 func (p *Parser) isDotpromptContent(content string) bool {
-	return strings.HasPrefix(strings.TrimSpace(content), "---") && 
+	trimmed := strings.TrimSpace(content)
+	
+	// Check for YAML frontmatter markers
+	hasFrontmatter := strings.HasPrefix(trimmed, "---") && 
 		   strings.Contains(content, "\n---\n")
+		   
+	// Check for multi-role dotprompt syntax
+	hasMultiRole := strings.Contains(content, "{{role \"") || strings.Contains(content, "{{role '")
+	
+	return hasFrontmatter || hasMultiRole
 }
 
 // parseFrontmatter extracts and parses the YAML frontmatter

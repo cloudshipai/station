@@ -38,9 +38,17 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	startTime := time.Now()
 	fmt.Printf("DEBUG DOTPROMPT: Starting hybrid execution for agent %s\n", agent.Name)
 	
-	// 1. Construct complete dotprompt content from database agent data
-	dotpromptContent := e.buildDotpromptFromAgent(agent, agentTools, "default")
-	fmt.Printf("DEBUG DOTPROMPT: Built dotprompt content, length: %d\n", len(dotpromptContent))
+	// 1. Use agent prompt directly if it contains multi-role syntax
+	var dotpromptContent string
+	if e.isDotpromptContent(agent.Prompt) {
+		// Agent already has dotprompt format (either frontmatter or multi-role)
+		dotpromptContent = agent.Prompt
+		fmt.Printf("DEBUG DOTPROMPT: Using agent prompt directly, length: %d\n", len(dotpromptContent))
+	} else {
+		// Legacy agent, build frontmatter
+		dotpromptContent = e.buildDotpromptFromAgent(agent, agentTools, "default")
+		fmt.Printf("DEBUG DOTPROMPT: Built dotprompt content, length: %d\n", len(dotpromptContent))
+	}
 	
 	// 2. Use dotprompt library directly for multi-role rendering (bypasses GenKit constraint)
 	dp := dotprompt.NewDotprompt(nil)
@@ -62,11 +70,13 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	// For now, only use userInput. Custom input data can be added via call_agent variables parameter
 	inputData, err := schemaHelper.GetMergedInputData(&agent, task, nil)
 	if err != nil {
+		fmt.Printf("DEBUG DOTPROMPT: Schema helper failed: %v, using basic userInput\n", err)
 		// Fallback to basic userInput on schema error
 		inputData = map[string]interface{}{
 			"userInput": task,
 		}
 	}
+	fmt.Printf("DEBUG DOTPROMPT: Input data: %+v\n", inputData)
 	
 	data := &dotprompt.DataArgument{
 		Input: inputData,
@@ -311,11 +321,18 @@ func (e *GenKitExecutor) extractToolNames(agentTools []*models.AgentToolWithDeta
 	return toolNames
 }
 
-// isDotpromptContent checks if the prompt contains dotprompt frontmatter
+// isDotpromptContent checks if the prompt contains dotprompt frontmatter or multi-role syntax
 func (e *GenKitExecutor) isDotpromptContent(prompt string) bool {
+	trimmed := strings.TrimSpace(prompt)
+	
 	// Check for YAML frontmatter markers
-	return strings.HasPrefix(strings.TrimSpace(prompt), "---") && 
+	hasFrontmatter := strings.HasPrefix(trimmed, "---") && 
 		   strings.Contains(prompt, "\n---\n")
+		   
+	// Check for multi-role dotprompt syntax
+	hasMultiRole := strings.Contains(prompt, "{{role \"") || strings.Contains(prompt, "{{role '")
+	
+	return hasFrontmatter || hasMultiRole
 }
 
 // getPromptSource returns a description of the prompt source type
