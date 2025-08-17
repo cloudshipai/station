@@ -232,8 +232,21 @@ func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment strin
 	}
 
 	// 6. Execute using hybrid approach: database config + dotprompt rendering + real execution
-	executor := dotprompt.NewGenKitExecutor()
-	response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, repos, task)
+	// TODO: This CLI execution path needs to be updated to use the new dotprompt system
+	// For now, use the traditional execution engine path
+	creator := services.NewIntelligentAgentCreator(repos, services.NewAgentService(repos))
+	result, err := creator.ExecuteAgentViaStdioMCP(context.Background(), agent, task, agentRun.ID)
+	
+	// Convert to expected response format
+	response := &dotprompt.ExecutionResponse{
+		Success:   result.Success,
+		Response:  result.Response,
+		Duration:  result.Duration,
+		ModelName: result.ModelName,
+		StepsUsed: result.StepsUsed,
+		ToolsUsed: result.ToolsUsed,
+		Error:     result.Error,
+	}
 	if err != nil {
 		// Update run as failed
 		completedAt := time.Now()

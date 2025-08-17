@@ -1,1 +1,0 @@
-This report summarizes the performance of connection pooling, highlighting its benefits in reducing overhead and improving response times for database-intensive applications.
