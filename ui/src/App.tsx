@@ -9,6 +9,8 @@ import {
   Background,
   Controls,
   MiniMap,
+  Handle,
+  Position,
   type Node,
   type Edge,
   type Connection,
@@ -36,7 +38,10 @@ const StationBanner = () => (
 
 // Custom Node Components (sized for better visibility and layout)
 const AgentNode = ({ data }: { data: any }) => (
-  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg">
+  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative">
+    {/* Output handle on the right side */}
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-tokyo-blue" />
+    
     <div className="flex items-center gap-2 mb-2">
       <Bot className="h-5 w-5 text-tokyo-blue" />
       <div className="font-mono text-base text-tokyo-blue font-medium">{data.label}</div>
@@ -47,7 +52,12 @@ const AgentNode = ({ data }: { data: any }) => (
 );
 
 const MCPNode = ({ data }: { data: any }) => (
-  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg">
+  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative">
+    {/* Input handle on the left side */}
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-cyan" />
+    {/* Output handle on the right side */}
+    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-tokyo-cyan" />
+    
     <div className="flex items-center gap-2 mb-2">
       <Database className="h-5 w-5 text-tokyo-cyan" />
       <div className="font-mono text-base text-tokyo-cyan font-medium">{data.label}</div>
@@ -58,7 +68,10 @@ const MCPNode = ({ data }: { data: any }) => (
 );
 
 const ToolNode = ({ data }: { data: any }) => (
-  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg">
+  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative">
+    {/* Input handle on the left side */}
+    <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-green" />
+    
     <div className="flex items-center gap-2 mb-2">
       <Settings className="h-5 w-5 text-tokyo-green" />
       <div className="font-mono text-base text-tokyo-green font-medium">{data.label}</div>
@@ -159,6 +172,7 @@ const AgentsCanvas = () => {
         const newNodes: Node[] = [];
         const newEdges: Edge[] = [];
 
+
         // Agent node (will be positioned by layout)
         newNodes.push({
           id: `agent-${agent.id}`,
@@ -231,13 +245,16 @@ const AgentsCanvas = () => {
           });
         });
 
+
         // Apply automatic layout using ELK.js
         console.log('Before layout - nodes:', newNodes.length, 'edges:', newEdges.length);
         console.log('Edges being created:', newEdges.map(e => `${e.source} -> ${e.target}`));
+        console.log('Node IDs:', newNodes.map(n => n.id));
         
         const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
         
         console.log('After layout - nodes:', layoutedNodes.length, 'edges:', newEdges.length);
+        console.log('Final edges:', newEdges);
         setNodes(layoutedNodes);
         setEdges(newEdges);
       } catch (error) {
