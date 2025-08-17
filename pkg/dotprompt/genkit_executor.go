@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v2"
 	
 	"station/pkg/models"
+	"station/pkg/schema"
 	
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -55,11 +56,20 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	fmt.Printf("DEBUG DOTPROMPT: Dotprompt compiled successfully\n")
 	
-	// 3. Render the prompt with input data
-	data := &dotprompt.DataArgument{
-		Input: map[string]any{
+	// 3. Render the prompt with merged input data (default + custom schema)
+	schemaHelper := schema.NewExportHelper()
+	
+	// For now, only use userInput. Custom input data can be added via call_agent variables parameter
+	inputData, err := schemaHelper.GetMergedInputData(&agent, task, nil)
+	if err != nil {
+		// Fallback to basic userInput on schema error
+		inputData = map[string]interface{}{
 			"userInput": task,
-		},
+		}
+	}
+	
+	data := &dotprompt.DataArgument{
+		Input: inputData,
 	}
 	
 	renderedPrompt, err := promptFunc(data, nil)
@@ -458,10 +468,17 @@ func (e *GenKitExecutor) buildDotpromptFromAgent(agent models.Agent, agentTools 
 	content.WriteString("  max_tokens: 2000\n")
 	content.WriteString("  maxTurns: 25\n")
 	
-	// Input schema with automatic userInput variable
-	content.WriteString("input:\n")
-	content.WriteString("  schema:\n")
-	content.WriteString("    userInput: string\n")
+	// Input schema with merged custom and default variables
+	schemaHelper := schema.NewExportHelper()
+	inputSchemaSection, err := schemaHelper.GenerateInputSchemaSection(&agent)
+	if err != nil {
+		// Fallback to default if custom schema is invalid
+		content.WriteString("input:\n")
+		content.WriteString("  schema:\n")
+		content.WriteString("    userInput: string\n")
+	} else {
+		content.WriteString(inputSchemaSection)
+	}
 	
 	content.WriteString("metadata:\n")
 	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))

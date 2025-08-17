@@ -17,6 +17,7 @@ type Agent struct {
 	EnvironmentID    int64          `json:"environment_id"`
 	CreatedBy        int64          `json:"created_by"`
 	ModelID          sql.NullInt64  `json:"model_id"`
+	InputSchema      sql.NullString `json:"input_schema"`
 	CronSchedule     sql.NullString `json:"cron_schedule"`
 	IsScheduled      sql.NullBool   `json:"is_scheduled"`
 	LastScheduledRun sql.NullTime   `json:"last_scheduled_run"`
