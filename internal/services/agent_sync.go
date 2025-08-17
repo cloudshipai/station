@@ -29,25 +29,24 @@ type DotPromptConfig struct {
 	Output      map[string]interface{} `yaml:"output"`
 }
 
-// extractInputSchema extracts and validates input schema from dotprompt config
+// extractInputSchema extracts and validates input schema from dotprompt config using Picoschema parsing
 func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, error) {
-	if config.Input == nil {
+	if config.Input == nil || config.Input["schema"] == nil {
 		return nil, nil
 	}
 	
-	// Look for schema in input.schema
+	// Get the raw schema map (Picoschema format)
 	schemaData, exists := config.Input["schema"]
 	if !exists {
 		return nil, nil
 	}
 	
-	// Convert schema map to our input schema format
 	schemaMap, ok := schemaData.(map[interface{}]interface{})
 	if !ok {
 		return nil, fmt.Errorf("input.schema must be a map")
 	}
 	
-	// Convert to string-keyed map and filter out userInput (we add that automatically)
+	// Convert interface{} map to string-keyed map and filter out userInput (we add that automatically)
 	customSchema := make(map[string]*schema.InputVariable)
 	
 	for key, value := range schemaMap {
@@ -61,44 +60,8 @@ func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, 
 			continue
 		}
 		
-		// Parse the variable definition
-		var variable *schema.InputVariable
-		
-		switch v := value.(type) {
-		case string:
-			// Simple type definition: "projectPath: string"
-			variable = &schema.InputVariable{
-				Type: schema.InputSchemaType(v),
-			}
-		case map[interface{}]interface{}:
-			// Complex definition with properties
-			variable = &schema.InputVariable{}
-			
-			if typeVal, exists := v["type"]; exists {
-				if typeStr, ok := typeVal.(string); ok {
-					variable.Type = schema.InputSchemaType(typeStr)
-				}
-			}
-			if descVal, exists := v["description"]; exists {
-				if descStr, ok := descVal.(string); ok {
-					variable.Description = descStr
-				}
-			}
-			if defaultVal, exists := v["default"]; exists {
-				variable.Default = defaultVal
-			}
-			if enumVal, exists := v["enum"]; exists {
-				if enumList, ok := enumVal.([]interface{}); ok {
-					variable.Enum = enumList
-				}
-			}
-			if reqVal, exists := v["required"]; exists {
-				if reqBool, ok := reqVal.(bool); ok {
-					variable.Required = reqBool
-				}
-			}
-		}
-		
+		// Parse Picoschema format - value is a string like "string, test description"
+		variable := s.parsePicoschemaField(keyStr, value)
 		if variable != nil && variable.Type != "" {
 			customSchema[keyStr] = variable
 		}
@@ -124,6 +87,74 @@ func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, 
 	schemaStr := string(schemaJSON)
 	return &schemaStr, nil
 }
+
+// parsePicoschemaField parses a single Picoschema field definition
+func (s *DeclarativeSync) parsePicoschemaField(fieldName string, value interface{}) *schema.InputVariable {
+	switch v := value.(type) {
+	case string:
+		// Parse Picoschema string format: "string" or "string, description" or "type?(enum, desc): [values]"
+		return s.parsePicoschemaString(fieldName, v)
+	case []interface{}:
+		// Array format for enums: [value1, value2, value3]
+		return &schema.InputVariable{
+			Type: "string",
+			Enum: v,
+		}
+	case map[interface{}]interface{}:
+		// Object format (less common in Picoschema but supported)
+		variable := &schema.InputVariable{}
+		
+		if typeVal, exists := v["type"]; exists {
+			if typeStr, ok := typeVal.(string); ok {
+				variable.Type = schema.InputSchemaType(typeStr)
+			}
+		}
+		if descVal, exists := v["description"]; exists {
+			if descStr, ok := descVal.(string); ok {
+				variable.Description = descStr
+			}
+		}
+		if defaultVal, exists := v["default"]; exists {
+			variable.Default = defaultVal
+		}
+		if enumVal, exists := v["enum"]; exists {
+			if enumList, ok := enumVal.([]interface{}); ok {
+				variable.Enum = enumList
+			}
+		}
+		if reqVal, exists := v["required"]; exists {
+			if reqBool, ok := reqVal.(bool); ok {
+				variable.Required = reqBool
+			}
+		}
+		
+		return variable
+	}
+	
+	return nil
+}
+
+// parsePicoschemaString parses Picoschema string definitions
+func (s *DeclarativeSync) parsePicoschemaString(fieldName string, definition string) *schema.InputVariable {
+	variable := &schema.InputVariable{}
+	
+	// Check if field is optional (ends with ?)
+	isOptional := strings.HasSuffix(fieldName, "?")
+	variable.Required = !isOptional
+	
+	// Handle most common case: "type, description"
+	if strings.Contains(definition, ",") {
+		parts := strings.SplitN(definition, ",", 2)
+		variable.Type = schema.InputSchemaType(strings.TrimSpace(parts[0]))
+		variable.Description = strings.TrimSpace(parts[1])
+		return variable
+	}
+	
+	// Handle simple case: "type"
+	variable.Type = schema.InputSchemaType(strings.TrimSpace(definition))
+	return variable
+}
+
 
 // syncAgents handles synchronization of agent .prompt files
 func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environmentName string, options SyncOptions) (*SyncResult, error) {
