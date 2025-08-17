@@ -919,7 +919,7 @@ func (s *Server) handleExportAgent(ctx context.Context, request mcp.CallToolRequ
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
 
-// generateDotpromptContent generates the .prompt file content for an agent (similar to CLI export)
+// generateDotpromptContent generates the .prompt file content for an agent using multi-role format
 func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environment string) string {
 	var content strings.Builder
 
@@ -929,12 +929,18 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 		modelName = s.config.AIModel
 	}
 
-	// YAML frontmatter
+	// YAML frontmatter with multi-role support
 	content.WriteString("---\n")
 	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
 	content.WriteString("config:\n")
 	content.WriteString("  temperature: 0.3\n")
 	content.WriteString("  max_tokens: 2000\n")
+	
+	// Input schema with automatic userInput variable
+	content.WriteString("input:\n")
+	content.WriteString("  schema:\n")
+	content.WriteString("    userInput: string\n")
+	
 	content.WriteString("metadata:\n")
 	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))
 	if agent.Description != "" {
@@ -962,11 +968,26 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 	content.WriteString(fmt.Sprintf("    updated_at: \"%s\"\n", agent.UpdatedAt.Format(time.RFC3339)))
 	content.WriteString("---\n\n")
 
-	// Agent prompt content
-	content.WriteString(agent.Prompt)
+	// Multi-role prompt content
+	// Check if agent prompt is already multi-role
+	if s.isMultiRolePrompt(agent.Prompt) {
+		// Already multi-role, use as-is
+		content.WriteString(agent.Prompt)
+	} else {
+		// Convert single prompt to multi-role format
+		content.WriteString("{{role \"system\"}}\n")
+		content.WriteString(agent.Prompt)
+		content.WriteString("\n\n{{role \"user\"}}\n")
+		content.WriteString("{{userInput}}")
+	}
 	content.WriteString("\n")
 
 	return content.String()
+}
+
+// isMultiRolePrompt checks if a prompt already contains role directives
+func (s *Server) isMultiRolePrompt(prompt string) bool {
+	return strings.Contains(prompt, "{{role \"") || strings.Contains(prompt, "{{role '")
 }
 
 func (s *Server) handleExportAgents(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

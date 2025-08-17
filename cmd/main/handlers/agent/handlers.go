@@ -872,23 +872,33 @@ func (h *AgentHandler) exportAgentFromDatabase(agentName, environment, promptFil
 	return nil
 }
 
-// generateDotpromptContent generates the .prompt file content for an agent
+// generateDotpromptContent generates the .prompt file content for an agent using multi-role format
 func (h *AgentHandler) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environment string) string {
 	var content strings.Builder
-	
-	// YAML frontmatter
+
+	// Get configured model from Station config, fallback to default
+	modelName := "gemini-1.5-flash" // default fallback
+	// TODO: Add proper config service access for CLI handlers
+
+	// YAML frontmatter with multi-role support
 	content.WriteString("---\n")
-	content.WriteString("model: \"gemini-2.0-flash-exp\"\n")
+	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
 	content.WriteString("config:\n")
 	content.WriteString("  temperature: 0.3\n")
 	content.WriteString("  max_tokens: 2000\n")
+	
+	// Input schema with automatic userInput variable
+	content.WriteString("input:\n")
+	content.WriteString("  schema:\n")
+	content.WriteString("    userInput: string\n")
+	
 	content.WriteString("metadata:\n")
 	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))
 	if agent.Description != "" {
 		content.WriteString(fmt.Sprintf("  description: \"%s\"\n", agent.Description))
 	}
 	content.WriteString("  version: \"1.0.0\"\n")
-	
+
 	// Tools section
 	if len(tools) > 0 {
 		content.WriteString("tools:\n")
@@ -896,28 +906,39 @@ func (h *AgentHandler) generateDotpromptContent(agent *models.Agent, tools []*mo
 			content.WriteString(fmt.Sprintf("  - \"%s\"\n", tool.ToolName))
 		}
 	}
-	
-	// Station metadata (basic)
+
+	// Station metadata
 	content.WriteString("station:\n")
 	content.WriteString("  execution_metadata:\n")
 	if agent.MaxSteps > 0 {
 		content.WriteString(fmt.Sprintf("    max_steps: %d\n", agent.MaxSteps))
 	}
 	content.WriteString(fmt.Sprintf("    environment: \"%s\"\n", environment))
+	content.WriteString(fmt.Sprintf("    agent_id: %d\n", agent.ID))
+	content.WriteString(fmt.Sprintf("    created_at: \"%s\"\n", agent.CreatedAt.Format(time.RFC3339)))
+	content.WriteString(fmt.Sprintf("    updated_at: \"%s\"\n", agent.UpdatedAt.Format(time.RFC3339)))
 	content.WriteString("---\n\n")
-	
-	// Template content
-	content.WriteString(fmt.Sprintf("You are %s.\n\n", agent.Name))
-	if agent.Description != "" {
-		content.WriteString(fmt.Sprintf("%s\n\n", agent.Description))
+
+	// Multi-role prompt content
+	// Check if agent prompt is already multi-role
+	if h.isMultiRolePrompt(agent.Prompt) {
+		// Already multi-role, use as-is
+		content.WriteString(agent.Prompt)
+	} else {
+		// Convert single prompt to multi-role format
+		content.WriteString("{{role \"system\"}}\n")
+		content.WriteString(agent.Prompt)
+		content.WriteString("\n\n{{role \"user\"}}\n")
+		content.WriteString("{{userInput}}")
 	}
-	
-	content.WriteString("## Task Instructions\n\n")
-	content.WriteString("**Task**: {{TASK}}\n")
-	content.WriteString("**Environment**: {{ENVIRONMENT}}\n\n")
-	content.WriteString("Please analyze the task and provide a comprehensive response using your available tools as needed.\n")
-	
+	content.WriteString("\n")
+
 	return content.String()
+}
+
+// isMultiRolePrompt checks if a prompt already contains role directives
+func (h *AgentHandler) isMultiRolePrompt(prompt string) bool {
+	return strings.Contains(prompt, "{{role \"") || strings.Contains(prompt, "{{role '")
 }
 
 // RunAgentImport imports agents from file-based configs
