@@ -571,41 +571,75 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		return nil, nil
 	}
 	
-	// Create MCP client based on config type
+	// Create MCP client with timeout protection
 	var mcpClient *mcp.GenkitMCPClient
-	if serverConfig.URL != "" {
-		// HTTP-based MCP server
-		mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-			Name:    "_",
-			Version: "1.0.0",
-			StreamableHTTP: &mcp.StreamableHTTPConfig{
-				BaseURL: serverConfig.URL,
-				Timeout: 30 * time.Second,
-			},
-		})
-	} else if serverConfig.Command != "" {
-		// Stdio-based MCP server
-		var envSlice []string
-		for key, value := range serverConfig.Env {
-			envSlice = append(envSlice, key+"="+value)
+	
+	// Add timeout for MCP client creation to prevent freezing
+	clientCtx, clientCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer clientCancel()
+	
+	// Channel to receive client creation result
+	type clientResult struct {
+		client *mcp.GenkitMCPClient
+		err    error
+	}
+	clientChan := make(chan clientResult, 1)
+	
+	// Run client creation in goroutine with timeout
+	go func() {
+		var client *mcp.GenkitMCPClient
+		var err error
+		
+		if serverConfig.URL != "" {
+			// HTTP-based MCP server
+			client, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
+				Name:    "_",
+				Version: "1.0.0",
+				StreamableHTTP: &mcp.StreamableHTTPConfig{
+					BaseURL: serverConfig.URL,
+					Timeout: 30 * time.Second,
+				},
+			})
+		} else if serverConfig.Command != "" {
+			// Stdio-based MCP server
+			var envSlice []string
+			for key, value := range serverConfig.Env {
+				envSlice = append(envSlice, key+"="+value)
+			}
+			
+			client, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
+				Name:    "_",
+				Version: "1.0.0",
+				Stdio: &mcp.StdioConfig{
+					Command: serverConfig.Command,
+					Args:    serverConfig.Args,
+					Env:     envSlice,
+				},
+			})
+		} else {
+			err = fmt.Errorf("invalid MCP server config - no URL or Command specified")
 		}
 		
-		mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
-			Name:    "_",
-			Version: "1.0.0",
-			Stdio: &mcp.StdioConfig{
-				Command: serverConfig.Command,
-				Args:    serverConfig.Args,
-				Env:     envSlice,
-			},
-		})
-	} else {
-		logging.Debug("Invalid MCP server config for %s", serverName)
+		clientChan <- clientResult{client: client, err: err}
+	}()
+	
+	// Wait for client creation or timeout
+	select {
+	case result := <-clientChan:
+		mcpClient = result.client
+		err = result.err
+	case <-clientCtx.Done():
+		logging.Info("🚨 CRITICAL: MCP client creation for server '%s' TIMED OUT after 10 seconds", serverName)
+		logging.Info("   💀 This indicates the MCP server is not responding or misconfigured")
+		logging.Info("   🔧 Check server command: %s %v", serverConfig.Command, serverConfig.Args)
+		logging.Info("   ⚠️  All tools from this server will be UNAVAILABLE")
 		return nil, nil
 	}
 	
 	if err != nil {
-		logging.Debug("Failed to create MCP client for %s: %v", serverName, err)
+		logging.Info("❌ CRITICAL: Failed to create MCP client for server '%s': %v", serverName, err)
+		logging.Info("   🔧 Check server configuration and ensure the MCP server command is valid")
+		logging.Info("   📡 Command: %s %v", serverConfig.Command, serverConfig.Args)
 		return nil, nil
 	}
 

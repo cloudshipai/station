@@ -36,8 +36,8 @@ func (h *ExportHelper) GenerateInputSchemaSection(agent *models.Agent) (string, 
 		for key, variable := range customSchema {
 			// Skip userInput as it's already added
 			if key != "userInput" {
-				dotpromptType := h.convertTypeToDotprompt(variable.Type)
-				content.WriteString(fmt.Sprintf("    %s: %s\n", key, dotpromptType))
+				dotpromptDefinition := h.convertVariableToPicoschema(key, variable)
+				content.WriteString(fmt.Sprintf("    %s: %s\n", key, dotpromptDefinition))
 			}
 		}
 	}
@@ -100,6 +100,23 @@ func (h *ExportHelper) convertTypeToDotprompt(schemaType InputSchemaType) string
 	default:
 		return "string" // fallback
 	}
+}
+
+// convertVariableToPicoschema converts a full InputVariable to proper Picoschema format
+func (h *ExportHelper) convertVariableToPicoschema(key string, variable *InputVariable) string {
+	// Handle enum types with values
+	if len(variable.Enum) > 0 {
+		// For enum, we need to return as an array, not a string
+		return fmt.Sprintf("%v", variable.Enum)
+	}
+	
+	// Handle non-enum types with description
+	typeStr := h.convertTypeToDotprompt(variable.Type)
+	if variable.Description != "" {
+		return fmt.Sprintf("%s, %s", typeStr, variable.Description)
+	}
+	
+	return typeStr
 }
 
 // ValidateInputSchema validates that an input schema JSON is valid
