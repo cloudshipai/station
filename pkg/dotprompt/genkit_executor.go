@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 	
-	"github.com/google/dotprompt/go/dotprompt"
 	"gopkg.in/yaml.v2"
 	
 	"station/internal/db/repositories"
@@ -129,43 +128,32 @@ func (e *GenKitExecutor) getPromptSource(prompt string) string {
 	return "simple text prompt"
 }
 
-// RenderDotpromptContent renders a dotprompt template with the given variables
+// RenderDotpromptContent renders a dotprompt template with the given variables using the new multi-role system
 func (e *GenKitExecutor) RenderDotpromptContent(dotpromptContent, task, agentName string) (string, error) {
-	// 1. Create dotprompt instance
-	dp := dotprompt.NewDotprompt(nil) // Use default options
+	// 1. Create renderer
+	renderer := NewRenderer()
 	
-	// 2. Prepare data for rendering with only agent metadata (no task duplication)
-	data := &dotprompt.DataArgument{
-		Input: map[string]any{
-			"AGENT_NAME": agentName,
-			"ENVIRONMENT": "default", // TODO: get from agent config
-		},
-		Context: map[string]any{
-			"agent_name": agentName,
-		},
+	// 2. Prepare render context with automatic variables
+	context := &RenderContext{
+		UserInput:   task,
+		AgentName:   agentName,
+		Environment: "default", // TODO: get from agent config
+		UserVariables: make(map[string]interface{}),
 	}
 	
-	// 3. Render the template  
-	rendered, err := dp.Render(dotpromptContent, data, nil)
+	// 3. Render the template using our multi-role system
+	parsed, err := renderer.Render(dotpromptContent, context)
 	if err != nil {
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 	
-	// 4. Convert messages to text (for now, until we implement full ai.Generate)
-	var renderedText strings.Builder
-	for i, msg := range rendered.Messages {
-		if i > 0 {
-			renderedText.WriteString("\n\n")
-		}
-		renderedText.WriteString(fmt.Sprintf("[%s]: ", msg.Role))
-		for _, part := range msg.Content {
-			if textPart, ok := part.(*dotprompt.TextPart); ok {
-				renderedText.WriteString(textPart.Text)
-			}
-		}
+	// 4. Convert to Genkit-compatible format
+	renderedText, err := renderer.RenderToGenkit(parsed)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert to Genkit format: %w", err)
 	}
 	
-	return renderedText.String(), nil
+	return renderedText, nil
 }
 
 // getActiveModelFromConfig gets the model from Station config (without dotprompt fallback)
