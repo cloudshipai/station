@@ -74,7 +74,7 @@ func (q *Queries) DeleteAgent(ctx context.Context, id int64) error {
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ?
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ?
 `
 
 func (q *Queries) GetAgent(ctx context.Context, id int64) (Agent, error) {
@@ -102,7 +102,7 @@ func (q *Queries) GetAgent(ctx context.Context, id int64) (Agent, error) {
 }
 
 const getAgentByName = `-- name: GetAgentByName :one
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE name = ?
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE name = ?
 `
 
 func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error) {
@@ -130,7 +130,7 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 }
 
 const getAgentBySchedule = `-- name: GetAgentBySchedule :one
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE
 `
 
 func (q *Queries) GetAgentBySchedule(ctx context.Context, id int64) (Agent, error) {
@@ -158,7 +158,7 @@ func (q *Queries) GetAgentBySchedule(ctx context.Context, id int64) (Agent, erro
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents ORDER BY name
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents ORDER BY name
 `
 
 func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
@@ -179,6 +179,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 			&i.EnvironmentID,
 			&i.CreatedBy,
 			&i.ModelID,
+			&i.InputSchema,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,
@@ -201,7 +202,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 }
 
 const listAgentsByEnvironment = `-- name: ListAgentsByEnvironment :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE environment_id = ? ORDER BY name
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE environment_id = ? ORDER BY name
 `
 
 func (q *Queries) ListAgentsByEnvironment(ctx context.Context, environmentID int64) ([]Agent, error) {
@@ -222,6 +223,7 @@ func (q *Queries) ListAgentsByEnvironment(ctx context.Context, environmentID int
 			&i.EnvironmentID,
 			&i.CreatedBy,
 			&i.ModelID,
+			&i.InputSchema,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,
@@ -244,7 +246,7 @@ func (q *Queries) ListAgentsByEnvironment(ctx context.Context, environmentID int
 }
 
 const listAgentsByUser = `-- name: ListAgentsByUser :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE created_by = ? ORDER BY name
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE created_by = ? ORDER BY name
 `
 
 func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agent, error) {
@@ -265,6 +267,7 @@ func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agen
 			&i.EnvironmentID,
 			&i.CreatedBy,
 			&i.ModelID,
+			&i.InputSchema,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,
@@ -287,7 +290,7 @@ func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agen
 }
 
 const listScheduledAgents = `-- name: ListScheduledAgents :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE is_scheduled = TRUE AND schedule_enabled = TRUE ORDER BY next_scheduled_run
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE is_scheduled = TRUE AND schedule_enabled = TRUE ORDER BY next_scheduled_run
 `
 
 func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
@@ -308,6 +311,7 @@ func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
 			&i.EnvironmentID,
 			&i.CreatedBy,
 			&i.ModelID,
+			&i.InputSchema,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,

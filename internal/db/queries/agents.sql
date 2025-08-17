@@ -33,8 +33,5 @@ SELECT * FROM agents WHERE is_scheduled = TRUE AND schedule_enabled = TRUE ORDER
 -- name: UpdateAgentScheduleTime :exec
 UPDATE agents SET last_scheduled_run = ?, next_scheduled_run = ? WHERE id = ?;
 
--- name: UpdateAgentPrompt :exec
-UPDATE agents SET prompt = ? WHERE id = ?;
-
 -- name: GetAgentBySchedule :one
 SELECT * FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE;

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"station/internal/logging"
 	"station/pkg/models"
+	"station/pkg/schema"
 	
 	"gopkg.in/yaml.v2"
 )
@@ -25,6 +27,102 @@ type DotPromptConfig struct {
 	Station     map[string]interface{} `yaml:"station"`
 	Input       map[string]interface{} `yaml:"input"`
 	Output      map[string]interface{} `yaml:"output"`
+}
+
+// extractInputSchema extracts and validates input schema from dotprompt config
+func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, error) {
+	if config.Input == nil {
+		return nil, nil
+	}
+	
+	// Look for schema in input.schema
+	schemaData, exists := config.Input["schema"]
+	if !exists {
+		return nil, nil
+	}
+	
+	// Convert schema map to our input schema format
+	schemaMap, ok := schemaData.(map[interface{}]interface{})
+	if !ok {
+		return nil, fmt.Errorf("input.schema must be a map")
+	}
+	
+	// Convert to string-keyed map and filter out userInput (we add that automatically)
+	customSchema := make(map[string]*schema.InputVariable)
+	
+	for key, value := range schemaMap {
+		keyStr, ok := key.(string)
+		if !ok {
+			continue
+		}
+		
+		// Skip userInput as it's automatically provided
+		if keyStr == "userInput" {
+			continue
+		}
+		
+		// Parse the variable definition
+		var variable *schema.InputVariable
+		
+		switch v := value.(type) {
+		case string:
+			// Simple type definition: "projectPath: string"
+			variable = &schema.InputVariable{
+				Type: schema.InputSchemaType(v),
+			}
+		case map[interface{}]interface{}:
+			// Complex definition with properties
+			variable = &schema.InputVariable{}
+			
+			if typeVal, exists := v["type"]; exists {
+				if typeStr, ok := typeVal.(string); ok {
+					variable.Type = schema.InputSchemaType(typeStr)
+				}
+			}
+			if descVal, exists := v["description"]; exists {
+				if descStr, ok := descVal.(string); ok {
+					variable.Description = descStr
+				}
+			}
+			if defaultVal, exists := v["default"]; exists {
+				variable.Default = defaultVal
+			}
+			if enumVal, exists := v["enum"]; exists {
+				if enumList, ok := enumVal.([]interface{}); ok {
+					variable.Enum = enumList
+				}
+			}
+			if reqVal, exists := v["required"]; exists {
+				if reqBool, ok := reqVal.(bool); ok {
+					variable.Required = reqBool
+				}
+			}
+		}
+		
+		if variable != nil && variable.Type != "" {
+			customSchema[keyStr] = variable
+		}
+	}
+	
+	// If no custom variables, return nil
+	if len(customSchema) == 0 {
+		return nil, nil
+	}
+	
+	// Convert to JSON string for storage
+	schemaJSON, err := json.Marshal(customSchema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize input schema: %w", err)
+	}
+	
+	// Validate the schema using our helper
+	helper := schema.NewExportHelper()
+	if err := helper.ValidateInputSchema(string(schemaJSON)); err != nil {
+		return nil, fmt.Errorf("invalid input schema: %w", err)
+	}
+	
+	schemaStr := string(schemaJSON)
+	return &schemaStr, nil
 }
 
 // syncAgents handles synchronization of agent .prompt files
@@ -227,6 +325,12 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		}
 	}
 
+	// Extract input schema from frontmatter
+	inputSchema, err := s.extractInputSchema(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract input schema: %w", err)
+	}
+
 	// Create agent using individual parameters
 	createdAgent, err := s.repos.Agents.Create(
 		agentName,
@@ -235,7 +339,7 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		maxSteps,
 		env.ID,
 		1, // createdBy - system user
-		nil, // input_schema - not set in sync
+		inputSchema, // input_schema - extracted from frontmatter
 		nil, // cronSchedule
 		true, // scheduleEnabled
 	)
@@ -295,6 +399,12 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		}
 	}
 
+	// Extract input schema from frontmatter
+	inputSchema, err := s.extractInputSchema(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract input schema: %w", err)
+	}
+
 	// Check if anything actually changed
 	needsUpdate := false
 	if existingAgent.Prompt != promptContent {
@@ -304,6 +414,19 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		needsUpdate = true
 	}
 	if existingAgent.Description != description {
+		needsUpdate = true
+	}
+	
+	// Check if input schema changed
+	currentSchemaStr := ""
+	if existingAgent.InputSchema != nil {
+		currentSchemaStr = *existingAgent.InputSchema
+	}
+	newSchemaStr := ""
+	if inputSchema != nil {
+		newSchemaStr = *inputSchema
+	}
+	if currentSchemaStr != newSchemaStr {
 		needsUpdate = true
 	}
 
@@ -316,13 +439,13 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 	}
 
 	// Update agent using individual parameters
-	err := s.repos.Agents.Update(
+	err = s.repos.Agents.Update(
 		existingAgent.ID,
 		existingAgent.Name,
 		description,
 		promptContent,
 		maxSteps,
-		nil, // input_schema - not set in sync
+		inputSchema, // input_schema - extracted from frontmatter
 		nil, // cronSchedule
 		true, // scheduleEnabled
 	)
