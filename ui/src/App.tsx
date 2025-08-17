@@ -18,6 +18,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Bot, Database, Settings, Plus, Home } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import { agentsApi } from './api/station';
+import { getLayoutedNodes } from './utils/layoutUtils';
 
 // Station ASCII Banner Component
 const StationBanner = () => (
@@ -158,11 +159,11 @@ const AgentsCanvas = () => {
         const newNodes: Node[] = [];
         const newEdges: Edge[] = [];
 
-        // Agent node (center)
+        // Agent node (will be positioned by layout)
         newNodes.push({
           id: `agent-${agent.id}`,
           type: 'agent',
-          position: { x: 400, y: 200 },
+          position: { x: 0, y: 0 }, // ELK will position this
           data: {
             label: agent.name,
             description: agent.description,
@@ -172,15 +173,12 @@ const AgentsCanvas = () => {
         });
 
         // MCP servers and tools
-        mcp_servers.forEach((server, serverIndex) => {
-          const serverX = 100 + (serverIndex * 300);
-          const serverY = 400;
-
+        mcp_servers.forEach((server) => {
           // MCP server node
           newNodes.push({
             id: `mcp-${server.id}`,
             type: 'mcp',
-            position: { x: serverX, y: serverY },
+            position: { x: 0, y: 0 }, // ELK will position this
             data: {
               label: server.name,
               description: 'MCP Server',
@@ -190,22 +188,20 @@ const AgentsCanvas = () => {
 
           // Edge from agent to MCP server
           newEdges.push({
-            id: `agent-${agent.id}-mcp-${server.id}`,
+            id: `edge-agent-${agent.id}-to-mcp-${server.id}`,
             source: `agent-${agent.id}`,
             target: `mcp-${server.id}`,
             animated: true,
             style: { stroke: '#7aa2f7', strokeWidth: 2 },
+            type: 'default',
           });
 
           // Tool nodes for this server
-          server.tools.forEach((tool, toolIndex) => {
-            const toolX = serverX + (toolIndex % 3 - 1) * 120;
-            const toolY = serverY + 150 + Math.floor(toolIndex / 3) * 80;
-
+          server.tools.forEach((tool) => {
             newNodes.push({
               id: `tool-${tool.id}`,
               type: 'tool',
-              position: { x: toolX, y: toolY },
+              position: { x: 0, y: 0 }, // ELK will position this
               data: {
                 label: tool.name.replace('__', ''),
                 description: tool.description || 'Tool function',
@@ -215,16 +211,21 @@ const AgentsCanvas = () => {
 
             // Edge from MCP server to tool
             newEdges.push({
-              id: `mcp-${server.id}-tool-${tool.id}`,
+              id: `edge-mcp-${server.id}-to-tool-${tool.id}`,
               source: `mcp-${server.id}`,
               target: `tool-${tool.id}`,
               animated: true,
               style: { stroke: '#7dcfff', strokeWidth: 1 },
+              type: 'default',
             });
           });
         });
 
-        setNodes(newNodes);
+        // Apply automatic layout using ELK.js
+        const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
+        
+        console.log('Setting layouted nodes:', layoutedNodes.length, 'edges:', newEdges.length);
+        setNodes(layoutedNodes);
         setEdges(newEdges);
       } catch (error) {
         console.error('Failed to fetch agent details:', error);
