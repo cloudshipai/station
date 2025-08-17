@@ -27,7 +27,7 @@ import (
 	"github.com/openai/openai-go/option"
 )
 
-const provider = "station-openai"
+const provider = "openai"
 
 type TextEmbeddingConfig struct {
 	Dimensions     int                                       `json:"dimensions,omitempty"`

@@ -1,4 +1,0 @@
-CLIENT_NAME: "Staging Test Corp"
-WORKSPACE_PATH: "/tmp/staging"
-MAX_FILES: 1000
-VERBOSE_MODE: true
