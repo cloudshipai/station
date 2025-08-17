@@ -979,6 +979,11 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 		content.WriteString(inputSchemaSection)
 	}
 	
+	// Add default output schema for GenKit UI compatibility
+	content.WriteString("output:\n")
+	content.WriteString("  schema:\n")
+	content.WriteString("    response: string\n")
+	
 	content.WriteString("metadata:\n")
 	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))
 	if agent.Description != "" {
