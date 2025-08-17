@@ -900,11 +900,18 @@ func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt stri
 	return renderedPrompt, nil
 }
 
-// isDotpromptContent checks if the prompt contains dotprompt frontmatter
+// isDotpromptContent checks if the prompt contains dotprompt frontmatter or multi-role syntax
 func (aee *AgentExecutionEngine) isDotpromptContent(prompt string) bool {
+	trimmed := strings.TrimSpace(prompt)
+	
 	// Check for YAML frontmatter markers
-	return strings.HasPrefix(strings.TrimSpace(prompt), "---") && 
+	hasFrontmatter := strings.HasPrefix(trimmed, "---") && 
 		   strings.Contains(prompt, "\n---\n")
+		   
+	// Check for multi-role dotprompt syntax
+	hasMultiRole := strings.Contains(prompt, "{{role \"") || strings.Contains(prompt, "{{role '")
+	
+	return hasFrontmatter || hasMultiRole
 }
 
 // renderDotpromptInline renders dotprompt content inline to avoid import cycles
