@@ -327,18 +327,38 @@ func (s *Server) handleGetAgentSchema(ctx context.Context, request mcp.CallToolR
 		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
 	}
 	
-	// Create an agent execution engine to parse the schema
-	agentService := services.NewAgentService(s.repos)
-	executionEngine := services.NewAgentExecutionEngine(s.repos, agentService)
+	// Build response with agent schema information
+	response := map[string]interface{}{
+		"agent_id":    agentID,
+		"agent_name":  agent.Name,
+		"has_schema":  false,
+		"schema":      nil,
+		"variables":   []string{},
+	}
 	
-	// Get the agent schema
-	schema, err := executionEngine.GetAgentSchema(agent)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get agent schema: %v", err)), nil
+	// Always include userInput as it's automatically available
+	response["variables"] = []string{"userInput"}
+	
+	// Check if agent has custom input schema
+	if agent.InputSchema != nil && *agent.InputSchema != "" {
+		response["has_schema"] = true
+		
+		// Parse the stored JSON schema
+		var customSchema map[string]interface{}
+		if err := json.Unmarshal([]byte(*agent.InputSchema), &customSchema); err == nil {
+			response["schema"] = customSchema
+			
+			// Add custom variable names to variables list
+			variables := []string{"userInput"}
+			for varName := range customSchema {
+				variables = append(variables, varName)
+			}
+			response["variables"] = variables
+		}
 	}
 	
 	// Return schema as JSON
-	schemaJSON, err := json.MarshalIndent(schema, "", "  ")
+	schemaJSON, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal schema: %v", err)), nil
 	}
