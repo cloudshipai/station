@@ -1,8 +1,0 @@
-{
-  "message": "Agent template installed successfully",
-  "agent_id": 1,
-  "agent_name": "API Test Corporation File Manager",
-  "environment": "production",
-  "tools_installed": 3,
-  "mcp_bundles": ["filesystem-tools"]
-}
