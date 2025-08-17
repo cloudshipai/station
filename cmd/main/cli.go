@@ -27,8 +27,6 @@ import (
 	"station/cmd/main/handlers/load"
 	"station/cmd/main/handlers/mcp"
 	"station/internal/db"
-	"station/internal/db/repositories"
-	"station/internal/services"
 	"station/internal/tui"
 	"station/pkg/bundle"
 	bundlecli "station/pkg/bundle/cli"
@@ -1483,103 +1481,4 @@ func createJSONSchema(variables []*TemplateVariable) map[string]interface{} {
 	}
 	
 	return schema
-}
-
-// runDevelop implements the "stn develop" command
-func runDevelop(cmd *cobra.Command, args []string) error {
-	// Get command flags
-	environment, _ := cmd.Flags().GetString("env")
-	port, _ := cmd.Flags().GetInt("port")
-	aiModel, _ := cmd.Flags().GetString("ai-model")
-	aiProvider, _ := cmd.Flags().GetString("ai-provider")
-	verbose, _ := cmd.Flags().GetBool("verbose")
-
-	// Show banner
-	styles := getCLIStyles(themeManager)
-	banner := styles.Banner.Render("🧪 Station Development Playground")
-	fmt.Println(banner)
-
-	fmt.Printf("🌍 Environment: %s\n", environment)
-	fmt.Printf("🚀 Starting development server on port %d...\n", port)
-	fmt.Printf("🤖 AI Provider: %s, Model: %s\n", aiProvider, aiModel)
-	fmt.Printf("🔧 Verbose: %v\n", verbose)
-	
-	ctx := context.Background()
-	
-	// Initialize database and services
-	databasePath := viper.GetString("database_url")
-	if databasePath == "" {
-		configDir := getWorkspacePath()
-		databasePath = filepath.Join(configDir, "station.db")
-	}
-	
-	database, err := db.New(databasePath)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer database.Close()
-	
-	repos := repositories.New(database)
-	
-	// Get environment ID
-	env, err := repos.Environments.GetByName(environment)
-	if err != nil {
-		return fmt.Errorf("environment '%s' not found: %w", environment, err)
-	}
-	
-	fmt.Printf("📁 Loading agents and MCP configs from environment: %s (ID: %d)\n", env.Name, env.ID)
-	
-	// Initialize Station's GenKit provider
-	genkitProvider := services.NewGenKitProvider()
-	genkitApp, err := genkitProvider.GetApp(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to initialize GenKit: %w", err)
-	}
-	
-	// Load MCP tools
-	mcpManager := services.NewMCPConnectionManager(repos, genkitApp)
-	mcpTools, mcpClients, err := mcpManager.GetEnvironmentMCPTools(ctx, env.ID)
-	if err != nil {
-		return fmt.Errorf("failed to load MCP tools: %w", err)
-	}
-	defer mcpManager.CleanupConnections(mcpClients)
-	
-	fmt.Printf("🔧 Loaded %d MCP tools from %d servers\n", len(mcpTools), len(mcpClients))
-	
-	// Load agent prompts from the environment
-	workspacePath := getWorkspacePath()
-	agentsDir := filepath.Join(workspacePath, "environments", environment, "agents")
-	
-	promptCount, err := loadAgentPrompts(ctx, genkitApp, agentsDir, environment)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: failed to load agent prompts: %v\n", err)
-	} else {
-		fmt.Printf("🤖 Loaded %d agent prompts\n", promptCount)
-	}
-	
-	// Define MCP tools in GenKit
-	for _, tool := range mcpTools {
-		// MCP tools are already registered in GenKit by the MCP plugin
-		fmt.Printf("   ✅ MCP Tool: %s\n", tool.Name())
-	}
-	
-	fmt.Println()
-	fmt.Println("🎉 Station Development Playground is ready!")
-	fmt.Printf("📖 To start the Genkit developer UI, run:\n")
-	fmt.Printf("   genkit start -o -- stn develop --env %s --port %d\n", environment, port)
-	fmt.Println()
-	fmt.Println("🧪 This will start the interactive testing UI at http://localhost:4000")
-	fmt.Println("🔧 All your agents and MCP tools will be available for testing")
-	fmt.Println()
-	fmt.Println("For now, Station development playground setup is complete.")
-	fmt.Println("Your agents and tools are loaded in Genkit and ready to use.")
-	
-	// Keep the process alive to maintain MCP connections
-	fmt.Println()
-	fmt.Println("Press Ctrl+C to exit and cleanup MCP connections...")
-	
-	// Block indefinitely until interrupted
-	select {}
-	
-	return nil
 }
