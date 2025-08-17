@@ -3,13 +3,11 @@ package dotprompt
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	
-	"gopkg.in/yaml.v2"
-	
+	"station/internal/config"
+	"station/internal/logging"
 	"station/pkg/models"
 	"station/pkg/schema"
 	
@@ -36,24 +34,31 @@ func (e *GenKitExecutor) ExecuteAgentWithDotpromptTemplate(extractor *RuntimeExt
 // ExecuteAgentWithDotprompt executes an agent using hybrid approach: dotprompt direct + GenKit Generate
 func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string) (*ExecutionResponse, error) {
 	startTime := time.Now()
-	fmt.Printf("DEBUG DOTPROMPT: Starting hybrid execution for agent %s\n", agent.Name)
+	logging.Info("🎯 DOTPROMPT EXECUTION START: Agent=%s, Tools=%d, MCPTools=%d", agent.Name, len(agentTools), len(mcpTools))
+	logging.Debug("DOTPROMPT: Starting unified execution for agent %s", agent.Name)
 	
 	// 1. Use agent prompt directly if it contains multi-role syntax
+	logging.Info("🔍 DOTPROMPT STEP 1: Checking agent prompt format")
 	var dotpromptContent string
 	if e.isDotpromptContent(agent.Prompt) {
 		// Agent already has dotprompt format (either frontmatter or multi-role)
 		dotpromptContent = agent.Prompt
-		fmt.Printf("DEBUG DOTPROMPT: Using agent prompt directly, length: %d\n", len(dotpromptContent))
+		logging.Info("✅ DOTPROMPT: Using agent prompt directly, length: %d", len(dotpromptContent))
+		logging.Debug("DOTPROMPT: Using agent prompt directly, length: %d", len(dotpromptContent))
 	} else {
 		// Legacy agent, build frontmatter
+		logging.Info("🔨 DOTPROMPT: Building frontmatter for legacy agent")
 		dotpromptContent = e.buildDotpromptFromAgent(agent, agentTools, "default")
-		fmt.Printf("DEBUG DOTPROMPT: Built dotprompt content, length: %d\n", len(dotpromptContent))
+		logging.Info("✅ DOTPROMPT: Built dotprompt content, length: %d", len(dotpromptContent))
+		logging.Debug("DOTPROMPT: Built dotprompt content, length: %d", len(dotpromptContent))
 	}
 	
 	// 2. Use dotprompt library directly for multi-role rendering (bypasses GenKit constraint)
+	logging.Info("🔍 DOTPROMPT STEP 2: Compiling dotprompt content")
 	dp := dotprompt.NewDotprompt(nil)
 	promptFunc, err := dp.Compile(dotpromptContent, nil)
 	if err != nil {
+		logging.Info("❌ DOTPROMPT COMPILE FAILED: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -62,28 +67,34 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		}, nil
 	}
 	
-	fmt.Printf("DEBUG DOTPROMPT: Dotprompt compiled successfully\n")
+	logging.Info("✅ DOTPROMPT STEP 2: Dotprompt compiled successfully")
+	logging.Debug("DOTPROMPT: Dotprompt compiled successfully")
 	
 	// 3. Render the prompt with merged input data (default + custom schema)
+	logging.Info("🔍 DOTPROMPT STEP 3: Preparing input data")
 	schemaHelper := schema.NewExportHelper()
 	
 	// For now, only use userInput. Custom input data can be added via call_agent variables parameter
 	inputData, err := schemaHelper.GetMergedInputData(&agent, task, nil)
 	if err != nil {
-		fmt.Printf("DEBUG DOTPROMPT: Schema helper failed: %v, using basic userInput\n", err)
+		logging.Info("⚠️ DOTPROMPT: Schema helper failed: %v, using basic userInput", err)
+		logging.Debug("DOTPROMPT: Schema helper failed: %v, using basic userInput", err)
 		// Fallback to basic userInput on schema error
 		inputData = map[string]interface{}{
 			"userInput": task,
 		}
 	}
-	fmt.Printf("DEBUG DOTPROMPT: Input data: %+v\n", inputData)
+	logging.Info("✅ DOTPROMPT STEP 3: Input data prepared with %d fields", len(inputData))
+	logging.Debug("DOTPROMPT: Input data: %+v", inputData)
 	
 	data := &dotprompt.DataArgument{
 		Input: inputData,
 	}
 	
+	logging.Info("🔍 DOTPROMPT STEP 4: Rendering prompt with input data")
 	renderedPrompt, err := promptFunc(data, nil)
 	if err != nil {
+		logging.Info("❌ DOTPROMPT RENDER FAILED: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -92,11 +103,14 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		}, nil
 	}
 	
-	fmt.Printf("DEBUG DOTPROMPT: Rendered %d messages from dotprompt\n", len(renderedPrompt.Messages))
+	logging.Info("✅ DOTPROMPT STEP 4: Rendered %d messages from dotprompt", len(renderedPrompt.Messages))
+	logging.Debug("DOTPROMPT: Rendered %d messages from dotprompt", len(renderedPrompt.Messages))
 	
 	// 4. Convert dotprompt messages to GenKit messages
+	logging.Info("🔍 DOTPROMPT STEP 5: Converting messages to GenKit format")
 	genkitMessages, err := e.convertDotpromptToGenkitMessages(renderedPrompt.Messages)
 	if err != nil {
+		logging.Info("❌ DOTPROMPT CONVERT FAILED: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -104,16 +118,42 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 			Error:     fmt.Sprintf("failed to convert messages: %v", err),
 		}, nil
 	}
+	logging.Info("✅ DOTPROMPT STEP 5: Converted to %d GenKit messages", len(genkitMessages))
 	
-	// 5. Get model name with proper provider prefix
+	// 5. Get model name with proper provider prefix (same logic as agent_execution_engine.go)
+	logging.Info("🔍 DOTPROMPT STEP 5B: Getting model configuration")
 	baseModelName := renderedPrompt.Model
 	if baseModelName == "" {
 		baseModelName = "gemini-1.5-flash" // fallback
 	}
-	if cfg := e.getStationConfig(); cfg != nil && cfg.AIModel != "" {
+	
+	// Load configuration 
+	cfg, err := config.Load()
+	if err != nil {
+		logging.Info("⚠️ DOTPROMPT: Failed to load config: %v, using defaults", err)
+		cfg = &config.Config{
+			AIProvider: "openai",
+			AIModel:    baseModelName,
+		}
+	}
+	
+	// Override model from config if available
+	if cfg.AIModel != "" {
 		baseModelName = cfg.AIModel
 	}
-	modelName := fmt.Sprintf("googleai/%s", baseModelName)
+	
+	// Use the same provider resolution logic as agent_execution_engine.go:237-256
+	var modelName string
+	switch strings.ToLower(cfg.AIProvider) {
+	case "gemini", "googlegenai":
+		modelName = fmt.Sprintf("googleai/%s", baseModelName)
+	case "openai":
+		modelName = fmt.Sprintf("openai/%s", baseModelName)
+	default:
+		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, baseModelName)
+	}
+	
+	logging.Info("✅ DOTPROMPT STEP 5B: Using model %s (provider: %s, config: %s)", modelName, cfg.AIProvider, baseModelName)
 	
 	// 6. Extract tool names for GenKit (merge frontmatter tools + MCP tools)
 	var toolNames []string
@@ -121,11 +161,11 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		toolNames = append(toolNames, tool)
 	}
 	
-	fmt.Printf("DEBUG DOTPROMPT: Using model %s with %d messages\n", modelName, len(genkitMessages))
-	fmt.Printf("DEBUG DOTPROMPT: Frontmatter tools: %v (%d tools)\n", toolNames, len(toolNames))
-	fmt.Printf("DEBUG DOTPROMPT: MCP tools received: %d tools\n", len(mcpTools))
+	logging.Debug("DOTPROMPT: Using model %s with %d messages", modelName, len(genkitMessages))
+	logging.Debug("DOTPROMPT: Frontmatter tools: %v (%d tools)", toolNames, len(toolNames))
+	logging.Debug("DOTPROMPT: MCP tools received: %d tools", len(mcpTools))
 	for i, tool := range mcpTools {
-		fmt.Printf("DEBUG DOTPROMPT:   MCP Tool %d: %s\n", i+1, tool.Name())
+		logging.Debug("DOTPROMPT:   MCP Tool %d: %s", i+1, tool.Name())
 	}
 	
 	// 7. Execute with GenKit's Generate for full multi-turn and tool support
@@ -139,18 +179,20 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	// Add MCP tools if available (same as traditional)
 	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
-	fmt.Printf("DEBUG DOTPROMPT: ✅ Added %d MCP tools to GenKit Generate options\n", len(mcpTools))
+	logging.Debug("DOTPROMPT: Added %d MCP tools to GenKit Generate options", len(mcpTools))
 	
 	// Debug: Print actual tool names that GenKit will see
 	for i, tool := range mcpTools {
-		fmt.Printf("DEBUG DOTPROMPT: GenKit Tool %d: %s\n", i+1, tool.Name())
+		logging.Debug("DOTPROMPT: GenKit Tool %d: %s", i+1, tool.Name())
 	}
 	
-	fmt.Printf("DEBUG DOTPROMPT: About to call genkit.Generate with %d options\n", len(generateOpts))
+	logging.Info("🔍 DOTPROMPT STEP 6: Calling GenKit Generate with %d options", len(generateOpts))
+	logging.Debug("DOTPROMPT: About to call genkit.Generate with %d options", len(generateOpts))
 	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
-	fmt.Printf("DEBUG DOTPROMPT: genkit.Generate completed, err=%v\n", err)
+	logging.Info("🔄 DOTPROMPT STEP 6: GenKit Generate completed, err=%v", err)
+	logging.Debug("DOTPROMPT: genkit.Generate completed, err=%v", err)
 	if err != nil {
-		fmt.Printf("DEBUG DOTPROMPT: Generate failed with error: %v\n", err)
+		logging.Debug("DOTPROMPT: Generate failed with error: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -160,6 +202,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	if response == nil {
+		logging.Debug("DOTPROMPT: ERROR - Generate returned nil response")
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -168,7 +211,19 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		}, nil
 	}
 	
-	fmt.Printf("DEBUG DOTPROMPT: Generated response, length: %d\n", len(response.Text()))
+	responseText := response.Text()
+	logging.Debug("DOTPROMPT: Generated response, length: %d, content: %.200s", len(responseText), responseText)
+	
+	// Check if response is empty
+	if responseText == "" {
+		logging.Debug("DOTPROMPT: WARNING - Response text is empty")
+		// Add more debug info about the response
+		if response.Message != nil {
+			logging.Debug("DOTPROMPT: Response.Message exists with role %s and %d parts", response.Message.Role, len(response.Message.Content))
+		} else {
+			logging.Debug("DOTPROMPT: Response.Message is nil")
+		}
+	}
 	
 	// Helper function
 	min := func(a, b int) int {
@@ -185,10 +240,10 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	// Check if any tool calls were made in the response
 	if response.Request != nil && response.Request.Messages != nil {
-		fmt.Printf("DEBUG DOTPROMPT: Request contains %d input messages\n", len(response.Request.Messages))
+		logging.Debug("DOTPROMPT: Request contains %d input messages", len(response.Request.Messages))
 		
 		for i, msg := range response.Request.Messages {
-			fmt.Printf("DEBUG DOTPROMPT:   Input Message %d: Role=%s, Parts=%d\n", i, msg.Role, len(msg.Content))
+			logging.Debug("DOTPROMPT:   Input Message %d: Role=%s, Parts=%d", i, msg.Role, len(msg.Content))
 			
 			// Extract tool requests, responses, and model thoughts
 			var modelThoughts []string
@@ -196,7 +251,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 			
 			for _, part := range msg.Content {
 				if part.IsToolRequest() && part.ToolRequest != nil {
-					fmt.Printf("DEBUG DOTPROMPT:   Found tool request: %s\n", part.ToolRequest.Name)
+					logging.Debug("DOTPROMPT:   Found tool request: %s", part.ToolRequest.Name)
 					
 					// Add tool call to array
 					toolCall := map[string]interface{}{
@@ -222,9 +277,9 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 				} else if part.IsText() && part.Text != "" {
 					// Capture model's intermediate thoughts/reasoning
 					modelThoughts = append(modelThoughts, part.Text)
-					fmt.Printf("DEBUG DOTPROMPT:   Found model thought: %s\n", part.Text[:min(100, len(part.Text))])
+					logging.Debug("DOTPROMPT:   Found model thought: %s", part.Text[:min(100, len(part.Text))])
 				} else if part.IsToolResponse() && part.ToolResponse != nil {
-					fmt.Printf("DEBUG DOTPROMPT:   Found tool response for: %s\n", part.ToolResponse.Name)
+					logging.Debug("DOTPROMPT:   Found tool response for: %s", part.ToolResponse.Name)
 					
 					// Add tool response as execution step
 					executionStep := map[string]interface{}{
@@ -252,19 +307,19 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	// Log response message information
 	if response.Message != nil {
-		fmt.Printf("DEBUG DOTPROMPT: Response message: Role=%s, Parts=%d\n", response.Message.Role, len(response.Message.Content))
+		logging.Debug("DOTPROMPT: Response message: Role=%s, Parts=%d", response.Message.Role, len(response.Message.Content))
 		for j, part := range response.Message.Content {
 			if part.IsToolRequest() {
-				fmt.Printf("DEBUG DOTPROMPT:   Part %d: TOOL REQUEST - %s\n", j, part.ToolRequest.Name)
+				logging.Debug("DOTPROMPT:   Part %d: TOOL REQUEST - %s", j, part.ToolRequest.Name)
 			} else {
-				fmt.Printf("DEBUG DOTPROMPT:   Part %d: TEXT\n", j)
+				logging.Debug("DOTPROMPT:   Part %d: TEXT", j)
 			}
 		}
 	} else {
-		fmt.Printf("DEBUG DOTPROMPT: ⚠️  Response.Message is nil\n")
+		logging.Debug("DOTPROMPT: Response.Message is nil")
 	}
 	
-	fmt.Printf("DEBUG DOTPROMPT: Extracted %d tool calls and %d execution steps\n", len(allToolCalls), len(executionSteps))
+	logging.Debug("DOTPROMPT: Extracted %d tool calls and %d execution steps", len(allToolCalls), len(executionSteps))
 	
 	// Convert to JSONArray format
 	var toolCallsArray *models.JSONArray
@@ -282,7 +337,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	return &ExecutionResponse{
 		Success:        true,
-		Response:       response.Text(),
+		Response:       responseText, // Use the responseText variable we created
 		ToolCalls:      toolCallsArray,
 		ExecutionSteps: executionStepsArray,
 		Duration:       time.Since(startTime),
@@ -374,7 +429,7 @@ func (e *GenKitExecutor) RenderDotpromptContent(dotpromptContent, task, agentNam
 // getActiveModelFromConfig gets the model from Station config (without dotprompt fallback)
 func (e *GenKitExecutor) getActiveModelFromConfig() string {
 	// Try to load Station config
-	stationConfig, err := e.loadStationConfig()
+	stationConfig, err := config.Load()
 	if err == nil && stationConfig.AIModel != "" {
 		return stationConfig.AIModel
 	}
@@ -404,59 +459,33 @@ func (e *GenKitExecutor) renderTemplate(template string, variables map[string]in
 }
 
 // getActiveModel determines the active model using Station config priority
-func (e *GenKitExecutor) getActiveModel(config *DotpromptConfig) string {
+func (e *GenKitExecutor) getActiveModel(dpConfig *DotpromptConfig) string {
 	// Try to load Station config
-	stationConfig, err := e.loadStationConfig()
+	stationConfig, err := config.Load()
 	if err == nil && stationConfig.AIModel != "" {
 		// Station config takes priority
 		return stationConfig.AIModel
 	}
 	
 	// Fallback to dotprompt config
-	if config.Model != "" {
-		return config.Model
+	if dpConfig.Model != "" {
+		return dpConfig.Model
 	}
 	
 	// Ultimate fallback
 	return "gemini-1.5-flash"
 }
 
-// loadStationConfig loads the Station configuration
-func (e *GenKitExecutor) loadStationConfig() (*StationConfig, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	
-	configPath := filepath.Join(homeDir, ".config", "station", "config.yaml")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, err
-	}
-	
-	var config StationConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, err
-	}
-	
-	return &config, nil
-}
-
-// StationConfig represents the Station configuration structure
-type StationConfig struct {
-	AIModel   string `yaml:"ai_model"`
-	AIProvider string `yaml:"ai_provider"`
-}
 
 // isModelSupported checks if a model is supported (for testing)
-func (e *GenKitExecutor) isModelSupported(config *DotpromptConfig) bool {
+func (e *GenKitExecutor) isModelSupported(dpConfig *DotpromptConfig) bool {
 	supportedModels := map[string]bool{
 		"gemini-2.0-flash-exp": true,
 		"gpt-4":                true,
 		"gpt-3.5-turbo":        true,
 	}
 	
-	return supportedModels[config.Model]
+	return supportedModels[dpConfig.Model]
 }
 
 // buildDotpromptFromAgent constructs complete dotprompt content from database agent data
@@ -473,7 +502,7 @@ func (e *GenKitExecutor) buildDotpromptFromAgent(agent models.Agent, agentTools 
 
 	// Get configured model from Station config, fallback to default
 	modelName := "gemini-1.5-flash" // default fallback
-	if cfg := e.getStationConfig(); cfg != nil && cfg.AIModel != "" {
+	if cfg, _ := config.Load(); cfg != nil && cfg.AIModel != "" {
 		modelName = cfg.AIModel
 	}
 
@@ -532,14 +561,6 @@ func (e *GenKitExecutor) buildDotpromptFromAgent(agent models.Agent, agentTools 
 	return content.String()
 }
 
-// getStationConfig loads the Station configuration for model info
-func (e *GenKitExecutor) getStationConfig() *StationConfig {
-	config, err := e.loadStationConfig()
-	if err != nil {
-		return nil
-	}
-	return config
-}
 
 // extractPromptContent extracts just the prompt content from a dotprompt file (removes frontmatter)
 func (e *GenKitExecutor) extractPromptContent(dotpromptContent string) (string, error) {
