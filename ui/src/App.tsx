@@ -34,37 +34,37 @@ const StationBanner = () => (
   </div>
 );
 
-// Custom Node Components
+// Custom Node Components (sized for better visibility and layout)
 const AgentNode = ({ data }: { data: any }) => (
-  <div className="px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg min-w-[150px]">
+  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg">
     <div className="flex items-center gap-2 mb-2">
-      <Bot className="h-4 w-4 text-tokyo-blue" />
-      <div className="font-mono text-sm text-tokyo-blue font-medium">{data.label}</div>
+      <Bot className="h-5 w-5 text-tokyo-blue" />
+      <div className="font-mono text-base text-tokyo-blue font-medium">{data.label}</div>
     </div>
-    <div className="text-xs text-tokyo-comment">{data.description}</div>
-    <div className="mt-2 text-xs text-tokyo-green">{data.status}</div>
+    <div className="text-sm text-tokyo-comment mb-2 line-clamp-2">{data.description}</div>
+    <div className="text-sm text-tokyo-green font-medium">{data.status}</div>
   </div>
 );
 
 const MCPNode = ({ data }: { data: any }) => (
-  <div className="px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg min-w-[150px]">
+  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg">
     <div className="flex items-center gap-2 mb-2">
-      <Database className="h-4 w-4 text-tokyo-cyan" />
-      <div className="font-mono text-sm text-tokyo-cyan font-medium">{data.label}</div>
+      <Database className="h-5 w-5 text-tokyo-cyan" />
+      <div className="font-mono text-base text-tokyo-cyan font-medium">{data.label}</div>
     </div>
-    <div className="text-xs text-tokyo-comment">{data.description}</div>
-    <div className="mt-2 text-xs text-tokyo-purple">{data.tools?.length || 0} tools</div>
+    <div className="text-sm text-tokyo-comment mb-2">{data.description}</div>
+    <div className="text-sm text-tokyo-purple font-medium">{data.tools?.length || 0} tools available</div>
   </div>
 );
 
 const ToolNode = ({ data }: { data: any }) => (
-  <div className="px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg min-w-[150px]">
+  <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg">
     <div className="flex items-center gap-2 mb-2">
-      <Settings className="h-4 w-4 text-tokyo-green" />
-      <div className="font-mono text-sm text-tokyo-green font-medium">{data.label}</div>
+      <Settings className="h-5 w-5 text-tokyo-green" />
+      <div className="font-mono text-base text-tokyo-green font-medium">{data.label}</div>
     </div>
-    <div className="text-xs text-tokyo-comment">{data.description}</div>
-    <div className="mt-2 text-xs text-tokyo-blue1">{data.category}</div>
+    <div className="text-sm text-tokyo-comment mb-2">{data.description || 'Tool function'}</div>
+    <div className="text-sm text-tokyo-blue1 font-medium">from {data.category}</div>
   </div>
 );
 
