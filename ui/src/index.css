@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+
+    /* Tokyo Night Theme Colors */
+    --tokyo-bg: #1a1b26;
+    --tokyo-bg-dark: #16161e;
+    --tokyo-bg-highlight: #292e42;
+    --tokyo-terminal-black: #414868;
+    --tokyo-fg: #c0caf5;
+    --tokyo-fg-dark: #a9b1d6;
+    --tokyo-fg-gutter: #3b4261;
+    --tokyo-dark3: #545c7e;
+    --tokyo-comment: #565f89;
+    --tokyo-dark5: #737aa2;
+    --tokyo-blue0: #3d59a1;
+    --tokyo-blue: #7aa2f7;
+    --tokyo-cyan: #7dcfff;
+    --tokyo-blue1: #2ac3de;
+    --tokyo-blue2: #0db9d7;
+    --tokyo-blue5: #89ddff;
+    --tokyo-blue6: #b4f9f8;
+    --tokyo-blue7: #394b70;
+    --tokyo-purple: #9d7cd8;
+    --tokyo-magenta: #bb9af7;
+    --tokyo-magenta2: #ff007c;
+    --tokyo-red: #f7768e;
+    --tokyo-red1: #db4b4b;
+    --tokyo-orange: #ff9e64;
+    --tokyo-yellow: #e0af68;
+    --tokyo-green: #9ece6a;
+    --tokyo-green1: #73daca;
+    --tokyo-green2: #41a6b5;
+    --tokyo-teal: #1abc9c;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground min-h-screen;
+    margin: 0;
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  }
+}
+
+@layer utilities {
+  .shadow-tokyo {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  .shadow-tokyo-lg {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+  
+  .shadow-tokyo-blue {
+    box-shadow: 0 0 0 1px var(--tokyo-blue7), 0 4px 6px -1px rgba(122, 162, 247, 0.1);
+  }
+  
+  .shadow-tokyo-glow {
+    box-shadow: 0 0 20px rgba(122, 162, 247, 0.2);
+  }
+}

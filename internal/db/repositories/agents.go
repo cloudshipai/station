@@ -120,6 +120,11 @@ func (r *AgentRepo) List() ([]*models.Agent, error) {
 	return result, nil
 }
 
+// GetAgentWithTools returns the GetAgentWithTools query rows directly for API use
+func (r *AgentRepo) GetAgentWithTools(ctx context.Context, id int64) ([]queries.GetAgentWithToolsRow, error) {
+	return r.queries.GetAgentWithTools(ctx, id)
+}
+
 func (r *AgentRepo) ListByEnvironment(environmentID int64) ([]*models.Agent, error) {
 	agents, err := r.queries.ListAgentsByEnvironment(context.Background(), environmentID)
 	if err != nil {

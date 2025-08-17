@@ -157,6 +157,94 @@ func (q *Queries) GetAgentBySchedule(ctx context.Context, id int64) (Agent, erro
 	return i, err
 }
 
+const getAgentWithTools = `-- name: GetAgentWithTools :many
+SELECT 
+    a.id as agent_id,
+    a.name as agent_name,
+    a.description as agent_description,
+    a.prompt as agent_prompt,
+    a.max_steps as agent_max_steps,
+    a.environment_id as agent_environment_id,
+    a.created_by as agent_created_by,
+    a.is_scheduled as agent_is_scheduled,
+    a.schedule_enabled as agent_schedule_enabled,
+    a.created_at as agent_created_at,
+    a.updated_at as agent_updated_at,
+    ms.id as mcp_server_id,
+    ms.name as mcp_server_name,
+    mt.id as tool_id,
+    mt.name as tool_name,
+    mt.description as tool_description,
+    mt.input_schema as tool_input_schema
+FROM agents a
+LEFT JOIN agent_tools at ON a.id = at.agent_id
+LEFT JOIN mcp_tools mt ON at.tool_id = mt.id
+LEFT JOIN mcp_servers ms ON mt.mcp_server_id = ms.id
+WHERE a.id = ?
+ORDER BY ms.name, mt.name
+`
+
+type GetAgentWithToolsRow struct {
+	AgentID              int64          `json:"agent_id"`
+	AgentName            string         `json:"agent_name"`
+	AgentDescription     string         `json:"agent_description"`
+	AgentPrompt          string         `json:"agent_prompt"`
+	AgentMaxSteps        int64          `json:"agent_max_steps"`
+	AgentEnvironmentID   int64          `json:"agent_environment_id"`
+	AgentCreatedBy       int64          `json:"agent_created_by"`
+	AgentIsScheduled     sql.NullBool   `json:"agent_is_scheduled"`
+	AgentScheduleEnabled sql.NullBool   `json:"agent_schedule_enabled"`
+	AgentCreatedAt       sql.NullTime   `json:"agent_created_at"`
+	AgentUpdatedAt       sql.NullTime   `json:"agent_updated_at"`
+	McpServerID          sql.NullInt64  `json:"mcp_server_id"`
+	McpServerName        sql.NullString `json:"mcp_server_name"`
+	ToolID               sql.NullInt64  `json:"tool_id"`
+	ToolName             sql.NullString `json:"tool_name"`
+	ToolDescription      sql.NullString `json:"tool_description"`
+	ToolInputSchema      sql.NullString `json:"tool_input_schema"`
+}
+
+func (q *Queries) GetAgentWithTools(ctx context.Context, id int64) ([]GetAgentWithToolsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAgentWithTools, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAgentWithToolsRow
+	for rows.Next() {
+		var i GetAgentWithToolsRow
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.AgentName,
+			&i.AgentDescription,
+			&i.AgentPrompt,
+			&i.AgentMaxSteps,
+			&i.AgentEnvironmentID,
+			&i.AgentCreatedBy,
+			&i.AgentIsScheduled,
+			&i.AgentScheduleEnabled,
+			&i.AgentCreatedAt,
+			&i.AgentUpdatedAt,
+			&i.McpServerID,
+			&i.McpServerName,
+			&i.ToolID,
+			&i.ToolName,
+			&i.ToolDescription,
+			&i.ToolInputSchema,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgents = `-- name: ListAgents :many
 SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents ORDER BY name
 `
