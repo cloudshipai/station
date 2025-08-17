@@ -73,6 +73,14 @@ tmp-*/
 # Node modules from any examples or tests
 node_modules/
 
+# Frontend UI application
+ui/node_modules/
+ui/dist/
+ui/.env*
+ui/coverage/
+ui/.nyc_output/
+ui/build/
+
 # Documentation site
 docs/site/dist/
 docs/site/.astro/
