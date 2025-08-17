@@ -20,6 +20,7 @@ import (
 func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 	group.POST("", h.createAgent)
 	group.GET("/:id", h.getAgent)
+	group.GET("/:id/details", h.getAgentWithTools)  // New endpoint for detailed view
 	group.PUT("/:id", h.updateAgent)
 	group.DELETE("/:id", h.deleteAgent)
 	
@@ -271,6 +272,92 @@ func (h *APIHandlers) getAgent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"agent": agent})
+}
+
+// getAgentWithTools returns agent details including tools and MCP server relationships
+func (h *APIHandlers) getAgentWithTools(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	// Get agent with tools using the new query
+	rows, err := h.repos.Agents.GetAgentWithTools(context.Background(), agentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get agent details"})
+		return
+	}
+
+	if len(rows) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
+		return
+	}
+
+	// Structure the response data
+	firstRow := rows[0]
+	
+	// Extract agent info (same for all rows)
+	agent := gin.H{
+		"id":               firstRow.AgentID,
+		"name":            firstRow.AgentName,
+		"description":     firstRow.AgentDescription,
+		"prompt":          firstRow.AgentPrompt,
+		"max_steps":       firstRow.AgentMaxSteps,
+		"environment_id":  firstRow.AgentEnvironmentID,
+		"created_by":      firstRow.AgentCreatedBy,
+		"is_scheduled":    firstRow.AgentIsScheduled.Bool,
+		"schedule_enabled": firstRow.AgentScheduleEnabled.Bool,
+		"created_at":      firstRow.AgentCreatedAt,
+		"updated_at":      firstRow.AgentUpdatedAt,
+	}
+
+	// Group tools by MCP server
+	mcpServers := make(map[int64]gin.H)
+	
+	for _, row := range rows {
+		// Skip rows without tools
+		if !row.McpServerID.Valid {
+			continue
+		}
+		
+		serverID := row.McpServerID.Int64
+		
+		// Initialize MCP server if not exists
+		if _, exists := mcpServers[serverID]; !exists {
+			mcpServers[serverID] = gin.H{
+				"id":    serverID,
+				"name":  row.McpServerName.String,
+				"tools": []gin.H{},
+			}
+		}
+		
+		// Add tool to server
+		if row.ToolID.Valid {
+			tool := gin.H{
+				"id":           row.ToolID.Int64,
+				"name":         row.ToolName.String,
+				"description":  row.ToolDescription.String,
+				"input_schema": row.ToolInputSchema.String,
+			}
+			
+			server := mcpServers[serverID]
+			tools := server["tools"].([]gin.H)
+			server["tools"] = append(tools, tool)
+			mcpServers[serverID] = server
+		}
+	}
+
+	// Convert map to slice
+	mcpServersList := make([]gin.H, 0, len(mcpServers))
+	for _, server := range mcpServers {
+		mcpServersList = append(mcpServersList, server)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"agent":       agent,
+		"mcp_servers": mcpServersList,
+	})
 }
 
 func (h *APIHandlers) updateAgent(c *gin.Context) {

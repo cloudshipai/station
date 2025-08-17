@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui
 
 # Build configuration
 BINARY_NAME=stn
@@ -21,8 +21,22 @@ build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME)"
 
+# Build with UI embedded
+build-with-ui: build-ui
+	@echo "🔨 Building Station $(VERSION) with embedded UI..."
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p internal/ui/static
+	@cp -r ui/dist/* internal/ui/static/ 2>/dev/null || true
+	go build $(LDFLAGS) -tags ui -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME) with embedded UI"
+
 local-install: build
 	mv ./bin/stn ~/.local/bin
+
+# Build and install with UI embedded
+local-install-ui: build-with-ui
+	mv ./bin/stn ~/.local/bin
+	@echo "✅ Installed Station with embedded UI to ~/.local/bin"
 # Build and install to $GOPATH/bin
 install:
 	@echo "📦 Installing Station $(VERSION) to $$GOPATH/bin..."
@@ -97,6 +111,23 @@ stop-station:
 # Show version information
 version:
 	@echo "Station Version: $(VERSION)"
+
+# UI Development workflow
+dev-ui:
+	@echo "🚀 Starting UI development server..."
+	@cd ui && npm run dev
+
+# Build UI for production
+build-ui:
+	@echo "📦 Building UI for production..."
+	@cd ui && npm run build
+	@echo "✅ UI built to ui/dist/"
+
+# Install UI dependencies
+install-ui:
+	@echo "📦 Installing UI dependencies..."
+	@cd ui && npm install
+	@echo "✅ UI dependencies installed"
 	@echo "Build Time: $(BUILD_TIME)"
 
 # Bundle system development targets
