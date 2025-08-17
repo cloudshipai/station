@@ -11,9 +11,9 @@ import (
 )
 
 const createAgent = `-- name: CreateAgent :one
-INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, cron_schedule, is_scheduled, schedule_enabled)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, name, description, prompt, max_steps, environment_id, created_by, model_id, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at
+INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, input_schema, cron_schedule, is_scheduled, schedule_enabled)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at
 `
 
 type CreateAgentParams struct {
@@ -23,6 +23,7 @@ type CreateAgentParams struct {
 	MaxSteps        int64          `json:"max_steps"`
 	EnvironmentID   int64          `json:"environment_id"`
 	CreatedBy       int64          `json:"created_by"`
+	InputSchema     sql.NullString `json:"input_schema"`
 	CronSchedule    sql.NullString `json:"cron_schedule"`
 	IsScheduled     sql.NullBool   `json:"is_scheduled"`
 	ScheduleEnabled sql.NullBool   `json:"schedule_enabled"`
@@ -36,6 +37,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		arg.MaxSteps,
 		arg.EnvironmentID,
 		arg.CreatedBy,
+		arg.InputSchema,
 		arg.CronSchedule,
 		arg.IsScheduled,
 		arg.ScheduleEnabled,
@@ -50,6 +52,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.EnvironmentID,
 		&i.CreatedBy,
 		&i.ModelID,
+		&i.InputSchema,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -86,6 +89,7 @@ func (q *Queries) GetAgent(ctx context.Context, id int64) (Agent, error) {
 		&i.EnvironmentID,
 		&i.CreatedBy,
 		&i.ModelID,
+		&i.InputSchema,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -113,6 +117,7 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 		&i.EnvironmentID,
 		&i.CreatedBy,
 		&i.ModelID,
+		&i.InputSchema,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -140,6 +145,7 @@ func (q *Queries) GetAgentBySchedule(ctx context.Context, id int64) (Agent, erro
 		&i.EnvironmentID,
 		&i.CreatedBy,
 		&i.ModelID,
+		&i.InputSchema,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -324,7 +330,7 @@ func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
 }
 
 const updateAgent = `-- name: UpdateAgent :exec
-UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?
+UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, input_schema = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?
 `
 
 type UpdateAgentParams struct {
@@ -332,6 +338,7 @@ type UpdateAgentParams struct {
 	Description     string         `json:"description"`
 	Prompt          string         `json:"prompt"`
 	MaxSteps        int64          `json:"max_steps"`
+	InputSchema     sql.NullString `json:"input_schema"`
 	CronSchedule    sql.NullString `json:"cron_schedule"`
 	IsScheduled     sql.NullBool   `json:"is_scheduled"`
 	ScheduleEnabled sql.NullBool   `json:"schedule_enabled"`
@@ -344,6 +351,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) error 
 		arg.Description,
 		arg.Prompt,
 		arg.MaxSteps,
+		arg.InputSchema,
 		arg.CronSchedule,
 		arg.IsScheduled,
 		arg.ScheduleEnabled,
