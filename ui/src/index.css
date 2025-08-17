@@ -55,6 +55,12 @@
     --tokyo-green1: #73daca;
     --tokyo-green2: #41a6b5;
     --tokyo-teal: #1abc9c;
+    
+    /* Neon Edge Colors */
+    --neon-pink: #ff00ff;
+    --neon-purple: #a855f7;
+    --neon-bright: #ff44ff;
+    --neon-glow: #ff00ff80;
   }
 
   .dark {
@@ -103,5 +109,42 @@
   
   .shadow-tokyo-glow {
     box-shadow: 0 0 20px rgba(122, 162, 247, 0.2);
+  }
+  
+  /* Neon edge animations */
+  @keyframes pulse-neon {
+    0%, 100% {
+      filter: drop-shadow(0 0 5px var(--neon-glow)) brightness(1);
+    }
+    50% {
+      filter: drop-shadow(0 0 15px var(--neon-glow)) brightness(1.2);
+    }
+  }
+  
+  /* React Flow edge styling */
+  .react-flow__edge-path {
+    stroke: #ff00ff !important;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 8px #ff00ff80) !important;
+    animation: pulse-neon 2s ease-in-out infinite !important;
+  }
+  
+  .neon-edge .react-flow__edge-path {
+    stroke: var(--neon-pink) !important;
+    stroke-width: 3px !important;
+    animation: pulse-neon 2s ease-in-out infinite;
+    filter: drop-shadow(0 0 8px var(--neon-glow));
+  }
+  
+  .neon-edge-mcp .react-flow__edge-path {
+    stroke: var(--neon-purple) !important;
+    stroke-width: 2px !important;
+    animation: pulse-neon 2.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.6));
+  }
+  
+  /* Ensure edges are visible */
+  .react-flow__edges {
+    z-index: 100 !important;
   }
 }

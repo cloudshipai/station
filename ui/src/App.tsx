@@ -192,8 +192,13 @@ const AgentsCanvas = () => {
             source: `agent-${agent.id}`,
             target: `mcp-${server.id}`,
             animated: true,
-            style: { stroke: '#7aa2f7', strokeWidth: 2 },
+            style: { 
+              stroke: '#ff00ff', 
+              strokeWidth: 3,
+              filter: 'drop-shadow(0 0 8px #ff00ff80)'
+            },
             type: 'default',
+            className: 'neon-edge',
           });
 
           // Tool nodes for this server
@@ -215,16 +220,24 @@ const AgentsCanvas = () => {
               source: `mcp-${server.id}`,
               target: `tool-${tool.id}`,
               animated: true,
-              style: { stroke: '#7dcfff', strokeWidth: 1 },
+              style: { 
+                stroke: '#a855f7', 
+                strokeWidth: 2,
+                filter: 'drop-shadow(0 0 6px rgba(168, 85, 247, 0.6))'
+              },
               type: 'default',
+              className: 'neon-edge-mcp',
             });
           });
         });
 
         // Apply automatic layout using ELK.js
+        console.log('Before layout - nodes:', newNodes.length, 'edges:', newEdges.length);
+        console.log('Edges being created:', newEdges.map(e => `${e.source} -> ${e.target}`));
+        
         const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
         
-        console.log('Setting layouted nodes:', layoutedNodes.length, 'edges:', newEdges.length);
+        console.log('After layout - nodes:', layoutedNodes.length, 'edges:', newEdges.length);
         setNodes(layoutedNodes);
         setEdges(newEdges);
       } catch (error) {
@@ -239,7 +252,12 @@ const AgentsCanvas = () => {
     (params: Connection) => setEdges((eds) => addEdge({
       ...params,
       animated: true,
-      style: { stroke: '#7aa2f7', strokeWidth: 2 },
+      style: { 
+        stroke: '#ff00ff', 
+        strokeWidth: 3,
+        filter: 'drop-shadow(0 0 8px #ff00ff80)'
+      },
+      className: 'neon-edge',
     }, eds)),
     [setEdges]
   );
@@ -299,6 +317,14 @@ const AgentsCanvas = () => {
           nodeTypes={nodeTypes}
           fitView
           className="bg-tokyo-bg"
+          defaultEdgeOptions={{
+            animated: true,
+            style: { 
+              stroke: '#ff00ff', 
+              strokeWidth: 3,
+              zIndex: 1000
+            },
+          }}
         >
           <Background 
             color="#394b70" 
