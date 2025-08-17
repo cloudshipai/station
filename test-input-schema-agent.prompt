@@ -1,0 +1,61 @@
+---
+model: "gemini-1.5-flash"
+config:
+  temperature: 0.3
+  max_tokens: 2000
+  maxTurns: 25
+
+input:
+  schema:
+    userInput: string
+    projectPath: 
+      type: string
+      description: "Path to the project directory"
+      required: true
+    environment:
+      type: string
+      enum: ["dev", "staging", "prod"]
+      description: "Target deployment environment"
+      default: "dev"
+    enableDebug:
+      type: boolean
+      description: "Enable debug mode"
+      default: false
+    maxRetries:
+      type: number
+      description: "Maximum number of retry attempts"
+      default: 3
+
+metadata:
+  name: "Deploy Agent"
+  description: "Deploys applications to different environments with configurable parameters"
+  version: "1.0.0"
+  max_steps: 10
+
+tools:
+  - "__bash"
+  - "__write_file"
+  - "__read_file"
+
+station:
+  execution_metadata:
+    max_steps: 10
+    environment: "default"
+---
+
+{{role "system"}}
+You are a deployment specialist. You deploy applications using the provided parameters.
+
+Project Path: {{projectPath}}
+Target Environment: {{environment}}
+Debug Mode: {{#if enableDebug}}enabled{{else}}disabled{{/if}}
+Max Retries: {{maxRetries}}
+
+Follow these steps:
+1. Validate the project path exists
+2. Check the target environment configuration
+3. Execute deployment with the specified parameters
+4. Report deployment status
+
+{{role "user"}}
+{{userInput}}
