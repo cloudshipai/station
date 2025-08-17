@@ -30,6 +30,15 @@ func (e *GenKitExecutor) ExecuteAgentWithDotpromptTemplate(extractor *RuntimeExt
 	return nil, fmt.Errorf("ExecuteAgentWithDotpromptTemplate is deprecated - use ExecuteAgentWithDatabaseConfig instead")
 }
 
+// ExecuteAgentWithDotprompt executes an agent using the simple genkit pattern: DefinePrompt -> Render -> GenerateWithRequest
+func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTools []*models.AgentToolWithDetails, repos *repositories.Repositories, task string) (*ExecutionResponse, error) {
+	// TODO: Implement proper genkit DefinePrompt -> Render -> GenerateWithRequest flow
+	// For now, construct dotprompt content and fall back to database config approach
+	// dotpromptContent := e.buildDotpromptFromAgent(agent, agentTools, "default")
+	
+	return e.ExecuteAgentWithDatabaseConfig(agent, agentTools, repos, task)
+}
+
 // ExecuteAgentWithDatabaseConfig executes an agent using hybrid approach: dotprompt rendering + real multi-step execution
 func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfig(agent models.Agent, agentTools []*models.AgentToolWithDetails, repos *repositories.Repositories, task string) (*ExecutionResponse, error) {
 	startTime := time.Now()
@@ -242,4 +251,96 @@ func (e *GenKitExecutor) isModelSupported(config *DotpromptConfig) bool {
 	}
 	
 	return supportedModels[config.Model]
+}
+
+// buildDotpromptFromAgent constructs complete dotprompt content from database agent data
+// This reuses the same logic as our export functions
+func (e *GenKitExecutor) buildDotpromptFromAgent(agent models.Agent, agentTools []*models.AgentToolWithDetails, environment string) string {
+	var content strings.Builder
+
+	// Get configured model from Station config, fallback to default
+	modelName := "gemini-1.5-flash" // default fallback
+	if cfg := e.getStationConfig(); cfg != nil && cfg.AIModel != "" {
+		modelName = cfg.AIModel
+	}
+
+	// YAML frontmatter with multi-role support (same as export logic)
+	content.WriteString("---\n")
+	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
+	content.WriteString("config:\n")
+	content.WriteString("  temperature: 0.3\n")
+	content.WriteString("  max_tokens: 2000\n")
+	
+	// Input schema with automatic userInput variable
+	content.WriteString("input:\n")
+	content.WriteString("  schema:\n")
+	content.WriteString("    userInput: string\n")
+	
+	content.WriteString("metadata:\n")
+	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))
+	if agent.Description != "" {
+		content.WriteString(fmt.Sprintf("  description: \"%s\"\n", agent.Description))
+	}
+	content.WriteString("  version: \"1.0.0\"\n")
+
+	// Tools section
+	if len(agentTools) > 0 {
+		content.WriteString("tools:\n")
+		for _, tool := range agentTools {
+			content.WriteString(fmt.Sprintf("  - \"%s\"\n", tool.ToolName))
+		}
+	}
+
+	// Station metadata
+	content.WriteString("station:\n")
+	content.WriteString("  execution_metadata:\n")
+	if agent.MaxSteps > 0 {
+		content.WriteString(fmt.Sprintf("    max_steps: %d\n", agent.MaxSteps))
+	}
+	content.WriteString(fmt.Sprintf("    environment: \"%s\"\n", environment))
+	content.WriteString(fmt.Sprintf("    agent_id: %d\n", agent.ID))
+	content.WriteString("---\n\n")
+
+	// Multi-role prompt content
+	// Check if agent prompt is already multi-role
+	if e.isMultiRolePrompt(agent.Prompt) {
+		// Already multi-role, use as-is
+		content.WriteString(agent.Prompt)
+	} else {
+		// Convert single prompt to multi-role format
+		content.WriteString("{{role \"system\"}}\n")
+		content.WriteString(agent.Prompt)
+		content.WriteString("\n\n{{role \"user\"}}\n")
+		content.WriteString("{{userInput}}")
+	}
+	content.WriteString("\n")
+
+	return content.String()
+}
+
+// getStationConfig loads the Station configuration for model info
+func (e *GenKitExecutor) getStationConfig() *StationConfig {
+	config, err := e.loadStationConfig()
+	if err != nil {
+		return nil
+	}
+	return config
+}
+
+// extractPromptContent extracts just the prompt content from a dotprompt file (removes frontmatter)
+func (e *GenKitExecutor) extractPromptContent(dotpromptContent string) (string, error) {
+	// Split by frontmatter markers
+	parts := strings.Split(dotpromptContent, "---")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("invalid dotprompt format: missing frontmatter markers")
+	}
+	
+	// Return everything after the second "---"
+	content := strings.Join(parts[2:], "---")
+	return strings.TrimSpace(content), nil
+}
+
+// isMultiRolePrompt checks if a prompt already contains role directives
+func (e *GenKitExecutor) isMultiRolePrompt(prompt string) bool {
+	return strings.Contains(prompt, "{{role \"") || strings.Contains(prompt, "{{role '")
 }
