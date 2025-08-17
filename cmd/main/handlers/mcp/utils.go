@@ -362,6 +362,7 @@ func (h *MCPHandler) syncAgentToDatabase(repos *repositories.Repositories, envID
 			config.Metadata.Description,
 			promptTemplate,
 			maxSteps,
+			nil, // input_schema - not set in MCP utils
 			nil, // cron schedule - preserve existing
 			agent.ScheduleEnabled,
 		)
@@ -377,6 +378,7 @@ func (h *MCPHandler) syncAgentToDatabase(repos *repositories.Repositories, envID
 			maxSteps,
 			envID,
 			1, // Default user ID
+			nil, // input_schema - not set in MCP utils
 			nil, // No cron schedule initially
 			false, // Schedule not enabled initially
 		)

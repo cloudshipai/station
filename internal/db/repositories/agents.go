@@ -33,6 +33,10 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 		ScheduleEnabled: agent.ScheduleEnabled.Bool,
 	}
 	
+	if agent.InputSchema.Valid {
+		result.InputSchema = &agent.InputSchema.String
+	}
+	
 	if agent.CronSchedule.Valid {
 		result.CronSchedule = &agent.CronSchedule.String
 	}
@@ -56,7 +60,7 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 	return result
 }
 
-func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, cronSchedule *string, scheduleEnabled bool) (*models.Agent, error) {
+func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool) (*models.Agent, error) {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 	
 	params := queries.CreateAgentParams{
@@ -68,6 +72,10 @@ func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environme
 		CreatedBy:       createdBy,
 		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
 		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
+	}
+	
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
 	}
 	
 	if cronSchedule != nil {
@@ -140,7 +148,7 @@ func (r *AgentRepo) ListByUser(userID int64) ([]*models.Agent, error) {
 	return result, nil
 }
 
-func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, cronSchedule *string, scheduleEnabled bool) error {
+func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool) error {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 	
 	params := queries.UpdateAgentParams{
@@ -151,6 +159,10 @@ func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps 
 		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
 		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
 		ID:              id,
+	}
+	
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
 	}
 	
 	if cronSchedule != nil {

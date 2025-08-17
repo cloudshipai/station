@@ -235,6 +235,7 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		maxSteps,
 		env.ID,
 		1, // createdBy - system user
+		nil, // input_schema - not set in sync
 		nil, // cronSchedule
 		true, // scheduleEnabled
 	)
@@ -321,6 +322,7 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		description,
 		promptContent,
 		maxSteps,
+		nil, // input_schema - not set in sync
 		nil, // cronSchedule
 		true, // scheduleEnabled
 	)
