@@ -155,7 +155,7 @@ func (m AgentsModel) createAgent() tea.Cmd {
 		
 		// Create agent in database (use first selected environment as primary)
 		primaryEnvID := validEnvIDs[0]
-		agent, err := m.repos.Agents.Create(name, description, prompt, 10, primaryEnvID, 1, cronSchedule, m.scheduleEnabled) // Default to user ID 1
+		agent, err := m.repos.Agents.Create(name, description, prompt, 10, primaryEnvID, 1, nil, cronSchedule, m.scheduleEnabled) // Default to user ID 1
 		if err != nil {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to create agent: %w", err)}
 		}
@@ -280,7 +280,7 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 		}
 		
 		// Update agent in database
-		if err := m.repos.Agents.Update(m.selectedAgent.ID, name, description, prompt, m.selectedAgent.MaxSteps, cronSchedule, m.scheduleEnabled); err != nil {
+		if err := m.repos.Agents.Update(m.selectedAgent.ID, name, description, prompt, m.selectedAgent.MaxSteps, nil, cronSchedule, m.scheduleEnabled); err != nil {
 			return AgentsErrorMsg{Err: fmt.Errorf("failed to update agent: %w", err)}
 		}
 		

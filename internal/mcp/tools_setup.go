@@ -18,6 +18,7 @@ func (s *Server) setupTools() {
 		mcp.WithNumber("max_steps", mcp.Description("Maximum steps the agent can take (default: 5)")),
 		mcp.WithBoolean("enabled", mcp.Description("Whether the agent is enabled (default: true)")),
 		mcp.WithArray("tool_names", mcp.Description("List of tool names to assign to the agent"), mcp.WithStringItems()),
+		mcp.WithString("input_schema", mcp.Description("JSON schema for custom input variables (optional)")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
