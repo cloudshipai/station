@@ -230,6 +230,7 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		req.MaxSteps,
 		req.EnvironmentID,
 		createdBy,
+		nil,   // input_schema - not set in API v1
 		nil,   // cronSchedule - no schedule initially
 		false, // scheduleEnabled - disabled initially
 	)
@@ -293,7 +294,7 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 
 	// Update agent fields if provided
 	if req.Name != "" || req.Description != "" || req.Prompt != "" || req.MaxSteps > 0 {
-		err = h.repos.Agents.Update(agentID, req.Name, req.Description, req.Prompt, req.MaxSteps, nil, false)
+		err = h.repos.Agents.Update(agentID, req.Name, req.Description, req.Prompt, req.MaxSteps, nil, nil, false)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent"})
 			return

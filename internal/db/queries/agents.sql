@@ -1,6 +1,6 @@
 -- name: CreateAgent :one
-INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, cron_schedule, is_scheduled, schedule_enabled)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, input_schema, cron_schedule, is_scheduled, schedule_enabled)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetAgent :one
@@ -19,7 +19,7 @@ SELECT * FROM agents WHERE environment_id = ? ORDER BY name;
 SELECT * FROM agents WHERE created_by = ? ORDER BY name;
 
 -- name: UpdateAgent :exec
-UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?;
+UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, input_schema = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?;
 
 -- name: UpdateAgentPrompt :exec
 UPDATE agents SET prompt = ? WHERE id = ?;

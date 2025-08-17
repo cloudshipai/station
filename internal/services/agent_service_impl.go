@@ -112,6 +112,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		config.MaxSteps,
 		config.EnvironmentID,
 		config.CreatedBy,
+		nil, // input_schema - not set in basic config
 		config.CronSchedule,
 		config.ScheduleEnabled,
 	)
@@ -149,6 +150,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *A
 		config.Description,
 		config.Prompt,
 		config.MaxSteps,
+		nil, // input_schema - not set in basic config
 		config.CronSchedule,
 		config.ScheduleEnabled,
 	)

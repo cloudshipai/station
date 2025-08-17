@@ -125,6 +125,7 @@ CREATE TABLE agents (
     environment_id INTEGER NOT NULL,
     created_by INTEGER NOT NULL,
     model_id INTEGER REFERENCES models(id),
+    input_schema TEXT DEFAULT NULL, -- JSON schema for custom input variables
     cron_schedule TEXT DEFAULT NULL, -- Cron expression for scheduling
     is_scheduled BOOLEAN DEFAULT FALSE,
     last_scheduled_run DATETIME DEFAULT NULL,

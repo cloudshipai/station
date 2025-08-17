@@ -1091,6 +1091,7 @@ func (h *AgentHandler) importAgentsLocal(environment string) error {
 			agentConfig.MaxSteps,
 			envID,
 			1, // Default user
+			nil, // input_schema - not set in local handler
 			agentConfig.CronSchedule,
 			agentConfig.ScheduleEnabled,
 		)

@@ -12,6 +12,7 @@ import (
 
 	"station/internal/services"
 	"station/pkg/models"
+	"station/pkg/schema"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -48,6 +49,12 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	// Extract optional parameters
 	maxSteps := request.GetInt("max_steps", 5) // Default to 5 if not provided
 	
+	// Extract input_schema if provided
+	var inputSchema *string
+	if inputSchemaStr := request.GetString("input_schema", ""); inputSchemaStr != "" {
+		inputSchema = &inputSchemaStr
+	}
+	
 	// Extract tool_names array if provided
 	var toolNames []string
 	if request.Params.Arguments != nil {
@@ -64,9 +71,9 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
-	// Create the agent using repository with correct parameter order
-	// Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, cronSchedule *string, scheduleEnabled bool)
-	createdAgent, err := s.repos.Agents.Create(name, description, prompt, int64(maxSteps), environmentID, 1, nil, true)
+	// Create the agent using repository with updated signature
+	// Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool)
+	createdAgent, err := s.repos.Agents.Create(name, description, prompt, int64(maxSteps), environmentID, 1, inputSchema, nil, true)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create agent: %v", err)), nil
 	}
@@ -535,6 +542,7 @@ func (s *Server) handleListPrompts(ctx context.Context, request mcp.CallToolRequ
 		{"name": "create_data_processing_agent", "description": "Guide for data processing agents"},
 		{"name": "export_agents_guide", "description": "Guide for exporting agents to .prompt files"},
 		{"name": "station_mcp_tools_guide", "description": "Comprehensive guide to using Station's MCP tools"},
+		{"name": "input_schema_guide", "description": "Guide for using custom input schemas with agents"},
 	}
 
 	response := map[string]interface{}{
@@ -563,6 +571,9 @@ func (s *Server) handleGetPrompt(ctx context.Context, request mcp.CallToolReques
 
 	case "station_mcp_tools_guide":
 		promptContent = "# Station MCP Tools Guide\n\nStation provides 20 MCP tools for complete agent lifecycle management through Claude Desktop, Claude Code, or any MCP client.\n\n## Key Tools\n\n- **create_agent**: Create new AI agents\n- **list_agents**: List all agents with filters\n- **call_agent**: Execute agents with advanced options\n- **export_agent**: Export single agent to .prompt file\n- **export_agents**: Export multiple agents at once\n- **list_tools**: List available MCP tools with pagination\n- **list_runs**: List agent execution runs\n- **inspect_run**: Get detailed run information\n\n## Usage Example\n\n```json\n{\n  \"tool\": \"create_agent\",\n  \"parameters\": {\n    \"name\": \"Database Monitor\",\n    \"description\": \"Monitors database health\",\n    \"prompt\": \"You are a database monitoring specialist...\",\n    \"environment_id\": \"1\",\n    \"tool_names\": [\"postgres_query\", \"slack_notify\"]\n  }\n}\n```\n\n## Best Practices\n\n1. Start with simple prompts and add complexity gradually\n2. Only assign tools the agent actually needs\n3. Use different environments for dev/staging/prod\n4. Export agents regularly for version control\n5. Use pagination for large datasets"
+		found = true
+	case "input_schema_guide":
+		promptContent = "# Input Schema Guide\n\nStation agents support custom input schemas to define structured input beyond the default `userInput` parameter. This enables rich, validated input data for complex agent workflows.\n\n## Default Schema\n\nEvery agent automatically has a `userInput` field:\n\n```yaml\ninput:\n  schema:\n    userInput: string  # Always available\n```\n\n## Custom Input Schema\n\nDefine additional input variables when creating an agent:\n\n```json\n{\n  \"tool\": \"create_agent\",\n  \"parameters\": {\n    \"name\": \"Deploy Agent\",\n    \"description\": \"Deploys applications to environments\",\n    \"prompt\": \"You deploy applications using the provided parameters.\",\n    \"environment_id\": \"1\",\n    \"input_schema\": \"{\\\"projectPath\\\": {\\\"type\\\": \\\"string\\\", \\\"description\\\": \\\"Path to project directory\\\"}, \\\"environment\\\": {\\\"type\\\": \\\"string\\\", \\\"enum\\\": [\\\"dev\\\", \\\"staging\\\", \\\"prod\\\"], \\\"description\\\": \\\"Target environment\\\"}, \\\"enableDebug\\\": {\\\"type\\\": \\\"boolean\\\", \\\"description\\\": \\\"Enable debug mode\\\"}}\"\n  }\n}\n```\n\n## Schema Types\n\n- **string**: Text values\n- **number**: Numeric values\n- **boolean**: true/false values\n- **array**: List of values\n- **object**: Nested objects\n\n## Schema Properties\n\n- **type**: Variable type (required)\n- **description**: Human-readable description\n- **enum**: Allowed values list\n- **default**: Default value if not provided\n- **required**: Whether field is mandatory\n\n## Exported Format\n\nAgents with custom schemas export with merged input definitions:\n\n```yaml\ninput:\n  schema:\n    userInput: string\n    projectPath: string\n    environment: string\n    enableDebug: boolean\n```\n\n## Call Agent with Variables\n\nWhen calling agents, the `variables` parameter provides custom input data:\n\n```json\n{\n  \"tool\": \"call_agent\",\n  \"parameters\": {\n    \"agent_id\": \"42\",\n    \"task\": \"Deploy the application\",\n    \"variables\": {\n      \"projectPath\": \"/home/user/myapp\",\n      \"environment\": \"staging\",\n      \"enableDebug\": true\n    }\n  }\n}\n```\n\n## Template Usage\n\nIn agent prompts, reference custom variables:\n\n```text\nDeploy the application from {{projectPath}} to {{environment}}.\n{{#if enableDebug}}Enable debug logging.{{/if}}\nUser instructions: {{userInput}}\n```\n\n## Benefits\n\n- **Structured Input**: Type-safe parameter passing\n- **Validation**: Automatic input validation\n- **Reusability**: Consistent agent interfaces\n- **Documentation**: Self-documenting agent APIs\n- **Flexibility**: Support complex workflows"
 		found = true
 
 	default:
@@ -936,10 +947,17 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 	content.WriteString("  temperature: 0.3\n")
 	content.WriteString("  max_tokens: 2000\n")
 	
-	// Input schema with automatic userInput variable
-	content.WriteString("input:\n")
-	content.WriteString("  schema:\n")
-	content.WriteString("    userInput: string\n")
+	// Input schema with merged custom and default variables
+	schemaHelper := schema.NewExportHelper()
+	inputSchemaSection, err := schemaHelper.GenerateInputSchemaSection(agent)
+	if err != nil {
+		// Fallback to default if custom schema is invalid
+		content.WriteString("input:\n")
+		content.WriteString("  schema:\n")
+		content.WriteString("    userInput: string\n")
+	} else {
+		content.WriteString(inputSchemaSection)
+	}
 	
 	content.WriteString("metadata:\n")
 	content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))

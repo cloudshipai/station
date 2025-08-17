@@ -109,6 +109,7 @@ func (apg *AgentPlanGenerator) CreateIntelligentAgent(ctx context.Context, req A
 		int64(plan.MaxSteps),
 		targetEnvironmentID,
 		1, // Default user ID for now
+		nil, // input_schema - not set in plan generator
 		cronSchedule,
 		scheduleEnabled,
 	)
