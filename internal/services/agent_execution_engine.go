@@ -73,19 +73,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 // ExecuteAgentViaStdioMCPWithVariables executes an agent with user-defined variables for dotprompt rendering
 func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
-	logging.Info("Starting stdio MCP agent execution for agent '%s'", agent.Name)
-	logging.Info("🚀 UNIFIED EXECUTION: Using unified dotprompt execution system for agent %s", agent.Name)
+	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
-	// Load configuration for debug logging
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// 🚀 UNIFIED DOTPROMPT ROUTING: All agents now use dotprompt execution system
-	if cfg.Debug {
-		logging.Info("🎯 EXECUTING AGENT: Using unified dotprompt execution system")
-	}
+	// All agents now use unified dotprompt execution system
 		
 		// Setup cleanup of MCP connections when dotprompt execution completes
 		defer func() {
@@ -124,12 +114,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		aee.activeMCPClients = mcpClients
 		
 		// Filter to only include tools assigned to this agent (same filtering logic as traditional)
-		if cfg.Debug {
-			logging.Info("DEBUG DOTPROMPT: Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
-		}
+		logging.Debug("Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
 		var mcpTools []ai.ToolRef
 		for _, assignedTool := range agentTools {
-			logging.Debug("DEBUG DOTPROMPT: Looking for assigned tool: %s", assignedTool.ToolName)
 			for _, mcpTool := range allMCPTools {
 				// Match by tool name - same method as traditional execution
 				var toolName string
@@ -140,30 +127,20 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 				} else {
 					// Fallback: use the type name
 					toolName = fmt.Sprintf("%T", mcpTool)
-					if cfg.Debug {
-						logging.Debug("Tool has no Name() method, using type name: %s", toolName)
-					}
 				}
 				
 				if toolName == assignedTool.ToolName {
-					if cfg.Debug {
-						logging.Debug("Including assigned tool for dotprompt: %s", toolName)
-					}
 					mcpTools = append(mcpTools, mcpTool)
 					break
 				}
 			}
 		}
 		
-		if cfg.Debug {
-			logging.Info("DEBUG DOTPROMPT: Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
-		}
+		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 		
 		// Use our new dotprompt + genkit execution system
-		logging.Info("🔥 CALLING DOTPROMPT EXECUTOR: About to call ExecuteAgentWithDatabaseConfig")
 		executor := dotprompt.NewGenKitExecutor()
 		response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, genkitApp, mcpTools, task)
-		logging.Info("🔥 DOTPROMPT EXECUTOR RETURNED: Success=%t, Error=%v", response != nil && response.Success, err)
 		if err != nil {
 			return nil, fmt.Errorf("dotprompt execution failed: %w", err)
 		}
@@ -254,9 +231,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, a
 	default:
 		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)
 	}
-	if cfg.Debug {
-		logging.Info("DEBUG: Model name: %s", modelName)
-	}
+	logging.Debug("Using model: %s", modelName)
 
 	// Build generate options with messages instead of system+prompt
 	var generateOptions []ai.GenerateOption
@@ -265,9 +240,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, a
 	generateOptions = append(generateOptions, ai.WithTools(tools...))
 	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
 
-	if cfg.Debug {
-		logging.Info("DEBUG: About to call genkit.Generate with %d messages and %d tools", len(messages), len(tools))
-	}
+	logging.Debug("Calling genkit.Generate with %d messages and %d tools", len(messages), len(tools))
 
 	// Execute with GenKit (same as existing)
 	genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -278,9 +251,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, a
 		return nil, fmt.Errorf("GenKit Generate failed: %w", err)
 	}
 
-	if cfg.Debug {
-		logging.Info("DEBUG: GenKit Generate completed successfully")
-	}
+	logging.Debug("GenKit Generate completed successfully")
 
 	// Return result (same format as existing)
 	result := &AgentExecutionResult{
@@ -342,28 +313,15 @@ func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt stri
 		return agentPrompt, nil
 	}
 
-	cfg, _ := config.Load()
-	if cfg != nil && cfg.Debug {
-		logging.Info("DEBUG: Agent prompt IS dotprompt, rendering with %d variables", len(userVariables))
-	}
+	logging.Debug("Agent prompt is dotprompt format, rendering with %d variables", len(userVariables))
 	
 	// Do inline dotprompt rendering to avoid import cycle
 	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, userVariables)
 	if err != nil {
-		if cfg != nil && cfg.Debug {
-			logging.Info("DEBUG: Dotprompt rendering failed: %v", err)
-		}
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 
-	if cfg != nil && cfg.Debug {
-		logging.Info("DEBUG: Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
-		logging.Info("DEBUG: Rendered content preview: %.200s", renderedPrompt)
-		
-		if len(userVariables) > 0 {
-			logging.Info("DEBUG: Rendered dotprompt with %d user variables", len(userVariables))
-		}
-	}
+	logging.Debug("Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
 	return renderedPrompt, nil
 }
 
