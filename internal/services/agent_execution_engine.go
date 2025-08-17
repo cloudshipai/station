@@ -74,10 +74,18 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
 	logging.Info("Starting stdio MCP agent execution for agent '%s'", agent.Name)
+	logging.Info("🚀 UNIFIED EXECUTION: Using unified dotprompt execution system for agent %s", agent.Name)
 
-	// 🚀 NEW DOTPROMPT ROUTING: Check if this agent uses dotprompt format
-	if aee.isDotpromptContent(agent.Prompt) {
-		logging.Info("🎯 DOTPROMPT AGENT DETECTED: Routing to new ExecuteAgentWithDotprompt system")
+	// Load configuration for debug logging
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// 🚀 UNIFIED DOTPROMPT ROUTING: All agents now use dotprompt execution system
+	if cfg.Debug {
+		logging.Info("🎯 EXECUTING AGENT: Using unified dotprompt execution system")
+	}
 		
 		// Setup cleanup of MCP connections when dotprompt execution completes
 		defer func() {
@@ -116,7 +124,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		aee.activeMCPClients = mcpClients
 		
 		// Filter to only include tools assigned to this agent (same filtering logic as traditional)
-		logging.Info("DEBUG DOTPROMPT: Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
+		if cfg.Debug {
+			logging.Info("DEBUG DOTPROMPT: Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
+		}
 		var mcpTools []ai.ToolRef
 		for _, assignedTool := range agentTools {
 			logging.Debug("DEBUG DOTPROMPT: Looking for assigned tool: %s", assignedTool.ToolName)
@@ -130,22 +140,30 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 				} else {
 					// Fallback: use the type name
 					toolName = fmt.Sprintf("%T", mcpTool)
-					logging.Debug("Tool has no Name() method, using type name: %s", toolName)
+					if cfg.Debug {
+						logging.Debug("Tool has no Name() method, using type name: %s", toolName)
+					}
 				}
 				
 				if toolName == assignedTool.ToolName {
-					logging.Debug("Including assigned tool for dotprompt: %s", toolName)
+					if cfg.Debug {
+						logging.Debug("Including assigned tool for dotprompt: %s", toolName)
+					}
 					mcpTools = append(mcpTools, mcpTool)
 					break
 				}
 			}
 		}
 		
-		logging.Info("DEBUG DOTPROMPT: Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
+		if cfg.Debug {
+			logging.Info("DEBUG DOTPROMPT: Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
+		}
 		
 		// Use our new dotprompt + genkit execution system
+		logging.Info("🔥 CALLING DOTPROMPT EXECUTOR: About to call ExecuteAgentWithDatabaseConfig")
 		executor := dotprompt.NewGenKitExecutor()
 		response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, genkitApp, mcpTools, task)
+		logging.Info("🔥 DOTPROMPT EXECUTOR RETURNED: Success=%t, Error=%v", response != nil && response.Success, err)
 		if err != nil {
 			return nil, fmt.Errorf("dotprompt execution failed: %w", err)
 		}
@@ -154,7 +172,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		return &AgentExecutionResult{
 			Success:        response.Success,
 			Response:       response.Response,
-			Duration:       response.Duration,
+			Duration:       time.Since(startTime), // Use our own timing
 			ModelName:      response.ModelName,
 			StepsUsed:      response.StepsUsed,
 			ToolsUsed:      response.ToolsUsed,
@@ -163,569 +181,6 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			ToolCalls:      response.ToolCalls,           // ✅ Pass through tool calls
 			ExecutionSteps: response.ExecutionSteps,     // ✅ Pass through execution steps
 		}, nil
-	}
-	
-	logging.Info("📝 TRADITIONAL AGENT: Using legacy execution system")
-
-	// Setup cleanup of MCP connections when execution completes
-	defer func() {
-		aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
-		// Clear the slice for next execution
-		aee.activeMCPClients = nil
-	}()
-
-	// Initialize Genkit + MCP if not already done
-	genkitApp, err := aee.genkitProvider.GetApp(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize Genkit for agent execution: %w", err)
-	}
-	
-	// Update MCP connection manager with GenKit app
-	aee.mcpConnManager.genkitApp = genkitApp
-	
-	// Initialize server pool if pooling is enabled (one-time initialization)
-	if err := aee.mcpConnManager.InitializeServerPool(ctx); err != nil {
-		logging.Info("Warning: Failed to initialize MCP server pool: %v", err)
-	}
-
-	// Let Genkit handle tracing automatically - no need for custom span wrapping
-	// Get tools assigned to this specific agent
-	assignedTools, err := aee.repos.AgentTools.ListAgentTools(agent.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get assigned tools for agent %d: %w", agent.ID, err)
-	}
-
-	logging.Debug("Agent has %d assigned tools for execution", len(assignedTools))
-
-	// Get available tools and reuse clients for execution (Mac performance fix)
-	allTools, executionClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get environment MCP tools for agent %d: %w", agent.ID, err)
-	}
-	// Store clients for cleanup after execution (reuse discovery clients)
-	aee.activeMCPClients = executionClients
-
-	// Filter to only include tools assigned to this agent and ensure clean tool names
-	logging.Info("DEBUG ExecutionEngine: Filtering %d assigned tools from %d available MCP tools", len(assignedTools), len(allTools))
-	var tools []ai.ToolRef
-	for _, assignedTool := range assignedTools {
-		logging.Debug("DEBUG ExecutionEngine: Looking for assigned tool: %s", assignedTool.ToolName)
-		for _, mcpTool := range allTools {
-			// Match by tool name - try multiple methods to get tool name  
-			var toolName string
-			if named, ok := mcpTool.(interface{ Name() string }); ok {
-				toolName = named.Name()
-			} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
-				toolName = stringer.String()
-			} else {
-				// Fallback: use the type name
-				toolName = fmt.Sprintf("%T", mcpTool)
-				logging.Debug("Tool has no Name() method, using type name: %s", toolName)
-			}
-			
-			if toolName == assignedTool.ToolName {
-				logging.Debug("Including assigned tool: %s", toolName)
-				tools = append(tools, mcpTool) // Tool implements ToolRef interface
-				break
-			}
-		}
-	}
-
-	logging.Info("Agent execution using %d tools (filtered from %d available in environment)", len(tools), len(allTools))
-	if len(tools) == 0 {
-		logging.Debug("WARNING: No tools available for agent execution - this may indicate a configuration issue")
-	}
-
-	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Render agent prompt with dotprompt if it contains frontmatter
-	// Use the provided user-defined variables for dotprompt rendering
-	renderedAgentPrompt, err := aee.RenderAgentPromptWithDotprompt(agent.Prompt, userVariables)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render agent prompt: %w", err)
-	}
-
-	// Build the system prompt with agent-specific instructions
-	systemPrompt := fmt.Sprintf(`%s
-
-You are executing on behalf of agent '%s' (ID: %d) in environment ID: %d.
-Available tools: %d
-Max steps allowed: %d
-
-IMPORTANT: You MUST use the available tools to complete tasks. Always start by using tools to gather information or perform actions.
-
-Available tools for this task:
-%s
-
-Guidelines:
-- ALWAYS use available tools when they can help complete the task
-- Be methodical and thorough in your approach
-- Use tools to gather information and perform actions
-- Provide clear explanations of what you're doing and why
-- If you encounter errors, try alternative approaches
-- Summarize your findings and actions at the end`,
-		renderedAgentPrompt,
-		agent.Name,
-		agent.ID,
-		agent.EnvironmentID,
-		len(tools),
-		agent.MaxSteps,
-		func() string {
-			var toolNames []string
-			for _, tool := range tools {
-				toolNames = append(toolNames, "- "+tool.Name())
-			}
-			if len(toolNames) == 0 {
-				return "- No tools available"
-			}
-			return strings.Join(toolNames, "\n")
-		}())
-
-	// Execute with GenKit
-	logging.Info("Executing agent with GenKit...")
-	logging.Info("System prompt: %s", systemPrompt)
-	logging.Info("User task: %s", task)
-	logging.Info("Model: %s", cfg.AIModel)
-	logging.Info("Number of tools: %d", len(tools))
-	
-	// Debug: Log tool names and types
-	for i, tool := range tools {
-		if named, ok := tool.(interface{ Name() string }); ok {
-			logging.Info("DEBUG: Tool %d: %s", i+1, named.Name())
-		}
-	}
-	
-	logging.Info("DEBUG: About to call genkit.Generate with %d tools", len(tools))
-	logging.Info("DEBUG: System prompt length: %d characters", len(systemPrompt))
-	logging.Info("DEBUG: User task: %s", task)
-	
-	// Create properly formatted model name with provider-specific logic
-	var modelName string
-	switch strings.ToLower(cfg.AIProvider) {
-	case "gemini", "googlegenai":
-		modelName = fmt.Sprintf("googleai/%s", cfg.AIModel)
-	case "openai":
-		// Station's OpenAI plugin registers models with station-openai provider prefix
-		modelName = fmt.Sprintf("station-openai/%s", cfg.AIModel)
-	default:
-		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)
-	}
-	logging.Info("DEBUG: Model name: %s", modelName)
-	
-	// Station's custom OpenAI plugin handles tool calling properly, no middleware needed
-	logging.Info("DEBUG: Using Station's custom plugin architecture - no middleware required")
-	
-	var generateOptions []ai.GenerateOption
-	generateOptions = append(generateOptions, ai.WithModelName(modelName))
-	generateOptions = append(generateOptions, ai.WithSystem(systemPrompt))
-	generateOptions = append(generateOptions, ai.WithPrompt(task))
-	
-	generateOptions = append(generateOptions, ai.WithTools(tools...))
-	
-	// Set max turns to handle complex multi-step analysis (default is 5, increase to 25)
-	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
-	
-	// Reusing discovery clients for execution (Mac performance optimization)
-	logging.Info("DEBUG: === REUSING DISCOVERY CLIENTS FOR EXECUTION ===")
-	logging.Info("DEBUG: Using %d existing MCP clients for execution", len(aee.activeMCPClients))
-
-	logging.Info("DEBUG: === BEFORE GenKit Generate Call ===")
-	logging.Info("DEBUG: Context timeout: %v", ctx.Err())
-	logging.Info("DEBUG: GenKit app initialized: %v", genkitApp != nil)
-	logging.Info("DEBUG: Generate options count: %d", len(generateOptions))
-	logging.Info("DEBUG: Tools for generation: %d", len(tools))
-	for i, tool := range tools {
-		if named, ok := tool.(interface{ Name() string }); ok {
-			logging.Info("DEBUG: Tool %d for generation: %s", i+1, named.Name())
-		}
-	}
-	logging.Info("DEBUG: Max turns: 25")
-	logging.Info("DEBUG: Fresh execution clients: %d", len(aee.activeMCPClients))
-	logging.Info("DEBUG: Now calling genkit.Generate...")
-	
-	// Add timeout to GenKit call for Mac debugging
-	genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-	
-	logging.Info("DEBUG: *** IMMEDIATE PRE-GENERATE: About to call genkit.Generate ***")
-	response, err := genkit.Generate(genCtx, genkitApp, generateOptions...)
-	logging.Info("DEBUG: *** IMMEDIATE POST-GENERATE: genkit.Generate returned ***")
-	
-	logging.Info("DEBUG: === AFTER GenKit Generate Call ===")
-	logging.Info("DEBUG: GenKit Generate completed, checking results...")
-	logging.Info("DEBUG: Generate error: %v", err)
-	
-	// CRITICAL DEBUG: Verify we reached this point
-	logging.Info("DEBUG: *** CRITICAL CHECKPOINT: Post-Generate section reached successfully ***")
-	if response != nil {
-		logging.Info("DEBUG: Response received: %v", response != nil)
-		logging.Info("DEBUG: Response text length: %d", len(response.Text()))
-	} else {
-		logging.Info("DEBUG: Response is nil!")
-	}
-	
-	// Debug: Log the response details regardless of error
-	logging.Info("DEBUG: GenKit Generate returned, error: %v", err)
-	
-	// ENHANCED DEBUGGING: Log raw response structure
-	if response != nil {
-		logging.Info("DEBUG: ENHANCED - Response has %d messages in Request.Messages", len(response.Request.Messages))
-		for i, msg := range response.Request.Messages {
-			logging.Info("DEBUG: ENHANCED - Request Message %d: Role=%s, Parts=%d", i, msg.Role, len(msg.Content))
-			for j, part := range msg.Content {
-				if part.IsToolRequest() {
-					logging.Info("DEBUG: ENHANCED - Part %d is ToolRequest: %s", j, part.ToolRequest.Name)
-				} else if part.IsToolResponse() {
-					logging.Info("DEBUG: ENHANCED - Part %d is ToolResponse: %s", j, part.ToolResponse.Name)
-				}
-			}
-		}
-	}
-	if err != nil {
-		logging.Info("GenKit Generate error: %v", err)
-		return &AgentExecutionResult{
-			Success:   false,
-			Error:     err.Error(),
-			Duration:  time.Since(startTime),
-			ModelName: cfg.AIModel,
-		}, nil
-	}
-	
-	logging.Info("GenKit Generate completed successfully")
-
-	// Process the response
-	responseText := response.Text()
-	logging.Info("AI Response Text: %s", responseText)
-	
-	// Debug: Detailed GenKit Response Object Analysis
-	logging.Info("DEBUG: === GenKit Response Object Details ===")
-	logging.Info("DEBUG: Response Type: %T", response)
-	logging.Info("DEBUG: Response Text Length: %d characters", len(responseText))
-	
-	// Examine response request details
-	if response.Request != nil {
-		logging.Info("DEBUG: Request Messages Count: %d", len(response.Request.Messages))
-		for i, msg := range response.Request.Messages {
-			logging.Info("DEBUG: Message %d - Role: %s, Content Parts: %d", i, msg.Role, len(msg.Content))
-		}
-	}
-	
-	// Examine response message details
-	if response.Message != nil {
-		logging.Info("DEBUG: Response Message Role: %s", response.Message.Role)
-		logging.Info("DEBUG: Response Message Content Parts: %d", len(response.Message.Content))
-		for i, part := range response.Message.Content {
-			if part.IsText() {
-				logging.Info("DEBUG: Content Part %d (Text): %.200s...", i, part.Text)
-			} else if part.IsToolRequest() {
-				logging.Info("DEBUG: Content Part %d (Tool Request): Name=%s, Ref=%s", 
-					i, part.ToolRequest.Name, part.ToolRequest.Ref)
-			} else if part.IsToolResponse() {
-				logging.Info("DEBUG: Content Part %d (Tool Response): Name=%s, Ref=%s", 
-					i, part.ToolResponse.Name, part.ToolResponse.Ref)
-			}
-		}
-	}
-	
-	// Usage information
-	if response.Usage != nil {
-		logging.Info("DEBUG: Token Usage - Input: %d, Output: %d, Total: %d", 
-			response.Usage.InputTokens, response.Usage.OutputTokens, response.Usage.TotalTokens)
-	}
-	
-	// Tool request analysis
-	toolRequests := response.ToolRequests()
-	logging.Info("DEBUG: Tool Requests in Response: %d", len(toolRequests))
-	for i, req := range toolRequests {
-		logging.Info("DEBUG: Tool Request %d: Name=%s, Ref=%s, Input=%v", i+1, req.Name, req.Ref, req.Input)
-	}
-	
-	// CRITICAL DEBUG: Check if tools are actually being called
-	logging.Info("DEBUG: === CRITICAL TOOL CALLING ANALYSIS ===")
-	logging.Info("DEBUG: ToolRequests() returned %d requests", len(toolRequests))
-	
-	// Check conversation history for tool calls
-	conversationHistory := response.History()
-	logging.Info("DEBUG: Conversation history has %d messages", len(conversationHistory))
-	for i, message := range conversationHistory {
-		logging.Info("DEBUG: Message %d: Role=%s, Content Parts=%d", i, message.Role, len(message.Content))
-		for j, part := range message.Content {
-			if part.IsToolRequest() {
-				logging.Info("DEBUG: *** FOUND TOOL REQUEST in Message %d, Part %d: %s", i, j, part.ToolRequest.Name)
-			}
-			if part.IsToolResponse() {
-				logging.Info("DEBUG: *** FOUND TOOL RESPONSE in Message %d, Part %d: %s", i, j, part.ToolResponse.Name)
-			}
-			if part.IsText() {
-				logging.Info("DEBUG: Text Part %d: %.100s...", j, part.Text)
-			}
-		}
-	}
-	
-	// ENHANCED: Count actual tool usage from request messages (completed calls)
-	totalToolCalls := 0
-	if response.Request != nil {
-		for _, msg := range response.Request.Messages {
-			for _, part := range msg.Content {
-				if part.IsToolRequest() {
-					totalToolCalls++
-					logging.Info("DEBUG: FOUND COMPLETED TOOL CALL: %s", part.ToolRequest.Name)
-				}
-			}
-		}
-	}
-	// Extract tool calls and execution steps from GenKit response
-	var toolCalls []interface{}
-	var steps []interface{}
-	
-	logging.Info("DEBUG: === STARTING TOOL CALL EXTRACTION ===")
-	
-	// Extract tool calls from GenKit conversation history  
-	allToolCalls := []interface{}{}
-	// conversationHistory already declared above, reuse it
-	toolCallCounter := 0
-	
-	logging.Info("DEBUG: Extracting from conversation history (%d messages)", len(conversationHistory))
-	
-	for msgIdx, message := range conversationHistory {
-		logging.Info("DEBUG: Processing message %d with role %s (%d parts)", msgIdx, message.Role, len(message.Content))
-		for partIdx, part := range message.Content {
-			if part.IsToolRequest() {
-				toolCallCounter++
-				toolReq := part.ToolRequest
-				logging.Info("DEBUG: *** EXTRACTING TOOL CALL %d: %s (Ref: %s)", toolCallCounter, toolReq.Name, toolReq.Ref)
-				toolCall := map[string]interface{}{
-					"step":           toolCallCounter,
-					"type":           "tool_call",
-					"tool_name":      toolReq.Name,
-					"tool_input":     toolReq.Input,
-					"tool_call_id":   toolReq.Ref,
-					"model_name":     cfg.AIModel,
-					"message_role":   string(message.Role),
-				}
-				allToolCalls = append(allToolCalls, toolCall)
-			} else {
-				logging.Info("DEBUG: Part %d in message %d: not a tool request (IsText: %v)", partIdx, msgIdx, part.IsText())
-			}
-		}
-	}
-	
-	logging.Info("DEBUG: Extracted %d tool calls from conversation history", len(allToolCalls))
-	
-	// Fallback to pending tool requests if no completed ones found in history
-	if len(allToolCalls) == 0 {
-		logging.Info("DEBUG: No tool calls found in history, checking pending tool requests (%d)", len(toolRequests))
-		for i, toolReq := range toolRequests {
-			logging.Info("DEBUG: *** FALLBACK TOOL REQUEST %d: %s", i+1, toolReq.Name)
-			toolCall := map[string]interface{}{
-				"step":           i + 1,
-				"type":           "tool_call",
-				"tool_name":      toolReq.Name,
-				"tool_input":     toolReq.Input,
-				"model_name":     cfg.AIModel,
-				"tool_call_id":   toolReq.Ref,
-			}
-			allToolCalls = append(allToolCalls, toolCall)
-		}
-		logging.Info("DEBUG: Added %d tool calls from pending requests", len(allToolCalls))
-	} else {
-		logging.Info("DEBUG: Using %d tool calls from conversation history", len(allToolCalls))
-	}
-	
-	toolCalls = allToolCalls
-	
-	// Build detailed execution steps from GenKit conversation history
-	stepCounter := 0
-	
-	// Process each message in the conversation history
-	for _, message := range conversationHistory {
-		// Process each part of the message
-		for _, part := range message.Content {
-			if part.IsToolRequest() {
-				stepCounter++
-				toolReq := part.ToolRequest
-				toolRequestStep := map[string]interface{}{
-					"step":          stepCounter,
-					"type":          "tool_request",
-					"agent_id":      agent.ID,
-					"agent_name":    agent.Name,
-					"model_name":    cfg.AIModel,
-					"tool_name":     toolReq.Name,
-					"tool_call_id":  toolReq.Ref,
-					"tool_input":    toolReq.Input,
-					"message_role":  string(message.Role),
-				}
-				steps = append(steps, toolRequestStep)
-				
-			} else if part.IsToolResponse() {
-				stepCounter++
-				toolResp := part.ToolResponse
-				toolResponseStep := map[string]interface{}{
-					"step":          stepCounter,
-					"type":          "tool_response", 
-					"agent_id":      agent.ID,
-					"agent_name":    agent.Name,
-					"model_name":    cfg.AIModel,
-					"tool_name":     toolResp.Name,
-					"tool_call_id":  toolResp.Ref,
-					"tool_output":   toolResp.Output,
-					"message_role":  string(message.Role),
-				}
-				steps = append(steps, toolResponseStep)
-				
-			} else if part.IsText() && message.Role == "model" {
-				// This is the AI's final text response
-				stepCounter++
-				finalResponseStep := map[string]interface{}{
-					"step":           stepCounter,
-					"type":           "model_response",
-					"agent_id":       agent.ID,
-					"agent_name":     agent.Name,
-					"model_name":     cfg.AIModel,
-					"content":        part.Text,
-					"content_length": len(part.Text),
-					"message_role":   string(message.Role),
-				}
-				steps = append(steps, finalResponseStep)
-			}
-		}
-	}
-	
-	// Fallback: If no steps were captured from history, add summary steps
-	if len(steps) == 0 {
-		if len(toolCalls) > 0 {
-			step := map[string]interface{}{
-				"step":              1,
-				"type":              "tool_execution_summary",
-				"agent_id":          agent.ID,
-				"agent_name":        agent.Name,
-				"model_name":        cfg.AIModel,
-				"tool_calls_count":  len(toolCalls),
-				"tools_used":        len(toolCalls),
-			}
-			steps = append(steps, step)
-		}
-		
-		if responseText != "" {
-			finalStep := map[string]interface{}{
-				"step":              len(steps) + 1,
-				"type":              "final_response_summary",
-				"agent_id":          agent.ID,
-				"agent_name":        agent.Name,
-				"model_name":        cfg.AIModel,
-				"content_length":    len(responseText),
-			}
-			steps = append(steps, finalStep)
-		}
-	}
-
-	// Convert to database-compatible types
-	toolCallsJSON := &models.JSONArray{}
-	if len(toolCalls) > 0 {
-		*toolCallsJSON = models.JSONArray(toolCalls)
-	}
-	
-	executionStepsJSON := &models.JSONArray{}
-	if len(steps) > 0 {
-		*executionStepsJSON = models.JSONArray(steps)
-	}
-	
-	// ENHANCED: Detect tool usage from response content if direct extraction failed
-	actualToolsUsed := len(toolCalls)
-	logging.Info("DEBUG: Initial tool count from direct extraction: %d", actualToolsUsed)
-	
-	if actualToolsUsed == 0 && len(responseText) > 0 {
-		logging.Info("DEBUG: Checking response content for tool usage indicators...")
-		// Check if the response contains tool-specific information that indicates tool usage
-		toolIndicators := []string{
-			"C06F9RUL491", // Specific channel IDs that only come from Slack API
-			"C06F9V88TL2",
-			"C06FNJDNG8H", 
-			"C06FYNRJ5U0",
-			"Channel Name:", // Formatted output that indicates API call
-			"Number of Members:", // Another API-specific format
-		}
-		
-		for _, indicator := range toolIndicators {
-			if strings.Contains(responseText, indicator) {
-				actualToolsUsed = 1 // At least one tool was used
-				logging.Info("DEBUG: ✅ DETECTED TOOL USAGE FROM RESPONSE CONTENT - Found: %s", indicator)
-				
-				// Create a fake tool call entry for proper tracking
-				if len(toolCalls) == 0 {
-					toolCall := map[string]interface{}{
-						"step":           1,
-						"type":           "tool_call_detected",
-						"tool_name":      "__slack_list_channels",
-						"detection_method": "content_analysis",
-						"indicator":      indicator,
-						"model_name":     cfg.AIModel,
-					}
-					toolCalls = append(toolCalls, toolCall)
-				}
-				break
-			}
-		}
-		
-		if actualToolsUsed == 0 {
-			logging.Info("DEBUG: ❌ No tool usage indicators found in response content")
-		}
-	}
-
-	result := &AgentExecutionResult{
-		Success:        true,
-		Response:       responseText,
-		ToolCalls:      toolCallsJSON,
-		Steps:          steps,
-		ExecutionSteps: executionStepsJSON,
-		Duration:       time.Since(startTime),
-		ModelName:      cfg.AIModel,
-		StepsUsed:      len(steps),
-		StepsTaken:     int64(len(steps)),
-		ToolsUsed:      actualToolsUsed, // Use the corrected count
-	}
-
-	// Extract token usage if available
-	if response.Usage != nil {
-		result.TokenUsage = map[string]interface{}{
-			"input_tokens":  response.Usage.InputTokens,
-			"output_tokens": response.Usage.OutputTokens,
-			"total_tokens":  response.Usage.TotalTokens,
-		}
-	}
-
-	// DEBUG: Log complete AgentExecutionResult data  
-	logging.Info("DEBUG: === AgentExecutionResult Complete Data ===")
-	logging.Info("DEBUG: Success: %v", result.Success)
-	logging.Info("DEBUG: Response length: %d chars", len(result.Response))
-	logging.Info("DEBUG: Duration: %v", result.Duration)
-	logging.Info("DEBUG: ModelName: %s", result.ModelName)
-	logging.Info("DEBUG: StepsUsed: %d", result.StepsUsed)
-	logging.Info("DEBUG: ToolsUsed: %d", result.ToolsUsed)
-	if result.TokenUsage != nil {
-		logging.Info("DEBUG: TokenUsage: %+v", result.TokenUsage)
-	} else {
-		logging.Info("DEBUG: TokenUsage: nil")
-	}
-	if result.ToolCalls != nil {
-		logging.Info("DEBUG: ToolCalls: %d items", len(*result.ToolCalls))
-	} else {
-		logging.Info("DEBUG: ToolCalls: nil")
-	}
-	if result.ExecutionSteps != nil {
-		logging.Info("DEBUG: ExecutionSteps: %d items", len(*result.ExecutionSteps))
-	} else {
-		logging.Info("DEBUG: ExecutionSteps: nil")
-	}
-
-	logging.Info("Agent execution completed successfully in %v (steps: %d, tools: %d)", 
-		result.Duration, result.StepsUsed, result.ToolsUsed)
-
-	return result, nil
 }
 
 // ExecuteAgentWithMessages executes an agent using pre-rendered ai.Message objects
@@ -795,11 +250,13 @@ func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, a
 	case "gemini", "googlegenai":
 		modelName = fmt.Sprintf("googleai/%s", cfg.AIModel)
 	case "openai":
-		modelName = fmt.Sprintf("station-openai/%s", cfg.AIModel)
+		modelName = fmt.Sprintf("openai/%s", cfg.AIModel)
 	default:
 		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)
 	}
-	logging.Info("DEBUG: Model name: %s", modelName)
+	if cfg.Debug {
+		logging.Info("DEBUG: Model name: %s", modelName)
+	}
 
 	// Build generate options with messages instead of system+prompt
 	var generateOptions []ai.GenerateOption
@@ -808,7 +265,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, a
 	generateOptions = append(generateOptions, ai.WithTools(tools...))
 	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
 
-	logging.Info("DEBUG: About to call genkit.Generate with %d messages and %d tools", len(messages), len(tools))
+	if cfg.Debug {
+		logging.Info("DEBUG: About to call genkit.Generate with %d messages and %d tools", len(messages), len(tools))
+	}
 
 	// Execute with GenKit (same as existing)
 	genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -819,7 +278,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, a
 		return nil, fmt.Errorf("GenKit Generate failed: %w", err)
 	}
 
-	logging.Info("DEBUG: GenKit Generate completed successfully")
+	if cfg.Debug {
+		logging.Info("DEBUG: GenKit Generate completed successfully")
+	}
 
 	// Return result (same format as existing)
 	result := &AgentExecutionResult{
@@ -878,24 +339,30 @@ func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt stri
 	// Check if this is a dotprompt with YAML frontmatter
 	if !aee.isDotpromptContent(agentPrompt) {
 		// Not a dotprompt, return as-is
-		logging.Info("DEBUG: Agent prompt is NOT dotprompt, returning as-is")
 		return agentPrompt, nil
 	}
 
-	logging.Info("DEBUG: Agent prompt IS dotprompt, rendering with %d variables", len(userVariables))
+	cfg, _ := config.Load()
+	if cfg != nil && cfg.Debug {
+		logging.Info("DEBUG: Agent prompt IS dotprompt, rendering with %d variables", len(userVariables))
+	}
 	
 	// Do inline dotprompt rendering to avoid import cycle
 	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, userVariables)
 	if err != nil {
-		logging.Info("DEBUG: Dotprompt rendering failed: %v", err)
+		if cfg != nil && cfg.Debug {
+			logging.Info("DEBUG: Dotprompt rendering failed: %v", err)
+		}
 		return "", fmt.Errorf("failed to render dotprompt: %w", err)
 	}
 
-	logging.Info("DEBUG: Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
-	logging.Info("DEBUG: Rendered content preview: %.200s", renderedPrompt)
-	
-	if len(userVariables) > 0 {
-		logging.Info("DEBUG: Rendered dotprompt with %d user variables", len(userVariables))
+	if cfg != nil && cfg.Debug {
+		logging.Info("DEBUG: Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
+		logging.Info("DEBUG: Rendered content preview: %.200s", renderedPrompt)
+		
+		if len(userVariables) > 0 {
+			logging.Info("DEBUG: Rendered dotprompt with %d user variables", len(userVariables))
+		}
 	}
 	return renderedPrompt, nil
 }
