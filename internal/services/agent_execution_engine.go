@@ -11,11 +11,12 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/pkg/models"
+	dotprompt "station/pkg/dotprompt"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
-	"github.com/google/dotprompt/go/dotprompt"
+	googledotprompt "github.com/google/dotprompt/go/dotprompt"
 )
 
 // AgentExecutionResult contains the result of an agent execution
@@ -73,6 +74,98 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
 	logging.Info("Starting stdio MCP agent execution for agent '%s'", agent.Name)
+
+	// 🚀 NEW DOTPROMPT ROUTING: Check if this agent uses dotprompt format
+	if aee.isDotpromptContent(agent.Prompt) {
+		logging.Info("🎯 DOTPROMPT AGENT DETECTED: Routing to new ExecuteAgentWithDotprompt system")
+		
+		// Setup cleanup of MCP connections when dotprompt execution completes
+		defer func() {
+			aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
+			// Clear the slice for next execution
+			aee.activeMCPClients = nil
+		}()
+		
+		// Get agent tools for the new dotprompt system
+		agentTools, err := aee.repos.AgentTools.ListAgentTools(agent.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get agent tools for dotprompt execution: %w", err)
+		}
+		
+		// Get GenKit app for dotprompt execution
+		genkitApp, err := aee.genkitProvider.GetApp(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get genkit app for dotprompt execution: %w", err)
+		}
+		
+		// Update MCP connection manager with GenKit app (same as traditional)
+		aee.mcpConnManager.genkitApp = genkitApp
+		
+		// Initialize server pool if pooling is enabled (same as traditional)
+		if err := aee.mcpConnManager.InitializeServerPool(ctx); err != nil {
+			logging.Info("Warning: Failed to initialize MCP server pool for dotprompt: %v", err)
+		}
+		
+		// Load MCP tools for dotprompt execution (reuse the same logic as traditional execution)
+		allMCPTools, mcpClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get environment MCP tools for dotprompt execution: %w", err)
+		}
+		
+		// Store clients for cleanup after execution
+		aee.activeMCPClients = mcpClients
+		
+		// Filter to only include tools assigned to this agent (same filtering logic as traditional)
+		logging.Info("DEBUG DOTPROMPT: Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
+		var mcpTools []ai.ToolRef
+		for _, assignedTool := range agentTools {
+			logging.Debug("DEBUG DOTPROMPT: Looking for assigned tool: %s", assignedTool.ToolName)
+			for _, mcpTool := range allMCPTools {
+				// Match by tool name - same method as traditional execution
+				var toolName string
+				if named, ok := mcpTool.(interface{ Name() string }); ok {
+					toolName = named.Name()
+				} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
+					toolName = stringer.String()
+				} else {
+					// Fallback: use the type name
+					toolName = fmt.Sprintf("%T", mcpTool)
+					logging.Debug("Tool has no Name() method, using type name: %s", toolName)
+				}
+				
+				if toolName == assignedTool.ToolName {
+					logging.Debug("Including assigned tool for dotprompt: %s", toolName)
+					mcpTools = append(mcpTools, mcpTool)
+					break
+				}
+			}
+		}
+		
+		logging.Info("DEBUG DOTPROMPT: Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
+		
+		// Use our new dotprompt + genkit execution system
+		executor := dotprompt.NewGenKitExecutor()
+		response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, genkitApp, mcpTools, task)
+		if err != nil {
+			return nil, fmt.Errorf("dotprompt execution failed: %w", err)
+		}
+		
+		// Convert ExecutionResponse to AgentExecutionResult  
+		return &AgentExecutionResult{
+			Success:        response.Success,
+			Response:       response.Response,
+			Duration:       response.Duration,
+			ModelName:      response.ModelName,
+			StepsUsed:      response.StepsUsed,
+			ToolsUsed:      response.ToolsUsed,
+			Error:          response.Error,
+			TokenUsage:     make(map[string]interface{}), // TODO: Add token usage from dotprompt system
+			ToolCalls:      response.ToolCalls,           // ✅ Pass through tool calls
+			ExecutionSteps: response.ExecutionSteps,     // ✅ Pass through execution steps
+		}, nil
+	}
+	
+	logging.Info("📝 TRADITIONAL AGENT: Using legacy execution system")
 
 	// Setup cleanup of MCP connections when execution completes
 	defer func() {
@@ -741,6 +834,11 @@ func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, a
 	return result, nil
 }
 
+// GetGenkitProvider returns the genkit provider for external access
+func (aee *AgentExecutionEngine) GetGenkitProvider() *GenKitProvider {
+	return aee.genkitProvider
+}
+
 // TestStdioMCPConnection tests the MCP connection for debugging
 func (aee *AgentExecutionEngine) TestStdioMCPConnection(ctx context.Context) error {
 	logging.Info("Testing stdio MCP connection...")
@@ -812,10 +910,10 @@ func (aee *AgentExecutionEngine) isDotpromptContent(prompt string) bool {
 // renderDotpromptInline renders dotprompt content inline to avoid import cycles
 func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent string, userVariables map[string]interface{}) (string, error) {
 	// 1. Create dotprompt instance
-	dp := dotprompt.NewDotprompt(nil) // Use default options
+	dp := googledotprompt.NewDotprompt(nil) // Use default options
 	
 	// 2. Prepare data for rendering with user-defined variables only
-	data := &dotprompt.DataArgument{
+	data := &googledotprompt.DataArgument{
 		Input:   userVariables, // User-defined variables like {{my_folder}}, {{my_var}}
 		Context: map[string]any{}, // Keep context empty unless needed
 	}
@@ -834,7 +932,7 @@ func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent string, 
 		}
 		// Don't include role prefix - just the content
 		for _, part := range msg.Content {
-			if textPart, ok := part.(*dotprompt.TextPart); ok {
+			if textPart, ok := part.(*googledotprompt.TextPart); ok {
 				renderedText.WriteString(textPart.Text)
 			}
 		}
@@ -868,7 +966,7 @@ func (aee *AgentExecutionEngine) GetAgentSchema(agent *models.Agent) (*AgentSche
 	}
 	
 	// Use GenKit's dotprompt parser to properly parse the template
-	parsedPrompt, err := dotprompt.ParseDocument(agent.Prompt)
+	parsedPrompt, err := googledotprompt.ParseDocument(agent.Prompt)
 	if err != nil {
 		return schema, fmt.Errorf("failed to parse dotprompt document: %w", err)
 	}
