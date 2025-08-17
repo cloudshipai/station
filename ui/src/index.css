@@ -121,7 +121,7 @@
     }
   }
   
-  /* React Flow edge styling */
+  /* React Flow edge styling with neon effects */
   .react-flow__edge-path {
     stroke: #ff00ff !important;
     stroke-width: 3px !important;
