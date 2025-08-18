@@ -21,7 +21,7 @@ import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-rout
 import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight, RotateCw, Train, Globe, Package, Download, Upload, Copy, Edit, ArrowLeft, Save } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import Editor from '@monaco-editor/react';
-import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi } from './api/station';
+import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi, bundlesApi, type BundleInfo } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes } from './utils/layoutUtils';
 import { AgentNode } from './components/nodes/AgentNode';
@@ -1982,6 +1982,7 @@ const EnvironmentsPage = () => {
   const [environments, setEnvironments] = useState<any[]>([]);
   const [selectedEnvironment, setSelectedEnvironment] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [graphLoading, setGraphLoading] = useState(false);
   const [isBundleModalOpen, setIsBundleModalOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
 
@@ -2011,6 +2012,7 @@ const EnvironmentsPage = () => {
 
     const generateEnvironmentGraph = async () => {
       try {
+        setGraphLoading(true);
         const [agentsResponse, mcpServersResponse] = await Promise.all([
           agentsApi.getByEnvironment(selectedEnvironment),
           mcpServersApi.getByEnvironment(selectedEnvironment)
@@ -2100,6 +2102,8 @@ const EnvironmentsPage = () => {
         setEdges(newEdges);
       } catch (error) {
         console.error('Failed to generate environment graph:', error);
+      } finally {
+        setGraphLoading(false);
       }
     };
 
@@ -2138,30 +2142,44 @@ const EnvironmentsPage = () => {
         </div>
       </div>
       
-      <div className="flex-1 h-full">
+      <div className="flex-1 h-full relative">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-tokyo-comment font-mono">Loading environments...</div>
           </div>
         ) : (
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={environmentPageNodeTypes}
-            fitView
-            className="bg-tokyo-bg w-full h-full"
-            defaultEdgeOptions={{
-              animated: true,
-              style: { 
-                stroke: '#ff00ff', 
-                strokeWidth: 3,
-                zIndex: 1000
-              },
-            }}
-          />
+          <>
+            <ReactFlow
+              key={`environment-${selectedEnvironment}`}
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              nodeTypes={environmentPageNodeTypes}
+              fitView
+              fitViewOptions={{ padding: 0.1, duration: 500 }}
+              className="bg-tokyo-bg w-full h-full"
+              defaultEdgeOptions={{
+                animated: true,
+                style: { 
+                  stroke: '#ff00ff', 
+                  strokeWidth: 3,
+                  zIndex: 1000
+                },
+              }}
+            />
+            
+            {/* Graph loading overlay */}
+            {graphLoading && (
+              <div className="absolute inset-0 bg-tokyo-bg bg-opacity-80 flex items-center justify-center z-50">
+                <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 flex items-center gap-3">
+                  <div className="animate-spin h-6 w-6 border-2 border-tokyo-orange border-t-transparent rounded-full"></div>
+                  <span className="text-tokyo-fg font-mono">Rebuilding environment graph...</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
       
@@ -2175,15 +2193,207 @@ const EnvironmentsPage = () => {
   );
 };
 
+// Install Bundle Modal Component
+const InstallBundleModal = ({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess?: () => void }) => {
+  const [bundleSource, setBundleSource] = useState<'url' | 'file'>('url');
+  const [bundleLocation, setBundleLocation] = useState('');
+  const [environmentName, setEnvironmentName] = useState('');
+  const [installing, setInstalling] = useState(false);
+  const [installSuccess, setInstallSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleInstall = async () => {
+    if (!bundleLocation.trim() || !environmentName.trim()) {
+      setError('Please provide both bundle location and environment name');
+      return;
+    }
+
+    try {
+      setInstalling(true);
+      setError(null);
+
+      // Install bundle via API
+      const response = await bundlesApi.install(bundleLocation, environmentName, bundleSource);
+      
+      // The API handles:
+      // 1. Download/extract the bundle from URL or file path
+      // 2. Create new environment via database mechanism
+      // 3. Unpack contents into the environment directory
+      // 4. Move tar.gz to ~/.config/station/bundles directory
+      
+      setInstallSuccess(true);
+      onSuccess?.(); // Refresh bundles list
+      setTimeout(() => {
+        setInstallSuccess(false);
+        onClose();
+        setBundleLocation('');
+        setEnvironmentName('');
+        setBundleSource('url');
+      }, 2000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to install bundle');
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!installing) {
+      onClose();
+      setError(null);
+      setInstallSuccess(false);
+      setBundleLocation('');
+      setEnvironmentName('');
+      setBundleSource('url');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-mono font-semibold text-tokyo-magenta">Install Bundle</h2>
+          <button
+            onClick={handleClose}
+            disabled={installing}
+            className="text-tokyo-comment hover:text-tokyo-fg transition-colors disabled:opacity-50"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {installSuccess ? (
+          <div className="text-center py-8">
+            <div className="bg-tokyo-green bg-opacity-10 border border-tokyo-green border-opacity-50 rounded-lg p-4 mb-4">
+              <Package className="h-8 w-8 text-tokyo-green mx-auto mb-2" />
+              <p className="text-tokyo-green font-mono">Bundle installed successfully!</p>
+            </div>
+            <div className="bg-tokyo-blue bg-opacity-10 border border-tokyo-blue border-opacity-50 rounded-lg p-3">
+              <p className="text-sm text-tokyo-blue font-mono">
+                Next step: Run <code className="bg-tokyo-bg px-1 rounded text-tokyo-orange">stn sync {environmentName}</code> to apply changes
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-mono text-tokyo-fg mb-2">Bundle Source</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBundleSource('url')}
+                  className={`px-3 py-2 rounded font-mono text-sm transition-colors ${
+                    bundleSource === 'url'
+                      ? 'bg-tokyo-blue text-tokyo-bg'
+                      : 'bg-tokyo-bg border border-tokyo-blue7 text-tokyo-comment hover:text-tokyo-fg'
+                  }`}
+                >
+                  URL/Endpoint
+                </button>
+                <button
+                  onClick={() => setBundleSource('file')}
+                  className={`px-3 py-2 rounded font-mono text-sm transition-colors ${
+                    bundleSource === 'file'
+                      ? 'bg-tokyo-blue text-tokyo-bg'
+                      : 'bg-tokyo-bg border border-tokyo-blue7 text-tokyo-comment hover:text-tokyo-fg'
+                  }`}
+                >
+                  File Path
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-mono text-tokyo-fg mb-2">
+                Bundle {bundleSource === 'url' ? 'URL' : 'File Path'}
+              </label>
+              <input
+                type="text"
+                value={bundleLocation}
+                onChange={(e) => setBundleLocation(e.target.value)}
+                placeholder={bundleSource === 'url' ? 'https://example.com/bundle.tar.gz' : '/path/to/bundle.tar.gz'}
+                className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded text-tokyo-fg font-mono text-sm focus:border-tokyo-blue focus:outline-none"
+                disabled={installing}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-mono text-tokyo-fg mb-2">New Environment Name</label>
+              <input
+                type="text"
+                value={environmentName}
+                onChange={(e) => setEnvironmentName(e.target.value)}
+                placeholder="production"
+                className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded text-tokyo-fg font-mono text-sm focus:border-tokyo-blue focus:outline-none"
+                disabled={installing}
+              />
+            </div>
+
+            {error && (
+              <div className="bg-tokyo-red bg-opacity-20 border border-tokyo-red rounded p-3">
+                <p className="text-tokyo-red text-sm font-mono">{error}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleClose}
+                disabled={installing}
+                className="flex-1 px-4 py-2 bg-tokyo-bg border border-tokyo-blue7 text-tokyo-comment rounded font-mono transition-colors hover:text-tokyo-fg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleInstall}
+                disabled={installing || !bundleLocation.trim() || !environmentName.trim()}
+                className="flex-1 px-4 py-2 bg-tokyo-magenta text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-purple transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {installing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-tokyo-bg border-t-transparent"></div>
+                    Installing...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Install Bundle
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Bundles Page Component
 const BundlesPage = () => {
-  const [bundles, setBundles] = useState<any[]>([]);
+  const [bundles, setBundles] = useState<BundleInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
 
-  // Fetch bundles data (placeholder for now)
+  // Fetch bundles data
+  const fetchBundles = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await bundlesApi.getAll();
+      setBundles(response.data.bundles || []);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load bundles');
+      setBundles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // TODO: Implement bundles API
-    setBundles([]);
+    fetchBundles();
   }, [environmentContext?.refreshTrigger]);
 
   return (
@@ -2191,20 +2401,76 @@ const BundlesPage = () => {
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
         <h1 className="text-xl font-mono font-semibold text-tokyo-magenta">Bundles</h1>
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2 bg-tokyo-magenta text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-purple transition-colors shadow-tokyo-glow flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Add Bundle
+          <button 
+            onClick={() => setIsInstallModalOpen(true)}
+            className="px-4 py-2 bg-tokyo-magenta text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-purple transition-colors shadow-tokyo-glow flex items-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Install Bundle
           </button>
         </div>
       </div>
       
       <div className="flex-1 p-4">
-        <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-8 text-center">
-          <Package className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-          <h2 className="text-lg font-mono font-medium text-tokyo-fg mb-2">No bundles found</h2>
-          <p className="text-tokyo-comment font-mono">Create your first bundle to get started with agent templates and configurations.</p>
-        </div>
+        {loading ? (
+          <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-8 text-center">
+            <div className="animate-spin h-8 w-8 border-2 border-tokyo-blue border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-tokyo-comment font-mono">Loading bundles...</p>
+          </div>
+        ) : error ? (
+          <div className="bg-tokyo-bg-dark border border-tokyo-red border-opacity-50 rounded-lg p-8 text-center">
+            <div className="h-16 w-16 text-tokyo-red mx-auto mb-4">⚠️</div>
+            <h2 className="text-lg font-mono font-medium text-tokyo-red mb-2">Error loading bundles</h2>
+            <p className="text-tokyo-comment font-mono">{error}</p>
+          </div>
+        ) : bundles.length === 0 ? (
+          <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-8 text-center">
+            <Package className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
+            <h2 className="text-lg font-mono font-medium text-tokyo-fg mb-2">No bundles found</h2>
+            <p className="text-tokyo-comment font-mono">Install your first bundle to get started with agent templates and configurations.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {bundles.map((bundle, index) => (
+              <div key={index} className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 hover:border-tokyo-blue5 transition-colors">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Package className="h-8 w-8 text-tokyo-magenta" />
+                    <div>
+                      <h3 className="text-lg font-mono font-medium text-tokyo-fg">{bundle.name}</h3>
+                      <p className="text-sm text-tokyo-comment font-mono">{bundle.file_name}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-2 text-sm font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-tokyo-comment">Size:</span>
+                    <span className="text-tokyo-fg">{(bundle.size / 1024).toFixed(1)} KB</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-tokyo-comment">Modified:</span>
+                    <span className="text-tokyo-fg">{bundle.modified_time}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-tokyo-comment">Path:</span>
+                    <span className="text-tokyo-fg text-xs truncate ml-2" title={bundle.file_path}>
+                      {bundle.file_path}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+      
+      {/* Install Bundle Modal */}
+      <InstallBundleModal 
+        isOpen={isInstallModalOpen} 
+        onClose={() => setIsInstallModalOpen(false)}
+        onSuccess={fetchBundles}
+      />
     </div>
   );
 };
