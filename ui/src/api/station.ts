@@ -40,6 +40,9 @@ export const agentsApi = {
     apiClient.get<{agents: Agent[], count: number}>(`/agents?environment_id=${environmentId}`),
   getTools: (agentId: number) => 
     apiClient.get<AgentTool[]>(`/agents/${agentId}/tools`),
+  getPrompt: (id: number) => apiClient.get<{content: string, path: string, agent_id: number}>(`/agents/${id}/prompt`),
+  updatePrompt: (id: number, content: string) => 
+    apiClient.put<{message: string, path: string, agent_id: number, environment: string, sync_command: string}>(`/agents/${id}/prompt`, { content }),
 };
 
 // MCP Servers API
