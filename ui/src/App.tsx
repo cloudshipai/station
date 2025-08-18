@@ -1058,6 +1058,16 @@ const Layout = ({ children, currentPage, onPageChange }: any) => {
             <Package className="inline h-4 w-4 mr-2" />
             Bundles
           </button>
+          <button 
+            onClick={() => onPageChange('ship')}
+            className={`w-full text-left p-3 rounded border font-mono transition-colors ${
+              currentPage === 'ship' 
+                ? 'bg-tokyo-yellow text-tokyo-bg border-tokyo-yellow shadow-tokyo-glow' 
+                : 'bg-transparent text-tokyo-fg-dark hover:bg-tokyo-bg-highlight hover:text-tokyo-yellow border-transparent hover:border-tokyo-blue7'
+            }`}
+          >
+            🚢 Ship CLI
+          </button>
         </nav>
       </div>
       <div className="flex-1">
@@ -1854,8 +1864,22 @@ const MCPServers = () => {
                 <p className="text-sm text-tokyo-comment mt-1 font-mono">
                   {server.command} {server.args ? server.args.join(' ') : ''}
                 </p>
+                
+                {/* Error message */}
+                {server.error && (
+                  <div className="mt-2 p-2 bg-tokyo-red bg-opacity-20 border border-tokyo-red border-opacity-50 rounded">
+                    <p className="text-sm text-tokyo-red font-mono">{server.error}</p>
+                  </div>
+                )}
+                
                 <div className="mt-2 flex gap-2">
-                  <span className="px-2 py-1 bg-tokyo-green text-tokyo-bg text-xs rounded font-mono">Active</span>
+                  <span className={`px-2 py-1 text-xs rounded font-mono ${
+                    server.status === 'error' 
+                      ? 'bg-tokyo-red text-tokyo-bg' 
+                      : 'bg-tokyo-green text-tokyo-bg'
+                  }`}>
+                    {server.status === 'error' ? 'Error' : 'Active'}
+                  </span>
                   <span className="px-2 py-1 bg-tokyo-blue text-tokyo-bg text-xs rounded font-mono">Environment {server.environment_id}</span>
                 </div>
               </div>
@@ -2369,6 +2393,356 @@ const InstallBundleModal = ({ isOpen, onClose, onSuccess }: { isOpen: boolean; o
   );
 };
 
+// Ship CLI Page Component
+const ShipCLIPage = () => {
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }));
+  };
+
+  const CollapsibleCard = ({ id, title, children, defaultExpanded = false }: { id: string; title: string; children: React.ReactNode; defaultExpanded?: boolean }) => {
+    const isExpanded = expandedSections[id] ?? defaultExpanded;
+    
+    return (
+      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection(id)}
+          className="w-full p-4 text-left flex items-center justify-between hover:bg-tokyo-bg-highlight transition-colors"
+        >
+          <h3 className="text-lg font-mono font-medium text-tokyo-yellow">{title}</h3>
+          <ChevronRight className={`h-4 w-4 text-tokyo-yellow transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+        </button>
+        {isExpanded && (
+          <div className="p-4 border-t border-tokyo-blue7">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-tokyo-bg">
+      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🚢</span>
+          <h1 className="text-xl font-mono font-semibold text-tokyo-yellow">Ship CLI</h1>
+          <span className="px-2 py-1 bg-tokyo-yellow bg-opacity-20 text-tokyo-yellow text-xs font-mono rounded">
+            Station Companion
+          </span>
+        </div>
+      </div>
+      
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Introduction */}
+          <div className="bg-tokyo-bg-dark border border-tokyo-yellow border-opacity-50 rounded-lg p-6">
+            <h2 className="text-2xl font-mono font-bold text-tokyo-yellow mb-4">Ship MCP Framework</h2>
+            <p className="text-tokyo-fg font-mono leading-relaxed mb-4">
+              <strong className="text-tokyo-yellow">Ship is the perfect companion to Station</strong> - a comprehensive collection of CloudShip AI team curated MCP servers that run on top of Dagger engine with the ability to use it as a framework to build MCP servers that run securely in containers.
+            </p>
+            <p className="text-tokyo-fg font-mono leading-relaxed mb-4">
+              Ship provides <strong className="text-tokyo-cyan">92 ready-to-use infrastructure and security tools</strong> that integrate seamlessly with Station's MCP server management, giving you off-the-shelf MCP servers powered by secure Dagger containers.
+            </p>
+            
+            {/* Beta Note */}
+            <div className="bg-tokyo-orange bg-opacity-20 border border-tokyo-orange border-opacity-50 rounded p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-tokyo-orange font-mono font-bold">📝 Note:</span>
+              </div>
+              <p className="text-tokyo-orange font-mono text-sm">
+                Ship is currently in <strong>early beta</strong>. While functional and actively maintained by the CloudShip AI team, expect regular updates and potential breaking changes as we refine the framework.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Install */}
+          <CollapsibleCard id="install" title="🚀 Quick Installation" defaultExpanded={true}>
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Install Ship CLI</h4>
+                <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                  <code className="text-tokyo-green font-mono text-sm">
+                    curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash
+                  </code>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Or install with Go</h4>
+                <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                  <code className="text-tokyo-green font-mono text-sm">
+                    go install github.com/cloudshipai/ship/cmd/ship@latest
+                  </code>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Use with Station</h4>
+                <p className="text-tokyo-comment font-mono text-sm mb-2">
+                  Once installed, add Ship MCP servers to your Station environment using the "Add Server" button above.
+                </p>
+                <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                  <code className="text-tokyo-green font-mono text-sm">
+                    ship mcp all  # Start MCP server with all 92 tools
+                  </code>
+                </div>
+              </div>
+            </div>
+          </CollapsibleCard>
+
+          {/* Module Categories */}
+          <CollapsibleCard id="terraform" title="🔧 Terraform Tools (11 modules)">
+            <div className="space-y-3">
+              {[
+                { name: 'lint', desc: 'TFLint for syntax checking', usage: 'ship tf lint' },
+                { name: 'checkov', desc: 'Security & compliance scanning', usage: 'ship tf checkov' },
+                { name: 'trivy', desc: 'Security scanning', usage: 'ship tf trivy' },
+                { name: 'terraform-docs', desc: 'Documentation generation', usage: 'ship tf docs' },
+                { name: 'diagram', desc: 'InfraMap visualization', usage: 'ship tf diagram' },
+                { name: 'cost', desc: 'OpenInfraQuote analysis', usage: 'ship tf cost' },
+                { name: 'infracost', desc: 'Advanced cost analysis', usage: 'Detailed pricing' },
+              ].map(tool => (
+                <div key={tool.name} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-mono font-medium text-tokyo-blue">{tool.name}</span>
+                    <code className="text-tokyo-green font-mono text-xs">{tool.usage}</code>
+                  </div>
+                  <p className="text-tokyo-comment font-mono text-sm">{tool.desc}</p>
+                </div>
+              ))}
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard id="security" title="🛡️ Security Tools (41 modules)">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { category: 'Secret Detection', tools: ['gitleaks', 'trufflehog', 'git-secrets', 'history-scrub'] },
+                  { category: 'Vulnerability Scanning', tools: ['grype', 'trivy', 'osv-scanner', 'semgrep'] },
+                  { category: 'SBOM & Supply Chain', tools: ['syft', 'guac', 'dependency-track', 'in-toto'] },
+                  { category: 'Container Security', tools: ['dockle', 'cosign', 'cosign-golden', 'trivy-golden'] },
+                  { category: 'Kubernetes Security', tools: ['kubescape', 'kube-bench', 'kube-hunter', 'falco'] },
+                  { category: 'Cloud Security', tools: ['prowler', 'scout-suite', 'cloudsplaining', 'cfn-nag'] }
+                ].map(cat => (
+                  <div key={cat.category} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                    <h5 className="font-mono font-medium text-tokyo-red mb-2">{cat.category}</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {cat.tools.map(tool => (
+                        <span key={tool} className="px-2 py-1 bg-tokyo-red bg-opacity-20 text-tokyo-red text-xs font-mono rounded">
+                          {tool}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard id="cloud" title="☁️ Cloud Infrastructure (20 modules)">
+            <div className="space-y-3">
+              {[
+                { name: 'cloudquery', desc: 'Asset inventory', support: 'Multi-cloud' },
+                { name: 'custodian', desc: 'Governance engine', support: 'AWS, Azure, GCP' },
+                { name: 'terraformer', desc: 'Infrastructure import', support: 'Multi-cloud' },
+                { name: 'packer', desc: 'Image building', support: 'Multi-platform' },
+                { name: 'velero', desc: 'Backup & recovery', support: 'Kubernetes' },
+                { name: 'cert-manager', desc: 'Certificate mgmt', support: 'Kubernetes' }
+              ].map(tool => (
+                <div key={tool.name} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3 flex justify-between items-center">
+                  <div>
+                    <span className="font-mono font-medium text-tokyo-cyan">{tool.name}</span>
+                    <p className="text-tokyo-comment font-mono text-sm">{tool.desc}</p>
+                  </div>
+                  <span className="px-2 py-1 bg-tokyo-cyan bg-opacity-20 text-tokyo-cyan text-xs font-mono rounded">
+                    {tool.support}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard id="external" title="🌐 External MCP Servers (4 modules)">
+            <div className="space-y-3">
+              {[
+                { 
+                  name: 'filesystem', 
+                  desc: 'File and directory operations', 
+                  vars: 'FILESYSTEM_ROOT (optional)',
+                  usage: 'ship mcp filesystem --var FILESYSTEM_ROOT=/custom/path'
+                },
+                { 
+                  name: 'memory', 
+                  desc: 'Persistent knowledge storage', 
+                  vars: 'MEMORY_STORAGE_PATH, MEMORY_MAX_SIZE',
+                  usage: 'ship mcp memory --var MEMORY_STORAGE_PATH=/data'
+                },
+                { 
+                  name: 'brave-search', 
+                  desc: 'Web search capabilities', 
+                  vars: 'BRAVE_API_KEY (required), BRAVE_SEARCH_COUNT',
+                  usage: 'ship mcp brave-search --var BRAVE_API_KEY=your_key'
+                },
+                { 
+                  name: 'steampipe', 
+                  desc: 'SQL-based cloud resource queries', 
+                  vars: 'STEAMPIPE_DATABASE_CONNECTIONS',
+                  usage: 'ship mcp steampipe'
+                }
+              ].map(server => (
+                <div key={server.name} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <h5 className="font-mono font-medium text-tokyo-purple">{server.name}</h5>
+                    <span className="px-2 py-1 bg-tokyo-purple bg-opacity-20 text-tokyo-purple text-xs font-mono rounded">
+                      External MCP
+                    </span>
+                  </div>
+                  <p className="text-tokyo-fg font-mono text-sm mb-2">{server.desc}</p>
+                  <p className="text-tokyo-comment font-mono text-xs mb-2">Variables: {server.vars}</p>
+                  <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded p-2">
+                    <code className="text-tokyo-green font-mono text-xs">{server.usage}</code>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard id="aws-labs" title="🏢 AWS Labs MCP Servers (6 modules)">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {[
+                { name: 'aws-core', focus: 'General AWS', desc: 'Core AWS operations' },
+                { name: 'aws-iam', focus: 'Identity & Access', desc: 'IAM management' },
+                { name: 'aws-pricing', focus: 'Cost Analysis', desc: 'AWS pricing data' },
+                { name: 'aws-eks', focus: 'Kubernetes', desc: 'EKS operations' },
+                { name: 'aws-ec2', focus: 'Compute', desc: 'EC2 management' },
+                { name: 'aws-s3', focus: 'Storage', desc: 'S3 operations' }
+              ].map(server => (
+                <div key={server.name} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                  <h5 className="font-mono font-medium text-tokyo-orange">{server.name}</h5>
+                  <p className="text-tokyo-comment font-mono text-xs">{server.focus}</p>
+                  <p className="text-tokyo-fg font-mono text-sm">{server.desc}</p>
+                </div>
+              ))}
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard id="usage" title="💻 Usage Examples">
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Start All Tools as MCP Server</h4>
+                <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                  <code className="text-tokyo-green font-mono text-sm">ship mcp all</code>
+                </div>
+                <p className="text-tokyo-comment font-mono text-sm mt-1">Starts MCP server with all 92 tools</p>
+              </div>
+              <div>
+                <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Category-Specific MCP Servers</h4>
+                <div className="space-y-2">
+                  <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                    <code className="text-tokyo-green font-mono text-sm">ship mcp security  # All 41 security tools</code>
+                  </div>
+                  <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                    <code className="text-tokyo-green font-mono text-sm">ship mcp terraform  # All 11 Terraform tools</code>
+                  </div>
+                  <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                    <code className="text-tokyo-green font-mono text-sm">ship mcp cloud  # All 20 cloud tools</code>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Direct CLI Usage</h4>
+                <div className="space-y-2">
+                  <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                    <code className="text-tokyo-green font-mono text-sm">ship tf lint  # Run TFLint on current directory</code>
+                  </div>
+                  <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
+                    <code className="text-tokyo-green font-mono text-sm">ship tf cost  # Estimate infrastructure costs</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard id="integration" title="🔗 Station Integration">
+            <div className="space-y-4">
+              <p className="text-tokyo-fg font-mono">
+                Ship pairs perfectly with Station! Use Station's <strong className="text-tokyo-cyan">"Add Server"</strong> feature to add Ship MCP servers to your environments.
+              </p>
+              <div>
+                <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Example Station MCP Configuration</h4>
+                <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3 overflow-x-auto">
+                  <pre className="text-tokyo-green font-mono text-sm">
+{`{
+  "name": "Ship All Tools",
+  "description": "All 92 Ship tools via MCP",
+  "mcpServers": {
+    "ship-all": {
+      "command": "ship",
+      "args": ["mcp", "all"],
+      "env": {
+        "AWS_PROFILE": "{{ .AWS_PROFILE }}",
+        "FILESYSTEM_ROOT": "{{ .PROJECT_ROOT }}"
+      }
+    }
+  }
+}`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </CollapsibleCard>
+
+          {/* Key Features Summary */}
+          <div className="bg-tokyo-bg-dark border border-tokyo-green border-opacity-50 rounded-lg p-6">
+            <h3 className="text-lg font-mono font-medium text-tokyo-green mb-4">🎯 Why Ship + Station?</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">92 Total Tools Available</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">Containerized Execution</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">MCP Integration</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">Security-First Design</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">Multi-Cloud Support</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">Variable Support</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">External Server Proxying</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-green">✅</span>
+                  <span className="font-mono text-sm text-tokyo-fg">Framework Extensibility</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Bundles Page Component
 const BundlesPage = () => {
   const [bundles, setBundles] = useState<BundleInfo[]>([]);
@@ -2639,7 +3013,7 @@ const AgentEditor = () => {
   );
 };
 
-type Page = 'agents' | 'mcps' | 'runs' | 'environments' | 'bundles';
+type Page = 'agents' | 'mcps' | 'runs' | 'environments' | 'bundles' | 'ship';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('agents');
@@ -2656,6 +3030,8 @@ function App() {
         return <EnvironmentsPage />;
       case 'bundles':
         return <BundlesPage />;
+      case 'ship':
+        return <ShipCLIPage />;
       default:
         return <AgentsCanvas />;
     }

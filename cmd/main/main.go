@@ -170,6 +170,7 @@ func init() {
 	mcpSyncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpSyncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
 	mcpSyncCmd.Flags().Bool("force", false, "Force sync even if no changes detected")
+	mcpSyncCmd.Flags().BoolP("interactive", "i", true, "Prompt for missing variables (default: true)")
 	
 	// Sync command flags (top-level)
 	syncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")

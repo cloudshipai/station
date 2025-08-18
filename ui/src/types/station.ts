@@ -31,6 +31,7 @@ export interface MCPServer {
   args?: string[];
   environment_id: number;
   status: 'active' | 'inactive' | 'error';
+  error?: string;
   created_at: string;
   updated_at: string;
 }

@@ -132,7 +132,7 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 		}
 	}
 	
-	// Check for "<no value>" in rendered content - indicates optional missing variables
+	// Check for "<no value>" in rendered content - indicates missing variables that didn't cause template failure
 	hasNoValue := strings.Contains(renderedContent, "<no value>")
 	
 	result := &VariableResolutionResult{
@@ -157,8 +157,8 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 
 // renderTemplate applies variables to template content using Go's text/template library
 func (tvs *TemplateVariableService) renderTemplate(templateContent string, variables map[string]string) (string, error) {
-	// Create a new template with the content
-	tmpl, err := template.New("mcp-config").Parse(templateContent)
+	// Create a new template with the content and configure it to error on missing keys
+	tmpl, err := template.New("mcp-config").Option("missingkey=error").Parse(templateContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
