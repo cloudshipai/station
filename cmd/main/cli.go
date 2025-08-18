@@ -1365,7 +1365,7 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 				yamlKey := strings.ToLower(variable.Name)
 				switch variable.Type {
 				case "number":
-					exampleVars[yamlKey] = 8080
+					exampleVars[yamlKey] = 8585
 				case "boolean":
 					exampleVars[yamlKey] = true
 				default:
