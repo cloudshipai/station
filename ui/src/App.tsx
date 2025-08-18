@@ -18,15 +18,16 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight, RotateCw, Train, Globe, Package, Download, Upload, Copy, Edit, ArrowLeft, Save } from 'lucide-react';
+import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight, Train, Globe, Package, Download, Copy, Edit, ArrowLeft, Save } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import Editor from '@monaco-editor/react';
 import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi, bundlesApi, type BundleInfo } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes } from './utils/layoutUtils';
-import { AgentNode } from './components/nodes/AgentNode';
-import { MCPNode } from './components/nodes/MCPNode';
-import { ToolNode } from './components/nodes/ToolNode';
+// Import node components when needed
+// import { AgentNode } from './components/nodes/AgentNode';
+// import { MCPNode } from './components/nodes/MCPNode';
+// import { ToolNode } from './components/nodes/ToolNode';
 
 // Station Banner Component  
 const StationBanner = () => (
@@ -536,7 +537,7 @@ const AgentDetailsModal = ({ agentId, isOpen, onClose }: { agentId: number | nul
 
 
 // Environment-specific Node Components (simplified for hub visualization)
-const EnvironmentAgentNode = ({ data }: NodeProps) => {
+const EnvironmentAgentNode = ({ data }: { data: any }) => {
   return (
     <div className="w-[240px] h-[100px] px-3 py-2 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative">
       <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-blue" />
@@ -550,7 +551,7 @@ const EnvironmentAgentNode = ({ data }: NodeProps) => {
   );
 };
 
-const EnvironmentMCPNode = ({ data }: NodeProps) => {
+const EnvironmentMCPNode = ({ data }: { data: any }) => {
   return (
     <div className="w-[240px] h-[100px] px-3 py-2 shadow-tokyo-cyan border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative">
       <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-cyan" />
@@ -751,7 +752,7 @@ const BundleEnvironmentModal = ({
 };
 
 // Environment Node Component
-const EnvironmentNode = ({ data }: NodeProps) => {
+const EnvironmentNode = ({ data }: { data: any }) => {
   return (
     <div className="w-[320px] h-[160px] px-4 py-3 shadow-tokyo-orange border border-tokyo-orange rounded-lg relative bg-tokyo-bg-dark">
       {/* Output handles for connecting to agents and MCP servers */}
@@ -786,7 +787,7 @@ const EnvironmentNode = ({ data }: NodeProps) => {
 };
 
 // Custom Agent Node for agents page (with full functionality)
-const AgentsPageAgentNode = ({ data }: NodeProps) => {
+const AgentsPageAgentNode = ({ data }: { data: any }) => {
   const handleInfoClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (data.onOpenModal && data.agentId) {
@@ -834,7 +835,7 @@ const AgentsPageAgentNode = ({ data }: NodeProps) => {
   );
 };
 
-const AgentsPageMCPNode = ({ data }: NodeProps) => {
+const AgentsPageMCPNode = ({ data }: { data: any }) => {
   const handleInfoClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (data.onOpenMCPModal && data.serverId) {
@@ -899,7 +900,7 @@ const AgentsPageMCPNode = ({ data }: NodeProps) => {
   );
 };
 
-const AgentsPageToolNode = ({ data }: NodeProps) => {
+const AgentsPageToolNode = ({ data }: { data: any }) => {
   const handleInfoClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     console.log('Opening tool details for:', data.toolId);
@@ -1106,8 +1107,8 @@ const Layout = ({ children, currentPage, onPageChange }: any) => {
 
 const AgentsCanvas = () => {
   const navigate = useNavigate();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2028,8 +2029,8 @@ const Runs = () => {
 
 // Environments Page Component
 const EnvironmentsPage = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [environments, setEnvironments] = useState<any[]>([]);
   const [selectedEnvironment, setSelectedEnvironment] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
