@@ -11,6 +11,7 @@ before:
   hooks:
     - go mod tidy
     - go generate ./...
+    - make build-ui
 
 builds:
   - id: station
@@ -30,6 +31,7 @@ builds:
         goarch: arm64
     flags:
       - -trimpath
+      - -tags=ui
     ldflags:
       - -s -w
       - -X station/internal/version.Version={{ .Tag }}

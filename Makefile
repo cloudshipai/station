@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui tag-check release
 
 # Build configuration
 BINARY_NAME=stn
@@ -37,6 +37,21 @@ local-install: build
 local-install-ui: build-with-ui
 	mv ./bin/stn ~/.local/bin
 	@echo "✅ Installed Station with embedded UI to ~/.local/bin"
+
+# Release targets
+tag-check:
+	@echo "🏷️ Current tags:"
+	@git tag | tail -10
+	@echo ""
+	@echo "Next tag should be: $(shell git tag | tail -1 | awk -F. '{print $$1"."$$2"."$$3+1}')"
+
+release: build-with-ui
+	@echo "🚀 Creating release build..."
+	@echo "✅ Station built with embedded UI at ./bin/stn"
+	@echo "📋 To create a new tag:"
+	@echo "   1. Check current tags with: make tag-check"  
+	@echo "   2. Create tag: git tag v0.8.7 (or next version)"
+	@echo "   3. Push tag: git push origin v0.8.7"
 # Build and install to $GOPATH/bin
 install:
 	@echo "📦 Installing Station $(VERSION) to $$GOPATH/bin..."
