@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -56,7 +57,36 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 			return
 		}
 		
-		c.JSON(http.StatusOK, servers)
+		// Enhance servers with status information
+		serverResponses := make([]map[string]interface{}, len(servers))
+		for i, server := range servers {
+			serverData := map[string]interface{}{
+				"id":             server.ID,
+				"name":           server.Name,
+				"command":        server.Command,
+				"args":           server.Args,
+				"env":            server.Env,
+				"working_dir":    server.WorkingDir,
+				"timeout_seconds": server.TimeoutSeconds,
+				"auto_restart":   server.AutoRestart,
+				"environment_id": server.EnvironmentID,
+				"created_at":     server.CreatedAt,
+				"file_config_id": server.FileConfigID,
+				"status":         "active",
+				"error":          nil,
+			}
+			
+			// Check for template variable issues
+			argsStr := fmt.Sprintf("%v", server.Args)
+			if strings.Contains(argsStr, "<no value>") {
+				serverData["status"] = "error"
+				serverData["error"] = "Template variables not configured. Run 'stn sync' to configure missing variables."
+			}
+			
+			serverResponses[i] = serverData
+		}
+		
+		c.JSON(http.StatusOK, serverResponses)
 		return
 	}
 	
