@@ -29,7 +29,7 @@ func (h *MCPHandler) validateEnvironmentExists(envName string) bool {
 }
 
 // syncMCPConfigsLocal performs declarative sync of file-based configs to database
-func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool) error {
+func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool, interactive bool) error {
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
@@ -59,7 +59,7 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool) error 
 	options := services.SyncOptions{
 		DryRun:      dryRun,
 		Validate:    false,
-		Interactive: true,
+		Interactive: interactive,
 		Verbose:     false,
 	}
 	

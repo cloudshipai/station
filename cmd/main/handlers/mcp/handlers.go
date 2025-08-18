@@ -106,13 +106,14 @@ func (h *MCPHandler) RunMCPSync(cmd *cobra.Command, args []string) error {
 	environment := args[0]
 	endpoint, _ := cmd.Flags().GetString("endpoint")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	interactive, _ := cmd.Flags().GetBool("interactive")
 
 	// Determine if we're in local mode
 	isLocal := endpoint == "" && viper.GetBool("local_mode")
 	
 	if isLocal {
 		fmt.Println(styles.Info.Render("🏠 Syncing local configurations"))
-		return h.syncMCPConfigsLocal(environment, dryRun)
+		return h.syncMCPConfigsLocal(environment, dryRun, interactive)
 	} else if endpoint != "" {
 		fmt.Println(styles.Info.Render("🌐 Syncing with: " + endpoint))
 		return fmt.Errorf("remote sync not yet implemented")
