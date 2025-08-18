@@ -41,27 +41,29 @@ graph LR
     Agent1 --> DB
 ```
 
-🌐 **[Browse Bundle Registry](https://cloudshipai.github.io/registry)** - Discover ready-to-use MCP bundles for Station
-
 📚 **[Documentation](https://cloudshipai.github.io/station)** - Complete Station documentation and guides
 
 > Station is an MCP runtime that augments your Claude Code and Cursor development experience by providing an agnostic runtime for your sub-agents - with centralized management, environment isolation, and server deployment capabilities.
 
 ---
 
-Station is purpose-built for **deployable sub-agents** - the intelligent automation you need for infrastructure monitoring, deployment pipelines, security scanning, and day-to-day tasks that require secure access to internal systems.
+Station is purpose-built for **deployable sub-agents** - to bring intelligence in tough to reach places. Made for engineering teams that want to own and control their AI agents across their environments. Station provides a framework and lifecycle to go from local to server deployments. Versioned user defined agents and tools opens the possibility for more intelligent infrastructure, deployments, security, background processes, and day-to-day tasks that require secure access to internal systems.
+
+Engineers define their agents 
+Engineers define and audit their tools 
+Engineers can deploy and run these anywhere 
 
 ## Quickstart
 
 ```bash
-curl -sSL https://getstation.cloudshipai.com | bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
 ## Getting Started
 
 ### 1. **Initialize Station**
 ```bash
-stn init --ship
+stn init
 ```
 
 ### 2. **Copy MCP Configuration** 
@@ -85,13 +87,24 @@ cat > ~/.config/station/environments/default/template.json << 'EOF'
 }
 EOF
 
-# Set the ROOT_PATH variable
+
+# Interactively fill in the variables 
+stn sync 
+# stn sync will detect unresolved variables and prompt you to fill them in
+
+
+# Automatically set the the ROOT_PATH variable
 echo "ROOT_PATH: $HOME/projects" > ~/.config/station/environments/default/variables.yml
 ```
 
 ### 3. **Sync Configuration**
 ```bash
+# stn sync <environment> 
+# defaults to default environment
+
 stn sync
+
+#stn sync development
 ```
 
 ### 4. **Connect to Claude or Cursor**
@@ -123,7 +136,7 @@ Add Station as an MCP server in your Claude Desktop or Cursor configuration:
 
 ### 5. **Access Web Interface**
 ```bash
-stn serve
+when connected to an LLM, station runs the web app
 ```
 
 Then open **http://localhost:8585** in your browser for the full Station management interface.
@@ -131,6 +144,12 @@ Then open **http://localhost:8585** in your browser for the full Station managem
 ## What is a Deployable Sub-Agent?
 
 A sub-agent is simple: **a .prompt file + MCP tools**. Everything you need is in the dotprompt.
+
+dotprompts have the ability to define both system prompt and user prompt in the same file, making this perfect to share and easy to test. 
+
+It also supports rich variable schema with Picoschema style 
+
+
 
 ### **Example: A Real Sub-Agent**
 
@@ -142,20 +161,110 @@ model: "gemini-2.5-flash"
 config:
   temperature: 0.3
   max_tokens: 2000
+input:
+  schema:
+    userInput: string
+output:
+  schema:
+    response: string
 metadata:
-  name: "TestAgent"
-  description: "A simple test agent for debugging sync functionality"
+  name: "helper"
+  description: "A general-purpose helper agent for common tasks and assistance"
   version: "1.0.0"
-tools:
-  - "__read_file"
-  - "__list_directory"
 station:
   execution_metadata:
     max_steps: 5
     environment: "default"
+    agent_id: 1
+    created_at: "2025-08-18T17:19:22Z"
+    updated_at: "2025-08-18T17:19:22Z"
 ---
 
-You are a test agent designed to verify that the agent sync functionality is working correctly.
+{{role "system"}}
+You are a helpful assistant designed to assist users with various tasks. You can help with:
+
+- Answering questions and providing explanations
+- Analyzing data and information
+- Helping with problem-solving
+- Providing guidance on best practices
+- Assisting with documentation and writing
+- Supporting development and technical tasks
+
+Always be concise, accurate, and helpful in your responses. If you're unsure about something, acknowledge it and suggest ways to find the correct information.
+
+{{role "user"}}
+{{userInput}}
+
+```
+
+### Example with more dynamic input schema 
+
+A planning agent that defines variables in the system prompt. These are fed at runtime via MCP, API, CLI
+
+```yaml
+
+  ---
+  model: "gemini-2.5-flash"
+  config:
+    temperature: 0.3
+    max_tokens: 2000
+  input:
+    schema:
+      userInput: string
+      project_type: string
+      scope: string
+      timeline: string
+      priority: string
+      budget: string
+  output:
+    schema:
+      response: string
+  metadata:
+    name: "planner"
+    description: "A versatile planning agent that can create structured plans for various
+  types of projects and tasks"
+    version: "1.0.0"
+  station:
+    execution_metadata:
+      max_steps: 5
+      environment: "default"
+      agent_id: 3
+      created_at: "2025-08-18T17:30:17Z"
+      updated_at: "2025-08-18T17:30:17Z"
+  ---
+
+  {{role "system"}}
+  You are an expert planning agent specialized in creating detailed, actionable plans for
+  various types of projects and tasks.
+
+  **Planning Context:**
+  - Project Type: {{project_type}}
+  - Scope: {{scope}}
+  - Timeline: {{timeline}}
+  - Priority: {{priority}}
+  - Budget: {{budget}}
+
+  **Your Planning Approach:**
+  1. **Analysis Phase**: Break down the requirements and constraints
+  2. **Structure Phase**: Create a logical sequence of phases/milestones
+  3. **Resource Phase**: Identify required resources, skills, and dependencies
+  4. **Risk Phase**: Anticipate potential obstacles and mitigation strategies
+  5. **Timeline Phase**: Provide realistic time estimates and scheduling
+  6. **Review Phase**: Include checkpoints and success criteria
+
+  **Output Format:**
+  - Executive Summary (2-3 sentences)
+  - Key Phases with deliverables
+  - Resource Requirements
+  - Timeline with milestones
+  - Risk Assessment and Mitigation
+  - Success Metrics
+
+  Always tailor your planning style to the project type and provide actionable, specific
+  recommendations. Include contingency planning and be realistic about constraints.
+
+  {{role "user"}}
+  {{userInput}}
 ```
 
 That's it. **Agent defined, tools assigned, ready to deploy.**
