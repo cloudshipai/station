@@ -37,7 +37,7 @@ export const agentsApi = {
   getById: (id: number) => apiClient.get<{agent: Agent}>(`/agents/${id}`),
   getWithTools: (id: number) => apiClient.get<AgentWithTools>(`/agents/${id}/details`),
   getByEnvironment: (environmentId: number) => 
-    apiClient.get<Agent[]>(`/environments/${environmentId}/agents`),
+    apiClient.get<{agents: Agent[], count: number}>(`/agents?environment_id=${environmentId}`),
   getTools: (agentId: number) => 
     apiClient.get<AgentTool[]>(`/agents/${agentId}/tools`),
 };
