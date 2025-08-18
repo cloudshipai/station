@@ -79,3 +79,39 @@ export const agentRunsApi = {
 export const syncApi = {
   trigger: () => apiClient.post('/sync'),
 };
+
+// Bundle info type
+export interface BundleInfo {
+  name: string;
+  file_name: string;
+  file_path: string;
+  size: number;
+  modified_time: string;
+}
+
+// Bundles API
+export const bundlesApi = {
+  getAll: () => apiClient.get<{success: boolean, bundles: BundleInfo[], count: number, error?: string}>('/bundles'),
+  create: (environment: string, local: boolean, endpoint?: string) => 
+    apiClient.post<{success: boolean, message: string, local_path?: string, share_url?: string}>('/bundles', { 
+      environment, 
+      local, 
+      endpoint 
+    }),
+  install: (bundleLocation: string, environmentName: string, source: 'url' | 'file') =>
+    apiClient.post<{
+      success: boolean;
+      message: string;
+      environment_name?: string;
+      environment_id?: number;
+      bundle_path?: string;
+      installed_agents?: number;
+      installed_mcps?: number;
+      sync_command?: string;
+      error?: string;
+    }>('/bundles/install', {
+      bundle_location: bundleLocation,
+      environment_name: environmentName,
+      source
+    }),
+};
