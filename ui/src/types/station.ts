@@ -65,13 +65,27 @@ export interface User {
 export interface AgentRun {
   id: number;
   agent_id: number;
+  user_id: number;
+  task: string;
+  final_response: string;
+  steps_taken: number;
+  tool_calls?: any[];
+  execution_steps?: any[];
   status: 'pending' | 'running' | 'completed' | 'failed';
-  input_data?: string;
-  output_data?: string;
-  error_message?: string;
-  started_at?: string;
+  started_at: string;
   completed_at?: string;
-  created_at: string;
+  // Rich metadata from response object
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  duration_seconds?: number;
+  model_name?: string;
+  tools_used?: number;
+}
+
+export interface AgentRunWithDetails extends AgentRun {
+  agent_name: string;
+  username: string;
 }
 
 // Canvas-specific types for visualization
