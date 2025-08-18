@@ -133,6 +133,37 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 			result.CompletedAt = &r.CompletedAt.Time
 		}
 		
+		// Add token usage and metadata fields for ListRecentAgentRunsRow
+		if r.InputTokens.Valid {
+			inputTokens := r.InputTokens.Int64
+			result.InputTokens = &inputTokens
+		}
+		
+		if r.OutputTokens.Valid {
+			outputTokens := r.OutputTokens.Int64
+			result.OutputTokens = &outputTokens
+		}
+		
+		if r.TotalTokens.Valid {
+			totalTokens := r.TotalTokens.Int64
+			result.TotalTokens = &totalTokens
+		}
+		
+		if r.DurationSeconds.Valid {
+			durationSeconds := r.DurationSeconds.Float64
+			result.DurationSeconds = &durationSeconds
+		}
+		
+		if r.ModelName.Valid {
+			modelName := r.ModelName.String
+			result.ModelName = &modelName
+		}
+		
+		if r.ToolsUsed.Valid {
+			toolsUsed := r.ToolsUsed.Int64
+			result.ToolsUsed = &toolsUsed
+		}
+		
 	case queries.GetAgentRunWithDetailsRow:
 		result = &models.AgentRunWithDetails{
 			AgentRun: models.AgentRun{
@@ -168,6 +199,37 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 		
 		if r.CompletedAt.Valid {
 			result.CompletedAt = &r.CompletedAt.Time
+		}
+		
+		// Add token usage and metadata fields for GetAgentRunWithDetailsRow
+		if r.InputTokens.Valid {
+			inputTokens := r.InputTokens.Int64
+			result.InputTokens = &inputTokens
+		}
+		
+		if r.OutputTokens.Valid {
+			outputTokens := r.OutputTokens.Int64
+			result.OutputTokens = &outputTokens
+		}
+		
+		if r.TotalTokens.Valid {
+			totalTokens := r.TotalTokens.Int64
+			result.TotalTokens = &totalTokens
+		}
+		
+		if r.DurationSeconds.Valid {
+			durationSeconds := r.DurationSeconds.Float64
+			result.DurationSeconds = &durationSeconds
+		}
+		
+		if r.ModelName.Valid {
+			modelName := r.ModelName.String
+			result.ModelName = &modelName
+		}
+		
+		if r.ToolsUsed.Valid {
+			toolsUsed := r.ToolsUsed.Int64
+			result.ToolsUsed = &toolsUsed
 		}
 	}
 	
