@@ -22,11 +22,11 @@ This page is under construction. We're working on detailed documentation for ins
 Basic tool installation workflow:
 
 ```bash
-# Load MCP configuration
-stn load tool-config.json --env default
+# Copy MCP configuration to environment directory
+cp tool-config.json ~/.config/station/environments/default/template.json
 
 # Sync to discover tools
-stn sync default
+stn sync
 
 # Verify tools are available
 stn mcp tools list
