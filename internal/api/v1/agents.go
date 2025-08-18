@@ -39,7 +39,7 @@ func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 
 func (h *APIHandlers) listAgents(c *gin.Context) {
 	// Check for environment filter parameter
-	envFilter := c.Query("environment")
+	envFilter := c.Query("environment_id")
 	
 	agents, err := h.repos.Agents.List()
 	if err != nil {
@@ -69,7 +69,7 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 		}
 		
 		if targetEnvID == -1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Environment '%s' not found", envFilter)})
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Environment with ID '%s' not found", envFilter)})
 			return
 		}
 		
