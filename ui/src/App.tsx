@@ -2481,7 +2481,7 @@ const ShipCLIPage = () => {
               </div>
               <div>
                 <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Use with Station</h4>
-                <p className="text-tokyo-comment font-mono text-sm mb-2">
+                <p className="text-tokyo-fg font-mono text-sm mb-2">
                   Once installed, add Ship MCP servers to your Station environment using the "Add Server" button above.
                 </p>
                 <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
@@ -2510,7 +2510,7 @@ const ShipCLIPage = () => {
                     <span className="font-mono font-medium text-tokyo-blue">{tool.name}</span>
                     <code className="text-tokyo-green font-mono text-xs">{tool.usage}</code>
                   </div>
-                  <p className="text-tokyo-comment font-mono text-sm">{tool.desc}</p>
+                  <p className="text-tokyo-fg font-mono text-sm">{tool.desc}</p>
                 </div>
               ))}
             </div>
@@ -2555,7 +2555,7 @@ const ShipCLIPage = () => {
                 <div key={tool.name} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3 flex justify-between items-center">
                   <div>
                     <span className="font-mono font-medium text-tokyo-cyan">{tool.name}</span>
-                    <p className="text-tokyo-comment font-mono text-sm">{tool.desc}</p>
+                    <p className="text-tokyo-fg font-mono text-sm">{tool.desc}</p>
                   </div>
                   <span className="px-2 py-1 bg-tokyo-cyan bg-opacity-20 text-tokyo-cyan text-xs font-mono rounded">
                     {tool.support}
@@ -2601,7 +2601,7 @@ const ShipCLIPage = () => {
                     </span>
                   </div>
                   <p className="text-tokyo-fg font-mono text-sm mb-2">{server.desc}</p>
-                  <p className="text-tokyo-comment font-mono text-xs mb-2">Variables: {server.vars}</p>
+                  <p className="text-tokyo-fg font-mono text-xs mb-2">Variables: {server.vars}</p>
                   <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded p-2">
                     <code className="text-tokyo-green font-mono text-xs">{server.usage}</code>
                   </div>
@@ -2622,7 +2622,7 @@ const ShipCLIPage = () => {
               ].map(server => (
                 <div key={server.name} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
                   <h5 className="font-mono font-medium text-tokyo-orange">{server.name}</h5>
-                  <p className="text-tokyo-comment font-mono text-xs">{server.focus}</p>
+                  <p className="text-tokyo-fg font-mono text-xs">{server.focus}</p>
                   <p className="text-tokyo-fg font-mono text-sm">{server.desc}</p>
                 </div>
               ))}
@@ -2636,7 +2636,7 @@ const ShipCLIPage = () => {
                 <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-3">
                   <code className="text-tokyo-green font-mono text-sm">ship mcp all</code>
                 </div>
-                <p className="text-tokyo-comment font-mono text-sm mt-1">Starts MCP server with all 92 tools</p>
+                <p className="text-tokyo-fg font-mono text-sm mt-1">Starts MCP server with all 92 tools</p>
               </div>
               <div>
                 <h4 className="text-md font-mono font-medium text-tokyo-cyan mb-2">Category-Specific MCP Servers</h4>
