@@ -138,7 +138,7 @@ func init() {
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
 	serveCmd.Flags().Int("mcp-port", 3000, "MCP server port") 
-	serveCmd.Flags().Int("api-port", 8080, "API server port")
+	serveCmd.Flags().Int("api-port", 8585, "API server port")
 	serveCmd.Flags().String("database", "station.db", "Database file path")
 	serveCmd.Flags().Bool("debug", false, "Enable debug logging")
 	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
