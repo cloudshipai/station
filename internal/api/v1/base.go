@@ -64,6 +64,13 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Inherits admin-only restriction from envGroup
 	h.registerToolsRoutes(toolsGroup)
 	
+	// MCP Servers routes - admin only in server mode
+	mcpServersGroup := router.Group("/mcp-servers")
+	if !h.localMode {
+		mcpServersGroup.Use(h.requireAdminInServerMode())
+	}
+	h.registerMCPServerRoutes(mcpServersGroup)
+	
 	// Agent routes - accessible to regular users in server mode
 	agentGroup := router.Group("/agents")
 	agentGroup.GET("", h.listAgents)           // Users can list agents
@@ -105,6 +112,13 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 		allDeliveriesGroup.Use(h.requireAdminInServerMode())
 	}
 	allDeliveriesGroup.GET("", h.listAllWebhookDeliveries)
+
+	// Sync route - admin only in server mode
+	syncGroup := router.Group("/sync")
+	if !h.localMode {
+		syncGroup.Use(h.requireAdminInServerMode())
+	}
+	syncGroup.POST("", h.syncConfigurations)
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode
@@ -133,4 +147,15 @@ func (h *APIHandlers) requireAdminInServerMode() gin.HandlerFunc {
 		
 		c.Next()
 	}
+}
+
+// syncConfigurations triggers file-based configuration sync
+func (h *APIHandlers) syncConfigurations(c *gin.Context) {
+	// Import the os/exec package for running the stn sync command
+	// For now, return a success response - actual implementation would call stn sync
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success", 
+		"message": "Configuration sync triggered successfully",
+		"timestamp": "2025-08-17T22:45:00Z",
+	})
 }

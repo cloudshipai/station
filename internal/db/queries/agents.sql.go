@@ -168,6 +168,7 @@ SELECT
     a.created_by as agent_created_by,
     a.is_scheduled as agent_is_scheduled,
     a.schedule_enabled as agent_schedule_enabled,
+    a.input_schema as agent_input_schema,
     a.created_at as agent_created_at,
     a.updated_at as agent_updated_at,
     ms.id as mcp_server_id,
@@ -194,6 +195,7 @@ type GetAgentWithToolsRow struct {
 	AgentCreatedBy       int64          `json:"agent_created_by"`
 	AgentIsScheduled     sql.NullBool   `json:"agent_is_scheduled"`
 	AgentScheduleEnabled sql.NullBool   `json:"agent_schedule_enabled"`
+	AgentInputSchema     sql.NullString `json:"agent_input_schema"`
 	AgentCreatedAt       sql.NullTime   `json:"agent_created_at"`
 	AgentUpdatedAt       sql.NullTime   `json:"agent_updated_at"`
 	McpServerID          sql.NullInt64  `json:"mcp_server_id"`
@@ -223,6 +225,7 @@ func (q *Queries) GetAgentWithTools(ctx context.Context, id int64) ([]GetAgentWi
 			&i.AgentCreatedBy,
 			&i.AgentIsScheduled,
 			&i.AgentScheduleEnabled,
+			&i.AgentInputSchema,
 			&i.AgentCreatedAt,
 			&i.AgentUpdatedAt,
 			&i.McpServerID,
