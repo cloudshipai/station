@@ -47,11 +47,10 @@ graph LR
 
 ---
 
-Station is purpose-built for **deployable sub-agents** - to bring intelligence in tough to reach places. Made for engineering teams that want to own and control their AI agents across their environments. Station provides a framework and lifecycle to go from local to server deployments. Versioned user defined agents and tools opens the possibility for more intelligent infrastructure, deployments, security, background processes, and day-to-day tasks that require secure access to internal systems.
+Station is purpose-built for **deployable sub-agents** - to bring intelligence in tough to reach places. Made for engineering teams that want to own and control AI agents across their environments. Station provides a framework and lifecycle to go from local to server deployments. Versioned user agents and tools opens the possibility for more intelligent infrastructure, deployments, security, background processes, and day-to-day tasks that require secure access to internal systems.
 
-Engineers define their agents 
-Engineers define and audit their tools 
-Engineers can deploy and run these anywhere 
+---
+
 
 ## Quickstart
 
