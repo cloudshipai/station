@@ -509,7 +509,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	viper.Set("encryption_key", encryptionKey)
 	viper.Set("ssh_port", 2222)
 	viper.Set("mcp_port", 3000)
-	viper.Set("api_port", 8080)
+	viper.Set("api_port", 8585)
 	viper.Set("ssh_host_key_path", "./ssh_host_key")
 	viper.Set("admin_username", "admin")
 	viper.Set("debug", false)
@@ -726,7 +726,7 @@ LITESTREAM_S3_SECRET_ACCESS_KEY=your-secret-key
 
 # Station Configuration
 STATION_ENV=production
-PORT=8080
+PORT=8585
 
 # AI Provider APIs
 OPENAI_API_KEY=sk-your-openai-key
