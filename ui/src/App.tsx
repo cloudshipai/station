@@ -23,6 +23,9 @@ import '@xyflow/react/dist/style.css';
 import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes } from './utils/layoutUtils';
+import { AgentNode } from './components/nodes/AgentNode';
+import { MCPNode } from './components/nodes/MCPNode';
+import { ToolNode } from './components/nodes/ToolNode';
 
 // Station Banner Component  
 const StationBanner = () => (
@@ -503,130 +506,32 @@ const AgentDetailsModal = ({ agentId, isOpen, onClose }: { agentId: number | nul
   );
 };
 
-// Custom Node Components (sized for better visibility and layout)
-const AgentNode = ({ data }: NodeProps) => {
-  const handleInfoClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (data.onOpenModal && data.agentId) {
-      data.onOpenModal(data.agentId);
-    }
-  };
 
+// Environment-specific Node Components (simplified for hub visualization)
+const EnvironmentAgentNode = ({ data }: NodeProps) => {
   return (
-    <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative group">
-      {/* Output handle on the right side */}
-      <Handle type="source" position={Position.Right} className="w-3 h-3 bg-tokyo-blue" />
-      
-      {/* Info button - appears on hover */}
-      <button
-        onClick={handleInfoClick}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg"
-        title="View agent details"
-      >
-        <Eye className="h-3 w-3" />
-      </button>
-      
-      <div className="flex items-center gap-2 mb-2">
-        <Bot className="h-5 w-5 text-tokyo-blue" />
-        <div className="font-mono text-base text-tokyo-blue font-medium">{data.label}</div>
+    <div className="w-[240px] h-[100px] px-3 py-2 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative">
+      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-blue" />
+      <div className="flex items-center gap-2 mb-1">
+        <Bot className="h-4 w-4 text-tokyo-blue" />
+        <div className="font-mono text-sm text-tokyo-blue font-medium">{data.label}</div>
       </div>
-      <div className="text-sm text-tokyo-comment mb-2 line-clamp-2">{data.description}</div>
-      <div className="text-sm text-tokyo-green font-medium">{data.status}</div>
+      <div className="text-xs text-tokyo-comment mb-1 line-clamp-2">{data.description}</div>
+      <div className="text-xs text-tokyo-green font-medium">{data.status}</div>
     </div>
   );
 };
 
-const MCPNode = ({ data }: NodeProps) => {
-  const handleInfoClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (data.onOpenMCPModal && data.serverId) {
-      data.onOpenMCPModal(data.serverId);
-    } else {
-      console.log('Opening MCP server details for:', data.serverId);
-    }
-  };
-
-  const handleExpandClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    console.log('MCP Node expand button clicked for server:', data.serverId);
-    if (data.onToggleExpand && data.serverId) {
-      console.log('Calling onToggleExpand for server:', data.serverId);
-      data.onToggleExpand(data.serverId);
-    } else {
-      console.log('Missing onToggleExpand function or serverId:', { onToggleExpand: !!data.onToggleExpand, serverId: data.serverId });
-    }
-  };
-
-  const isExpanded = data.expanded || false;
-  const toolCount = data.tools?.length || 0;
-
+const EnvironmentMCPNode = ({ data }: NodeProps) => {
   return (
-    <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative group">
-      {/* Input handle on the left side */}
+    <div className="w-[240px] h-[100px] px-3 py-2 shadow-tokyo-cyan border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative">
       <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-cyan" />
-      {/* Output handle on the right side - only show when expanded */}
-      {isExpanded && <Handle type="source" position={Position.Right} className="w-3 h-3 bg-tokyo-cyan" />}
-      
-      {/* Expand/Collapse button - always visible */}
-      <button
-        onClick={handleExpandClick}
-        className="absolute top-2 left-2 p-1 rounded bg-tokyo-cyan hover:bg-tokyo-blue1 text-tokyo-bg transition-colors duration-200"
-        title={isExpanded ? 'Collapse tools' : 'Expand tools'}
-      >
-        {isExpanded ? (
-          <ChevronDown className="h-3 w-3" />
-        ) : (
-          <ChevronRight className="h-3 w-3" />
-        )}
-      </button>
-      
-      {/* Info button - appears on hover */}
-      <button
-        onClick={handleInfoClick}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-cyan hover:bg-tokyo-blue1 text-tokyo-bg"
-        title="View MCP server details"
-      >
-        <Eye className="h-3 w-3" />
-      </button>
-      
-      <div className="flex items-center gap-2 mb-2 ml-6">
-        <Database className="h-5 w-5 text-tokyo-cyan" />
-        <div className="font-mono text-base text-tokyo-cyan font-medium">{data.label}</div>
+      <div className="flex items-center gap-2 mb-1">
+        <Database className="h-4 w-4 text-tokyo-cyan" />
+        <div className="font-mono text-sm text-tokyo-cyan font-medium">{data.label}</div>
       </div>
-      <div className="text-sm text-tokyo-comment mb-2 ml-6">{data.description}</div>
-      <div className="text-sm text-tokyo-purple font-medium ml-6">
-        {toolCount} tools {isExpanded ? 'expanded' : 'available'}
-      </div>
-    </div>
-  );
-};
-
-const ToolNode = ({ data }: NodeProps) => {
-  const handleInfoClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    console.log('Opening tool details for:', data.toolId);
-  };
-
-  return (
-    <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative group">
-      {/* Input handle on the left side */}
-      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-green" />
-      
-      {/* Info button - appears on hover */}
-      <button
-        onClick={handleInfoClick}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-green hover:bg-tokyo-green1 text-tokyo-bg"
-        title="View tool details"
-      >
-        <Eye className="h-3 w-3" />
-      </button>
-      
-      <div className="flex items-center gap-2 mb-2">
-        <Settings className="h-5 w-5 text-tokyo-green" />
-        <div className="font-mono text-base text-tokyo-green font-medium">{data.label}</div>
-      </div>
-      <div className="text-sm text-tokyo-comment mb-2">{data.description || 'Tool function'}</div>
-      <div className="text-sm text-tokyo-blue1 font-medium">from {data.category}</div>
+      <div className="text-xs text-tokyo-comment mb-1">{data.description}</div>
+      <div className="text-xs text-tokyo-purple font-medium">MCP Server</div>
     </div>
   );
 };
@@ -635,6 +540,18 @@ const ToolNode = ({ data }: NodeProps) => {
 const EnvironmentNode = ({ data }: NodeProps) => {
   return (
     <div className="w-[320px] h-[160px] px-4 py-3 shadow-tokyo-orange border border-tokyo-orange rounded-lg relative bg-tokyo-bg-dark">
+      {/* Output handles for connecting to agents and MCP servers */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{ background: '#ff9e64', width: 12, height: 12 }}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{ background: '#7dcfff', width: 12, height: 12 }}
+      />
+      
       <div className="flex items-center gap-2 mb-3">
         <Globe className="h-6 w-6 text-tokyo-orange" />
         <div className="font-mono text-lg text-tokyo-orange font-bold">{data.label}</div>
@@ -655,8 +572,8 @@ const EnvironmentNode = ({ data }: NodeProps) => {
 };
 
 const nodeTypes: NodeTypes = {
-  agent: AgentNode,
-  mcp: MCPNode,
+  agent: EnvironmentAgentNode,
+  mcp: EnvironmentMCPNode,
   tool: ToolNode,
   environment: EnvironmentNode,
 };
@@ -1600,7 +1517,10 @@ const EnvironmentsPage = () => {
           mcpServersApi.getByEnvironment(selectedEnvironment)
         ]);
 
-        const agents = Array.isArray(agentsResponse.data) ? agentsResponse.data : [];
+        console.log('API Responses:', { agentsResponse: agentsResponse.data, mcpServersResponse: mcpServersResponse.data });
+
+        const agents = agentsResponse.data?.agents ? 
+          (Array.isArray(agentsResponse.data.agents) ? agentsResponse.data.agents : []) : [];
         const mcpServers = Array.isArray(mcpServersResponse.data) ? mcpServersResponse.data : [];
 
         const newNodes = [];
@@ -1668,9 +1588,17 @@ const EnvironmentsPage = () => {
         });
 
         // Layout the nodes
-        const layoutedElements = await getLayoutedNodes(newNodes, newEdges);
-        setNodes(layoutedElements.nodes);
-        setEdges(layoutedElements.edges);
+        const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
+        console.log('Environment graph generated:', {
+          rawNodes: newNodes?.length || 0,
+          rawEdges: newEdges?.length || 0,
+          agents: agents?.length || 0,
+          mcpServers: mcpServers?.length || 0,
+          layoutedNodes: layoutedNodes?.length || 0,
+          environment: selectedEnv?.name
+        });
+        setNodes(layoutedNodes);
+        setEdges(newEdges);
       } catch (error) {
         console.error('Failed to generate environment graph:', error);
       }
@@ -1707,32 +1635,30 @@ const EnvironmentsPage = () => {
         </div>
       </div>
       
-      <div className="flex-1">
+      <div className="flex-1 h-full">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-tokyo-comment font-mono">Loading environments...</div>
           </div>
         ) : (
-          <ReactFlowProvider>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              nodeTypes={nodeTypes}
-              fitView
-              className="bg-tokyo-bg"
-              defaultEdgeOptions={{
-                animated: true,
-                style: { 
-                  stroke: '#ff00ff', 
-                  strokeWidth: 3,
-                  zIndex: 1000
-                },
-              }}
-            />
-          </ReactFlowProvider>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            fitView
+            className="bg-tokyo-bg w-full h-full"
+            defaultEdgeOptions={{
+              animated: true,
+              style: { 
+                stroke: '#ff00ff', 
+                strokeWidth: 3,
+                zIndex: 1000
+              },
+            }}
+          />
         )}
       </div>
     </div>
