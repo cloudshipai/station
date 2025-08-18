@@ -125,7 +125,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	if !h.localMode {
 		bundlesGroup.Use(h.requireAdminInServerMode())
 	}
+	bundlesGroup.GET("", h.listBundles)
 	bundlesGroup.POST("", h.createBundle)
+	bundlesGroup.POST("/install", h.installBundle)
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode
