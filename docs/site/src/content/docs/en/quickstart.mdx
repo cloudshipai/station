@@ -37,37 +37,34 @@ stn init
 
 This creates the Station configuration directory and initializes the database.
 
-### 2. Load MCP Tools
+### 2. Configure MCP Tools
 
-Station works with Model Context Protocol (MCP) servers. Load some essential tools:
+Station works with Model Context Protocol (MCP) servers. Set up essential filesystem tools:
 
 ```bash
-# Create filesystem MCP config
-cat > filesystem-mcp.json << 'EOF'
+# Create the template.json config file
+cat > ~/.config/station/environments/default/template.json << 'EOF'
 {
-  "name": "Filesystem MCP",
-  "description": "Basic filesystem operations",
+  "description": "Essential filesystem operations with MCP server integration",
   "mcpServers": {
     "filesystem": {
       "command": "npx",
       "args": [
-        "-y",
+        "-y", 
         "@modelcontextprotocol/server-filesystem@latest",
         "{{ .ALLOWED_PATH }}"
       ]
     }
-  }
+  },
+  "name": "filesystem-updated"
 }
 EOF
-
-# Load the configuration
-stn load filesystem-mcp.json --env default
 
 # Create variables for template resolution
 echo "ALLOWED_PATH: /home/user/projects" > ~/.config/station/environments/default/variables.yml
 
 # Sync to discover tools
-stn sync default
+stn sync
 ```
 
 ### 3. Create Your First Agent
@@ -151,7 +148,7 @@ Real-time updates and streaming responses for agent execution and system events.
 2. **Test Locally** - `stn agent run` to test functionality
 3. **Export Template** - `stn agent export` to create reusable templates
 4. **Version Control** - `git add & commit` for your agent configurations
-5. **Deploy** - `stn template install` in production environment
+5. **Deploy** - Copy template configs and sync in production environment
 6. **Monitor** - Use SSH/API access to monitor execution
 
 ## Next Steps

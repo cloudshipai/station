@@ -86,8 +86,8 @@ stn sync default
 
 **Example workflow:**
 ```bash
-# Load template
-stn load filesystem-mcp.json --env production
+# Copy template to production environment
+cp filesystem-mcp.json ~/.config/station/environments/production/template.json
 
 # Create variables file (or Station will prompt)
 echo "ALLOWED_PATH: /opt/production/data" > ~/.config/station/environments/production/variables.yml
@@ -145,8 +145,8 @@ EOF
 ### Load Into Environment
 
 ```bash
-# Load configuration into specific environment
-stn load filesystem-mcp.json --env default
+# Copy configuration to specific environment
+cp filesystem-mcp.json ~/.config/station/environments/default/template.json
 ```
 
 **Output:**
