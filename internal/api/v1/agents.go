@@ -3,7 +3,10 @@ package v1
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/afero"
@@ -23,6 +26,10 @@ func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 	group.GET("/:id/details", h.getAgentWithTools)  // New endpoint for detailed view
 	group.PUT("/:id", h.updateAgent)
 	group.DELETE("/:id", h.deleteAgent)
+	
+	// Agent prompt file management
+	group.GET("/:id/prompt", h.getAgentPrompt)
+	group.PUT("/:id/prompt", h.updateAgentPrompt)
 	
 	// Agent template installation endpoint
 	group.POST("/templates/install", h.installAgentTemplate)
@@ -477,6 +484,126 @@ func (h *APIHandlers) installAgentTemplate(c *gin.Context) {
 		"environment":    result.Environment,
 		"tools_installed": result.ToolsInstalled,
 		"mcp_bundles":    result.MCPBundles,
+	})
+}
+
+// getAgentPrompt returns the agent's prompt file content
+func (h *APIHandlers) getAgentPrompt(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	// Get agent to verify it exists and get its environment
+	agent, err := h.repos.Agents.GetByID(agentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
+		return
+	}
+
+	// Get environment to find the prompt file
+	environment, err := h.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent environment not found"})
+		return
+	}
+
+	// Get home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get home directory"})
+		return
+	}
+
+	// Construct prompt file path
+	promptFileName := fmt.Sprintf("%s.prompt", agent.Name)
+	promptFilePath := filepath.Join(homeDir, ".config", "station", "environments", environment.Name, "agents", promptFileName)
+
+	// Check if file exists
+	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Prompt file not found",
+			"path":  promptFilePath,
+		})
+		return
+	}
+
+	// Read file content
+	content, err := ioutil.ReadFile(promptFilePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read prompt file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"content":  string(content),
+		"path":     promptFilePath,
+		"agent_id": agentID,
+	})
+}
+
+// updateAgentPrompt updates the agent's prompt file content
+func (h *APIHandlers) updateAgentPrompt(c *gin.Context) {
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
+		return
+	}
+
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get agent to verify it exists and get its environment
+	agent, err := h.repos.Agents.GetByID(agentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
+		return
+	}
+
+	// Get environment to find the prompt file
+	environment, err := h.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent environment not found"})
+		return
+	}
+
+	// Get home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get home directory"})
+		return
+	}
+
+	// Construct prompt file path
+	promptFileName := fmt.Sprintf("%s.prompt", agent.Name)
+	agentsDir := filepath.Join(homeDir, ".config", "station", "environments", environment.Name, "agents")
+	promptFilePath := filepath.Join(agentsDir, promptFileName)
+
+	// Create agents directory if it doesn't exist
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create agents directory"})
+		return
+	}
+
+	// Write content to file
+	if err := ioutil.WriteFile(promptFilePath, []byte(req.Content), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write prompt file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Prompt file updated successfully",
+		"path":        promptFilePath,
+		"agent_id":    agentID,
+		"environment": environment.Name,
+		"sync_command": fmt.Sprintf("stn sync %s", environment.Name),
 	})
 }
 

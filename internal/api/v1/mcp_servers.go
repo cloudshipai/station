@@ -1,11 +1,32 @@
 package v1
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
+
+// MCP Server request structure
+type MCPServerRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Config      string `json:"config" binding:"required"`
+	Environment string `json:"environment" binding:"required"`
+}
+
+// MCP Server response structure
+type MCPServerResponse struct {
+	Success     bool   `json:"success"`
+	Message     string `json:"message"`
+	ServerName  string `json:"server_name,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	FilePath    string `json:"file_path,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
 
 // registerMCPServerRoutes registers MCP server routes
 func (h *APIHandlers) registerMCPServerRoutes(group *gin.RouterGroup) {
@@ -61,10 +82,78 @@ func (h *APIHandlers) getMCPServer(c *gin.Context) {
 	c.JSON(http.StatusOK, server)
 }
 
-// createMCPServer creates a new MCP server
+// createMCPServer creates a new MCP server configuration file
 func (h *APIHandlers) createMCPServer(c *gin.Context) {
-	// Implementation would go here
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "Create MCP server not implemented"})
+	var req MCPServerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid request: %v", err),
+		})
+		return
+	}
+
+	// Validate JSON config
+	var configData interface{}
+	if err := json.Unmarshal([]byte(req.Config), &configData); err != nil {
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid JSON configuration: %v", err),
+		})
+		return
+	}
+
+	// Get home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, MCPServerResponse{
+			Success: false,
+			Error:   "Failed to get home directory",
+		})
+		return
+	}
+
+	// Environment directory path
+	envPath := filepath.Join(homeDir, ".config", "station", "environments", req.Environment)
+	
+	// Check if environment directory exists
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Environment '%s' not found", req.Environment),
+		})
+		return
+	}
+
+	// Create the config file path
+	configFileName := fmt.Sprintf("%s.json", req.Name)
+	configFilePath := filepath.Join(envPath, configFileName)
+
+	// Check if file already exists
+	if _, err := os.Stat(configFilePath); err == nil {
+		c.JSON(http.StatusConflict, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("MCP server config '%s' already exists in environment '%s'", req.Name, req.Environment),
+		})
+		return
+	}
+
+	// Write the config to file
+	if err := os.WriteFile(configFilePath, []byte(req.Config), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to write config file: %v", err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, MCPServerResponse{
+		Success:     true,
+		Message:     fmt.Sprintf("MCP server '%s' created successfully in environment '%s'", req.Name, req.Environment),
+		ServerName:  req.Name,
+		Environment: req.Environment,
+		FilePath:    configFilePath,
+	})
 }
 
 // updateMCPServer updates an existing MCP server

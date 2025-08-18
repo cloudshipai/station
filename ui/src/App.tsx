@@ -17,9 +17,10 @@ import {
   type NodeTypes,
   type NodeProps,
 } from '@xyflow/react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight, Users, RotateCw, Train, Globe, Package } from 'lucide-react';
+import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight, RotateCw, Train, Globe, Package, Download, Upload, Copy, Edit, ArrowLeft, Save } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
+import Editor from '@monaco-editor/react';
 import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes } from './utils/layoutUtils';
@@ -536,6 +537,192 @@ const EnvironmentMCPNode = ({ data }: NodeProps) => {
   );
 };
 
+// Bundle Environment Modal Component
+const BundleEnvironmentModal = ({ 
+  isOpen, 
+  onClose, 
+  environmentName 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  environmentName: string;
+}) => {
+  const [endpoint, setEndpoint] = useState('https://share.cloudshipai.com/upload');
+  const [isLocal, setIsLocal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [response, setResponse] = useState<any>(null);
+
+  const handleBundle = async () => {
+    setIsLoading(true);
+    setResponse(null);
+    
+    try {
+      const bundleData = {
+        environment: environmentName,
+        local: isLocal,
+        endpoint: isLocal ? undefined : endpoint
+      };
+
+      // Call the bundles API (to be implemented)
+      const result = await apiClient.post('/bundles', bundleData);
+      setResponse(result.data);
+    } catch (error) {
+      console.error('Failed to create bundle:', error);
+      setResponse({ error: 'Failed to create bundle' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-tokyo-glow max-w-md w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark rounded-t-lg">
+          <h2 className="text-lg font-mono font-semibold text-tokyo-fg z-10 relative">
+            Bundle Environment: {environmentName}
+          </h2>
+          <button onClick={onClose} className="text-tokyo-comment hover:text-tokyo-fg transition-colors z-10 relative">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+          {/* Warning */}
+          <div className="bg-yellow-900 bg-opacity-30 border border-yellow-500 border-opacity-50 rounded p-3">
+            <p className="text-sm text-yellow-300 font-mono">
+              Note: Make sure your MCP servers are templates. Your variables.yml will not be part of this bundle.
+            </p>
+          </div>
+
+          {/* Local Toggle */}
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="local-toggle"
+              checked={isLocal}
+              onChange={(e) => setIsLocal(e.target.checked)}
+              className="w-4 h-4 text-tokyo-orange bg-tokyo-bg border-tokyo-blue7 rounded focus:ring-tokyo-orange focus:ring-2"
+            />
+            <label htmlFor="local-toggle" className="text-sm font-mono text-tokyo-fg">
+              Save locally (skip upload)
+            </label>
+          </div>
+
+          {/* Endpoint Input - Hidden when local is selected */}
+          {!isLocal && (
+            <div className="space-y-2">
+              <label className="text-sm font-mono text-tokyo-comment">Upload Endpoint:</label>
+              <input
+                type="text"
+                value={endpoint}
+                onChange={(e) => setEndpoint(e.target.value)}
+                className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-orange"
+                placeholder="https://share.cloudshipai.com/upload"
+              />
+            </div>
+          )}
+
+          {/* Response Display */}
+          {response && (
+            <div className="space-y-3">
+              {/* Success Response for share.cloudshipai.com */}
+              {response.success && endpoint.includes('share.cloudshipai.com') && response.share_url && (
+                <div className="bg-green-900 bg-opacity-30 border border-green-500 border-opacity-50 rounded p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-mono text-white font-medium">Bundle Shared Successfully</h4>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(response.share_url)}
+                      className="p-1 text-green-400 hover:text-green-300 transition-colors"
+                      title="Copy share URL"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-xs text-green-400 font-mono mb-1 font-medium">Share URL:</div>
+                      <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200 break-all">
+                        {response.share_url}
+                      </div>
+                    </div>
+                    
+                    {response.share_id && (
+                      <div>
+                        <div className="text-xs text-green-400 font-mono mb-1 font-medium">Share ID:</div>
+                        <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
+                          {response.share_id}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {response.expires && (
+                      <div>
+                        <div className="text-xs text-green-400 font-mono mb-1 font-medium">Expires:</div>
+                        <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
+                          {response.expires}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Local bundle success */}
+              {response.success && response.local_path && (
+                <div className="bg-blue-900 bg-opacity-30 border border-blue-500 border-opacity-50 rounded p-4">
+                  <h4 className="text-sm font-mono text-white font-medium mb-3">Bundle Saved Locally</h4>
+                  <div>
+                    <div className="text-xs text-blue-400 font-mono mb-1 font-medium">Local Path:</div>
+                    <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200 break-all">
+                      {response.local_path}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Error response */}
+              {response.error && (
+                <div className="bg-red-900 bg-opacity-30 border border-red-500 border-opacity-50 rounded p-4">
+                  <h4 className="text-sm font-mono text-red-400 font-medium mb-2">Error</h4>
+                  <div className="text-xs text-red-400 font-mono">
+                    {response.error}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-tokyo-blue7">
+          <button
+            onClick={handleBundle}
+            disabled={isLoading}
+            className="w-full px-4 py-2 bg-tokyo-orange text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-orange5 transition-colors shadow-tokyo-glow disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-tokyo-bg border-t-transparent"></div>
+                Creating Bundle...
+              </>
+            ) : (
+              <>
+                <Package className="h-4 w-4" />
+                Bundle
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Environment Node Component
 const EnvironmentNode = ({ data }: NodeProps) => {
   return (
@@ -571,7 +758,160 @@ const EnvironmentNode = ({ data }: NodeProps) => {
   );
 };
 
-const nodeTypes: NodeTypes = {
+// Custom Agent Node for agents page (with full functionality)
+const AgentsPageAgentNode = ({ data }: NodeProps) => {
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.onOpenModal && data.agentId) {
+      data.onOpenModal(data.agentId);
+    }
+  };
+
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.onEditAgent && data.agentId) {
+      data.onEditAgent(data.agentId);
+    }
+  };
+
+  return (
+    <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative group">
+      {/* Output handle on the right side */}
+      <Handle type="source" position={Position.Right} className="w-3 h-3 bg-tokyo-blue" />
+      
+      {/* Edit button - appears on hover */}
+      <button
+        onClick={handleEditClick}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-orange hover:bg-tokyo-orange text-tokyo-bg"
+        title="Edit agent configuration"
+      >
+        <Edit className="h-3 w-3" />
+      </button>
+      
+      {/* Info button - appears on hover */}
+      <button
+        onClick={handleInfoClick}
+        className="absolute top-2 right-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg"
+        title="View agent details"
+      >
+        <Eye className="h-3 w-3" />
+      </button>
+      
+      <div className="flex items-center gap-2 mb-2">
+        <Bot className="h-5 w-5 text-tokyo-blue" />
+        <div className="font-mono text-base text-tokyo-blue font-medium">{data.label}</div>
+      </div>
+      <div className="text-sm text-tokyo-comment mb-2 line-clamp-2">{data.description}</div>
+      <div className="text-sm text-tokyo-green font-medium">{data.status}</div>
+    </div>
+  );
+};
+
+const AgentsPageMCPNode = ({ data }: NodeProps) => {
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.onOpenMCPModal && data.serverId) {
+      data.onOpenMCPModal(data.serverId);
+    } else {
+      console.log('Opening MCP server details for:', data.serverId);
+    }
+  };
+
+  const handleExpandClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log('MCP Node expand button clicked for server:', data.serverId);
+    if (data.onToggleExpand && data.serverId) {
+      console.log('Calling onToggleExpand for server:', data.serverId);
+      data.onToggleExpand(data.serverId);
+    } else {
+      console.log('Missing onToggleExpand function or serverId:', { onToggleExpand: !!data.onToggleExpand, serverId: data.serverId });
+    }
+  };
+
+  const isExpanded = data.expanded || false;
+  const toolCount = data.tools?.length || 0;
+
+  return (
+    <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative group">
+      {/* Input handle on the left side */}
+      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-cyan" />
+      {/* Output handle on the right side - only show when expanded */}
+      {isExpanded && <Handle type="source" position={Position.Right} className="w-3 h-3 bg-tokyo-cyan" />}
+      
+      {/* Expand/Collapse button - always visible */}
+      <button
+        onClick={handleExpandClick}
+        className="absolute top-2 left-2 p-1 rounded bg-tokyo-cyan hover:bg-tokyo-blue1 text-tokyo-bg transition-colors duration-200"
+        title={isExpanded ? 'Collapse tools' : 'Expand tools'}
+      >
+        {isExpanded ? (
+          <ChevronDown className="h-3 w-3" />
+        ) : (
+          <ChevronRight className="h-3 w-3" />
+        )}
+      </button>
+      
+      {/* Info button - appears on hover */}
+      <button
+        onClick={handleInfoClick}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-cyan hover:bg-tokyo-blue1 text-tokyo-bg"
+        title="View MCP server details"
+      >
+        <Eye className="h-3 w-3" />
+      </button>
+      
+      <div className="flex items-center gap-2 mb-2 ml-6">
+        <Database className="h-5 w-5 text-tokyo-cyan" />
+        <div className="font-mono text-base text-tokyo-cyan font-medium">{data.label}</div>
+      </div>
+      <div className="text-sm text-tokyo-comment mb-2 ml-6">{data.description}</div>
+      <div className="text-sm text-tokyo-purple font-medium ml-6">
+        {toolCount} tools {isExpanded ? 'expanded' : 'available'}
+      </div>
+    </div>
+  );
+};
+
+const AgentsPageToolNode = ({ data }: NodeProps) => {
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log('Opening tool details for:', data.toolId);
+  };
+
+  return (
+    <div className="w-[280px] h-[130px] px-4 py-3 shadow-tokyo-blue border border-tokyo-blue7 bg-tokyo-bg-dark rounded-lg relative group">
+      {/* Input handle on the left side */}
+      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-tokyo-green" />
+      
+      {/* Info button - appears on hover */}
+      <button
+        onClick={handleInfoClick}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-green hover:bg-tokyo-green1 text-tokyo-bg"
+        title="View tool details"
+      >
+        <Eye className="h-3 w-3" />
+      </button>
+      
+      <div className="flex items-center gap-2 mb-2">
+        <Settings className="h-5 w-5 text-tokyo-green" />
+        <div className="font-mono text-base text-tokyo-green font-medium">{data.label}</div>
+      </div>
+      <div className="text-sm text-tokyo-comment mb-2">{data.description || 'Tool function'}</div>
+      <div className="text-sm text-tokyo-blue1 font-medium">from {data.category}</div>
+    </div>
+  );
+};
+
+// Node types for the main agents page (with full functionality)
+const agentPageNodeTypes: NodeTypes = {
+  agent: AgentsPageAgentNode,
+  mcp: AgentsPageMCPNode,
+  tool: AgentsPageToolNode,
+  environment: EnvironmentNode,
+};
+
+// Node types for the environments page (simplified hub visualization)
+const environmentPageNodeTypes: NodeTypes = {
   agent: EnvironmentAgentNode,
   mcp: EnvironmentMCPNode,
   tool: ToolNode,
@@ -697,17 +1037,6 @@ const Layout = ({ children, currentPage, onPageChange }: any) => {
             Runs
           </button>
           <button 
-            onClick={() => onPageChange('users')}
-            className={`w-full text-left p-3 rounded border font-mono transition-colors ${
-              currentPage === 'users' 
-                ? 'bg-tokyo-purple text-tokyo-bg border-tokyo-purple shadow-tokyo-glow' 
-                : 'bg-transparent text-tokyo-fg-dark hover:bg-tokyo-bg-highlight hover:text-tokyo-purple border-transparent hover:border-tokyo-blue7'
-            }`}
-          >
-            <Users className="inline h-4 w-4 mr-2" />
-            Users
-          </button>
-          <button 
             onClick={() => onPageChange('environments')}
             className={`w-full text-left p-3 rounded border font-mono transition-colors ${
               currentPage === 'environments' 
@@ -739,6 +1068,7 @@ const Layout = ({ children, currentPage, onPageChange }: any) => {
 };
 
 const AgentsCanvas = () => {
+  const navigate = useNavigate();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
@@ -763,6 +1093,11 @@ const AgentsCanvas = () => {
   const closeAgentModal = () => {
     setIsModalOpen(false);
     setModalAgentId(null);
+  };
+
+  // Function to edit agent configuration
+  const editAgent = (agentId: number) => {
+    navigate(`/agent-editor/${agentId}`);
   };
   
   // Function to open MCP server details modal
@@ -850,6 +1185,7 @@ const AgentsCanvas = () => {
           status: agent.is_scheduled ? 'Scheduled' : 'Manual',
           agentId: agent.id,
           onOpenModal: openAgentModal,
+          onEditAgent: editAgent,
         },
       });
 
@@ -1024,7 +1360,7 @@ const AgentsCanvas = () => {
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onNodeClick={onNodeClick}
-              nodeTypes={nodeTypes}
+              nodeTypes={agentPageNodeTypes}
               fitView
               className="bg-tokyo-bg"
               defaultEdgeOptions={{
@@ -1074,6 +1410,214 @@ const AgentsCanvas = () => {
         isOpen={isMCPModalOpen} 
         onClose={closeMCPServerModal} 
       />
+    </div>
+  );
+};
+
+// Add Server Modal Component
+const AddServerModal = ({ 
+  isOpen, 
+  onClose, 
+  environmentName 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  environmentName: string;
+}) => {
+  const [serverName, setServerName] = useState('');
+  const [serverConfig, setServerConfig] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [response, setResponse] = useState<any>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const defaultConfig = `{
+  "mcpServers": {
+    "filesystem": {
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@latest",
+        "{{ .ROOT_PATH }}"
+      ],
+      "autoApprove": [],
+      "command": "npx",
+      "disabled": false
+    }
+  }
+}`;
+
+  const handleSubmit = async () => {
+    if (!serverName.trim() || !serverConfig.trim()) {
+      setResponse({ error: 'Server name and config are required' });
+      return;
+    }
+
+    setIsLoading(true);
+    setResponse(null);
+    
+    try {
+      const result = await apiClient.post('/mcp-servers', {
+        name: serverName,
+        config: serverConfig,
+        environment: environmentName
+      });
+      setResponse(result.data);
+      setShowSuccess(true);
+    } catch (error) {
+      console.error('Failed to create MCP server:', error);
+      setResponse({ error: 'Failed to create MCP server' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetModal = () => {
+    setServerName('');
+    setServerConfig('');
+    setResponse(null);
+    setShowSuccess(false);
+    setIsLoading(false);
+  };
+
+  const handleClose = () => {
+    resetModal();
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-tokyo-glow max-w-4xl w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark rounded-t-lg">
+          <h2 className="text-lg font-mono font-semibold text-white z-10 relative">
+            Add MCP Server: {environmentName}
+          </h2>
+          <button onClick={handleClose} className="text-tokyo-comment hover:text-tokyo-fg transition-colors z-10 relative">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          {!showSuccess ? (
+            <>
+              {/* Server Name Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-mono text-tokyo-cyan font-medium">Server Name:</label>
+                <input
+                  type="text"
+                  value={serverName}
+                  onChange={(e) => setServerName(e.target.value)}
+                  className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-cyan"
+                  placeholder="e.g., filesystem, database, etc."
+                />
+              </div>
+
+              {/* Server Config Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-mono text-tokyo-cyan font-medium">Server Configuration:</label>
+                <textarea
+                  value={serverConfig}
+                  onChange={(e) => setServerConfig(e.target.value)}
+                  className="w-full h-80 px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-cyan text-xs"
+                  placeholder={defaultConfig}
+                />
+              </div>
+
+              {/* Documentation Note */}
+              <div className="bg-blue-900 bg-opacity-30 border border-blue-500 border-opacity-50 rounded p-4">
+                <p className="text-sm text-blue-300 font-mono">
+                  <strong>Note:</strong> Replace any arguments you want as variables with <code className="bg-gray-800 px-1 rounded">{'{{ .VAR }}'}</code> Go variable notation.{' '}
+                  <a 
+                    href="https://cloudshipai.github.io/station/en/mcp/overview/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-400 underline hover:text-blue-300"
+                  >
+                    More info here
+                  </a>
+                </p>
+              </div>
+
+              {/* Error Display */}
+              {response?.error && (
+                <div className="bg-red-900 bg-opacity-30 border border-red-500 border-opacity-50 rounded p-4">
+                  <h4 className="text-sm font-mono text-red-400 font-medium mb-2">Error</h4>
+                  <div className="text-xs text-red-400 font-mono">
+                    {response.error}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Success Card */
+            <div className="space-y-4">
+              <div className="bg-green-900 bg-opacity-30 border border-green-500 border-opacity-50 rounded p-6 text-center">
+                <h3 className="text-lg font-mono text-white font-medium mb-4">MCP Server Created Successfully!</h3>
+                
+                <div className="space-y-3 text-left">
+                  <div>
+                    <span className="text-xs text-green-400 font-mono font-medium">Server Name:</span>
+                    <div className="mt-1 p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
+                      {serverName}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <span className="text-xs text-green-400 font-mono font-medium">Environment:</span>
+                    <div className="mt-1 p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
+                      {environmentName}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Next Steps */}
+              <div className="bg-blue-900 bg-opacity-30 border border-blue-500 border-opacity-50 rounded p-4">
+                <h4 className="text-sm font-mono text-blue-400 font-medium mb-3">Next Steps</h4>
+                <p className="text-xs text-blue-300 font-mono mb-3">
+                  Sync this config and input your variables:
+                </p>
+                
+                <div className="bg-gray-900 border border-gray-600 rounded p-3 flex items-center justify-between">
+                  <code className="text-xs text-gray-200 font-mono">stn sync</code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText('stn sync')}
+                    className="p-1 text-blue-400 hover:text-blue-300 transition-colors"
+                    title="Copy command"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!showSuccess && (
+          <div className="p-4 border-t border-tokyo-blue7">
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading || !serverName.trim() || !serverConfig.trim()}
+              className="w-full px-4 py-2 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors shadow-tokyo-glow disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-tokyo-bg border-t-transparent"></div>
+                  Creating Server...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  Create Server
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1200,6 +1744,8 @@ const MCPServers = () => {
   const [mcpServers, setMcpServers] = useState<any[]>([]);
   const [modalMCPServerId, setModalMCPServerId] = useState<number | null>(null);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
+  const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
+  const [environments, setEnvironments] = useState<any[]>([]);
   const environmentContext = React.useContext(EnvironmentContext);
 
   // Function to open MCP server details modal
@@ -1212,6 +1758,21 @@ const MCPServers = () => {
     setIsMCPModalOpen(false);
     setModalMCPServerId(null);
   };
+
+  // Fetch environments data
+  useEffect(() => {
+    const fetchEnvironments = async () => {
+      try {
+        const response = await environmentsApi.getAll();
+        const environmentsData = response.data.environments || [];
+        setEnvironments(Array.isArray(environmentsData) ? environmentsData : []);
+      } catch (error) {
+        console.error('Failed to fetch environments:', error);
+        setEnvironments([]);
+      }
+    };
+    fetchEnvironments();
+  }, []);
 
   // Fetch MCP servers data when environment changes
   useEffect(() => {
@@ -1254,14 +1815,9 @@ const MCPServers = () => {
         <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
         <div className="flex items-center gap-3">
           <button 
-            onClick={handleSync}
-            disabled={isSyncing}
-            className="px-4 py-2 bg-gradient-to-r from-tokyo-purple to-tokyo-magenta text-tokyo-bg rounded font-mono font-bold hover:from-tokyo-magenta hover:to-tokyo-purple transition-all shadow-tokyo-glow flex items-center gap-2 disabled:opacity-50"
+            onClick={() => setIsAddServerModalOpen(true)}
+            className="px-4 py-2 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors shadow-tokyo-glow flex items-center gap-2"
           >
-            <RotateCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Syncing...' : 'SYNC'}
-          </button>
-          <button className="px-4 py-2 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors shadow-tokyo-glow flex items-center gap-2">
             <Plus className="h-4 w-4" />
             Add Server
           </button>
@@ -1307,6 +1863,13 @@ const MCPServers = () => {
           </div>
         )}
       </div>
+      
+      {/* Add Server Modal */}
+      <AddServerModal 
+        isOpen={isAddServerModalOpen} 
+        onClose={() => setIsAddServerModalOpen(false)} 
+        environmentName={environmentContext?.selectedEnvironment ? environments.find(env => env.id === environmentContext.selectedEnvironment)?.name || 'default' : 'default'}
+      />
       
       {/* MCP Server Details Modal */}
       <MCPServerDetailsModal 
@@ -1411,71 +1974,6 @@ const Runs = () => {
   );
 };
 
-const UsersPage = () => {
-  const [users, setUsers] = useState<any[]>([]);
-  const environmentContext = React.useContext(EnvironmentContext);
-
-  // Fetch users data
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await usersApi.getAll();
-        setUsers(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error('Failed to fetch users:', error);
-        setUsers([]);
-      }
-    };
-    fetchUsers();
-  }, [environmentContext?.refreshTrigger]);
-
-  return (
-    <div className="h-full flex flex-col bg-tokyo-bg">
-      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-        <h1 className="text-xl font-mono font-semibold text-tokyo-purple">Users</h1>
-        <button className="px-4 py-2 bg-tokyo-purple text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-purple transition-colors shadow-tokyo-glow flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Add User
-        </button>
-      </div>
-      <div className="flex-1 p-4 overflow-y-auto">
-        {users.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <Users className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-              <div className="text-tokyo-fg font-mono text-lg mb-2">No users found</div>
-              <div className="text-tokyo-comment font-mono text-sm">
-                User accounts will appear here when created
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-4 max-h-full overflow-y-auto">
-            {users.map((user) => (
-              <div key={user.id} className="p-4 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-tokyo">
-                <div className="flex items-center gap-3">
-                  <Users className="h-8 w-8 text-tokyo-purple" />
-                  <div>
-                    <h3 className="font-mono font-medium text-tokyo-purple">{user.username || user.name}</h3>
-                    <p className="text-sm text-tokyo-comment mt-1 font-mono">{user.email || 'No email specified'}</p>
-                  </div>
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <span className="px-2 py-1 bg-tokyo-green text-tokyo-bg text-xs rounded font-mono">
-                    {user.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                  <span className="px-2 py-1 bg-tokyo-purple text-tokyo-bg text-xs rounded font-mono">
-                    {user.is_admin ? 'Admin' : 'User'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 // Environments Page Component
 const EnvironmentsPage = () => {
@@ -1484,6 +1982,7 @@ const EnvironmentsPage = () => {
   const [environments, setEnvironments] = useState<any[]>([]);
   const [selectedEnvironment, setSelectedEnvironment] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isBundleModalOpen, setIsBundleModalOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
 
   // Fetch environments data
@@ -1628,9 +2127,13 @@ const EnvironmentsPage = () => {
               </option>
             ))}
           </select>
-          <button className="px-4 py-2 bg-tokyo-orange text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-orange5 transition-colors shadow-tokyo-glow flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Add Environment
+          <button 
+            onClick={() => setIsBundleModalOpen(true)}
+            disabled={!selectedEnvironment}
+            className="px-4 py-2 bg-tokyo-magenta text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-purple transition-colors shadow-tokyo-glow flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Package className="h-4 w-4" />
+            Bundle
           </button>
         </div>
       </div>
@@ -1647,7 +2150,7 @@ const EnvironmentsPage = () => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            nodeTypes={nodeTypes}
+            nodeTypes={environmentPageNodeTypes}
             fitView
             className="bg-tokyo-bg w-full h-full"
             defaultEdgeOptions={{
@@ -1661,6 +2164,13 @@ const EnvironmentsPage = () => {
           />
         )}
       </div>
+      
+      {/* Bundle Environment Modal */}
+      <BundleEnvironmentModal
+        isOpen={isBundleModalOpen}
+        onClose={() => setIsBundleModalOpen(false)}
+        environmentName={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
+      />
     </div>
   );
 };
@@ -1708,7 +2218,162 @@ const queryClient = new QueryClient({
   },
 });
 
-type Page = 'agents' | 'mcps' | 'runs' | 'users' | 'environments' | 'bundles';
+// Agent Editor Component
+const AgentEditor = () => {
+  const { agentId } = useParams<{ agentId: string }>();
+  const navigate = useNavigate();
+  const [agentData, setAgentData] = useState<any>(null);
+  const [promptContent, setPromptContent] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAgentData = async () => {
+      if (!agentId) return;
+      
+      try {
+        setLoading(true);
+        
+        // Fetch agent details
+        const agentResponse = await agentsApi.getById(parseInt(agentId));
+        setAgentData(agentResponse.data.agent);
+        
+        // Fetch prompt file content via API
+        const promptResponse = await agentsApi.getPrompt(parseInt(agentId));
+        setPromptContent(promptResponse.data.content || '');
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to load agent data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAgentData();
+  }, [agentId]);
+
+  const handleSave = async () => {
+    if (!agentId) return;
+    
+    try {
+      setSaving(true);
+      setError(null);
+      
+      // Save prompt content via API
+      await agentsApi.updatePrompt(parseInt(agentId), promptContent);
+      
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to save agent configuration');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBack = () => {
+    navigate(-1);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-tokyo-bg flex items-center justify-center">
+        <div className="text-tokyo-comment">Loading agent configuration...</div>
+      </div>
+    );
+  }
+
+  if (error && !agentData) {
+    return (
+      <div className="min-h-screen bg-tokyo-bg flex items-center justify-center">
+        <div className="text-tokyo-red">{error}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-tokyo-bg">
+      {/* Header with breadcrumbs */}
+      <div className="bg-tokyo-bg-dark border-b border-tokyo-blue7 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-2 text-tokyo-comment hover:text-tokyo-blue transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Agents</span>
+            </button>
+            <div className="text-tokyo-comment">/</div>
+            <h1 className="text-xl font-mono text-tokyo-blue font-bold">
+              Edit Agent: {agentData?.name || 'Unknown'}
+            </h1>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {saveSuccess && (
+              <div className="text-sm text-tokyo-green">Saved successfully!</div>
+            )}
+            {error && (
+              <div className="text-sm text-tokyo-red">{error}</div>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+        
+        {/* Agent description */}
+        {agentData?.description && (
+          <div className="mt-2 text-sm text-tokyo-comment">
+            {agentData.description}
+          </div>
+        )}
+      </div>
+
+      {/* Editor content */}
+      <div className="flex-1 p-6">
+        <div className="bg-tokyo-bg-dark rounded-lg border border-tokyo-blue7 h-[calc(100vh-200px)]">
+          <div className="p-4 border-b border-tokyo-blue7">
+            <h2 className="text-lg font-mono text-tokyo-blue">Agent Configuration</h2>
+            <p className="text-sm text-tokyo-comment mt-1">
+              Edit the agent's prompt file configuration. After saving, run <code className="bg-tokyo-bg px-1 rounded text-tokyo-orange">stn sync {agentData?.environment_name || 'environment'}</code> to apply changes.
+            </p>
+          </div>
+          
+          <div className="h-[calc(100%-80px)]">
+            <Editor
+              height="100%"
+              defaultLanguage="yaml"
+              value={promptContent}
+              onChange={(value) => setPromptContent(value || '')}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
+                lineNumbers: 'on',
+                rulers: [80],
+                wordWrap: 'on',
+                automaticLayout: true,
+                scrollBeyondLastLine: false,
+                padding: { top: 16, bottom: 16 }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+type Page = 'agents' | 'mcps' | 'runs' | 'environments' | 'bundles';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('agents');
@@ -1721,8 +2386,6 @@ function App() {
         return <MCPServers />;
       case 'runs':
         return <Runs />;
-      case 'users':
-        return <UsersPage />;
       case 'environments':
         return <EnvironmentsPage />;
       case 'bundles':
@@ -1740,6 +2403,7 @@ function App() {
             <div className="min-h-screen bg-background">
               <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
                 <Routes>
+                  <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
                   <Route path="*" element={renderPage()} />
                 </Routes>
             </Layout>
