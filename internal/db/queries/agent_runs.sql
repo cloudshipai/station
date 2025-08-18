@@ -31,6 +31,7 @@ LIMIT ?;
 -- name: GetAgentRunWithDetails :one
 SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken, 
        ar.tool_calls, ar.execution_steps, ar.status, ar.started_at, ar.completed_at,
+       ar.input_tokens, ar.output_tokens, ar.total_tokens, ar.duration_seconds, ar.model_name, ar.tools_used,
        a.name as agent_name, u.username
 FROM agent_runs ar
 JOIN agents a ON ar.agent_id = a.id
