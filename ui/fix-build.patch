@@ -1,0 +1,21 @@
+// Quick TypeScript fixes for build errors
+// Apply these changes to App.tsx
+
+// 1. Remove unused import
+// Line 18: Remove NodeProps from the ReactFlow import
+
+// 2. Fix unused variables - comment them out:
+// Line 1781: const [isSyncing, setIsSyncing] = useState(false); -> // const [isSyncing, setIsSyncing] = useState(false);
+// Line 1835: const handleSync = async () => { -> // const handleSync = async () => {
+// Line 2039: const environmentContext = React.useContext(EnvironmentContext); -> // const environmentContext = React.useContext(EnvironmentContext);
+// Line 2268: const response = await bundlesApi.install(...) -> await bundlesApi.install(...)
+
+// 3. Fix array type:
+// Line 2080: const newEdges = []; -> const newEdges: any[] = [];
+
+// 4. Remove unused index parameters:
+// Line 2097: agents.forEach((agent, index) => { -> agents.forEach((agent) => {
+// Line 2121: mcpServers.forEach((server, index) => { -> mcpServers.forEach((server) => {
+
+// 5. Comment out ToolNode usage:
+// Line ~945: ToolNode: AgentsPageToolNode, -> // ToolNode: AgentsPageToolNode,
