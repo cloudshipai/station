@@ -942,7 +942,7 @@ const agentPageNodeTypes: NodeTypes = {
 const environmentPageNodeTypes: NodeTypes = {
   agent: EnvironmentAgentNode,
   mcp: EnvironmentMCPNode,
-  tool: ToolNode,
+  tool: AgentsPageToolNode,
   environment: EnvironmentNode,
 };
 
