@@ -64,12 +64,37 @@ curl -sSL https://getstation.cloudshipai.com | bash
 stn init --ship
 ```
 
-### 2. **Sync Configuration**
+### 2. **Copy MCP Configuration** 
+Copy a filesystem template to get started:
+```bash
+# Create the template.json config file
+cat > ~/.config/station/environments/default/template.json << 'EOF'
+{
+  "description": "Essential filesystem operations with MCP server integration",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y", 
+        "@modelcontextprotocol/server-filesystem@latest",
+        "{{ .ROOT_PATH }}"
+      ]
+    }
+  },
+  "name": "filesystem-updated"
+}
+EOF
+
+# Set the ROOT_PATH variable
+echo "ROOT_PATH: $HOME/projects" > ~/.config/station/environments/default/variables.yml
+```
+
+### 3. **Sync Configuration**
 ```bash
 stn sync
 ```
 
-### 3. **Connect to Claude or Cursor**
+### 4. **Connect to Claude or Cursor**
 Add Station as an MCP server in your Claude Desktop or Cursor configuration:
 
 **Claude Desktop (`~/.claude_desktop_config.json`):**
@@ -96,7 +121,7 @@ Add Station as an MCP server in your Claude Desktop or Cursor configuration:
 }
 ```
 
-### 4. **Access Web Interface**
+### 5. **Access Web Interface**
 ```bash
 stn serve
 ```
