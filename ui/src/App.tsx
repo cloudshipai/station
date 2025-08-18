@@ -2431,7 +2431,7 @@ const ShipCLIPage = () => {
         <div className="flex items-center gap-3">
           <span className="text-2xl">🚢</span>
           <h1 className="text-xl font-mono font-semibold text-tokyo-yellow">Ship CLI</h1>
-          <span className="px-2 py-1 bg-tokyo-yellow bg-opacity-20 text-tokyo-yellow text-xs font-mono rounded">
+          <span className="px-2 py-1 text-tokyo-yellow text-xs font-mono rounded border border-tokyo-yellow">
             Station Companion
           </span>
         </div>
@@ -2450,12 +2450,12 @@ const ShipCLIPage = () => {
             </p>
             
             {/* Beta Note */}
-            <div className="bg-tokyo-orange bg-opacity-20 border border-tokyo-orange border-opacity-50 rounded p-3">
+            <div className="border border-tokyo-yellow rounded p-3">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-tokyo-orange font-mono font-bold">📝 Note:</span>
+                <span className="text-tokyo-yellow font-mono font-bold">📝 Note:</span>
               </div>
-              <p className="text-tokyo-orange font-mono text-sm">
-                Ship is currently in <strong>early beta</strong>. While functional and actively maintained by the CloudShip AI team, expect regular updates and potential breaking changes as we refine the framework.
+              <p className="text-tokyo-fg font-mono text-sm">
+                Ship is currently in <strong className="text-tokyo-yellow">early beta</strong>. While functional and actively maintained by the CloudShip AI team, expect regular updates and potential breaking changes as we refine the framework.
               </p>
             </div>
           </div>
@@ -2531,7 +2531,7 @@ const ShipCLIPage = () => {
                     <h5 className="font-mono font-medium text-tokyo-red mb-2">{cat.category}</h5>
                     <div className="flex flex-wrap gap-1">
                       {cat.tools.map(tool => (
-                        <span key={tool} className="px-2 py-1 bg-tokyo-red bg-opacity-20 text-tokyo-red text-xs font-mono rounded">
+                        <span key={tool} className="px-2 py-1 text-tokyo-fg text-xs font-mono rounded border border-tokyo-blue7">
                           {tool}
                         </span>
                       ))}
@@ -2557,7 +2557,7 @@ const ShipCLIPage = () => {
                     <span className="font-mono font-medium text-tokyo-cyan">{tool.name}</span>
                     <p className="text-tokyo-fg font-mono text-sm">{tool.desc}</p>
                   </div>
-                  <span className="px-2 py-1 bg-tokyo-cyan bg-opacity-20 text-tokyo-cyan text-xs font-mono rounded">
+                  <span className="px-2 py-1 text-tokyo-cyan text-xs font-mono rounded border border-tokyo-cyan">
                     {tool.support}
                   </span>
                 </div>
@@ -2596,7 +2596,7 @@ const ShipCLIPage = () => {
                 <div key={server.name} className="bg-tokyo-bg border border-tokyo-blue7 rounded p-4">
                   <div className="flex justify-between items-start mb-2">
                     <h5 className="font-mono font-medium text-tokyo-purple">{server.name}</h5>
-                    <span className="px-2 py-1 bg-tokyo-purple bg-opacity-20 text-tokyo-purple text-xs font-mono rounded">
+                    <span className="px-2 py-1 text-tokyo-purple text-xs font-mono rounded border border-tokyo-purple">
                       External MCP
                     </span>
                   </div>
