@@ -180,21 +180,31 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	responseText := response.Text()
 	
 	
-	// Extract tool calls and execution steps (same logic as traditional approach)
+	// Extract tool calls and execution steps with detailed debugging
 	var allToolCalls []interface{}
 	var executionSteps []interface{}
 	stepCounter := 1
 	
+	logging.Debug("=== TOOL CALLS & EXECUTION STEPS EXTRACTION ===")
+	
 	// Check if any tool calls were made in the response
 	if response.Request != nil && response.Request.Messages != nil {
-		for _, msg := range response.Request.Messages {
+		logging.Debug("Processing %d messages from response.Request", len(response.Request.Messages))
+		
+		for msgIdx, msg := range response.Request.Messages {
+			logging.Debug("  Message[%d]: Role=%s, ContentParts=%d", msgIdx, msg.Role, len(msg.Content))
 			
 			// Extract tool requests, responses, and model thoughts
 			var modelThoughts []string
 			var toolRequestsInMessage []map[string]interface{}
 			
-			for _, part := range msg.Content {
+			for partIdx, part := range msg.Content {
+				logging.Debug("    Part[%d]: IsToolRequest=%t, IsText=%t, IsToolResponse=%t", 
+					partIdx, part.IsToolRequest(), part.IsText(), part.IsToolResponse())
+				
 				if part.IsToolRequest() && part.ToolRequest != nil {
+					logging.Debug("      ToolRequest: Name=%s, Ref=%s", part.ToolRequest.Name, part.ToolRequest.Ref)
+					logging.Debug("      ToolRequest Input: %+v", part.ToolRequest.Input)
 					
 					// Add tool call to array
 					toolCall := map[string]interface{}{
@@ -217,10 +227,15 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 					}
 					executionSteps = append(executionSteps, executionStep)
 					stepCounter++
+					
 				} else if part.IsText() && part.Text != "" {
+					logging.Debug("      Text content: %q", part.Text)
 					// Capture model's intermediate thoughts/reasoning
 					modelThoughts = append(modelThoughts, part.Text)
+					
 				} else if part.IsToolResponse() && part.ToolResponse != nil {
+					logging.Debug("      ToolResponse: Name=%s", part.ToolResponse.Name)
+					logging.Debug("      ToolResponse Output: %+v", part.ToolResponse.Output)
 					
 					// Add tool response as execution step
 					executionStep := map[string]interface{}{
@@ -237,16 +252,52 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 			
 			// If there were model thoughts alongside tool requests, add them to tool calls
 			if len(modelThoughts) > 0 && len(toolRequestsInMessage) > 0 {
+				logging.Debug("    Adding model thoughts to %d tool requests", len(toolRequestsInMessage))
 				for j := range toolRequestsInMessage {
 					if j < len(allToolCalls) {
 						allToolCalls[len(allToolCalls)-len(toolRequestsInMessage)+j].(map[string]interface{})["model_thoughts"] = strings.Join(modelThoughts, " ")
 					}
 				}
+			} else if len(modelThoughts) > 0 {
+				logging.Debug("    Found model thoughts without tool requests: %d thoughts", len(modelThoughts))
+				// Add model thoughts as execution step even if no tool calls
+				executionStep := map[string]interface{}{
+					"step":      stepCounter,
+					"type":      "model_reasoning",
+					"content":   strings.Join(modelThoughts, " "),
+					"timestamp": time.Now().Format(time.RFC3339),
+				}
+				executionSteps = append(executionSteps, executionStep)
+				stepCounter++
+			}
+		}
+	} else {
+		logging.Debug("No messages found in response.Request")
+	}
+	
+	// Note: Some AI providers put tool calls in different response fields,
+	// but this GenKit version uses response.Request.Messages
+	
+	logging.Debug("EXTRACTION SUMMARY: %d tool calls, %d execution steps", len(allToolCalls), len(executionSteps))
+	
+	// Log detailed summary of extracted data
+	if len(allToolCalls) > 0 {
+		logging.Debug("Tool calls extracted:")
+		for i, toolCall := range allToolCalls {
+			if tc, ok := toolCall.(map[string]interface{}); ok {
+				logging.Debug("  [%d] %s (step %v)", i, tc["tool_name"], tc["step"])
 			}
 		}
 	}
 	
-	logging.Debug("Extracted %d tool calls and %d execution steps", len(allToolCalls), len(executionSteps))
+	if len(executionSteps) > 0 {
+		logging.Debug("Execution steps extracted:")
+		for i, step := range executionSteps {
+			if s, ok := step.(map[string]interface{}); ok {
+				logging.Debug("  [%d] %s (step %v)", i, s["type"], s["step"])
+			}
+		}
+	}
 	
 	// Convert to JSONArray format
 	var toolCallsArray *models.JSONArray
@@ -262,6 +313,51 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		executionStepsArray = &jsonArray
 	}
 	
+	// Debug: Dissect the GenKit response object to understand its structure
+	tokenUsage := make(map[string]interface{})
+	if response != nil {
+		logging.Debug("GenKit Response Object Structure Analysis:")
+		logging.Debug("  response != nil: true")
+		logging.Debug("  response.Text(): %q", response.Text())
+		
+		// Check Usage field
+		if response.Usage != nil {
+			logging.Debug("  response.Usage != nil: true")
+			logging.Debug("  response.Usage.InputTokens: %d", response.Usage.InputTokens)
+			logging.Debug("  response.Usage.OutputTokens: %d", response.Usage.OutputTokens)
+			tokenUsage["input_tokens"] = response.Usage.InputTokens
+			tokenUsage["output_tokens"] = response.Usage.OutputTokens
+			tokenUsage["total_tokens"] = response.Usage.InputTokens + response.Usage.OutputTokens
+		} else {
+			logging.Debug("  response.Usage: nil")
+		}
+		
+		// Check Request field (sometimes token usage is here)
+		if response.Request != nil {
+			logging.Debug("  response.Request != nil: true")
+			if response.Request.Messages != nil {
+				logging.Debug("  response.Request.Messages: %d messages", len(response.Request.Messages))
+			}
+		} else {
+			logging.Debug("  response.Request: nil")
+		}
+		
+		// Check if there are other response fields we should examine
+		// (Candidates field not available in this GenKit version)
+		
+		// Try to access other potential fields using reflection-like approach
+		logging.Debug("  Full response type: %T", response)
+		
+		// Log token usage summary
+		if len(tokenUsage) > 0 {
+			logging.Debug("  Extracted token usage: %+v", tokenUsage)
+		} else {
+			logging.Debug("  No token usage extracted")
+		}
+	} else {
+		logging.Debug("GenKit response is nil")
+	}
+
 	return &ExecutionResponse{
 		Success:        true,
 		Response:       responseText, // Use the responseText variable we created
@@ -271,6 +367,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		ModelName:      modelName,
 		StepsUsed:      len(allToolCalls), // Actual number of tool calls made
 		ToolsUsed:      len(allToolCalls), // Actual number of tools used
+		TokenUsage:     tokenUsage,        // Add extracted token usage
 		Error:          "",
 	}, nil
 }

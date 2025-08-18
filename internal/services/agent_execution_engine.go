@@ -154,7 +154,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			StepsUsed:      response.StepsUsed,
 			ToolsUsed:      response.ToolsUsed,
 			Error:          response.Error,
-			TokenUsage:     make(map[string]interface{}), // TODO: Add token usage from dotprompt system
+			TokenUsage:     response.TokenUsage,           // ✅ Pass through token usage from dotprompt
 			ToolCalls:      response.ToolCalls,           // ✅ Pass through tool calls
 			ExecutionSteps: response.ExecutionSteps,     // ✅ Pass through execution steps
 		}, nil
