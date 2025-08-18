@@ -47,6 +47,7 @@ SELECT
     a.created_by as agent_created_by,
     a.is_scheduled as agent_is_scheduled,
     a.schedule_enabled as agent_schedule_enabled,
+    a.input_schema as agent_input_schema,
     a.created_at as agent_created_at,
     a.updated_at as agent_updated_at,
     ms.id as mcp_server_id,

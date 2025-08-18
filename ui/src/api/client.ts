@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Station API client configuration
-const API_BASE_URL = 'http://localhost:8088/api/v1';
+// Station API client configuration  
+const API_BASE_URL = 'http://localhost:8585/api/v1';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

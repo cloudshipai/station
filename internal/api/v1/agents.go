@@ -308,6 +308,7 @@ func (h *APIHandlers) getAgentWithTools(c *gin.Context) {
 		"created_by":      firstRow.AgentCreatedBy,
 		"is_scheduled":    firstRow.AgentIsScheduled.Bool,
 		"schedule_enabled": firstRow.AgentScheduleEnabled.Bool,
+		"input_schema":    firstRow.AgentInputSchema.String,
 		"created_at":      firstRow.AgentCreatedAt,
 		"updated_at":      firstRow.AgentUpdatedAt,
 	}

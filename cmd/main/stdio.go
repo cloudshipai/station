@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"sync"
 
+	"station/internal/api"
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -94,6 +97,29 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Note: stdio mode doesn't use execution queue, pass nil for direct execution
 	mcpServer := mcp.NewServer(database, agentSvc, nil, repos, cfg, localMode)
 
+	// Try to start API server if port is available (avoid conflicts with other stdio instances)
+	var apiServer *api.Server
+	var apiCtx context.Context
+	var apiCancel context.CancelFunc
+	var wg sync.WaitGroup
+
+	if isPortAvailable(cfg.APIPort) {
+		fmt.Fprintf(os.Stderr, "🚀 Starting API server on port %d in stdio mode\n", cfg.APIPort)
+		
+		apiServer = api.New(cfg, database, localMode)
+		apiCtx, apiCancel = context.WithCancel(ctx)
+		
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := apiServer.Start(apiCtx); err != nil {
+				fmt.Fprintf(os.Stderr, "⚠️  API server error: %v\n", err)
+			}
+		}()
+	} else {
+		fmt.Fprintf(os.Stderr, "⚠️  Port %d already in use, skipping API server (another Station instance running?)\n", cfg.APIPort)
+	}
+
 	// Log startup message to stderr (so it doesn't interfere with stdio protocol)
 	fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in stdio mode\n")
 	fmt.Fprintf(os.Stderr, "Local mode: %t\n", localMode)
@@ -104,10 +130,33 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "Ready for MCP communication via stdin/stdout\n")
 
-	// Start MCP server in stdio mode
+	// Start MCP server in stdio mode (this blocks until stdin closes)
 	if err := mcpServer.StartStdio(ctx); err != nil {
+		// Clean shutdown of API server if it was started
+		if apiCancel != nil {
+			fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
+			apiCancel()
+			wg.Wait()
+		}
 		return fmt.Errorf("failed to start MCP stdio server: %w", err)
 	}
 
+	// Clean shutdown of API server when stdio closes
+	if apiCancel != nil {
+		fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
+		apiCancel()
+		wg.Wait()
+	}
+
 	return nil
+}
+
+// isPortAvailable checks if a port is available on localhost
+func isPortAvailable(port int) bool {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return false
+	}
+	ln.Close()
+	return true
 }

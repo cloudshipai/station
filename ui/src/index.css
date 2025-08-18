@@ -147,4 +147,19 @@
   .react-flow__edges {
     z-index: 100 !important;
   }
+
+  /* Node transition animations for expand/collapse */
+  .react-flow__node {
+    transition: all 0.3s ease-in-out !important;
+  }
+  
+  /* Smooth transitions for handles */
+  .react-flow__handle {
+    transition: all 0.2s ease-in-out !important;
+  }
+  
+  /* Edge transition animations */
+  .react-flow__edge {
+    transition: all 0.3s ease-in-out !important;
+  }
 }

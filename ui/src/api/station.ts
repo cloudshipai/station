@@ -6,12 +6,13 @@ import type {
   Tool, 
   AgentTool, 
   User, 
-  AgentRun 
+  AgentRun,
+  AgentRunWithDetails 
 } from '../types/station';
 
 // Environment API
 export const environmentsApi = {
-  getAll: () => apiClient.get<Environment[]>('/environments'),
+  getAll: () => apiClient.get<{count: number, environments: Environment[]}>('/environments'),
   getById: (id: number) => apiClient.get<Environment>(`/environments/${id}`),
 };
 
@@ -46,7 +47,7 @@ export const mcpServersApi = {
   getAll: () => apiClient.get<MCPServer[]>('/mcp-servers'),
   getById: (id: number) => apiClient.get<MCPServer>(`/mcp-servers/${id}`),
   getByEnvironment: (environmentId: number) => 
-    apiClient.get<MCPServer[]>(`/environments/${environmentId}/mcp-servers`),
+    apiClient.get<MCPServer[]>(`/mcp-servers?environment_id=${environmentId}`),
 };
 
 // Tools API
@@ -65,8 +66,13 @@ export const usersApi = {
 
 // Agent Runs API  
 export const agentRunsApi = {
-  getAll: () => apiClient.get<AgentRun[]>('/runs'),
-  getById: (id: number) => apiClient.get<AgentRun>(`/runs/${id}`),
+  getAll: () => apiClient.get<{runs: AgentRunWithDetails[], count: number, limit: number}>('/runs'),
+  getById: (id: number) => apiClient.get<{run: AgentRunWithDetails}>(`/runs/${id}`),
   getByAgent: (agentId: number) => 
-    apiClient.get<AgentRun[]>(`/agents/${agentId}/runs`),
+    apiClient.get<{runs: AgentRun[], count: number, agent_id: number}>(`/agents/${agentId}/runs`),
+};
+
+// Sync API
+export const syncApi = {
+  trigger: () => apiClient.post('/sync'),
 };

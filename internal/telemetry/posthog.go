@@ -47,7 +47,7 @@ func NewTelemetryService(enabled bool) *TelemetryService {
 	}
 
 	// Send initial installation/boot event
-	service.TrackEvent("station_boot", map[string]interface{}{
+	service.TrackEvent("stn_boot", map[string]interface{}{
 		"os":           runtime.GOOS,
 		"arch":         runtime.GOARCH,
 		"go_version":   runtime.Version(),
@@ -110,7 +110,7 @@ func (t *TelemetryService) TrackEvent(eventName string, properties map[string]in
 
 // TrackAgentCreated tracks agent creation events
 func (t *TelemetryService) TrackAgentCreated(agentID int64, environmentID int64, toolCount int) {
-	t.TrackEvent("agent_created", map[string]interface{}{
+	t.TrackEvent("stn_agent_created", map[string]interface{}{
 		"agent_id":      agentID,
 		"environment_id": environmentID,
 		"tool_count":    toolCount,
@@ -119,7 +119,7 @@ func (t *TelemetryService) TrackAgentCreated(agentID int64, environmentID int64,
 
 // TrackAgentExecuted tracks agent execution events
 func (t *TelemetryService) TrackAgentExecuted(agentID int64, executionTimeMs int64, success bool, stepCount int) {
-	t.TrackEvent("agent_executed", map[string]interface{}{
+	t.TrackEvent("stn_agent_executed", map[string]interface{}{
 		"agent_id":         agentID,
 		"execution_time_ms": executionTimeMs,
 		"success":          success,
@@ -129,7 +129,7 @@ func (t *TelemetryService) TrackAgentExecuted(agentID int64, executionTimeMs int
 
 // TrackCLICommand tracks CLI command usage
 func (t *TelemetryService) TrackCLICommand(command string, subcommand string, success bool, durationMs int64) {
-	t.TrackEvent("cli_command", map[string]interface{}{
+	t.TrackEvent("stn_cli_command", map[string]interface{}{
 		"command":     command,
 		"subcommand":  subcommand,
 		"success":     success,
@@ -149,12 +149,12 @@ func (t *TelemetryService) TrackError(errorType string, errorMessage string, con
 		properties[k] = v
 	}
 	
-	t.TrackEvent("error_occurred", properties)
+	t.TrackEvent("stn_error_occurred", properties)
 }
 
 // TrackMCPServerLoaded tracks MCP server loading
 func (t *TelemetryService) TrackMCPServerLoaded(serverName string, toolCount int, success bool) {
-	t.TrackEvent("mcp_server_loaded", map[string]interface{}{
+	t.TrackEvent("stn_mcp_server_loaded", map[string]interface{}{
 		"server_name": serverName,
 		"tool_count":  toolCount,
 		"success":     success,
@@ -163,8 +163,53 @@ func (t *TelemetryService) TrackMCPServerLoaded(serverName string, toolCount int
 
 // TrackEnvironmentCreated tracks environment creation
 func (t *TelemetryService) TrackEnvironmentCreated(environmentID int64) {
-	t.TrackEvent("environment_created", map[string]interface{}{
+	t.TrackEvent("stn_environment_created", map[string]interface{}{
 		"environment_id": environmentID,
+	})
+}
+
+// TrackTemplateInstalled tracks template bundle installations
+func (t *TelemetryService) TrackTemplateInstalled(templateName string, environment string, success bool, durationMs int64) {
+	t.TrackEvent("stn_template_installed", map[string]interface{}{
+		"template_name": templateName,
+		"environment":   environment,
+		"success":       success,
+		"duration_ms":   durationMs,
+	})
+}
+
+// TrackAPIRequest tracks API endpoint usage
+func (t *TelemetryService) TrackAPIRequest(endpoint string, method string, statusCode int, durationMs int64) {
+	t.TrackEvent("stn_api_request", map[string]interface{}{
+		"endpoint":    endpoint,
+		"method":      method,
+		"status_code": statusCode,
+		"duration_ms": durationMs,
+	})
+}
+
+// TrackUIEvent tracks UI interactions
+func (t *TelemetryService) TrackUIEvent(eventType string, component string, action string) {
+	t.TrackEvent("stn_ui_event", map[string]interface{}{
+		"event_type": eventType,
+		"component":  component,
+		"action":     action,
+	})
+}
+
+// TrackStdioModeStarted tracks stdio mode usage
+func (t *TelemetryService) TrackStdioModeStarted(withAPIServer bool) {
+	t.TrackEvent("stn_stdio_mode_started", map[string]interface{}{
+		"with_api_server": withAPIServer,
+	})
+}
+
+// TrackServerModeStarted tracks server mode usage
+func (t *TelemetryService) TrackServerModeStarted(apiPort int, mcpPort int, sshPort int) {
+	t.TrackEvent("stn_server_mode_started", map[string]interface{}{
+		"api_port": apiPort,
+		"mcp_port": mcpPort,
+		"ssh_port": sshPort,
 	})
 }
 
@@ -202,7 +247,7 @@ func (t *TelemetryService) SetEnabled(enabled bool) {
 	t.enabled = enabled
 	if !enabled && t.client != nil {
 		// Send opt-out event before disabling
-		t.TrackEvent("telemetry_disabled", map[string]interface{}{
+		t.TrackEvent("stn_telemetry_disabled", map[string]interface{}{
 			"reason": "user_opt_out",
 		})
 	}
