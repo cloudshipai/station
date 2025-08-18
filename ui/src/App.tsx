@@ -230,19 +230,46 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
                     {(runDetails.execution_steps || []).map((step: any, index: number) => (
                       <div key={index} className="bg-tokyo-bg border border-tokyo-blue7 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-tokyo-comment font-mono text-sm">Step {step.step_number || index + 1}</span>
+                          <span className="text-tokyo-comment font-mono text-sm">
+                            Step {step.step || index + 1} - {step.type || 'Unknown'}
+                          </span>
                           {step.timestamp && (
                             <span className="text-xs text-tokyo-comment">
                               {new Date(step.timestamp).toLocaleTimeString()}
                             </span>
                           )}
                         </div>
-                        <div className="text-tokyo-fg font-mono">{step.action || step.response}</div>
-                        {step.tool_calls && step.tool_calls.length > 0 && (
-                          <div className="mt-2 text-sm text-tokyo-cyan">
-                            Tools used: {(step.tool_calls || []).map((tc: any) => tc.tool_name).join(', ')}
-                          </div>
-                        )}
+                        <div className="text-tokyo-fg font-mono whitespace-pre-wrap">
+                          {step.type === 'tool_call' && (
+                            <div>
+                              <div className="text-tokyo-cyan mb-2">🔧 {step.tool_name}</div>
+                              <div className="text-tokyo-comment text-sm">
+                                Input: {JSON.stringify(step.input, null, 2)}
+                              </div>
+                            </div>
+                          )}
+                          {step.type === 'tool_response' && (
+                            <div>
+                              <div className="text-tokyo-green mb-2">✅ {step.tool_name} Response</div>
+                              <div className="text-tokyo-fg text-sm">
+                                {typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2)}
+                              </div>
+                            </div>
+                          )}
+                          {step.type === 'model_reasoning' && (
+                            <div>
+                              <div className="text-tokyo-purple mb-2">🤔 Model Reasoning</div>
+                              <div className="text-tokyo-fg">
+                                {step.content}
+                              </div>
+                            </div>
+                          )}
+                          {!step.type && (
+                            <div className="text-tokyo-comment">
+                              {step.action || step.response || step.content || 'No content available'}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
