@@ -365,9 +365,9 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		ExecutionSteps: executionStepsArray,
 		Duration:       time.Since(startTime),
 		ModelName:      modelName,
-		StepsUsed:      len(allToolCalls), // Actual number of tool calls made
-		ToolsUsed:      len(allToolCalls), // Actual number of tools used
-		TokenUsage:     tokenUsage,        // Add extracted token usage
+		StepsUsed:      len(executionSteps), // Actual number of execution steps
+		ToolsUsed:      len(allToolCalls),   // Actual number of tools used
+		TokenUsage:     tokenUsage,          // Add extracted token usage
 		Error:          "",
 	}, nil
 }
