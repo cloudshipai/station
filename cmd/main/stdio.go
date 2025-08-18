@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"sync"
@@ -69,32 +68,22 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize key manager: %w", err)
 	}
 
-	// Initialize services  
-	// TODO: Replace with file-based config service
-	// fileConfigSvc := services.NewFileConfigService(configManager, toolDiscovery, repos)
-	_ = services.NewWebhookService(repos) // webhookSvc declared but not used
-
-	// Initialize Genkit and agent service (needed for agent tools)
+	// Initialize minimal services for API server only
 	ctx := context.Background()
 	
-	// Initialize Genkit with configured AI provider (minimal setup for stdio)
+	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)
 	if err != nil {
-		log.Printf("Warning: Failed to initialize Genkit: %v (agent execution will be limited)", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize Genkit: %v (agent execution will be limited)\n", err)
 	}
 
-	// Initialize agent service with IntelligentAgentCreator (same as server mode)
+	// Initialize agent service for API endpoints
 	agentSvc := services.NewAgentService(repos)
-	fmt.Fprintf(os.Stderr, "DEBUG: Agent service created: %v\n", agentSvc != nil)
 	
-	// Note: Skip InitializeMCP in stdio mode - MCP tools are available directly
-	// The agent service is initialized but doesn't need the MCP connection test
-
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
 
-	// Create MCP server with the same functionality as HTTP mode
-	// Note: stdio mode doesn't use execution queue, pass nil for direct execution
+	// Create MCP server for stdio communication only
 	mcpServer := mcp.NewServer(database, agentSvc, nil, repos, cfg, localMode)
 
 	// Try to start API server if port is available (avoid conflicts with other stdio instances)
