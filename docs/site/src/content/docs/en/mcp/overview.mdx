@@ -122,9 +122,9 @@ cat > filesystem-mcp.json << 'EOF'
 }
 EOF
 
-stn load filesystem-mcp.json --env default
+cp filesystem-mcp.json ~/.config/station/environments/default/template.json
 echo "ALLOWED_PATH: /home/user/projects" > ~/.config/station/environments/default/variables.yml
-stn sync default
+stn sync
 ```
 
 ### 3. Connect to Claude Desktop

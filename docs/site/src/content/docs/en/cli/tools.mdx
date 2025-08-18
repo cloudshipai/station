@@ -22,11 +22,11 @@ This page is under construction. We're working on comprehensive documentation fo
 Key tool management commands:
 
 ```bash
-# Load MCP configuration
-stn load config.json --env default
+# Copy MCP configuration to environment directory
+cp config.json ~/.config/station/environments/default/template.json
 
 # Sync configurations and discover tools
-stn sync default
+stn sync
 
 # List available tools
 stn mcp tools list

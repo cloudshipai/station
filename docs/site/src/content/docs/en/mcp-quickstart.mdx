@@ -29,54 +29,24 @@ This creates your Station workspace and initializes the local database.
 
 ### 3. Create and Load an MCP Configuration
 
-Let's create a filesystem MCP config so your agents can work with files:
+Create a filesystem MCP config directly in your Station environment:
 
-**Create `filesystem-mcp.json`:**
+**Copy this config to `~/.config/station/environments/default/template.json`:**
 ```json
 {
-  "name": "Filesystem MCP",
-  "description": "Basic filesystem operations",
+  "description": "Essential filesystem operations with MCP server integration",
   "mcpServers": {
     "filesystem": {
       "command": "npx",
       "args": [
-        "-y",
+        "-y", 
         "@modelcontextprotocol/server-filesystem@latest",
         "{{ .ALLOWED_PATH }}"
       ]
     }
-  }
+  },
+  "name": "filesystem-updated"
 }
-```
-
-**Load the configuration:**
-```bash
-stn load filesystem-mcp.json --env default
-```
-
-**Output:**
-```
-╭────────────────────────────────╮
-│                                │
-│  📂 Loading MCP Configuration  │
-│                                │
-╰────────────────────────────────╯
-
-📄 Found config file: filesystem-mcp.json
-🔧 Found 1 MCP server(s)
-📝 Config name: Filesystem MCP-20250814-095146
-🌍 Environment: default
-📁 Creating file-based configuration...
-✅ Saved template file: ~/.config/station/environments/default/filesystem_mcp.json
-✅ Created file-based config: Filesystem MCP in environment default
-
-╭──────────────────────────────────────────╮
-│                                          │
-│  🎉✨🎊                                  │
-│  MCP Configuration Loaded Successfully!  │
-│  🎉✨🎊                                  │
-│                                          │
-╰──────────────────────────────────────────╯
 ```
 
 **Create variables file:**
@@ -87,7 +57,7 @@ echo "ALLOWED_PATH: /home/user/projects" > ~/.config/station/environments/defaul
 
 **Sync to discover tools:**
 ```bash
-stn sync default
+stn sync
 ```
 
 **Output:**
@@ -99,7 +69,7 @@ stn sync default
 ╰─────────────────────────────╯
 
 🔍 Scanning file-based configs in environment 'default'...
-Processing MCP template: filesystem_mcp
+Processing MCP template: filesystem-updated
    🖥️  Processing server: filesystem
       Command: npx [-y @modelcontextprotocol/server-filesystem@latest /home/user/projects]
    ✅ Created MCP server: filesystem
@@ -220,9 +190,10 @@ Your agents can now combine tools from multiple MCP servers and be deployed acro
 3. Make sure Claude Desktop was fully restarted after config changes
 
 ### No MCP tools available for agent creation?
-1. Load some tools first: `stn load examples/mcps/filesystem.json`
-2. Sync the configuration: `stn sync default`
-3. Restart Claude Desktop after loading new tools
+1. Copy a template config to your environment directory: `~/.config/station/environments/default/template.json`
+2. Add any required variables to `variables.yml` 
+3. Sync the configuration: `stn sync`
+4. Restart Claude Desktop after syncing new tools
 
 ### Agent creation failing?
 1. Make sure you have MCP tools loaded (agents need tools to be useful)
