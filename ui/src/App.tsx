@@ -753,8 +753,14 @@ const BundleEnvironmentModal = ({
 
 // Environment Node Component
 const EnvironmentNode = ({ data }: { data: any }) => {
+  const handleCopySync = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const syncCommand = `stn sync ${data.label}`;
+    navigator.clipboard.writeText(syncCommand);
+  };
+
   return (
-    <div className="w-[320px] h-[160px] px-4 py-3 shadow-tokyo-orange border border-tokyo-orange rounded-lg relative bg-tokyo-bg-dark">
+    <div className="w-[320px] h-[160px] px-4 py-3 shadow-tokyo-orange border border-tokyo-orange rounded-lg relative bg-tokyo-bg-dark group">
       {/* Output handles for connecting to agents and MCP servers */}
       <Handle
         type="source"
@@ -766,6 +772,15 @@ const EnvironmentNode = ({ data }: { data: any }) => {
         position={Position.Bottom}
         style={{ background: '#7dcfff', width: 12, height: 12 }}
       />
+      
+      {/* Copy sync command button - appears on hover */}
+      <button
+        onClick={handleCopySync}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-orange hover:bg-tokyo-orange1 text-tokyo-bg"
+        title={`Copy sync command: stn sync ${data.label}`}
+      >
+        <Copy className="h-3 w-3" />
+      </button>
       
       <div className="flex items-center gap-2 mb-3">
         <Globe className="h-6 w-6 text-tokyo-orange" />
@@ -2322,8 +2337,15 @@ const InstallBundleModal = ({ isOpen, onClose, onSuccess }: { isOpen: boolean; o
               <Package className="h-8 w-8 text-tokyo-green mx-auto mb-2" />
               <p className="text-tokyo-green font-mono">Bundle installed successfully!</p>
             </div>
-            <div className="bg-tokyo-blue bg-opacity-10 border border-tokyo-blue border-opacity-50 rounded-lg p-3">
-              <p className="text-sm text-tokyo-blue font-mono">
+            <div className="bg-transparent border border-tokyo-blue border-opacity-50 rounded-lg p-3 relative group">
+              <button
+                onClick={() => navigator.clipboard.writeText(`stn sync ${environmentName}`)}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-blue hover:bg-tokyo-blue1 text-tokyo-bg"
+                title={`Copy sync command: stn sync ${environmentName}`}
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+              <p className="text-sm text-tokyo-blue font-mono pr-8">
                 Next step: Run <code className="bg-tokyo-bg px-1 rounded text-tokyo-orange">stn sync {environmentName}</code> to apply changes
               </p>
             </div>
@@ -2771,13 +2793,140 @@ const ShipCLIPage = () => {
   );
 };
 
+// Bundle Details Modal Component
+const BundleDetailsModal = ({ bundle, isOpen, onClose }: { bundle: BundleInfo | null; isOpen: boolean; onClose: () => void }) => {
+  if (!isOpen || !bundle) return null;
+
+  const handleCopySync = () => {
+    navigator.clipboard.writeText(`stn sync default`);
+  };
+
+  const handleCopyPath = () => {
+    navigator.clipboard.writeText(bundle.file_path);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Package className="h-6 w-6 text-tokyo-magenta" />
+            <h2 className="text-xl font-mono font-semibold text-tokyo-magenta">Bundle Details</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-tokyo-comment hover:text-tokyo-fg transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* Bundle Info */}
+          <div className="bg-tokyo-bg border border-tokyo-blue7 rounded-lg p-4">
+            <h3 className="text-lg font-mono font-medium text-tokyo-fg mb-4">{bundle.name}</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono">
+              <div>
+                <span className="text-tokyo-comment block mb-1">File Name:</span>
+                <span className="text-tokyo-fg">{bundle.file_name}</span>
+              </div>
+              
+              <div>
+                <span className="text-tokyo-comment block mb-1">Size:</span>
+                <span className="text-tokyo-fg">{(bundle.size / 1024).toFixed(1)} KB</span>
+              </div>
+              
+              <div>
+                <span className="text-tokyo-comment block mb-1">Modified:</span>
+                <span className="text-tokyo-fg">{bundle.modified_time}</span>
+              </div>
+              
+              <div>
+                <span className="text-tokyo-comment block mb-1">File Path:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-tokyo-fg text-xs break-all">{bundle.file_path}</span>
+                  <button
+                    onClick={handleCopyPath}
+                    className="p-1 rounded bg-tokyo-blue hover:bg-tokyo-blue1 text-tokyo-bg flex-shrink-0"
+                    title="Copy file path"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="bg-tokyo-bg border border-tokyo-blue7 rounded-lg p-4">
+            <h4 className="text-md font-mono font-medium text-tokyo-fg mb-3">Actions</h4>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={handleCopySync}
+                className="flex items-center gap-2 px-3 py-2 bg-tokyo-orange hover:bg-tokyo-orange1 text-tokyo-bg rounded font-mono text-sm transition-colors"
+              >
+                <Copy className="h-4 w-4" />
+                Copy Sync Command
+              </button>
+              
+              <div className="flex items-center gap-2 px-3 py-2 bg-tokyo-bg-dark border border-tokyo-blue7 rounded">
+                <code className="text-tokyo-orange text-sm">stn sync default</code>
+              </div>
+            </div>
+          </div>
+
+          {/* Bundle Usage */}
+          <div className="bg-tokyo-bg border border-tokyo-blue7 rounded-lg p-4">
+            <h4 className="text-md font-mono font-medium text-tokyo-fg mb-3">Usage</h4>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-tokyo-comment font-mono mb-2">
+                  This bundle contains agent configurations and templates. To use it:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-tokyo-fg font-mono text-xs ml-4">
+                  <li>Run the sync command to apply the bundle to your environment</li>
+                  <li>Check the agents page to see any new agents created from the bundle</li>
+                  <li>Configure any required environment variables or MCP servers</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-tokyo-bg border border-tokyo-blue7 text-tokyo-comment rounded font-mono transition-colors hover:text-tokyo-fg"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Bundles Page Component
 const BundlesPage = () => {
   const [bundles, setBundles] = useState<BundleInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [selectedBundle, setSelectedBundle] = useState<BundleInfo | null>(null);
+  const [isBundleDetailsOpen, setIsBundleDetailsOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
+
+  // Function to open bundle details modal
+  const openBundleDetails = (bundle: BundleInfo) => {
+    setSelectedBundle(bundle);
+    setIsBundleDetailsOpen(true);
+  };
+
+  const closeBundleDetails = () => {
+    setIsBundleDetailsOpen(false);
+    setSelectedBundle(null);
+  };
 
   // Fetch bundles data
   const fetchBundles = async () => {
@@ -2834,7 +2983,7 @@ const BundlesPage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {bundles.map((bundle, index) => (
-              <div key={index} className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 hover:border-tokyo-blue5 transition-colors">
+              <div key={index} className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 hover:border-tokyo-blue5 transition-colors relative group">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <Package className="h-8 w-8 text-tokyo-magenta" />
@@ -2842,6 +2991,24 @@ const BundlesPage = () => {
                       <h3 className="text-lg font-mono font-medium text-tokyo-fg">{bundle.name}</h3>
                       <p className="text-sm text-tokyo-comment font-mono">{bundle.file_name}</p>
                     </div>
+                  </div>
+                  
+                  {/* Action buttons - appear on hover */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <button
+                      onClick={() => navigator.clipboard.writeText(`stn sync default`)}
+                      className="p-1 rounded bg-tokyo-orange hover:bg-tokyo-orange1 text-tokyo-bg"
+                      title="Copy sync command: stn sync default"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => openBundleDetails(bundle)}
+                      className="p-1 rounded bg-tokyo-magenta hover:bg-tokyo-purple text-tokyo-bg"
+                      title="View bundle details"
+                    >
+                      <Eye className="h-3 w-3" />
+                    </button>
                   </div>
                 </div>
                 
@@ -2872,6 +3039,13 @@ const BundlesPage = () => {
         isOpen={isInstallModalOpen} 
         onClose={() => setIsInstallModalOpen(false)}
         onSuccess={fetchBundles}
+      />
+      
+      {/* Bundle Details Modal */}
+      <BundleDetailsModal 
+        bundle={selectedBundle}
+        isOpen={isBundleDetailsOpen} 
+        onClose={closeBundleDetails}
       />
     </div>
   );
