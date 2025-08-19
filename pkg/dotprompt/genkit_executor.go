@@ -385,8 +385,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfig(agent models.Agent, agen
 		}, nil
 	}
 	
-	// Success! Add info about which approach was used
-	result.Response = fmt.Sprintf("🚀 Dotprompt + GenKit Execution:\n%s", result.Response)
+	// Success! Return clean response without execution engine prefix
 	return result, nil
 }
 
