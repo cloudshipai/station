@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -374,7 +376,9 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 	parts := strings.Split(url, "/")
 	filename := parts[len(parts)-1]
 	if !strings.HasSuffix(filename, ".tar.gz") {
-		filename = fmt.Sprintf("bundle-%d.tar.gz", len(parts))
+		// Generate meaningful name from URL path
+		bundleName := generateBundleNameFromURL(url)
+		filename = fmt.Sprintf("%s.tar.gz", bundleName)
 	}
 
 	// Download the file
@@ -610,4 +614,46 @@ func (h *APIHandlers) listBundles(c *gin.Context) {
 		Bundles: bundles,
 		Count:   len(bundles),
 	})
+}
+
+// generateBundleNameFromURL generates a meaningful bundle name from a URL
+func generateBundleNameFromURL(url string) string {
+	// Parse URL to extract meaningful parts
+	parts := strings.Split(url, "/")
+	
+	// Look for repository name in common URL patterns
+	var name string
+	
+	// GitHub pattern: https://github.com/user/repo or https://github.com/user/repo/...
+	if strings.Contains(url, "github.com") {
+		for i, part := range parts {
+			if part == "github.com" && i+2 < len(parts) {
+				name = parts[i+2] // repo name
+				break
+			}
+		}
+	}
+	
+	// If no specific pattern matched, use last meaningful part
+	if name == "" {
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i] != "" && parts[i] != "download" && parts[i] != "releases" && 
+			   !strings.Contains(parts[i], ".") {
+				name = parts[i]
+				break
+			}
+		}
+	}
+	
+	// Fallback to generic name with timestamp
+	if name == "" {
+		name = fmt.Sprintf("bundle-%d", time.Now().Unix())
+	}
+	
+	// Clean up the name
+	name = strings.ToLower(name)
+	name = strings.ReplaceAll(name, " ", "-")
+	name = regexp.MustCompile(`[^a-z0-9\-]`).ReplaceAllString(name, "")
+	
+	return name
 }
