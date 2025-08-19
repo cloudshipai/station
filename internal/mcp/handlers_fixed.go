@@ -265,23 +265,14 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 			return mcp.NewToolResultError("Agent service not available for direct execution"), nil
 		}
 		
-		// Debug logging
-		fmt.Printf("DEBUG MCP: About to execute agent %d with task: %s\n", agentID, task)
-		
 		response, execErr = s.agentService.ExecuteAgent(ctx, agentID, task, userVariables)
 		if execErr != nil {
-			fmt.Printf("DEBUG MCP: Agent execution failed: %v\n", execErr)
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
 		}
 		
-		// Debug the response
 		if response == nil {
-			fmt.Printf("DEBUG MCP: Response is nil!\n")
 			return mcp.NewToolResultError("Agent execution returned nil response"), nil
 		}
-		
-		fmt.Printf("DEBUG MCP: Agent response content length: %d\n", len(response.Content))
-		fmt.Printf("DEBUG MCP: Agent response content: '%s'\n", response.Content)
 		
 		if storeRun {
 			// TODO: Store the run in the database for direct execution
