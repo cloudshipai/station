@@ -419,6 +419,9 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	// Using legacy connection model (deprecated)
 	logging.Info("⚠️  Using legacy MCP connection model (deprecated). Enable pooling with STATION_MCP_POOLING=true for better performance.")
 	
+	// 🔍 PERFORMANCE: Track legacy MCP connection time
+	mcpConnStartTime := time.Now()
+	
 	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
 	// Always create fresh connections for each execution
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: CACHE COMPLETELY DISABLED - creating fresh connections")
@@ -484,6 +487,9 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	
 	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: NOT CACHING - fresh connections every time")
+	
+	mcpConnDuration := time.Since(mcpConnStartTime)
+	logging.Info("🔍 MCP_CONN_PERF: Legacy connections completed in %v", mcpConnDuration)
 	
 	return allTools, allClients, nil
 }
