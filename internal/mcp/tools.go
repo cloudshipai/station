@@ -95,6 +95,13 @@ func (ts *ToolsServer) setupAgentCreationPrompts() {
 	)
 	
 	ts.mcpServer.AddPrompt(agentCreationPrompt, ts.handleAgentCreationPrompt)
+
+	// Export reminder prompt
+	exportReminderPrompt := mcp.NewPrompt("agent_export_reminder",
+		mcp.WithPromptDescription("Important reminder about exporting agents after creation to save them to disk"),
+	)
+	
+	ts.mcpServer.AddPrompt(exportReminderPrompt, ts.handleExportReminderPrompt)
 }
 
 // handleAgentCreationPrompt provides structured guidance for agent creation
@@ -256,6 +263,91 @@ This ensures you have full control over what agents are created in your Station 
 
 Remember: Station's power comes from smart agent design, not tool proliferation. Focus on solving the specific user problem efficiently!`, 
 		userIntent, domain, schedulePreference, environmentNames, toolCategories)
+}
+
+// handleExportReminderPrompt provides guidance about exporting agents after creation
+func (ts *ToolsServer) handleExportReminderPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	promptContent := `# 📤 Important: Agent Export Required
+
+## Critical Post-Creation Step
+
+After creating an agent using Station's MCP tools, you **MUST export the agent to disk** to ensure it's permanently saved and accessible for future use.
+
+## Why Export is Required
+
+🔄 **In-Memory Creation**: When you create an agent via MCP tools, it's stored in Station's database but not yet saved as a .prompt file
+💾 **Disk Persistence**: Exporting creates the .prompt file that can be version-controlled, shared, and deployed
+📋 **Backup & Recovery**: .prompt files serve as the source of truth for agent configurations
+🔧 **Development Workflow**: Exported agents can be edited, tested, and iterated upon
+
+## How to Export After Creation
+
+### CLI Export Command
+` + "```bash\n" + `stn agent export <agent-name> <environment-name>
+` + "```\n" + `
+
+### MCP Export Tool
+Use the station MCP server's export functionality:
+` + "```\n" + `mcp__stn__export_agent tool with agent_id parameter
+` + "```\n" + `
+
+## What Gets Exported
+
+The export process creates a complete .prompt file containing:
+- ✅ Agent metadata (name, description, version)
+- ✅ System prompt and configuration
+- ✅ Input schema (including custom fields)
+- ✅ Execution settings (max_steps, environment)
+- ✅ Model configuration and parameters
+
+## Export Location
+
+Agents are exported to:
+` + "```\n" + `~/.config/station/environments/<environment>/agents/<agent-name>.prompt
+` + "```\n" + `
+
+## Best Practices
+
+1. **Immediate Export**: Export immediately after creation
+2. **Version Control**: Add .prompt files to your git repository
+3. **Environment Consistency**: Use consistent naming across environments
+4. **Documentation**: Include clear descriptions in your agents
+
+## Example Workflow
+
+` + "```bash\n" + `# 1. Create agent via MCP
+# (agent now exists in Station database)
+
+# 2. Export to disk immediately
+stn agent export my-new-agent production
+
+# 3. Verify the file was created
+ls ~/.config/station/environments/production/agents/my-new-agent.prompt
+
+# 4. Add to version control
+git add ~/.config/station/environments/production/agents/my-new-agent.prompt
+git commit -m "Add my-new-agent configuration"
+` + "```\n" + `
+
+## ⚠️ Remember: No Export = Potential Data Loss
+
+Without export, your agent exists only in the database and may not survive:
+- Database migrations or resets
+- Environment changes
+- System reinstallation
+- Configuration synchronization issues
+
+**Always export your agents after creation!**`
+
+	return mcp.NewGetPromptResult("Agent Export Requirement", []mcp.PromptMessage{
+		{
+			Role: mcp.RoleUser,
+			Content: mcp.TextContent{
+				Type: "text",
+				Text: promptContent,
+			},
+		},
+	}), nil
 }
 
 // Helper function to extract environment names
