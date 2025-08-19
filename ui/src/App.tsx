@@ -2318,7 +2318,7 @@ const InstallBundleModal = ({ isOpen, onClose, onSuccess }: { isOpen: boolean; o
 
         {installSuccess ? (
           <div className="text-center py-8">
-            <div className="bg-tokyo-green bg-opacity-10 border border-tokyo-green border-opacity-50 rounded-lg p-4 mb-4">
+            <div className="bg-transparent border border-tokyo-green border-opacity-50 rounded-lg p-4 mb-4">
               <Package className="h-8 w-8 text-tokyo-green mx-auto mb-2" />
               <p className="text-tokyo-green font-mono">Bundle installed successfully!</p>
             </div>
