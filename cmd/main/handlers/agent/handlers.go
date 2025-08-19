@@ -22,6 +22,7 @@ import (
 	"station/internal/services"
 	"station/internal/theme"
 	"station/pkg/models"
+	"station/pkg/schema"
 	agent_bundle "station/pkg/agent-bundle"
 	"station/pkg/agent-bundle/creator"
 	"station/pkg/agent-bundle/manager"
@@ -900,10 +901,17 @@ func (h *AgentHandler) generateDotpromptContent(agent *models.Agent, tools []*mo
 	content.WriteString("  temperature: 0.3\n")
 	content.WriteString("  max_tokens: 2000\n")
 	
-	// Input schema with automatic userInput variable
-	content.WriteString("input:\n")
-	content.WriteString("  schema:\n")
-	content.WriteString("    userInput: string\n")
+	// Input schema with merged custom and default variables
+	schemaHelper := schema.NewExportHelper()
+	inputSchemaSection, err := schemaHelper.GenerateInputSchemaSection(agent)
+	if err != nil {
+		// Fallback to default if custom schema is invalid
+		content.WriteString("input:\n")
+		content.WriteString("  schema:\n")
+		content.WriteString("    userInput: string\n")
+	} else {
+		content.WriteString(inputSchemaSection)
+	}
 	
 	// Add default output schema for GenKit UI compatibility
 	content.WriteString("output:\n")
