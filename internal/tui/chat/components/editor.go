@@ -66,7 +66,7 @@ func (e *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "enter":
 			// Check if Shift is held for new line
-			if len(msg.Alt) > 0 || strings.Contains(msg.String(), "shift") {
+			if msg.Alt || strings.Contains(msg.String(), "shift") {
 				// Shift+Enter - add new line
 				e.textarea, cmd = e.textarea.Update(msg)
 				return e, cmd
@@ -90,8 +90,7 @@ func (e *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return e, nil
 			
 		case "ctrl+a":
-			// Select all text
-			e.textarea.SelectAll()
+			// Select all text - not supported in this version of textarea
 			return e, nil
 			
 		case "ctrl+u":
