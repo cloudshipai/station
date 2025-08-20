@@ -196,27 +196,47 @@ Always be concise, accurate, and helpful in your responses. If you're unsure abo
 
 ```
 
-### Example with more dynamic input schema 
+### Example with JSON Schema input validation
 
-A planning agent that defines variables in the system prompt. These are fed at runtime via MCP, API, CLI
+Agents support JSON Schema for input validation, enabling type-safe parameter passing via MCP, API, and CLI:
 
 ```yaml
-
-  ---
-  model: "gemini-2.5-flash"
-  config:
-    temperature: 0.3
-    max_tokens: 2000
-  input:
-    schema:
-      userInput: string
-      project_type: string
-      scope: string
-      timeline: string
-      priority: string
-      budget: string
-  output:
-    schema:
+---
+model: "gemini-2.5-flash"
+config:
+  temperature: 0.3
+  max_tokens: 2000
+input:
+  schema:
+    type: object
+    properties:
+      userInput:
+        type: string
+        description: "The main user input/task for the agent"
+      project_type:
+        type: string
+        enum: ["web", "mobile", "backend", "fullstack"]
+        description: "Type of project to plan"
+      scope:
+        type: string
+        enum: ["small", "medium", "large", "enterprise"]
+        description: "Project scope and complexity"
+      timeline:
+        type: string
+        pattern: "^[1-9][0-9]* (days|weeks|months)$"
+        description: "Project timeline (e.g., '2 weeks', '3 months')"
+      priority:
+        type: string
+        enum: ["low", "medium", "high", "urgent"]
+        default: "medium"
+        description: "Task priority level"
+      budget:
+        type: number
+        minimum: 0
+        description: "Project budget in USD"
+    required: ["userInput", "project_type", "scope"]
+output:
+  schema:
       response: string
   metadata:
     name: "planner"

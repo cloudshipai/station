@@ -407,15 +407,61 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
 	}
 
-	// For now, return success with current agent data
+	// Extract optional parameters with defaults from existing agent
+	name := request.GetString("name", existingAgent.Name)
+	description := request.GetString("description", existingAgent.Description)
+	prompt := request.GetString("prompt", existingAgent.Prompt)
+	
+	// Handle max_steps
+	maxSteps := existingAgent.MaxSteps
+	if maxStepsParam := request.GetString("max_steps", ""); maxStepsParam != "" {
+		if parsed, parseErr := strconv.ParseInt(maxStepsParam, 10, 64); parseErr == nil {
+			maxSteps = parsed
+		}
+	}
+
+	// Handle input schema (preserve existing if not provided)
+	var inputSchema *string
+	if existingAgent.InputSchema != nil {
+		inputSchema = existingAgent.InputSchema
+	}
+	if schemaParam := request.GetString("input_schema", ""); schemaParam != "" {
+		inputSchema = &schemaParam
+	}
+
+	// Handle schedule fields (preserve existing if not provided)
+	var cronSchedule *string
+	scheduleEnabled := false
+	if existingAgent.CronSchedule != nil {
+		cronSchedule = existingAgent.CronSchedule
+		scheduleEnabled = existingAgent.ScheduleEnabled
+	}
+	if scheduleParam := request.GetString("cron_schedule", ""); scheduleParam != "" {
+		cronSchedule = &scheduleParam
+		scheduleEnabled = true
+	}
+
+	// Perform the update
+	err = s.repos.Agents.Update(agentID, name, description, prompt, maxSteps, inputSchema, cronSchedule, scheduleEnabled)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent: %v", err)), nil
+	}
+
+	// Get the updated agent for response
+	updatedAgent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to retrieve updated agent: %v", err)), nil
+	}
+
 	response := map[string]interface{}{
 		"success": true,
 		"agent": map[string]interface{}{
-			"id":          existingAgent.ID,
-			"name":        existingAgent.Name,
-			"description": existingAgent.Description,
+			"id":          updatedAgent.ID,
+			"name":        updatedAgent.Name,
+			"description": updatedAgent.Description,
+			"max_steps":   updatedAgent.MaxSteps,
 		},
-		"message": "Agent update functionality pending - repository signature mismatch",
+		"message": fmt.Sprintf("Successfully updated agent '%s'", updatedAgent.Name),
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
@@ -967,10 +1013,8 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 	schemaHelper := schema.NewExportHelper()
 	inputSchemaSection, err := schemaHelper.GenerateInputSchemaSection(agent)
 	if err != nil {
-		// Fallback to default if custom schema is invalid
-		content.WriteString("input:\n")
-		content.WriteString("  schema:\n")
-		content.WriteString("    userInput: string\n")
+		// Log the error but continue with default schema to avoid breaking the export
+		content.WriteString("input:\n  schema:\n    userInput: string\n")
 	} else {
 		content.WriteString(inputSchemaSection)
 	}

@@ -1,32 +1,208 @@
 ---
 title: Agent Configuration
-description: Advanced agent configuration options
+description: Advanced agent configuration options including JSON Schema input validation
 ---
 
 # Agent Configuration
 
-## 🚧 Coming Soon
+Agents in Station use the dotprompt format with YAML frontmatter for configuration. This enables powerful features like JSON Schema input validation, tool selection, and environment-specific settings.
 
-This page is under construction. We're working on detailed documentation for advanced agent configuration options.
-
-## What This Will Cover
-
-- **Agent Metadata** - Names, descriptions, and environment settings
-- **Tool Configuration** - Customizing tool access and permissions  
-- **Execution Settings** - Timeout, retry, and scheduling configuration
-- **Environment Variables** - Using variables in agent prompts and tools
-- **Prompt Engineering** - Best practices for agent prompt design
-
-## Quick Reference
+## Basic Agent Structure
 
 Agent configurations are stored as `.prompt` files in your Station environment:
 
 ```
 ~/.config/station/environments/default/agents/
 ├── my-agent.prompt
-├── another-agent.prompt
-└── ...
+├── deployment-agent.prompt
+└── monitoring-agent.prompt
 ```
+
+## Input Schema Validation
+
+Station agents support JSON Schema for type-safe input validation. This ensures agents receive properly structured data at runtime.
+
+### Basic Schema Example
+
+```yaml
+---
+model: "gemini-1.5-flash"
+config:
+  temperature: 0.3
+  max_tokens: 2000
+input:
+  schema:
+    type: object
+    properties:
+      userInput:
+        type: string
+        description: "The main user input/task for the agent"
+      environment:
+        type: string
+        enum: ["development", "staging", "production"]
+        description: "Target deployment environment"
+    required: ["userInput", "environment"]
+output:
+  schema:
+    response: string
+metadata:
+  name: "deployment-agent"
+  description: "Handles deployments with environment validation"
+  version: "1.0.0"
+tools:
+  - "__create_directory"
+  - "__read_file"
+  - "__write_file"
+---
+
+You are a deployment agent. Deploy the following task: {{userInput}} to the {{environment}} environment.
+```
+
+### Advanced Schema Features
+
+Station's JSON Schema support includes all standard features:
+
+```yaml
+input:
+  schema:
+    type: object
+    properties:
+      userInput:
+        type: string
+        description: "The main task for the agent"
+      priority:
+        type: string
+        enum: ["low", "medium", "high", "urgent"]
+        default: "medium"
+        description: "Task priority level"
+      dry_run:
+        type: boolean
+        default: false
+        description: "Run in simulation mode"
+      notification_emails:
+        type: array
+        items:
+          type: string
+          format: email
+        description: "Email addresses for notifications"
+      timeout:
+        type: number
+        minimum: 30
+        maximum: 3600
+        description: "Execution timeout in seconds"
+    required: ["userInput"]
+```
+
+## Tool Configuration
+
+Specify which MCP tools your agent can access:
+
+```yaml
+tools:
+  - "__read_file"
+  - "__write_file" 
+  - "__list_directory"
+  - "__slack_post_message"
+```
+
+## Station Metadata
+
+The `station` section contains execution and environment metadata:
+
+```yaml
+station:
+  execution_metadata:
+    max_steps: 10
+    environment: "production"
+    agent_id: 42
+    created_at: "2025-01-15T10:30:00Z"
+    updated_at: "2025-01-15T15:45:00Z"
+```
+
+## Agent Creation
+
+### CLI Method
+
+Create agents with JSON Schema validation:
+
+```bash
+# Interactive creation
+stn agent create deployment-helper "Handles application deployments"
+
+# With environment specification
+stn agent create --env production monitoring-agent "System monitoring agent"
+```
+
+### Direct File Creation
+
+Create `.prompt` files directly in your environment's `agents/` directory:
+
+```bash
+# Create agent file
+touch ~/.config/station/environments/default/agents/my-agent.prompt
+
+# Edit with your preferred editor
+vim ~/.config/station/environments/default/agents/my-agent.prompt
+```
+
+## Best Practices
+
+### Schema Design
+
+- Always include `userInput` as a required string field
+- Use descriptive field names and descriptions
+- Leverage enums for controlled vocabularies
+- Set reasonable defaults where appropriate
+- Use format validation (email, uri, etc.) when applicable
+
+### Tool Selection
+
+- Grant minimal tool access (principle of least privilege)
+- Group related tools together for specific agent functions
+- Consider environment-specific tool restrictions
+
+### Prompt Engineering
+
+- Reference schema variables clearly in prompts: `{{environment}}`, `{{priority}}`
+- Provide context about expected input structure
+- Include error handling guidance in prompts
+
+## Environment Variables
+
+Use template variables in prompts for environment-specific configuration:
+
+```yaml
+---
+# Agent configuration...
+---
+
+Deploy to {{.DEPLOY_TARGET}} using credentials from {{.AWS_PROFILE}}.
+
+Task: {{userInput}}
+Environment: {{environment}}
+Priority: {{priority}}
+```
+
+## Validation and Export
+
+### Export Agents
+
+Export agents to dotprompt format:
+
+```bash
+# Export specific agent
+stn agent export my-agent
+
+# Export all agents in environment  
+stn agent export-all --env production
+```
+
+### Validation
+
+Station automatically validates:
+- JSON Schema syntax during agent creation
+- Input data against schemas during execution
+- Tool access permissions at runtime
 
 ## Next Steps
 

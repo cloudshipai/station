@@ -180,7 +180,7 @@ func runMainServer() error {
 	localMode := viper.GetBool("local_mode")
 	
 	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc, localMode)
-	mcpServer := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
+	mcpRouter := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
 	apiServer := api.New(cfg, database, localMode)
 	
 	// Initialize ToolDiscoveryService for API config uploads
@@ -201,8 +201,10 @@ func runMainServer() error {
 
 	go func() {
 		defer wg.Done()
-		log.Printf("🔧 Starting MCP server on port %d", cfg.MCPPort)
-		if err := mcpServer.Start(ctx, cfg.MCPPort); err != nil {
+		log.Printf("🔧 Starting MCP router (admin + dynamic servers)")
+		
+		// Start MCP server
+		if err := mcpRouter.Start(ctx, cfg.MCPPort); err != nil {
 			log.Printf("MCP server error: %v", err)
 		}
 		
@@ -213,11 +215,11 @@ func runMainServer() error {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer shutdownCancel()
 		
-		log.Printf("🔧 Shutting down MCP server...")
-		if err := mcpServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("MCP server shutdown error: %v", err)
+		log.Printf("🔧 Shutting down MCP servers...")
+		if err := mcpRouter.Shutdown(shutdownCtx); err != nil {
+			log.Printf("MCP servers shutdown error: %v", err)
 		} else {
-			log.Printf("🔧 MCP server stopped gracefully")
+			log.Printf("🔧 MCP servers stopped gracefully")
 		}
 	}()
 
@@ -231,7 +233,8 @@ func runMainServer() error {
 
 	fmt.Printf("\n✅ Station is running!\n")
 	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
-	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)
+	fmt.Printf("🔧 Admin MCP: http://localhost:3030/mcp\n")
+	fmt.Printf("🤖 Agents MCP: http://localhost:3031/mcp\n")
 	fmt.Printf("🌐 API Server: http://localhost:%d\n", cfg.APIPort)
 	fmt.Printf("\nPress Ctrl+C to stop\n\n")
 

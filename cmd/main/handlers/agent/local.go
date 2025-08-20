@@ -21,6 +21,7 @@ import (
 	"station/internal/services"
 	"station/internal/theme"
 	"station/pkg/models"
+	"station/pkg/schema"
 )
 
 
@@ -455,7 +456,142 @@ func (h *AgentHandler) deleteAgentLocal(agentID int64) error {
 	return nil
 }
 
-// createAgentLocal creates an intelligent agent using the local intelligent agent creator
+// createAgentLocalDirect creates an agent with direct parameters (bypasses intelligent creation)
+func (h *AgentHandler) createAgentLocalDirect(name, description, prompt, environment string, maxSteps int, tools []string, inputSchema, schedule string) error {
+	cfg, err := loadStationConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	
+	// Resolve environment
+	var targetEnvironmentID int64
+	if environment != "" {
+		environments, err := repos.Environments.List()
+		if err != nil {
+			return fmt.Errorf("failed to list environments: %w", err)
+		}
+		
+		var found bool
+		for _, env := range environments {
+			if env.Name == environment {
+				targetEnvironmentID = env.ID
+				found = true
+				break
+			}
+		}
+		
+		if !found {
+			return fmt.Errorf("environment '%s' not found", environment)
+		}
+	} else {
+		// Default to first available environment
+		environments, err := repos.Environments.List()
+		if err != nil {
+			return fmt.Errorf("failed to list environments: %w", err)
+		}
+		if len(environments) == 0 {
+			return fmt.Errorf("no environments available")
+		}
+		targetEnvironmentID = environments[0].ID
+		environment = environments[0].Name
+	}
+
+	fmt.Printf("🌍 Creating agent in environment: %s (ID: %d)\n", environment, targetEnvironmentID)
+
+	// Parse schedule
+	var cronSchedule *string
+	scheduleEnabled := false
+	if schedule != "" && schedule != "on-demand" {
+		cronSchedule = &schedule
+		scheduleEnabled = true
+	}
+	
+	// Validate and parse input schema
+	var inputSchemaPtr *string
+	if inputSchema != "" {
+		// Validate JSON schema
+		schemaHelper := schema.NewExportHelper()
+		if err := schemaHelper.ValidateInputSchema(inputSchema); err != nil {
+			return fmt.Errorf("invalid input schema: %w", err)
+		}
+		inputSchemaPtr = &inputSchema
+	}
+
+	// Create agent directly (no intelligent creation)
+	agent, err := repos.Agents.Create(
+		name,
+		description,
+		prompt,
+		int64(maxSteps),
+		targetEnvironmentID,
+		1, // Default user ID
+		inputSchemaPtr,
+		cronSchedule,
+		scheduleEnabled,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create agent: %w", err)
+	}
+
+	// Assign tools if specified
+	assignedCount := 0
+	if len(tools) > 0 {
+		fmt.Printf("🔧 Assigning %d tools to agent...\n", len(tools))
+		for _, toolName := range tools {
+			// Find tool in environment
+			tool, err := repos.MCPTools.FindByNameInEnvironment(targetEnvironmentID, toolName)
+			if err != nil {
+				fmt.Printf("⚠️  Tool '%s' not found in environment, skipping\n", toolName)
+				continue
+			}
+			
+			// Assign tool to agent
+			_, err = repos.AgentTools.AddAgentTool(agent.ID, tool.ID)
+			if err != nil {
+				fmt.Printf("⚠️  Failed to assign tool '%s': %v\n", toolName, err)
+				continue
+			}
+			
+			assignedCount++
+			fmt.Printf("✅ Assigned tool: %s\n", toolName)
+		}
+	}
+
+	styles := getCLIStyles(h.themeManager)
+	fmt.Println()
+	fmt.Println(styles.Success.Render("✅ Agent created successfully!"))
+	fmt.Println()
+	fmt.Printf("Agent ID: %d\n", agent.ID)
+	fmt.Printf("Name: %s\n", agent.Name)
+	fmt.Printf("Description: %s\n", agent.Description)
+	fmt.Printf("Environment: %s (ID: %d)\n", environment, targetEnvironmentID)
+	fmt.Printf("Max Steps: %d\n", agent.MaxSteps)
+	fmt.Printf("Tools Assigned: %d\n", assignedCount)
+	
+	if inputSchemaPtr != nil {
+		fmt.Printf("Input Schema: Configured\n")
+	}
+	
+	if scheduleEnabled {
+		fmt.Printf("Schedule: %s\n", *cronSchedule)
+	}
+
+	fmt.Println()
+	fmt.Println(styles.Info.Render("🚀 You can now run this agent with:"))
+	fmt.Printf("  stn agent run %s \"<your task>\"\n", agent.Name)
+
+	return nil
+}
+
+// createAgentLocal creates an intelligent agent using the local intelligent agent creator (DEPRECATED)
 func (h *AgentHandler) createAgentLocal(name, description, domain, schedule, environment string) error {
 	cfg, err := loadStationConfig()
 	if err != nil {

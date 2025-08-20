@@ -133,6 +133,18 @@ func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
 	}
 	
 	tail, _ := cmd.Flags().GetBool("tail")
+	
+	// Get user variables from --var flags
+	userVariables, _ := cmd.Flags().GetStringToString("var")
+	if userVariables == nil {
+		userVariables = make(map[string]string)
+	}
+	
+	// Convert string map to interface map for internal processing
+	userVars := make(map[string]interface{})
+	for k, v := range userVariables {
+		userVars[k] = v
+	}
 
 	styles := common.GetCLIStyles(h.themeManager)
 	banner := styles.Banner.Render(fmt.Sprintf("▶️  Running Agent: %s", agentName))
@@ -146,7 +158,13 @@ func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("remote agent execution with names not yet implemented")
 	} else {
 		fmt.Println(styles.Info.Render("🚀 Running local agent with full execution engine"))
-		return h.runAgentLocalWithFullEngine(agentName, task, environment, tail)
+		if len(userVars) > 0 {
+			fmt.Printf("🔧 User Variables: %d provided\n", len(userVars))
+			for k, v := range userVars {
+				fmt.Printf("    • %s = %v\n", k, v)
+			}
+		}
+		return h.runAgentLocalWithFullEngine(agentName, task, environment, tail, userVars)
 	}
 }
 
@@ -346,7 +364,7 @@ func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment strin
 }
 
 // runAgentLocalWithFullEngine executes an agent using the full AgentExecutionEngine with detailed capture
-func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment string, tail bool) error {
+func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment string, tail bool, userVars map[string]interface{}) error {
 	styles := common.GetCLIStyles(h.themeManager)
 	
 	// 1. Connect to database and get agent configuration
@@ -426,11 +444,12 @@ func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment 
 		return fmt.Errorf("failed to create agent run record: %w", err)
 	}
 
-	// 5. Use the full AgentExecutionEngine for detailed execution
+	// 5. Use the full AgentExecutionEngine for detailed execution with user variables
 	creator := services.NewIntelligentAgentCreator(repos, nil)
 	ctx := context.Background()
 	
-	result, err := creator.ExecuteAgentViaStdioMCP(ctx, agent, task, agentRun.ID)
+	// Debug message removed - user variables now properly passed through
+	result, err := creator.ExecuteAgentViaStdioMCP(ctx, agent, task, agentRun.ID, userVars)
 	if err != nil {
 		// Update run as failed
 		completedAt := time.Now()
@@ -749,25 +768,36 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	return nil
 }
 
-// RunAgentCreate creates a new agent
+// RunAgentCreate creates a new agent using direct parameters (same as MCP create_agent)
 func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 	styles := common.GetCLIStyles(h.themeManager)
 	banner := styles.Banner.Render("➕ Create Agent")
 	fmt.Println(banner)
 
+	// Get positional arguments
+	name := args[0]
+	description := args[1]
+	
+	// Get flags
 	endpoint, _ := cmd.Flags().GetString("endpoint")
-	name, _ := cmd.Flags().GetString("name")
-	description, _ := cmd.Flags().GetString("description")
-	domain, _ := cmd.Flags().GetString("domain")
+	prompt, _ := cmd.Flags().GetString("prompt")
+	maxSteps, _ := cmd.Flags().GetInt("max-steps")
+	tools, _ := cmd.Flags().GetStringSlice("tools")
+	inputSchema, _ := cmd.Flags().GetString("input-schema")
 	schedule, _ := cmd.Flags().GetString("schedule")
 	environment, _ := cmd.Flags().GetString("env")
+
+	// Validate required fields
+	if prompt == "" {
+		return fmt.Errorf("--prompt is required. Specify the system prompt for your agent")
+	}
 
 	if endpoint != "" {
 		fmt.Println(styles.Error.Render("❌ Creating remote agents is not currently supported"))
 		return fmt.Errorf("remote agent creation not supported")
 	} else {
 		fmt.Println(styles.Info.Render("🏠 Creating local agent"))
-		return h.createAgentLocal(name, description, domain, schedule, environment)
+		return h.createAgentLocalDirect(name, description, prompt, environment, maxSteps, tools, inputSchema, schedule)
 	}
 }
 
@@ -905,10 +935,8 @@ func (h *AgentHandler) generateDotpromptContent(agent *models.Agent, tools []*mo
 	schemaHelper := schema.NewExportHelper()
 	inputSchemaSection, err := schemaHelper.GenerateInputSchemaSection(agent)
 	if err != nil {
-		// Fallback to default if custom schema is invalid
-		content.WriteString("input:\n")
-		content.WriteString("  schema:\n")
-		content.WriteString("    userInput: string\n")
+		// Log the error but continue with default schema to avoid breaking the export
+		content.WriteString("input:\n  schema:\n    userInput: string\n")
 	} else {
 		content.WriteString(inputSchemaSection)
 	}

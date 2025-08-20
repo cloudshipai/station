@@ -32,9 +32,19 @@ func (e *GenKitExecutor) ExecuteAgentWithDotpromptTemplate(extractor *RuntimeExt
 }
 
 // ExecuteAgentWithDotprompt executes an agent using hybrid approach: dotprompt direct + GenKit Generate
-func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string) (*ExecutionResponse, error) {
+func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, userVariables ...map[string]interface{}) (*ExecutionResponse, error) {
 	startTime := time.Now()
 	logging.Debug("Starting unified dotprompt execution for agent %s", agent.Name)
+	
+	// Handle optional userVariables parameter
+	var customData map[string]interface{}
+	logging.Debug("DEBUG GenKitExecutor: userVariables length = %d", len(userVariables))
+	if len(userVariables) > 0 {
+		customData = userVariables[0]
+		logging.Debug("DEBUG GenKitExecutor: Received %d user variables: %+v", len(customData), customData)
+	} else {
+		logging.Debug("DEBUG GenKitExecutor: No user variables provided")
+	}
 	
 	// 1. Use agent prompt directly if it contains multi-role syntax
 	var dotpromptContent string
@@ -65,16 +75,12 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	// 3. Render the prompt with merged input data (default + custom schema)
 	schemaHelper := schema.NewExportHelper()
 	
-	// For now, only use userInput. Custom input data can be added via call_agent variables parameter
-	inputData, err := schemaHelper.GetMergedInputData(&agent, task, nil)
+	// Pass user variables to schema system for agents with JSON Schema, or just userInput for simple agents
+	inputData, err := schemaHelper.GetMergedInputData(&agent, task, customData)
 	if err != nil {
-		logging.Debug("Schema helper failed: %v, using basic userInput", err)
-		// Fallback to basic userInput on schema error
-		inputData = map[string]interface{}{
-			"userInput": task,
-		}
+		return nil, fmt.Errorf("failed to prepare input data for agent %s: %w", agent.Name, err)
 	}
-	logging.Debug("Input data prepared with %d fields", len(inputData))
+	logging.Debug("Input data prepared with %d fields: %+v", len(inputData), inputData)
 	
 	data := &dotprompt.DataArgument{
 		Input: inputData,
@@ -90,6 +96,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		}, nil
 	}
 	
+	// Process rendered prompt messages
 	logging.Debug("Rendered %d messages from dotprompt", len(renderedPrompt.Messages))
 	
 	// 4. Convert dotprompt messages to GenKit messages
@@ -158,8 +165,10 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	// Add MCP tools if available (same as traditional)
 	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
 	
+	// Execute AI generation with configured options
 	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
 	if err != nil {
+		// Generation failed - return error response
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -169,6 +178,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	if response == nil {
+		// Generation returned nil response - return error
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -179,6 +189,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	responseText := response.Text()
 	
+	// Generation successful - extract response text
 	
 	// Extract tool calls and execution steps with detailed debugging
 	var allToolCalls []interface{}

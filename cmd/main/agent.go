@@ -46,14 +46,24 @@ var (
 
 	agentCreateCmd = &cobra.Command{
 		Use:   "create <name> <description>",
-		Short: "Create a new intelligent agent",
-		Long: `Create a new AI agent using intelligent analysis to determine:
-- Optimal environment and tool assignments
-- System prompt based on requirements
-- Maximum steps and configuration
+		Short: "Create a new agent with direct parameters",
+		Long: `Create a new AI agent by specifying exact configuration:
 
-The agent will be created using Station's self-bootstrapping architecture, 
-where our own MCP server analyzes requirements to create optimized agents.`,
+Required:
+  --prompt       System prompt for the agent (required)
+
+Optional:
+  --tools        List of tool names to assign (e.g., --tools __list_directory,__read_file)
+  --max-steps    Maximum execution steps (default: 5)
+  --input-schema JSON schema for custom input variables
+  --env          Environment name (default: "default")
+  --schedule     Cron schedule (default: "on-demand")
+
+Example:
+  stn agent create my-agent "File management agent" \
+    --prompt "You are a file management agent. Help users organize files." \
+    --tools __list_directory,__read_file,__write_file \
+    --max-steps 10`,
 		Args: cobra.ExactArgs(2),
 		RunE: runAgentCreate,
 	}

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"crypto/md5"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +12,6 @@ import (
 
 	"station/internal/logging"
 	"station/pkg/models"
-	"station/pkg/schema"
 	
 	"gopkg.in/yaml.v2"
 )
@@ -46,8 +44,9 @@ func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, 
 		return nil, fmt.Errorf("input.schema must be a map")
 	}
 	
-	// Convert interface{} map to string-keyed map and filter out userInput (we add that automatically)
-	customSchema := make(map[string]*schema.InputVariable)
+	// TODO: Update to use JSON Schema format instead of custom InputVariable format
+	// For now, we'll skip custom schema parsing during sync
+	_ = schemaMap // Suppress unused variable warning
 	
 	for key, value := range schemaMap {
 		keyStr, ok := key.(string)
@@ -61,98 +60,29 @@ func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, 
 		}
 		
 		// Parse Picoschema format - value is a string like "string, test description"
-		variable := s.parsePicoschemaField(keyStr, value)
-		if variable != nil && variable.Type != "" {
-			customSchema[keyStr] = variable
-		}
+		// Schema parsing disabled during JSON Schema migration
+		_ = s.parsePicoschemaField(keyStr, value)
 	}
 	
-	// If no custom variables, return nil
-	if len(customSchema) == 0 {
-		return nil, nil
-	}
-	
-	// Convert to JSON string for storage
-	schemaJSON, err := json.Marshal(customSchema)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize input schema: %w", err)
-	}
-	
-	// Validate the schema using our helper
-	helper := schema.NewExportHelper()
-	if err := helper.ValidateInputSchema(string(schemaJSON)); err != nil {
-		return nil, fmt.Errorf("invalid input schema: %w", err)
-	}
-	
-	schemaStr := string(schemaJSON)
-	return &schemaStr, nil
+	// Schema sync disabled during JSON Schema migration
+	return nil, fmt.Errorf("custom schema sync temporarily disabled - needs JSON Schema format update")
 }
 
 // parsePicoschemaField parses a single Picoschema field definition
-func (s *DeclarativeSync) parsePicoschemaField(fieldName string, value interface{}) *schema.InputVariable {
-	switch v := value.(type) {
-	case string:
-		// Parse Picoschema string format: "string" or "string, description" or "type?(enum, desc): [values]"
-		return s.parsePicoschemaString(fieldName, v)
-	case []interface{}:
-		// Array format for enums: [value1, value2, value3]
-		return &schema.InputVariable{
-			Type: "string",
-			Enum: v,
-		}
-	case map[interface{}]interface{}:
-		// Object format (less common in Picoschema but supported)
-		variable := &schema.InputVariable{}
-		
-		if typeVal, exists := v["type"]; exists {
-			if typeStr, ok := typeVal.(string); ok {
-				variable.Type = schema.InputSchemaType(typeStr)
-			}
-		}
-		if descVal, exists := v["description"]; exists {
-			if descStr, ok := descVal.(string); ok {
-				variable.Description = descStr
-			}
-		}
-		if defaultVal, exists := v["default"]; exists {
-			variable.Default = defaultVal
-		}
-		if enumVal, exists := v["enum"]; exists {
-			if enumList, ok := enumVal.([]interface{}); ok {
-				variable.Enum = enumList
-			}
-		}
-		if reqVal, exists := v["required"]; exists {
-			if reqBool, ok := reqVal.(bool); ok {
-				variable.Required = reqBool
-			}
-		}
-		
-		return variable
-	}
-	
+// TODO: Update to use JSON Schema format
+func (s *DeclarativeSync) parsePicoschemaField(fieldName string, value interface{}) interface{} {
+	// Temporarily disabled - needs update to JSON Schema format
+	_ = fieldName
+	_ = value
 	return nil
 }
 
 // parsePicoschemaString parses Picoschema string definitions
-func (s *DeclarativeSync) parsePicoschemaString(fieldName string, definition string) *schema.InputVariable {
-	variable := &schema.InputVariable{}
-	
-	// Check if field is optional (ends with ?)
-	isOptional := strings.HasSuffix(fieldName, "?")
-	variable.Required = !isOptional
-	
-	// Handle most common case: "type, description"
-	if strings.Contains(definition, ",") {
-		parts := strings.SplitN(definition, ",", 2)
-		variable.Type = schema.InputSchemaType(strings.TrimSpace(parts[0]))
-		variable.Description = strings.TrimSpace(parts[1])
-		return variable
-	}
-	
-	// Handle simple case: "type"
-	variable.Type = schema.InputSchemaType(strings.TrimSpace(definition))
-	return variable
+func (s *DeclarativeSync) parsePicoschemaString(fieldName string, definition string) interface{} {
+	// TODO: Update to JSON Schema format
+	_ = fieldName
+	_ = definition
+	return nil
 }
 
 

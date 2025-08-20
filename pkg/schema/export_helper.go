@@ -22,24 +22,24 @@ func (h *ExportHelper) GenerateInputSchemaSection(agent *models.Agent) (string, 
 	content.WriteString("input:\n")
 	content.WriteString("  schema:\n")
 	
-	// Always include the mandatory userInput
-	content.WriteString("    userInput: string\n")
-	
-	// Add custom schema if defined
+	// Handle schema conversion
 	if agent.InputSchema != nil && *agent.InputSchema != "" {
-		customSchema, err := ParseInputSchema(*agent.InputSchema)
+		// First ensure userInput is merged into the schema
+		mergedSchema, err := MergeUserInputWithSchema(*agent.InputSchema)
 		if err != nil {
-			return "", fmt.Errorf("invalid input schema in agent: %w", err)
+			return "", fmt.Errorf("failed to merge schema for agent %s (ID: %d): %w", agent.Name, agent.ID, err)
 		}
 		
-		// Convert to dotprompt format and add custom variables
-		for key, variable := range customSchema {
-			// Skip userInput as it's already added
-			if key != "userInput" {
-				dotpromptDefinition := h.convertVariableToPicoschema(key, variable)
-				content.WriteString(fmt.Sprintf("    %s: %s\n", key, dotpromptDefinition))
-			}
+		// Convert JSON Schema to dotprompt YAML format
+		schemaYAML, err := GenerateDotpromptSchema(mergedSchema)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate dotprompt schema for agent %s (ID: %d): %w", agent.Name, agent.ID, err)
 		}
+		
+		content.WriteString(schemaYAML)
+	} else {
+		// Default schema with just userInput
+		content.WriteString("    userInput: string\n")
 	}
 	
 	return content.String(), nil
@@ -52,79 +52,34 @@ func (h *ExportHelper) GetMergedInputData(agent *models.Agent, userInput string,
 		"userInput": userInput,
 	}
 	
-	// If agent has custom schema, validate and merge
+	// Merge custom data if provided
+	if customData != nil {
+		for key, value := range customData {
+			// Don't allow overriding userInput
+			if key != "userInput" {
+				result[key] = value
+			}
+		}
+	}
+	
+	// If agent has custom schema, validate the merged data
 	if agent.InputSchema != nil && *agent.InputSchema != "" {
-		customSchema, err := ParseInputSchema(*agent.InputSchema)
+		// Ensure userInput is merged into schema for validation
+		mergedSchema, err := MergeUserInputWithSchema(*agent.InputSchema)
 		if err != nil {
-			return nil, fmt.Errorf("invalid agent input schema: %w", err)
+			return nil, fmt.Errorf("failed to merge agent schema: %w", err)
 		}
 		
-		// Validate custom data against schema
-		if customData != nil {
-			if err := customSchema.ValidateInputData(customData); err != nil {
-				return nil, fmt.Errorf("input validation failed: %w", err)
-			}
-			
-			// Merge custom data (excluding userInput)
-			for key, value := range customData {
-				if key != "userInput" {
-					result[key] = value
-				}
-			}
-		}
-		
-		// Add default values for missing non-required fields
-		for key, variable := range customSchema {
-			if key != "userInput" && result[key] == nil && variable.Default != nil {
-				result[key] = variable.Default
-			}
+		// Validate the complete input data against the schema
+		if err := ValidateInputData(mergedSchema, result); err != nil {
+			return nil, fmt.Errorf("input validation failed: %w", err)
 		}
 	}
 	
 	return result, nil
 }
 
-// convertTypeToDotprompt converts schema type to dotprompt type string
-func (h *ExportHelper) convertTypeToDotprompt(schemaType InputSchemaType) string {
-	switch schemaType {
-	case TypeString:
-		return "string"
-	case TypeNumber:
-		return "number"
-	case TypeBoolean:
-		return "boolean"
-	case TypeArray:
-		return "array"
-	case TypeObject:
-		return "object"
-	default:
-		return "string" // fallback
-	}
-}
-
-// convertVariableToPicoschema converts a full InputVariable to proper Picoschema format
-func (h *ExportHelper) convertVariableToPicoschema(key string, variable *InputVariable) string {
-	// Handle enum types with values
-	if len(variable.Enum) > 0 {
-		// For enum, we need to return as an array, not a string
-		return fmt.Sprintf("%v", variable.Enum)
-	}
-	
-	// Handle non-enum types with description
-	typeStr := h.convertTypeToDotprompt(variable.Type)
-	if variable.Description != "" {
-		return fmt.Sprintf("%s, %s", typeStr, variable.Description)
-	}
-	
-	return typeStr
-}
-
-// ValidateInputSchema validates that an input schema JSON is valid
+// ValidateInputSchema validates that a JSON Schema is valid
 func (h *ExportHelper) ValidateInputSchema(schemaJSON string) error {
-	if schemaJSON == "" {
-		return nil // Empty schema is valid
-	}
-	
-	_, err := ParseInputSchema(schemaJSON)
-	return err
+	return ValidateJSONSchema(schemaJSON)
 }

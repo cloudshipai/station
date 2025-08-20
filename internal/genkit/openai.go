@@ -43,6 +43,11 @@ type EmbedderRef struct {
 var (
 	// Supported models: https://platform.openai.com/docs/models
 	supportedModels = map[string]ai.ModelInfo{
+		"gpt-5": {
+			Label:    "OpenAI GPT-5 (Station Fixed)",
+			Supports: &Multimodal,
+			Versions: []string{"gpt-5"},
+		},
 		"gpt-4o": {
 			Label:    "OpenAI GPT-4o (Station Fixed)",
 			Supports: &Multimodal,

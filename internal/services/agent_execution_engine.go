@@ -74,6 +74,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
+	logging.Info("DEBUG AgentExecutionEngine: Received %d user variables: %+v", len(userVariables), userVariables)
 
 	// All agents now use unified dotprompt execution system
 		
@@ -138,9 +139,12 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		
 		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 		
-		// Use our new dotprompt + genkit execution system
+		// Use our new dotprompt + genkit execution system with user variables
 		executor := dotprompt.NewGenKitExecutor()
-		response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, genkitApp, mcpTools, task)
+		logging.Info("DEBUG AgentExecutionEngine: About to call ExecuteAgentWithDotprompt with %d user variables", len(userVariables))
+		
+		// Pass user variables through to the dotprompt execution system
+		response, err := executor.ExecuteAgentWithDotprompt(*agent, agentTools, genkitApp, mcpTools, task, userVariables)
 		if err != nil {
 			return nil, fmt.Errorf("dotprompt execution failed: %w", err)
 		}

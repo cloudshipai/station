@@ -216,12 +216,19 @@ func init() {
 	agentRunCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentRunCmd.Flags().String("env", "default", "Environment name for the agent")
 	agentRunCmd.Flags().Bool("tail", false, "Follow the agent execution with real-time output")
+	agentRunCmd.Flags().StringToString("var", nil, "Set custom variables for the agent (e.g., --var environment=production --var priority=high)")
 	agentDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
 	agentCreateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentCreateCmd.Flags().String("env", "default", "Environment name or ID for the agent")
-	agentCreateCmd.Flags().String("domain", "", "Domain context for the agent (e.g., devops, data-science)")
+	agentCreateCmd.Flags().String("prompt", "", "System prompt for the agent (required)")
+	agentCreateCmd.Flags().Int("max-steps", 5, "Maximum steps the agent can take")
+	agentCreateCmd.Flags().StringSlice("tools", []string{}, "List of tool names to assign to the agent (e.g., --tools __list_directory,__read_file)")
+	agentCreateCmd.Flags().String("input-schema", "", "JSON schema for custom input variables (optional)")
 	agentCreateCmd.Flags().String("schedule", "on-demand", "Schedule preference (on-demand, daily, weekly, custom)")
+	// Deprecated flags - keep for compatibility but hidden
+	agentCreateCmd.Flags().String("domain", "", "Domain context for the agent (DEPRECATED: use --prompt instead)")
+	agentCreateCmd.Flags().MarkHidden("domain")
 	
 	// Agent Bundle command flags
 	agentBundleCreateCmd.Flags().String("name", "", "Bundle name (defaults to directory name)")
