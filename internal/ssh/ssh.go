@@ -17,6 +17,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/internal/tui"
 )
@@ -24,16 +25,18 @@ import (
 type Server struct {
 	cfg            *config.Config
 	db             *db.DB
+	repos          *repositories.Repositories
 	executionQueue *services.ExecutionQueueService
 	genkitService  services.AgentServiceInterface
 	localMode      bool
 	srv            *ssh.Server
 }
 
-func New(cfg *config.Config, database *db.DB, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface, localMode bool) *Server {
+func New(cfg *config.Config, database *db.DB, repos *repositories.Repositories, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface, localMode bool) *Server {
 	s := &Server{
 		cfg:            cfg,
 		db:             database,
+		repos:          repos,
 		executionQueue: executionQueue,
 		genkitService:  genkitService,
 		localMode:      localMode,
@@ -98,7 +101,7 @@ func (s *Server) teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption
 	// TODO: Add configuration option to choose between chat and traditional TUI
 	
 	// Create the new chat TUI model
-	chatModel := tui.NewChatModel(s.db, s.executionQueue, s.genkitService)
+	chatModel := tui.NewChatModel(s.db, s.repos, s.executionQueue, s.genkitService)
 	
 	return chatModel, []tea.ProgramOption{
 		tea.WithAltScreen(),

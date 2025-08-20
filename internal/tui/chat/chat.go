@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/internal/tui/chat/components"
 	"station/internal/tui/dialogs"
@@ -60,6 +61,7 @@ type Model struct {
 	
 	// Database and services
 	db             db.Database
+	repos          *repositories.Repositories
 	executionQueue *services.ExecutionQueueService
 	agentService   services.AgentServiceInterface
 	agentClient    *AgentClient
@@ -90,12 +92,13 @@ type Model struct {
 }
 
 // NewModel creates a new chat TUI model
-func NewModel(database db.Database, executionQueue *services.ExecutionQueueService, agentService services.AgentServiceInterface) *Model {
+func NewModel(database db.Database, repos *repositories.Repositories, executionQueue *services.ExecutionQueueService, agentService services.AgentServiceInterface) *Model {
 	return &Model{
 		db:             database,
+		repos:          repos,
 		executionQueue: executionQueue,
 		agentService:   agentService,
-		agentClient:    NewAgentClient(database, executionQueue, agentService),
+		agentClient:    NewAgentClient(database, repos, executionQueue, agentService),
 		chatMessages:   make([]components.Message, 0),
 		theme:          theme.DefaultTheme(),
 		activeSession:  false,
@@ -328,15 +331,6 @@ func (m *Model) renderStatusBar() string {
 }
 
 // Message types for communication
-type AgentResponseMsg struct {
-	Message   Message
-	SessionID string
-}
-
-type SessionStartedMsg struct {
-	Session SessionInfo
-}
-
 type MessageSubmitMsg struct {
 	Content string
 }
