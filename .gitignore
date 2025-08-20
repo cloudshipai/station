@@ -132,3 +132,7 @@ soft-serve/
 toolhive/
 wish/
 stn-test
+
+# SQLite temporary files
+*.db-shm
+*.db-wal
