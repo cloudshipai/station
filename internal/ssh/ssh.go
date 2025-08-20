@@ -93,10 +93,14 @@ func (s *Server) createSSHServer() *ssh.Server {
 }
 
 func (s *Server) teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
-	// Create the new TUI model with database access, execution queue, and genkit service
-	tuiModel := tui.NewModel(s.db, s.executionQueue, s.genkitService)
+	// Check if chat mode is requested via environment variable or user command
+	// For now, we'll default to the new chat interface
+	// TODO: Add configuration option to choose between chat and traditional TUI
 	
-	return tuiModel, []tea.ProgramOption{
+	// Create the new chat TUI model
+	chatModel := tui.NewChatModel(s.db, s.executionQueue, s.genkitService)
+	
+	return chatModel, []tea.ProgramOption{
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	}
