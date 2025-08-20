@@ -26,6 +26,7 @@ type SyncOptions struct {
 	Force       bool
 	Verbose     bool
 	Interactive bool
+	Confirm     bool
 }
 
 // SyncResult contains results of a sync operation
