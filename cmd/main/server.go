@@ -11,6 +11,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/mcp"
+	"station/internal/mcp_agents"
 	"station/internal/services"
 	"station/internal/ssh"
 	"station/pkg/crypto"
@@ -179,8 +180,16 @@ func runMainServer() error {
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
 	
+	// Get environment name from viper config (defaults to "default")
+	environmentName := viper.GetString("serve_environment")
+	if environmentName == "" {
+		environmentName = "default"
+	}
+	log.Printf("🤖 Serving agents from environment: %s", environmentName)
+	
 	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc, localMode)
 	mcpServer := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
+	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
 	apiServer := api.New(cfg, database, localMode)
 	
 	// Initialize ToolDiscoveryService for API config uploads
@@ -189,7 +198,7 @@ func runMainServer() error {
 	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService, executionQueueSvc)
 
-	wg.Add(4) // SSH, MCP, API, and webhook retry processor
+	wg.Add(5) // SSH, MCP, Dynamic Agent MCP, API, and webhook retry processor
 
 	go func() {
 		defer wg.Done()
@@ -223,6 +232,28 @@ func runMainServer() error {
 
 	go func() {
 		defer wg.Done()
+		log.Printf("🤖 Starting Dynamic Agent MCP server on port %d", cfg.MCPPort+1)
+		if err := dynamicAgentServer.Start(ctx, cfg.MCPPort+1); err != nil {
+			log.Printf("Dynamic Agent MCP server error: %v", err)
+		}
+		
+		// Wait for context cancellation, then shutdown fast
+		<-ctx.Done()
+		
+		// Very aggressive timeout - 1s for dynamic MCP shutdown
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer shutdownCancel()
+		
+		log.Printf("🤖 Shutting down Dynamic Agent MCP server...")
+		if err := dynamicAgentServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Dynamic Agent MCP server shutdown error: %v", err)
+		} else {
+			log.Printf("🤖 Dynamic Agent MCP server stopped gracefully")
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
 		log.Printf("🚀 Starting API server on port %d", cfg.APIPort)
 		if err := apiServer.Start(ctx); err != nil {
 			log.Printf("API server error: %v", err)
@@ -232,6 +263,7 @@ func runMainServer() error {
 	fmt.Printf("\n✅ Station is running!\n")
 	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
 	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)
+	fmt.Printf("🤖 Dynamic Agent MCP: http://localhost:%d/mcp (environment: %s)\n", cfg.MCPPort+1, environmentName)
 	fmt.Printf("🌐 API Server: http://localhost:%d\n", cfg.APIPort)
 	fmt.Printf("\nPress Ctrl+C to stop\n\n")
 
