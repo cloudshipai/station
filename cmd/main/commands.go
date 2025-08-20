@@ -885,3 +885,4 @@ func runSyncForEnvironment(environment string) error {
 	
 	return runMCPSync(cmd, args)
 }
+

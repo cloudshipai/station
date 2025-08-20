@@ -291,6 +291,7 @@ func init() {
 	viper.BindPFlag("database_url", serveCmd.Flags().Lookup("database"))
 	viper.BindPFlag("debug", serveCmd.Flags().Lookup("debug"))
 	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
+	viper.BindPFlag("serve_environment", serveCmd.Flags().Lookup("env"))
 	
 	// Set default values
 	viper.SetDefault("telemetry_enabled", true)

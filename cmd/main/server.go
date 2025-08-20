@@ -11,6 +11,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/mcp"
+	"station/internal/mcp_agents"
 	"station/internal/services"
 	"station/internal/ssh"
 	"station/pkg/crypto"
@@ -181,6 +182,14 @@ func runMainServer() error {
 	
 	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc, localMode)
 	mcpRouter := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
+	// Get environment name from viper config (defaults to "default")
+	environmentName := viper.GetString("serve_environment")
+	if environmentName == "" {
+		environmentName = "default"
+	}
+	log.Printf("🤖 Serving agents from environment: %s", environmentName)
+	
+	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
 	apiServer := api.New(cfg, database, localMode)
 	
 	// Initialize ToolDiscoveryService for API config uploads
@@ -189,7 +198,7 @@ func runMainServer() error {
 	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService, executionQueueSvc)
 
-	wg.Add(4) // SSH, MCP, API, and webhook retry processor
+	wg.Add(5) // SSH, MCP, Dynamic Agents MCP, API, and webhook retry processor
 
 	go func() {
 		defer wg.Done()
@@ -201,7 +210,7 @@ func runMainServer() error {
 
 	go func() {
 		defer wg.Done()
-		log.Printf("🔧 Starting MCP router (admin + dynamic servers)")
+		log.Printf("🔧 Starting MCP router (admin server)")
 		
 		// Start MCP server
 		if err := mcpRouter.Start(ctx, cfg.MCPPort); err != nil {
@@ -220,6 +229,16 @@ func runMainServer() error {
 			log.Printf("MCP servers shutdown error: %v", err)
 		} else {
 			log.Printf("🔧 MCP servers stopped gracefully")
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		log.Printf("🤖 Starting Dynamic Agents MCP server on port 3031")
+		
+		// Start dynamic agent server
+		if err := dynamicAgentServer.Start(ctx); err != nil {
+			log.Printf("Dynamic Agents MCP server error: %v", err)
 		}
 	}()
 
