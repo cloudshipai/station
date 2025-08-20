@@ -17,7 +17,7 @@ func RenderOverlay(width, height int, background, overlay string, withBackdrop b
 		backdropStyle := lipgloss.NewStyle().
 			Width(width).
 			Height(height).
-			Background(backgroundColor.Darker(0.8))
+			Background(backgroundColor)
 		
 		background = backdropStyle.Render(background)
 	}
