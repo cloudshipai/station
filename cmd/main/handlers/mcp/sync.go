@@ -23,7 +23,8 @@ This command scans .prompt files and MCP configurations, validates dependencies,
   stn mcp sync --env production   # Sync specific environment  
   stn mcp sync --dry-run          # Show what would change
   stn mcp sync --validate         # Validate configurations only
-  stn mcp sync --no-interactive   # Skip prompting for missing variables`,
+  stn mcp sync --no-interactive   # Skip prompting for missing variables
+  stn mcp sync --confirm          # Auto-confirm agent deletions`,
 	RunE: runMCPSync,
 }
 
@@ -34,6 +35,7 @@ type syncFlags struct {
 	Validate    bool
 	Verbose     bool
 	Interactive bool
+	Confirm     bool
 }
 
 func init() {
@@ -43,6 +45,7 @@ func init() {
 	syncCmd.Flags().Bool("validate", false, "Only validate configurations without syncing")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 	syncCmd.Flags().BoolP("interactive", "i", true, "Prompt for missing variables (default: true)")
+	syncCmd.Flags().Bool("confirm", false, "Skip interactive prompts for agent deletion (auto-confirm)")
 	
 	// Bind flags to viper
 	viper.BindPFlag("mcp.sync.environment", syncCmd.Flags().Lookup("env"))
@@ -50,6 +53,7 @@ func init() {
 	viper.BindPFlag("mcp.sync.validate", syncCmd.Flags().Lookup("validate"))
 	viper.BindPFlag("mcp.sync.verbose", syncCmd.Flags().Lookup("verbose"))
 	viper.BindPFlag("mcp.sync.interactive", syncCmd.Flags().Lookup("interactive"))
+	viper.BindPFlag("mcp.sync.confirm", syncCmd.Flags().Lookup("confirm"))
 }
 
 func runMCPSync(cmd *cobra.Command, args []string) error {
@@ -60,6 +64,7 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 		Validate:    viper.GetBool("mcp.sync.validate"),
 		Verbose:     viper.GetBool("mcp.sync.verbose"),
 		Interactive: viper.GetBool("mcp.sync.interactive"),
+		Confirm:     viper.GetBool("mcp.sync.confirm"),
 	}
 
 	// Load configuration
@@ -108,6 +113,7 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 			Validate:    flags.Validate,
 			Verbose:     flags.Verbose,
 			Interactive: flags.Interactive,
+			Confirm:     flags.Confirm,
 		})
 		
 		if err != nil {

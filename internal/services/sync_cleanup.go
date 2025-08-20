@@ -8,6 +8,7 @@ import (
 
 	"station/internal/db/repositories"
 	"station/internal/logging"
+	"station/pkg/models"
 )
 
 // cleanupOrphanedResources removes configs, servers, and tools that no longer exist in filesystem
@@ -158,7 +159,7 @@ func (s *DeclarativeSync) removeConfigServersAndTools(ctx context.Context, envID
 }
 
 // cleanupOrphanedAgents removes agents from database that don't have corresponding .prompt files
-func (s *DeclarativeSync) cleanupOrphanedAgents(ctx context.Context, agentsDir, environmentName string, promptFiles []string) (int, error) {
+func (s *DeclarativeSync) cleanupOrphanedAgents(ctx context.Context, agentsDir, environmentName string, promptFiles []string, options SyncOptions) (int, error) {
 	env, err := s.repos.Environments.GetByName(environmentName)
 	if err != nil {
 		return 0, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
@@ -178,12 +179,41 @@ func (s *DeclarativeSync) cleanupOrphanedAgents(ctx context.Context, agentsDir, 
 	}
 
 	// Find orphaned agents (in DB but not in filesystem)
+	orphanedAgents := []*models.Agent{}
+	for _, dbAgent := range dbAgents {
+		if !promptAgentNames[dbAgent.Name] {
+			orphanedAgents = append(orphanedAgents, dbAgent)
+		}
+	}
+
+	if len(orphanedAgents) == 0 {
+		return 0, nil
+	}
+
+	// Display warning about orphaned agents
+	fmt.Printf("\n⚠️  WARNING: Found %d agent(s) in database that don't have .prompt files:\n", len(orphanedAgents))
+	for _, agent := range orphanedAgents {
+		fmt.Printf("   📋 %s: %s\n", agent.Name, agent.Description)
+	}
+	fmt.Printf("\n💡 TIP: You forgot to export your agents! These agents will be deleted because\n")
+	fmt.Printf("   file-based configuration is the source of truth. Consider running:\n")
+	fmt.Printf("   stn agent export %s --env %s\n\n", orphanedAgents[0].Name, environmentName)
+
 	orphanedCount := 0
 	agentService := NewAgentService(s.repos)
 
-	for _, dbAgent := range dbAgents {
-		if !promptAgentNames[dbAgent.Name] {
-			// This agent exists in DB but has no corresponding .prompt file
+	for _, dbAgent := range orphanedAgents {
+		shouldDelete := options.Confirm
+
+		// If not auto-confirming, ask user for each agent
+		if !shouldDelete {
+			fmt.Printf("🗑️  Delete agent '%s' from database? (y/N): ", dbAgent.Name)
+			var response string
+			fmt.Scanln(&response)
+			shouldDelete = strings.ToLower(strings.TrimSpace(response)) == "y"
+		}
+
+		if shouldDelete {
 			logging.Info("🗑️  Removing orphaned agent: %s", dbAgent.Name)
 			
 			err := agentService.DeleteAgent(ctx, dbAgent.ID)
@@ -193,6 +223,8 @@ func (s *DeclarativeSync) cleanupOrphanedAgents(ctx context.Context, agentsDir, 
 			}
 			
 			orphanedCount++
+		} else {
+			fmt.Printf("⏭️  Skipping deletion of agent: %s\n", dbAgent.Name)
 		}
 	}
 
