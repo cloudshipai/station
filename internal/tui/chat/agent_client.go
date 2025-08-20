@@ -4,27 +4,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/internal/tui/types"
+	"station/pkg/models"
 )
 
 // AgentClient handles communication with Station agents
 type AgentClient struct {
 	db             db.Database
+	repos          *repositories.Repositories
 	executionQueue *services.ExecutionQueueService
 	agentService   services.AgentServiceInterface
 }
 
 // NewAgentClient creates a new agent client
-func NewAgentClient(database db.Database, executionQueue *services.ExecutionQueueService, agentService services.AgentServiceInterface) *AgentClient {
+func NewAgentClient(database db.Database, repos *repositories.Repositories, executionQueue *services.ExecutionQueueService, agentService services.AgentServiceInterface) *AgentClient {
 	return &AgentClient{
 		db:             database,
+		repos:          repos,
 		executionQueue: executionQueue,
 		agentService:   agentService,
 	}
@@ -67,37 +70,24 @@ type ToolCallResult struct {
 
 // ListAgents returns available agents
 func (c *AgentClient) ListAgents(ctx context.Context) ([]Agent, error) {
-	agents, err := c.db.ListAgents(ctx)
+	agents, err := c.repos.Agents.List()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list agents: %w", err)
 	}
 
 	var result []Agent
 	for _, agent := range agents {
-		// Get tools for this agent
-		tools, err := c.db.ListToolsByAgent(ctx, agent.ID)
-		if err != nil {
-			slog.Warn("Failed to load tools for agent", "agent_id", agent.ID, "error", err)
-			tools = []db.Tool{} // Continue with empty tools
-		}
-
-		var agentTools []Tool
-		for _, tool := range tools {
-			agentTools = append(agentTools, Tool{
-				Name:        tool.Name,
-				Description: tool.Description,
-			})
-		}
-
-		result = append(result, Agent{
-			ID:          agent.ID,
+		// Convert to TUI Agent type
+		tuiAgent := Agent{
+			ID:          int64(agent.ID),
 			Name:        agent.Name,
 			Description: agent.Description,
-			Model:       agent.Model,
+			Enabled:     true, // TODO: Check if models.Agent has Enabled field
 			MaxSteps:    int(agent.MaxSteps),
-			Enabled:     agent.Enabled,
-			Tools:       agentTools,
-		})
+			Tools:       []Tool{}, // TODO: Load tools if needed
+		}
+		
+		result = append(result, tuiAgent)
 	}
 
 	return result, nil
@@ -105,7 +95,7 @@ func (c *AgentClient) ListAgents(ctx context.Context) ([]Agent, error) {
 
 // StartChatSession starts a new chat session with an agent
 func (c *AgentClient) StartChatSession(ctx context.Context, agentID int64) (*ChatSession, error) {
-	agent, err := c.db.GetAgent(ctx, agentID)
+	agent, err := c.repos.Agents.GetByID(agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent: %w", err)
 	}
@@ -116,7 +106,6 @@ func (c *AgentClient) StartChatSession(ctx context.Context, agentID int64) (*Cha
 		ID:        sessionID,
 		AgentID:   agent.ID,
 		AgentName: agent.Name,
-		Model:     agent.Model,
 		Created:   time.Now(),
 		Messages:  make([]ChatMessage, 0),
 	}
@@ -137,7 +126,7 @@ func (c *AgentClient) SendMessage(ctx context.Context, session *ChatSession, use
 		session.Messages = append(session.Messages, userMsg)
 
 		// Execute agent
-		agent, err := c.db.GetAgent(ctx, session.AgentID)
+		agent, err := c.repos.Agents.GetByID(session.AgentID)
 		if err != nil {
 			return AgentErrorMsg{
 				SessionID: session.ID,
@@ -145,18 +134,12 @@ func (c *AgentClient) SendMessage(ctx context.Context, session *ChatSession, use
 			}
 		}
 
-		// Create execution request
-		request := services.ExecutionRequest{
-			AgentID: agent.ID,
-			Input:   userMessage,
-			Context: map[string]interface{}{
-				"session_id": session.ID,
-				"chat_mode": true,
-			},
-		}
-
 		// Queue the execution
-		runID, err := c.executionQueue.QueueExecution(ctx, request)
+		metadata := map[string]interface{}{
+			"session_id": session.ID,
+			"chat_mode":  true,
+		}
+		runID, err := c.executionQueue.QueueExecution(agent.ID, 1, userMessage, metadata)
 		if err != nil {
 			return AgentErrorMsg{
 				SessionID: session.ID,
@@ -192,7 +175,7 @@ func (c *AgentClient) monitorExecution(ctx context.Context, session *ChatSession
 			}
 		case <-ticker.C:
 			// Check execution status
-			run, err := c.db.GetRun(ctx, runID)
+			run, err := c.repos.AgentRuns.GetByID(runID)
 			if err != nil {
 				continue // Keep polling
 			}
@@ -210,8 +193,8 @@ func (c *AgentClient) monitorExecution(ctx context.Context, session *ChatSession
 				}
 			case "failed", "error":
 				errorMsg := "Agent execution failed"
-				if run.ErrorMessage != "" {
-					errorMsg = run.ErrorMessage
+				if run.FinalResponse != "" {
+					errorMsg = run.FinalResponse
 				}
 				return AgentErrorMsg{
 					SessionID: session.ID,
@@ -229,17 +212,22 @@ func (c *AgentClient) monitorExecution(ctx context.Context, session *ChatSession
 }
 
 // parseAgentResponse parses the agent execution result into a chat message
-func (c *AgentClient) parseAgentResponse(run db.Run) ChatMessage {
+func (c *AgentClient) parseAgentResponse(run *models.AgentRun) ChatMessage {
+	timestamp := time.Now()
+	if run.CompletedAt != nil {
+		timestamp = *run.CompletedAt
+	}
+	
 	msg := ChatMessage{
 		ID:        fmt.Sprintf("agent-%d", time.Now().UnixNano()),
 		Role:      "assistant",
-		Timestamp: time.Time(run.CompletedAt),
+		Timestamp: timestamp,
 	}
 
 	// Parse the output
-	if run.Output != "" {
+	if run.FinalResponse != "" {
 		var output map[string]interface{}
-		if err := json.Unmarshal([]byte(run.Output), &output); err == nil {
+		if err := json.Unmarshal([]byte(run.FinalResponse), &output); err == nil {
 			// Extract content and thinking from structured output
 			if content, ok := output["content"].(string); ok {
 				msg.Content = content
@@ -252,7 +240,7 @@ func (c *AgentClient) parseAgentResponse(run db.Run) ChatMessage {
 			}
 		} else {
 			// Fallback to raw output
-			msg.Content = run.Output
+			msg.Content = run.FinalResponse
 		}
 	}
 
