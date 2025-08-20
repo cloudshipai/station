@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui tag-check release
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui build-with-opencode local-install-opencode build-with-ui-opencode local-install-ui-opencode tag-check release
 
 # Build configuration
 BINARY_NAME=stn
@@ -37,6 +37,32 @@ local-install: build
 local-install-ui: build-with-ui
 	mv ./bin/stn ~/.local/bin
 	@echo "✅ Installed Station with embedded UI to ~/.local/bin"
+
+# Build with OpenCode embedded
+build-with-opencode:
+	@echo "🔨 Building Station $(VERSION) with embedded OpenCode..."
+	@mkdir -p $(BUILD_DIR)
+	go build $(LDFLAGS) -tags opencode -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME) with embedded OpenCode"
+
+# Build and install with OpenCode embedded
+local-install-opencode: build-with-opencode
+	mv ./bin/stn ~/.local/bin
+	@echo "✅ Installed Station with embedded OpenCode to ~/.local/bin"
+
+# Build with both UI and OpenCode embedded (complete build)
+build-with-ui-opencode: build-ui
+	@echo "🔨 Building Station $(VERSION) with embedded UI and OpenCode..."
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p internal/ui/static
+	@cp -r ui/dist/* internal/ui/static/ 2>/dev/null || true
+	go build $(LDFLAGS) -tags "ui opencode" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME) with embedded UI and OpenCode"
+
+# Build and install with both UI and OpenCode embedded
+local-install-ui-opencode: build-with-ui-opencode
+	mv ./bin/stn ~/.local/bin
+	@echo "✅ Installed Station with embedded UI and OpenCode to ~/.local/bin"
 
 # Release targets
 tag-check:

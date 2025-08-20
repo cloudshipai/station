@@ -128,6 +128,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	bundlesGroup.GET("", h.listBundles)
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
+
+	// Code routes - OpenCode integration
+	h.registerCodeRoutes(router)
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode

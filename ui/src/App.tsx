@@ -18,7 +18,7 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight, Train, Globe, Package, Download, Copy, Edit, ArrowLeft, Save } from 'lucide-react';
+import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight, Train, Globe, Package, Download, Copy, Edit, ArrowLeft, Save, Code } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import Editor from '@monaco-editor/react';
 import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi, bundlesApi, type BundleInfo } from './api/station';
@@ -1110,6 +1110,21 @@ const Layout = ({ children, currentPage, onPageChange }: any) => {
             }`}
           >
             🚢 Ship CLI
+          </button>
+          
+          {/* OpenCode Button with Pulsating Red Dot */}
+          <button 
+            onClick={() => onPageChange('code')}
+            className={`w-full text-left p-3 rounded border font-mono transition-colors relative ${
+              currentPage === 'code' 
+                ? 'bg-tokyo-red text-tokyo-bg border-tokyo-red shadow-tokyo-glow' 
+                : 'bg-transparent text-tokyo-fg-dark hover:bg-tokyo-bg-highlight hover:text-tokyo-red border-transparent hover:border-tokyo-blue7'
+            }`}
+          >
+            <Code className="inline h-4 w-4 mr-2" />
+            Code
+            {/* Pulsating red dot */}
+            <span className="absolute top-2 right-2 w-2 h-2 bg-tokyo-red rounded-full animate-pulse shadow-lg"></span>
           </button>
         </nav>
       </div>
@@ -3215,7 +3230,170 @@ const AgentEditor = () => {
   );
 };
 
-type Page = 'agents' | 'mcps' | 'runs' | 'environments' | 'bundles' | 'ship';
+// CodePage Component with xterm.js integration
+const CodePage = () => {
+  const [isCodeActive, setIsCodeActive] = useState(false);
+  const [sessionUrl, setSessionUrl] = useState<string | null>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+
+  const startCodeSession = async () => {
+    try {
+      setIsCodeActive(true);
+      
+      // Call API to start OpenCode Dagger container
+      const response = await fetch('/api/v1/code/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace: '/workspace',
+          environment: 'default'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to start OpenCode session');
+      }
+      
+      const data = await response.json();
+      setSessionUrl(data.url);
+      
+    } catch (error) {
+      console.error('Failed to start code session:', error);
+      setIsCodeActive(false);
+    }
+  };
+
+  const exitCodeSession = () => {
+    setIsCodeActive(false);
+    setSessionUrl(null);
+    
+    // Call API to stop OpenCode session
+    fetch('/api/v1/code/stop', { method: 'POST' })
+      .catch(error => console.error('Failed to stop code session:', error));
+  };
+
+  // Handle Ctrl+C to exit
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === 'c' && isCodeActive) {
+        event.preventDefault();
+        exitCodeSession();
+      }
+    };
+
+    if (isCodeActive) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isCodeActive]);
+
+  if (isCodeActive && sessionUrl) {
+    // Full-screen terminal view
+    return (
+      <div className="fixed inset-0 bg-black z-50 flex flex-col">
+        {/* Header bar */}
+        <div className="bg-tokyo-bg-dark border-b border-tokyo-blue7 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Code className="h-4 w-4 text-tokyo-red" />
+            <span className="text-tokyo-fg font-mono text-sm">OpenCode Live Session</span>
+            <span className="w-2 h-2 bg-tokyo-red rounded-full animate-pulse"></span>
+          </div>
+          <div className="text-tokyo-comment text-xs font-mono">
+            Press Ctrl+C to exit
+          </div>
+        </div>
+        
+        {/* Terminal iframe */}
+        <div className="flex-1">
+          <iframe 
+            src={sessionUrl}
+            className="w-full h-full border-0"
+            title="OpenCode Terminal"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Landing page
+  return (
+    <div className="h-full bg-tokyo-bg p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <Code className="h-12 w-12 text-tokyo-red" />
+            <h1 className="text-4xl font-mono font-bold text-tokyo-fg">OpenCode</h1>
+            <span className="w-3 h-3 bg-tokyo-red rounded-full animate-pulse shadow-lg"></span>
+          </div>
+          <p className="text-tokyo-comment font-mono text-lg">
+            Launch a live coding environment with AI assistance
+          </p>
+        </div>
+
+        {/* Features */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6">
+            <div className="text-tokyo-blue mb-3">
+              <Code className="h-6 w-6" />
+            </div>
+            <h3 className="text-tokyo-fg font-mono font-medium mb-2">Full Terminal</h3>
+            <p className="text-tokyo-comment text-sm font-mono">
+              Complete terminal environment with xterm.js integration
+            </p>
+          </div>
+          
+          <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6">
+            <div className="text-tokyo-green mb-3">
+              <Bot className="h-6 w-6" />
+            </div>
+            <h3 className="text-tokyo-fg font-mono font-medium mb-2">AI Assistant</h3>
+            <p className="text-tokyo-comment text-sm font-mono">
+              OpenCode with your environment variables and API keys
+            </p>
+          </div>
+          
+          <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6">
+            <div className="text-tokyo-cyan mb-3">
+              <Package className="h-6 w-6" />
+            </div>
+            <h3 className="text-tokyo-fg font-mono font-medium mb-2">Isolated</h3>
+            <p className="text-tokyo-comment text-sm font-mono">
+              Runs in secure Dagger container with scoped workspace
+            </p>
+          </div>
+        </div>
+
+        {/* Launch button */}
+        <div className="text-center">
+          <button
+            onClick={startCodeSession}
+            disabled={isCodeActive}
+            className="bg-tokyo-red hover:bg-red-600 disabled:opacity-50 text-white px-8 py-4 rounded-lg font-mono font-medium text-lg transition-colors shadow-lg hover:shadow-tokyo-glow relative overflow-hidden"
+          >
+            {isCodeActive ? (
+              <>
+                <span className="animate-pulse">Starting OpenCode...</span>
+              </>
+            ) : (
+              <>
+                <Code className="inline h-5 w-5 mr-2" />
+                Launch OpenCode
+                <span className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-pulse"></span>
+              </>
+            )}
+          </button>
+          
+          <p className="text-tokyo-comment text-sm font-mono mt-4">
+            OpenCode will open in full-screen mode with your environment
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+type Page = 'agents' | 'mcps' | 'runs' | 'environments' | 'bundles' | 'ship' | 'code';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('agents');
@@ -3234,6 +3412,8 @@ function App() {
         return <BundlesPage />;
       case 'ship':
         return <ShipCLIPage />;
+      case 'code':
+        return <CodePage />;
       default:
         return <AgentsCanvas />;
     }

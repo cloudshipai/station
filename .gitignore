@@ -136,3 +136,6 @@ stn-test
 # SQLite temporary files
 *.db-shm
 *.db-wal
+
+# OpenCode binaries for embedding (temporary - don't commit)
+internal/opencode/binaries/

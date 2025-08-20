@@ -96,16 +96,25 @@ func (s *Server) createSSHServer() *ssh.Server {
 }
 
 func (s *Server) teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
-	// Check if chat mode is requested via environment variable or user command
-	// For now, we'll default to the new chat interface
-	// TODO: Add configuration option to choose between chat and traditional TUI
+	// Check user command arguments for interface preference
+	command := strings.Join(session.Command(), " ")
 	
-	// Create the new chat TUI model
-	chatModel := tui.NewChatModel(s.db, s.repos, s.executionQueue, s.genkitService)
-	
-	return chatModel, []tea.ProgramOption{
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
+	switch {
+	case strings.Contains(command, "chat"):
+		// Use chat interface when explicitly requested
+		chatModel := tui.NewChatModel(s.db, s.repos, s.executionQueue, s.genkitService)
+		return chatModel, []tea.ProgramOption{
+			tea.WithAltScreen(),
+			tea.WithMouseCellMotion(),
+		}
+	default:
+		// Default to traditional TUI with OpenCode splash screen
+		// This gives users access to OpenCode options via SSH
+		tuiModel := tui.NewModel(s.db, s.executionQueue, s.genkitService)
+		return tuiModel, []tea.ProgramOption{
+			tea.WithAltScreen(),
+			tea.WithMouseCellMotion(),
+		}
 	}
 }
 
@@ -195,3 +204,4 @@ func (s *Server) authenticateSystemUserPassword(username string, password string
 	// System users should use SSH key authentication only
 	return false
 }
+

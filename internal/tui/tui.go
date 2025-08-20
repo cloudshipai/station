@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	
 	"station/internal/db"
+	"station/internal/opencode"
 	"station/internal/services"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
@@ -70,6 +72,10 @@ type Model struct {
 	showSplash    bool
 	loading     bool
 	error       string
+	
+	// Splash screen selection
+	splashOptions    []string
+	selectedOption   int
 }
 
 // KeyMap defines keyboard shortcuts
@@ -79,6 +85,11 @@ type KeyMap struct {
 	Quit        key.Binding
 	Help        key.Binding
 	Refresh     key.Binding
+}
+
+// Message types for TUI communication
+type errorMsg struct {
+	err error
 }
 
 // Default key bindings
@@ -110,6 +121,14 @@ func DefaultKeyMap() KeyMap {
 // NewModel creates a new TUI model
 func NewModel(database db.Database, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface) *Model {
 	
+	// Build splash screen options
+	splashOptions := []string{"Station Dashboard"}
+	if opencode.IsAvailable() {
+		splashOptions = append(splashOptions, "OpenCode IDE")
+		splashOptions = append(splashOptions, "OpenCode IDE (Docker Sandbox)")
+		splashOptions = append(splashOptions, "OpenCode IDE (Dagger Sandbox)")
+	}
+	
 	return &Model{
 		db:             database,
 		executionQueue: executionQueue,
@@ -120,6 +139,8 @@ func NewModel(database db.Database, executionQueue *services.ExecutionQueueServi
 		help:           help.New(),
 		loading:        true,
 		showSplash:     true,
+		splashOptions:  splashOptions,
+		selectedOption: 0,
 	}
 }
 
@@ -196,12 +217,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 		return m, nil
 		
+	case errorMsg:
+		// Handle error messages by storing them and showing to user
+		m.error = msg.err.Error()
+		m.showSplash = false  // Show dashboard with error
+		return m, nil
+		
 	case tea.KeyMsg:
 		// Handle splash screen first
 		if m.showSplash {
-			if msg.String() == "enter" || msg.String() == " " || msg.String() == "q" {
-				m.showSplash = false
+			switch msg.String() {
+			case "up", "k":
+				if m.selectedOption > 0 {
+					m.selectedOption--
+				}
 				return m, nil
+			case "down", "j":
+				if m.selectedOption < len(m.splashOptions)-1 {
+					m.selectedOption++
+				}
+				return m, nil
+			case "enter", " ":
+				return m.handleSplashSelection()
+			case "q", "ctrl+c":
+				return m, tea.Quit
 			}
 			return m, nil // Consume all other keys in splash mode
 		}
@@ -671,6 +710,69 @@ func (m Model) getActiveTabModel() tabs.TabModel {
 	}
 }
 
+// handleSplashSelection handles the splash screen selection
+func (m *Model) handleSplashSelection() (tea.Model, tea.Cmd) {
+	if m.selectedOption >= len(m.splashOptions) {
+		m.selectedOption = 0
+	}
+	
+	selectedOption := m.splashOptions[m.selectedOption]
+	
+	switch selectedOption {
+	case "Station Dashboard":
+		// Continue with normal Station TUI
+		m.showSplash = false
+		return m, nil
+	case "OpenCode IDE":
+		// Exit Station TUI first, then launch OpenCode natively
+		return m, tea.Sequence(
+			tea.Quit, // Exit Station TUI immediately
+			func() tea.Msg {
+				// This will run after the TUI has quit
+				err := opencode.ExtractAndLaunchTUI()
+				if err != nil {
+					fmt.Printf("Error launching OpenCode: %v\n", err)
+				}
+				return nil
+			},
+		)
+	case "OpenCode IDE (Docker Sandbox)":
+		// Exit Station TUI first, then launch OpenCode in Docker sandbox
+		return m, tea.Sequence(
+			tea.Quit, // Exit Station TUI immediately
+			func() tea.Msg {
+				// Set environment variable to trigger Docker sandbox mode
+				os.Setenv("OPENCODE_SANDBOX", "docker")
+				// This will run after the TUI has quit
+				err := opencode.ExtractAndLaunchTUI()
+				if err != nil {
+					fmt.Printf("Error launching OpenCode in Docker sandbox: %v\n", err)
+				}
+				return nil
+			},
+		)
+	case "OpenCode IDE (Dagger Sandbox)":
+		// Exit Station TUI first, then launch OpenCode in Dagger sandbox
+		return m, tea.Sequence(
+			tea.Quit, // Exit Station TUI immediately
+			func() tea.Msg {
+				// Set environment variable to trigger Dagger sandbox mode
+				os.Setenv("OPENCODE_SANDBOX", "dagger")
+				// This will run after the TUI has quit
+				err := opencode.ExtractAndLaunchTUI()
+				if err != nil {
+					fmt.Printf("Error launching OpenCode in Dagger sandbox: %v\n", err)
+				}
+				return nil
+			},
+		)
+	default:
+		// Default to Station Dashboard
+		m.showSplash = false
+		return m, nil
+	}
+}
+
 // renderSplashScreen renders the initial splash screen with Station ASCII art
 func (m *Model) renderSplashScreen() string {
 	// Station ASCII art - using the same as the banner but larger
@@ -736,18 +838,41 @@ func (m *Model) renderSplashScreen() string {
 	// More spacing
 	sections = append(sections, "")
 	sections = append(sections, "")
+	
+	// Selection options
+	for i, option := range m.splashOptions {
+		var style lipgloss.Style
+		var prefix string
+		
+		if i == m.selectedOption {
+			style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#1a1b26")).
+				Background(styles.Primary).
+				Bold(true).
+				Padding(0, 2).
+				Margin(0, 1)
+			prefix = "▶ "
+		} else {
+			style = lipgloss.NewStyle().
+				Foreground(styles.Primary).
+				Padding(0, 2).
+				Margin(0, 1)
+			prefix = "  "
+		}
+		
+		optionText := style.Render(prefix + option)
+		sections = append(sections, optionText)
+	}
+	
+	// Spacing
 	sections = append(sections, "")
 	
-	// Enter prompt
-	promptStyle := lipgloss.NewStyle().
-		Foreground(styles.Primary).
-		Bold(true).
-		Background(lipgloss.Color("#1a1a1a")).
-		Padding(0, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(styles.Primary)
-	prompt := promptStyle.Render("Press ENTER to continue")
-	sections = append(sections, prompt)
+	// Instructions
+	instructStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		Italic(true)
+	instructions := instructStyle.Render("↑/↓ navigate • enter select • q quit")
+	sections = append(sections, instructions)
 	
 	// Join all sections
 	content := lipgloss.JoinVertical(lipgloss.Center, sections...)
