@@ -187,7 +187,7 @@ func runMainServer() error {
 	}
 	log.Printf("🤖 Serving agents from environment: %s", environmentName)
 	
-	sshServer := ssh.New(cfg, database, executionQueueSvc, agentSvc, localMode)
+	sshServer := ssh.New(cfg, database, repos, executionQueueSvc, agentSvc, localMode)
 	mcpServer := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
 	apiServer := api.New(cfg, database, localMode)
