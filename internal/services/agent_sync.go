@@ -210,7 +210,7 @@ func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environment
 
 	// Cleanup orphaned agents (declarative: filesystem is source of truth)
 	if !options.DryRun {
-		orphanedCount, err := s.cleanupOrphanedAgents(ctx, agentsDir, environmentName, promptFiles)
+		orphanedCount, err := s.cleanupOrphanedAgents(ctx, agentsDir, environmentName, promptFiles, options)
 		if err != nil {
 			logging.Info("Warning: Failed to cleanup orphaned agents: %v", err)
 		} else if orphanedCount > 0 {
