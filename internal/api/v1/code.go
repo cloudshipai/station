@@ -1,14 +1,17 @@
 package v1
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"sync"
 	"time"
 
-	"dagger.io/dagger"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"github.com/creack/pty"
 	"station/internal/opencode"
 )
 
@@ -22,10 +25,22 @@ type CodeSession struct {
 	Status     string    `json:"status"`
 	ContainerID string   `json:"-"` // Internal container reference
 	Workspace   string   `json:"-"` // Internal workspace path
+	PTY        *os.File  `json:"-"` // PTY for OpenCode process
+	Cmd        *exec.Cmd `json:"-"` // Running OpenCode command
+	mu         sync.Mutex `json:"-"` // Mutex for thread-safe access
 }
 
 // Global session manager (in production, use Redis or database)
 var activeSessions = make(map[string]*CodeSession)
+
+// WebSocket upgrader for terminal connections
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		// Allow connections from any origin for development
+		// In production, implement proper origin checking
+		return true
+	},
+}
 
 // StartCodeSession starts a new OpenCode session in Dagger
 func (h *APIHandlers) startCodeSession(c *gin.Context) {
@@ -57,25 +72,21 @@ func (h *APIHandlers) startCodeSession(c *gin.Context) {
 	// Store session
 	activeSessions[sessionID] = session
 	
-	// Start OpenCode in Dagger container
+	// Start OpenCode with PTY (direct approach for WebSocket integration)
 	go func() {
-		if err := startDaggerOpenCode(sessionID, port, req.Workspace); err != nil {
+		if err := startOpenCodeWithPTY(sessionID, req.Workspace); err != nil {
 			session.Status = "failed"
 			fmt.Printf("Failed to start OpenCode session %s: %v\n", sessionID, err)
 			return
 		}
-		
-		// Update session with URL
-		session.URL = fmt.Sprintf("http://localhost:%d", port)
-		session.Status = "running"
-		fmt.Printf("OpenCode session %s started on port %d\n", sessionID, port)
+		fmt.Printf("OpenCode session %s started with PTY\n", sessionID)
 	}()
 	
 	// Return session info (poll for URL)
 	c.JSON(http.StatusOK, gin.H{
 		"session_id": sessionID,
 		"status":     "starting",
-		"url":        fmt.Sprintf("http://localhost:%d", port), // Optimistic URL
+		"message":    "OpenCode container is starting. Use /api/v1/code/session/{id} to get the URL when ready.",
 	})
 }
 
@@ -84,7 +95,7 @@ func (h *APIHandlers) stopCodeSession(c *gin.Context) {
 	// Stop all active sessions (for simplicity)
 	for sessionID, session := range activeSessions {
 		if session.Status == "running" {
-			if err := stopDaggerOpenCode(sessionID); err != nil {
+			if err := stopOpenCodeSession(sessionID); err != nil {
 				fmt.Printf("Failed to stop OpenCode session %s: %v\n", sessionID, err)
 			}
 		}
@@ -110,96 +121,106 @@ func (h *APIHandlers) getCodeSession(c *gin.Context) {
 	c.JSON(http.StatusOK, session)
 }
 
-// startDaggerOpenCode starts OpenCode in a Dagger container with web server
-func startDaggerOpenCode(sessionID string, port int, workspace string) error {
-	fmt.Printf("🚀 Starting Dagger OpenCode container for session %s on port %d\n", sessionID, port)
+// startOpenCodeWithPTY starts OpenCode directly with PTY for WebSocket connection
+func startOpenCodeWithPTY(sessionID, workspace string) error {
+	fmt.Printf("🚀 Starting OpenCode with PTY for session %s\n", sessionID)
 	
 	// Check if OpenCode is available
 	if !opencode.IsAvailable() {
 		return fmt.Errorf("OpenCode not available in this build")
 	}
 	
-	// Create context for Dagger operations
-	ctx := context.Background()
-	
-	// Connect to Dagger engine
-	client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stderr))
-	if err != nil {
-		return fmt.Errorf("failed to connect to Dagger: %w", err)
-	}
-	defer client.Close()
-	
 	// Create workspace directory if it doesn't exist
 	if workspace == "" {
 		workspace = "/tmp/opencode-workspace-" + sessionID
 	}
-	err = os.MkdirAll(workspace, 0755)
-	if err != nil {
+	if err := os.MkdirAll(workspace, 0755); err != nil {
 		return fmt.Errorf("failed to create workspace directory: %w", err)
 	}
 	
-	// Get embedded OpenCode binary data
+	// Get session to update with PTY info
+	session, exists := activeSessions[sessionID]
+	if !exists {
+		return fmt.Errorf("session %s not found", sessionID)
+	}
+	
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	
+	// Extract embedded OpenCode binary to temp location
 	binaryData, err := opencode.GetEmbeddedBinary()
 	if err != nil {
 		return fmt.Errorf("failed to get embedded OpenCode binary: %w", err)
 	}
 	
-	// Create Dagger directory and file references
-	workspaceDir := client.Host().Directory(workspace)
-	
-	// Create container with OpenCode web server
-	container := client.Container().
-		From("ubuntu:22.04").
-		// Install required dependencies
-		WithExec([]string{"apt-get", "update"}).
-		WithExec([]string{"apt-get", "install", "-y", "ca-certificates"}).
-		// Create OpenCode binary from embedded data
-		WithNewFile("/usr/local/bin/opencode", string(binaryData), dagger.ContainerWithNewFileOpts{
-			Permissions: 0755,
-		}).
-		// Mount workspace
-		WithMountedDirectory("/workspace", workspaceDir).
-		// Set working directory
-		WithWorkdir("/workspace").
-		// Set environment variables for API keys (only if they exist)
-		WithEnvVariable("ANTHROPIC_API_KEY", os.Getenv("ANTHROPIC_API_KEY")).
-		WithEnvVariable("OPENAI_API_KEY", os.Getenv("OPENAI_API_KEY")).
-		// Expose the port for web interface
-		WithExposedPort(port)
-	
-	// Store container reference for later cleanup (before starting)
-	if session, exists := activeSessions[sessionID]; exists {
-		session.Workspace = workspace
+	// Create temporary binary file
+	tmpBinary := fmt.Sprintf("/tmp/opencode-%s", sessionID)
+	if err := os.WriteFile(tmpBinary, binaryData, 0755); err != nil {
+		return fmt.Errorf("failed to write OpenCode binary: %w", err)
 	}
 	
-	// Start the container with OpenCode server in the background
+	// Set up environment for OpenCode
+	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
+	if anthropicKey == "" {
+		anthropicKey = "sk-ant-dummy-key-for-testing"
+	}
+	openaiKey := os.Getenv("OPENAI_API_KEY")
+	if openaiKey == "" {
+		openaiKey = "sk-dummy-key-for-testing"
+	}
+	
+	// Create OpenCode command with workspace
+	cmd := exec.Command(tmpBinary, workspace)
+	cmd.Dir = workspace
+	cmd.Env = append(os.Environ(),
+		"ANTHROPIC_API_KEY="+anthropicKey,
+		"OPENAI_API_KEY="+openaiKey,
+		"TERM=xterm-256color",
+		"OPENCODE=1",
+	)
+	
+	// Start OpenCode with PTY
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		os.Remove(tmpBinary)
+		return fmt.Errorf("failed to start OpenCode with PTY: %w", err)
+	}
+	
+	// Store PTY and command in session
+	session.PTY = ptmx
+	session.Cmd = cmd
+	session.Workspace = workspace
+	session.Status = "running"
+	session.URL = fmt.Sprintf("ws://localhost:8585/api/v1/code/session/%s/ws", sessionID)
+	session.ContainerID = fmt.Sprintf("opencode-pty-%s", sessionID)
+	
+	fmt.Printf("✅ OpenCode started with PTY for session %s - WebSocket at %s\n", sessionID, session.URL)
+	
+	// Monitor process in background
 	go func() {
-		// Start container as a service with the serve command
-		service := container.WithExec([]string{"/usr/local/bin/opencode", "serve", "--hostname", "0.0.0.0", "--port", fmt.Sprintf("%d", port), "/workspace"}).
-			AsService()
-		
-		// Start the service and get the running container
-		_, err := service.Start(ctx)
-		if err != nil {
-			fmt.Printf("❌ Failed to start OpenCode container for session %s: %v\n", sessionID, err)
-			if session, exists := activeSessions[sessionID]; exists {
-				session.Status = "failed"
+		defer func() {
+			session.mu.Lock()
+			if session.PTY != nil {
+				session.PTY.Close()
 			}
-			return
-		}
+			session.Status = "stopped"
+			session.mu.Unlock()
+			os.Remove(tmpBinary)
+			fmt.Printf("🛑 OpenCode session %s terminated\n", sessionID)
+		}()
 		
-		fmt.Printf("✅ OpenCode container started successfully for session %s\n", sessionID)
-		if session, exists := activeSessions[sessionID]; exists {
-			session.Status = "running"
+		// Wait for process to finish
+		if err := cmd.Wait(); err != nil {
+			fmt.Printf("⚠️ OpenCode process for session %s exited with error: %v\n", sessionID, err)
 		}
 	}()
 	
 	return nil
 }
 
-// stopDaggerOpenCode stops a Dagger OpenCode container
-func stopDaggerOpenCode(sessionID string) error {
-	fmt.Printf("🛑 Stopping Dagger OpenCode container for session %s\n", sessionID)
+// stopOpenCodeSession stops an OpenCode PTY session
+func stopOpenCodeSession(sessionID string) error {
+	fmt.Printf("🛑 Stopping OpenCode session %s\n", sessionID)
 	
 	// Get session info
 	session, exists := activeSessions[sessionID]
@@ -207,30 +228,101 @@ func stopDaggerOpenCode(sessionID string) error {
 		return fmt.Errorf("session %s not found", sessionID)
 	}
 	
-	// Create context for Dagger operations
-	ctx := context.Background()
+	session.mu.Lock()
+	defer session.mu.Unlock()
 	
-	// Connect to Dagger engine
-	client, err := dagger.Connect(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Dagger: %w", err)
+	// Close PTY and terminate process
+	if session.PTY != nil {
+		session.PTY.Close()
+		session.PTY = nil
 	}
-	defer client.Close()
 	
-	// For Dagger containers, we rely on context cancellation for cleanup
-	// The container will be automatically cleaned up when the Dagger client disconnects
-	fmt.Printf("🧹 Cleaning up Dagger resources for session %s\n", sessionID)
+	if session.Cmd != nil && session.Cmd.Process != nil {
+		// Try graceful termination first
+		session.Cmd.Process.Signal(os.Interrupt)
+		
+		// Wait a bit, then force kill if needed
+		go func() {
+			time.Sleep(2 * time.Second)
+			if session.Cmd.Process != nil {
+				session.Cmd.Process.Kill()
+			}
+		}()
+	}
 	
-	// Clean up workspace directory if it exists
-	if session.Workspace != "" {
-		err = os.RemoveAll(session.Workspace)
+	session.Status = "stopped"
+	
+	fmt.Printf("✅ OpenCode session %s stopped\n", sessionID)
+	return nil
+}
+
+// handleCodeWebSocket handles WebSocket connections for OpenCode terminal sessions
+func (h *APIHandlers) handleCodeWebSocket(c *gin.Context) {
+	sessionID := c.Param("id")
+	
+	// Get session
+	session, exists := activeSessions[sessionID]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+		return
+	}
+	
+	session.mu.Lock()
+	if session.Status != "running" || session.PTY == nil {
+		session.mu.Unlock()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Session not ready"})
+		return
+	}
+	pty := session.PTY
+	session.mu.Unlock()
+	
+	// Upgrade HTTP connection to WebSocket
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		fmt.Printf("Failed to upgrade WebSocket for session %s: %v\n", sessionID, err)
+		return
+	}
+	defer conn.Close()
+	
+	fmt.Printf("🔌 WebSocket connected for OpenCode session %s\n", sessionID)
+	
+	// Handle bidirectional communication between WebSocket and PTY
+	go func() {
+		// PTY -> WebSocket (read from OpenCode, send to browser)
+		buf := make([]byte, 1024)
+		for {
+			n, err := pty.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					fmt.Printf("Error reading from PTY for session %s: %v\n", sessionID, err)
+				}
+				break
+			}
+			
+			if err := conn.WriteMessage(websocket.TextMessage, buf[:n]); err != nil {
+				fmt.Printf("Error writing to WebSocket for session %s: %v\n", sessionID, err)
+				break
+			}
+		}
+	}()
+	
+	// WebSocket -> PTY (read from browser, send to OpenCode)
+	for {
+		_, message, err := conn.ReadMessage()
 		if err != nil {
-			fmt.Printf("⚠️ Warning: Failed to clean up workspace for session %s: %v\n", sessionID, err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				fmt.Printf("WebSocket error for session %s: %v\n", sessionID, err)
+			}
+			break
+		}
+		
+		if _, err := pty.Write(message); err != nil {
+			fmt.Printf("Error writing to PTY for session %s: %v\n", sessionID, err)
+			break
 		}
 	}
 	
-	fmt.Printf("✅ Container cleanup completed for session %s\n", sessionID)
-	return nil
+	fmt.Printf("🔌 WebSocket disconnected for OpenCode session %s\n", sessionID)
 }
 
 // registerCodeRoutes registers OpenCode-related API routes
@@ -240,4 +332,5 @@ func (h *APIHandlers) registerCodeRoutes(router *gin.RouterGroup) {
 	codeGroup.POST("/start", h.startCodeSession)
 	codeGroup.POST("/stop", h.stopCodeSession)
 	codeGroup.GET("/session/:id", h.getCodeSession)
+	codeGroup.GET("/session/:id/ws", h.handleCodeWebSocket)
 }

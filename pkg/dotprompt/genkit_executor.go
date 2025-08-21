@@ -501,14 +501,11 @@ func (e *GenKitExecutor) getActiveModel(dpConfig *DotpromptConfig) string {
 
 
 // isModelSupported checks if a model is supported (for testing)
+// NOTE: Removed model restrictions - users should be able to use any model name
 func (e *GenKitExecutor) isModelSupported(dpConfig *DotpromptConfig) bool {
-	supportedModels := map[string]bool{
-		"gemini-2.0-flash-exp": true,
-		"gpt-4":                true,
-		"gpt-3.5-turbo":        true,
-	}
-	
-	return supportedModels[dpConfig.Model]
+	// Always return true - let the user define whatever model they want
+	// The actual validation should happen at the API provider level
+	return true
 }
 
 // buildDotpromptFromAgent constructs complete dotprompt content from database agent data

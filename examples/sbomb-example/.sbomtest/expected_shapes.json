@@ -1,0 +1,14 @@
+{
+  "grype": { 
+    "keys": ["matches", "distro"], 
+    "minMatches": 1 
+  },
+  "osv": { 
+    "keys": ["sarifLogVersion"], 
+    "format": "sarif" 
+  },
+  "scancode": { 
+    "keys": ["files"], 
+    "minFiles": 1 
+  }
+}

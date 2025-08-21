@@ -1,0 +1,10 @@
+{
+  "name": "sbomb-example",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "lodash": "4.17.19",
+    "minimist": "0.0.8"
+  }
+}

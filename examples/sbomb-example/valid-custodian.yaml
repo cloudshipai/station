@@ -1,0 +1,6 @@
+policies:
+  - name: s3-encryption-check
+    resource: s3
+    filters:
+      - type: bucket-encryption
+        state: false

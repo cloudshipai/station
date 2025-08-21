@@ -1,0 +1,60 @@
+policies:
+  - name: ec2-tag-compliance
+    resource: ec2
+    description: |
+      Ensure all EC2 instances have required tags
+    filters:
+      - or:
+        - "tag:Environment": absent
+        - "tag:Owner": absent
+        - "tag:Project": absent
+    actions:
+      - type: tag
+        tags:
+          ComplianceStatus: "Non-Compliant"
+      - type: notify
+        template: default
+        subject: "EC2 Instance Missing Required Tags"
+        violation_desc: "Instance lacks required tags: Environment, Owner, or Project"
+
+  - name: s3-public-access-block
+    resource: s3
+    description: |
+      Ensure S3 buckets have public access block enabled
+    filters:
+      - not:
+        - type: public-access-block
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+    actions:
+      - type: set-public-access-block
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  - name: rds-backup-check
+    resource: rds
+    description: |
+      Check RDS instances have automated backups enabled
+    filters:
+      - type: value
+        key: BackupRetentionPeriod
+        value: 0
+        op: eq
+    actions:
+      - type: modify-db
+        backup-retention-period: 7
+
+  - name: unused-security-groups
+    resource: security-group
+    description: |
+      Find and report unused security groups
+    filters:
+      - unused
+    actions:
+      - type: notify
+        template: default
+        subject: "Unused Security Groups Detected"

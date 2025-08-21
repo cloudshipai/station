@@ -1,0 +1,5 @@
+policies:
+  - name: test-policy
+    resource: ec2
+    filters:
+      - "tag:Environment": absent

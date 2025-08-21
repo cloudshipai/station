@@ -1,0 +1,36 @@
+policies:
+  - name: unencrypted-s3-buckets
+    resource: s3
+    description: |
+      Find S3 buckets without encryption enabled
+    filters:
+      - type: bucket-encryption
+        state: False
+    actions:
+      - type: notify
+        template: default
+        subject: "S3 Bucket Without Encryption"
+        
+  - name: public-rds-instances
+    resource: rds
+    description: |
+      Find RDS instances that are publicly accessible
+    filters:
+      - PubliclyAccessible: true
+    actions:
+      - type: notify
+        template: default
+        subject: "Publicly Accessible RDS Instance"
+        
+  - name: old-ebs-snapshots
+    resource: ebs-snapshot
+    description: |
+      Find EBS snapshots older than 30 days
+    filters:
+      - type: age
+        days: 30
+        op: gt
+    actions:
+      - type: notify
+        template: default
+        subject: "Old EBS Snapshots Found"

@@ -3234,18 +3234,21 @@ const AgentEditor = () => {
 const CodePage = () => {
   const [isCodeActive, setIsCodeActive] = useState(false);
   const [sessionUrl, setSessionUrl] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const terminalInstanceRef = useRef<any>(null);
+  const websocketRef = useRef<WebSocket | null>(null);
 
   const startCodeSession = async () => {
     try {
       setIsCodeActive(true);
       
-      // Call API to start OpenCode Dagger container
+      // Call API to start OpenCode with PTY
       const response = await fetch('/api/v1/code/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspace: '/workspace',
+          workspace: '/tmp/opencode-workspace',
           environment: 'default'
         })
       });
@@ -3255,7 +3258,38 @@ const CodePage = () => {
       }
       
       const data = await response.json();
-      setSessionUrl(data.url);
+      const newSessionId = data.session_id;
+      setSessionId(newSessionId);
+      
+      // Poll for session to become ready
+      const pollForSession = async () => {
+        for (let i = 0; i < 30; i++) { // Max 30 seconds
+          try {
+            const sessionResponse = await fetch(`/api/v1/code/session/${newSessionId}`);
+            if (sessionResponse.ok) {
+              const sessionData = await sessionResponse.json();
+              if (sessionData.status === 'running' && sessionData.url) {
+                setSessionUrl(sessionData.url);
+                return sessionData.url;
+              }
+              if (sessionData.status === 'failed') {
+                throw new Error('OpenCode session failed to start');
+              }
+            }
+          } catch (pollError) {
+            console.warn('Session poll error:', pollError);
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        }
+        throw new Error('Session failed to start within 30 seconds');
+      };
+      
+      const wsUrl = await pollForSession();
+      
+      // Initialize xterm.js terminal
+      if (terminalRef.current && wsUrl) {
+        await initializeTerminal(wsUrl);
+      }
       
     } catch (error) {
       console.error('Failed to start code session:', error);
@@ -3263,9 +3297,115 @@ const CodePage = () => {
     }
   };
 
+  const initializeTerminal = async (wsUrl: string) => {
+    // Dynamically import xterm.js
+    const { Terminal } = await import('@xterm/xterm');
+    const { FitAddon } = await import('@xterm/addon-fit');
+    
+    // Create terminal instance
+    const terminal = new Terminal({
+      theme: {
+        background: '#1a1b26',
+        foreground: '#a9b1d6',
+        cursor: '#f7768e',
+        selection: '#283457',
+        black: '#32344a',
+        red: '#f7768e',
+        green: '#9ece6a',
+        yellow: '#e0af68',
+        blue: '#7aa2f7',
+        magenta: '#ad8ee6',
+        cyan: '#449dab',
+        white: '#787c99',
+        brightBlack: '#444b6a',
+        brightRed: '#ff7a93',
+        brightGreen: '#b9f27c',
+        brightYellow: '#ff9e64',
+        brightBlue: '#7da6ff',
+        brightMagenta: '#bb9af7',
+        brightCyan: '#0db9d7',
+        brightWhite: '#acb0d0'
+      },
+      fontFamily: 'JetBrains Mono, Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace',
+      fontSize: 14,
+      cursorBlink: true,
+      allowTransparency: false,
+      rows: 30,
+      cols: 120
+    });
+    
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    
+    // Mount terminal
+    if (terminalRef.current) {
+      terminal.open(terminalRef.current);
+      fitAddon.fit();
+      
+      // Store terminal instance
+      terminalInstanceRef.current = terminal;
+      
+      // Connect WebSocket
+      const ws = new WebSocket(wsUrl);
+      websocketRef.current = ws;
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected to OpenCode');
+        terminal.focus();
+      };
+      
+      ws.onmessage = (event) => {
+        terminal.write(event.data);
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket disconnected from OpenCode');
+        terminal.write('\r\n\x1b[31mConnection to OpenCode lost\x1b[0m\r\n');
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        terminal.write('\r\n\x1b[31mWebSocket error occurred\x1b[0m\r\n');
+      };
+      
+      // Send terminal input to WebSocket
+      terminal.onData((data) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(data);
+        }
+      });
+      
+      // Handle window resize
+      const resizeHandler = () => {
+        fitAddon.fit();
+      };
+      window.addEventListener('resize', resizeHandler);
+      
+      // Cleanup function
+      return () => {
+        window.removeEventListener('resize', resizeHandler);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+        terminal.dispose();
+      };
+    }
+  };
+
   const exitCodeSession = () => {
+    // Cleanup WebSocket and terminal
+    if (websocketRef.current) {
+      websocketRef.current.close();
+      websocketRef.current = null;
+    }
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.dispose();
+      terminalInstanceRef.current = null;
+    }
+    
     setIsCodeActive(false);
     setSessionUrl(null);
+    setSessionId(null);
     
     // Call API to stop OpenCode session
     fetch('/api/v1/code/stop', { method: 'POST' })
@@ -3303,12 +3443,11 @@ const CodePage = () => {
           </div>
         </div>
         
-        {/* Terminal iframe */}
+        {/* Terminal container */}
         <div className="flex-1">
-          <iframe 
-            src={sessionUrl}
-            className="w-full h-full border-0"
-            title="OpenCode Terminal"
+          <div 
+            ref={terminalRef}
+            className="w-full h-full bg-tokyo-bg border border-tokyo-blue7 rounded"
           />
         </div>
       </div>
