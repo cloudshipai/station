@@ -91,12 +91,8 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 
 	// All agents now use unified dotprompt execution system
 		
-		// Setup cleanup of MCP connections when dotprompt execution completes
-		defer func() {
-			aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
-			// Clear the slice for next execution
-			aee.activeMCPClients = nil
-		}()
+		// Note: MCP cleanup will happen after dotprompt execution completes
+		// Do NOT defer cleanup here as it would disconnect connections while LLM is still using tools
 		
 		// Get agent tools for the new dotprompt system
 		agentTools, err := aee.repos.AgentTools.ListAgentTools(agent.ID)
@@ -167,7 +163,24 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		aee.genkitProvider.SetOpenAILogCallback(logCallback)
 		
 		response, err := executor.ExecuteAgentWithDatabaseConfigAndLogging(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
+		
+		// Clean up MCP connections after execution is complete
+		aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
+		aee.activeMCPClients = nil
+		
 		if err != nil {
+			// Log the execution failure for debugging
+			if logCallback != nil {
+				logCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "error",
+					"message":   "Agent execution failed",
+					"details": map[string]interface{}{
+						"error":    err.Error(),
+						"duration": time.Since(startTime).String(),
+					},
+				})
+			}
 			return nil, fmt.Errorf("dotprompt execution failed: %w", err)
 		}
 		
