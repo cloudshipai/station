@@ -17,6 +17,7 @@ import (
 type ProviderConfig struct {
 	Provider string
 	Model    string
+	BaseURL  string
 }
 
 // Predefined models for each provider
@@ -39,8 +40,8 @@ var defaultModel = "gemini-2.5-flash"
 // Provider descriptions for better UX
 var providerDescriptions = map[string]string{
 	"gemini": "Google's Gemini models - Fast, capable, and cost-effective",
-	"openai": "OpenAI's GPT models - Industry standard with excellent performance", 
-	"custom": "Configure a custom provider (Anthropic, Ollama, etc.)",
+	"openai": "OpenAI & OpenAI-compatible models - GPT, Claude, Ollama, etc.", 
+	"custom": "Configure a custom provider (any OpenAI-compatible endpoint)",
 }
 
 // setupProviderInteractively runs the interactive provider setup
@@ -81,7 +82,7 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ProviderConfig{Provider: customProvider, Model: customModel}, nil
+		return &ProviderConfig{Provider: customProvider, Model: customModel, BaseURL: ""}, nil
 	} else {
 		// Step 2b: Model selection for known provider
 		log.Printf("Selecting model for provider: '%s'\n", provider)
@@ -92,7 +93,7 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 		log.Printf("Selected model: '%s'\n", model)
 	}
 
-	return &ProviderConfig{Provider: provider, Model: model}, nil
+	return &ProviderConfig{Provider: provider, Model: model, BaseURL: ""}, nil
 }
 
 // detectProviderFromEnv checks environment variables for API keys

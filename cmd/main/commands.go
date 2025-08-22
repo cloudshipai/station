@@ -475,6 +475,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	var providerConfig *ProviderConfig
 	provider, _ := cmd.Flags().GetString("provider")
 	model, _ := cmd.Flags().GetString("model")
+	baseURL, _ := cmd.Flags().GetString("base-url")
 	useDefaults, _ := cmd.Flags().GetBool("yes")
 
 	if !configExists && !useDefaults && provider == "" {
@@ -483,7 +484,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			fmt.Printf("⚠️  Provider setup failed: %v\n", err)
 			fmt.Printf("💡 Using defaults: provider=%s, model=%s\n", defaultProvider, defaultModel)
-			providerConfig = &ProviderConfig{Provider: defaultProvider, Model: defaultModel}
+			providerConfig = &ProviderConfig{Provider: defaultProvider, Model: defaultModel, BaseURL: baseURL}
 		}
 	} else {
 		// Use flags, defaults, or skip if config exists
@@ -497,11 +498,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 				model = defaultModel
 			}
 		}
-		providerConfig = &ProviderConfig{Provider: provider, Model: model}
+		providerConfig = &ProviderConfig{Provider: provider, Model: model, BaseURL: baseURL}
 		
 		if !configExists {
 			fmt.Printf("🤖 Using AI provider: %s\n", providerConfig.Provider)
 			fmt.Printf("   Model: %s\n", providerConfig.Model)
+			if providerConfig.BaseURL != "" {
+				fmt.Printf("   Base URL: %s\n", providerConfig.BaseURL)
+			}
 		}
 	}
 
@@ -519,6 +523,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if !configExists {
 		viper.Set("ai_provider", providerConfig.Provider)
 		viper.Set("ai_model", providerConfig.Model)
+		if providerConfig.BaseURL != "" {
+			viper.Set("ai_base_url", providerConfig.BaseURL)
+		}
 	}
 	
 	// Set workspace and database paths
@@ -586,6 +593,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if !configExists {
 		fmt.Printf("🤖 AI Provider: %s\n", providerConfig.Provider)
 		fmt.Printf("🧠 Model: %s\n", providerConfig.Model)
+		if providerConfig.BaseURL != "" {
+			fmt.Printf("🔗 Base URL: %s\n", providerConfig.BaseURL)
+		}
 	}
 	
 	// Run ship sync after everything is set up (only if ship setup succeeded)
