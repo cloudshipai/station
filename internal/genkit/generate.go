@@ -70,6 +70,7 @@ func NewStationModelGenerator(client *openai.Client, modelName string) *StationM
 		modelName: modelName,
 		request: &openai.ChatCompletionNewParams{
 			Model: (modelName),
+			ParallelToolCalls: openai.Bool(false), // Prevent obsessive parallel tool calling
 		},
 	}
 }
@@ -397,28 +398,37 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 	logging.Debug("Station GenKit: About to send %d messages to LLM API", len(g.request.Messages))
 	
 	// Enforce turn limit before making API call
+	// NOTE: Turn limit enforcement moved to genkit_executor.go for proper final response handling
+	// The executor will handle turn limits and attempt a final response without tools
 	const MAX_TURNS = 25
 	messageCount := len(g.request.Messages)
+	
+	// If we're close to turn limit, log warning about potential mass tool calling
+	if messageCount >= MAX_TURNS - 5 {
+		logging.Debug("Station GenKit: Near turn limit (%d/%d), AI should avoid multiple tool calls", messageCount, MAX_TURNS)
+		// NOTE: We can't easily modify tool choice here, but we log for awareness
+	}
+	
 	if messageCount >= MAX_TURNS {
-		limitError := fmt.Errorf("conversation exceeded maximum turn limit (%d messages >= %d max turns)", messageCount, MAX_TURNS)
-		logging.Debug("Station GenKit: %v", limitError)
+		// Log warning but don't fail immediately - let executor handle it
+		logging.Debug("Station GenKit: Conversation approaching/exceeding %d turn limit (%d messages)", MAX_TURNS, messageCount)
 		
-		// Log turn limit hit for real-time progress tracking
+		// Log turn limit warning for real-time progress tracking
 		if g.logCallback != nil {
 			g.logCallback(map[string]interface{}{
 				"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
-				"level":     "error",
-				"message":   fmt.Sprintf("TURN LIMIT EXCEEDED: %d messages >= %d max turns", messageCount, MAX_TURNS),
+				"level":     "warning",
+				"message":   fmt.Sprintf("TURN LIMIT REACHED: %d messages >= %d max turns - executor will handle final response", messageCount, MAX_TURNS),
 				"details": map[string]interface{}{
 					"current_messages": messageCount,
 					"max_turns": MAX_TURNS,
-					"enforcement_point": "openai_plugin",
-					"actionable_solution": "Reduce conversation length or increase max_turns limit",
+					"enforcement_point": "openai_plugin_warning_only",
+					"action": "Will be handled by executor's custom turn limit logic",
 				},
 			})
 		}
 		
-		return nil, limitError
+		// Continue execution - let the executor handle the turn limit with final response logic
 	}
 	
 	// Log conversation approaching limits

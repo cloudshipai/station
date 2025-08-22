@@ -169,8 +169,9 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	var generateOpts []ai.GenerateOption
 	generateOpts = append(generateOpts, ai.WithModelName(modelName))  // Use same as traditional
 	generateOpts = append(generateOpts, ai.WithMessages(genkitMessages...))
-	maxTurns := 25
-	generateOpts = append(generateOpts, ai.WithMaxTurns(maxTurns))
+	maxToolCalls := 25  // Allow 25 tool calls, then force final response
+	// Set GenKit maxTurns higher than our custom limit to let our logic handle it
+	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
 	
 	// Add tool call limits to prevent obsessive tool calling
 	maxToolCallsPerConversation := 15
@@ -179,23 +180,23 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	// Add MCP tools if available (same as traditional)
 	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
 	
-	// Check if we're approaching turn limits and log warning
+	// Check if we're approaching tool call limits and log warning
 	messageCount := len(genkitMessages)
-	turnsRemaining := maxTurns - messageCount
+	toolCallsRemaining := maxToolCalls - messageCount  // Approximation based on message count
 	
-	if e.logCallback != nil && turnsRemaining <= 5 {
+	if e.logCallback != nil && toolCallsRemaining <= 5 {
 		e.logCallback(map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
 			"level":     "warning",
-			"message":   fmt.Sprintf("APPROACHING TURN LIMIT: %d messages, only %d turns remaining (max: %d)", 
-				messageCount, turnsRemaining, maxTurns),
+			"message":   fmt.Sprintf("APPROACHING TOOL CALL LIMIT: %d messages, approximately %d tool calls remaining (max: %d)", 
+				messageCount, toolCallsRemaining, maxToolCalls),
 			"details": map[string]interface{}{
 				"current_messages": messageCount,
-				"max_turns": maxTurns,
-				"turns_remaining": turnsRemaining,
+				"max_tool_calls": maxToolCalls,
+				"calls_remaining": toolCallsRemaining,
 				"risk_level": func() string {
-					if turnsRemaining <= 2 { return "CRITICAL" }
-					if turnsRemaining <= 5 { return "HIGH" }
+					if toolCallsRemaining <= 2 { return "CRITICAL" }
+					if toolCallsRemaining <= 5 { return "HIGH" }
 					return "MEDIUM"
 				}(),
 			},
@@ -253,8 +254,8 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		LogCallback:         e.logCallback,
 	}
 	
-	// Wrap Generate with tool call monitoring
-	response, err := e.generateWithToolLimits(ctx, genkitApp, generateOpts, toolCallTracker)
+	// Use custom generate with proper turn limiting and final response capability  
+	response, err := e.generateWithCustomTurnLimit(ctx, genkitApp, generateOpts, toolCallTracker, maxToolCalls, modelName)
 	generateDuration := time.Since(generateStartTime)
 	
 	// Log immediately after Generate call (success or failure)
@@ -885,7 +886,7 @@ func (e *GenKitExecutor) buildDotpromptFromAgent(agent models.Agent, agentTools 
 	content.WriteString("config:\n")
 	content.WriteString("  temperature: 0.3\n")
 	content.WriteString("  max_tokens: 2000\n")
-	content.WriteString("  maxTurns: 25\n")
+	// NOTE: Removed maxTurns from config - we handle turn limiting manually
 	
 	// Input schema with merged custom and default variables
 	schemaHelper := schema.NewExportHelper()
@@ -1006,13 +1007,163 @@ func (e *GenKitExecutor) convertDotpromptToGenkitMessages(dotpromptMessages []do
 	return genkitMessages, nil
 }
 
-// generateWithToolLimits wraps genkit.Generate with tool call monitoring and limits
-func (e *GenKitExecutor) generateWithToolLimits(ctx context.Context, genkitApp *genkit.Genkit, generateOpts []ai.GenerateOption, tracker *ToolCallTracker) (*ai.ModelResponse, error) {
+// generateWithCustomTurnLimit implements custom turn limiting with final response capability
+func (e *GenKitExecutor) generateWithCustomTurnLimit(ctx context.Context, genkitApp *genkit.Genkit, generateOpts []ai.GenerateOption, tracker *ToolCallTracker, maxToolCalls int, modelName string) (*ai.ModelResponse, error) {
 	
-	// Call the actual Generate method
+	// First attempt: normal generation with tools
 	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
 	
-	// Analyze the response for tool calling patterns
+	// If the first call succeeds, check message count to see if we need final response
+	if err == nil && response != nil && response.Request != nil && response.Request.Messages != nil {
+		msgCount := len(response.Request.Messages)
+		
+		// If we're at or past turn limit, force final response
+		if msgCount >= 25 {
+			if tracker.LogCallback != nil {
+				tracker.LogCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "warning",
+					"message":   fmt.Sprintf("Turn limit reached (%d messages >= 25) - requesting final response without tools", msgCount),
+					"details": map[string]interface{}{
+						"message_count": msgCount,
+						"max_turns": 25,
+						"solution": "Requesting AI to provide final summary without additional tools",
+					},
+				})
+			}
+			
+			// Extract conversation history and add final prompt
+			currentMessages := response.Request.Messages
+			summaryMessage := &ai.Message{
+				Role: ai.RoleUser,
+				Content: []*ai.Part{
+					ai.NewTextPart("You have reached the 25-turn conversation limit. Please provide a final response summarizing what you've learned and completed so far. Do not call any more tools."),
+				},
+			}
+			currentMessages = append(currentMessages, summaryMessage)
+			
+			// Create final response options WITHOUT any tools
+			var finalOpts []ai.GenerateOption
+			finalOpts = append(finalOpts, ai.WithModelName(modelName))
+			finalOpts = append(finalOpts, ai.WithMessages(currentMessages...))
+			// Intentionally NOT adding tools - force text-only response
+			
+			// Attempt final generation WITHOUT tools
+			finalResponse, finalErr := genkit.Generate(ctx, genkitApp, finalOpts...)
+			
+			if finalErr != nil {
+				if tracker.LogCallback != nil {
+					tracker.LogCallback(map[string]interface{}{
+						"timestamp": time.Now().Format(time.RFC3339),
+						"level":     "error",
+						"message":   "Final response generation failed after hitting turn limit",
+						"details": map[string]interface{}{
+							"final_error": finalErr.Error(),
+						},
+					})
+				}
+				// Return the original successful response instead of failing completely
+				return response, nil
+			}
+			
+			// Success! Final response generated
+			if tracker.LogCallback != nil {
+				tracker.LogCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "info",
+					"message":   "Successfully generated final response after hitting turn limit",
+					"details": map[string]interface{}{
+						"response_length": len(finalResponse.Text()),
+						"final_generation": true,
+						"turn_limit_handled": true,
+					},
+				})
+			}
+			
+			return finalResponse, nil
+		}
+	}
+	
+	// Check if we hit other turn limit errors from the original call
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "turn") {
+		// This is a turn limit error - we need to try a final response without tools
+		if tracker.LogCallback != nil {
+			tracker.LogCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "warning",
+				"message":   "Hit tool call limit - attempting final response without tools",
+				"details": map[string]interface{}{
+					"original_error": err.Error(),
+					"max_tool_calls": maxToolCalls,
+					"solution": "Requesting AI to provide final summary without additional tools",
+				},
+			})
+		}
+		
+		// Extract conversation history from the failed response
+		var currentMessages []*ai.Message
+		if response != nil && response.Request != nil && response.Request.Messages != nil {
+			currentMessages = response.Request.Messages
+		}
+		
+		// If we got a conversation history, try to generate a final response
+		if len(currentMessages) > 0 {
+			// Add a final user message requesting summary without tools
+			summaryMessage := &ai.Message{
+				Role: ai.RoleUser,
+				Content: []*ai.Part{
+					ai.NewTextPart("You have reached the tool usage limit. Please provide a final response summarizing what you've learned and completed so far. Do not call any more tools."),
+				},
+			}
+			currentMessages = append(currentMessages, summaryMessage)
+			
+			// Create final response options WITHOUT any tools
+			var finalOpts []ai.GenerateOption
+			finalOpts = append(finalOpts, ai.WithModelName(modelName))
+			finalOpts = append(finalOpts, ai.WithMessages(currentMessages...))
+			// Intentionally NOT adding tools - force text-only response
+			
+			// Attempt final generation WITHOUT tools
+			finalResponse, finalErr := genkit.Generate(ctx, genkitApp, finalOpts...)
+			
+			if finalErr != nil {
+				// Both attempts failed - return original error but with explanation
+				if tracker.LogCallback != nil {
+					tracker.LogCallback(map[string]interface{}{
+						"timestamp": time.Now().Format(time.RFC3339),
+						"level":     "error",
+						"message":   "Both tool-enabled and final response generation failed",
+						"details": map[string]interface{}{
+							"original_error": err.Error(),
+							"final_error": finalErr.Error(),
+						},
+					})
+				}
+				return nil, fmt.Errorf("conversation failed: %v (final attempt also failed: %v)", err, finalErr)
+			}
+			
+			// Success! Final response generated
+			if tracker.LogCallback != nil {
+				tracker.LogCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "info",
+					"message":   "Successfully generated final response after hitting tool limit",
+					"details": map[string]interface{}{
+						"response_length": len(finalResponse.Text()),
+						"final_generation": true,
+						"tool_calls_made": "reached_limit",
+					},
+				})
+			}
+			
+			return finalResponse, nil
+		}
+		
+		// Fallback: if we can't create a final response, return original error
+		return nil, err
+	}
+	
+	// No turn limit error - analyze the response for tool calling patterns  
 	if err == nil && response != nil && response.Request != nil && response.Request.Messages != nil {
 		violation := e.analyzeToolCallPatterns(response.Request.Messages, tracker)
 		if violation != "" {
@@ -1053,6 +1204,12 @@ func (e *GenKitExecutor) generateWithToolLimits(ctx context.Context, genkitApp *
 	}
 	
 	return response, err
+}
+
+// generateWithToolLimits wraps genkit.Generate with tool call monitoring and limits (deprecated)
+func (e *GenKitExecutor) generateWithToolLimits(ctx context.Context, genkitApp *genkit.Genkit, generateOpts []ai.GenerateOption, tracker *ToolCallTracker) (*ai.ModelResponse, error) {
+	// This method is deprecated in favor of generateWithCustomTurnLimit
+	return e.generateWithCustomTurnLimit(ctx, genkitApp, generateOpts, tracker, 25, "gpt-4")
 }
 
 // analyzeToolCallPatterns examines conversation messages to detect problematic tool usage
