@@ -119,6 +119,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 		syncGroup.Use(h.requireAdminInServerMode())
 	}
 	syncGroup.POST("", h.syncConfigurations)
+	syncGroup.POST("/interactive", h.startInteractiveSync)
+	syncGroup.GET("/status/:id", h.getSyncStatus)
+	syncGroup.POST("/variables", h.submitVariables)
 
 	// Bundles route - admin only in server mode
 	bundlesGroup := router.Group("/bundles")
