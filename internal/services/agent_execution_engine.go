@@ -191,6 +191,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			Duration:       time.Since(startTime), // Use our own timing
 			ModelName:      response.ModelName,
 			StepsUsed:      response.StepsUsed,
+			StepsTaken:     int64(response.StepsUsed), // Map StepsUsed to StepsTaken for database
 			ToolsUsed:      response.ToolsUsed,
 			Error:          response.Error,
 			TokenUsage:     response.TokenUsage,           // ✅ Pass through token usage from dotprompt
