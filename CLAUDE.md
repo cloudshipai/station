@@ -38,6 +38,14 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - **Database**: All runs saved with complete metadata via `UpdateCompletionWithMetadata`
   - **Commands**: `stn runs list` and `stn runs inspect <id> -v` show full execution details
 
+- **Interactive Sync Flow**: ✅ Complete UI-based variable prompting system
+  - **Features**: Real-time sync progress, variable forms, Monaco Editor integration
+  - **Multi-Variable Detection**: Handles all missing variables in single interaction
+  - **Error Handling**: Graceful 404 handling, automatic UI refresh after completion
+  - **UI Integration**: SyncModal with Tokyo Night theme, uncontrolled inputs
+  - **Backend**: Custom VariableResolver, enhanced DeclarativeSync service
+  - **User Experience**: Seamless variable prompting without CLI intervention
+
 ### Known Issues
 - **SSH/MCP Shutdown Performance**: Graceful shutdown takes ~1m25s (should be <10s)
   - Likely causes: hanging MCP connections, database locks, resource cleanup delays
@@ -81,10 +89,10 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 - **Before committing**: Ensure no temporary files pollute the root directory
 
 ### Branch Strategy
-- **main**: Production-ready code
-- **develop**: Long-lived staging branch for testing development builds
-- **feature/***: Feature branches (PRs to develop, then develop → main)
-- **CI only runs on main and develop** - feature branches test via PRs
+- **main**: Production-ready code and primary development branch
+- **feature/***: Feature branches for larger features (PRs to main when ready)
+- **fix/***: Bug fix branches (PRs to main when ready)
+- Work directly on main for small changes and iterative development
 
 ### Security Guidelines
 - Only assist with defensive security tasks
