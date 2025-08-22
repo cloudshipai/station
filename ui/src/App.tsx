@@ -44,7 +44,12 @@ const StationBanner = () => (
 const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isOpen: boolean, onClose: () => void }) => {
   const [runDetails, setRunDetails] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
 
+  // Fetch run details with auto-refresh for running agents
   useEffect(() => {
     if (!isOpen || !runId) return;
 
@@ -61,8 +66,76 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
       }
     };
 
+    // Initial fetch
     fetchRunDetails();
-  }, [runId, isOpen]);
+
+    // Set up auto-refresh for running agents
+    const pollRunDetails = async () => {
+      setAutoRefreshing(true);
+      try {
+        const response = await agentRunsApi.getById(runId);
+        setRunDetails(response.data.run);
+      } catch (error) {
+        console.error('Failed to refresh run details:', error);
+      } finally {
+        setAutoRefreshing(false);
+      }
+    };
+
+    // Check if we need to poll (run is still running)
+    if (runDetails?.status === 'running') {
+      setAutoRefreshing(true);
+      const interval = setInterval(pollRunDetails, 3000); // Poll every 3 seconds
+      return () => {
+        clearInterval(interval);
+        setAutoRefreshing(false);
+      };
+    } else {
+      setAutoRefreshing(false);
+    }
+  }, [runId, isOpen, runDetails?.status]);
+
+  // Fetch logs when logs panel is opened
+  useEffect(() => {
+    if (!isOpen || !runId || !showLogs) return;
+
+    const fetchLogs = async () => {
+      setLogsLoading(true);
+      try {
+        const response = await apiClient.get(`/runs/${runId}/logs?limit=100`);
+        console.log('Logs API response:', response.data); // Debug logging
+        setLogs(response.data.logs || []);
+      } catch (error) {
+        console.error('Failed to fetch logs:', error);
+        setLogs([]);
+      } finally {
+        setLogsLoading(false);
+      }
+    };
+
+    // Always fetch logs when the panel is opened
+    fetchLogs();
+  }, [runId, isOpen, showLogs]);
+
+  // Separate polling effect for running agents
+  useEffect(() => {
+    if (!isOpen || !runId || !showLogs || !runDetails) return;
+
+    const isRunning = runDetails.status === 'running';
+    if (!isRunning) return;
+
+    const fetchLogs = async () => {
+      try {
+        const response = await apiClient.get(`/runs/${runId}/logs?limit=100`);
+        setLogs(response.data.logs || []);
+      } catch (error) {
+        console.error('Failed to fetch logs during polling:', error);
+      }
+    };
+
+    const interval = setInterval(fetchLogs, 2000); // Poll every 2 seconds
+    return () => clearInterval(interval);
+  }, [runId, isOpen, showLogs, runDetails]);
 
   if (!isOpen) return null;
 
@@ -74,13 +147,31 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
           <div className="flex items-center gap-3">
             <Play className="h-6 w-6 text-tokyo-green" />
             <h2 className="text-xl font-mono font-semibold text-tokyo-green">Run Details</h2>
+            {autoRefreshing && (
+              <div className="flex items-center gap-2 text-tokyo-comment">
+                <div className="w-4 h-4 border-2 border-tokyo-comment border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm font-mono">Auto-refreshing...</span>
+              </div>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-tokyo-bg-highlight text-tokyo-comment hover:text-tokyo-fg transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLogs(!showLogs)}
+              className={`px-3 py-2 rounded-lg font-mono text-sm transition-colors ${
+                showLogs 
+                  ? 'bg-tokyo-green text-tokyo-bg hover:bg-tokyo-green/80' 
+                  : 'bg-tokyo-bg-highlight text-tokyo-comment hover:text-tokyo-green hover:bg-tokyo-bg-highlight/80'
+              }`}
+            >
+              {showLogs ? '🟢 Live Logs' : '⚫ Show Logs'}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-tokyo-bg-highlight text-tokyo-comment hover:text-tokyo-fg transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -274,6 +365,71 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Live Logs Section */}
+              {showLogs && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-mono font-medium text-tokyo-fg">Live Execution Logs</h3>
+                    {logsLoading && (
+                      <div className="flex items-center gap-2 text-tokyo-comment">
+                        <div className="w-4 h-4 border-2 border-tokyo-comment border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-sm font-mono">Loading logs...</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-tokyo-bg border border-tokyo-blue7 rounded-lg p-4 max-h-96 overflow-auto">
+                    {logs.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="text-tokyo-comment font-mono">
+                          {logsLoading ? 'Loading logs...' : 'No logs available'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {logs.map((log, index) => (
+                          <div key={index} className="border-b border-tokyo-blue7/30 pb-2 last:border-b-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-mono px-2 py-1 rounded ${
+                                log.level === 'error' ? 'bg-tokyo-red/20 text-tokyo-red' :
+                                log.level === 'warning' ? 'bg-tokyo-orange/20 text-tokyo-orange' :
+                                log.level === 'info' ? 'bg-tokyo-blue/20 text-tokyo-blue' :
+                                'bg-tokyo-comment/20 text-tokyo-comment'
+                              }`}>
+                                {log.level?.toUpperCase() || 'LOG'}
+                              </span>
+                              <span className="text-xs text-tokyo-comment font-mono">
+                                {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : ''}
+                              </span>
+                            </div>
+                            <div className="text-sm text-tokyo-fg font-mono leading-relaxed">
+                              {log.message}
+                            </div>
+                            {log.details && (
+                              <div className="mt-2 text-xs text-tokyo-comment bg-tokyo-bg-dark rounded p-2">
+                                <pre className="whitespace-pre-wrap">
+                                  {typeof log.details === 'string' ? log.details : JSON.stringify(log.details, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {runDetails?.status === 'running' && (
+                    <div className="mt-2 text-xs text-tokyo-comment font-mono flex items-center gap-2">
+                      <div className="w-2 h-2 bg-tokyo-green rounded-full animate-pulse"></div>
+                      Auto-refreshing every 2 seconds...
+                    </div>
+                  )}
+                  {runDetails?.status === 'completed' && (
+                    <div className="mt-2 text-xs text-tokyo-comment font-mono">
+                      Execution completed - logs are final
+                    </div>
+                  )}
                 </div>
               )}
             </div>

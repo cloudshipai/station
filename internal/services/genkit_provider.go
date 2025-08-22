@@ -19,6 +19,7 @@ type GenKitProvider struct {
 	currentProvider string // Track current AI provider to detect changes
 	currentAPIKey   string // Track current API key to detect changes
 	currentBaseURL  string // Track current base URL to detect changes
+	openaiPlugin    *stationGenkit.StationOpenAI // Keep reference to OpenAI plugin for logging callbacks
 }
 
 // NewGenKitProvider creates a new GenKit provider manager
@@ -84,6 +85,9 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 			logging.Debug("Using custom OpenAI base URL: %s", cfg.AIBaseURL)
 		}
 		
+		// Store reference to plugin for logging callbacks
+		gp.openaiPlugin = stationOpenAI
+		
 		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(stationOpenAI))
 		
 	case "googlegenai", "gemini":
@@ -114,4 +118,11 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 	
 	gp.genkitApp = genkitApp
 	return nil
+}
+
+// SetOpenAILogCallback sets the logging callback for the OpenAI plugin (if using OpenAI provider)
+func (gp *GenKitProvider) SetOpenAILogCallback(callback func(map[string]interface{})) {
+	if gp.openaiPlugin != nil {
+		gp.openaiPlugin.SetLogCallback(callback)
+	}
 }
