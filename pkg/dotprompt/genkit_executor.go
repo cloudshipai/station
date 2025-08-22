@@ -16,6 +16,16 @@ import (
 	"github.com/google/dotprompt/go/dotprompt"
 )
 
+// ToolCallTracker monitors tool usage to prevent obsessive calling loops
+type ToolCallTracker struct {
+	TotalCalls          int
+	ConsecutiveSameTool map[string]int
+	LastToolUsed        string
+	MaxToolCalls        int
+	MaxConsecutive      int
+	LogCallback         func(map[string]interface{})
+}
+
 // GenKitExecutor handles dotprompt-based agent execution using GenKit Generate
 type GenKitExecutor struct{
 	logCallback func(map[string]interface{})
@@ -162,6 +172,10 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	maxTurns := 25
 	generateOpts = append(generateOpts, ai.WithMaxTurns(maxTurns))
 	
+	// Add tool call limits to prevent obsessive tool calling
+	maxToolCallsPerConversation := 15
+	maxConsecutiveSameTool := 3
+	
 	// Add MCP tools if available (same as traditional)
 	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
 	
@@ -229,7 +243,18 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		})
 	}
 	
-	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
+	// Create tool call tracker to prevent obsessive loops
+	toolCallTracker := &ToolCallTracker{
+		TotalCalls:          0,
+		ConsecutiveSameTool: make(map[string]int),
+		LastToolUsed:        "",
+		MaxToolCalls:        maxToolCallsPerConversation,
+		MaxConsecutive:      maxConsecutiveSameTool,
+		LogCallback:         e.logCallback,
+	}
+	
+	// Wrap Generate with tool call monitoring
+	response, err := e.generateWithToolLimits(ctx, genkitApp, generateOpts, toolCallTracker)
 	generateDuration := time.Since(generateStartTime)
 	
 	// Log immediately after Generate call (success or failure)
@@ -979,4 +1004,251 @@ func (e *GenKitExecutor) convertDotpromptToGenkitMessages(dotpromptMessages []do
 	}
 	
 	return genkitMessages, nil
+}
+
+// generateWithToolLimits wraps genkit.Generate with tool call monitoring and limits
+func (e *GenKitExecutor) generateWithToolLimits(ctx context.Context, genkitApp *genkit.Genkit, generateOpts []ai.GenerateOption, tracker *ToolCallTracker) (*ai.ModelResponse, error) {
+	
+	// Call the actual Generate method
+	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
+	
+	// Analyze the response for tool calling patterns
+	if err == nil && response != nil && response.Request != nil && response.Request.Messages != nil {
+		violation := e.analyzeToolCallPatterns(response.Request.Messages, tracker)
+		if violation != "" {
+			// Log the pattern violation
+			if tracker.LogCallback != nil {
+				tracker.LogCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "warning",
+					"message":   "Tool calling pattern violation detected",
+					"details": map[string]interface{}{
+						"violation":     violation,
+						"total_calls":   tracker.TotalCalls,
+						"last_tool":     tracker.LastToolUsed,
+						"consecutive":   tracker.ConsecutiveSameTool,
+						"conversation_length": len(response.Request.Messages),
+					},
+				})
+			}
+		}
+		
+		// Check if we should force completion to prevent endless loops
+		shouldComplete, reason := e.shouldForceCompletion(response.Request.Messages, tracker)
+		if shouldComplete {
+			if tracker.LogCallback != nil {
+				tracker.LogCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "warning",
+					"message":   "Agent should complete task - enough information gathered",
+					"details": map[string]interface{}{
+						"completion_reason": reason,
+						"total_calls":       tracker.TotalCalls,
+						"conversation_length": len(response.Request.Messages),
+						"recommendation":    "Agent should provide final response instead of calling more tools",
+					},
+				})
+			}
+		}
+	}
+	
+	return response, err
+}
+
+// analyzeToolCallPatterns examines conversation messages to detect problematic tool usage
+func (e *GenKitExecutor) analyzeToolCallPatterns(messages []*ai.Message, tracker *ToolCallTracker) string {
+	// Reset tracker state
+	tracker.TotalCalls = 0
+	tracker.ConsecutiveSameTool = make(map[string]int)
+	tracker.LastToolUsed = ""
+	
+	var consecutiveCount int
+	
+	// Analyze all messages for tool calling patterns
+	for i, msg := range messages {
+		if msg.Content == nil {
+			continue
+		}
+		
+		// Count tool requests in this message
+		toolsInMessage := 0
+		var toolsUsed []string
+		
+		for _, part := range msg.Content {
+			if part.IsToolRequest() && part.ToolRequest != nil {
+				toolName := part.ToolRequest.Name
+				toolsUsed = append(toolsUsed, toolName)
+				toolsInMessage++
+				tracker.TotalCalls++
+				
+				// Track consecutive usage
+				if toolName == tracker.LastToolUsed {
+					consecutiveCount++
+				} else {
+					consecutiveCount = 1
+					tracker.LastToolUsed = toolName
+				}
+				
+				tracker.ConsecutiveSameTool[toolName] = consecutiveCount
+				
+				// Check for violations
+				if tracker.TotalCalls > tracker.MaxToolCalls {
+					return fmt.Sprintf("Total tool calls (%d) exceeded limit (%d)", tracker.TotalCalls, tracker.MaxToolCalls)
+				}
+				
+				if consecutiveCount > tracker.MaxConsecutive {
+					return fmt.Sprintf("Consecutive calls to '%s' (%d) exceeded limit (%d)", toolName, consecutiveCount, tracker.MaxConsecutive)
+				}
+			}
+		}
+		
+		// Detect mass tool calling in single message (warning sign)
+		if toolsInMessage > 5 {
+			if tracker.LogCallback != nil {
+				tracker.LogCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "warning", 
+					"message":   fmt.Sprintf("Mass tool calling detected: %d tools in message %d", toolsInMessage, i),
+					"details": map[string]interface{}{
+						"tools_in_message": toolsInMessage,
+						"message_index":    i,
+						"tools_used":       toolsUsed,
+					},
+				})
+			}
+		}
+	}
+	
+	// Look for escalating pattern (2 -> 12 -> more)
+	if tracker.TotalCalls > 10 {
+		if tracker.LogCallback != nil {
+			tracker.LogCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "warning",
+				"message":   "High tool usage detected - potential obsessive calling pattern",
+				"details": map[string]interface{}{
+					"total_calls":         tracker.TotalCalls,
+					"conversation_length": len(messages),
+					"avg_tools_per_turn":  float64(tracker.TotalCalls) / float64(len(messages)),
+				},
+			})
+		}
+	}
+	
+	return "" // No violation detected
+}
+
+// shouldForceCompletion determines if conversation should be forced to complete
+func (e *GenKitExecutor) shouldForceCompletion(messages []*ai.Message, tracker *ToolCallTracker) (bool, string) {
+	messageCount := len(messages)
+	
+	// Force completion if approaching turn limit
+	if messageCount >= 20 {
+		return true, fmt.Sprintf("Approaching turn limit (%d messages)", messageCount)
+	}
+	
+	// Force completion if too many tools used  
+	if tracker.TotalCalls >= 12 {
+		return true, fmt.Sprintf("Tool usage limit reached (%d calls)", tracker.TotalCalls)
+	}
+	
+	// Detect repetitive information gathering pattern
+	if messageCount > 8 {
+		recentToolCalls := e.extractRecentToolCalls(messages, 5)
+		if e.isRepetitivePattern(recentToolCalls) {
+			return true, "Repetitive tool calling detected - likely sufficient information gathered"
+		}
+	}
+	
+	// Check for information gathering vs action taking balance
+	if tracker.TotalCalls > 6 {
+		infoGatheringTools := 0
+		for _, msg := range messages {
+			if msg.Content == nil {
+				continue
+			}
+			for _, part := range msg.Content {
+				if part.IsToolRequest() && part.ToolRequest != nil {
+					toolName := part.ToolRequest.Name
+					if e.isInformationGatheringTool(toolName) {
+						infoGatheringTools++
+					}
+				}
+			}
+		}
+		
+		// If >80% of tools are information gathering, suggest completion
+		if float64(infoGatheringTools)/float64(tracker.TotalCalls) > 0.8 {
+			return true, fmt.Sprintf("High information gathering ratio (%d/%d) - suggest final response", infoGatheringTools, tracker.TotalCalls)
+		}
+	}
+	
+	return false, ""
+}
+
+// extractRecentToolCalls gets tool names from recent messages
+func (e *GenKitExecutor) extractRecentToolCalls(messages []*ai.Message, lookback int) []string {
+	var tools []string
+	start := len(messages) - lookback
+	if start < 0 {
+		start = 0
+	}
+	
+	for i := start; i < len(messages); i++ {
+		msg := messages[i]
+		if msg.Content == nil {
+			continue
+		}
+		for _, part := range msg.Content {
+			if part.IsToolRequest() && part.ToolRequest != nil {
+				tools = append(tools, part.ToolRequest.Name)
+			}
+		}
+	}
+	
+	return tools
+}
+
+// isRepetitivePattern detects if the same tools are being called repeatedly
+func (e *GenKitExecutor) isRepetitivePattern(toolCalls []string) bool {
+	if len(toolCalls) < 3 {
+		return false
+	}
+	
+	// Count occurrences
+	counts := make(map[string]int)
+	for _, tool := range toolCalls {
+		counts[tool]++
+	}
+	
+	// If any tool appears >50% of the time in recent calls, it's repetitive
+	for _, count := range counts {
+		if float64(count)/float64(len(toolCalls)) > 0.5 {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// isInformationGatheringTool determines if a tool is primarily for information gathering
+func (e *GenKitExecutor) isInformationGatheringTool(toolName string) bool {
+	infoTools := map[string]bool{
+		"list_directory":      true,
+		"directory_tree":      true,
+		"read_text_file":      true,
+		"get_file_info":       true,
+		"search_files":        true,
+		"list_files":          true,
+		"read_file":           true,
+		"stat_file":           true,
+		"find_files":          true,
+		"grep_files":          true,
+		"get_system_info":     true,
+		"check_status":        true,
+		"list_processes":      true,
+		"get_environment":     true,
+	}
+	
+	return infoTools[toolName]
 }
