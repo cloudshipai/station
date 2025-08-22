@@ -22,6 +22,7 @@ import { Bot, Database, Settings, Plus, Eye, X, Play, ChevronDown, ChevronRight,
 import '@xyflow/react/dist/style.css';
 import Editor from '@monaco-editor/react';
 import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi, bundlesApi, type BundleInfo } from './api/station';
+import { RunsPage } from './components/runs/RunsPage';
 import { apiClient } from './api/client';
 import { getLayoutedNodes } from './utils/layoutUtils';
 // Import node components when needed
@@ -2105,7 +2106,6 @@ const MCPServers = () => {
 };
 
 const Runs = () => {
-  const [runs, setRuns] = useState<any[]>([]);
   const [modalRunId, setModalRunId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
@@ -2121,71 +2121,9 @@ const Runs = () => {
     setModalRunId(null);
   };
 
-  // Fetch runs data (not affected by environment changes - shows all runs)
-  useEffect(() => {
-    const fetchRuns = async () => {
-      try {
-        const response = await agentRunsApi.getAll();
-        setRuns(response.data.runs || []);
-      } catch (error) {
-        console.error('Failed to fetch runs:', error);
-        setRuns([]);
-      }
-    };
-    fetchRuns();
-  }, [environmentContext?.refreshTrigger]); // Only refetch on manual refresh, not environment change
-
-  // Show all runs regardless of environment selection
-  const filteredRuns = runs || [];
-
   return (
     <div className="h-full flex flex-col bg-tokyo-bg">
-      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-        <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
-      </div>
-      <div className="flex-1 p-4 overflow-y-auto">
-        {filteredRuns.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <Play className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-              <div className="text-tokyo-fg font-mono text-lg mb-2">No agent runs found</div>
-              <div className="text-tokyo-comment font-mono text-sm">
-                Agent executions will appear here when agents are run
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-4 max-h-full overflow-y-auto">
-            {filteredRuns.map((run) => (
-              <div key={run.id} className="p-4 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-tokyo">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-mono font-medium text-tokyo-green">{run.agent_name}</h3>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => openRunModal(run.id)}
-                      className="p-2 rounded-lg hover:bg-tokyo-bg-highlight text-tokyo-comment hover:text-tokyo-blue transition-colors"
-                      title="View run details"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <span className={`px-2 py-1 text-xs rounded font-mono ${
-                      run.status === 'completed' ? 'bg-tokyo-green text-tokyo-bg' :
-                      run.status === 'running' ? 'bg-tokyo-blue text-tokyo-bg' :
-                      'bg-tokyo-red text-tokyo-bg'
-                    }`}>
-                      {run.status}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-2 flex gap-4 text-sm text-tokyo-comment font-mono">
-                  <span>Duration: {run.duration_seconds ? `${run.duration_seconds.toFixed(1)}s` : 'N/A'}</span>
-                  <span>Time: {new Date(run.started_at).toLocaleTimeString()}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <RunsPage onRunClick={openRunModal} refreshTrigger={environmentContext?.refreshTrigger} />
       
       {/* Run Details Modal */}
       <RunDetailsModal 
