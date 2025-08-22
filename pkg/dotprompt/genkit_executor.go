@@ -3,6 +3,7 @@ package dotprompt
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	
@@ -48,24 +49,41 @@ func (e *GenKitExecutor) ExecuteAgentWithDotpromptTemplate(extractor *RuntimeExt
 
 func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string) (*ExecutionResponse, error) {
 	startTime := time.Now()
+	
+	// Add panic recovery to catch any silent panics
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("🚨 PANIC RECOVERED in ExecuteAgentWithDotprompt: %v", r)
+		}
+	}()
+	
 	logging.Debug("Starting unified dotprompt execution for agent %s", agent.Name)
+	log.Printf("🔥 DEBUG-FLOW: Function entry - agent ID %d, name %s", agent.ID, agent.Name)
+	log.Printf("🔥 DEBUG-FLOW: Input parameters - agentTools: %d, mcpTools: %d, task length: %d", len(agentTools), len(mcpTools), len(task))
 	
 	// 1. Use agent prompt directly if it contains multi-role syntax
 	var dotpromptContent string
+	log.Printf("🔥 DEBUG-FLOW: Step 1 - Checking agent prompt format")
 	if e.isDotpromptContent(agent.Prompt) {
 		// Agent already has dotprompt format (either frontmatter or multi-role)
 		dotpromptContent = agent.Prompt
 		logging.Debug("Using agent prompt directly, length: %d", len(dotpromptContent))
+		log.Printf("🔥 DEBUG-FLOW: Step 1 - Using agent prompt directly")
 	} else {
 		// Legacy agent, build frontmatter
+		log.Printf("🔥 DEBUG-FLOW: Step 1 - Building dotprompt from legacy agent")
 		dotpromptContent = e.buildDotpromptFromAgent(agent, agentTools, "default")
 		logging.Debug("Built dotprompt content, length: %d", len(dotpromptContent))
+		log.Printf("🔥 DEBUG-FLOW: Step 1 - Built dotprompt content successfully")
 	}
 	
 	// 2. Use dotprompt library directly for multi-role rendering (bypasses GenKit constraint)
+	logging.Debug("DEBUG-FLOW: Step 2 - Creating dotprompt instance")
 	dp := dotprompt.NewDotprompt(nil)
+	logging.Debug("DEBUG-FLOW: Step 2 - Compiling dotprompt content (length: %d)", len(dotpromptContent))
 	promptFunc, err := dp.Compile(dotpromptContent, nil)
 	if err != nil {
+		logging.Debug("DEBUG-FLOW: Step 2 - FAILED to compile dotprompt: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -75,27 +93,34 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	logging.Debug("Dotprompt compiled successfully")
+	logging.Debug("DEBUG-FLOW: Step 2 - Dotprompt compiled successfully")
 	
 	// 3. Render the prompt with merged input data (default + custom schema)
+	logging.Debug("DEBUG-FLOW: Step 3 - Creating schema helper")
 	schemaHelper := schema.NewExportHelper()
 	
 	// For now, only use userInput. Custom input data can be added via call_agent variables parameter
+	logging.Debug("DEBUG-FLOW: Step 3 - Getting merged input data")
 	inputData, err := schemaHelper.GetMergedInputData(&agent, task, nil)
 	if err != nil {
 		logging.Debug("Schema helper failed: %v, using basic userInput", err)
+		logging.Debug("DEBUG-FLOW: Step 3 - Schema helper failed, using fallback")
 		// Fallback to basic userInput on schema error
 		inputData = map[string]interface{}{
 			"userInput": task,
 		}
 	}
 	logging.Debug("Input data prepared with %d fields", len(inputData))
+	logging.Debug("DEBUG-FLOW: Step 3 - Input data prepared successfully")
 	
 	data := &dotprompt.DataArgument{
 		Input: inputData,
 	}
 	
+	logging.Debug("DEBUG-FLOW: Step 3 - Rendering prompt with data")
 	renderedPrompt, err := promptFunc(data, nil)
 	if err != nil {
+		logging.Debug("DEBUG-FLOW: Step 3 - FAILED to render dotprompt: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -105,10 +130,13 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	logging.Debug("Rendered %d messages from dotprompt", len(renderedPrompt.Messages))
+	logging.Debug("DEBUG-FLOW: Step 3 - Rendered prompt successfully with %d messages", len(renderedPrompt.Messages))
 	
 	// 4. Convert dotprompt messages to GenKit messages
+	logging.Debug("DEBUG-FLOW: Step 4 - Converting dotprompt messages to GenKit format")
 	genkitMessages, err := e.convertDotpromptToGenkitMessages(renderedPrompt.Messages)
 	if err != nil {
+		logging.Debug("DEBUG-FLOW: Step 4 - FAILED to convert messages: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -117,17 +145,22 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		}, nil
 	}
 	logging.Debug("Converted to %d GenKit messages", len(genkitMessages))
+	logging.Debug("DEBUG-FLOW: Step 4 - Message conversion successful")
 	
 	// 5. Get model name with proper provider prefix (same logic as agent_execution_engine.go)
+	logging.Debug("DEBUG-FLOW: Step 5 - Getting model configuration")
 	baseModelName := renderedPrompt.Model
 	if baseModelName == "" {
 		baseModelName = "gemini-1.5-flash" // fallback
 	}
+	logging.Debug("DEBUG-FLOW: Step 5 - Base model: %s", baseModelName)
 	
 	// Load configuration 
+	logging.Debug("DEBUG-FLOW: Step 5 - Loading config")
 	cfg, err := config.Load()
 	if err != nil {
 		logging.Debug("Failed to load config: %v, using defaults", err)
+		logging.Debug("DEBUG-FLOW: Step 5 - Config load failed, using defaults")
 		cfg = &config.Config{
 			AIProvider: "openai",
 			AIModel:    baseModelName,
@@ -138,6 +171,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	if cfg.AIModel != "" {
 		baseModelName = cfg.AIModel
 	}
+	logging.Debug("DEBUG-FLOW: Step 5 - Config loaded - provider: %s, model: %s", cfg.AIProvider, cfg.AIModel)
 	
 	// Use the same provider resolution logic as agent_execution_engine.go:237-256
 	var modelName string
@@ -151,27 +185,34 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	logging.Debug("Using model %s (provider: %s, config: %s)", modelName, cfg.AIProvider, baseModelName)
+	logging.Debug("DEBUG-FLOW: Step 5 - Final model name: %s", modelName)
 	
 	// 6. Extract tool names for GenKit (merge frontmatter tools + MCP tools)
+	logging.Debug("DEBUG-FLOW: Step 6 - Extracting tool names from frontmatter")
 	var toolNames []string
 	for _, tool := range renderedPrompt.Tools {
 		toolNames = append(toolNames, tool)
 	}
+	logging.Debug("DEBUG-FLOW: Step 6 - Found %d frontmatter tools", len(toolNames))
 	
 	logging.Debug("Using model %s with %d messages and %d MCP tools", modelName, len(genkitMessages), len(mcpTools))
+	logging.Debug("DEBUG-FLOW: Step 6 - Ready for execution setup")
 	
 	// 7. Execute with GenKit's Generate for full multi-turn and tool support
-	// Add timeout to prevent infinite hanging
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	// Add timeout to prevent infinite hanging - 10 minutes for complex analysis tasks
+	logging.Debug("DEBUG-FLOW: Step 7 - Creating execution context with 10min timeout")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	
 	// Build generate options (match traditional approach exactly)
+	logging.Debug("DEBUG-FLOW: Step 7 - Building generate options")
 	var generateOpts []ai.GenerateOption
 	generateOpts = append(generateOpts, ai.WithModelName(modelName))  // Use same as traditional
 	generateOpts = append(generateOpts, ai.WithMessages(genkitMessages...))
 	maxToolCalls := 25  // Allow 25 tool calls, then force final response
 	// Set GenKit maxTurns higher than our custom limit to let our logic handle it
 	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
+	logging.Debug("DEBUG-FLOW: Step 7 - Basic options set (model: %s, messages: %d, maxTurns: 30)", modelName, len(genkitMessages))
 	
 	// Add tool call limits to prevent obsessive tool calling
 	maxToolCallsPerConversation := 15
@@ -222,7 +263,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 			"details": map[string]interface{}{
 				"model":          modelName,
 				"available_tools": toolNames,
-				"max_turns":      25,
+				"max_turns":      40,
 				"conversation_length": len(genkitMessages),
 				"task_preview":   func() string { if len(task) > 80 { return task[:80] + "..." }; return task }(),
 			},
@@ -237,7 +278,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 			"level":     "debug",
 			"message":   "Starting AI model conversation",
 			"details": map[string]interface{}{
-				"context_timeout": "2_minutes",
+				"context_timeout": "10_minutes",
 				"genkit_app":      fmt.Sprintf("%T", genkitApp),
 				"options_count":   len(generateOpts),
 			},
@@ -245,6 +286,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	// Create tool call tracker to prevent obsessive loops
+	logging.Debug("DEBUG-FLOW: Step 7 - Creating tool call tracker")
 	toolCallTracker := &ToolCallTracker{
 		TotalCalls:          0,
 		ConsecutiveSameTool: make(map[string]int),
@@ -253,9 +295,14 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		MaxConsecutive:      maxConsecutiveSameTool,
 		LogCallback:         e.logCallback,
 	}
+	logging.Debug("DEBUG-FLOW: Step 7 - Tool call tracker created (maxCalls: %d, maxConsecutive: %d)", maxToolCallsPerConversation, maxConsecutiveSameTool)
 	
 	// Use custom generate with proper turn limiting and final response capability  
+	logging.Debug("DEBUG-FLOW: Step 7 - CALLING generateWithCustomTurnLimit - THIS IS THE CRITICAL CALL")
+	logging.Debug("DEBUG-FLOW: Step 7 - Parameters: ctx=%v, genkitApp=%v, optsCount=%d, maxToolCalls=%d, model=%s", 
+		ctx != nil, genkitApp != nil, len(generateOpts), maxToolCalls, modelName)
 	response, err := e.generateWithCustomTurnLimit(ctx, genkitApp, generateOpts, toolCallTracker, maxToolCalls, modelName)
+	logging.Debug("DEBUG-FLOW: Step 7 - generateWithCustomTurnLimit RETURNED - response=%v, error=%v", response != nil, err)
 	generateDuration := time.Since(generateStartTime)
 	
 	// Log immediately after Generate call (success or failure)
@@ -615,7 +662,9 @@ func (e *GenKitExecutor) ExecuteAgentWithDotpromptAndLogging(agent models.Agent,
 	}
 	
 	// Execute the normal dotprompt method
+	log.Printf("🔥 ANDLOGGING: About to call ExecuteAgentWithDotprompt")
 	result, err := e.ExecuteAgentWithDotprompt(agent, agentTools, genkitApp, mcpTools, task)
+	log.Printf("🔥 ANDLOGGING: ExecuteAgentWithDotprompt returned - result=%v, err=%v", result != nil, err)
 	
 	if err != nil {
 		if logCallback != nil {
@@ -669,6 +718,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfig(agent models.Agent, agen
 
 // ExecuteAgentWithDatabaseConfigAndLogging executes an agent with progressive logging callback
 func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfigAndLogging(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{})) (*ExecutionResponse, error) {
+	log.Printf("🔥 CONFIG-AND-LOGGING: Function entry - agent %s", agent.Name)
 	// Store the logging callback for use during execution
 	e.logCallback = logCallback
 	
@@ -700,7 +750,9 @@ func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfigAndLogging(agent models.A
 	}
 	
 	// Execute using the dotprompt + genkit approach with logging
+	log.Printf("🔥 WRAPPER: About to call ExecuteAgentWithDotpromptAndLogging")
 	result, err := e.ExecuteAgentWithDotpromptAndLogging(agent, agentTools, genkitApp, mcpTools, task, logCallback)
+	log.Printf("🔥 WRAPPER: ExecuteAgentWithDotpromptAndLogging returned - result=%v, err=%v", result != nil, err)
 	if err != nil {
 		// Log the error
 		if logCallback != nil {
@@ -1010,23 +1062,62 @@ func (e *GenKitExecutor) convertDotpromptToGenkitMessages(dotpromptMessages []do
 // generateWithCustomTurnLimit implements custom turn limiting with final response capability
 func (e *GenKitExecutor) generateWithCustomTurnLimit(ctx context.Context, genkitApp *genkit.Genkit, generateOpts []ai.GenerateOption, tracker *ToolCallTracker, maxToolCalls int, modelName string) (*ai.ModelResponse, error) {
 	
+	// Add detailed debug logging before GenKit Generate call
+	if tracker.LogCallback != nil {
+		tracker.LogCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "debug",
+			"message":   "ABOUT TO CALL genkit.Generate() - this is where conversations often hang",
+			"details": map[string]interface{}{
+				"model_name":    modelName,
+				"genkit_app":    fmt.Sprintf("%T", genkitApp),
+				"genkit_app_nil": genkitApp == nil,
+				"context_done":  ctx.Err() != nil,
+				"opts_count":    len(generateOpts),
+				"max_tool_calls": maxToolCalls,
+			},
+		})
+	}
+	
 	// First attempt: normal generation with tools
+	logging.Debug("CRITICAL: About to call genkit.Generate with model=%s, opts=%d", modelName, len(generateOpts))
+	
+	generateStart := time.Now()
 	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
+	generateDuration := time.Since(generateStart)
+	
+	// Log immediately after GenKit call (before any other processing)
+	if tracker.LogCallback != nil {
+		tracker.LogCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "debug",
+			"message":   fmt.Sprintf("GenKit Generate call COMPLETED in %v", generateDuration),
+			"details": map[string]interface{}{
+				"duration":     generateDuration.String(),
+				"error":        err != nil,
+				"error_msg":    func() string { if err != nil { return err.Error() }; return "none" }(),
+				"response_nil": response == nil,
+				"quick_return": generateDuration < 100*time.Millisecond,
+			},
+		})
+	}
+	
+	logging.Debug("CRITICAL: genkit.Generate returned after %v, err=%v, response_nil=%v", generateDuration, err != nil, response == nil)
 	
 	// If the first call succeeds, check message count to see if we need final response
 	if err == nil && response != nil && response.Request != nil && response.Request.Messages != nil {
 		msgCount := len(response.Request.Messages)
 		
 		// If we're at or past turn limit, force final response
-		if msgCount >= 25 {
+		if msgCount >= 40 {
 			if tracker.LogCallback != nil {
 				tracker.LogCallback(map[string]interface{}{
 					"timestamp": time.Now().Format(time.RFC3339),
 					"level":     "warning",
-					"message":   fmt.Sprintf("Turn limit reached (%d messages >= 25) - requesting final response without tools", msgCount),
+					"message":   fmt.Sprintf("Turn limit reached (%d messages >= 40) - requesting final response without tools", msgCount),
 					"details": map[string]interface{}{
 						"message_count": msgCount,
-						"max_turns": 25,
+						"max_turns": 40,
 						"solution": "Requesting AI to provide final summary without additional tools",
 					},
 				})
@@ -1037,7 +1128,7 @@ func (e *GenKitExecutor) generateWithCustomTurnLimit(ctx context.Context, genkit
 			summaryMessage := &ai.Message{
 				Role: ai.RoleUser,
 				Content: []*ai.Part{
-					ai.NewTextPart("You have reached the 25-turn conversation limit. Please provide a final response summarizing what you've learned and completed so far. Do not call any more tools."),
+					ai.NewTextPart("You have reached the conversation turn limit. Please provide a final response summarizing what you've learned and completed so far. Do not call any more tools."),
 				},
 			}
 			currentMessages = append(currentMessages, summaryMessage)
@@ -1084,16 +1175,27 @@ func (e *GenKitExecutor) generateWithCustomTurnLimit(ctx context.Context, genkit
 		}
 	}
 	
-	// Check if we hit other turn limit errors from the original call
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "turn") {
-		// This is a turn limit error - we need to try a final response without tools
+	// Check for API timeout errors and turn limit errors from the original call
+	isAPITimeout := err != nil && (strings.Contains(strings.ToLower(err.Error()), "timeout") || 
+									strings.Contains(strings.ToLower(err.Error()), "deadline exceeded") ||
+									strings.Contains(strings.ToLower(err.Error()), "failed to create completion after"))
+	isTurnLimitError := err != nil && strings.Contains(strings.ToLower(err.Error()), "turn")
+	
+	if isAPITimeout || isTurnLimitError {
+		// This is an API timeout or turn limit error - we need to try a final response without tools
+		errorType := "turn limit"
+		if isAPITimeout {
+			errorType = "API timeout"
+		}
+		
 		if tracker.LogCallback != nil {
 			tracker.LogCallback(map[string]interface{}{
 				"timestamp": time.Now().Format(time.RFC3339),
 				"level":     "warning",
-				"message":   "Hit tool call limit - attempting final response without tools",
+				"message":   fmt.Sprintf("Hit %s - attempting final response without tools", errorType),
 				"details": map[string]interface{}{
 					"original_error": err.Error(),
+					"error_type": errorType,
 					"max_tool_calls": maxToolCalls,
 					"solution": "Requesting AI to provide final summary without additional tools",
 				},
@@ -1109,10 +1211,17 @@ func (e *GenKitExecutor) generateWithCustomTurnLimit(ctx context.Context, genkit
 		// If we got a conversation history, try to generate a final response
 		if len(currentMessages) > 0 {
 			// Add a final user message requesting summary without tools
+			var summaryPrompt string
+			if isAPITimeout {
+				summaryPrompt = "The API request timed out. Please provide a final response summarizing what you've learned and completed so far, including any analysis you performed and tools you used. Do not call any more tools."
+			} else {
+				summaryPrompt = "You have reached the tool usage limit. Please provide a final response summarizing what you've learned and completed so far. Do not call any more tools."
+			}
+			
 			summaryMessage := &ai.Message{
 				Role: ai.RoleUser,
 				Content: []*ai.Part{
-					ai.NewTextPart("You have reached the tool usage limit. Please provide a final response summarizing what you've learned and completed so far. Do not call any more tools."),
+					ai.NewTextPart(summaryPrompt),
 				},
 			}
 			currentMessages = append(currentMessages, summaryMessage)
@@ -1144,14 +1253,22 @@ func (e *GenKitExecutor) generateWithCustomTurnLimit(ctx context.Context, genkit
 			
 			// Success! Final response generated
 			if tracker.LogCallback != nil {
+				successMessage := fmt.Sprintf("Successfully generated final response after hitting %s", errorType)
 				tracker.LogCallback(map[string]interface{}{
 					"timestamp": time.Now().Format(time.RFC3339),
 					"level":     "info",
-					"message":   "Successfully generated final response after hitting tool limit",
+					"message":   successMessage,
 					"details": map[string]interface{}{
 						"response_length": len(finalResponse.Text()),
 						"final_generation": true,
-						"tool_calls_made": "reached_limit",
+						"error_recovery": errorType,
+						"response_preview": func() string {
+							text := finalResponse.Text()
+							if len(text) > 200 {
+								return text[:200] + "..."
+							}
+							return text
+						}(),
 					},
 				})
 			}

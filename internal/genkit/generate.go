@@ -70,7 +70,7 @@ func NewStationModelGenerator(client *openai.Client, modelName string) *StationM
 		modelName: modelName,
 		request: &openai.ChatCompletionNewParams{
 			Model: (modelName),
-			ParallelToolCalls: openai.Bool(false), // Prevent obsessive parallel tool calling
+			// Note: ParallelToolCalls will be set only when tools are provided
 		},
 	}
 }
@@ -257,6 +257,9 @@ func (g *StationModelGenerator) WithTools(tools []*ai.ToolDefinition) *StationMo
 	// which is not supported by some vendor APIs
 	if len(toolParams) > 0 {
 		g.tools = toolParams
+		// Only set ParallelToolCalls when tools are provided
+		// OpenAI API requires this field only when tools are specified
+		g.request.ParallelToolCalls = openai.Bool(false) // Prevent obsessive parallel tool calling
 	}
 
 	return g
@@ -501,61 +504,128 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 		})
 	}
 	
-	// Create a context with timeout to detect hanging calls
-	apiCallCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
+	// Make API call with retry logic for timeout handling
+	const maxRetries = 3
+	var completion *openai.ChatCompletion
+	var err error
+	var totalDuration time.Duration
 	
-	// Start tracking API call timing
-	apiCallStart := time.Now()
-	
-	completion, err := g.client.Chat.Completions.New(apiCallCtx, *g.request)
-	apiCallDuration := time.Since(apiCallStart)
-	
-	if err != nil {
-		logging.Debug("Station GenKit: OpenAI API call failed after %v: %v", apiCallDuration, err)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Create a context with timeout to detect hanging calls
+		apiCallCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		
+		// Start tracking API call timing
+		apiCallStart := time.Now()
+		
+		completion, err = g.client.Chat.Completions.New(apiCallCtx, *g.request)
+		apiCallDuration := time.Since(apiCallStart)
+		totalDuration += apiCallDuration
+		
+		cancel() // Clean up context
+		
+		if err == nil {
+			// Success! Log if this took multiple attempts
+			if attempt > 1 && g.logCallback != nil {
+				g.logCallback(map[string]interface{}{
+					"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+					"level":     "info",
+					"message":   fmt.Sprintf("OpenAI API call succeeded on attempt %d/%d after %v total", attempt, maxRetries, totalDuration),
+					"details": map[string]interface{}{
+						"attempt":        attempt,
+						"last_duration":  apiCallDuration.String(),
+						"total_duration": totalDuration.String(),
+					},
+				})
+			}
+			break
+		}
+		
+		logging.Debug("Station GenKit: OpenAI API call attempt %d/%d failed after %v: %v", attempt, maxRetries, apiCallDuration, err)
 		
 		// Determine failure type for better debugging
 		var failureType string
 		var failureDetails map[string]interface{}
+		isTimeout := apiCallCtx.Err() == context.DeadlineExceeded
 		
-		if apiCallCtx.Err() == context.DeadlineExceeded {
+		if isTimeout {
 			failureType = "API_TIMEOUT"
 			failureDetails = map[string]interface{}{
-				"timeout_duration": "2_minutes",
-				"likely_cause": "Network issue, API overload, or request too complex",
-				"conversation_turn": len(g.request.Messages),
-				"tools_in_request": len(g.tools),
+				"timeout_duration":   "2_minutes",
+				"likely_cause":       "Network issue, API overload, or request too complex",
+				"conversation_turn":  len(g.request.Messages),
+				"tools_in_request":   len(g.tools),
+				"attempt":           attempt,
+				"max_retries":       maxRetries,
+				"will_retry":        attempt < maxRetries,
 			}
 		} else {
 			failureType = "API_ERROR"
 			failureDetails = map[string]interface{}{
-				"error_message": err.Error(),
-				"duration": apiCallDuration.String(),
+				"error_message":     err.Error(),
+				"duration":          apiCallDuration.String(),
 				"conversation_turn": len(g.request.Messages),
+				"attempt":           attempt,
+				"max_retries":       maxRetries,
+				"will_retry":        attempt < maxRetries,
 			}
 		}
 		
 		// Log API call failure for real-time progress tracking
 		if g.logCallback != nil {
+			logLevel := "error"
+			message := fmt.Sprintf("OpenAI API call FAILED (%s) on attempt %d/%d after %v", failureType, attempt, maxRetries, apiCallDuration)
+			
+			if attempt < maxRetries {
+				logLevel = "warning"
+				message += " - retrying..."
+			} else {
+				message += " - giving up after 3 attempts"
+			}
+			
 			g.logCallback(map[string]interface{}{
 				"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
-				"level":     "error",
-				"message":   fmt.Sprintf("OpenAI API call FAILED (%s) after %v", failureType, apiCallDuration),
+				"level":     logLevel,
+				"message":   message,
 				"details":   failureDetails,
 			})
 		}
 		
-		return nil, fmt.Errorf("failed to create completion after %v: %w", apiCallDuration, err)
+		// If this is the last attempt, return the error
+		if attempt >= maxRetries {
+			return nil, fmt.Errorf("failed to create completion after %d attempts (total %v): %w", maxRetries, totalDuration, err)
+		}
+		
+		// Wait before retrying (exponential backoff: 2s, 4s, 8s)
+		waitTime := time.Duration(1<<attempt) * time.Second
+		if g.logCallback != nil {
+			g.logCallback(map[string]interface{}{
+				"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+				"level":     "info",
+				"message":   fmt.Sprintf("Waiting %v before retry attempt %d/%d", waitTime, attempt+1, maxRetries),
+				"details": map[string]interface{}{
+					"wait_time":    waitTime.String(),
+					"next_attempt": attempt + 1,
+					"reason":       "API timeout retry backoff",
+				},
+			})
+		}
+		
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("context cancelled during retry wait: %w", ctx.Err())
+		case <-time.After(waitTime):
+			// Continue to next attempt
+		}
 	}
 	
 	// Log successful API call timing
-	if g.logCallback != nil && apiCallDuration > 30*time.Second {
+	if g.logCallback != nil && totalDuration > 30*time.Second {
 		g.logCallback(map[string]interface{}{
 			"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
 			"level":     "warning",
-			"message":   fmt.Sprintf("OpenAI API call took %v (slower than expected)", apiCallDuration),
+			"message":   fmt.Sprintf("OpenAI API call took %v (slower than expected)", totalDuration),
 			"details": map[string]interface{}{
-				"duration": apiCallDuration.String(),
+				"duration": totalDuration.String(),
 				"conversation_turn": len(g.request.Messages),
 			},
 		})
