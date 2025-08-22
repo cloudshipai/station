@@ -198,3 +198,10 @@ func (o *StationOpenAI) ListActions(ctx context.Context) []core.ActionDesc {
 func (o *StationOpenAI) ResolveAction(g *genkit.Genkit, atype core.ActionType, name string) error {
 	return o.stationOpenAICompatible.ResolveAction(g, atype, name)
 }
+
+// SetLogCallback sets the logging callback for progressive logging during model execution
+func (o *StationOpenAI) SetLogCallback(callback func(map[string]interface{})) {
+	if o.stationOpenAICompatible != nil {
+		o.stationOpenAICompatible.SetLogCallback(callback)
+	}
+}

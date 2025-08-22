@@ -137,6 +137,7 @@ type AgentRun struct {
 	DurationSeconds *float64   `json:"duration_seconds,omitempty" db:"duration_seconds"`
 	ModelName       *string    `json:"model_name,omitempty" db:"model_name"`
 	ToolsUsed       *int64     `json:"tools_used,omitempty" db:"tools_used"`
+	DebugLogs       *JSONArray `json:"debug_logs,omitempty" db:"debug_logs"`
 }
 
 type AgentRunWithDetails struct {

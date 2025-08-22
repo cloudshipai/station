@@ -45,6 +45,7 @@ type AgentRun struct {
 	DurationSeconds sql.NullFloat64 `json:"duration_seconds"`
 	ModelName       sql.NullString  `json:"model_name"`
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
+	DebugLogs       sql.NullString  `json:"debug_logs"`
 }
 
 type AgentTool struct {

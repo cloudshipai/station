@@ -78,6 +78,9 @@ type StationOpenAICompatible struct {
 	// This will be used as a prefix for model names (e.g., "station-openai/model-name").
 	// Should be lowercase and match the plugin's Name() method.
 	Provider string
+	
+	// LogCallback allows progressive logging during model execution
+	LogCallback func(map[string]interface{})
 }
 
 // Init implements genkit.Plugin.
@@ -101,6 +104,13 @@ func (o *StationOpenAICompatible) Name() string {
 	return o.Provider
 }
 
+// SetLogCallback sets the logging callback for progressive logging during model execution
+func (o *StationOpenAICompatible) SetLogCallback(callback func(map[string]interface{})) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.LogCallback = callback
+}
+
 // DefineModel defines a model in the registry
 func (o *StationOpenAICompatible) DefineModel(g *genkit.Genkit, provider, name string, info ai.ModelInfo) (ai.Model, error) {
 	o.mu.Lock()
@@ -119,6 +129,11 @@ func (o *StationOpenAICompatible) DefineModel(g *genkit.Genkit, provider, name s
 	) (*ai.ModelResponse, error) {
 		// Configure the response generator with input using Station's fixed version
 		generator := NewStationModelGenerator(o.client, modelName).WithMessages(input.Messages).WithConfig(input.Config).WithTools(input.Tools)
+		
+		// Add logging callback if available
+		if o.LogCallback != nil {
+			generator = generator.WithLogCallback(o.LogCallback)
+		}
 
 		// Generate response
 		resp, err := generator.Generate(ctx, cb)

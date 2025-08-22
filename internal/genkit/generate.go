@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"station/internal/logging"
 
@@ -48,10 +49,18 @@ type StationModelGenerator struct {
 	toolChoice openai.ChatCompletionToolChoiceOptionUnionParam
 	// Store any errors that occur during building
 	err error
+	// Progressive logging callback for real-time updates
+	logCallback func(map[string]interface{})
 }
 
 func (g *StationModelGenerator) GetRequest() *openai.ChatCompletionNewParams {
 	return g.request
+}
+
+// WithLogCallback sets a logging callback for real-time progress updates
+func (g *StationModelGenerator) WithLogCallback(callback func(map[string]interface{})) *StationModelGenerator {
+	g.logCallback = callback
+	return g
 }
 
 // NewStationModelGenerator creates a new Station ModelGenerator instance
@@ -385,7 +394,53 @@ func (g *StationModelGenerator) generateStream(ctx context.Context, handleChunk 
 
 // generateComplete generates a complete model response
 func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.ModelResponse, error) {
-	logging.Debug("Station GenKit: About to send %d messages to OpenAI API", len(g.request.Messages))
+	logging.Debug("Station GenKit: About to send %d messages to LLM API", len(g.request.Messages))
+	
+	// Enforce turn limit before making API call
+	const MAX_TURNS = 25
+	messageCount := len(g.request.Messages)
+	if messageCount >= MAX_TURNS {
+		limitError := fmt.Errorf("conversation exceeded maximum turn limit (%d messages >= %d max turns)", messageCount, MAX_TURNS)
+		logging.Debug("Station GenKit: %v", limitError)
+		
+		// Log turn limit hit for real-time progress tracking
+		if g.logCallback != nil {
+			g.logCallback(map[string]interface{}{
+				"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+				"level":     "error",
+				"message":   fmt.Sprintf("TURN LIMIT EXCEEDED: %d messages >= %d max turns", messageCount, MAX_TURNS),
+				"details": map[string]interface{}{
+					"current_messages": messageCount,
+					"max_turns": MAX_TURNS,
+					"enforcement_point": "openai_plugin",
+					"actionable_solution": "Reduce conversation length or increase max_turns limit",
+				},
+			})
+		}
+		
+		return nil, limitError
+	}
+	
+	// Log conversation approaching limits
+	turnsRemaining := MAX_TURNS - messageCount
+	if g.logCallback != nil && turnsRemaining <= 3 {
+		g.logCallback(map[string]interface{}{
+			"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+			"level":     "warning",
+			"message":   fmt.Sprintf("TURN LIMIT WARNING: %d messages, only %d turns remaining", messageCount, turnsRemaining),
+			"details": map[string]interface{}{
+				"current_messages": messageCount,
+				"max_turns": MAX_TURNS,
+				"turns_remaining": turnsRemaining,
+				"urgency_level": func() string {
+					if turnsRemaining <= 1 { return "CRITICAL" }
+					if turnsRemaining <= 3 { return "HIGH" }
+					return "MEDIUM"
+				}(),
+			},
+		})
+	}
+	
 	for i, msg := range g.request.Messages {
 		switch {
 		case msg.OfTool != nil:
@@ -406,12 +461,143 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 	}
 	
 	logging.Debug("Station GenKit: Calling OpenAI API with model=%s", g.request.Model)
-	completion, err := g.client.Chat.Completions.New(ctx, *g.request)
+	
+	// Log API call start for real-time progress tracking
+	if g.logCallback != nil {
+		// Get the last user message for context (simplified approach)
+		lastUserMsg := "user input"
+		messageCount := len(g.request.Messages)
+		if messageCount > 1 {
+			lastUserMsg = fmt.Sprintf("conversation with %d messages", messageCount)
+		}
+		
+		// List tool names for clarity
+		toolNames := make([]string, len(g.tools))
+		for i, tool := range g.tools {
+			toolNames[i] = tool.Function.Name
+		}
+		
+		g.logCallback(map[string]interface{}{
+			"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+			"level":     "info",
+			"message":   fmt.Sprintf("Making LLM API call to %s with %d tools", g.request.Model, len(g.tools)),
+			"details": map[string]interface{}{
+				"model":            g.request.Model,
+				"conversation_turn": len(g.request.Messages),
+				"available_tools":  toolNames,
+				"last_user_input":  lastUserMsg,
+				"request_type":     "chat_completion",
+			},
+		})
+	}
+	
+	// Create a context with timeout to detect hanging calls
+	apiCallCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	
+	// Start tracking API call timing
+	apiCallStart := time.Now()
+	
+	completion, err := g.client.Chat.Completions.New(apiCallCtx, *g.request)
+	apiCallDuration := time.Since(apiCallStart)
+	
 	if err != nil {
-		logging.Debug("Station GenKit: OpenAI API call failed: %v", err)
-		return nil, fmt.Errorf("failed to create completion: %w", err)
+		logging.Debug("Station GenKit: OpenAI API call failed after %v: %v", apiCallDuration, err)
+		
+		// Determine failure type for better debugging
+		var failureType string
+		var failureDetails map[string]interface{}
+		
+		if apiCallCtx.Err() == context.DeadlineExceeded {
+			failureType = "API_TIMEOUT"
+			failureDetails = map[string]interface{}{
+				"timeout_duration": "2_minutes",
+				"likely_cause": "Network issue, API overload, or request too complex",
+				"conversation_turn": len(g.request.Messages),
+				"tools_in_request": len(g.tools),
+			}
+		} else {
+			failureType = "API_ERROR"
+			failureDetails = map[string]interface{}{
+				"error_message": err.Error(),
+				"duration": apiCallDuration.String(),
+				"conversation_turn": len(g.request.Messages),
+			}
+		}
+		
+		// Log API call failure for real-time progress tracking
+		if g.logCallback != nil {
+			g.logCallback(map[string]interface{}{
+				"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+				"level":     "error",
+				"message":   fmt.Sprintf("OpenAI API call FAILED (%s) after %v", failureType, apiCallDuration),
+				"details":   failureDetails,
+			})
+		}
+		
+		return nil, fmt.Errorf("failed to create completion after %v: %w", apiCallDuration, err)
+	}
+	
+	// Log successful API call timing
+	if g.logCallback != nil && apiCallDuration > 30*time.Second {
+		g.logCallback(map[string]interface{}{
+			"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+			"level":     "warning",
+			"message":   fmt.Sprintf("OpenAI API call took %v (slower than expected)", apiCallDuration),
+			"details": map[string]interface{}{
+				"duration": apiCallDuration.String(),
+				"conversation_turn": len(g.request.Messages),
+			},
+		})
 	}
 	logging.Debug("Station GenKit: OpenAI API call successful, processing response...")
+	
+	// Log API call success with response details for real-time progress tracking
+	if g.logCallback != nil {
+		responseMessage := ""
+		toolCallDetails := make([]string, 0)
+		
+		if len(completion.Choices) > 0 {
+			choice := completion.Choices[0]
+			
+			// Get response content
+			if choice.Message.Content != "" {
+				responseMessage = choice.Message.Content
+				if len(responseMessage) > 150 {
+					responseMessage = responseMessage[:150] + "..."
+				}
+			}
+			
+			// Get tool call details
+			if choice.Message.ToolCalls != nil {
+				for _, tc := range choice.Message.ToolCalls {
+					toolCallDetails = append(toolCallDetails, fmt.Sprintf("%s(...)", tc.Function.Name))
+				}
+			}
+		}
+		
+		var nextAction string
+		if len(toolCallDetails) > 0 {
+			nextAction = fmt.Sprintf("Will execute %d tools: %v", len(toolCallDetails), toolCallDetails)
+		} else {
+			nextAction = "AI provided final text response"
+		}
+		
+		g.logCallback(map[string]interface{}{
+			"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
+			"level":     "info",
+			"message":   fmt.Sprintf("OpenAI responded (tokens: %d in, %d out). %s", 
+				completion.Usage.PromptTokens, completion.Usage.CompletionTokens, nextAction),
+			"details": map[string]interface{}{
+				"input_tokens":      completion.Usage.PromptTokens,
+				"output_tokens":     completion.Usage.CompletionTokens,
+				"total_tokens":      completion.Usage.TotalTokens,
+				"tool_calls":        toolCallDetails,
+				"response_preview":  responseMessage,
+				"finish_reason":     completion.Choices[0].FinishReason,
+			},
+		})
+	}
 
 	// For OpenAI, we need to reconstruct the conversation history from the messages
 	// This enables GenKit's response.History() to work properly for step capture
@@ -601,4 +787,17 @@ func anyToJSONString(data any) string {
 		panic(fmt.Errorf("failed to marshal any to JSON string: data, %#v %w", data, err))
 	}
 	return string(jsonBytes)
+}
+
+// Helper functions for progressive logging
+
+// getCurrentTimestampNano returns current timestamp in nanoseconds for high precision logging
+func getCurrentTimestampNano() int64 {
+	return time.Now().UnixNano()
+}
+
+// getMaxTokensFromRequest extracts max_tokens from the request if present
+func getMaxTokensFromRequest(req *openai.ChatCompletionNewParams) interface{} {
+	// The MaxTokens field is an Opt[int64], just return the value directly
+	return req.MaxTokens.Value
 }

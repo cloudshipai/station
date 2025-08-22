@@ -17,7 +17,9 @@ import (
 )
 
 // GenKitExecutor handles dotprompt-based agent execution using GenKit Generate
-type GenKitExecutor struct{}
+type GenKitExecutor struct{
+	logCallback func(map[string]interface{})
+}
 
 // NewGenKitExecutor creates a new GenKit-based dotprompt executor
 func NewGenKitExecutor() *GenKitExecutor {
@@ -32,6 +34,8 @@ func (e *GenKitExecutor) ExecuteAgentWithDotpromptTemplate(extractor *RuntimeExt
 }
 
 // ExecuteAgentWithDotprompt executes an agent using hybrid approach: dotprompt direct + GenKit Generate
+
+
 func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string) (*ExecutionResponse, error) {
 	startTime := time.Now()
 	logging.Debug("Starting unified dotprompt execution for agent %s", agent.Name)
@@ -147,19 +151,151 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	logging.Debug("Using model %s with %d messages and %d MCP tools", modelName, len(genkitMessages), len(mcpTools))
 	
 	// 7. Execute with GenKit's Generate for full multi-turn and tool support
-	ctx := context.Background()
+	// Add timeout to prevent infinite hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 	
 	// Build generate options (match traditional approach exactly)
 	var generateOpts []ai.GenerateOption
 	generateOpts = append(generateOpts, ai.WithModelName(modelName))  // Use same as traditional
 	generateOpts = append(generateOpts, ai.WithMessages(genkitMessages...))
-	generateOpts = append(generateOpts, ai.WithMaxTurns(25))
+	maxTurns := 25
+	generateOpts = append(generateOpts, ai.WithMaxTurns(maxTurns))
 	
 	// Add MCP tools if available (same as traditional)
 	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
 	
+	// Check if we're approaching turn limits and log warning
+	messageCount := len(genkitMessages)
+	turnsRemaining := maxTurns - messageCount
+	
+	if e.logCallback != nil && turnsRemaining <= 5 {
+		e.logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "warning",
+			"message":   fmt.Sprintf("APPROACHING TURN LIMIT: %d messages, only %d turns remaining (max: %d)", 
+				messageCount, turnsRemaining, maxTurns),
+			"details": map[string]interface{}{
+				"current_messages": messageCount,
+				"max_turns": maxTurns,
+				"turns_remaining": turnsRemaining,
+				"risk_level": func() string {
+					if turnsRemaining <= 2 { return "CRITICAL" }
+					if turnsRemaining <= 5 { return "HIGH" }
+					return "MEDIUM"
+				}(),
+			},
+		})
+	}
+	
+	// Add logging before model execution with specific tool names for clarity
+	if e.logCallback != nil {
+		toolNames := make([]string, 0, len(mcpTools))
+		for _, tool := range mcpTools {
+			if namedTool, ok := tool.(interface{ Name() string }); ok {
+				toolNames = append(toolNames, namedTool.Name())
+			}
+		}
+		if len(toolNames) > 5 {
+			toolNames = append(toolNames[:5], fmt.Sprintf("...and %d more", len(toolNames)-5))
+		}
+		
+		e.logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   fmt.Sprintf("Agent '%s' starting conversation with %d tools available", agent.Name, len(mcpTools)),
+			"details": map[string]interface{}{
+				"model":          modelName,
+				"available_tools": toolNames,
+				"max_turns":      25,
+				"conversation_length": len(genkitMessages),
+				"task_preview":   func() string { if len(task) > 80 { return task[:80] + "..." }; return task }(),
+			},
+		})
+	}
+	
+	// Add detailed logging around the GenKit Generate call
+	generateStartTime := time.Now()
+	if e.logCallback != nil {
+		e.logCallback(map[string]interface{}{
+			"timestamp": generateStartTime.Format(time.RFC3339),
+			"level":     "debug",
+			"message":   "Starting AI model conversation",
+			"details": map[string]interface{}{
+				"context_timeout": "2_minutes",
+				"genkit_app":      fmt.Sprintf("%T", genkitApp),
+				"options_count":   len(generateOpts),
+			},
+		})
+	}
+	
 	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
+	generateDuration := time.Since(generateStartTime)
+	
+	// Log immediately after Generate call (success or failure)
+	if e.logCallback != nil {
+		if err != nil {
+			// Analyze error type for better debugging
+			errorMessage := err.Error()
+			var failureType string
+			var actionable_solution string
+			
+			if strings.Contains(errorMessage, "context") && strings.Contains(errorMessage, "deadline") {
+				failureType = "TIMEOUT"
+				actionable_solution = "API call timed out - check network or reduce context size"
+			} else if strings.Contains(errorMessage, "token") || strings.Contains(errorMessage, "length") {
+				failureType = "CONTEXT_LIMIT"
+				actionable_solution = "Hit context window limit - reduce conversation history or message size"
+			} else if strings.Contains(errorMessage, "turn") || strings.Contains(errorMessage, "max") {
+				failureType = "TURN_LIMIT"
+				actionable_solution = "Hit maximum turn limit - conversation exceeded 25 exchanges"
+			} else if strings.Contains(errorMessage, "rate") || strings.Contains(errorMessage, "quota") {
+				failureType = "RATE_LIMIT"
+				actionable_solution = "API rate limit reached - wait before retrying"
+			} else {
+				failureType = "UNKNOWN_ERROR"
+				actionable_solution = "Check error details and API connectivity"
+			}
+			
+			e.logCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "error",
+				"message":   fmt.Sprintf("AI conversation FAILED (%s) after %v", failureType, generateDuration),
+				"details": map[string]interface{}{
+					"failure_type":       failureType,
+					"error_message":      errorMessage,
+					"duration":           generateDuration.String(),
+					"model":              modelName,
+					"messages_in_conversation": messageCount,
+					"actionable_solution": actionable_solution,
+				},
+			})
+		} else {
+			e.logCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "info",
+				"message":   "AI model conversation completed",
+				"details": map[string]interface{}{
+					"duration_seconds": generateDuration.Seconds(),
+					"response_nil":     response == nil,
+				},
+			})
+		}
+	}
 	if err != nil {
+		// Log the error
+		if e.logCallback != nil {
+			e.logCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "error",
+				"message":   "AI model execution failed",
+				"details": map[string]interface{}{
+					"error": err.Error(),
+					"model": modelName,
+				},
+			})
+		}
+		
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -179,6 +315,19 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	responseText := response.Text()
 	
+	// Log model response completion
+	if e.logCallback != nil {
+		e.logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   "AI model response received",
+			"details": map[string]interface{}{
+				"response_length": len(responseText),
+				"has_request":     response.Request != nil,
+				"has_messages":    response.Request != nil && response.Request.Messages != nil,
+			},
+		})
+	}
 	
 	// Extract tool calls and execution steps with detailed debugging
 	var allToolCalls []interface{}
@@ -217,6 +366,21 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 					allToolCalls = append(allToolCalls, toolCall)
 					toolRequestsInMessage = append(toolRequestsInMessage, toolCall)
 					
+					// Log tool call in real-time
+					if e.logCallback != nil {
+						e.logCallback(map[string]interface{}{
+							"timestamp": time.Now().Format(time.RFC3339),
+							"level":     "info",
+							"message":   "Tool executed",
+							"details": map[string]interface{}{
+								"tool_name":    part.ToolRequest.Name,
+								"step":         stepCounter,
+								"tool_call_id": part.ToolRequest.Ref,
+								"input":        part.ToolRequest.Input,
+							},
+						})
+					}
+					
 					// Add execution step
 					executionStep := map[string]interface{}{
 						"step":      stepCounter,
@@ -246,6 +410,21 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 						"timestamp": time.Now().Format(time.RFC3339),
 					}
 					executionSteps = append(executionSteps, executionStep)
+					
+					// Log tool response in real-time
+					if e.logCallback != nil {
+						e.logCallback(map[string]interface{}{
+							"timestamp": time.Now().Format(time.RFC3339),
+							"level":     "info",
+							"message":   "Tool response received",
+							"details": map[string]interface{}{
+								"tool_name": part.ToolResponse.Name,
+								"step":      stepCounter,
+								"output_length": len(fmt.Sprintf("%v", part.ToolResponse.Output)),
+							},
+						})
+					}
+					
 					stepCounter++
 				}
 			}
@@ -372,6 +551,79 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}, nil
 }
 
+// ExecuteAgentWithDotpromptAndLogging executes an agent with progressive logging callbacks
+func (e *GenKitExecutor) ExecuteAgentWithDotpromptAndLogging(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{})) (*ExecutionResponse, error) {
+	// Store the callback for use during execution
+	e.logCallback = logCallback
+	
+	// Add detailed logging at key execution points
+	if logCallback != nil {
+		toolNames := make([]string, 0, len(mcpTools))
+		for _, tool := range mcpTools {
+			if namedTool, ok := tool.(interface{ Name() string }); ok {
+				toolNames = append(toolNames, namedTool.Name())
+			}
+		}
+		if len(toolNames) > 3 {
+			toolNames = append(toolNames[:3], fmt.Sprintf("...%d more", len(toolNames)-3))
+		}
+		
+		logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info", 
+			"message":   fmt.Sprintf("Initializing agent '%s' with system prompt (%d chars) and %s", 
+				agent.Name, len(agent.Prompt), func() string {
+					if len(toolNames) == 0 {
+						return "no tools"
+					}
+					return fmt.Sprintf("%d tools: [%s]", len(toolNames), strings.Join(toolNames, ", "))
+				}()),
+			"details": map[string]interface{}{
+				"agent_id":     agent.ID,
+				"agent_name":   agent.Name,
+				"system_prompt_length": len(agent.Prompt),
+				"tool_names":   toolNames,
+				"task_preview": func() string { if len(task) > 60 { return task[:60] + "..." }; return task }(),
+			},
+		})
+	}
+	
+	// Execute the normal dotprompt method
+	result, err := e.ExecuteAgentWithDotprompt(agent, agentTools, genkitApp, mcpTools, task)
+	
+	if err != nil {
+		if logCallback != nil {
+			logCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "error",
+				"message":   "Dotprompt execution failed",
+				"details": map[string]interface{}{
+					"error": err.Error(),
+				},
+			})
+		}
+		return result, err
+	}
+	
+	// Log successful completion with details
+	if logCallback != nil {
+		logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   "Agent execution completed",
+			"details": map[string]interface{}{
+				"success": result.Success,
+				"duration_seconds": result.Duration.Seconds(),
+				"response_length": len(result.Response),
+				"tools_used": result.ToolsUsed,
+				"steps_taken": result.StepsUsed,
+			},
+		})
+	}
+	
+	return result, nil
+}
+
 // ExecuteAgentWithDatabaseConfig executes an agent using the dotprompt + genkit approach
 func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfig(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string) (*ExecutionResponse, error) {
 	// Execute using the dotprompt + genkit approach
@@ -386,6 +638,79 @@ func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfig(agent models.Agent, agen
 	}
 	
 	// Success! Return clean response without execution engine prefix
+	return result, nil
+}
+
+// ExecuteAgentWithDatabaseConfigAndLogging executes an agent with progressive logging callback
+func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfigAndLogging(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{})) (*ExecutionResponse, error) {
+	// Store the logging callback for use during execution
+	e.logCallback = logCallback
+	
+	// Add logging for LLM execution start
+	if logCallback != nil {
+		toolNames := make([]string, 0, len(mcpTools))
+		for _, tool := range mcpTools {
+			if namedTool, ok := tool.(interface{ Name() string }); ok {
+				toolNames = append(toolNames, namedTool.Name())
+			}
+		}
+		if len(toolNames) > 4 {
+			toolNames = append(toolNames[:4], "...")
+		}
+		
+		logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   fmt.Sprintf("Agent '%s' ready to execute task with %d tools: %s", 
+				agent.Name, len(mcpTools), strings.Join(toolNames, ", ")),
+			"details": map[string]interface{}{
+				"agent_id":      agent.ID,
+				"agent_name":    agent.Name,
+				"task_length":   len(task),
+				"tool_names":    toolNames,
+				"execution_mode": "dotprompt_genkit",
+			},
+		})
+	}
+	
+	// Execute using the dotprompt + genkit approach with logging
+	result, err := e.ExecuteAgentWithDotpromptAndLogging(agent, agentTools, genkitApp, mcpTools, task, logCallback)
+	if err != nil {
+		// Log the error
+		if logCallback != nil {
+			logCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "error",
+				"message":   "Dotprompt execution failed",
+				"details": map[string]interface{}{
+					"error": err.Error(),
+				},
+			})
+		}
+		
+		return &ExecutionResponse{
+			Success:  false,
+			Response: "",
+			Duration: 0,
+			Error:    fmt.Sprintf("❌ Dotprompt + GenKit execution failed: %v\n\nThis agent requires the new dotprompt + genkit execution system. Please check that:\n- Agent configuration is valid\n- GenKit provider is properly initialized\n- All required tools are available", err),
+		}, nil
+	}
+	
+	// Log successful completion
+	if logCallback != nil {
+		logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   "Agent execution completed successfully",
+			"details": map[string]interface{}{
+				"success":      result.Success,
+				"duration":     result.Duration,
+				"response_len": len(result.Response),
+			},
+		})
+	}
+	
+	// Success! Return clean response
 	return result, nil
 }
 

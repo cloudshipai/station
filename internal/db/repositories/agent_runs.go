@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"station/internal/db/queries"
 	"station/pkg/models"
 	"time"
@@ -87,6 +88,14 @@ func convertAgentRunFromSQLc(run queries.AgentRun) *models.AgentRun {
 		result.ToolsUsed = &toolsUsed
 	}
 	
+	if run.DebugLogs.Valid {
+		// Parse JSON string to JSONArray
+		var debugLogs models.JSONArray
+		if err := (&debugLogs).Scan(run.DebugLogs.String); err == nil {
+			result.DebugLogs = &debugLogs
+		}
+	}
+	
 	return result
 }
 
@@ -164,6 +173,13 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 			result.ToolsUsed = &toolsUsed
 		}
 		
+		if r.DebugLogs.Valid {
+			var debugLogs models.JSONArray
+			if err := (&debugLogs).Scan(r.DebugLogs.String); err == nil {
+				result.DebugLogs = &debugLogs
+			}
+		}
+		
 	case queries.GetAgentRunWithDetailsRow:
 		result = &models.AgentRunWithDetails{
 			AgentRun: models.AgentRun{
@@ -230,6 +246,13 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 		if r.ToolsUsed.Valid {
 			toolsUsed := r.ToolsUsed.Int64
 			result.ToolsUsed = &toolsUsed
+		}
+		
+		if r.DebugLogs.Valid {
+			var debugLogs models.JSONArray
+			if err := (&debugLogs).Scan(r.DebugLogs.String); err == nil {
+				result.DebugLogs = &debugLogs
+			}
 		}
 	}
 	
@@ -495,4 +518,44 @@ func (r *AgentRunRepo) UpdateStatus(id int64, status string) error {
 		ID:     id,
 	}
 	return r.queries.UpdateAgentRunStatus(context.Background(), params)
+}
+
+// UpdateDebugLogs updates the debug_logs field for an agent run
+func (r *AgentRunRepo) UpdateDebugLogs(id int64, debugLogs *models.JSONArray) error {
+	var debugLogsStr sql.NullString
+	
+	if debugLogs != nil {
+		if jsonStr, err := debugLogs.Value(); err == nil {
+			if strVal, ok := jsonStr.(string); ok {
+				debugLogsStr = sql.NullString{String: strVal, Valid: true}
+			} else if byteVal, ok := jsonStr.([]byte); ok {
+				strVal := string(byteVal)
+				debugLogsStr = sql.NullString{String: strVal, Valid: true}
+			}
+		}
+	}
+	
+	params := queries.UpdateAgentRunDebugLogsParams{
+		DebugLogs: debugLogsStr,
+		ID:        id,
+	}
+	return r.queries.UpdateAgentRunDebugLogs(context.Background(), params)
+}
+
+// AppendDebugLog appends a new debug log entry to an existing agent run
+func (r *AgentRunRepo) AppendDebugLog(id int64, logEntry map[string]interface{}) error {
+	run, err := r.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("failed to get agent run: %w", err)
+	}
+	
+	var debugLogs models.JSONArray
+	if run.DebugLogs != nil {
+		debugLogs = *run.DebugLogs
+	} else {
+		debugLogs = make(models.JSONArray, 0)
+	}
+	
+	debugLogs = append(debugLogs, logEntry)
+	return r.UpdateDebugLogs(id, &debugLogs)
 }
