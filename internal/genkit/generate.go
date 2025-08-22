@@ -647,12 +647,42 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 	// Add tool responses
 	for _, msg := range g.request.Messages {
 		if msg.OfTool != nil {
+			// Extract actual tool response content instead of hardcoded placeholder
+			var toolOutput interface{}
+			
+			// Try to extract the actual tool content from the OpenAI tool message
+			// For now, marshal the entire content structure to capture whatever is there
+			content := msg.OfTool.Content
+			contentBytes, err := json.Marshal(content)
+			if err == nil {
+				// Try to parse as JSON first
+				var contentObj interface{}
+				if json.Unmarshal(contentBytes, &contentObj) == nil {
+					toolOutput = map[string]interface{}{
+						"response": contentObj,
+						"tool_call_id": msg.OfTool.ToolCallID,
+					}
+				} else {
+					// Use raw JSON string
+					toolOutput = map[string]interface{}{
+						"response": string(contentBytes),
+						"tool_call_id": msg.OfTool.ToolCallID,
+					}
+				}
+			} else {
+				// Final fallback with call ID
+				toolOutput = map[string]interface{}{
+					"response": fmt.Sprintf("Tool response for call ID: %s", msg.OfTool.ToolCallID),
+					"tool_call_id": msg.OfTool.ToolCallID,
+				}
+			}
+			
 			historyMessages = append(historyMessages, &ai.Message{
 				Role:    ai.RoleTool,
 				Content: []*ai.Part{ai.NewToolResponsePart(&ai.ToolResponse{
 					Ref:    msg.OfTool.ToolCallID,
 					Name:   "tool_response",
-					Output: map[string]interface{}{"response": "Tool response data"},
+					Output: toolOutput,
 				})},
 			})
 		}
