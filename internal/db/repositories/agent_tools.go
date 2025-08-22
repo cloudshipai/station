@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"station/internal/db/queries"
 	"station/pkg/models"
 )
@@ -64,7 +65,20 @@ func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.
 }
 
 // AddAgentTool creates a new agent-tool assignment using tool ID
+// Enforces a maximum of 40 tools per agent for performance reasons
 func (r *AgentToolRepo) AddAgentTool(agentID int64, toolID int64) (*models.AgentTool, error) {
+	// Check current tool count for this agent
+	currentTools, err := r.ListAgentTools(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check current tool count: %w", err)
+	}
+	
+	// Enforce 40-tool limit per agent
+	const MaxToolsPerAgent = 40
+	if len(currentTools) >= MaxToolsPerAgent {
+		return nil, fmt.Errorf("agent already has maximum allowed tools (%d). Cannot add more tools to prevent performance issues", MaxToolsPerAgent)
+	}
+	
 	params := queries.AddAgentToolParams{
 		AgentID: agentID,
 		ToolID:  toolID,

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -147,8 +148,10 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		}
 		
 		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
+		log.Printf("🔥 MCP-SETUP: MCP tools loaded - %d tools available, %d filtered", len(allMCPTools), len(mcpTools))
 		
 		// Use our new dotprompt + genkit execution system with progressive logging
+		log.Printf("🔥 MCP-SETUP: Creating dotprompt executor")
 		executor := dotprompt.NewGenKitExecutor()
 		
 		// Create a logging callback for real-time progress updates
@@ -162,7 +165,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		// Set the logging callback on the OpenAI plugin for detailed API call logging
 		aee.genkitProvider.SetOpenAILogCallback(logCallback)
 		
+		log.Printf("🔥 AGENT-ENGINE: About to call dotprompt executor - agent: %s", agent.Name)
 		response, err := executor.ExecuteAgentWithDatabaseConfigAndLogging(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
+		log.Printf("🔥 AGENT-ENGINE: Dotprompt executor returned - response: %v, err: %v", response != nil, err)
 		
 		// Clean up MCP connections after execution is complete
 		aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
