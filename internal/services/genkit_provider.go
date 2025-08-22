@@ -66,6 +66,14 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 	gp.currentAPIKey = cfg.AIAPIKey
 	gp.currentBaseURL = cfg.AIBaseURL
 
+	// Auto-detect provider based on model name if needed
+	detectedProvider := detectProviderFromModel(cfg.AIModel, cfg.AIProvider)
+	if detectedProvider != cfg.AIProvider {
+		logging.Info("Auto-detected provider '%s' for model '%s' (overriding configured provider '%s')", 
+			detectedProvider, cfg.AIModel, cfg.AIProvider)
+		cfg.AIProvider = detectedProvider
+	}
+
 	// Initialize Genkit with the configured AI provider
 	logging.Info("Initializing GenKit with provider: %s, model: %s", cfg.AIProvider, cfg.AIModel)
 	
@@ -99,16 +107,17 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		
 		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
 		
-	case "ollama":
-		return fmt.Errorf("Ollama provider not yet supported in modular architecture")
-		
 	default:
 		return fmt.Errorf("unsupported AI provider: %s\n\n"+
-			"Supported providers:\n"+
-			"  • openai: OpenAI GPT models (gpt-4, gpt-3.5-turbo, etc)\n"+
-			"  • googlegenai: Google Gemini models (gemini-pro, etc)\n"+
-			"  • ollama: Local Ollama models (llama3, mistral, etc)\n\n"+
-			"For OpenAI-compatible providers, use 'openai' with custom STN_AI_BASE_URL", 
+			"Station automatically detects providers based on model names:\n"+
+			"  • gemini-*: Routes to Google Gemini provider\n"+
+			"  • gpt-*, claude-*, llama*, etc: Routes to OpenAI-compatible provider\n\n"+
+			"Supported configurations:\n"+
+			"  • OpenAI models: Use any gpt-* model name with OPENAI_API_KEY\n"+
+			"  • Gemini models: Use any gemini-* model name with GEMINI_API_KEY or GOOGLE_API_KEY\n"+
+			"  • OpenAI-compatible APIs: Use any model name with ai_base_url configured\n"+
+			"    Examples: Anthropic, Ollama, Together AI, etc.\n\n"+
+			"Set ai_base_url in config.yml or use --base-url with 'stn init' for custom endpoints.", 
 			cfg.AIProvider)
 	}
 	
@@ -125,4 +134,33 @@ func (gp *GenKitProvider) SetOpenAILogCallback(callback func(map[string]interfac
 	if gp.openaiPlugin != nil {
 		gp.openaiPlugin.SetLogCallback(callback)
 	}
+}
+
+// detectProviderFromModel auto-detects the provider based on model name
+func detectProviderFromModel(modelName, configuredProvider string) string {
+	modelLower := strings.ToLower(modelName)
+	
+	// If model starts with gemini-, it's definitely a Gemini model
+	if strings.HasPrefix(modelLower, "gemini") {
+		return "gemini"
+	}
+	
+	// Known Gemini models
+	geminiModels := []string{
+		"gemini-pro", "gemini-pro-vision", "gemini-1.5-pro", "gemini-1.5-flash",
+		"gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
+	}
+	for _, geminiModel := range geminiModels {
+		if modelLower == geminiModel {
+			return "gemini"
+		}
+	}
+	
+	// For all other models (gpt-*, claude-*, llama*, etc.), use OpenAI-compatible
+	// This allows Station to work with:
+	// - OpenAI models (gpt-4, gpt-3.5-turbo, etc.)
+	// - Anthropic models via OpenAI-compatible API (claude-3-sonnet, etc.)
+	// - Local models via Ollama (llama3, mistral, etc.)
+	// - Any other OpenAI-compatible endpoint
+	return "openai"
 }
