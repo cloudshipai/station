@@ -15,8 +15,9 @@ import (
 
 // DeclarativeSync handles synchronization between file-based configs and database
 type DeclarativeSync struct {
-	repos  *repositories.Repositories
-	config *config.Config
+	repos                   *repositories.Repositories
+	config                  *config.Config
+	customVariableResolver  VariableResolver // Custom resolver for UI integration
 }
 
 // SyncOptions controls sync behavior
@@ -69,6 +70,11 @@ func NewDeclarativeSync(repos *repositories.Repositories, config *config.Config)
 		repos:  repos,
 		config: config,
 	}
+}
+
+// SetVariableResolver sets a custom variable resolver for UI integration
+func (s *DeclarativeSync) SetVariableResolver(resolver VariableResolver) {
+	s.customVariableResolver = resolver
 }
 
 // SyncEnvironment synchronizes a specific environment
@@ -220,6 +226,10 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 		templateWorkspaceDir = filepath.Join(configHome, "station")
 	}
 	templateService := NewTemplateVariableService(templateWorkspaceDir, s.repos)
+	// Inject custom variable resolver if available
+	if s.customVariableResolver != nil {
+		templateService.SetVariableResolver(s.customVariableResolver)
+	}
 
 	// Process each JSON template file
 	for _, jsonFile := range jsonFiles {

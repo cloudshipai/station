@@ -78,6 +78,11 @@ export const agentRunsApi = {
 // Sync API
 export const syncApi = {
   trigger: () => apiClient.post('/sync'),
+  startInteractive: (environment: string, options?: { dry_run?: boolean; force?: boolean }) => 
+    apiClient.post('/sync/interactive', { environment, ...options }),
+  getStatus: (syncId: string) => apiClient.get(`/sync/status/${syncId}`),
+  submitVariables: (syncId: string, variables: Record<string, string>) => 
+    apiClient.post('/sync/variables', { sync_id: syncId, variables }),
 };
 
 // Bundle info type

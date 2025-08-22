@@ -13,10 +13,14 @@ import (
 	"station/internal/db/repositories"
 )
 
+// VariableResolver is a function type for resolving missing variables
+type VariableResolver func(missingVars []VariableInfo) (map[string]string, error)
+
 // TemplateVariableService handles variable detection, resolution, and management
 type TemplateVariableService struct {
-	configDir string
-	repos     *repositories.Repositories
+	configDir        string
+	repos           *repositories.Repositories
+	variableResolver VariableResolver // Custom resolver for interactive modes
 }
 
 // VariableInfo represents a detected variable in a template
@@ -41,6 +45,11 @@ func NewTemplateVariableService(configDir string, repos *repositories.Repositori
 		configDir: configDir,
 		repos:     repos,
 	}
+}
+
+// SetVariableResolver sets a custom variable resolver for interactive modes
+func (tvs *TemplateVariableService) SetVariableResolver(resolver VariableResolver) {
+	tvs.variableResolver = resolver
 }
 
 // ProcessTemplateWithVariables handles the complete variable workflow for a template
@@ -76,50 +85,90 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 		log.Printf("Template rendering failed for %s: %v", configName, err)
 		
 		if interactive {
-			// In interactive mode, we can try to extract missing variable from error and prompt
-			missingVar := tvs.extractMissingVariableFromError(err)
-			if missingVar != "" {
-				log.Printf("Extracted missing variable '%s' from template error", missingVar)
+			// In interactive mode, try to detect all missing variables at once
+			allMissingVars := tvs.detectAllMissingVariables(templateContent, existingVars)
+			if len(allMissingVars) > 0 {
+				log.Printf("Detected %d missing variables: %v", len(allMissingVars), tvs.getVariableNames(allMissingVars))
 				
-				// Prompt for the missing variable
-				newVars, err := tvs.promptForMissingVariables([]VariableInfo{{
-					Name:     missingVar,
-					Required: true,
-					Secret:   tvs.isSecretVariable(missingVar),
-				}})
+				var newVars map[string]string
+				if tvs.variableResolver != nil {
+					newVars, err = tvs.variableResolver(allMissingVars)
+				} else {
+					newVars, err = tvs.promptForMissingVariables(allMissingVars)
+				}
 				if err != nil {
-					return nil, fmt.Errorf("failed to collect missing variable: %w", err)
+					return nil, fmt.Errorf("failed to collect missing variables: %w", err)
 				}
 				
-				// Merge new variable and try rendering again
+				// Merge new variables and try rendering again
 				for k, v := range newVars {
 					existingVars[k] = v
 				}
 				
-				// Save new variable to environment file
+				// Save new variables to environment file
 				if err := tvs.saveVariablesToEnvironment(envName, newVars); err != nil {
 					log.Printf("Warning: failed to save variables to environment file: %v", err)
 				}
 				
-				// Try rendering again
+				// Try rendering again with all variables
 				renderedContent, err = tvs.renderTemplate(templateContent, existingVars)
 				if err != nil {
-					// Still failing - return error
+					// Check if there are still more missing variables
+					remainingMissing := tvs.detectAllMissingVariables(templateContent, existingVars)
 					return &VariableResolutionResult{
 						AllResolved:     false,
 						ResolvedVars:    existingVars,
-						MissingVars:     []VariableInfo{{Name: missingVar, Required: true}},
+						MissingVars:     remainingMissing,
 						RenderedContent: "",
-					}, fmt.Errorf("template rendering failed even after providing variable: %w", err)
+					}, fmt.Errorf("template rendering failed even after providing variables: %w", err)
 				}
 			} else {
-				// Couldn't extract variable name from error
-				return &VariableResolutionResult{
-					AllResolved:     false,
-					ResolvedVars:    existingVars,
-					MissingVars:     []VariableInfo{},
-					RenderedContent: "",
-				}, fmt.Errorf("template rendering failed and couldn't determine missing variable: %w", err)
+				// Fallback to single variable extraction from error
+				missingVar := tvs.extractMissingVariableFromError(err)
+				if missingVar != "" {
+					log.Printf("Extracted single missing variable '%s' from template error", missingVar)
+					
+					variableInfo := []VariableInfo{{
+						Name:     missingVar,
+						Required: true,
+						Secret:   tvs.isSecretVariable(missingVar),
+					}}
+					
+					var newVars map[string]string
+					if tvs.variableResolver != nil {
+						newVars, err = tvs.variableResolver(variableInfo)
+					} else {
+						newVars, err = tvs.promptForMissingVariables(variableInfo)
+					}
+					if err != nil {
+						return nil, fmt.Errorf("failed to collect missing variable: %w", err)
+					}
+					
+					for k, v := range newVars {
+						existingVars[k] = v
+					}
+					
+					if err := tvs.saveVariablesToEnvironment(envName, newVars); err != nil {
+						log.Printf("Warning: failed to save variables to environment file: %v", err)
+					}
+					
+					renderedContent, err = tvs.renderTemplate(templateContent, existingVars)
+					if err != nil {
+						return &VariableResolutionResult{
+							AllResolved:     false,
+							ResolvedVars:    existingVars,
+							MissingVars:     []VariableInfo{{Name: missingVar, Required: true}},
+							RenderedContent: "",
+						}, fmt.Errorf("template rendering failed even after providing variable: %w", err)
+					}
+				} else {
+					return &VariableResolutionResult{
+						AllResolved:     false,
+						ResolvedVars:    existingVars,
+						MissingVars:     []VariableInfo{},
+						RenderedContent: "",
+					}, fmt.Errorf("template rendering failed and couldn't determine missing variable: %w", err)
+				}
 			}
 		} else {
 			// Non-interactive mode - return failure
@@ -306,6 +355,67 @@ func (tvs *TemplateVariableService) getEnvironmentName(envID int64) (string, err
 		return "", err
 	}
 	return env.Name, nil
+}
+
+// detectAllMissingVariables tries to detect all missing variables in a template
+func (tvs *TemplateVariableService) detectAllMissingVariables(templateContent string, existingVars map[string]string) []VariableInfo {
+	// Try to parse the template to extract variable references
+	variables := tvs.extractVariableReferences(templateContent)
+	var missing []VariableInfo
+	
+	for _, varName := range variables {
+		if _, exists := existingVars[varName]; !exists {
+			missing = append(missing, VariableInfo{
+				Name:     varName,
+				Required: true,
+				Secret:   tvs.isSecretVariable(varName),
+			})
+		}
+	}
+	
+	return missing
+}
+
+// extractVariableReferences extracts all variable references from template content
+func (tvs *TemplateVariableService) extractVariableReferences(templateContent string) []string {
+	var variables []string
+	
+	// Simple regex-free approach: look for {{ .VAR_NAME }} patterns
+	content := templateContent
+	for {
+		start := strings.Index(content, "{{ .")
+		if start == -1 {
+			break
+		}
+		
+		start += 4 // Skip "{{ ."
+		end := strings.Index(content[start:], " }}")
+		if end == -1 {
+			end = strings.Index(content[start:], "}}")
+		}
+		if end == -1 {
+			break
+		}
+		
+		varName := strings.TrimSpace(content[start : start+end])
+		if varName != "" && !tvs.containsString(variables, varName) {
+			variables = append(variables, varName)
+		}
+		
+		content = content[start+end:]
+	}
+	
+	return variables
+}
+
+// containsString checks if a slice contains a string
+func (tvs *TemplateVariableService) containsString(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }
 
 // extractMissingVariableFromError extracts variable name from Go template error messages
