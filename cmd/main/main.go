@@ -133,6 +133,7 @@ func init() {
 	initCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
 	initCmd.Flags().String("provider", "", "AI provider (openai, gemini, custom) - if not set, shows interactive selection")
 	initCmd.Flags().String("model", "", "AI model name - if not set, shows interactive selection based on provider")
+	initCmd.Flags().String("base-url", "", "Base URL for OpenAI-compatible endpoints (e.g., http://localhost:11434/v1 for Ollama)")
 	initCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
 	
 	// Serve command flags
