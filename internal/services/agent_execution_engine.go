@@ -75,6 +75,20 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 	startTime := time.Now()
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
+	// Log execution start
+	err := aee.repos.AgentRuns.AppendDebugLog(runID, map[string]interface{}{
+		"timestamp": time.Now().Format(time.RFC3339),
+		"level":     "info",
+		"message":   fmt.Sprintf("Starting execution for agent '%s'", agent.Name),
+		"details": map[string]interface{}{
+			"agent_id": agent.ID,
+			"task":     task,
+		},
+	})
+	if err != nil {
+		logging.Debug("Failed to log execution start: %v", err)
+	}
+
 	// All agents now use unified dotprompt execution system
 		
 		// Setup cleanup of MCP connections when dotprompt execution completes
@@ -138,9 +152,21 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		
 		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 		
-		// Use our new dotprompt + genkit execution system
+		// Use our new dotprompt + genkit execution system with progressive logging
 		executor := dotprompt.NewGenKitExecutor()
-		response, err := executor.ExecuteAgentWithDatabaseConfig(*agent, agentTools, genkitApp, mcpTools, task)
+		
+		// Create a logging callback for real-time progress updates
+		logCallback := func(logEntry map[string]interface{}) {
+			err := aee.repos.AgentRuns.AppendDebugLog(runID, logEntry)
+			if err != nil {
+				logging.Debug("Failed to append debug log: %v", err)
+			}
+		}
+		
+		// Set the logging callback on the OpenAI plugin for detailed API call logging
+		aee.genkitProvider.SetOpenAILogCallback(logCallback)
+		
+		response, err := executor.ExecuteAgentWithDatabaseConfigAndLogging(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
 		if err != nil {
 			return nil, fmt.Errorf("dotprompt execution failed: %w", err)
 		}
