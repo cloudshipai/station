@@ -2178,8 +2178,8 @@ const Runs = () => {
                   </div>
                 </div>
                 <div className="mt-2 flex gap-4 text-sm text-tokyo-comment font-mono">
-                  <span>Duration: {run.execution_time}</span>
-                  <span>Time: {run.timestamp}</span>
+                  <span>Duration: {run.duration_seconds ? `${run.duration_seconds.toFixed(1)}s` : 'N/A'}</span>
+                  <span>Time: {new Date(run.started_at).toLocaleTimeString()}</span>
                 </div>
               </div>
             ))}
