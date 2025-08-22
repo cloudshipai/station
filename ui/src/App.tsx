@@ -23,6 +23,7 @@ import '@xyflow/react/dist/style.css';
 import Editor from '@monaco-editor/react';
 import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi, bundlesApi, type BundleInfo } from './api/station';
 import { RunsPage } from './components/runs/RunsPage';
+import { SyncModal } from './components/sync/SyncModal';
 import { apiClient } from './api/client';
 import { getLayoutedNodes } from './utils/layoutUtils';
 // Import node components when needed
@@ -1727,12 +1728,35 @@ const AddServerModal = ({
               {/* Server Config Input */}
               <div className="space-y-2">
                 <label className="text-sm font-mono text-tokyo-cyan font-medium">Server Configuration:</label>
-                <textarea
-                  value={serverConfig}
-                  onChange={(e) => setServerConfig(e.target.value)}
-                  className="w-full h-80 px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-cyan text-xs"
-                  placeholder={defaultConfig}
-                />
+                <div className="border border-tokyo-blue7 rounded overflow-hidden">
+                  <Editor
+                    height="320px"
+                    defaultLanguage="json"
+                    theme="vs-dark"
+                    value={serverConfig}
+                    onChange={(value) => setServerConfig(value || '')}
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 12,
+                      fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
+                      lineNumbers: 'on',
+                      folding: true,
+                      wordWrap: 'on',
+                      automaticLayout: true,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      bracketPairColorization: { enabled: true },
+                      suggest: { showSnippets: false },
+                      quickSuggestions: false,
+                      parameterHints: { enabled: false },
+                      hover: { enabled: false },
+                      contextmenu: false,
+                      scrollBeyondLastLine: false,
+                      renderLineHighlight: 'all',
+                      selectOnLineNumbers: true,
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Documentation Note */}
@@ -1955,6 +1979,7 @@ const MCPServers = () => {
   const [modalMCPServerId, setModalMCPServerId] = useState<number | null>(null);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
   const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [environments, setEnvironments] = useState<any[]>([]);
   const environmentContext = React.useContext(EnvironmentContext);
 
@@ -1984,36 +2009,30 @@ const MCPServers = () => {
     fetchEnvironments();
   }, []);
 
-  // Fetch MCP servers data when environment changes
-  useEffect(() => {
-    const fetchMCPServers = async () => {
-      try {
-        if (environmentContext?.selectedEnvironment) {
-          // Fetch servers for specific environment
-          const response = await mcpServersApi.getByEnvironment(environmentContext.selectedEnvironment);
-          setMcpServers(Array.isArray(response.data) ? response.data : []);
-        } else {
-          // No specific environment selected, show empty for now
-          setMcpServers([]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch MCP servers:', error);
+  // Define fetchMCPServers function
+  const fetchMCPServers = useCallback(async () => {
+    try {
+      if (environmentContext?.selectedEnvironment) {
+        // Fetch servers for specific environment
+        const response = await mcpServersApi.getByEnvironment(environmentContext.selectedEnvironment);
+        setMcpServers(Array.isArray(response.data) ? response.data : []);
+      } else {
+        // No specific environment selected, show empty for now
         setMcpServers([]);
       }
-    };
-    fetchMCPServers();
-  }, [environmentContext?.selectedEnvironment, environmentContext?.refreshTrigger]);
-
-  const handleSync = async () => {
-    setIsSyncing(true);
-    try {
-      await syncApi.trigger();
-      console.log('Sync completed successfully');
     } catch (error) {
-      console.error('Sync failed:', error);
-    } finally {
-      setIsSyncing(false);
+      console.error('Failed to fetch MCP servers:', error);
+      setMcpServers([]);
     }
+  }, [environmentContext?.selectedEnvironment]);
+
+  // Fetch MCP servers data when environment changes
+  useEffect(() => {
+    fetchMCPServers();
+  }, [fetchMCPServers, environmentContext?.refreshTrigger]);
+
+  const handleSync = () => {
+    setIsSyncModalOpen(true);
   };
 
   // MCP servers are already filtered by environment on the backend
@@ -2024,6 +2043,13 @@ const MCPServers = () => {
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
         <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSync}
+            className="px-4 py-2 bg-tokyo-blue text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors flex items-center gap-2"
+          >
+            <Play className="h-4 w-4" />
+            Sync
+          </button>
           <button 
             onClick={() => setIsAddServerModalOpen(true)}
             className="px-4 py-2 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors shadow-tokyo-glow flex items-center gap-2"
@@ -2100,6 +2126,14 @@ const MCPServers = () => {
         serverId={modalMCPServerId} 
         isOpen={isMCPModalOpen} 
         onClose={closeMCPServerModal} 
+      />
+      
+      {/* Sync Modal */}
+      <SyncModal 
+        isOpen={isSyncModalOpen} 
+        onClose={() => setIsSyncModalOpen(false)} 
+        environment={environmentContext?.selectedEnvironment ? environments.find(env => env.id === environmentContext.selectedEnvironment)?.name || 'default' : 'default'}
+        onSyncComplete={fetchMCPServers}
       />
     </div>
   );
