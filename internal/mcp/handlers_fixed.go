@@ -157,6 +157,15 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 			name, createdAgent.MaxSteps, createdAgent.EnvironmentID, len(assignedTools), len(toolNames))
 	}
 
+	// Automatically export agent to file-based config after successful DB save and tool assignment
+	if s.agentExportService != nil {
+		if err := s.agentExportService.ExportAgentAfterSave(createdAgent.ID); err != nil {
+			// Log the error but don't fail the request - the agent was successfully created in DB
+			// Add export error info to response for user awareness
+			response["export_warning"] = fmt.Sprintf("Agent created but export failed: %v. Use 'stn agent export %s' to export manually.", err, name)
+		}
+	}
+
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
@@ -749,6 +758,14 @@ func (s *Server) handleUpdateAgentPrompt(ctx context.Context, request mcp.CallTo
 			"name":   agent.Name,
 			"prompt": prompt,
 		},
+	}
+
+	// Automatically export agent to file-based config after successful DB update
+	if s.agentExportService != nil {
+		if err := s.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+			// Add export error info to response for user awareness
+			response["export_warning"] = fmt.Sprintf("Agent updated but export failed: %v. Use 'stn agent export %s' to export manually.", err, agent.Name)
+		}
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
