@@ -1,0 +1,6 @@
+# Dagger CI Template Variables
+CI_TYPE: dagger
+WORKSPACE_PATH: /workspace
+REPORTS_PATH: /workspace/reports
+PARALLEL_JOBS: true
+CACHE_ENABLED: true
