@@ -143,8 +143,6 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
   const submitVariables = async () => {
     if (!syncStatus || isSubmittingVariables) return;
     
-    console.log('submitVariables called - starting submission');
-    
     // Validate required fields first (before setting loading state)
     const errors: Record<string, string> = {};
     const currentVariables: Record<string, string> = {};
@@ -162,29 +160,23 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
       });
     }
     
-    console.log('Validation errors:', errors);
     setValidationErrors(errors);
     
     // Don't proceed if there are validation errors
     if (Object.keys(errors).length > 0) {
-      console.log('Validation failed, not submitting');
       return;
     }
     
     // Only set loading state after validation passes
-    console.log('Validation passed, setting loading state');
     setIsSubmittingVariables(true);
     
     try {
-      console.log('Making API call...');
       await syncApi.submitVariables(syncStatus.id, currentVariables);
-      console.log('API call successful');
       // The polling will pick up the status change
       setValidationErrors({}); // Clear any previous errors
     } catch (error) {
       console.error('Failed to submit variables:', error);
     } finally {
-      console.log('Clearing loading state');
       setIsSubmittingVariables(false);
     }
   };
