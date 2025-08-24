@@ -1,0 +1,8 @@
+# CI Server Template Variables
+SERVER_MODE: ci-server
+WORKSPACE_ROOT: /app/workspaces
+REPORTS_ROOT: /app/reports
+CACHE_ROOT: /app/cache
+LOG_LEVEL: debug
+MAX_CONCURRENT_JOBS: 10
+RETENTION_DAYS: 30
