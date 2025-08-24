@@ -16,17 +16,18 @@ import (
 )
 
 type Server struct {
-	mcpServer        *server.MCPServer
-	httpServer       *server.StreamableHTTPServer
-	db               db.Database
+	mcpServer          *server.MCPServer
+	httpServer         *server.StreamableHTTPServer
+	db                 db.Database
 	// mcpConfigSvc removed - using file-based configs only
-	toolDiscoverySvc *ToolDiscoveryService
-	agentService     services.AgentServiceInterface
-	executionQueue   *services.ExecutionQueueService
-	authService      *auth.AuthService
-	repos            *repositories.Repositories
-	config           *config.Config
-	localMode        bool
+	toolDiscoverySvc   *ToolDiscoveryService
+	agentService       services.AgentServiceInterface
+	executionQueue     *services.ExecutionQueueService
+	authService        *auth.AuthService
+	repos              *repositories.Repositories
+	config             *config.Config
+	localMode          bool
+	agentExportService *services.AgentExportService
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, executionQueue *services.ExecutionQueueService, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -48,17 +49,18 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 	log.Printf("MCP Server configured with streamable HTTP transport")
 
 	server := &Server{
-		mcpServer:        mcpServer,
-		httpServer:       httpServer,
-		db:               database,
+		mcpServer:          mcpServer,
+		httpServer:         httpServer,
+		db:                 database,
 		// mcpConfigSvc removed
-		toolDiscoverySvc: toolDiscoverySvc,
-		agentService:     agentService,
-		executionQueue:   executionQueue,
-		authService:      authService,
-		repos:            repos,
-		config:           cfg,
-		localMode:        localMode,
+		toolDiscoverySvc:   toolDiscoverySvc,
+		agentService:       agentService,
+		executionQueue:     executionQueue,
+		authService:        authService,
+		repos:              repos,
+		config:             cfg,
+		localMode:          localMode,
+		agentExportService: services.NewAgentExportService(repos),
 	}
 
 	// Setup the server capabilities
