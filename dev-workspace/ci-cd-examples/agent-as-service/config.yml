@@ -1,0 +1,24 @@
+# Station CI Configuration
+admin_username: ci-runner
+ai_model: gpt-4o
+ai_provider: openai
+api_port: 8585
+database_url: /app/data/station.db
+debug: false
+encryption_key: "{{ .ENCRYPTION_KEY }}"
+local_mode: true  # Simplified for CI usage
+
+# MCP settings optimized for CI
+mcp:
+  sync:
+    confirm: false
+    dry_run: false
+    environment: "ci"
+    interactive: false
+    validate: true
+    verbose: false
+
+mcp_port: 3000
+ssh_host_key_path: /app/ssh_host_key
+ssh_port: 2222
+telemetry_enabled: false  # Disable in CI
