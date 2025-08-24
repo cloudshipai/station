@@ -41,20 +41,22 @@ type AgentCreationPlan struct {
 
 // AgentPlanGenerator handles intelligent agent creation and planning
 type AgentPlanGenerator struct {
-	repos          *repositories.Repositories
-	agentService   AgentServiceInterface
-	genkitProvider *GenKitProvider
-	mcpConnManager *MCPConnectionManager
-	mcpClient      *mcp.GenkitMCPClient
+	repos             *repositories.Repositories
+	agentService      AgentServiceInterface
+	genkitProvider    *GenKitProvider
+	mcpConnManager    *MCPConnectionManager
+	mcpClient         *mcp.GenkitMCPClient
+	agentExportService *AgentExportService
 }
 
 // NewAgentPlanGenerator creates a new agent plan generator
 func NewAgentPlanGenerator(repos *repositories.Repositories, agentService AgentServiceInterface) *AgentPlanGenerator {
 	return &AgentPlanGenerator{
-		repos:          repos,
-		agentService:   agentService,
-		genkitProvider: NewGenKitProvider(),
-		mcpConnManager: NewMCPConnectionManager(repos, nil),
+		repos:             repos,
+		agentService:      agentService,
+		genkitProvider:    NewGenKitProvider(),
+		mcpConnManager:    NewMCPConnectionManager(repos, nil),
+		agentExportService: NewAgentExportService(repos),
 	}
 }
 
@@ -122,6 +124,12 @@ func (apg *AgentPlanGenerator) CreateIntelligentAgent(ctx context.Context, req A
 	if len(plan.CoreTools) > 0 {
 		assignedCount = apg.assignToolsToAgent(agent.ID, plan.CoreTools, targetEnvironmentID)
 		logging.Debug("Agent assigned %d tools from %d selected by AI", assignedCount, len(plan.CoreTools))
+	}
+
+	// Step 5.5: Automatically export agent to file-based config after successful DB save
+	if err := apg.agentExportService.ExportAgentAfterSave(agent.ID); err != nil {
+		// Log the error but don't fail the agent creation - the agent was successfully created in DB
+		logging.Info("Failed to export agent %d after creation: %v", agent.ID, err)
 	}
 
 	// Step 6: Handle scheduling if enabled

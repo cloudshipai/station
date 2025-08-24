@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -257,6 +258,12 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		// h.assignToolsToAgent(agentID, req.AssignedTools, req.EnvironmentID)
 	}
 
+	// Automatically export agent to file-based config after successful DB save
+	if err := h.agentExportService.ExportAgentAfterSave(agent.ID); err != nil {
+		// Log the error but don't fail the request - the agent was successfully created in DB
+		log.Printf("Failed to export agent %d after creation: %v", agent.ID, err)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"message":     "Agent created successfully",
 		"agent_id":    agent.ID,
@@ -393,6 +400,12 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent"})
 			return
+		}
+
+		// Automatically export agent to file-based config after successful DB update
+		if err := h.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+			// Log the error but don't fail the request - the agent was successfully updated in DB
+			log.Printf("Failed to export agent %d after update: %v", agentID, err)
 		}
 	}
 

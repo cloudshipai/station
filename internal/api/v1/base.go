@@ -17,6 +17,7 @@ type APIHandlers struct {
 	// genkitService removed - service no longer exists
 	webhookService       *services.WebhookService
 	executionQueueSvc    *services.ExecutionQueueService
+	agentExportService   *services.AgentExportService
 	localMode            bool
 }
 
@@ -33,6 +34,7 @@ func NewAPIHandlers(
 		toolDiscoveryService: toolDiscoveryService,
 		webhookService:       webhookService,
 		executionQueueSvc:    executionQueueSvc,
+		agentExportService:   services.NewAgentExportService(repos),
 		localMode:            localMode,
 	}
 }
