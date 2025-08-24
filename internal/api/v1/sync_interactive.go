@@ -262,6 +262,7 @@ func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequ
 	}
 
 	// Update progress and final status
+	h.updateSyncProgress(syncID, "Processing results", 3, "Finalizing sync results...")
 	h.updateSyncProgress(syncID, "Completed", 4, "Sync operation completed successfully")
 	h.updateSyncStatus(syncID, "completed", "Sync completed successfully", result, "")
 }

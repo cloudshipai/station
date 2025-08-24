@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Play, CheckCircle, AlertCircle, Clock, Database } from 'lucide-react';
+import { X, Play, CheckCircle, AlertCircle, Clock, Database, Loader2 } from 'lucide-react';
 import { syncApi } from '../../api/station';
 
 interface SyncModalProps {
@@ -39,9 +39,11 @@ interface SyncStatus {
 export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environment, onSyncComplete }) => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmittingVariables, setIsSubmittingVariables] = useState(false);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [variablesInitialized, setVariablesInitialized] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const inputRefs = useRef<Record<string, HTMLInputElement>>({});
 
   // Clean up polling on unmount or modal close
@@ -54,6 +56,8 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
       setSyncStatus(null);
       setVariables({});
       setVariablesInitialized(false);
+      setValidationErrors({});
+      setIsSubmittingVariables(false);
       inputRefs.current = {};
     }
   }, [isOpen, pollInterval]);
@@ -137,24 +141,51 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
   };
 
   const submitVariables = async () => {
-    if (!syncStatus) return;
+    if (!syncStatus || isSubmittingVariables) return;
+    
+    console.log('submitVariables called - starting submission');
+    
+    // Validate required fields first (before setting loading state)
+    const errors: Record<string, string> = {};
+    const currentVariables: Record<string, string> = {};
+    
+    if (syncStatus.variables) {
+      syncStatus.variables.variables.forEach(variable => {
+        const input = inputRefs.current[variable.name];
+        const value = input?.value?.trim() || '';
+        
+        if (variable.required && !value) {
+          errors[variable.name] = `${variable.name} is required`;
+        }
+        
+        currentVariables[variable.name] = value;
+      });
+    }
+    
+    console.log('Validation errors:', errors);
+    setValidationErrors(errors);
+    
+    // Don't proceed if there are validation errors
+    if (Object.keys(errors).length > 0) {
+      console.log('Validation failed, not submitting');
+      return;
+    }
+    
+    // Only set loading state after validation passes
+    console.log('Validation passed, setting loading state');
+    setIsSubmittingVariables(true);
     
     try {
-      // Get current values from input refs
-      const currentVariables: Record<string, string> = {};
-      if (syncStatus.variables) {
-        syncStatus.variables.variables.forEach(variable => {
-          const input = inputRefs.current[variable.name];
-          if (input) {
-            currentVariables[variable.name] = input.value;
-          }
-        });
-      }
-      
+      console.log('Making API call...');
       await syncApi.submitVariables(syncStatus.id, currentVariables);
+      console.log('API call successful');
       // The polling will pick up the status change
+      setValidationErrors({}); // Clear any previous errors
     } catch (error) {
       console.error('Failed to submit variables:', error);
+    } finally {
+      console.log('Clearing loading state');
+      setIsSubmittingVariables(false);
     }
   };
 
@@ -316,18 +347,33 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
                           type={variable.secret ? 'password' : 'text'}
                           defaultValue={variable.default || ''}
                           placeholder={variable.default || `Enter ${variable.name}...`}
-                          className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-cyan text-sm"
+                          className={`w-full px-3 py-2 bg-tokyo-bg border rounded font-mono text-tokyo-fg focus:outline-none text-sm ${
+                            validationErrors[variable.name] 
+                              ? 'border-tokyo-red focus:border-tokyo-red' 
+                              : 'border-tokyo-blue7 focus:border-tokyo-cyan'
+                          }`}
                           autoComplete="off"
                         />
+                        {validationErrors[variable.name] && (
+                          <p className="text-xs text-tokyo-red font-mono mt-1">
+                            {validationErrors[variable.name]}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
 
                   <button
                     onClick={submitVariables}
-                    className="w-full px-4 py-2 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue transition-colors"
+                    disabled={isSubmittingVariables || Object.keys(validationErrors).length > 0}
+                    className={`w-full px-4 py-2 rounded font-mono font-medium transition-colors flex items-center justify-center gap-2 ${
+                      isSubmittingVariables || Object.keys(validationErrors).length > 0
+                        ? 'bg-tokyo-comment text-tokyo-bg cursor-not-allowed' 
+                        : 'bg-tokyo-cyan text-tokyo-bg hover:bg-tokyo-blue'
+                    }`}
                   >
-                    Continue Sync
+                    {isSubmittingVariables && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {isSubmittingVariables ? 'Submitting...' : 'Continue Sync'}
                   </button>
                 </div>
               )}
@@ -349,17 +395,21 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
                   
                   {syncStatus.result && (
                     <div className="space-y-2 text-sm font-mono">
-                      <div className="flex justify-between">
-                        <span className="text-tokyo-comment">Agents Processed:</span>
-                        <span className="text-tokyo-fg">{syncStatus.result.agents_processed}</span>
+                      <div className="text-tokyo-comment">
+                        📊 <strong>Sync Results:</strong>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-tokyo-comment">Agents Synced:</span>
-                        <span className="text-tokyo-fg">{syncStatus.result.agents_synced}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-tokyo-comment">MCP Servers:</span>
-                        <span className="text-tokyo-fg">{syncStatus.result.mcp_servers_processed}</span>
+                      <div className="ml-4 space-y-1">
+                        <div className="text-tokyo-cyan">
+                          • MCP Servers: {syncStatus.result.MCPServersProcessed} processed, {syncStatus.result.MCPServersConnected} connected
+                        </div>
+                        <div className="text-tokyo-green">
+                          • Agents: {syncStatus.result.AgentsProcessed} processed, {syncStatus.result.AgentsSynced} synced
+                        </div>
+                        {syncStatus.result.AgentsSkipped > 0 && (
+                          <div className="text-tokyo-comment">
+                            • {syncStatus.result.AgentsSkipped} agents up-to-date (skipped)
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
