@@ -44,19 +44,6 @@ var (
 		RunE:  runAgentDelete,
 	}
 
-	agentCreateCmd = &cobra.Command{
-		Use:   "create <name> <description>",
-		Short: "Create a new intelligent agent",
-		Long: `Create a new AI agent using intelligent analysis to determine:
-- Optimal environment and tool assignments
-- System prompt based on requirements
-- Maximum steps and configuration
-
-The agent will be created using Station's self-bootstrapping architecture, 
-where our own MCP server analyzes requirements to create optimized agents.`,
-		Args: cobra.ExactArgs(2),
-		RunE: runAgentCreate,
-	}
 
 	agentExportCmd = &cobra.Command{
 		Use:   "export <name> [environment]",
@@ -167,11 +154,6 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 	return agentHandler.RunAgentDelete(cmd, args)
 }
 
-// runAgentCreate creates a new intelligent agent
-func runAgentCreate(cmd *cobra.Command, args []string) error {
-	agentHandler := agent.NewAgentHandler(themeManager)
-	return agentHandler.RunAgentCreate(cmd, args)
-}
 
 // runAgentExport exports an agent to file-based config
 func runAgentExport(cmd *cobra.Command, args []string) error {
