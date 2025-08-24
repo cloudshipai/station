@@ -432,6 +432,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	
 	// Check if ship setup is requested
 	shipSetup, _ := cmd.Flags().GetBool("ship")
+	
+	// Check CloudShip AI configuration
+	cloudshipaiKey, _ := cmd.Flags().GetString("cloudshipai")
+	cloudshipaiEndpoint, _ := cmd.Flags().GetString("cloudshipai_endpoint")
+	
+	// Check environment variable if flag not provided
+	if cloudshipaiKey == "" {
+		cloudshipaiKey = os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY")
+	}
 
 	// Check existing config to avoid interactive mode
 	_, err := os.Stat(configFile)
@@ -536,6 +545,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	} else {
 		// Default: database in config directory, no workspace setting needed
 		viper.Set("database_url", filepath.Join(configDir, "station.db"))
+	}
+	
+	// Set CloudShip AI configuration if provided
+	if cloudshipaiKey != "" {
+		viper.Set("cloudshipai.registration_key", cloudshipaiKey)
+		viper.Set("cloudshipai.endpoint", cloudshipaiEndpoint)
+		viper.Set("cloudshipai.enabled", true)
+		fmt.Printf("🌩️  CloudShip AI integration enabled\n")
+		fmt.Printf("   Endpoint: %s\n", cloudshipaiEndpoint)
 	}
 
 	// Write configuration file
