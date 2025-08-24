@@ -749,27 +749,6 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	return nil
 }
 
-// RunAgentCreate creates a new agent
-func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
-	styles := common.GetCLIStyles(h.themeManager)
-	banner := styles.Banner.Render("➕ Create Agent")
-	fmt.Println(banner)
-
-	endpoint, _ := cmd.Flags().GetString("endpoint")
-	name, _ := cmd.Flags().GetString("name")
-	description, _ := cmd.Flags().GetString("description")
-	domain, _ := cmd.Flags().GetString("domain")
-	schedule, _ := cmd.Flags().GetString("schedule")
-	environment, _ := cmd.Flags().GetString("env")
-
-	if endpoint != "" {
-		fmt.Println(styles.Error.Render("❌ Creating remote agents is not currently supported"))
-		return fmt.Errorf("remote agent creation not supported")
-	} else {
-		fmt.Println(styles.Info.Render("🏠 Creating local agent"))
-		return h.createAgentLocal(name, description, domain, schedule, environment)
-	}
-}
 
 // RunAgentExport exports an agent to file-based config
 func (h *AgentHandler) RunAgentExport(cmd *cobra.Command, args []string) error {
