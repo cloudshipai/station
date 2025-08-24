@@ -1978,8 +1978,6 @@ const MCPServers = () => {
   const [mcpServers, setMcpServers] = useState<any[]>([]);
   const [modalMCPServerId, setModalMCPServerId] = useState<number | null>(null);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
-  const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [environments, setEnvironments] = useState<any[]>([]);
   const environmentContext = React.useContext(EnvironmentContext);
 
@@ -2031,10 +2029,6 @@ const MCPServers = () => {
     fetchMCPServers();
   }, [fetchMCPServers, environmentContext?.refreshTrigger]);
 
-  const handleSync = () => {
-    setIsSyncModalOpen(true);
-  };
-
   // MCP servers are already filtered by environment on the backend
   const filteredServers = mcpServers || [];
 
@@ -2042,22 +2036,6 @@ const MCPServers = () => {
     <div className="h-full flex flex-col bg-tokyo-bg">
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
         <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handleSync}
-            className="px-4 py-2 bg-tokyo-blue text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors flex items-center gap-2"
-          >
-            <Play className="h-4 w-4" />
-            Sync
-          </button>
-          <button 
-            onClick={() => setIsAddServerModalOpen(true)}
-            className="px-4 py-2 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors shadow-tokyo-glow flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Add Server
-          </button>
-        </div>
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         {filteredServers.length === 0 ? (
@@ -2114,26 +2092,11 @@ const MCPServers = () => {
         )}
       </div>
       
-      {/* Add Server Modal */}
-      <AddServerModal 
-        isOpen={isAddServerModalOpen} 
-        onClose={() => setIsAddServerModalOpen(false)} 
-        environmentName={environmentContext?.selectedEnvironment ? environments.find(env => env.id === environmentContext.selectedEnvironment)?.name || 'default' : 'default'}
-      />
-      
       {/* MCP Server Details Modal */}
       <MCPServerDetailsModal 
         serverId={modalMCPServerId} 
         isOpen={isMCPModalOpen} 
         onClose={closeMCPServerModal} 
-      />
-      
-      {/* Sync Modal */}
-      <SyncModal 
-        isOpen={isSyncModalOpen} 
-        onClose={() => setIsSyncModalOpen(false)} 
-        environment={environmentContext?.selectedEnvironment ? environments.find(env => env.id === environmentContext.selectedEnvironment)?.name || 'default' : 'default'}
-        onSyncComplete={fetchMCPServers}
       />
     </div>
   );
@@ -2179,6 +2142,8 @@ const EnvironmentsPage = () => {
   const [loading, setLoading] = useState(true);
   const [graphLoading, setGraphLoading] = useState(false);
   const [isBundleModalOpen, setIsBundleModalOpen] = useState(false);
+  const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
 
   // Fetch environments data
@@ -2203,105 +2168,6 @@ const EnvironmentsPage = () => {
 
   // Generate nodes and edges for the selected environment
   useEffect(() => {
-    if (!selectedEnvironment) return;
-
-    const generateEnvironmentGraph = async () => {
-      try {
-        setGraphLoading(true);
-        const [agentsResponse, mcpServersResponse] = await Promise.all([
-          agentsApi.getByEnvironment(selectedEnvironment),
-          mcpServersApi.getByEnvironment(selectedEnvironment)
-        ]);
-
-        console.log('API Responses:', { agentsResponse: agentsResponse.data, mcpServersResponse: mcpServersResponse.data });
-
-        const agents = agentsResponse.data?.agents ? 
-          (Array.isArray(agentsResponse.data.agents) ? agentsResponse.data.agents : []) : [];
-        const mcpServers = Array.isArray(mcpServersResponse.data) ? mcpServersResponse.data : [];
-
-        const newNodes = [];
-        const newEdges = [];
-
-        // Create environment node (center)
-        const selectedEnv = environments.find(env => env.id === selectedEnvironment);
-        newNodes.push({
-          id: `env-${selectedEnvironment}`,
-          type: 'environment',
-          position: { x: 0, y: 0 },
-          data: {
-            label: selectedEnv?.name || 'Environment',
-            description: selectedEnv?.description || 'Environment Hub',
-            agentCount: agents.length,
-            serverCount: mcpServers.length,
-          },
-        });
-
-        // Create agent nodes
-        agents.forEach((agent, index) => {
-          newNodes.push({
-            id: `agent-${agent.id}`,
-            type: 'agent',
-            position: { x: 0, y: 0 },
-            data: {
-              label: agent.name,
-              description: agent.description,
-              status: agent.is_scheduled ? 'Scheduled' : 'Manual',
-              agentId: agent.id,
-            },
-          });
-
-          // Connect agent to environment
-          newEdges.push({
-            id: `edge-env-${selectedEnvironment}-to-agent-${agent.id}`,
-            source: `env-${selectedEnvironment}`,
-            target: `agent-${agent.id}`,
-            animated: true,
-            style: { stroke: '#7aa2f7', strokeWidth: 2 },
-          });
-        });
-
-        // Create MCP server nodes
-        mcpServers.forEach((server, index) => {
-          newNodes.push({
-            id: `mcp-${server.id}`,
-            type: 'mcp',
-            position: { x: 0, y: 0 },
-            data: {
-              label: server.name,
-              description: 'MCP Server',
-              serverId: server.id,
-            },
-          });
-
-          // Connect MCP server to environment
-          newEdges.push({
-            id: `edge-env-${selectedEnvironment}-to-mcp-${server.id}`,
-            source: `env-${selectedEnvironment}`,
-            target: `mcp-${server.id}`,
-            animated: true,
-            style: { stroke: '#0db9d7', strokeWidth: 2 },
-          });
-        });
-
-        // Layout the nodes
-        const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
-        console.log('Environment graph generated:', {
-          rawNodes: newNodes?.length || 0,
-          rawEdges: newEdges?.length || 0,
-          agents: agents?.length || 0,
-          mcpServers: mcpServers?.length || 0,
-          layoutedNodes: layoutedNodes?.length || 0,
-          environment: selectedEnv?.name
-        });
-        setNodes(layoutedNodes);
-        setEdges(newEdges);
-      } catch (error) {
-        console.error('Failed to generate environment graph:', error);
-      } finally {
-        setGraphLoading(false);
-      }
-    };
-
     generateEnvironmentGraph();
   }, [selectedEnvironment, environments]);
 
@@ -2309,6 +2175,118 @@ const EnvironmentsPage = () => {
     (params: any) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
+
+  const handleSync = () => {
+    setIsSyncModalOpen(true);
+  };
+
+  const handleAddServer = () => {
+    setIsAddServerModalOpen(true);
+  };
+
+  const handleSyncComplete = () => {
+    // Refresh the environment graph after sync
+    generateEnvironmentGraph();
+  };
+
+  const generateEnvironmentGraph = async () => {
+    if (!selectedEnvironment) return;
+    
+    try {
+      setGraphLoading(true);
+      const [agentsResponse, mcpServersResponse] = await Promise.all([
+        agentsApi.getByEnvironment(selectedEnvironment),
+        mcpServersApi.getByEnvironment(selectedEnvironment)
+      ]);
+
+      console.log('API Responses:', { agentsResponse: agentsResponse.data, mcpServersResponse: mcpServersResponse.data });
+
+      const agents = agentsResponse.data?.agents ? 
+        (Array.isArray(agentsResponse.data.agents) ? agentsResponse.data.agents : []) : [];
+      const mcpServers = Array.isArray(mcpServersResponse.data) ? mcpServersResponse.data : [];
+
+      const newNodes = [];
+      const newEdges = [];
+
+      // Create environment node (center)
+      const selectedEnv = environments.find(env => env.id === selectedEnvironment);
+      newNodes.push({
+        id: `env-${selectedEnvironment}`,
+        type: 'environment',
+        position: { x: 0, y: 0 },
+        data: {
+          label: selectedEnv?.name || 'Environment',
+          description: selectedEnv?.description || 'Environment Hub',
+          agentCount: agents.length,
+          serverCount: mcpServers.length,
+        },
+      });
+
+      // Create agent nodes
+      agents.forEach((agent, index) => {
+        newNodes.push({
+          id: `agent-${agent.id}`,
+          type: 'agent',
+          position: { x: 0, y: 0 },
+          data: {
+            label: agent.name,
+            description: agent.description,
+            status: agent.is_scheduled ? 'Scheduled' : 'Manual',
+            agentId: agent.id,
+          },
+        });
+
+        // Connect agent to environment
+        newEdges.push({
+          id: `edge-env-${selectedEnvironment}-to-agent-${agent.id}`,
+          source: `env-${selectedEnvironment}`,
+          target: `agent-${agent.id}`,
+          animated: true,
+          style: { stroke: '#7aa2f7', strokeWidth: 2 },
+        });
+      });
+
+      // Create MCP server nodes
+      mcpServers.forEach((server, index) => {
+        newNodes.push({
+          id: `mcp-${server.id}`,
+          type: 'mcp',
+          position: { x: 0, y: 0 },
+          data: {
+            label: server.name,
+            description: 'MCP Server',
+            serverId: server.id,
+          },
+        });
+
+        // Connect MCP server to environment
+        newEdges.push({
+          id: `edge-env-${selectedEnvironment}-to-mcp-${server.id}`,
+          source: `env-${selectedEnvironment}`,
+          target: `mcp-${server.id}`,
+          animated: true,
+          style: { stroke: '#0db9d7', strokeWidth: 2 },
+        });
+      });
+
+      // Layout the nodes
+      const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
+      console.log('Environment graph generated:', {
+        rawNodes: newNodes?.length || 0,
+        rawEdges: newEdges?.length || 0,
+        agents: agents?.length || 0,
+        mcpServers: mcpServers?.length || 0,
+        layoutedNodes: layoutedNodes?.length || 0,
+        environment: selectedEnv?.name
+      });
+      setNodes(layoutedNodes);
+      setEdges(newEdges);
+    } catch (error) {
+      console.error('Failed to generate environment graph:', error);
+    } finally {
+      setGraphLoading(false);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-tokyo-bg">
@@ -2326,6 +2304,22 @@ const EnvironmentsPage = () => {
               </option>
             ))}
           </select>
+          <button 
+            onClick={handleSync}
+            disabled={!selectedEnvironment}
+            className="px-4 py-2 bg-tokyo-blue text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play className="h-4 w-4" />
+            Sync
+          </button>
+          <button 
+            onClick={handleAddServer}
+            disabled={!selectedEnvironment}
+            className="px-4 py-2 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue1 transition-colors shadow-tokyo-glow flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-4 w-4" />
+            Add Server
+          </button>
           <button 
             onClick={() => setIsBundleModalOpen(true)}
             disabled={!selectedEnvironment}
@@ -2383,6 +2377,21 @@ const EnvironmentsPage = () => {
         isOpen={isBundleModalOpen}
         onClose={() => setIsBundleModalOpen(false)}
         environmentName={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
+      />
+      
+      {/* Add Server Modal */}
+      <AddServerModal 
+        isOpen={isAddServerModalOpen} 
+        onClose={() => setIsAddServerModalOpen(false)} 
+        environmentName={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
+      />
+      
+      {/* Sync Modal */}
+      <SyncModal 
+        isOpen={isSyncModalOpen} 
+        onClose={() => setIsSyncModalOpen(false)} 
+        environment={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
+        onSyncComplete={handleSyncComplete}
       />
     </div>
   );
