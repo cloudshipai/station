@@ -14,6 +14,7 @@ import (
 	"station/internal/mcp_agents"
 	"station/internal/services"
 	"station/internal/ssh"
+	"station/pkg/cloudshipai"
 	"station/pkg/crypto"
 	"strings"
 	"sync"
@@ -198,6 +199,12 @@ func runMainServer() error {
 	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService, executionQueueSvc)
 
+	// Initialize CloudShip AI client
+	cloudshipaiClient := cloudshipai.NewClient()
+	if err := cloudshipaiClient.Start(); err != nil {
+		log.Printf("Warning: Failed to start CloudShip AI client: %v", err)
+	}
+
 	wg.Add(5) // SSH, MCP, Dynamic Agent MCP, API, and webhook retry processor
 
 	go func() {
@@ -279,6 +286,9 @@ func runMainServer() error {
 
 	// Signal all goroutines to start shutdown immediately
 	cancel()
+	
+	// Stop CloudShip AI client
+	cloudshipaiClient.Stop()
 
 	// Create done channel with aggressive timeout handling
 	done := make(chan struct{})
