@@ -218,8 +218,9 @@ telemetry_enabled: true
 ## Environment Variables
 
 ### Required
-- `OPENAI_API_KEY` - OpenAI API key for Claude/GPT models
+- `OPENAI_API_KEY` - OpenAI API key for GPT models  
 - `ANTHROPIC_API_KEY` - Anthropic API key for Claude models
+- `ENCRYPTION_KEY` - Station encryption key (generate with `openssl rand -hex 32`)
 
 ### Optional
 - `GITHUB_TOKEN` - For GitHub integration tools

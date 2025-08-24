@@ -56,6 +56,7 @@ func init() {
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(developCmd)
 	rootCmd.AddCommand(blastoffCmd)
+	rootCmd.AddCommand(buildCmd)
 	
 	// Initialize file config handler and integrate with mcp commands
 	fileConfigHandler := file_config.NewFileConfigHandler()

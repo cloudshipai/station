@@ -121,6 +121,11 @@ func Contains(slice []string, item string) bool {
 	return false
 }
 
+// GetStationConfigRoot returns the Station configuration root directory
+func GetStationConfigRoot() (string, error) {
+	return config.GetStationConfigDir(), nil
+}
+
 // GetEnvironmentIDByName retrieves environment ID by name
 func GetEnvironmentIDByName(endpoint, environment string) (int64, error) {
 	// This is a placeholder - in a real implementation, this would make an API call

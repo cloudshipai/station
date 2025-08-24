@@ -430,9 +430,9 @@ func (b *BaseBuilder) buildBaseContainer(ctx context.Context, client *dagger.Cli
 	base = base.WithFile("/usr/local/bin/stn", stationBinary).
 		WithExec([]string{"chmod", "+x", "/usr/local/bin/stn"})
 
-	// Create app directories
+	// Create app and config directories
 	dbPath := "/app/data/station.db"
-	base = base.WithExec([]string{"mkdir", "-p", "/app/data", "/app/environment"})
+	base = base.WithExec([]string{"mkdir", "-p", "/app/data", "/app/environment", "/root/.config/station"})
 
 	// Create minimal database in project directory
 	projectRoot, err := os.Getwd()
