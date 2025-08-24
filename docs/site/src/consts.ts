@@ -99,6 +99,12 @@ export const SIDEBAR: Sidebar = {
         { text: 'Publishing Bundles', link: 'en/bundles/publishing' }
       ]
     },
+    'CI/CD Integration': {
+      collapsed: false,
+      items: [
+        { text: 'CI/CD Integration', link: 'en/ci-cd-integration', badge: 'Production Ready' }
+      ]
+    },
     'Deployment': {
       collapsed: true,
       items: [

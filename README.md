@@ -368,6 +368,70 @@ This launches a complete browser-based development playground where you can:
 
 Perfect for developing and testing agents before deployment.
 
+## CI/CD Integration
+
+Station provides **three production-ready patterns** for integrating AI agents into your CI/CD pipelines:
+
+### 🐳 **Agent-as-a-Service (Docker)**
+Deploy agents in containerized environments for maximum isolation and scalability.
+
+```yaml
+# GitHub Actions Example
+- name: Run Security Analysis
+  run: |
+    docker run \
+      -v $(pwd)/agents:/app/environment/agents:ro \
+      -v $(pwd)/config.yml:/root/.config/station/config.yaml:ro \
+      -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+      station-base:latest \
+      stn agent run terraform-security-agent "Analyze infrastructure for security vulnerabilities"
+```
+
+### 🔧 **Direct Station Execution**
+Execute agents directly in CI runners with full MCP tool access.
+
+```bash
+# Install Station in CI
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+
+# Configure and run agents
+stn init --provider openai --model gpt-4o
+stn agent import production
+stn agent run sbom-security-agent "Generate SBOM and vulnerability analysis"
+```
+
+### ⚡ **Dagger Integration**
+Programmatic orchestration with type-safe Go modules for complex CI workflows.
+
+```go
+// Dagger module for Station CI
+func (m *StationCI) SecurityScan(
+    ctx context.Context,
+    stationSource *dagger.Directory,
+    source *dagger.Directory,
+    openaiKey *dagger.Secret,
+) *dagger.Container {
+    return m.BuildStationBase(ctx, stationSource).
+        WithDirectory("/workspace", source).
+        WithSecretVariable("OPENAI_API_KEY", openaiKey).
+        WithExec([]string{"stn", "agent", "run", "security-scanner"})
+}
+```
+
+### **Complete Examples Available**
+- **Docker Compose** deployments with persistent volumes
+- **GitHub Actions** workflows with artifact collection
+- **Kubernetes** deployments with multi-environment support
+- **Dagger modules** for complex multi-stage pipelines
+
+📚 **[View Complete CI/CD Examples →](dev-workspace/ci-cd-examples/)**
+
+**Benefits:**
+- ✅ **Database Isolation** - Each CI run gets its own execution context
+- ✅ **Security** - No shared state between pipelines or teams  
+- ✅ **Scalability** - Parallel execution across multiple environments
+- ✅ **Auditability** - Complete run history and execution tracking
+
 ## System Requirements
 
 - **OS:** Linux, macOS, Windows  
