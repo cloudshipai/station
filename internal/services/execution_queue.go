@@ -313,10 +313,10 @@ func (eq *ExecutionQueueService) executeRequest(worker *Worker, request *Executi
 		userVariables = make(map[string]interface{}) // Default to empty map
 	}
 	
-	// Execute the agent using AgentServiceInterface with variables support
-	log.Printf("DEBUG ExecutionQueue: About to call ExecuteAgent for agent %d with %d variables", request.AgentID, len(userVariables))
-	response, err := worker.ExecutionService.ExecuteAgent(ctx, request.AgentID, request.Task, userVariables)
-	log.Printf("DEBUG ExecutionQueue: ExecuteAgent returned for agent %d, error: %v", request.AgentID, err)
+	// Execute the agent using AgentServiceInterface with variables support AND the real run ID
+	log.Printf("DEBUG ExecutionQueue: About to call ExecuteAgentWithRunID for agent %d with run ID %d and %d variables", request.AgentID, request.RunID, len(userVariables))
+	response, err := worker.ExecutionService.ExecuteAgentWithRunID(ctx, request.AgentID, request.Task, request.RunID, userVariables)
+	log.Printf("DEBUG ExecutionQueue: ExecuteAgentWithRunID returned for agent %d, run ID %d, error: %v", request.AgentID, request.RunID, err)
 	
 	endTime := time.Now()
 	
