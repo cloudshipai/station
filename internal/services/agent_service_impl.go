@@ -102,6 +102,79 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	}, nil
 }
 
+// ExecuteAgentWithRunID executes an agent with proper run ID for logging - used by ExecutionQueueService
+func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64, task string, runID int64, userVariables map[string]interface{}) (*Message, error) {
+	// Default to empty variables if nil provided
+	if userVariables == nil {
+		userVariables = make(map[string]interface{})
+	}
+	
+	// Get the agent details
+	agent, err := s.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
+	}
+
+	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with run ID %d and %d variables", agent.ID, agent.Name, runID, len(userVariables))
+	
+	// CRITICAL FIX: Create fresh execution context like CLI does
+	// This prevents shared state issues that cause STDIO pipe transport failures
+	log.Printf("DEBUG AgentService: Creating fresh execution context to avoid shared state issues")
+	freshCreator := NewIntelligentAgentCreator(s.repos, nil) // Fresh creator instance
+	
+	// Execute using fresh IntelligentAgentCreator with stdio MCP and user variables - PASS THE REAL RUN ID
+	result, err := freshCreator.ExecuteAgentViaStdioMCP(ctx, agent, task, runID, userVariables) // Use real run ID!
+	
+	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
+	}
+
+	// Convert result to Message format with proper types for execution queue
+	extra := map[string]interface{}{
+		"agent_id":     agent.ID,
+		"agent_name":   agent.Name,
+		"steps_taken":  result.StepsTaken,
+	}
+	
+	// Include variables in response for tracking if provided
+	if len(userVariables) > 0 {
+		extra["user_variables"] = userVariables
+	}
+	
+	// Add tool calls and execution steps directly (they're already *models.JSONArray)
+	if result.ToolCalls != nil {
+		extra["tool_calls"] = result.ToolCalls
+	}
+	
+	if result.ExecutionSteps != nil {
+		extra["execution_steps"] = result.ExecutionSteps
+	}
+	
+	// Preserve rich GenKit response object data from Station's OpenAI plugin
+	if result.TokenUsage != nil {
+		extra["token_usage"] = result.TokenUsage
+	}
+	
+	if result.Duration > 0 {
+		extra["duration"] = result.Duration.Seconds()
+	}
+	
+	if result.ModelName != "" {
+		extra["model_name"] = result.ModelName
+	}
+	
+	if result.ToolsUsed > 0 {
+		extra["tools_used"] = result.ToolsUsed
+	}
+
+	return &Message{
+		Content: result.Response,
+		Role:    RoleAssistant,
+		Extra:   extra,
+	}, nil
+}
+
 // CreateAgent creates a new agent
 func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*models.Agent, error) {
 	// Create agent using repository

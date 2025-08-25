@@ -13,6 +13,9 @@ type AgentServiceInterface interface {
 	// userVariables is optional - pass nil or empty map for no variables
 	ExecuteAgent(ctx context.Context, agentID int64, task string, userVariables map[string]interface{}) (*Message, error)
 	
+	// ExecuteAgentWithRunID executes an agent with proper run ID for logging - used by ExecutionQueueService
+	ExecuteAgentWithRunID(ctx context.Context, agentID int64, task string, runID int64, userVariables map[string]interface{}) (*Message, error)
+	
 	// Agent management - used by MCP server
 	CreateAgent(ctx context.Context, config *AgentConfig) (*models.Agent, error)
 	GetAgent(ctx context.Context, agentID int64) (*models.Agent, error)
