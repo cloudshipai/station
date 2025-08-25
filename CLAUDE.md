@@ -46,6 +46,13 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - **Backend**: Custom VariableResolver, enhanced DeclarativeSync service
   - **User Experience**: Seamless variable prompting without CLI intervention
 
+- **MCP Agent Execution Fix**: ✅ Fixed critical runID=0 bug in v0.9.1
+  - **Root Cause**: ExecutionQueue passed runID=0 to AgentService, breaking debug logging
+  - **Impact**: MCP agents ran silently for 72+ seconds with no logs or metadata
+  - **Solution**: Added ExecuteAgentWithRunID() method to pass real run ID through execution chain
+  - **Result**: MCP agents now have full logging, live execution tracking, and proper metadata
+  - **Location**: `agent_service_impl.go:105-177`, `agent_service_interface.go:16-17`, `execution_queue.go:316-319`
+
 ### Known Issues
 - **SSH/MCP Shutdown Performance**: Graceful shutdown takes ~1m25s (should be <10s)
   - Likely causes: hanging MCP connections, database locks, resource cleanup delays
@@ -138,6 +145,13 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 - Enhanced environment isolation features
 - Better debugging tools for MCP operations
 - Performance optimization for large-scale deployments
+
+### Architecture TODOs
+- **CRITICAL**: Unify agent execution paths across CLI/MCP/API interfaces at service layer
+  - **Current Issue**: Multiple execution paths (CLI, MCP, API) use different methods and interfaces
+  - **Complexity**: Hard to follow execution flow, prone to bugs like runID=0 issue
+  - **Goal**: Single unified execution interface that all callers use consistently
+  - **Benefit**: Easier maintenance, consistent behavior, reduced duplication
 
 ## Reference Documentation
 - Main README: `/station/README.md` - Project overview and quick start
