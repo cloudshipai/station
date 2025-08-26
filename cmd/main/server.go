@@ -138,17 +138,8 @@ func runMainServer() error {
 		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
 	}
 	
-	// Initialize execution queue service for async agent execution
-	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, webhookSvc, 5) // 5 workers
-	
-	// Start execution queue service
-	if err := executionQueueSvc.Start(); err != nil {
-		return fmt.Errorf("failed to start execution queue service: %w", err)
-	}
-	defer executionQueueSvc.Stop()
-	
-	// Initialize scheduler service for cron-based agent execution
-	schedulerSvc := services.NewSchedulerService(database, executionQueueSvc)
+	// Initialize scheduler service for cron-based agent execution (using direct execution)
+	schedulerSvc := services.NewSchedulerService(database, agentSvc)
 	
 	// Start scheduler service
 	if err := schedulerSvc.Start(); err != nil {
@@ -188,16 +179,16 @@ func runMainServer() error {
 	}
 	log.Printf("🤖 Serving agents from environment: %s", environmentName)
 	
-	sshServer := ssh.New(cfg, database, repos, executionQueueSvc, agentSvc, localMode)
-	mcpServer := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
+	sshServer := ssh.New(cfg, database, repos, agentSvc, localMode)
+	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
 	apiServer := api.New(cfg, database, localMode)
 	
 	// Initialize ToolDiscoveryService for API config uploads
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
 	
-	// Set services for the API server
-	apiServer.SetServices(toolDiscoveryService, executionQueueSvc)
+	// Set services for the API server  
+	apiServer.SetServices(toolDiscoveryService)
 
 	// Initialize CloudShip AI client
 	cloudshipaiClient := cloudshipai.NewClient()

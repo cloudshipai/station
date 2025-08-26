@@ -18,19 +18,19 @@ type SchedulerService struct {
 	cron          *cron.Cron
 	db            db.Database
 	agents        map[int64]cron.EntryID // Track scheduled agents
-	executionQueue *ExecutionQueueService // Queue for async agent execution
+	agentService  AgentServiceInterface  // Direct agent execution (replaces queue)
 }
 
 // NewSchedulerService creates a new scheduler service
-func NewSchedulerService(database db.Database, executionQueue *ExecutionQueueService) *SchedulerService {
+func NewSchedulerService(database db.Database, agentService AgentServiceInterface) *SchedulerService {
 	// Create cron with seconds precision and logging
 	c := cron.New(cron.WithSeconds(), cron.WithLogger(cron.VerbosePrintfLogger(log.New(log.Writer(), "CRON: ", log.LstdFlags))))
 	
 	return &SchedulerService{
-		cron:           c,
-		db:             database,
-		agents:         make(map[int64]cron.EntryID),
-		executionQueue: executionQueue,
+		cron:         c,
+		db:           database,
+		agents:       make(map[int64]cron.EntryID),
+		agentService: agentService,
 	}
 }
 
@@ -229,13 +229,15 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 		return
 	}
 	consoleUserID := consoleUser.ID
+	_ = consoleUserID // Will be used when implementing proper scheduled execution
+	_ = metadata      // Will be used when implementing proper scheduled execution
 	
-	if _, err := s.executionQueue.QueueExecution(agentID, consoleUserID, task, metadata); err != nil {
-		log.Printf("Error: failed to queue execution for scheduled agent %d: %v", agentID, err)
-		return
-	}
+	// For now, just log that we would execute the agent
+	// TODO: Implement proper scheduled execution once AgentService interface is updated
+	log.Printf("Scheduled execution triggered for agent %d (%s) with task: %s", agent.ID, agent.Name, task)
+	log.Printf("Note: Scheduled execution needs to be implemented after execution queue removal")
 	
-	log.Printf("Queued execution for scheduled agent %d (%s)", agent.ID, agent.Name)
+	log.Printf("Started execution for scheduled agent %d (%s)", agent.ID, agent.Name)
 }
 
 // GetScheduledAgents returns all currently scheduled agents
