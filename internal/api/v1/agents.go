@@ -163,13 +163,6 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 		return
 	}
 
-	// Check if execution queue service is available
-	log.Printf("🔍 queueAgent: executionQueueSvc is nil: %t", h.executionQueueSvc == nil)
-	if h.executionQueueSvc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Execution queue service not available"})
-		return
-	}
-
 	// Get user ID for tracking (use console user for local mode)
 	var userID int64 = 1 // Default console user
 	if !h.localMode {
@@ -181,35 +174,58 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 		userID = user.ID
 	}
 
-	// Create metadata for the execution
-	metadata := map[string]interface{}{
-		"source":       "api_execution",
-		"triggered_by": "cli",
-		"api_endpoint": c.Request.URL.Path,
-	}
-
-	// Queue the execution
-	runID, err := h.executionQueueSvc.QueueExecution(agentID, userID, req.Task, metadata)
+	// Get agent details
+	agent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to queue execution: %v", err)})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
 	}
+
+	// Create agent run record (same as CLI approach)
+	agentRun, err := h.repos.AgentRuns.Create(
+		agentID,
+		userID,
+		req.Task,
+		"", // final_response (will be updated)
+		0,  // steps_taken
+		nil, // tool_calls 
+		nil, // execution_steps
+		"running", // status
+		nil, // completed_at
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create agent run: %v", err)})
+		return
+	}
+
+	// Execute agent directly (same as CLI) - async with goroutine for API responsiveness
+	go func() {
+		ctx := context.Background()
+		metadata := map[string]interface{}{
+			"source":       "api_execution",
+			"triggered_by": "api",
+			"api_endpoint": c.Request.URL.Path,
+		}
+		
+		_, err := h.agentService.ExecuteAgentWithRunID(ctx, agent.ID, req.Task, agentRun.ID, metadata)
+		if err != nil {
+			log.Printf("Agent execution failed (Run ID: %d): %v", agentRun.ID, err)
+		} else {
+			log.Printf("Agent execution completed successfully (Run ID: %d)", agentRun.ID)
+		}
+		
+		// Send webhook notification if service available
+		if h.webhookService != nil {
+			h.webhookService.NotifyAgentRunCompleted(ctx, agentRun, agent)
+		}
+	}()
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"agent_id": agentID,
 		"task":     req.Task,
-		"run_id":   runID,
-		"status":   "queued",
-		"message":  "Agent execution queued successfully",
-	})
-}
-
-// DEBUG: Test if executionQueueSvc is available
-func (h *APIHandlers) debugService(c *gin.Context) {
-	log.Printf("🔍 debugService: Handler called!")
-	c.JSON(http.StatusOK, gin.H{
-		"executionQueueSvc_nil": h.executionQueueSvc == nil,
-		"message": "Debug service check",
+		"run_id":   agentRun.ID,
+		"status":   "running",
+		"message":  "Agent execution started",
 	})
 }
 
