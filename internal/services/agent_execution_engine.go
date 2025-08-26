@@ -8,14 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/pkg/models"
 	dotprompt "station/pkg/dotprompt"
 
 	"github.com/firebase/genkit/go/ai"
-	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	googledotprompt "github.com/google/dotprompt/go/dotprompt"
 )
@@ -205,111 +203,6 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		}, nil
 }
 
-// ExecuteAgentWithMessages executes an agent using pre-rendered ai.Message objects
-// This allows dotprompt multi-role templates while reusing all tool loading and config logic
-func (aee *AgentExecutionEngine) ExecuteAgentWithMessages(ctx context.Context, agent *models.Agent, messages []*ai.Message, userID int64) (*AgentExecutionResult, error) {
-	// Reuse all the existing setup logic but replace the prompt/system message handling
-	logging.Info("=== Executing Agent with Messages (Dotprompt Multi-Role) ===")
-	logging.Info("Agent: %s (ID: %d, Environment: %d)", agent.Name, agent.ID, agent.EnvironmentID)
-	logging.Info("Messages: %d", len(messages))
-	
-	// Get tools assigned to this specific agent (same as existing method)
-	assignedTools, err := aee.repos.AgentTools.ListAgentTools(agent.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get assigned tools for agent %d: %w", agent.ID, err)
-	}
-
-	logging.Debug("Agent has %d assigned tools for execution", len(assignedTools))
-
-	// Get available tools and reuse clients for execution (same as existing)
-	allTools, executionClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get environment tools for environment %d: %w", agent.EnvironmentID, err)
-	}
-
-	// Store active clients for reuse (same as existing)
-	aee.activeMCPClients = executionClients
-
-	// Filter tools to only include those assigned to the agent (same as existing)
-	var tools []ai.ToolRef
-	for _, assignedTool := range assignedTools {
-		for _, mcpTool := range allTools {
-			var toolName string
-			if named, ok := mcpTool.(interface{ Name() string }); ok {
-				toolName = named.Name()
-			} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
-				toolName = stringer.String()
-			} else {
-				toolName = fmt.Sprintf("%T", mcpTool)
-				logging.Debug("Tool has no Name() method, using type name: %s", toolName)
-			}
-			
-			if toolName == assignedTool.ToolName {
-				logging.Debug("Including assigned tool: %s", toolName)
-				tools = append(tools, mcpTool)
-				break
-			}
-		}
-	}
-
-	logging.Info("Agent execution using %d tools (filtered from %d available)", len(tools), len(allTools))
-
-	// Load configuration (same as existing)
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Get GenKit app (same as existing)
-	genkitApp, err := aee.genkitProvider.GetApp(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get GenKit app: %w", err)
-	}
-
-	// Create model name (same as existing)
-	var modelName string
-	switch strings.ToLower(cfg.AIProvider) {
-	case "gemini", "googlegenai":
-		modelName = fmt.Sprintf("googleai/%s", cfg.AIModel)
-	case "openai":
-		modelName = fmt.Sprintf("openai/%s", cfg.AIModel)
-	default:
-		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)
-	}
-	logging.Debug("Using model: %s", modelName)
-
-	// Build generate options with messages instead of system+prompt
-	var generateOptions []ai.GenerateOption
-	generateOptions = append(generateOptions, ai.WithModelName(modelName))
-	generateOptions = append(generateOptions, ai.WithMessages(messages...)) // KEY DIFFERENCE
-	generateOptions = append(generateOptions, ai.WithTools(tools...))
-	generateOptions = append(generateOptions, ai.WithMaxTurns(25))
-
-	logging.Debug("Calling genkit.Generate with %d messages and %d tools", len(messages), len(tools))
-
-	// Execute with GenKit (same as existing)
-	genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	response, err := genkit.Generate(genCtx, genkitApp, generateOptions...)
-	if err != nil {
-		return nil, fmt.Errorf("GenKit Generate failed: %w", err)
-	}
-
-	logging.Debug("GenKit Generate completed successfully")
-
-	// Return result (same format as existing)
-	result := &AgentExecutionResult{
-		Success:   true,
-		Response:  response.Text(),
-		Duration:  time.Since(time.Now()), // Will be overridden by caller
-		ModelName: modelName,
-		StepsUsed: 1, // TODO: Extract from response if available
-		ToolsUsed: len(tools),
-	}
-
-	return result, nil
-}
 
 // GetGenkitProvider returns the genkit provider for external access
 func (aee *AgentExecutionEngine) GetGenkitProvider() *GenKitProvider {

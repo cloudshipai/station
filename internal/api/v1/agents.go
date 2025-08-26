@@ -132,6 +132,7 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 }
 
 func (h *APIHandlers) queueAgent(c *gin.Context) {
+	log.Printf("🔍 queueAgent: Handler called!")
 	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
@@ -148,6 +149,7 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 	}
 
 	// Check if execution queue service is available
+	log.Printf("🔍 queueAgent: executionQueueSvc is nil: %t", h.executionQueueSvc == nil)
 	if h.executionQueueSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Execution queue service not available"})
 		return
@@ -184,6 +186,15 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 		"run_id":   runID,
 		"status":   "queued",
 		"message":  "Agent execution queued successfully",
+	})
+}
+
+// DEBUG: Test if executionQueueSvc is available
+func (h *APIHandlers) debugService(c *gin.Context) {
+	log.Printf("🔍 debugService: Handler called!")
+	c.JSON(http.StatusOK, gin.H{
+		"executionQueueSvc_nil": h.executionQueueSvc == nil,
+		"message": "Debug service check",
 	})
 }
 
