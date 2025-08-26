@@ -315,10 +315,16 @@ func TestAPIHandlers_GetAgent(t *testing.T) {
 
 			// If successful, verify response contains agent data
 			if tt.expectedStatus == http.StatusOK && w.Code == http.StatusOK {
-				var agent map[string]interface{}
-				err := json.Unmarshal(w.Body.Bytes(), &agent)
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
 				if err != nil {
 					t.Fatalf("Failed to unmarshal response: %v", err)
+				}
+
+				// Extract agent from response wrapper
+				agent, exists := response["agent"].(map[string]interface{})
+				if !exists {
+					t.Fatal("Response missing agent object")
 				}
 
 				// Verify agent fields
