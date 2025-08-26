@@ -26,7 +26,7 @@ func (h *APIHandlers) listRuns(c *gin.Context) {
 		}
 	}
 
-	runs, err := h.repos.AgentRuns.ListRecent(limit)
+	runs, err := h.repos.AgentRuns.ListRecent(c.Request.Context(), limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list runs"})
 		return
@@ -46,7 +46,7 @@ func (h *APIHandlers) getRun(c *gin.Context) {
 		return
 	}
 
-	run, err := h.repos.AgentRuns.GetByIDWithDetails(runID)
+	run, err := h.repos.AgentRuns.GetByIDWithDetails(c.Request.Context(), runID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Run not found"})
 		return
@@ -62,7 +62,7 @@ func (h *APIHandlers) listRunsByAgent(c *gin.Context) {
 		return
 	}
 
-	runs, err := h.repos.AgentRuns.ListByAgent(agentID)
+	runs, err := h.repos.AgentRuns.ListByAgent(c.Request.Context(), agentID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list runs for agent"})
 		return
@@ -82,7 +82,7 @@ func (h *APIHandlers) getRunLogs(c *gin.Context) {
 		return
 	}
 
-	run, err := h.repos.AgentRuns.GetByIDWithDetails(runID)
+	run, err := h.repos.AgentRuns.GetByIDWithDetails(c.Request.Context(), runID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Run not found"})
 		return

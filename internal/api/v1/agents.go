@@ -183,6 +183,7 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 
 	// Create agent run record (same as CLI approach)
 	agentRun, err := h.repos.AgentRuns.Create(
+		c.Request.Context(),
 		agentID,
 		userID,
 		req.Task,

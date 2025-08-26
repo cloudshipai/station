@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -550,7 +551,7 @@ func (m RunsModel) RefreshData() tea.Cmd {
 func (m RunsModel) loadRuns() tea.Cmd {
 	return tea.Cmd(func() tea.Msg {
 		// Load recent runs from database with agent and user details
-		dbRuns, err := m.repos.AgentRuns.ListRecent(50) // Get last 50 runs
+		dbRuns, err := m.repos.AgentRuns.ListRecent(context.Background(), 50) // Get last 50 runs
 		if err != nil {
 			// Return empty list on error (could also return error message)
 			return RunsLoadedMsg{Runs: []AgentRunDisplay{}}
@@ -638,7 +639,7 @@ func (m *RunsModel) loadFullRunData() tea.Cmd {
 		fmt.Sscanf(m.selectedRun.ID, "run-%d", &runID)
 		
 		// Get full run data from database
-		run, err := m.repos.AgentRuns.GetByIDWithDetails(runID)
+		run, err := m.repos.AgentRuns.GetByIDWithDetails(context.Background(), runID)
 		if err != nil {
 			return nil
 		}

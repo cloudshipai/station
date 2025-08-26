@@ -186,7 +186,7 @@ func (c *AgentClient) monitorExecution(ctx context.Context, session *ChatSession
 			}
 		case <-ticker.C:
 			// Check execution status
-			run, err := c.repos.AgentRuns.GetByID(runID)
+			run, err := c.repos.AgentRuns.GetByID(context.Background(), runID)
 			if err != nil {
 				continue // Keep polling
 			}
