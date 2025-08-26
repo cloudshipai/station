@@ -175,7 +175,8 @@ func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment strin
 	}
 	
 	// 3. Get agents in environment and find by name (runtime source of truth)
-	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	agentService := services.NewAgentService(repos)
+	agents, err := agentService.ListAgentsByEnvironment(context.Background(), env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get agents from environment '%s': %w", environment, err)
 	}
@@ -235,7 +236,7 @@ func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment strin
 	// 6. Execute using hybrid approach: database config + dotprompt rendering + real execution
 	// TODO: This CLI execution path needs to be updated to use the new dotprompt system
 	// For now, use the traditional execution engine path
-	agentService := services.NewAgentService(repos)
+	// Reuse agentService already declared above
 	result, err := agentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(context.Background(), agent, task, agentRun.ID, map[string]interface{}{})
 	
 	// Convert to expected response format
@@ -369,7 +370,8 @@ func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment 
 		return fmt.Errorf("environment '%s' not found: %w", environment, err)
 	}
 	
-	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	agentService := services.NewAgentService(repos)
+	agents, err := agentService.ListAgentsByEnvironment(context.Background(), env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get agents from environment '%s': %w", environment, err)
 	}
@@ -427,7 +429,7 @@ func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment 
 	}
 
 	// 5. Use the full AgentExecutionEngine for detailed execution
-	agentService := services.NewAgentService(repos)
+	// Reuse agentService already declared above
 	ctx := context.Background()
 	
 	result, err := agentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, agentRun.ID, map[string]interface{}{})
@@ -720,7 +722,8 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	}
 	
 	// Find agent by name in the environment
-	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	agentService := services.NewAgentService(repos)
+	agents, err := agentService.ListAgentsByEnvironment(context.Background(), env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get agents from environment '%s': %w", environment, err)
 	}
@@ -738,7 +741,7 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	}
 
 	// Delete the agent using AgentService for proper file cleanup
-	agentService := services.NewAgentService(repos)
+	// Reuse agentService already declared above
 	err = agentService.DeleteAgent(context.Background(), agent.ID)
 	if err != nil {
 		return fmt.Errorf("failed to delete agent: %w", err)
@@ -820,7 +823,8 @@ func (h *AgentHandler) exportAgentFromDatabase(agentName, environment, promptFil
 	
 	// Try to find agent by name (for now, we'll use a simple query)
 	// TODO: Replace with proper name-based lookup when SQLC queries are ready
-	agents, err := repos.Agents.ListByEnvironment(env.ID)
+	agentService := services.NewAgentService(repos)
+	agents, err := agentService.ListAgentsByEnvironment(context.Background(), env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to list agents: %w", err)
 	}

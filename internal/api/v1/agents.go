@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/afero"
 	"station/internal/auth"
+	"station/internal/services"
 	"station/pkg/models"
 	agent_bundle "station/pkg/agent-bundle"
 	"station/pkg/agent-bundle/manager"
@@ -243,31 +244,19 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		req.MaxSteps = 25
 	}
 
-	// Validate environment exists
-	environment, err := h.repos.Environments.GetByID(req.EnvironmentID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Environment not found"})
-		return
+	// Create AgentConfig for unified service
+	config := &services.AgentConfig{
+		EnvironmentID: req.EnvironmentID,
+		Name:          req.Name,
+		Description:   req.Description,
+		Prompt:        req.Prompt,
+		AssignedTools: req.AssignedTools,
+		MaxSteps:      req.MaxSteps,
+		CreatedBy:     createdBy,
 	}
 
-	// Create agent directly in database (simplified implementation)
-	// In a production system, you might want to:
-	// 1. Validate tool assignments
-	// 2. Check user permissions for the environment
-	// 3. Create associated tool mappings
-
-	// Create the agent using the repository
-	agent, err := h.repos.Agents.Create(
-		req.Name,
-		req.Description,
-		req.Prompt,
-		req.MaxSteps,
-		req.EnvironmentID,
-		createdBy,
-		nil,   // input_schema - not set in API v1
-		nil,   // cronSchedule - no schedule initially
-		false, // scheduleEnabled - disabled initially
-	)
+	// Create the agent using the unified service
+	agent, err := h.agentService.CreateAgent(c.Request.Context(), config)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create agent"})
 		return
@@ -293,7 +282,7 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		"message":     "Agent created successfully",
 		"agent_id":    agent.ID,
 		"agent_name":  agent.Name,
-		"environment": environment.Name,
+		"environment_id": config.EnvironmentID,
 	})
 }
 
@@ -421,7 +410,14 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 
 	// Update agent fields if provided
 	if req.Name != "" || req.Description != "" || req.Prompt != "" || req.MaxSteps > 0 {
-		err = h.repos.Agents.Update(agentID, req.Name, req.Description, req.Prompt, req.MaxSteps, nil, nil, false)
+		config := &services.AgentConfig{
+			Name:        req.Name,
+			Description: req.Description,
+			Prompt:      req.Prompt,
+			MaxSteps:    req.MaxSteps,
+		}
+		
+		_, err = h.agentService.UpdateAgent(c.Request.Context(), agentID, config)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent"})
 			return
