@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/afero"
 	"station/internal/auth"
@@ -329,83 +330,168 @@ func (h *APIHandlers) getAgentWithTools(c *gin.Context) {
 		return
 	}
 
-	// Get agent with tools using the new query
-	rows, err := h.repos.Agents.GetAgentWithTools(context.Background(), agentID)
+	// Get agent first
+	agent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get agent details"})
-		return
-	}
-
-	if len(rows) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
 	}
 
-	// Structure the response data
-	firstRow := rows[0]
-	
-	// Extract agent info (same for all rows)
-	agent := gin.H{
-		"id":               firstRow.AgentID,
-		"name":            firstRow.AgentName,
-		"description":     firstRow.AgentDescription,
-		"prompt":          firstRow.AgentPrompt,
-		"max_steps":       firstRow.AgentMaxSteps,
-		"environment_id":  firstRow.AgentEnvironmentID,
-		"created_by":      firstRow.AgentCreatedBy,
-		"is_scheduled":    firstRow.AgentIsScheduled.Bool,
-		"schedule_enabled": firstRow.AgentScheduleEnabled.Bool,
-		"input_schema":    firstRow.AgentInputSchema.String,
-		"created_at":      firstRow.AgentCreatedAt,
-		"updated_at":      firstRow.AgentUpdatedAt,
+	// Get environment to find MCP configs
+	environment, err := h.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get agent environment"})
+		return
 	}
 
-	// Group tools by MCP server
-	mcpServers := make(map[int64]gin.H)
-	
-	for _, row := range rows {
-		// Skip rows without tools
-		if !row.McpServerID.Valid {
-			continue
-		}
-		
-		serverID := row.McpServerID.Int64
-		
-		// Initialize MCP server if not exists
-		if _, exists := mcpServers[serverID]; !exists {
-			mcpServers[serverID] = gin.H{
-				"id":    serverID,
-				"name":  row.McpServerName.String,
-				"tools": []gin.H{},
-			}
-		}
-		
-		// Add tool to server
-		if row.ToolID.Valid {
-			tool := gin.H{
-				"id":           row.ToolID.Int64,
-				"name":         row.ToolName.String,
-				"description":  row.ToolDescription.String,
-				"input_schema": row.ToolInputSchema.String,
-			}
-			
-			server := mcpServers[serverID]
-			tools := server["tools"].([]gin.H)
-			server["tools"] = append(tools, tool)
-			mcpServers[serverID] = server
-		}
-	}
-
-	// Convert map to slice
-	mcpServersList := make([]gin.H, 0, len(mcpServers))
-	for _, server := range mcpServers {
-		mcpServersList = append(mcpServersList, server)
+	// Get MCP servers and tools assigned to this specific agent
+	mcpServers, err := h.getAgentAssignedTools(agent, environment.Name)
+	if err != nil {
+		log.Printf("Failed to get agent assigned tools: %v", err)
+		mcpServers = []gin.H{} // Return empty array on error
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"agent":       agent,
-		"mcp_servers": mcpServersList,
+		"mcp_servers": mcpServers,
 	})
+}
+
+// getAgentAssignedTools gets only the tools assigned to this specific agent
+func (h *APIHandlers) getAgentAssignedTools(agent *models.Agent, environmentName string) ([]gin.H, error) {
+	// First, get the agent's assigned tools from its prompt file
+	assignedTools, err := h.getAgentToolsFromPrompt(agent, environmentName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent tools: %w", err)
+	}
+
+	if len(assignedTools) == 0 {
+		return []gin.H{}, nil
+	}
+
+	// Map each assigned tool to its MCP server
+	mcpServers := make(map[string][]gin.H)
+	toolID := 1
+	
+	for _, toolName := range assignedTools {
+		serverName := h.getToolMCPServer(toolName)
+		if serverName == "" {
+			continue // Skip tools that don't map to known MCP servers
+		}
+
+		tool := gin.H{
+			"id":           toolID,
+			"name":         toolName,
+			"description":  fmt.Sprintf("Tool: %s", toolName),
+			"input_schema": "{}",
+		}
+
+		mcpServers[serverName] = append(mcpServers[serverName], tool)
+		toolID++
+	}
+
+	// Convert to the expected format
+	var result []gin.H
+	serverID := 1
+	for serverName, tools := range mcpServers {
+		server := gin.H{
+			"id":    serverID,
+			"name":  serverName,
+			"tools": tools,
+		}
+		result = append(result, server)
+		serverID++
+	}
+
+	return result, nil
+}
+
+// getAgentToolsFromPrompt extracts the tools list from the agent's prompt file
+func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentName string) ([]string, error) {
+	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "station", "environments", environmentName, "agents")
+	promptFile := filepath.Join(agentsDir, fmt.Sprintf("%s.prompt", agent.Name))
+
+	content, err := ioutil.ReadFile(promptFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read prompt file: %w", err)
+	}
+
+	// Parse YAML frontmatter to extract tools
+	lines := strings.Split(string(content), "\n")
+	inFrontmatter := false
+	var tools []string
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		if line == "---" {
+			if !inFrontmatter {
+				inFrontmatter = true
+				continue
+			} else {
+				break // End of frontmatter
+			}
+		}
+		
+		if !inFrontmatter {
+			continue
+		}
+		
+		// Look for tools section
+		if strings.HasPrefix(line, "tools:") {
+			continue
+		}
+		
+		// Parse tool entries (- "toolname" or - "__toolname")
+		if strings.HasPrefix(line, "- \"") && strings.HasSuffix(line, "\"") {
+			tool := strings.Trim(line[2:], "\"")
+			tools = append(tools, tool)
+		} else if strings.HasPrefix(line, "- \"__") && strings.HasSuffix(line, "\"") {
+			tool := strings.Trim(line[2:], "\"")
+			tools = append(tools, tool)
+		} else if strings.HasPrefix(line, "- __") {
+			// Handle unquoted tool names like: - "__toolname"
+			tool := strings.TrimSpace(line[2:])
+			if strings.HasPrefix(tool, "\"") && strings.HasSuffix(tool, "\"") {
+				tool = strings.Trim(tool, "\"")
+			}
+			tools = append(tools, tool)
+		}
+	}
+	
+	return tools, nil
+}
+
+// getToolMCPServer maps tool names to their MCP servers based on naming patterns
+func (h *APIHandlers) getToolMCPServer(toolName string) string {
+	// Map common tool prefixes to MCP servers
+	if strings.HasPrefix(toolName, "__infracost_") {
+		return "ship-infracost"
+	}
+	if strings.HasPrefix(toolName, "__openinfraquote_") {
+		return "ship-openinfraquote"
+	}
+	if strings.HasPrefix(toolName, "__directory_tree") || strings.HasPrefix(toolName, "__read_text_file") {
+		return "filesystem"
+	}
+	if strings.HasPrefix(toolName, "__syft_") {
+		return "ship-syft"
+	}
+	if strings.HasPrefix(toolName, "__grype_") {
+		return "ship-grype"
+	}
+	if strings.HasPrefix(toolName, "__checkov_") {
+		return "ship-checkov"
+	}
+	if strings.HasPrefix(toolName, "__trivy_") {
+		return "ship-trivy"
+	}
+	if strings.HasPrefix(toolName, "__tflint_") {
+		return "ship-tflint"
+	}
+	
+	// Default to a generic server if no pattern matches
+	return "unknown"
 }
 
 func (h *APIHandlers) updateAgent(c *gin.Context) {
@@ -653,6 +739,22 @@ func (h *APIHandlers) updateAgentPrompt(c *gin.Context) {
 		return
 	}
 
+	// Extract the system prompt from the file content and update the database
+	systemPrompt := extractSystemPromptFromContent(req.Content)
+	log.Printf("DEBUG: Extracted system prompt length: %d", len(systemPrompt))
+	if systemPrompt != "" {
+		log.Printf("DEBUG: Updating agent %d prompt in database", agentID)
+		err = h.agentService.UpdateAgentPrompt(c.Request.Context(), agentID, systemPrompt)
+		if err != nil {
+			log.Printf("Failed to update agent prompt in database: %v", err)
+			// Don't fail the request since file was saved successfully
+		} else {
+			log.Printf("DEBUG: Successfully updated agent %d prompt in database", agentID)
+		}
+	} else {
+		log.Printf("DEBUG: System prompt is empty, not updating database")
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message":     "Prompt file updated successfully",
 		"path":        promptFilePath,
@@ -660,6 +762,43 @@ func (h *APIHandlers) updateAgentPrompt(c *gin.Context) {
 		"environment": environment.Name,
 		"sync_command": fmt.Sprintf("stn sync %s", environment.Name),
 	})
+}
+
+// extractSystemPromptFromContent extracts the system prompt content from the full prompt file
+func extractSystemPromptFromContent(content string) string {
+	lines := strings.Split(content, "\n")
+	inFrontmatter := false
+	frontmatterEnded := false
+	var promptLines []string
+	
+	for _, line := range lines {
+		// Check for YAML frontmatter boundaries
+		if strings.TrimSpace(line) == "---" {
+			if !inFrontmatter {
+				inFrontmatter = true
+				continue
+			} else {
+				frontmatterEnded = true
+				continue
+			}
+		}
+		
+		// Skip frontmatter content
+		if inFrontmatter && !frontmatterEnded {
+			continue
+		}
+		
+		// Once we're past the frontmatter, collect the prompt content
+		if frontmatterEnded {
+			promptLines = append(promptLines, line)
+		}
+	}
+	
+	// Join the prompt lines and clean up
+	prompt := strings.Join(promptLines, "\n")
+	prompt = strings.TrimSpace(prompt)
+	
+	return prompt
 }
 
 // MockResolver for template installation API (reused from CLI handler)

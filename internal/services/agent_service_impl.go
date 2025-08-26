@@ -335,8 +335,12 @@ func (s *AgentService) GetAgent(ctx context.Context, agentID int64) (*models.Age
 	return s.repos.Agents.GetByID(agentID)
 }
 
-// ListAgentsByEnvironment lists agents in a specific environment
+// ListAgentsByEnvironment lists agents in a specific environment (0 = all environments)
 func (s *AgentService) ListAgentsByEnvironment(ctx context.Context, environmentID int64) ([]*models.Agent, error) {
+	if environmentID == 0 {
+		// Return all agents across all environments
+		return s.repos.Agents.List()
+	}
 	return s.repos.Agents.ListByEnvironment(environmentID)
 }
 
@@ -428,6 +432,11 @@ func (s *AgentService) deleteAgentPromptFile(agentName, environmentName string) 
 
 	log.Printf("Successfully deleted .prompt file: %s", promptFilePath)
 	return nil
+}
+
+// UpdateAgentPrompt updates only the prompt field of an agent in the database
+func (s *AgentService) UpdateAgentPrompt(ctx context.Context, agentID int64, prompt string) error {
+	return s.repos.Agents.UpdatePrompt(agentID, prompt)
 }
 
 // InitializeMCP initializes MCP for the agent service
