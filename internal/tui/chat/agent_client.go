@@ -19,16 +19,14 @@ import (
 type AgentClient struct {
 	db             db.Database
 	repos          *repositories.Repositories
-	executionQueue *services.ExecutionQueueService
 	agentService   services.AgentServiceInterface
 }
 
 // NewAgentClient creates a new agent client
-func NewAgentClient(database db.Database, repos *repositories.Repositories, executionQueue *services.ExecutionQueueService, agentService services.AgentServiceInterface) *AgentClient {
+func NewAgentClient(database db.Database, repos *repositories.Repositories, agentService services.AgentServiceInterface) *AgentClient {
 	return &AgentClient{
 		db:             database,
 		repos:          repos,
-		executionQueue: executionQueue,
 		agentService:   agentService,
 	}
 }
@@ -134,47 +132,33 @@ func (c *AgentClient) SendMessage(ctx context.Context, session *ChatSession, use
 			}
 		}
 
-		// Execute agent directly or via queue
+		// Execute agent directly (no queue)
 		metadata := map[string]interface{}{
 			"session_id": session.ID,
 			"chat_mode":  true,
 		}
 		
-		if c.executionQueue != nil {
-			// Use queue if available
-			runID, err := c.executionQueue.QueueExecution(agent.ID, 1, userMessage, metadata)
-			if err != nil {
-				return AgentErrorMsg{
-					SessionID: session.ID,
-					Error:     fmt.Errorf("failed to queue execution: %w", err),
-				}
-			}
-			// Start monitoring the execution
-			return c.monitorExecution(ctx, session, runID)
-		} else {
-			// Direct execution without queue
-			result, err := c.agentService.ExecuteAgentWithRunID(ctx, agent.ID, userMessage, 0, metadata)
-			if err != nil {
-				return AgentErrorMsg{
-					SessionID: session.ID,
-					Error:     fmt.Errorf("failed to execute agent: %w", err),
-				}
-			}
-			
-			// Create agent response message directly
-			agentMsg := ChatMessage{
-				ID:        fmt.Sprintf("agent-%d", time.Now().UnixNano()),
-				Role:      "assistant",
-				Content:   result.Content,
-				Timestamp: time.Now(),
-			}
-			session.Messages = append(session.Messages, agentMsg)
-			
-			return AgentResponseMsg{
+		result, err := c.agentService.ExecuteAgentWithRunID(ctx, agent.ID, userMessage, 0, metadata)
+		if err != nil {
+			return AgentErrorMsg{
 				SessionID: session.ID,
-				Message:   agentMsg,
-				Session:   session,
+				Error:     fmt.Errorf("failed to execute agent: %w", err),
 			}
+		}
+		
+		// Create agent response message directly
+		agentMsg := ChatMessage{
+			ID:        fmt.Sprintf("agent-%d", time.Now().UnixNano()),
+			Role:      "assistant",
+			Content:   result.Content,
+			Timestamp: time.Now(),
+		}
+		session.Messages = append(session.Messages, agentMsg)
+		
+		return AgentResponseMsg{
+			SessionID: session.ID,
+			Message:   agentMsg,
+			Session:   session,
 		}
 	}
 }
