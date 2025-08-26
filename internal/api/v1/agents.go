@@ -273,9 +273,11 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 	}
 
 	// Automatically export agent to file-based config after successful DB save
-	if err := h.agentExportService.ExportAgentAfterSave(agent.ID); err != nil {
-		// Log the error but don't fail the request - the agent was successfully created in DB
-		log.Printf("Failed to export agent %d after creation: %v", agent.ID, err)
+	if h.agentExportService != nil {
+		if err := h.agentExportService.ExportAgentAfterSave(agent.ID); err != nil {
+			// Log the error but don't fail the request - the agent was successfully created in DB
+			log.Printf("Failed to export agent %d after creation: %v", agent.ID, err)
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -424,9 +426,11 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 		}
 
 		// Automatically export agent to file-based config after successful DB update
-		if err := h.agentExportService.ExportAgentAfterSave(agentID); err != nil {
-			// Log the error but don't fail the request - the agent was successfully updated in DB
-			log.Printf("Failed to export agent %d after update: %v", agentID, err)
+		if h.agentExportService != nil {
+			if err := h.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+				// Log the error but don't fail the request - the agent was successfully updated in DB
+				log.Printf("Failed to export agent %d after update: %v", agentID, err)
+			}
 		}
 	}
 
