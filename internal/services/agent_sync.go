@@ -460,6 +460,56 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 	if currentSchemaStr != newSchemaStr {
 		needsUpdate = true
 	}
+	
+	// Check if tool assignments changed
+	if len(config.Tools) > 0 {
+		// Get current tool assignments from database
+		currentTools, err := s.repos.AgentTools.ListAgentTools(existingAgent.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current tool assignments: %w", err)
+		}
+		
+		// Create maps for comparison
+		currentToolNames := make(map[string]bool)
+		for _, tool := range currentTools {
+			currentToolNames[tool.ToolName] = true
+		}
+		
+		configToolNames := make(map[string]bool)
+		for _, toolName := range config.Tools {
+			configToolNames[toolName] = true
+		}
+		
+		// Check if tool sets are different
+		if len(currentToolNames) != len(configToolNames) {
+			needsUpdate = true
+		} else {
+			// Check if all tools match
+			for toolName := range currentToolNames {
+				if !configToolNames[toolName] {
+					needsUpdate = true
+					break
+				}
+			}
+			if !needsUpdate {
+				for toolName := range configToolNames {
+					if !currentToolNames[toolName] {
+						needsUpdate = true
+						break
+					}
+				}
+			}
+		}
+	} else {
+		// No tools in config, check if agent currently has tools assigned
+		currentTools, err := s.repos.AgentTools.ListAgentTools(existingAgent.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current tool assignments: %w", err)
+		}
+		if len(currentTools) > 0 {
+			needsUpdate = true // Need to clear existing tools
+		}
+	}
 
 	if !needsUpdate {
 		return &SyncOperation{
