@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -742,7 +743,7 @@ func (m EnvironmentsModel) getEnvironmentStats(envID int64) EnvironmentStats {
 	var hasLastRunTime bool
 	
 	for _, agent := range agents {
-		runs, err := m.repos.AgentRuns.ListByAgent(agent.ID)
+		runs, err := m.repos.AgentRuns.ListByAgent(context.Background(), agent.ID)
 		if err != nil {
 			log.Printf("Error getting runs for agent %d: %v", agent.ID, err)
 			continue

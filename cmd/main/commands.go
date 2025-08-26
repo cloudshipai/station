@@ -441,6 +441,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if cloudshipaiKey == "" {
 		cloudshipaiKey = os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY")
 	}
+	
+	// Check OTEL configuration
+	otelEndpoint, _ := cmd.Flags().GetString("otel-endpoint")
+	telemetryEnabled, _ := cmd.Flags().GetBool("telemetry")
+	
+	// Check environment variable if flag not provided
+	if otelEndpoint == "" {
+		otelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
 
 	// Check existing config to avoid interactive mode
 	_, err := os.Stat(configFile)
@@ -554,6 +563,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 		viper.Set("cloudshipai.enabled", true)
 		fmt.Printf("🌩️  CloudShip AI integration enabled\n")
 		fmt.Printf("   Endpoint: %s\n", cloudshipaiEndpoint)
+	}
+	
+	// Set OTEL configuration
+	viper.Set("telemetry_enabled", telemetryEnabled)
+	if otelEndpoint != "" {
+		viper.Set("otel_endpoint", otelEndpoint)
+		fmt.Printf("📊 OpenTelemetry integration enabled\n")
+		fmt.Printf("   OTLP Endpoint: %s\n", otelEndpoint)
 	}
 
 	// Write configuration file
