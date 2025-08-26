@@ -80,17 +80,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Initialize agent service for API endpoints
 	agentSvc := services.NewAgentService(repos)
 	
-	// Initialize webhook service (required for ExecutionQueueService)
-	webhookSvc := services.NewWebhookService(repos)
-	
-	// Initialize execution queue service for run storage
-	executionQueueSvc := services.NewExecutionQueueService(repos, agentSvc, webhookSvc, 5) // 5 workers
-	
-	// Start execution queue service
-	if err := executionQueueSvc.Start(); err != nil {
-		return fmt.Errorf("failed to start execution queue service: %w", err)
-	}
-	defer executionQueueSvc.Stop()
+	// Initialize webhook service 
+	_ = services.NewWebhookService(repos) // Not used in stdio mode
 	
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
