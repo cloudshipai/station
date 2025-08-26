@@ -207,3 +207,8 @@ func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) 
 	
 	return tools, nil
 }
+
+// GetServerNameForTool looks up which MCP server hosts a specific tool
+func (r *MCPToolRepo) GetServerNameForTool(toolName string) (string, error) {
+	return r.queries.GetMCPServerNameByTool(context.Background(), toolName)
+}
