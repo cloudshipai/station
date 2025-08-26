@@ -177,6 +177,9 @@ func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environment
 		return nil, fmt.Errorf("failed to scan agent files: %w", err)
 	}
 
+	// Debug: Show .prompt files found
+	fmt.Printf("📋 Found %d agent .prompt files\n", len(promptFiles))
+
 	result.AgentsProcessed = len(promptFiles)
 
 	// Process each .prompt file
@@ -384,14 +387,13 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 			// Find tool by name in environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(env.ID, toolName)
 			if err != nil {
-				logging.Info("Warning: Tool %s not found in environment: %v", toolName, err)
-				continue
+				return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
 			}
 
 			// Assign tool to agent
 			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
 			if err != nil {
-				logging.Info("Warning: Failed to assign tool %s to agent: %v", toolName, err)
+				return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
 			}
 		}
 	}
@@ -539,7 +541,7 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		// Clear existing assignments
 		err = s.repos.AgentTools.Clear(existingAgent.ID)
 		if err != nil {
-			logging.Info("Warning: Failed to clear existing tool assignments: %v", err)
+			return nil, fmt.Errorf("failed to clear existing tool assignments: %w", err)
 		}
 
 		// Assign new tools
@@ -547,16 +549,17 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			// Find tool by name in environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(existingAgent.EnvironmentID, toolName)
 			if err != nil {
-				logging.Info("Warning: Tool %s not found in environment: %v", toolName, err)
-				continue
+				return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
 			}
 
 			// Assign tool to agent
 			_, err = s.repos.AgentTools.AddAgentTool(existingAgent.ID, tool.ID)
 			if err != nil {
-				logging.Info("Warning: Failed to assign tool %s to agent: %v", toolName, err)
+				return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
 			}
 		}
+		
+		fmt.Printf("   🔧 Assigned %d tools to agent\n", len(config.Tools))
 	}
 
 	logging.Info("🔄 Updated agent: %s", existingAgent.Name)
