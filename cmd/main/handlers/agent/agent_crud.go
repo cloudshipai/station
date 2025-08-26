@@ -2,15 +2,10 @@ package agent
 
 import (
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/common"
-	"station/internal/db"
-	"station/internal/db/repositories"
 	"station/internal/theme"
-	"station/pkg/models"
 )
 
 // AgentCRUD handles basic agent CRUD operations
