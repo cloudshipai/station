@@ -49,11 +49,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	// Extract optional parameters
 	maxSteps := request.GetInt("max_steps", 5) // Default to 5 if not provided
 	
-	// Extract input_schema if provided
-	var inputSchema *string
-	if inputSchemaStr := request.GetString("input_schema", ""); inputSchemaStr != "" {
-		inputSchema = &inputSchemaStr
-	}
+	// Note: input_schema support can be added to AgentConfig in the future if needed
 	
 	// Extract tool_names array if provided
 	var toolNames []string
@@ -71,9 +67,18 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
-	// Create the agent using repository with updated signature
-	// Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool)
-	createdAgent, err := s.repos.Agents.Create(name, description, prompt, int64(maxSteps), environmentID, 1, inputSchema, nil, true)
+	// Create the agent using unified service layer
+	config := &services.AgentConfig{
+		EnvironmentID: environmentID,
+		Name:          name,
+		Description:   description,
+		Prompt:        prompt,
+		AssignedTools: toolNames,
+		MaxSteps:      int64(maxSteps),
+		CreatedBy:     1, // Console user
+	}
+	
+	createdAgent, err := s.agentService.CreateAgent(ctx, config)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create agent: %v", err)), nil
 	}
