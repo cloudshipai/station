@@ -13,6 +13,7 @@ import (
 // APIHandlers contains all the API handlers and their dependencies
 type APIHandlers struct {
 	repos                *repositories.Repositories
+	agentService         *services.AgentService
 	// mcpConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService
 	// genkitService removed - service no longer exists
@@ -33,6 +34,7 @@ func NewAPIHandlers(
 	log.Printf("🔍 NewAPIHandlers: executionQueueSvc is nil: %t", executionQueueSvc == nil)
 	return &APIHandlers{
 		repos:                repos,
+		agentService:         services.NewAgentService(repos),
 		toolDiscoveryService: toolDiscoveryService,
 		webhookService:       webhookService,
 		executionQueueSvc:    executionQueueSvc,

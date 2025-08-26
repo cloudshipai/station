@@ -42,7 +42,21 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 	// Check for environment filter parameter
 	envFilter := c.Query("environment_id")
 	
-	agents, err := h.repos.Agents.List()
+	var agents []*models.Agent
+	var err error
+	
+	if envFilter != "" {
+		envID, parseErr := strconv.ParseInt(envFilter, 10, 64)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid environment_id"})
+			return
+		}
+		agents, err = h.agentService.ListAgentsByEnvironment(c.Request.Context(), envID)
+	} else {
+		// For now, list all agents (environment_id = 0 means all environments)
+		agents, err = h.agentService.ListAgentsByEnvironment(c.Request.Context(), 0)
+	}
+	
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agents"})
 		return
@@ -107,7 +121,7 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 	}
 
 	// Validate agent exists
-	agent, err := h.repos.Agents.GetByID(agentID)
+	agent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
@@ -290,7 +304,7 @@ func (h *APIHandlers) getAgent(c *gin.Context) {
 		return
 	}
 
-	agent, err := h.repos.Agents.GetByID(agentID)
+	agent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
@@ -430,7 +444,7 @@ func (h *APIHandlers) deleteAgent(c *gin.Context) {
 		return
 	}
 
-	err = h.repos.Agents.Delete(agentID)
+	err = h.agentService.DeleteAgent(c.Request.Context(), agentID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete agent"})
 		return
@@ -520,7 +534,7 @@ func (h *APIHandlers) getAgentPrompt(c *gin.Context) {
 	}
 
 	// Get agent to verify it exists and get its environment
-	agent, err := h.repos.Agents.GetByID(agentID)
+	agent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
@@ -585,7 +599,7 @@ func (h *APIHandlers) updateAgentPrompt(c *gin.Context) {
 	}
 
 	// Get agent to verify it exists and get its environment
-	agent, err := h.repos.Agents.GetByID(agentID)
+	agent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
