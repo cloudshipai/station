@@ -13,7 +13,7 @@ import (
 // APIHandlers contains all the API handlers and their dependencies
 type APIHandlers struct {
 	repos                *repositories.Repositories
-	agentService         *services.AgentService
+	agentService         services.AgentServiceInterface
 	// mcpConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService
 	// genkitService removed - service no longer exists
