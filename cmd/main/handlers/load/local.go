@@ -64,8 +64,7 @@ func (h *LoadHandler) uploadConfigLocalLoad(mcpConfig LoadMCPConfig, configName,
 
 // createFileBasedConfig creates a file-based config record and triggers tool discovery
 func (h *LoadHandler) createFileBasedConfig(envID int64, configName string, mcpConfig LoadMCPConfig, repos *repositories.Repositories) error {
-	// This function is deprecated - use createFileBasedConfigTemplate instead
-	// For backwards compatibility, convert to standard format
+	// Convert MCP config to standard format
 	standardConfig := map[string]interface{}{
 		"mcpServers": mcpConfig.MCPServers,
 	}
