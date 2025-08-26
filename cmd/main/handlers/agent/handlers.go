@@ -235,8 +235,8 @@ func (h *AgentHandler) runAgentLocalDotprompt(agentName, task, environment strin
 	// 6. Execute using hybrid approach: database config + dotprompt rendering + real execution
 	// TODO: This CLI execution path needs to be updated to use the new dotprompt system
 	// For now, use the traditional execution engine path
-	creator := services.NewIntelligentAgentCreator(repos, services.NewAgentService(repos))
-	result, err := creator.ExecuteAgentViaStdioMCP(context.Background(), agent, task, agentRun.ID)
+	agentService := services.NewAgentService(repos)
+	result, err := agentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(context.Background(), agent, task, agentRun.ID, map[string]interface{}{})
 	
 	// Convert to expected response format
 	response := &dotprompt.ExecutionResponse{
@@ -427,10 +427,10 @@ func (h *AgentHandler) runAgentLocalWithFullEngine(agentName, task, environment 
 	}
 
 	// 5. Use the full AgentExecutionEngine for detailed execution
-	creator := services.NewIntelligentAgentCreator(repos, nil)
+	agentService := services.NewAgentService(repos)
 	ctx := context.Background()
 	
-	result, err := creator.ExecuteAgentViaStdioMCP(ctx, agent, task, agentRun.ID)
+	result, err := agentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, agentRun.ID, map[string]interface{}{})
 	if err != nil {
 		// Update run as failed
 		completedAt := time.Now()

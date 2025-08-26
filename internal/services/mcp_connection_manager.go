@@ -410,7 +410,7 @@ func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Contex
 }
 
 // GetEnvironmentMCPTools connects to MCP servers from file configs and gets their tools
-// This replaces the large method in IntelligentAgentCreator
+// This replaces the large method that was in the old wrapper classes
 func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, []*mcp.GenkitMCPClient, error) {
 	if mcm.poolingEnabled {
 		return mcm.getPooledEnvironmentMCPTools(ctx, environmentID)

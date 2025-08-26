@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,7 @@ func NewAPIHandlers(
 	executionQueueSvc *services.ExecutionQueueService,
 	localMode bool,
 ) *APIHandlers {
+	log.Printf("🔍 NewAPIHandlers: executionQueueSvc is nil: %t", executionQueueSvc == nil)
 	return &APIHandlers{
 		repos:                repos,
 		toolDiscoveryService: toolDiscoveryService,
@@ -41,6 +43,7 @@ func NewAPIHandlers(
 
 // RegisterRoutes registers all v1 API routes
 func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
+	log.Printf("🔍 RegisterRoutes: executionQueueSvc is nil: %t", h.executionQueueSvc == nil)
 	// Create auth middleware
 	authMiddleware := auth.NewAuthMiddleware(h.repos)
 	
@@ -80,7 +83,7 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	agentGroup.POST("/:id/queue", h.queueAgent)  // Users can queue agents (via execution queue)
 	
 	// Admin-only agent management routes
-	agentAdminGroup := router.Group("/agents")
+	agentAdminGroup := router.Group("/admin/agents")
 	if !h.localMode {
 		agentAdminGroup.Use(h.requireAdminInServerMode())
 	}
@@ -133,6 +136,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	bundlesGroup.GET("", h.listBundles)
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
+	
+	// DEBUG: Test endpoint for executionQueueSvc availability
+	router.GET("/debug-service", h.debugService)
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode

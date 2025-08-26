@@ -518,8 +518,8 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	// keyManager removed - no longer needed for file-based configs
 	
 	// Initialize services for file-based configs (MCPConfigService removed)
-	// Create intelligent agent creator (simplified for file-based system)
-	creator := services.NewIntelligentAgentCreator(repos, nil)
+	// Create agent service (simplified for file-based system)
+	agentService := services.NewAgentService(repos)
 	
 	// Get console user for execution tracking  
 	consoleUser, err := repos.Users.GetByUsername("console")
@@ -553,7 +553,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	fmt.Printf("🤖 Executing agent using self-bootstrapping architecture...\n")
 	
 	// Execute the agent using our stdio MCP approach
-	result, err := creator.ExecuteAgentViaStdioMCP(ctx, agent, task, agentRun.ID)
+	result, err := agentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, agentRun.ID, map[string]interface{}{})
 	if err != nil {
 		// Store original error before it gets overwritten
 		originalErr := err

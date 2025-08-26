@@ -130,7 +130,7 @@ func runMainServer() error {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
 	
-	// Initialize agent service with IntelligentAgentCreator
+	// Initialize agent service with AgentExecutionEngine
 	agentSvc := services.NewAgentService(repos)
 	
 	// Initialize MCP for the agent service
