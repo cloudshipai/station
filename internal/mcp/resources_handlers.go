@@ -45,8 +45,8 @@ func (s *Server) handleEnvironmentsResource(ctx context.Context, request mcp.Rea
 }
 
 func (s *Server) handleAgentsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	// Get all agents from database
-	agents, err := s.repos.Agents.List()
+	// Get all agents using unified service layer
+	agents, err := s.agentService.ListAgentsByEnvironment(ctx, 0) // 0 = all environments
 	if err != nil {
 		return nil, fmt.Errorf("failed to list agents: %w", err)
 	}
@@ -127,7 +127,7 @@ func (s *Server) handleAgentDetailsResource(ctx context.Context, request mcp.Rea
 	}
 
 	// Get agent details from database
-	agent, err := s.repos.Agents.GetByID(agentID)
+	agent, err := s.agentService.GetAgent(ctx, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent: %w", err)
 	}
@@ -255,7 +255,7 @@ func (s *Server) handleAgentRunsResource(ctx context.Context, request mcp.ReadRe
 	}
 
 	// Get agent details for context
-	agent, err := s.repos.Agents.GetByID(agentID)
+	agent, err := s.agentService.GetAgent(ctx, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent: %w", err)
 	}

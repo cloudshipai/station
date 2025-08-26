@@ -11,6 +11,7 @@ import (
 
 	"station/internal/db/repositories"
 	"station/internal/logging"
+	"station/internal/services"
 	"station/internal/template"
 	"station/pkg/config"
 	"station/pkg/models"
@@ -355,8 +356,10 @@ func (s *ConfigSyncer) Sync(environment string, envID int64, options SyncOptions
 		return nil, fmt.Errorf("failed to discover config files: %w", err)
 	}
 	
-	// Get all agents in this environment
-	agents, err := s.repos.Agents.ListByEnvironment(envID)
+	// Get all agents in this environment using unified service layer
+	agentService := services.NewAgentService(s.repos)  
+	ctx := context.Background()
+	agents, err := agentService.ListAgentsByEnvironment(ctx, envID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list agents: %w", err)
 	}

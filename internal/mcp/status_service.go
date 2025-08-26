@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/pkg/models"
 )
 
@@ -71,8 +73,10 @@ func (s *StatusService) GetEnvironmentStatuses(environmentName string) ([]*Envir
 
 // getEnvironmentStatus gets status for a single environment
 func (s *StatusService) getEnvironmentStatus(env *models.Environment) (*EnvironmentStatus, error) {
-	// Get agents for this environment
-	agents, err := s.repos.Agents.ListByEnvironment(env.ID)
+	// Get agents for this environment using unified service layer  
+	ctx := context.Background()
+	agentService := services.NewAgentService(s.repos)
+	agents, err := agentService.ListAgentsByEnvironment(ctx, env.ID)
 	if err != nil {
 		return nil, err
 	}
