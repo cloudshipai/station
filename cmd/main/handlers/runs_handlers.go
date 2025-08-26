@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -89,7 +90,7 @@ func (h *RunsHandler) listRunsLocal(limit int) error {
 		limit = 50
 	}
 	
-	runs, err := repos.AgentRuns.ListRecent(int64(limit))
+	runs, err := repos.AgentRuns.ListRecent(context.Background(), int64(limit))
 	if err != nil {
 		return fmt.Errorf("failed to list runs: %w", err)
 	}
@@ -128,7 +129,7 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 	defer database.Close()
 
 	repos := repositories.New(database)
-	run, err := repos.AgentRuns.GetByIDWithDetails(runID)
+	run, err := repos.AgentRuns.GetByIDWithDetails(context.Background(), runID)
 	if err != nil {
 		return fmt.Errorf("run with ID %d not found", runID)
 	}

@@ -372,7 +372,7 @@ func (h *AgentHandler) showAgentLocal(agentID int64) error {
 	fmt.Printf("Updated: %s\n", agent.UpdatedAt.Format("Jan 2, 2006 15:04"))
 
 	// Show recent runs
-	runs, err := repos.AgentRuns.ListByAgent(agentID)
+	runs, err := repos.AgentRuns.ListByAgent(context.Background(), agentID)
 	if err == nil && len(runs) > 0 {
 		fmt.Printf("\nRecent runs (%d):\n", len(runs))
 		for i, run := range runs {
@@ -495,6 +495,8 @@ func (h *AgentHandler) tryServerExecution(agentID int64, task string, tail bool,
 
 // runAgentWithStdioMCP executes an agent using self-bootstrapping stdio MCP architecture
 func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail bool, cfg *config.Config, agent *models.Agent) error {
+	// Create execution context
+	ctx := context.Background()
 	
 	fmt.Printf("🔄 Self-bootstrapping stdio MCP execution mode\n")
 	fmt.Printf("🤖 Using Station's own MCP server to execute agent via stdio\n")
@@ -529,6 +531,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	
 	// Create agent run record
 	agentRun, err := repos.AgentRuns.Create(
+		ctx,
 		agentID,
 		consoleUser.ID,
 		task,
@@ -547,7 +550,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	fmt.Printf("🔗 Connecting to Station's stdio MCP server...\n")
 	
 	// Use the intelligent agent creator's stdio MCP connection to execute
-	ctx := context.Background()
+	ctx = context.Background()
 	
 	fmt.Printf("🔍 Initializing agent execution with stdio MCP...\n")
 	fmt.Printf("🤖 Executing agent using self-bootstrapping architecture...\n")
@@ -563,6 +566,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		errorMsg := fmt.Sprintf("Stdio MCP execution failed: %v", originalErr)
 		
 		updateErr := repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx,
 			agentRun.ID,
 			errorMsg,
 			0, // steps_taken
@@ -629,6 +633,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	}
 	
 	err = repos.AgentRuns.UpdateCompletionWithMetadata(
+		ctx,
 		agentRun.ID,
 		result.Response,
 		result.StepsTaken,
@@ -648,7 +653,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	}
 	
 	// Get updated run and display results
-	updatedRun, err := repos.AgentRuns.GetByID(agentRun.ID)
+	updatedRun, err := repos.AgentRuns.GetByID(ctx, agentRun.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get updated run: %w", err)
 	}
@@ -715,7 +720,7 @@ func (h *AgentHandler) monitorExecution(runID int64, apiPort int) error {
 		}
 		
 		freshRepos := repositories.New(database)
-		run, err := freshRepos.AgentRuns.GetByID(runID)
+		run, err := freshRepos.AgentRuns.GetByID(context.Background(), runID)
 		database.Close() // Close immediately after reading
 		
 		if err != nil {

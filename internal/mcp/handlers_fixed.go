@@ -1160,7 +1160,7 @@ func (s *Server) handleListRuns(ctx context.Context, request mcp.CallToolRequest
 		}
 		
 		// Get basic runs for this agent, then convert to detailed format
-		basicRuns, err := s.repos.AgentRuns.ListByAgent(agentID)
+		basicRuns, err := s.repos.AgentRuns.ListByAgent(context.Background(), agentID)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to list runs for agent: %v", err)), nil
 		}
@@ -1176,7 +1176,7 @@ func (s *Server) handleListRuns(ctx context.Context, request mcp.CallToolRequest
 		}
 	} else {
 		// Get recent runs (no agent filter)
-		allRuns, err = s.repos.AgentRuns.ListRecent(1000) // Get large number, then filter/paginate
+		allRuns, err = s.repos.AgentRuns.ListRecent(context.Background(), 1000) // Get large number, then filter/paginate
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to list runs: %v", err)), nil
 		}
@@ -1239,7 +1239,7 @@ func (s *Server) handleInspectRun(ctx context.Context, request mcp.CallToolReque
 	verbose := request.GetBool("verbose", true)
 
 	// Get detailed run information
-	run, err := s.repos.AgentRuns.GetByIDWithDetails(runID)
+	run, err := s.repos.AgentRuns.GetByIDWithDetails(context.Background(), runID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to get run details: %v", err)), nil
 	}

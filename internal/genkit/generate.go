@@ -28,6 +28,10 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // mapToStruct unmarshals a map[string]any to the expected config type.
@@ -267,15 +271,36 @@ func (g *StationModelGenerator) WithTools(tools []*ai.ToolDefinition) *StationMo
 
 // Generate executes the generation request
 func (g *StationModelGenerator) Generate(ctx context.Context, handleChunk func(context.Context, *ai.ModelResponseChunk) error) (*ai.ModelResponse, error) {
+	// Start OTEL span for OpenAI generation with enhanced agent loop attributes
+	tracer := otel.Tracer("station-openai-plugin")
+	ctx, span := tracer.Start(ctx, "openai.generate",
+		trace.WithAttributes(
+			attribute.String("model.name", g.modelName),
+			attribute.Int("messages.count", len(g.messages)),
+			attribute.Int("tools.count", len(g.tools)),
+			attribute.Bool("streaming", handleChunk != nil),
+			// Enhanced attributes for agent loop analysis
+			attribute.Int("conversation.turn", len(g.messages)),
+			attribute.String("request.type", "chat_completion"),
+			attribute.Bool("tools.available", len(g.tools) > 0),
+		),
+	)
+	defer span.End()
+
 	// Check for any errors that occurred during building
 	if g.err != nil {
 		logging.Debug("Station GenKit: Generate failed with build error: %v", g.err)
+		span.RecordError(g.err)
+		span.SetStatus(codes.Error, "build error")
 		return nil, g.err
 	}
 
 	if len(g.messages) == 0 {
 		logging.Debug("Station GenKit: Generate failed - no messages provided")
-		return nil, fmt.Errorf("no messages provided")
+		err := fmt.Errorf("no messages provided")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "no messages provided")
+		return nil, err
 	}
 	
 	logging.Debug("Station GenKit: Starting Generate with %d messages, %d tools", len(g.messages), len(g.tools))
@@ -289,12 +314,103 @@ func (g *StationModelGenerator) Generate(ctx context.Context, handleChunk func(c
 		}
 	}
 
+	var response *ai.ModelResponse
+	var err error
+	
 	if handleChunk != nil {
 		logging.Debug("Station GenKit: Using streaming mode")
-		return g.generateStream(ctx, handleChunk)
+		span.SetAttributes(attribute.String("generation.mode", "streaming"))
+		response, err = g.generateStream(ctx, handleChunk)
+	} else {
+		logging.Debug("Station GenKit: Using complete mode")
+		span.SetAttributes(attribute.String("generation.mode", "complete"))
+		response, err = g.generateComplete(ctx)
 	}
-	logging.Debug("Station GenKit: Using complete mode")
-	return g.generateComplete(ctx)
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "generation failed")
+		return nil, err
+	}
+
+	// Add response metrics to span with enhanced agent loop analysis
+	if response.Usage != nil {
+		span.SetAttributes(
+			attribute.Int("tokens.input", int(response.Usage.InputTokens)),
+			attribute.Int("tokens.output", int(response.Usage.OutputTokens)),
+			attribute.Int("tokens.total", int(response.Usage.TotalTokens)),
+			// Token efficiency metrics for agent loop analysis
+			attribute.Float64("tokens.output_ratio", float64(response.Usage.OutputTokens)/float64(response.Usage.TotalTokens)),
+			attribute.Float64("tokens.per_turn", float64(response.Usage.TotalTokens)/float64(len(g.messages))),
+		)
+	}
+	
+	if response.Message != nil {
+		span.SetAttributes(
+			attribute.Int("response.parts", len(response.Message.Content)),
+		)
+		
+		// Analyze response content for agent loop patterns
+		toolCallCount := 0
+		textResponseLength := 0
+		for _, part := range response.Message.Content {
+			if part.IsToolRequest() {
+				toolCallCount++
+			} else if part.IsText() {
+				textResponseLength += len(part.Text)
+			}
+		}
+		
+		span.SetAttributes(
+			attribute.Int("response.tool_calls", toolCallCount),
+			attribute.Int("response.text_length", textResponseLength),
+			attribute.Bool("response.has_tools", toolCallCount > 0),
+			attribute.Bool("response.has_text", textResponseLength > 0),
+			// Agent behavior patterns
+			attribute.String("agent.behavior", func() string {
+				if toolCallCount > 0 && textResponseLength > 0 {
+					return "tool_and_text"
+				} else if toolCallCount > 0 {
+					return "tool_only"
+				} else {
+					return "text_only"
+				}
+			}()),
+			attribute.String("agent.response_type", func() string {
+				if toolCallCount >= 3 {
+					return "multi_tool"
+				} else if toolCallCount > 0 {
+					return "single_tool"
+				} else if textResponseLength > 500 {
+					return "detailed_response"
+				} else {
+					return "brief_response"
+				}
+			}()),
+		)
+	}
+
+	// Determine if conversation is continuing based on response content
+	responseHasTools := false
+	if response.Message != nil {
+		for _, part := range response.Message.Content {
+			if part.IsToolRequest() {
+				responseHasTools = true
+				break
+			}
+		}
+	}
+
+	span.SetAttributes(
+		attribute.String("finish.reason", string(response.FinishReason)),
+		// Enhanced finish reason analysis for agent loop understanding
+		attribute.Bool("conversation.continuing", response.FinishReason == ai.FinishReasonStop && responseHasTools),
+		attribute.Bool("conversation.completed", response.FinishReason == ai.FinishReasonStop && !responseHasTools),
+		attribute.Bool("conversation.truncated", response.FinishReason == ai.FinishReasonLength),
+	)
+	span.SetStatus(codes.Ok, "generation completed")
+
+	return response, nil
 }
 
 // concatenateContent concatenates text content into a single string
@@ -398,6 +514,30 @@ func (g *StationModelGenerator) generateStream(ctx context.Context, handleChunk 
 
 // generateComplete generates a complete model response
 func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.ModelResponse, error) {
+	// Create child span for API call with enhanced agent loop context
+	tracer := otel.Tracer("station-openai-plugin")
+	
+	// Analyze conversation pattern for span attributes
+	conversationAnalysis := g.analyzeConversationPattern()
+	
+	ctx, span := tracer.Start(ctx, "openai.api_call",
+		trace.WithAttributes(
+			attribute.String("api.method", "chat.completions.create"),
+			attribute.String("model", g.request.Model),
+			// Enhanced agent loop analysis attributes
+			attribute.Int("conversation.turn", len(g.request.Messages)),
+			attribute.Int("conversation.tool_messages", conversationAnalysis.ToolMessages),
+			attribute.Int("conversation.user_messages", conversationAnalysis.UserMessages),
+			attribute.Int("conversation.assistant_messages", conversationAnalysis.AssistantMessages),
+			attribute.Int("conversation.system_messages", conversationAnalysis.SystemMessages),
+			attribute.Float64("conversation.tool_ratio", conversationAnalysis.ToolRatio),
+			attribute.String("conversation.pattern", conversationAnalysis.Pattern),
+			attribute.Bool("conversation.has_recent_tools", conversationAnalysis.HasRecentTools),
+			attribute.String("conversation.phase", conversationAnalysis.Phase),
+		),
+	)
+	defer span.End()
+
 	logging.Debug("Station GenKit: About to send %d messages to LLM API", len(g.request.Messages))
 	
 	// Enforce turn limit before making API call
@@ -517,14 +657,35 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 		// Start tracking API call timing
 		apiCallStart := time.Now()
 		
+		// Add span event for API call attempt
+		span.AddEvent("api_call_attempt",
+			trace.WithAttributes(
+				attribute.Int("attempt", attempt),
+				attribute.Int("max_retries", maxRetries),
+			),
+		)
+		
 		completion, err = g.client.Chat.Completions.New(apiCallCtx, *g.request)
 		apiCallDuration := time.Since(apiCallStart)
 		totalDuration += apiCallDuration
 		
+		// Record timing in span
+		span.SetAttributes(
+			attribute.Float64("api_call.duration_seconds", apiCallDuration.Seconds()),
+			attribute.Int("api_call.attempts", attempt),
+		)
+		
 		cancel() // Clean up context
 		
 		if err == nil {
-			// Success! Log if this took multiple attempts
+			// Success! Record in span and log if this took multiple attempts
+			span.AddEvent("api_call_success",
+				trace.WithAttributes(
+					attribute.Int("attempt", attempt),
+					attribute.Float64("total_duration_seconds", totalDuration.Seconds()),
+				),
+			)
+			
 			if attempt > 1 && g.logCallback != nil {
 				g.logCallback(map[string]interface{}{
 					"timestamp": fmt.Sprintf("%d", getCurrentTimestampNano()),
@@ -538,6 +699,15 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 				})
 			}
 			break
+		} else {
+			// Record error in span
+			span.AddEvent("api_call_error",
+				trace.WithAttributes(
+					attribute.Int("attempt", attempt),
+					attribute.String("error", err.Error()),
+					attribute.Bool("is_timeout", apiCallCtx.Err() == context.DeadlineExceeded),
+				),
+			)
 		}
 		
 		logging.Debug("Station GenKit: OpenAI API call attempt %d/%d failed after %v: %v", attempt, maxRetries, apiCallDuration, err)
@@ -592,7 +762,14 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 		
 		// If this is the last attempt, return the error
 		if attempt >= maxRetries {
-			return nil, fmt.Errorf("failed to create completion after %d attempts (total %v): %w", maxRetries, totalDuration, err)
+			finalErr := fmt.Errorf("failed to create completion after %d attempts (total %v): %w", maxRetries, totalDuration, err)
+			span.RecordError(finalErr)
+			span.SetStatus(codes.Error, "api call failed after retries")
+			span.SetAttributes(
+				attribute.Float64("total_duration_seconds", totalDuration.Seconds()),
+				attribute.Bool("exhausted_retries", true),
+			)
+			return nil, finalErr
 		}
 		
 		// Wait before retrying (exponential backoff: 2s, 4s, 8s)
@@ -631,6 +808,86 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 		})
 	}
 	logging.Debug("Station GenKit: OpenAI API call successful, processing response...")
+	
+	// Record successful API call metrics in span with enhanced agent loop analysis
+	if completion.Usage.TotalTokens > 0 {
+		span.SetAttributes(
+			attribute.Int("response.tokens.input", int(completion.Usage.PromptTokens)),
+			attribute.Int("response.tokens.output", int(completion.Usage.CompletionTokens)),
+			attribute.Int("response.tokens.total", int(completion.Usage.TotalTokens)),
+			// Token efficiency and cost analysis
+			attribute.Float64("response.tokens.efficiency", float64(completion.Usage.CompletionTokens)/float64(completion.Usage.PromptTokens)),
+			attribute.Float64("response.tokens.cost_ratio", float64(completion.Usage.PromptTokens)/float64(completion.Usage.TotalTokens)),
+		)
+	}
+	
+	if len(completion.Choices) > 0 {
+		choice := completion.Choices[0]
+		span.SetAttributes(
+			attribute.String("response.finish_reason", string(choice.FinishReason)),
+		)
+		
+		if choice.Message.ToolCalls != nil {
+			// Enhanced tool call analysis for agent loop patterns
+			toolNames := make([]string, len(choice.Message.ToolCalls))
+			toolTypes := make(map[string]int)
+			for i, tc := range choice.Message.ToolCalls {
+				toolNames[i] = tc.Function.Name
+				// Categorize tool types for pattern analysis
+				toolType := g.categorizeToolType(tc.Function.Name)
+				toolTypes[toolType]++
+			}
+			
+			span.SetAttributes(
+				attribute.Int("response.tool_calls_count", len(choice.Message.ToolCalls)),
+				attribute.StringSlice("response.tool_call_names", toolNames),
+				// Tool pattern analysis
+				attribute.Int("response.tools.read_operations", toolTypes["read"]),
+				attribute.Int("response.tools.write_operations", toolTypes["write"]),
+				attribute.Int("response.tools.search_operations", toolTypes["search"]),
+				attribute.Int("response.tools.analysis_operations", toolTypes["analysis"]),
+				attribute.Int("response.tools.system_operations", toolTypes["system"]),
+				attribute.String("response.tools.dominant_type", g.getDominantToolType(toolTypes)),
+				attribute.Bool("response.tools.mixed_operations", len(toolTypes) > 1),
+				attribute.String("agent.strategy", g.inferAgentStrategy(toolTypes, len(choice.Message.ToolCalls))),
+			)
+			
+			// Add span events for each tool call with enhanced context
+			for i, tc := range choice.Message.ToolCalls {
+				span.AddEvent(fmt.Sprintf("tool_call_%d", i+1),
+					trace.WithAttributes(
+						attribute.String("tool.name", tc.Function.Name),
+						attribute.String("tool.id", tc.ID),
+						attribute.String("tool.type", g.categorizeToolType(tc.Function.Name)),
+						attribute.Int("tool.sequence", i+1),
+						attribute.Int("tool.args_length", len(tc.Function.Arguments)),
+					),
+				)
+			}
+		} else {
+			// No tool calls - analyze text response
+			textLength := len(choice.Message.Content)
+			span.SetAttributes(
+				attribute.Int("response.text_length", textLength),
+				attribute.String("response.type", "text_only"),
+				attribute.String("agent.completion_type", func() string {
+					if textLength > 1000 {
+						return "detailed_analysis"
+					} else if textLength > 300 {
+						return "summary_response"
+					} else {
+						return "brief_response"
+					}
+				}()),
+			)
+		}
+	}
+	
+	span.SetAttributes(
+		attribute.Float64("api.total_duration_seconds", totalDuration.Seconds()),
+		attribute.Bool("api.success", true),
+	)
+	span.SetStatus(codes.Ok, "api call completed")
 	
 	// Log API call success with response details for real-time progress tracking
 	if g.logCallback != nil {
@@ -910,4 +1167,201 @@ func getCurrentTimestampNano() int64 {
 func getMaxTokensFromRequest(req *openai.ChatCompletionNewParams) interface{} {
 	// The MaxTokens field is an Opt[int64], just return the value directly
 	return req.MaxTokens.Value
+}
+
+// ConversationAnalysis represents the analyzed conversation pattern for agent loop insights
+type ConversationAnalysis struct {
+	ToolMessages      int
+	UserMessages      int
+	AssistantMessages int
+	SystemMessages    int
+	ToolRatio         float64
+	Pattern           string
+	HasRecentTools    bool
+	Phase             string
+}
+
+// analyzeConversationPattern analyzes the conversation for agent loop patterns
+func (g *StationModelGenerator) analyzeConversationPattern() ConversationAnalysis {
+	analysis := ConversationAnalysis{}
+	
+	// Count message types
+	for _, msg := range g.messages {
+		switch {
+		case msg.OfTool != nil:
+			analysis.ToolMessages++
+		case msg.OfUser != nil:
+			analysis.UserMessages++
+		case msg.OfAssistant != nil:
+			analysis.AssistantMessages++
+		case msg.OfSystem != nil:
+			analysis.SystemMessages++
+		}
+	}
+	
+	totalMessages := len(g.messages)
+	if totalMessages > 0 {
+		analysis.ToolRatio = float64(analysis.ToolMessages) / float64(totalMessages)
+	}
+	
+	// Determine conversation pattern
+	if analysis.ToolRatio > 0.6 {
+		analysis.Pattern = "tool_heavy"
+	} else if analysis.ToolRatio > 0.3 {
+		analysis.Pattern = "mixed"
+	} else if analysis.ToolRatio > 0 {
+		analysis.Pattern = "occasional_tools"
+	} else {
+		analysis.Pattern = "conversation_only"
+	}
+	
+	// Check for recent tool activity (last 3 messages)
+	recentToolCount := 0
+	start := len(g.messages) - 3
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(g.messages); i++ {
+		if g.messages[i].OfTool != nil {
+			recentToolCount++
+		}
+	}
+	analysis.HasRecentTools = recentToolCount > 0
+	
+	// Determine conversation phase
+	if totalMessages < 3 {
+		analysis.Phase = "initialization"
+	} else if analysis.ToolRatio > 0.5 {
+		analysis.Phase = "active_exploration"
+	} else if analysis.HasRecentTools {
+		analysis.Phase = "transitioning"
+	} else {
+		analysis.Phase = "conversation_focus"
+	}
+	
+	return analysis
+}
+
+// categorizeToolType categorizes tools by their primary function for pattern analysis
+func (g *StationModelGenerator) categorizeToolType(toolName string) string {
+	// Read operations
+	readTools := map[string]bool{
+		"read_text_file": true, "get_file_info": true, "list_directory": true,
+		"directory_tree": true, "read_file": true, "cat": true, "head": true,
+		"tail": true, "stat": true, "ls": true,
+	}
+	
+	// Write operations
+	writeTools := map[string]bool{
+		"write_text_file": true, "create_file": true, "append_file": true,
+		"mkdir": true, "touch": true, "copy": true, "move": true, "rm": true,
+		"chmod": true, "edit": true,
+	}
+	
+	// Search operations  
+	searchTools := map[string]bool{
+		"search_files": true, "find": true, "grep": true, "search": true,
+		"locate": true, "which": true,
+	}
+	
+	// System operations
+	systemTools := map[string]bool{
+		"run_command": true, "execute": true, "bash": true, "sh": true,
+		"ps": true, "kill": true, "top": true, "df": true, "du": true,
+		"mount": true, "umount": true,
+	}
+	
+	if readTools[toolName] {
+		return "read"
+	} else if writeTools[toolName] {
+		return "write"
+	} else if searchTools[toolName] {
+		return "search"
+	} else if systemTools[toolName] {
+		return "system"
+	} else {
+		return "analysis"
+	}
+}
+
+// getDominantToolType returns the most common tool type
+func (g *StationModelGenerator) getDominantToolType(toolTypes map[string]int) string {
+	maxCount := 0
+	dominantType := "unknown"
+	
+	for toolType, count := range toolTypes {
+		if count > maxCount {
+			maxCount = count
+			dominantType = toolType
+		}
+	}
+	
+	return dominantType
+}
+
+// inferAgentStrategy infers the agent's current strategy based on tool usage patterns
+func (g *StationModelGenerator) inferAgentStrategy(toolTypes map[string]int, totalCalls int) string {
+	// Single tool call strategies
+	if totalCalls == 1 {
+		for toolType := range toolTypes {
+			switch toolType {
+			case "read":
+				return "targeted_reading"
+			case "write":
+				return "focused_action"
+			case "search":
+				return "specific_search"
+			case "system":
+				return "direct_execution"
+			default:
+				return "single_analysis"
+			}
+		}
+	}
+	
+	// Multi-tool strategies
+	readOps := toolTypes["read"]
+	writeOps := toolTypes["write"]
+	searchOps := toolTypes["search"]
+	systemOps := toolTypes["system"]
+	analysisOps := toolTypes["analysis"]
+	
+	// Information gathering pattern
+	if readOps > 0 && searchOps > 0 && writeOps == 0 {
+		return "information_gathering"
+	}
+	
+	// Implementation pattern
+	if readOps > 0 && writeOps > 0 {
+		return "implementation_workflow"
+	}
+	
+	// Exploration pattern
+	if searchOps > 1 || (readOps > 2 && searchOps > 0) {
+		return "systematic_exploration"
+	}
+	
+	// Analysis pattern  
+	if analysisOps > readOps && writeOps == 0 {
+		return "deep_analysis"
+	}
+	
+	// System administration pattern
+	if systemOps > 0 && (readOps > 0 || writeOps > 0) {
+		return "system_administration"
+	}
+	
+	// Mixed strategy
+	if len(toolTypes) >= 3 {
+		return "multi_modal_approach"
+	}
+	
+	// Default based on dominant operation
+	if readOps > writeOps {
+		return "read_heavy_workflow"
+	} else if writeOps > 0 {
+		return "action_oriented_workflow"
+	} else {
+		return "analysis_workflow"
+	}
 }

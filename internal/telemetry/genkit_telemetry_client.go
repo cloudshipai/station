@@ -131,6 +131,7 @@ type PerformanceData struct {
 	PromptProcessingTime  int64   `json:"prompt_processing_time_ms,omitempty"`
 	ResponseGenerationTime int64  `json:"response_generation_time_ms,omitempty"`
 	TokensPerSecond       float64 `json:"tokens_per_second,omitempty"`
+	AgentLoopMetrics      interface{} `json:"agent_loop_metrics,omitempty"`
 }
 
 // extractExecutionData extracts comprehensive execution data from Genkit trace
@@ -147,6 +148,21 @@ func (c *GenkitTelemetryClient) extractExecutionData(trace *tracing.Data) *Execu
 	var errorInfo *ErrorInfoData
 	performanceData := &PerformanceData{
 		TotalExecutionTime: data.TotalDuration,
+	}
+	
+	// Enhanced metrics for agent loop analysis
+	var agentLoopMetrics = struct {
+		ConversationTurns      int
+		ToolHeavyOperations    int
+		TextOnlyResponses      int
+		MixedResponses         int
+		DominantStrategy       string
+		ConversationPhases     map[string]int
+		ToolTypesUsed          map[string]int
+		TokenEfficiency        float64
+	}{
+		ConversationPhases: make(map[string]int),
+		ToolTypesUsed:      make(map[string]int),
 	}
 
 	stepCount := int64(0)
@@ -203,6 +219,49 @@ func (c *GenkitTelemetryClient) extractExecutionData(trace *tracing.Data) *Execu
 		if c.isModelInference(span) {
 			performanceData.ModelInferenceTime += duration
 		}
+		
+		// Extract enhanced agent loop metrics from span attributes
+		if span.Attributes != nil {
+			// Conversation analysis
+			if turns, ok := span.Attributes["conversation.turn"].(float64); ok {
+				agentLoopMetrics.ConversationTurns = int(turns)
+			}
+			
+			// Agent behavior patterns
+			if behavior, ok := span.Attributes["agent.behavior"].(string); ok {
+				switch behavior {
+				case "tool_only":
+					agentLoopMetrics.ToolHeavyOperations++
+				case "text_only":
+					agentLoopMetrics.TextOnlyResponses++
+				case "tool_and_text":
+					agentLoopMetrics.MixedResponses++
+				}
+			}
+			
+			// Agent strategy
+			if strategy, ok := span.Attributes["agent.strategy"].(string); ok {
+				agentLoopMetrics.DominantStrategy = strategy
+			}
+			
+			// Conversation phase tracking
+			if phase, ok := span.Attributes["conversation.phase"].(string); ok {
+				agentLoopMetrics.ConversationPhases[phase]++
+			}
+			
+			// Tool type analysis
+			toolTypes := []string{"read", "write", "search", "analysis", "system"}
+			for _, toolType := range toolTypes {
+				if count, ok := span.Attributes[fmt.Sprintf("response.tools.%s_operations", toolType)].(float64); ok {
+					agentLoopMetrics.ToolTypesUsed[toolType] += int(count)
+				}
+			}
+			
+			// Token efficiency
+			if efficiency, ok := span.Attributes["response.tokens.efficiency"].(float64); ok {
+				agentLoopMetrics.TokenEfficiency = efficiency
+			}
+		}
 	}
 
 	data.StepsTaken = stepCount
@@ -216,6 +275,9 @@ func (c *GenkitTelemetryClient) extractExecutionData(trace *tracing.Data) *Execu
 		tokensPerMs := float64(totalTokenUsage.OutputTokens) / float64(data.TotalDuration)
 		data.PerformanceData.TokensPerSecond = tokensPerMs * 1000 // Convert to tokens per second
 	}
+
+	// Store agent loop metrics in performance data for later use
+	data.PerformanceData.AgentLoopMetrics = agentLoopMetrics
 
 	return data
 }
@@ -427,12 +489,17 @@ func (c *GenkitTelemetryClient) updateAgentRunWithTelemetry(ctx context.Context,
 		executionStepsArray[i] = step
 	}
 
-	// Create comprehensive metadata
+	// Create comprehensive metadata with enhanced agent loop insights
 	metadata := map[string]interface{}{
 		"trace_id":         data.TraceID,
 		"total_duration_ms": data.TotalDuration,
 		"telemetry_captured_at": time.Now().Unix(),
 		"agent_name":       c.agentName,
+	}
+	
+	// Add agent loop metrics if available
+	if data.PerformanceData != nil && data.PerformanceData.AgentLoopMetrics != nil {
+		metadata["agent_loop_metrics"] = data.PerformanceData.AgentLoopMetrics
 	}
 
 	if data.TokenUsage != nil {
@@ -460,6 +527,7 @@ func (c *GenkitTelemetryClient) updateAgentRunWithTelemetry(ctx context.Context,
 	completedAt := time.Now()
 	
 	err := c.repos.AgentRuns.UpdateCompletion(
+		ctx,
 		c.runID,
 		"", // final_response will be set separately
 		data.StepsTaken,

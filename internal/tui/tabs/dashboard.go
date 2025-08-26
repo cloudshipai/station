@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -305,7 +306,7 @@ func (m DashboardModel) loadStats() tea.Cmd {
 		}
 		
 		// Count runs
-		runs, err := m.repos.AgentRuns.List()
+		runs, err := m.repos.AgentRuns.List(context.Background())
 		if err == nil {
 			stats.TotalRuns = len(runs)
 			// Count runs today

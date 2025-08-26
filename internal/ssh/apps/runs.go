@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ func (app *RunsApp) Init() tea.Cmd {
 }
 
 func (app *RunsApp) loadRuns() tea.Msg {
-	runs, err := app.repos.AgentRuns.ListRecent(20) // Get latest 20 runs
+	runs, err := app.repos.AgentRuns.ListRecent(context.Background(), 20) // Get latest 20 runs
 	if err != nil {
 		return runsErrorMsg(err)
 	}

@@ -18,6 +18,7 @@ type Config struct {
 	AdminUsername     string
 	Environment       string
 	TelemetryEnabled  bool
+	OTELEndpoint      string // OpenTelemetry OTLP endpoint for exporting traces
 	Debug             bool   // Debug mode enables verbose logging
 	EncryptionKey     string // Encryption key (can be loaded from config file or env var)
 	// Workspace Configuration
@@ -39,6 +40,7 @@ func Load() (*Config, error) {
 		AdminUsername:    getEnvOrDefault("ADMIN_USERNAME", "admin"),
 		Environment:      getEnvOrDefault("ENVIRONMENT", "development"),
 		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true), // Default enabled with opt-out
+		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", ""), // Default empty (no export)
 		Debug:            getEnvBoolOrDefault("STN_DEBUG", false), // Default to info level
 		EncryptionKey:    os.Getenv("ENCRYPTION_KEY"), // Load from environment
 		// Workspace Configuration  
@@ -71,6 +73,9 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("telemetry_enabled") {
 		cfg.TelemetryEnabled = viper.GetBool("telemetry_enabled")
+	}
+	if viper.IsSet("otel_endpoint") {
+		cfg.OTELEndpoint = viper.GetString("otel_endpoint")
 	}
 	if viper.IsSet("debug") {
 		cfg.Debug = viper.GetBool("debug")

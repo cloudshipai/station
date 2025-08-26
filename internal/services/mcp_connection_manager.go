@@ -16,6 +16,9 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // EnvironmentToolCache caches tools and clients for an environment
@@ -226,11 +229,22 @@ func (mcm *MCPConnectionManager) deduplicateServers(servers []serverDefinition) 
 
 // startPooledServer starts a server and adds it to the pool
 func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server serverDefinition) error {
+	// Create telemetry span for MCP server startup
+	tracer := otel.Tracer("station-mcp")
+	ctx, span := tracer.Start(ctx, "mcp.server.start",
+		trace.WithAttributes(
+			attribute.String("mcp.server.name", server.name),
+			attribute.String("mcp.server.key", server.key),
+		),
+	)
+	defer span.End()
+	
 	mcm.serverPool.mutex.Lock()
 	defer mcm.serverPool.mutex.Unlock()
 	
 	// Check if already started
 	if _, exists := mcm.serverPool.servers[server.key]; exists {
+		span.SetAttributes(attribute.Bool("mcp.server.already_running", true))
 		return nil
 	}
 	
@@ -239,6 +253,11 @@ func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server s
 	// Create server client (same logic as connectToMCPServer)
 	client, tools, err := mcm.createServerClient(ctx, server.name, server.config)
 	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(
+			attribute.Bool("mcp.server.success", false),
+			attribute.String("mcp.server.error", err.Error()),
+		)
 		return fmt.Errorf("failed to create server client for %s: %w", server.key, err)
 	}
 	
@@ -246,6 +265,11 @@ func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server s
 	mcm.serverPool.servers[server.key] = client
 	mcm.serverPool.serverConfigs[server.key] = server.config
 	mcm.serverPool.tools[server.key] = tools
+	
+	span.SetAttributes(
+		attribute.Bool("mcp.server.success", true),
+		attribute.Int("mcp.server.tools_count", len(tools)),
+	)
 	
 	logging.Info("✅ Pooled server %s started with %d tools", server.key, len(tools))
 	return nil
@@ -291,6 +315,14 @@ func (mcm *MCPConnectionManager) parseFileConfig(fileConfig *repositories.FileCo
 
 // createServerClient creates a new MCP client (extracted from connectToMCPServer)
 func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverName string, serverConfigRaw interface{}) (*mcp.GenkitMCPClient, []ai.Tool, error) {
+	// Create telemetry span for MCP client creation and tool discovery
+	tracer := otel.Tracer("station-mcp")
+	ctx, span := tracer.Start(ctx, "mcp.client.create_and_discover_tools",
+		trace.WithAttributes(
+			attribute.String("mcp.server.name", serverName),
+		),
+	)
+	defer span.End()
 	// Convert server config (same logic as connectToMCPServer)
 	serverConfigBytes, err := json.Marshal(serverConfigRaw)
 	if err != nil {
@@ -345,9 +377,18 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
 	if err != nil {
 		logging.Info("❌ CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
+		span.RecordError(err)
+		span.SetAttributes(
+			attribute.Bool("mcp.tool_discovery.success", false),
+			attribute.String("mcp.tool_discovery.error", err.Error()),
+		)
 		return mcpClient, nil, err // Return client for cleanup even on error
 	}
 	
+	span.SetAttributes(
+		attribute.Bool("mcp.tool_discovery.success", true),
+		attribute.Int("mcp.tools_discovered", len(serverTools)),
+	)
 	logging.Info("✅ MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
 	
 	// DEBUG: Log actual tool names returned by MCP server

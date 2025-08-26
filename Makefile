@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui tag-check release
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui tag-check release jaeger jaeger-down
 
 # Build configuration
 BINARY_NAME=stn
@@ -201,8 +201,41 @@ help:
 	@echo "  make test-agent-bundle-watch  - Watch agent bundle tests"
 	@echo "  make test-bundles             - Run all bundle system tests"
 	@echo ""
+	@echo "OpenTelemetry & Observability:"
+	@echo "  make jaeger      - Start Jaeger with OTLP support for distributed tracing"
+	@echo "  make jaeger-down - Stop and remove Jaeger container"
+	@echo ""
 	@echo "Version Control:"
 	@echo "  make build VERSION=v1.2.3 - Build with custom version"
 
 # Default target
 all: build
+
+# OpenTelemetry & Observability targets
+
+# Start Jaeger with OTLP support for distributed tracing
+jaeger:
+	@echo "🔍 Starting Jaeger with OTLP support..."
+	@docker run -d --name station-jaeger \
+		-e COLLECTOR_OTLP_ENABLED=true \
+		-p 16686:16686 \
+		-p 4317:4317 \
+		-p 4318:4318 \
+		jaegertracing/all-in-one:latest
+	@echo "✅ Jaeger started successfully!"
+	@echo "📊 Jaeger UI: http://localhost:16686"
+	@echo "🔌 OTLP gRPC: localhost:4317"
+	@echo "🔌 OTLP HTTP: localhost:4318"
+	@echo ""
+	@echo "💡 To use with Station, set these environment variables:"
+	@echo "   export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317"
+	@echo "   export OTEL_EXPORTER_OTLP_PROTOCOL=grpc"
+	@echo "   export OTEL_SERVICE_NAME=station"
+	@echo "   export OTEL_SERVICE_VERSION=0.2.7"
+
+# Stop and remove Jaeger container
+jaeger-down:
+	@echo "🛑 Stopping Jaeger..."
+	@docker stop station-jaeger || true
+	@docker rm station-jaeger || true
+	@echo "✅ Jaeger stopped and removed"

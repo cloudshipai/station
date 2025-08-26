@@ -16,6 +16,9 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	googledotprompt "github.com/google/dotprompt/go/dotprompt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // AgentExecutionResult contains the result of an agent execution
@@ -41,6 +44,7 @@ type AgentExecutionEngine struct {
 	genkitProvider     *GenKitProvider
 	mcpConnManager     *MCPConnectionManager
 	telemetryManager   *TelemetryManager
+	telemetryService   *TelemetryService // For creating spans
 	activeMCPClients   []*mcp.GenkitMCPClient // Store active connections for cleanup after execution
 }
 
@@ -74,8 +78,22 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 	startTime := time.Now()
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
+	// Create telemetry span if telemetry service is available
+	var span trace.Span
+	if aee.telemetryService != nil {
+		ctx, span = aee.telemetryService.StartSpan(ctx, "agent_execution_engine.execute",
+			trace.WithAttributes(
+				attribute.String("agent.name", agent.Name),
+				attribute.Int64("agent.id", agent.ID),
+				attribute.Int64("run.id", runID),
+				attribute.Int("user_variables.count", len(userVariables)),
+			),
+		)
+		defer span.End()
+	}
+
 	// Log execution start
-	err := aee.repos.AgentRuns.AppendDebugLog(runID, map[string]interface{}{
+	err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, map[string]interface{}{
 		"timestamp": time.Now().Format(time.RFC3339),
 		"level":     "info",
 		"message":   fmt.Sprintf("Starting execution for agent '%s'", agent.Name),
@@ -96,12 +114,24 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		// Get agent tools for the new dotprompt system
 		agentTools, err := aee.repos.AgentTools.ListAgentTools(agent.ID)
 		if err != nil {
+			if span != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "failed to get agent tools")
+			}
 			return nil, fmt.Errorf("failed to get agent tools for dotprompt execution: %w", err)
+		}
+		
+		if span != nil {
+			span.SetAttributes(attribute.Int("agent.tools_count", len(agentTools)))
 		}
 		
 		// Get GenKit app for dotprompt execution
 		genkitApp, err := aee.genkitProvider.GetApp(ctx)
 		if err != nil {
+			if span != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "failed to get genkit app")
+			}
 			return nil, fmt.Errorf("failed to get genkit app for dotprompt execution: %w", err)
 		}
 		
@@ -114,9 +144,34 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		}
 		
 		// Load MCP tools for dotprompt execution (reuse the same logic as traditional execution)
+		var mcpLoadSpan trace.Span
+		if span != nil {
+			ctx, mcpLoadSpan = aee.telemetryService.StartSpan(ctx, "mcp.load_tools",
+				trace.WithAttributes(
+					attribute.Int64("environment.id", agent.EnvironmentID),
+				),
+			)
+			defer mcpLoadSpan.End()
+		}
+		
 		allMCPTools, mcpClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
 		if err != nil {
+			if mcpLoadSpan != nil {
+				mcpLoadSpan.RecordError(err)
+				mcpLoadSpan.SetStatus(codes.Error, "failed to load MCP tools")
+			}
+			if span != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "failed to get environment MCP tools")
+			}
 			return nil, fmt.Errorf("failed to get environment MCP tools for dotprompt execution: %w", err)
+		}
+		
+		if mcpLoadSpan != nil {
+			mcpLoadSpan.SetAttributes(
+				attribute.Int("mcp.tools_loaded", len(allMCPTools)),
+				attribute.Int("mcp.clients_connected", len(mcpClients)),
+			)
 		}
 		
 		// Store clients for cleanup after execution
@@ -148,13 +203,18 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 		log.Printf("🔥 MCP-SETUP: MCP tools loaded - %d tools available, %d filtered", len(allMCPTools), len(mcpTools))
 		
+		// Add filtered tools count to span
+		if span != nil {
+			span.SetAttributes(attribute.Int("agent.filtered_tools_count", len(mcpTools)))
+		}
+		
 		// Use our new dotprompt + genkit execution system with progressive logging
 		log.Printf("🔥 MCP-SETUP: Creating dotprompt executor")
 		executor := dotprompt.NewGenKitExecutor()
 		
 		// Create a logging callback for real-time progress updates
 		logCallback := func(logEntry map[string]interface{}) {
-			err := aee.repos.AgentRuns.AppendDebugLog(runID, logEntry)
+			err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
 			if err != nil {
 				logging.Debug("Failed to append debug log: %v", err)
 			}
@@ -164,6 +224,21 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		aee.genkitProvider.SetOpenAILogCallback(logCallback)
 		
 		log.Printf("🔥 AGENT-ENGINE: About to call dotprompt executor - agent: %s", agent.Name)
+		
+		// Create execution span
+		var execSpan trace.Span
+		if span != nil {
+			ctx, execSpan = aee.telemetryService.StartSpan(ctx, "dotprompt.execute",
+				trace.WithAttributes(
+					attribute.String("task.preview", func() string {
+						if len(task) > 200 { return task[:200] + "..." }
+						return task
+					}()),
+				),
+			)
+			defer execSpan.End()
+		}
+		
 		response, err := executor.ExecuteAgentWithDatabaseConfigAndLogging(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
 		log.Printf("🔥 AGENT-ENGINE: Dotprompt executor returned - response: %v, err: %v", response != nil, err)
 		
@@ -172,6 +247,16 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		aee.activeMCPClients = nil
 		
 		if err != nil {
+			// Record error in spans
+			if execSpan != nil {
+				execSpan.RecordError(err)
+				execSpan.SetStatus(codes.Error, "dotprompt execution failed")
+			}
+			if span != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "agent execution failed")
+			}
+			
 			// Log the execution failure for debugging
 			if logCallback != nil {
 				logCallback(map[string]interface{}{
@@ -187,11 +272,32 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			return nil, fmt.Errorf("dotprompt execution failed: %w", err)
 		}
 		
+		// Add success metrics to spans
+		duration := time.Since(startTime)
+		if execSpan != nil {
+			execSpan.SetAttributes(
+				attribute.Bool("execution.success", response.Success),
+				attribute.String("execution.model", response.ModelName),
+				attribute.Float64("execution.duration_seconds", duration.Seconds()),
+				attribute.Int("execution.steps_used", response.StepsUsed),
+				attribute.Int("execution.tools_used", response.ToolsUsed),
+			)
+		}
+		if span != nil {
+			span.SetAttributes(
+				attribute.Bool("execution.success", response.Success),
+				attribute.String("execution.model", response.ModelName),
+				attribute.Float64("execution.duration_seconds", duration.Seconds()),
+				attribute.Int("execution.steps_used", response.StepsUsed),
+				attribute.Int("execution.tools_used", response.ToolsUsed),
+			)
+		}
+
 		// Convert ExecutionResponse to AgentExecutionResult  
 		return &AgentExecutionResult{
 			Success:        response.Success,
 			Response:       response.Response,
-			Duration:       time.Since(startTime), // Use our own timing
+			Duration:       duration,
 			ModelName:      response.ModelName,
 			StepsUsed:      response.StepsUsed,
 			StepsTaken:     int64(response.StepsUsed), // Map StepsUsed to StepsTaken for database

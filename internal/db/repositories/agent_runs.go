@@ -7,17 +7,23 @@ import (
 	"station/internal/db/queries"
 	"station/pkg/models"
 	"time"
+	
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type AgentRunRepo struct {
 	db      *sql.DB
 	queries *queries.Queries
+	tracer  trace.Tracer
 }
 
 func NewAgentRunRepo(db *sql.DB) *AgentRunRepo {
 	return &AgentRunRepo{
 		db:      db,
 		queries: queries.New(db),
+		tracer:  otel.Tracer("station-database"),
 	}
 }
 
@@ -260,7 +266,7 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 }
 
 // CreateWithMetadata creates a new agent run with response object metadata
-func (r *AgentRunRepo) CreateWithMetadata(agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) (*models.AgentRun, error) {
+func (r *AgentRunRepo) CreateWithMetadata(ctx context.Context, agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) (*models.AgentRun, error) {
 	params := queries.CreateAgentRunParams{
 		AgentID:       agentID,
 		UserID:        userID,
@@ -316,7 +322,7 @@ func (r *AgentRunRepo) CreateWithMetadata(agentID, userID int64, task, finalResp
 		params.ToolsUsed = sql.NullInt64{Int64: *toolsUsed, Valid: true}
 	}
 	
-	sqlcRun, err := r.queries.CreateAgentRun(context.Background(), params)
+	sqlcRun, err := r.queries.CreateAgentRun(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +331,16 @@ func (r *AgentRunRepo) CreateWithMetadata(agentID, userID int64, task, finalResp
 }
 
 // Create creates a new agent run (backwards compatibility)
-func (r *AgentRunRepo) Create(agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) (*models.AgentRun, error) {
+func (r *AgentRunRepo) Create(ctx context.Context, agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) (*models.AgentRun, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.create",
+		trace.WithAttributes(
+			attribute.Int64("agent.id", agentID),
+			attribute.Int64("user.id", userID),
+			attribute.String("run.status", status),
+			attribute.Int64("run.steps_taken", stepsTaken),
+		),
+	)
+	defer span.End()
 	params := queries.CreateAgentRunBasicParams{
 		AgentID:       agentID,
 		UserID:        userID,
@@ -356,32 +371,53 @@ func (r *AgentRunRepo) Create(agentID, userID int64, task, finalResponse string,
 		params.CompletedAt = sql.NullTime{Time: *completedAt, Valid: true}
 	}
 	
-	sqlcRun, err := r.queries.CreateAgentRunBasic(context.Background(), params)
+	sqlcRun, err := r.queries.CreateAgentRunBasic(ctx, params)
 	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
 		return nil, err
 	}
 	
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int64("run.id", sqlcRun.ID),
+	)
 	return convertAgentRunFromSQLc(sqlcRun), nil
 }
 
-func (r *AgentRunRepo) GetByID(id int64) (*models.AgentRun, error) {
-	run, err := r.queries.GetAgentRun(context.Background(), id)
+func (r *AgentRunRepo) GetByID(ctx context.Context, id int64) (*models.AgentRun, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.get_by_id",
+		trace.WithAttributes(
+			attribute.Int64("run.id", id),
+		),
+	)
+	defer span.End()
+	
+	run, err := r.queries.GetAgentRun(ctx, id)
 	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
 		return nil, err
 	}
+	
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.String("run.status", run.Status),
+		attribute.Int64("run.agent_id", run.AgentID),
+	)
 	return convertAgentRunFromSQLc(run), nil
 }
 
-func (r *AgentRunRepo) GetByIDWithDetails(id int64) (*models.AgentRunWithDetails, error) {
-	row, err := r.queries.GetAgentRunWithDetails(context.Background(), id)
+func (r *AgentRunRepo) GetByIDWithDetails(ctx context.Context, id int64) (*models.AgentRunWithDetails, error) {
+	row, err := r.queries.GetAgentRunWithDetails(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	return convertAgentRunWithDetailsFromSQLc(row), nil
 }
 
-func (r *AgentRunRepo) List() ([]*models.AgentRun, error) {
-	runs, err := r.queries.ListAgentRuns(context.Background())
+func (r *AgentRunRepo) List(ctx context.Context) ([]*models.AgentRun, error) {
+	runs, err := r.queries.ListAgentRuns(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -394,8 +430,8 @@ func (r *AgentRunRepo) List() ([]*models.AgentRun, error) {
 	return result, nil
 }
 
-func (r *AgentRunRepo) ListByAgent(agentID int64) ([]*models.AgentRun, error) {
-	runs, err := r.queries.ListAgentRunsByAgent(context.Background(), agentID)
+func (r *AgentRunRepo) ListByAgent(ctx context.Context, agentID int64) ([]*models.AgentRun, error) {
+	runs, err := r.queries.ListAgentRunsByAgent(ctx, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -408,8 +444,8 @@ func (r *AgentRunRepo) ListByAgent(agentID int64) ([]*models.AgentRun, error) {
 	return result, nil
 }
 
-func (r *AgentRunRepo) ListByUser(userID int64) ([]*models.AgentRun, error) {
-	runs, err := r.queries.ListAgentRunsByUser(context.Background(), userID)
+func (r *AgentRunRepo) ListByUser(ctx context.Context, userID int64) ([]*models.AgentRun, error) {
+	runs, err := r.queries.ListAgentRunsByUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -422,8 +458,8 @@ func (r *AgentRunRepo) ListByUser(userID int64) ([]*models.AgentRun, error) {
 	return result, nil
 }
 
-func (r *AgentRunRepo) ListRecent(limit int64) ([]*models.AgentRunWithDetails, error) {
-	rows, err := r.queries.ListRecentAgentRuns(context.Background(), limit)
+func (r *AgentRunRepo) ListRecent(ctx context.Context, limit int64) ([]*models.AgentRunWithDetails, error) {
+	rows, err := r.queries.ListRecentAgentRuns(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +473,15 @@ func (r *AgentRunRepo) ListRecent(limit int64) ([]*models.AgentRunWithDetails, e
 }
 
 // UpdateCompletionWithMetadata updates an existing run record with completion data and response metadata
-func (r *AgentRunRepo) UpdateCompletionWithMetadata(id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) error {
+func (r *AgentRunRepo) UpdateCompletionWithMetadata(ctx context.Context, id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) error {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.update_completion",
+		trace.WithAttributes(
+			attribute.Int64("run.id", id),
+			attribute.String("run.status", status),
+			attribute.Int64("run.steps_taken", stepsTaken),
+		),
+	)
+	defer span.End()
 	params := queries.UpdateAgentRunCompletionParams{
 		FinalResponse:  finalResponse,
 		StepsTaken:     stepsTaken,
@@ -503,25 +547,35 @@ func (r *AgentRunRepo) UpdateCompletionWithMetadata(id int64, finalResponse stri
 		params.ToolsUsed = sql.NullInt64{Int64: *toolsUsed, Valid: true}
 	}
 	
-	return r.queries.UpdateAgentRunCompletion(context.Background(), params)
+	err := r.queries.UpdateAgentRunCompletion(ctx, params)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return err
+	}
+	
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+	)
+	return nil
 }
 
 // UpdateCompletion updates an existing run record (backwards compatibility)
-func (r *AgentRunRepo) UpdateCompletion(id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) error {
-	return r.UpdateCompletionWithMetadata(id, finalResponse, stepsTaken, toolCalls, executionSteps, status, completedAt, nil, nil, nil, nil, nil, nil)
+func (r *AgentRunRepo) UpdateCompletion(ctx context.Context, id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) error {
+	return r.UpdateCompletionWithMetadata(ctx, id, finalResponse, stepsTaken, toolCalls, executionSteps, status, completedAt, nil, nil, nil, nil, nil, nil)
 }
 
 // UpdateStatus updates only the status of an agent run using SQLC
-func (r *AgentRunRepo) UpdateStatus(id int64, status string) error {
+func (r *AgentRunRepo) UpdateStatus(ctx context.Context, id int64, status string) error {
 	params := queries.UpdateAgentRunStatusParams{
 		Status: status,
 		ID:     id,
 	}
-	return r.queries.UpdateAgentRunStatus(context.Background(), params)
+	return r.queries.UpdateAgentRunStatus(ctx, params)
 }
 
 // UpdateDebugLogs updates the debug_logs field for an agent run
-func (r *AgentRunRepo) UpdateDebugLogs(id int64, debugLogs *models.JSONArray) error {
+func (r *AgentRunRepo) UpdateDebugLogs(ctx context.Context, id int64, debugLogs *models.JSONArray) error {
 	var debugLogsStr sql.NullString
 	
 	if debugLogs != nil {
@@ -539,12 +593,12 @@ func (r *AgentRunRepo) UpdateDebugLogs(id int64, debugLogs *models.JSONArray) er
 		DebugLogs: debugLogsStr,
 		ID:        id,
 	}
-	return r.queries.UpdateAgentRunDebugLogs(context.Background(), params)
+	return r.queries.UpdateAgentRunDebugLogs(ctx, params)
 }
 
 // AppendDebugLog appends a new debug log entry to an existing agent run
-func (r *AgentRunRepo) AppendDebugLog(id int64, logEntry map[string]interface{}) error {
-	run, err := r.GetByID(id)
+func (r *AgentRunRepo) AppendDebugLog(ctx context.Context, id int64, logEntry map[string]interface{}) error {
+	run, err := r.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get agent run: %w", err)
 	}
@@ -557,5 +611,5 @@ func (r *AgentRunRepo) AppendDebugLog(id int64, logEntry map[string]interface{})
 	}
 	
 	debugLogs = append(debugLogs, logEntry)
-	return r.UpdateDebugLogs(id, &debugLogs)
+	return r.UpdateDebugLogs(ctx, id, &debugLogs)
 }
