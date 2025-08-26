@@ -76,6 +76,10 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Agent routes - accessible to regular users in server mode
 	agentGroup := router.Group("/agents")
 	agentGroup.GET("", h.listAgents)           // Users can list agents
+	agentGroup.GET("/:id", h.getAgent)         // Users can view individual agents
+	agentGroup.GET("/:id/details", h.getAgentWithTools) // Users can view agent details
+	agentGroup.GET("/:id/prompt", h.getAgentPrompt)    // Users can view agent prompts
+	agentGroup.PUT("/:id/prompt", h.updateAgentPrompt) // Users can update agent prompts
 	agentGroup.POST("/:id/execute", h.callAgent) // Users can execute agents (direct execution with async goroutine)
 	
 	// Admin-only agent management routes
