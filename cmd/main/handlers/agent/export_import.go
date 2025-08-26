@@ -1,22 +1,17 @@
 package agent
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"station/cmd/main/handlers/common"
-	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/pkg/models"
-	"station/pkg/schema"
 )
 
 // RunAgentExport exports an agent to a .prompt file
@@ -40,14 +35,12 @@ func (h *AgentHandler) RunAgentExport(cmd *cobra.Command, args []string) error {
 
 // exportAgentLocalByName exports an agent from the local database
 func (h *AgentHandler) exportAgentLocalByName(agentName, environment string) error {
-	styles := getCLIStyles(h.themeManager)
-
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load station config: %v", err)
 	}
 
-	database, err := db.NewSQLite(cfg.GetDatabasePath())
+	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
@@ -101,14 +94,12 @@ func (h *AgentHandler) exportAgentLocalByName(agentName, environment string) err
 
 // exportAgentFromDatabase exports an agent from the database to a .prompt file
 func (h *AgentHandler) exportAgentFromDatabase(agentName, environment, promptFilePath string) error {
-	styles := getCLIStyles(h.themeManager)
-
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load station config: %v", err)
 	}
 
-	database, err := db.NewSQLite(cfg.GetDatabasePath())
+	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
@@ -161,7 +152,7 @@ func (h *AgentHandler) exportAgentFromDatabase(agentName, environment, promptFil
 	}
 
 	fmt.Printf("✅ Agent '%s' successfully exported to: %s\n", 
-		styles.Success.Render(agentName), promptFilePath)
+		agentName, promptFilePath)
 	
 	return nil
 }
@@ -219,8 +210,7 @@ func (h *AgentHandler) RunAgentImport(cmd *cobra.Command, args []string) error {
 		environment = "default"
 	}
 
-	styles := getCLIStyles(h.themeManager)
-	fmt.Printf("%s🔄 Importing agents from environment '%s'...%s\n", styles.Primary, environment, styles.Reset)
+	fmt.Printf("🔄 Importing agents from environment '%s'...\n", environment)
 
 	return h.importAgentsLocal(environment)
 }

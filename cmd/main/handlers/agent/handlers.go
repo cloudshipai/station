@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/common"
-	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
@@ -65,14 +64,12 @@ func (h *AgentHandler) RunAgentShow(cmd *cobra.Command, args []string) error {
 
 // showAgentLocalByName shows details of an agent by name and environment
 func (h *AgentHandler) showAgentLocalByName(agentName, environment string) error {
-	styles := getCLIStyles(h.themeManager)
-
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load station config: %v", err)
 	}
 
-	database, err := db.NewSQLite(cfg.GetDatabasePath())
+	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
@@ -122,25 +119,25 @@ func (h *AgentHandler) showAgentLocalByName(agentName, environment string) error
 	}
 
 	// Display agent details
-	fmt.Printf("%s📋 Agent Details%s\n", styles.Primary, styles.Reset)
-	fmt.Printf("%sName:%s %s\n", styles.Info, styles.Reset, targetAgent.Name)
-	fmt.Printf("%sDescription:%s %s\n", styles.Info, styles.Reset, targetAgent.Description)
-	fmt.Printf("%sEnvironment:%s %s\n", styles.Info, styles.Reset, environmentName)
-	fmt.Printf("%sMax Steps:%s %d\n", styles.Info, styles.Reset, targetAgent.MaxSteps)
-	fmt.Printf("%sCreated:%s %s\n", styles.Info, styles.Reset, targetAgent.CreatedAt.Format("2006-01-02 15:04:05"))
-	fmt.Printf("%sUpdated:%s %s\n", styles.Info, styles.Reset, targetAgent.UpdatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("📋 Agent Details\n")
+	fmt.Printf("Name: %s\n", targetAgent.Name)
+	fmt.Printf("Description: %s\n", targetAgent.Description)
+	fmt.Printf("Environment: %s\n", environmentName)
+	fmt.Printf("Max Steps: %d\n", targetAgent.MaxSteps)
+	fmt.Printf("Created: %s\n", targetAgent.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("Updated: %s\n", targetAgent.UpdatedAt.Format("2006-01-02 15:04:05"))
 
 	if len(tools) > 0 {
-		fmt.Printf("\n%s🛠 Tools (%d):%s\n", styles.Info, len(tools), styles.Reset)
+		fmt.Printf("\n🛠 Tools (%d):\n", len(tools))
 		for _, tool := range tools {
 			fmt.Printf("  • %s\n", tool.ToolName)
-			if tool.Description != "" {
-				fmt.Printf("    %s\n", tool.Description)
+			if tool.ToolDescription != "" {
+				fmt.Printf("    %s\n", tool.ToolDescription)
 			}
 		}
 	}
 
-	fmt.Printf("\n%s📝 Prompt:%s\n%s\n", styles.Primary, styles.Reset, targetAgent.Prompt)
+	fmt.Printf("\n📝 Prompt:\n%s\n", targetAgent.Prompt)
 	return nil
 }
 
@@ -168,14 +165,12 @@ func (h *AgentHandler) RunAgentDelete(cmd *cobra.Command, args []string) error {
 
 // deleteAgentLocalByName deletes an agent by name and environment
 func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) error {
-	styles := getCLIStyles(h.themeManager)
-
 	cfg, err := loadStationConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load station config: %v", err)
 	}
 
-	database, err := db.NewSQLite(cfg.GetDatabasePath())
+	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
@@ -213,14 +208,13 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	}
 
 	// Confirm deletion
-	fmt.Printf("%s⚠ Are you sure you want to delete agent '%s'? [y/N]: %s", 
-		styles.Warning, targetAgent.Name, styles.Reset)
+	fmt.Printf("⚠ Are you sure you want to delete agent '%s'? [y/N]: ", targetAgent.Name)
 	
 	var response string
 	fmt.Scanln(&response)
 	
 	if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
-		fmt.Printf("%s❌ Deletion cancelled%s\n", styles.Info, styles.Reset)
+		fmt.Printf("❌ Deletion cancelled\n")
 		return nil
 	}
 
@@ -230,7 +224,6 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 		return fmt.Errorf("failed to delete agent: %v", err)
 	}
 
-	fmt.Printf("%s✅ Agent '%s' deleted successfully%s\n", 
-		styles.Success, targetAgent.Name, styles.Reset)
+	fmt.Printf("✅ Agent '%s' deleted successfully\n", targetAgent.Name)
 	return nil
 }
