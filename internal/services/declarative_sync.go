@@ -113,7 +113,21 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	envDir := filepath.Join(workspaceDir, "environments", environmentName)
 	agentsDir := filepath.Join(envDir, "agents")
 
-	// 3. Sync agents from .prompt files
+	// 3. Sync MCP template files FIRST (JSON files with potential variables)
+	// This must happen before agent sync so tools have stable IDs
+	mcpResult, err := s.syncMCPTemplateFiles(ctx, envDir, environmentName, options)
+	if err != nil {
+		fmt.Printf("Warning: Failed to sync MCP templates for %s: %v\n", environmentName, err)
+		result.ValidationErrors++
+		result.ValidationMessages = append(result.ValidationMessages, 
+			fmt.Sprintf("MCP template sync failed: %v", err))
+	} else {
+		result.MCPServersProcessed = mcpResult.MCPServersProcessed
+		result.MCPServersConnected = mcpResult.MCPServersConnected
+		result.Operations = append(result.Operations, mcpResult.Operations...)
+	}
+
+	// 4. Sync agents from .prompt files AFTER MCP tools are stable
 	agentResult, err := s.syncAgents(ctx, agentsDir, environmentName, options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sync agents: %w", err)
@@ -126,19 +140,6 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	result.ValidationErrors += agentResult.ValidationErrors
 	result.ValidationMessages = append(result.ValidationMessages, agentResult.ValidationMessages...)
 	result.Operations = append(result.Operations, agentResult.Operations...)
-
-	// 4. Sync MCP template files (JSON files with potential variables)
-	mcpResult, err := s.syncMCPTemplateFiles(ctx, envDir, environmentName, options)
-	if err != nil {
-		fmt.Printf("Warning: Failed to sync MCP templates for %s: %v\n", environmentName, err)
-		result.ValidationErrors++
-		result.ValidationMessages = append(result.ValidationMessages, 
-			fmt.Sprintf("MCP template sync failed: %v", err))
-	} else {
-		result.MCPServersProcessed = mcpResult.MCPServersProcessed
-		result.MCPServersConnected = mcpResult.MCPServersConnected
-		result.Operations = append(result.Operations, mcpResult.Operations...)
-	}
 
 	// 5. Cleanup orphaned configs, servers, and tools (declarative sync)
 	cleanupResult, err := s.cleanupOrphanedResources(ctx, envDir, environmentName, options)
