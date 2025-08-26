@@ -21,6 +21,7 @@ type AgentServiceInterface interface {
 	GetAgent(ctx context.Context, agentID int64) (*models.Agent, error)
 	ListAgentsByEnvironment(ctx context.Context, environmentID int64) ([]*models.Agent, error)
 	UpdateAgent(ctx context.Context, agentID int64, config *AgentConfig) (*models.Agent, error)
+	UpdateAgentPrompt(ctx context.Context, agentID int64, prompt string) error
 	DeleteAgent(ctx context.Context, agentID int64) error
 }
 
