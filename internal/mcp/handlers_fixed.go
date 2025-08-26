@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"station/internal/logging"
 	"station/internal/services"
 	"station/pkg/models"
 	"station/pkg/schema"
@@ -18,6 +19,33 @@ import (
 )
 
 // Simplified handlers that work with the current repository interfaces
+
+// extractInt64FromTokenUsage safely extracts int64 from various numeric types in token usage
+// (Same helper function as CLI uses)
+func extractInt64FromTokenUsage(value interface{}) *int64 {
+	if value == nil {
+		return nil
+	}
+	
+	switch v := value.(type) {
+	case int64:
+		return &v
+	case int:
+		val := int64(v)
+		return &val
+	case int32:
+		val := int64(v)
+		return &val
+	case float64:
+		val := int64(v)
+		return &val
+	case float32:
+		val := int64(v)
+		return &val
+	default:
+		return nil
+	}
+}
 
 func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// Extract parameters
@@ -225,26 +253,111 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 	var response *services.Message
 	var execErr error
 	
-	// Use direct execution (same pattern as API)
+	// Create metadata for execution
 	metadata := map[string]interface{}{
 		"source": "mcp",
 		"user_variables": userVariables,
 	}
 	
-	// Execute agent directly using the service interface (synchronous)
-	response, execErr = s.agentService.ExecuteAgentWithRunID(ctx, agentID, task, 0, metadata) // 0 for run ID since we're not tracking runs in MCP for now
-	if execErr != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
+	if storeRun {
+		// Create agent run first to get a proper run ID
+		run, err := s.repos.AgentRuns.Create(ctx, agentID, userID, task, "", 0, nil, nil, "running", nil)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create agent run: %v", err)), nil
+		}
+		runID = run.ID
+		
+		// Get agent details for unified execution flow
+		agent, err := s.repos.Agents.GetByID(agentID)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
+		}
+		
+		// Create concrete agent service to access execution engine (same as CLI)
+		concreteAgentService := services.NewAgentService(s.repos)
+		
+		// Use the same unified execution flow as CLI 
+		result, execErr := concreteAgentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, userVariables)
+		if execErr != nil {
+			// Update run as failed (same as CLI)
+			completedAt := time.Now()
+			errorMsg := fmt.Sprintf("MCP execution failed: %v", execErr)
+			updateErr := s.repos.AgentRuns.UpdateCompletionWithMetadata(
+				ctx, runID, errorMsg, 0, nil, nil, "failed", &completedAt,
+				nil, nil, nil, nil, nil, nil,
+			)
+			if updateErr != nil {
+				logging.Info("Warning: Failed to update failed run %d: %v", runID, updateErr)
+			}
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
+		}
+		
+		// Update run as completed with full metadata (same as CLI)
+		completedAt := time.Now()
+		durationSeconds := result.Duration.Seconds()
+		
+		// Extract token usage from result using exact same logic as CLI
+		var inputTokens, outputTokens, totalTokens *int64
+		var toolsUsed *int64
+		
+		if result.TokenUsage != nil {
+			// Use same field names and extraction logic as CLI
+			if inputVal := extractInt64FromTokenUsage(result.TokenUsage["input_tokens"]); inputVal != nil {
+				inputTokens = inputVal
+			}
+			if outputVal := extractInt64FromTokenUsage(result.TokenUsage["output_tokens"]); outputVal != nil {
+				outputTokens = outputVal
+			}
+			if totalVal := extractInt64FromTokenUsage(result.TokenUsage["total_tokens"]); totalVal != nil {
+				totalTokens = totalVal
+			}
+		}
+		
+		if result.StepsUsed > 0 {
+			toolsUsedVal := int64(result.StepsUsed) // Using StepsUsed as proxy for tools used
+			toolsUsed = &toolsUsedVal
+		}
+		
+		// Update database with complete metadata (same as CLI)
+		err = s.repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx,
+			runID,
+			result.Response,        // final_response
+			result.StepsTaken,      // steps_taken
+			result.ToolCalls,       // tool_calls  
+			result.ExecutionSteps,  // execution_steps
+			"completed",           // status
+			&completedAt,          // completed_at
+			inputTokens,           // input_tokens
+			outputTokens,          // output_tokens
+			totalTokens,           // total_tokens
+			&durationSeconds,      // duration_seconds
+			&result.ModelName,     // model_name
+			toolsUsed,            // tools_used
+		)
+		if err != nil {
+			logging.Info("Warning: Failed to update run %d completion metadata: %v", runID, err)
+		}
+		
+		// Convert AgentExecutionResult to Message for response
+		response = &services.Message{
+			Content: result.Response,
+		}
+	} else {
+		// Execute without run storage using simplified flow
+		response, execErr = s.agentService.ExecuteAgentWithRunID(ctx, agentID, task, 0, metadata)
+		if execErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
+		}
 	}
 	
 	if response == nil {
 		return mcp.NewToolResultError("Agent execution returned nil response"), nil
 	}
 	
-	if storeRun {
-		// TODO: Store the run in the database for direct execution
-		runID = 0 // Run storage not yet implemented for direct execution
-	}
+	// Note: When storeRun=true, ExecuteAgentViaStdioMCPWithVariables automatically 
+	// updates the run record with completion status, metadata, tool calls, etc.
+	// No manual database update needed.
 	
 	// Return detailed response
 	result := map[string]interface{}{
@@ -786,6 +899,14 @@ func (s *Server) handleAddTool(ctx context.Context, request mcp.CallToolRequest)
 		},
 	}
 
+	// Auto-export agent to keep file config in sync (Database → Config)
+	if s.agentExportService != nil {
+		if err := s.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+			// Add export error info to response for user awareness
+			response["export_warning"] = fmt.Sprintf("Tool added but export failed: %v. Use 'stn agent export %s' to export manually.", err, agent.Name)
+		}
+	}
+
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
@@ -835,6 +956,14 @@ func (s *Server) handleRemoveTool(ctx context.Context, request mcp.CallToolReque
 			"name": toolName,
 			"id":   tool.ID,
 		},
+	}
+
+	// Auto-export agent to keep file config in sync (Database → Config)
+	if s.agentExportService != nil {
+		if err := s.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+			// Add export error info to response for user awareness
+			response["export_warning"] = fmt.Sprintf("Tool removed but export failed: %v. Use 'stn agent export %s' to export manually.", err, agent.Name)
+		}
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
