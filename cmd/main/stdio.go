@@ -95,8 +95,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
 
-	// Create MCP server for stdio communication with ExecutionQueueService
-	mcpServer := mcp.NewServer(database, agentSvc, executionQueueSvc, repos, cfg, localMode)
+	// Create MCP server for stdio communication
+	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
 
 	// Try to start API server if port is available (avoid conflicts with other stdio instances)
 	var apiServer *api.Server

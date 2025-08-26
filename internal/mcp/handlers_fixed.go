@@ -225,73 +225,25 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 	var response *services.Message
 	var execErr error
 	
-	if s.executionQueue != nil {
-		// Prepare metadata with user variables for dotprompt rendering
-		metadata := map[string]interface{}{
-			"source": "mcp",
-			"user_variables": userVariables,
-		}
-		
-		// Queue the execution for detailed tracing
-		runID, execErr = s.executionQueue.QueueExecution(agentID, userID, task, metadata)
-		if execErr != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to queue agent execution: %v", execErr)), nil
-		}
-		
-		// Wait for execution to complete and get the result
-		// For synchronous execution, we need to poll the database
-		// or implement a blocking queue mechanism
-		time.Sleep(100 * time.Millisecond) // Small delay to let queue start
-		
-		// Poll for completion with timeout
-		timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-		defer cancel()
-		
-	pollLoop:
-		for {
-			select {
-			case <-timeoutCtx.Done():
-				return mcp.NewToolResultError("Agent execution timed out"), nil
-			default:
-				// Check if execution is complete
-				if s.repos.AgentRuns == nil {
-					return mcp.NewToolResultError("Agent runs repository not available"), nil
-				}
-				run, checkErr := s.repos.AgentRuns.GetByID(runID)
-				if checkErr != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("Failed to check execution status: %v", checkErr)), nil
-				}
-				
-				if run.Status == "completed" {
-					response = &services.Message{Content: run.FinalResponse}
-					break pollLoop
-				} else if run.Status == "failed" {
-					return mcp.NewToolResultError(fmt.Sprintf("Agent execution failed: %s", run.FinalResponse)), nil
-				}
-				
-				// Wait before polling again
-				time.Sleep(500 * time.Millisecond)
-			}
-		}
-	} else {
-		// Fallback to direct execution
-		if s.agentService == nil {
-			return mcp.NewToolResultError("Agent service not available for direct execution"), nil
-		}
-		
-		response, execErr = s.agentService.ExecuteAgent(ctx, agentID, task, userVariables)
-		if execErr != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
-		}
-		
-		if response == nil {
-			return mcp.NewToolResultError("Agent execution returned nil response"), nil
-		}
-		
-		if storeRun {
-			// TODO: Store the run in the database for direct execution
-			runID = 0 // Run storage not yet implemented for direct execution
-		}
+	// Use direct execution (same pattern as API)
+	metadata := map[string]interface{}{
+		"source": "mcp",
+		"user_variables": userVariables,
+	}
+	
+	// Execute agent directly using the service interface (synchronous)
+	response, execErr = s.agentService.ExecuteAgentWithRunID(ctx, agentID, task, 0, metadata) // 0 for run ID since we're not tracking runs in MCP for now
+	if execErr != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
+	}
+	
+	if response == nil {
+		return mcp.NewToolResultError("Agent execution returned nil response"), nil
+	}
+	
+	if storeRun {
+		// TODO: Store the run in the database for direct execution
+		runID = 0 // Run storage not yet implemented for direct execution
 	}
 	
 	// Return detailed response

@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +17,7 @@ type APIHandlers struct {
 	toolDiscoveryService *services.ToolDiscoveryService
 	// genkitService removed - service no longer exists
 	webhookService       *services.WebhookService
-	executionQueueSvc    *services.ExecutionQueueService
+	// executionQueueSvc removed - using direct execution instead
 	agentExportService   *services.AgentExportService
 	localMode            bool
 }
@@ -28,16 +27,13 @@ func NewAPIHandlers(
 	repos *repositories.Repositories,
 	toolDiscoveryService *services.ToolDiscoveryService,
 	webhookService *services.WebhookService,
-	executionQueueSvc *services.ExecutionQueueService,
 	localMode bool,
 ) *APIHandlers {
-	log.Printf("🔍 NewAPIHandlers: executionQueueSvc is nil: %t", executionQueueSvc == nil)
 	return &APIHandlers{
 		repos:                repos,
 		agentService:         services.NewAgentService(repos),
 		toolDiscoveryService: toolDiscoveryService,
 		webhookService:       webhookService,
-		executionQueueSvc:    executionQueueSvc,
 		agentExportService:   services.NewAgentExportService(repos),
 		localMode:            localMode,
 	}
@@ -45,7 +41,6 @@ func NewAPIHandlers(
 
 // RegisterRoutes registers all v1 API routes
 func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
-	log.Printf("🔍 RegisterRoutes: executionQueueSvc is nil: %t", h.executionQueueSvc == nil)
 	// Create auth middleware
 	authMiddleware := auth.NewAuthMiddleware(h.repos)
 	
@@ -81,8 +76,7 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Agent routes - accessible to regular users in server mode
 	agentGroup := router.Group("/agents")
 	agentGroup.GET("", h.listAgents)           // Users can list agents
-	agentGroup.POST("/:id/execute", h.callAgent) // Users can call agents (direct execution)
-	agentGroup.POST("/:id/queue", h.queueAgent)  // Users can queue agents (via execution queue)
+	agentGroup.POST("/:id/execute", h.callAgent) // Users can execute agents (direct execution with async goroutine)
 	
 	// Admin-only agent management routes
 	agentAdminGroup := router.Group("/admin/agents")
@@ -138,9 +132,6 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	bundlesGroup.GET("", h.listBundles)
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
-	
-	// DEBUG: Test endpoint for executionQueueSvc availability
-	router.GET("/debug-service", h.debugService)
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode
