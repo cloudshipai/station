@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"station/internal/services"
 	"station/pkg/models"
 )
 
@@ -363,25 +365,12 @@ func (m AgentsModel) updateAgent() tea.Cmd {
 	})
 }
 
-// runAgent queues an agent for execution using the execution queue service
+// runAgent executes an agent directly using the agent service
 func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
-	if m.executionQueue == nil {
-		return tea.Sequence(
-			tea.Printf("❌ ERROR: Execution queue service not available!"),
-			tea.Printf("🔧 This indicates a configuration or initialization problem"),
-		)
-	}
-	
 	// Use a default task prompt for manual agent execution
 	task := "Execute agent manually from TUI"
 	if agent.Prompt != "" {
 		task = agent.Prompt
-	}
-	
-	// Create metadata to indicate this was a manual execution
-	metadata := map[string]interface{}{
-		"source":       "manual_tui",
-		"triggered_at": time.Now(),
 	}
 	
 	// For manual executions via SSH console, get the console user ID
@@ -391,17 +380,31 @@ func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
 		return tea.Printf("❌ Could not find console user for execution tracking")
 	}
 	
-	// Queue the execution
-	runID, err := m.executionQueue.QueueExecution(agent.ID, consoleUser.ID, task, metadata)
-	if err != nil {
-		return tea.Printf("❌ Failed to queue agent execution: %v", err)
-	}
-	
 	return tea.Sequence(
-		tea.Printf("🚀 Agent '%s' has been queued for execution!", agent.Name),
-		tea.Printf("📊 Run ID: %d - Check the Runs tab to monitor progress", runID),
+		tea.Printf("🚀 Executing agent '%s'...", agent.Name),
 		func() tea.Msg {
-			return RunCreatedMsg{RunID: runID, AgentID: agent.ID}
+			// Create basic run record
+			ctx := context.Background()
+			run, err := m.repos.AgentRuns.Create(agent.ID, consoleUser.ID, task, "", 0, nil, nil, "running", nil)
+			if err != nil {
+				return tea.Printf("❌ Failed to create run record: %v", err)
+			}
+			
+			// Start execution in background
+			go func() {
+				agentSvc := services.NewAgentService(m.repos)
+				metadata := map[string]interface{}{
+					"source":       "manual_tui",
+					"triggered_at": time.Now(),
+				}
+				
+				_, executionErr := agentSvc.ExecuteAgentWithRunID(ctx, agent.ID, task, run.ID, metadata)
+				if executionErr != nil {
+					log.Printf("Agent execution failed: %v", executionErr)
+				}
+			}()
+			
+			return RunCreatedMsg{RunID: run.ID, AgentID: agent.ID}
 		},
 	)
 }

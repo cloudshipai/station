@@ -62,7 +62,6 @@ type Model struct {
 	// Database and services
 	db             db.Database
 	repos          *repositories.Repositories
-	executionQueue *services.ExecutionQueueService
 	agentService   services.AgentServiceInterface
 	agentClient    *AgentClient
 	
@@ -92,13 +91,12 @@ type Model struct {
 }
 
 // NewModel creates a new chat TUI model
-func NewModel(database db.Database, repos *repositories.Repositories, executionQueue *services.ExecutionQueueService, agentService services.AgentServiceInterface) *Model {
+func NewModel(database db.Database, repos *repositories.Repositories, executionQueue interface{}, agentService services.AgentServiceInterface) *Model {
 	return &Model{
 		db:             database,
 		repos:          repos,
-		executionQueue: executionQueue,
 		agentService:   agentService,
-		agentClient:    NewAgentClient(database, repos, executionQueue, agentService),
+		agentClient:    NewAgentClient(database, repos, agentService),
 		chatMessages:   make([]components.Message, 0),
 		theme:          theme.DefaultTheme(),
 		activeSession:  false,

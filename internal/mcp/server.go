@@ -19,10 +19,8 @@ type Server struct {
 	mcpServer          *server.MCPServer
 	httpServer         *server.StreamableHTTPServer
 	db                 db.Database
-	// mcpConfigSvc removed - using file-based configs only
 	toolDiscoverySvc   *ToolDiscoveryService
-	agentService       services.AgentServiceInterface
-	// executionQueue removed - using direct execution instead  
+	agentService       services.AgentServiceInterface  
 	authService        *auth.AuthService
 	repos              *repositories.Repositories
 	config             *config.Config
@@ -52,7 +50,6 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		mcpServer:          mcpServer,
 		httpServer:         httpServer,
 		db:                 database,
-		// mcpConfigSvc removed
 		toolDiscoverySvc:   toolDiscoverySvc,
 		agentService:       agentService,
 		authService:        authService,

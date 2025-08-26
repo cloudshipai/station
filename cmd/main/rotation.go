@@ -65,9 +65,8 @@ func runEncryptionRotation() error {
 
 	fmt.Printf("🔍 Scanning for encrypted data to migrate...\n")
 
-	// TODO: Update to work with file-based configs
-	// For now, skip MCP config rotation since we've migrated to file-based system
-	mcpConfigs := []interface{}{} // Empty list for now
+	// Skip MCP config rotation since system uses file-based configs (no encrypted DB data)
+	mcpConfigs := []interface{}{} // Empty - no database MCP configs to rotate
 
 	fmt.Printf("   Generated previous key ID: %s\n", previousKeyVersion.ID)
 	fmt.Printf("   Found %d total MCP configs\n", len(mcpConfigs))
@@ -82,9 +81,8 @@ func runEncryptionRotation() error {
 
 	fmt.Printf("📋 Found %d MCP configs to migrate\n", configsToMigrate)
 
-	// TODO: Migrate each config when working with file-based system
+	// No migration needed for file-based configs (not encrypted in database)
 	migratedCount := 0
-	// Rotation disabled for file-based configs
 
 	fmt.Printf("🎉 Successfully migrated %d MCP configurations\n", migratedCount)
 	return nil

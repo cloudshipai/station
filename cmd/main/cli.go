@@ -197,7 +197,7 @@ func runUI(cmd *cobra.Command, args []string) error {
 	// The TUI can work with nil services for basic functionality
 	
 	// Create TUI model with minimal services (nil is acceptable for basic UI)
-	tuiModel := tui.NewModel(database, nil, nil)
+	tuiModel := tui.NewModel(database, nil)
 	
 	// Launch the TUI with same options as SSH
 	program := tea.NewProgram(tuiModel, 

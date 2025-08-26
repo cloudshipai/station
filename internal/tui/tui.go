@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -42,7 +41,6 @@ type LayoutDimensions struct {
 type Model struct {
 	// Core data
 	db             db.Database
-	executionQueue *services.ExecutionQueueService
 	genkitService  services.AgentServiceInterface
 	
 	// UI state
@@ -53,11 +51,6 @@ type Model struct {
 	
 	// Tab models - each tab is its own bubbletea model
 	dashboardModel tabs.TabModel
-	agentsModel    tabs.TabModel
-	runsModel      tabs.TabModel
-	mcpModel       tabs.TabModel
-	toolsModel     tabs.TabModel
-	envModel       tabs.TabModel
 	usersModel     tabs.TabModel
 	settingsModel  tabs.TabModel
 	
@@ -108,13 +101,12 @@ func DefaultKeyMap() KeyMap {
 }
 
 // NewModel creates a new TUI model
-func NewModel(database db.Database, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface) *Model {
+func NewModel(database db.Database, genkitService services.AgentServiceInterface) *Model {
 	
 	return &Model{
 		db:             database,
-		executionQueue: executionQueue,
 		genkitService:  genkitService,
-		tabs:           []string{"Dashboard", "Agents", "Runs", "MCP Servers", "Tools", "Environments", "Users", "Settings"},
+		tabs:           []string{"Dashboard", "Users", "Settings"},
 		activeTab:      0,
 		keyMap:         DefaultKeyMap(),
 		help:           help.New(),
@@ -138,21 +130,11 @@ func (m *Model) initializeTabModels() tea.Cmd {
 	
 	// Initialize each tab model
 	m.dashboardModel = tabs.NewDashboardModel(m.db)
-	m.agentsModel = tabs.NewAgentsModel(m.db, m.executionQueue)
-	m.runsModel = tabs.NewRunsModel(m.db)
-	m.mcpModel = tabs.NewMCPModel(m.db, m.genkitService)
-	m.toolsModel = tabs.NewToolsModel(m.db)
-	m.envModel = tabs.NewEnvironmentsModel(m.db)
 	m.usersModel = tabs.NewUsersModel(m.db)
 	m.settingsModel = tabs.NewSettingsModel(m.db)
 	
 	// Get initialization commands from each model
 	cmds = append(cmds, m.dashboardModel.Init())
-	cmds = append(cmds, m.agentsModel.Init())
-	cmds = append(cmds, m.runsModel.Init())
-	cmds = append(cmds, m.mcpModel.Init())
-	cmds = append(cmds, m.toolsModel.Init())
-	cmds = append(cmds, m.envModel.Init())
 	cmds = append(cmds, m.usersModel.Init())
 	cmds = append(cmds, m.settingsModel.Init())
 	
@@ -176,21 +158,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 		// Update all tab models with calculated sizing
 		m.dashboardModel.SetSize(layout.ContentWidth, layout.ContentHeight)
-		m.agentsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
-		m.runsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
-		m.mcpModel.SetSize(layout.ContentWidth, layout.ContentHeight)
-		m.toolsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
-		m.envModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.usersModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		m.settingsModel.SetSize(layout.ContentWidth, layout.ContentHeight)
 		
 		// Forward the message to tab models
 		m.dashboardModel, _ = m.dashboardModel.Update(msg)
-		m.agentsModel, _ = m.agentsModel.Update(msg)
-		m.runsModel, _ = m.runsModel.Update(msg)
-		m.mcpModel, _ = m.mcpModel.Update(msg)
-		m.toolsModel, _ = m.toolsModel.Update(msg)
-		m.envModel, _ = m.envModel.Update(msg)
 		m.usersModel, _ = m.usersModel.Update(msg)
 		m.settingsModel, _ = m.settingsModel.Update(msg)
 		
@@ -231,40 +203,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.activeTab {
 			case 0: // Dashboard
 				m.dashboardModel, cmd = m.dashboardModel.Update(msg)
-			case 1: // Agents
-				m.agentsModel, cmd = m.agentsModel.Update(msg)
-			case 2: // Runs
-				m.runsModel, cmd = m.runsModel.Update(msg)
-			case 3: // MCP Servers
-				m.mcpModel, cmd = m.mcpModel.Update(msg)
-			case 4: // Tools
-				m.toolsModel, cmd = m.toolsModel.Update(msg)
-			case 5: // Environments
-				m.envModel, cmd = m.envModel.Update(msg)
-			case 6: // Users
+			case 1: // Users
 				m.usersModel, cmd = m.usersModel.Update(msg)
-			case 7: // Settings
+			case 2: // Settings
 				m.settingsModel, cmd = m.settingsModel.Update(msg)
 			}
 			return m, cmd
 		}
 		
-	// Handle navigation messages from dashboard
-	case tabs.NavigateToRunMsg:
-		// Navigate to runs tab and set selected run
-		m.activeTab = 2 // Runs tab index
-		if runsModel, ok := m.runsModel.(*tabs.RunsModel); ok {
-			runsModel.SetSelectedID(fmt.Sprintf("%d", msg.RunID))
-		}
-		return m, nil
-		
-	case tabs.NavigateToAgentMsg:
-		// Navigate to agents tab and set selected agent  
-		m.activeTab = 1 // Agents tab index
-		if agentsModel, ok := m.agentsModel.(*tabs.AgentsModel); ok {
-			agentsModel.SetSelectedID(fmt.Sprintf("%d", msg.AgentID))
-		}
-		return m, nil
+	// Removed NavigateToRunMsg and NavigateToAgentMsg handlers since those tabs are removed
 		
 	default:
 		// Forward all other messages to all tab models
@@ -274,21 +221,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Forward to all tabs since we don't know which one should handle the message
 		var cmd tea.Cmd
 		m.dashboardModel, cmd = m.dashboardModel.Update(msg)
-		tabCmds = append(tabCmds, cmd)
-		
-		m.agentsModel, cmd = m.agentsModel.Update(msg)
-		tabCmds = append(tabCmds, cmd)
-		
-		m.runsModel, cmd = m.runsModel.Update(msg)
-		tabCmds = append(tabCmds, cmd)
-		
-		m.mcpModel, cmd = m.mcpModel.Update(msg)
-		tabCmds = append(tabCmds, cmd)
-		
-		m.toolsModel, cmd = m.toolsModel.Update(msg)
-		tabCmds = append(tabCmds, cmd)
-		
-		m.envModel, cmd = m.envModel.Update(msg)
 		tabCmds = append(tabCmds, cmd)
 		
 		m.usersModel, cmd = m.usersModel.Update(msg)
@@ -557,19 +489,9 @@ func (m Model) renderActiveTabContent() string {
 	switch m.activeTab {
 	case 0: // Dashboard
 		return m.dashboardModel.View()
-	case 1: // Agents
-		return m.agentsModel.View()
-	case 2: // Runs
-		return m.runsModel.View()
-	case 3: // MCP Servers
-		return m.mcpModel.View()
-	case 4: // Tools
-		return m.toolsModel.View()
-	case 5: // Environments
-		return m.envModel.View()
-	case 6: // Users
+	case 1: // Users
 		return m.usersModel.View()
-	case 7: // Settings
+	case 2: // Settings
 		return m.settingsModel.View()
 	default:
 		return "Invalid tab selected"
@@ -629,18 +551,8 @@ func (m Model) refreshActiveTab() tea.Cmd {
 	case 0:
 		return m.dashboardModel.RefreshData()
 	case 1:
-		return m.agentsModel.RefreshData()
-	case 2:
-		return m.runsModel.RefreshData()
-	case 3:
-		return m.mcpModel.RefreshData()
-	case 4:
-		return m.toolsModel.RefreshData()
-	case 5:
-		return m.envModel.RefreshData()
-	case 6:
 		return m.usersModel.RefreshData()
-	case 7:
+	case 2:
 		return m.settingsModel.RefreshData()
 	default:
 		return nil
@@ -652,19 +564,9 @@ func (m Model) getActiveTabModel() tabs.TabModel {
 	switch m.activeTab {
 	case 0: // Dashboard
 		return m.dashboardModel
-	case 1: // Agents
-		return m.agentsModel
-	case 2: // Runs
-		return m.runsModel
-	case 3: // MCP Servers
-		return m.mcpModel
-	case 4: // Tools
-		return m.toolsModel
-	case 5: // Environments
-		return m.envModel
-	case 6: // Users
+	case 1: // Users
 		return m.usersModel
-	case 7: // Settings
+	case 2: // Settings
 		return m.settingsModel
 	default:
 		return m.dashboardModel
@@ -761,8 +663,8 @@ func (m *Model) renderSplashScreen() string {
 }
 
 // Program creates a new Bubble Tea program
-func NewProgram(database db.Database, executionQueue *services.ExecutionQueueService, genkitService services.AgentServiceInterface) *tea.Program {
-	model := NewModel(database, executionQueue, genkitService)
+func NewProgram(database db.Database, genkitService services.AgentServiceInterface) *tea.Program {
+	model := NewModel(database, genkitService)
 	return tea.NewProgram(
 		model,
 		tea.WithAltScreen(),

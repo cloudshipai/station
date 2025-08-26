@@ -1,12 +1,8 @@
 package mcp
 
 import (
-	"context"
-	"log"
-
 	"station/internal/db"
 	"station/internal/db/repositories"
-	// "station/internal/services" // Removed - no longer used
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -26,13 +22,6 @@ func NewToolDiscoveryService(database db.Database, repos *repositories.Repositor
 	}
 }
 
-func (t *ToolDiscoveryService) DiscoverTools(ctx context.Context, configID int64) error {
-	// This method is deprecated - tool discovery now uses file-based configs
-	// See services.ToolDiscoveryService.DiscoverToolsFromFileConfig
-	log.Printf("DiscoverTools method deprecated - use file-based config discovery instead")
-
-	return nil
-}
 
 func (t *ToolDiscoveryService) GetDiscoveredTools(configID string) []mcp.Tool {
 	return t.discoveredTools[configID]

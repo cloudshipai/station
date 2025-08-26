@@ -114,8 +114,6 @@ func runMainServer() error {
 	}
 
 	// Initialize required services
-	// TODO: Replace with file-based config service
-	// fileConfigSvc := services.NewFileConfigService(configManager, toolDiscovery, repos)
 	webhookSvc := services.NewWebhookService(repos)
 	
 	// Create default environment if none exists
@@ -293,13 +291,6 @@ func runMainServer() error {
 		fmt.Println("✅ All servers stopped gracefully")
 	case <-shutdownCtx.Done():
 		fmt.Println("⏰ Shutdown timeout exceeded (3s), forcing exit")
-		// Force cleanup critical resources immediately
-		// TODO: Close agent service when implemented
-		// if agentSvc != nil {
-		//	forcedCtx, forceCancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-		//	agentSvc.Close(forcedCtx)
-		//	forceCancel()
-		// }
 	}
 
 	return nil

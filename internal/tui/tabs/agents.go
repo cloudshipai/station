@@ -13,7 +13,6 @@ import (
 
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/internal/services"
 	"station/internal/tui/components"
 	"station/internal/tui/styles"
 	"station/pkg/models"
@@ -35,7 +34,6 @@ type AgentsModel struct {
 	
 	// Data access
 	repos          *repositories.Repositories
-	executionQueue *services.ExecutionQueueService
 	
 	// State
 	agents        []models.Agent
@@ -141,7 +139,7 @@ type AgentToolsLoadedMsg struct {
 }
 
 // NewAgentsModel creates a new agents model
-func NewAgentsModel(database db.Database, executionQueue *services.ExecutionQueueService) *AgentsModel {
+func NewAgentsModel(database db.Database) *AgentsModel {
 	repos := repositories.New(database)
 	// Create list - styles will be set dynamically in WindowSizeMsg handler
 	delegate := list.NewDefaultDelegate()
@@ -183,7 +181,6 @@ func NewAgentsModel(database db.Database, executionQueue *services.ExecutionQueu
 		BaseTabModel:    NewBaseTabModel(database, "Agents"),
 		list:            l,
 		repos:           repos,
-		executionQueue:  executionQueue,
 		nameInput:       nameInput,
 		descInput:       descInput,
 		promptArea:      promptArea,
