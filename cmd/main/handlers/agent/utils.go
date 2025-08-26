@@ -185,9 +185,11 @@ type MockResolver struct{}
 
 func (r *MockResolver) Resolve(ctx context.Context, deps []agent_bundle.MCPBundleDependency, env string) (*agent_bundle.ResolutionResult, error) {
 	return &agent_bundle.ResolutionResult{
-		ResolvedBundles: make(map[string]agent_bundle.MCPBundleRef),
+		Success:         true,
+		ResolvedBundles: []agent_bundle.MCPBundleRef{},
+		MissingBundles:  []agent_bundle.MCPBundleDependency{},
 		Conflicts:       []agent_bundle.ToolConflict{},
-		MissingTools:    []agent_bundle.ToolRequirement{},
+		InstallOrder:    []string{},
 	}, nil
 }
 
@@ -201,6 +203,8 @@ func (r *MockResolver) ValidateToolAvailability(ctx context.Context, tools []age
 
 func (r *MockResolver) ResolveConflicts(conflicts []agent_bundle.ToolConflict) (*agent_bundle.ConflictResolution, error) {
 	return &agent_bundle.ConflictResolution{
-		Actions: []agent_bundle.ConflictAction{},
+		Strategy:    "auto",
+		Resolutions: make(map[string]string),
+		Warnings:    []string{},
 	}, nil
 }
