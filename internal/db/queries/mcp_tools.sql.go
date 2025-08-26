@@ -136,6 +136,20 @@ func (q *Queries) FindMCPToolByNameInEnvironment(ctx context.Context, arg FindMC
 	return i, err
 }
 
+const getMCPServerNameByTool = `-- name: GetMCPServerNameByTool :one
+SELECT s.name
+FROM mcp_servers s
+JOIN mcp_tools t ON s.id = t.mcp_server_id
+WHERE t.name = ?
+LIMIT 1
+`
+
+func (q *Queries) GetMCPServerNameByTool(ctx context.Context, name string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getMCPServerNameByTool, name)
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getMCPTool = `-- name: GetMCPTool :one
 SELECT id, mcp_server_id, name, description, input_schema, file_config_id, created_at, updated_at FROM mcp_tools WHERE id = ?
 `

@@ -462,36 +462,16 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 	return tools, nil
 }
 
-// getToolMCPServer maps tool names to their MCP servers based on naming patterns
+// getToolMCPServer dynamically looks up which MCP server hosts the given tool
 func (h *APIHandlers) getToolMCPServer(toolName string) string {
-	// Map common tool prefixes to MCP servers
-	if strings.HasPrefix(toolName, "__infracost_") {
-		return "ship-infracost"
-	}
-	if strings.HasPrefix(toolName, "__openinfraquote_") {
-		return "ship-openinfraquote"
-	}
-	if strings.HasPrefix(toolName, "__directory_tree") || strings.HasPrefix(toolName, "__read_text_file") {
-		return "filesystem"
-	}
-	if strings.HasPrefix(toolName, "__syft_") {
-		return "ship-syft"
-	}
-	if strings.HasPrefix(toolName, "__grype_") {
-		return "ship-grype"
-	}
-	if strings.HasPrefix(toolName, "__checkov_") {
-		return "ship-checkov"
-	}
-	if strings.HasPrefix(toolName, "__trivy_") {
-		return "ship-trivy"
-	}
-	if strings.HasPrefix(toolName, "__tflint_") {
-		return "ship-tflint"
+	// Query database through repositories to find which MCP server has this tool
+	serverName, err := h.repos.MCPTools.GetServerNameForTool(toolName)
+	if err != nil {
+		// Tool not found in any MCP server
+		return ""
 	}
 	
-	// Default to a generic server if no pattern matches
-	return "unknown"
+	return serverName
 }
 
 func (h *APIHandlers) updateAgent(c *gin.Context) {

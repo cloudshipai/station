@@ -84,3 +84,10 @@ FROM mcp_tools t
 JOIN mcp_servers s ON t.mcp_server_id = s.id
 JOIN environments e ON s.environment_id = e.id
 ORDER BY e.name, s.name, t.name;
+
+-- name: GetMCPServerNameByTool :one
+SELECT s.name
+FROM mcp_servers s
+JOIN mcp_tools t ON s.id = t.mcp_server_id
+WHERE t.name = ?
+LIMIT 1;
