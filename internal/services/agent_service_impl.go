@@ -6,15 +6,21 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/pkg/models"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // AgentService implements AgentServiceInterface using AgentExecutionEngine directly
 type AgentService struct {
 	repos           *repositories.Repositories
 	executionEngine *AgentExecutionEngine
+	telemetry       *TelemetryService
 }
 
 // NewAgentService creates a new agent service
@@ -22,13 +28,56 @@ func NewAgentService(repos *repositories.Repositories) *AgentService {
 	service := &AgentService{
 		repos: repos,
 	}
+	
+	// Initialize telemetry service with config
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("Warning: Failed to load config for telemetry: %v", err)
+		// Use default config
+		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
+	}
+	
+	telemetryConfig := &TelemetryConfig{
+		Enabled:      cfg.TelemetryEnabled,
+		OTLPEndpoint: cfg.OTELEndpoint,
+		ServiceName:  "station",
+		Environment:  cfg.Environment,
+	}
+	
+	service.telemetry = NewTelemetryService(telemetryConfig)
+	if err := service.telemetry.Initialize(context.Background()); err != nil {
+		log.Printf("Warning: Failed to initialize telemetry: %v", err)
+		// Continue without telemetry rather than failing
+	}
+	
 	// Create execution engine with self-reference
 	service.executionEngine = NewAgentExecutionEngine(repos, service)
+	
+	// Pass telemetry to execution engine
+	service.executionEngine.telemetryManager = NewTelemetryManager()
+	
+	// Also pass telemetry service directly for span creation
+	service.executionEngine.telemetryService = service.telemetry
+	
 	return service
 }
 
 // ExecuteAgent executes an agent with a specific task and optional user variables
 func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task string, userVariables map[string]interface{}) (*Message, error) {
+	// Start telemetry span
+	startTime := time.Now()
+	ctx, span := s.telemetry.StartSpan(ctx, "agent.execute",
+		trace.WithAttributes(
+			attribute.Int64("agent.id", agentID),
+			attribute.String("task.preview", func() string {
+				if len(task) > 100 { return task[:100] + "..." }
+				return task
+			}()),
+			attribute.Int("variables.count", len(userVariables)),
+		),
+	)
+	defer span.End()
+
 	// Default to empty variables if nil provided
 	if userVariables == nil {
 		userVariables = make(map[string]interface{})
@@ -37,8 +86,17 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	// Get the agent details
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get agent")
+		s.telemetry.RecordError(ctx, "agent_not_found", "agent_service")
 		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
 	}
+
+	// Add agent details to span
+	span.SetAttributes(
+		attribute.String("agent.name", agent.Name),
+		attribute.String("agent.environment", fmt.Sprintf("%d", agent.EnvironmentID)),
+	)
 
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with %d variables", agent.ID, agent.Name, len(userVariables))
 	
@@ -47,7 +105,35 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "execution failed")
+		s.telemetry.RecordError(ctx, "execution_failed", "agent_service")
+		s.telemetry.RecordAgentExecution(ctx, agent.ID, agent.Name, "unknown", time.Since(startTime), false, nil)
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
+	}
+
+	// Record successful execution metrics
+	duration := time.Since(startTime)
+	modelName := result.ModelName
+	if modelName == "" {
+		modelName = "unknown"
+	}
+	
+	// Add execution result attributes to span
+	span.SetAttributes(
+		attribute.String("execution.model", modelName),
+		attribute.Float64("execution.duration_seconds", duration.Seconds()),
+		attribute.Int64("execution.steps_taken", result.StepsTaken),
+		attribute.Int("execution.tools_used", result.ToolsUsed),
+		attribute.Bool("execution.success", true),
+	)
+	
+	// Record business metrics for successful execution
+	s.telemetry.RecordAgentExecution(ctx, agent.ID, agent.Name, modelName, duration, true, result.TokenUsage)
+
+	// Force flush spans to ensure they're sent to Jaeger immediately
+	if err := s.telemetry.ForceFlush(ctx); err != nil {
+		log.Printf("Warning: Failed to flush telemetry spans: %v", err)
 	}
 
 	// Convert result to Message format with proper types for execution queue
@@ -97,6 +183,21 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 
 // ExecuteAgentWithRunID executes an agent with proper run ID for logging - used by ExecutionQueueService
 func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64, task string, runID int64, userVariables map[string]interface{}) (*Message, error) {
+	// Start telemetry span
+	startTime := time.Now()
+	ctx, span := s.telemetry.StartSpan(ctx, "agent.execute_with_run_id",
+		trace.WithAttributes(
+			attribute.Int64("agent.id", agentID),
+			attribute.Int64("run.id", runID),
+			attribute.String("task.preview", func() string {
+				if len(task) > 100 { return task[:100] + "..." }
+				return task
+			}()),
+			attribute.Int("variables.count", len(userVariables)),
+		),
+	)
+	defer span.End()
+
 	// Default to empty variables if nil provided
 	if userVariables == nil {
 		userVariables = make(map[string]interface{})
@@ -105,8 +206,17 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 	// Get the agent details
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get agent")
+		s.telemetry.RecordError(ctx, "agent_not_found", "agent_service")
 		return nil, fmt.Errorf("failed to get agent %d: %w", agentID, err)
 	}
+
+	// Add agent details to span
+	span.SetAttributes(
+		attribute.String("agent.name", agent.Name),
+		attribute.String("agent.environment", fmt.Sprintf("%d", agent.EnvironmentID)),
+	)
 
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with run ID %d and %d variables", agent.ID, agent.Name, runID, len(userVariables))
 	
@@ -115,7 +225,35 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 	
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "execution failed")
+		s.telemetry.RecordError(ctx, "execution_failed", "agent_service")
+		s.telemetry.RecordAgentExecution(ctx, agent.ID, agent.Name, "unknown", time.Since(startTime), false, nil)
 		return nil, fmt.Errorf("failed to execute agent via stdio MCP: %w", err)
+	}
+
+	// Record successful execution metrics
+	duration := time.Since(startTime)
+	modelName := result.ModelName
+	if modelName == "" {
+		modelName = "unknown"
+	}
+	
+	// Add execution result attributes to span
+	span.SetAttributes(
+		attribute.String("execution.model", modelName),
+		attribute.Float64("execution.duration_seconds", duration.Seconds()),
+		attribute.Int64("execution.steps_taken", result.StepsTaken),
+		attribute.Int("execution.tools_used", result.ToolsUsed),
+		attribute.Bool("execution.success", true),
+	)
+	
+	// Record business metrics for successful execution
+	s.telemetry.RecordAgentExecution(ctx, agent.ID, agent.Name, modelName, duration, true, result.TokenUsage)
+
+	// Force flush spans to ensure they're sent to Jaeger immediately
+	if err := s.telemetry.ForceFlush(ctx); err != nil {
+		log.Printf("Warning: Failed to flush telemetry spans: %v", err)
 	}
 
 	// Convert result to Message format with proper types for execution queue

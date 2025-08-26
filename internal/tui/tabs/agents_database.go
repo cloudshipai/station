@@ -385,7 +385,7 @@ func (m *AgentsModel) runAgent(agent models.Agent) tea.Cmd {
 		func() tea.Msg {
 			// Create basic run record
 			ctx := context.Background()
-			run, err := m.repos.AgentRuns.Create(agent.ID, consoleUser.ID, task, "", 0, nil, nil, "running", nil)
+			run, err := m.repos.AgentRuns.Create(ctx, agent.ID, consoleUser.ID, task, "", 0, nil, nil, "running", nil)
 			if err != nil {
 				return tea.Printf("❌ Failed to create run record: %v", err)
 			}
