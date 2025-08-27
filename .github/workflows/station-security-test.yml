@@ -1,0 +1,41 @@
+name: Station Security Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Station Security Analysis
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        echo "🚀 Starting Station DevOps Security Analysis"
+        
+        # Pull the Station container from Docker Hub
+        docker pull epuerta18/station-devops-simple:latest
+        
+        echo "=== SECURITY SCANNER ===" 
+        # Run Security Scanner with combined sync + agent execution
+        timeout 180s docker run --rm \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v ${{ github.workspace }}:/workspace \
+          -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
+          epuerta18/station-devops-simple:latest \
+          bash -c "stn sync default -i=false && stn agent run 'Security Scanner' 'Scan this repository for security issues, secrets, and vulnerabilities. Focus on .env files, configuration files, and any exposed credentials. Use gitleaks to scan for secrets.' --env default" || echo "Security scan completed or timed out"
+          
+        echo "=== TERRAFORM AUDITOR ==="
+        # Run Terraform Auditor with combined sync + agent execution  
+        timeout 180s docker run --rm \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v ${{ github.workspace }}:/workspace \
+          -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
+          epuerta18/station-devops-simple:latest \
+          bash -c "stn sync default -i=false && stn agent run 'Terraform Auditor' 'Analyze all Terraform files in this repository for security misconfigurations and compliance issues. Use checkov for Infrastructure as Code security scanning.' --env default" || echo "Terraform audit completed or timed out"

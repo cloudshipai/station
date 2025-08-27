@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -131,6 +132,9 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	envDir := client.Host().Directory(b.environmentPath)
 	base = base.WithExec([]string{"mkdir", "-p", "/root/.config/station/environments/default"})
 	base = base.WithDirectory("/root/.config/station/environments/default", envDir)
+	
+	// Create workspace directory for CI/CD filesystem operations
+	base = base.WithExec([]string{"mkdir", "-p", "/workspace"})
 
 	dbPath := "/root/.config/station/station.db"
 
@@ -171,54 +175,214 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	
 	base = base.WithExec(initArgs)
 	
-	// CRUCIAL FIX: Run sync to import agents into database
-	base = base.WithExec([]string{"stn", "sync", "default", "-i=false"})
-	
-	// Create Ship CLI installation script if requested
-	if b.buildOptions.InstallShip {
-		log.Printf("🚢 Creating Ship CLI installation script for runtime...")
-		shipInstaller := `#!/bin/bash
-set -e
-if [ ! -f /usr/local/bin/ship ]; then
-    echo "Installing Ship CLI at runtime..."
-    curl -fsSL https://github.com/cloudshipai/ship/releases/download/v0.7.0/ship_Linux_x86_64.tar.gz -o /tmp/ship.tar.gz
-    tar -xzf /tmp/ship.tar.gz -C /tmp
-    cp /tmp/ship /usr/local/bin/ship
-    chmod +x /usr/local/bin/ship
-    rm -f /tmp/ship.tar.gz
-    echo "✅ Ship CLI installed successfully"
-else
-    echo "✅ Ship CLI already available"
-fi
-`
-		base = base.WithNewFile("/usr/local/bin/install-ship.sh", shipInstaller).
-			WithExec([]string{"chmod", "+x", "/usr/local/bin/install-ship.sh"})
-		log.Printf("✅ Ship CLI runtime installer created")
+	// Pass through API keys for tool discovery during sync
+	if key := os.Getenv("STN_AI_API_KEY"); key != "" {
+		base = base.WithEnvVariable("STN_AI_API_KEY", key)
+	}
+	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
+		base = base.WithEnvVariable("OPENAI_API_KEY", key)
+	}
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		base = base.WithEnvVariable("ANTHROPIC_API_KEY", key)
+	}
+	if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
+		base = base.WithEnvVariable("GOOGLE_API_KEY", key)
+	}
+	if key := os.Getenv("GEMINI_API_KEY"); key != "" {
+		base = base.WithEnvVariable("GEMINI_API_KEY", key)
+	}
+	if key := os.Getenv("AI_API_KEY"); key != "" {
+		base = base.WithEnvVariable("AI_API_KEY", key)
 	}
 	
-	// Create entrypoint script that installs Ship if needed
+	// CRUCIAL FIX: Run sync to import agents into database with API key for tool discovery
+	base = base.WithExec([]string{"stn", "sync", "default", "-i=false"})
+	
+	// Install Ship CLI and Docker CLI inside the container
 	if b.buildOptions.InstallShip {
-		entrypointScript := `#!/bin/bash
-set -e
-
-# Install Ship CLI at runtime if needed
-if [ -f /usr/local/bin/install-ship.sh ]; then
-    /usr/local/bin/install-ship.sh
-fi
-
-# Execute the original command
-exec "$@"
-`
-		base = base.WithNewFile("/usr/local/bin/entrypoint.sh", entrypointScript).
-			WithExec([]string{"chmod", "+x", "/usr/local/bin/entrypoint.sh"}).
-			WithEntrypoint([]string{"/usr/local/bin/entrypoint.sh"})
-		log.Printf("✅ Container entrypoint configured with Ship CLI installer")
+		log.Printf("🚢 Downloading Ship CLI inside container...")
+		
+		// Download and install Ship CLI inside the container
+		base = base.WithExec([]string{"bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash"})
+		
+		log.Printf("🐳 Downloading Docker CLI inside container...")
+		
+		// Download and install Docker CLI static binary inside the container
+		base = base.WithExec([]string{"bash", "-c", `
+			curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz | tar -xz && 
+			mv docker/docker /usr/local/bin/docker && 
+			rm -rf docker && 
+			chmod +x /usr/local/bin/docker
+		`})
+		
+		// The Ship CLI installs to ~/.local/bin by default, so ensure it's executable and in the right location
+		base = base.WithExec([]string{"bash", "-c", `
+			if [ -f /root/.local/bin/ship ]; then 
+				cp /root/.local/bin/ship /usr/local/bin/ship
+				chmod +x /usr/local/bin/ship
+			fi
+		`})
+		
+		log.Printf("✅ Ship CLI and Docker CLI installed inside container")
 	}
 	
 	// Set environment variables that persist at runtime
 	base = base.WithEnvVariable("PATH", "/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	
+	// Set working directory to /workspace for CI/CD operations
+	base = base.WithWorkdir("/workspace")
 
 	return base, tempDBPath, nil
+}
+
+func (b *EnvironmentBuilder) downloadShipCLI(ctx context.Context) (string, error) {
+	// Create temporary directory for Ship CLI installation  
+	tempInstallDir, err := os.MkdirTemp("", "ship-install-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp install dir: %w", err)
+	}
+	defer os.RemoveAll(tempInstallDir)
+	
+	// Create bin subdirectory for installation
+	installBinDir := filepath.Join(tempInstallDir, "bin")
+	if err := os.MkdirAll(installBinDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create install bin dir: %w", err)
+	}
+	
+	// Download Ship CLI installation script
+	log.Printf("Downloading Ship CLI installation script...")
+	scriptURL := "https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh"
+	
+	// Create a HOME environment that points to our temp directory
+	// This will make the installation script install to $HOME/.local/bin
+	tempHome := tempInstallDir
+	tempLocalBin := filepath.Join(tempHome, ".local", "bin")
+	if err := os.MkdirAll(tempLocalBin, 0755); err != nil {
+		return "", fmt.Errorf("failed to create temp local bin: %w", err)
+	}
+	
+	// Set environment variables for the installation
+	installEnv := []string{
+		fmt.Sprintf("HOME=%s", tempHome),
+		fmt.Sprintf("PATH=%s:%s", installBinDir, os.Getenv("PATH")),
+		"SHIP_NO_PATH_UPDATE=1", // Don't modify PATH during installation
+	}
+	
+	// Download and execute installation script
+	cmd := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("curl -fsSL %s | bash", scriptURL))
+	cmd.Env = installEnv
+	cmd.Dir = tempInstallDir
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to install Ship CLI: %w\nOutput: %s", err, string(output))
+	}
+	
+	// Ship CLI should now be installed in tempHome/.local/bin/ship
+	shipBinaryPath := filepath.Join(tempLocalBin, "ship")
+	if _, err := os.Stat(shipBinaryPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("Ship CLI binary not found at %s after installation\nOutput: %s", shipBinaryPath, string(output))
+	}
+	
+	// Create a temp file in the current working directory (project root)  
+	// This ensures Dagger can access it via client.Host().File()
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+	
+	finalTempFile := filepath.Join(workingDir, "ship-cli-temp")
+	
+	// Copy the binary to our final temp file location
+	sourceFile, err := os.Open(shipBinaryPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source binary: %w", err)
+	}
+	defer sourceFile.Close()
+	
+	destFile, err := os.Create(finalTempFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to create dest binary: %w", err)
+	}
+	defer destFile.Close()
+	
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		os.Remove(finalTempFile)
+		return "", fmt.Errorf("failed to copy binary: %w", err)
+	}
+	
+	// Make executable
+	if err := os.Chmod(finalTempFile, 0755); err != nil {
+		os.Remove(finalTempFile)
+		return "", fmt.Errorf("failed to make binary executable: %w", err)
+	}
+	
+	log.Printf("Successfully downloaded Ship CLI to: %s", finalTempFile)
+	return finalTempFile, nil
+}
+
+func (b *EnvironmentBuilder) downloadDockerCLI(ctx context.Context) (string, error) {
+	// Create a temp file in the current working directory (project root)
+	// This ensures Dagger can access it via client.Host().File()
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+	
+	finalTempFile := filepath.Join(workingDir, "docker-cli-temp")
+	
+	// Download Docker CLI static binary directly
+	log.Printf("Downloading Docker CLI static binary...")
+	dockerURL := "https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz"
+	
+	// Create temporary directory for Docker CLI download
+	tempDir, err := os.MkdirTemp("", "docker-download-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	
+	// Download and extract the Docker CLI binary in temp directory
+	cmd := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("curl -fsSL %s | tar -xz", dockerURL))
+	cmd.Dir = tempDir
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to download Docker CLI: %w\nOutput: %s", err, string(output))
+	}
+	
+	// The extracted binary should be at docker/docker in the temp directory
+	dockerBinaryPath := filepath.Join(tempDir, "docker", "docker")
+	if _, err := os.Stat(dockerBinaryPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("Docker CLI binary not found after download: %s", dockerBinaryPath)
+	}
+	
+	// Copy to our final temp file location
+	sourceFile, err := os.Open(dockerBinaryPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source binary: %w", err)
+	}
+	defer sourceFile.Close()
+	
+	destFile, err := os.Create(finalTempFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to create dest binary: %w", err)
+	}
+	defer destFile.Close()
+	
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		os.Remove(finalTempFile)
+		return "", fmt.Errorf("failed to copy binary: %w", err)
+	}
+	
+	// Make executable
+	if err := os.Chmod(finalTempFile, 0755); err != nil {
+		os.Remove(finalTempFile)
+		return "", fmt.Errorf("failed to make Docker binary executable: %w", err)
+	}
+	
+	log.Printf("Successfully downloaded Docker CLI to: %s", finalTempFile)
+	return finalTempFile, nil
 }
 
 func (b *EnvironmentBuilder) setupEnvironmentInDB(ctx context.Context, database *db.DB) error {
@@ -321,10 +485,17 @@ func (b *EnvironmentBuilder) loadImageToDocker(tarPath, imageName string) (strin
 }
 
 func (b *EnvironmentBuilder) extractImageIDFromLoadOutput(output string) string {
-	// Parse docker load output like "Loaded image: sha256:abc123..."
+	// Parse docker load output like "Loaded image: sha256:abc123..." or "Loaded image ID: sha256:abc123..."
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
-		if strings.Contains(line, "Loaded image:") {
+		if strings.Contains(line, "Loaded image ID:") {
+			// Handle "Loaded image ID: sha256:abc123..."
+			parts := strings.Split(line, ":")
+			if len(parts) >= 3 {
+				return strings.TrimSpace(strings.Join(parts[2:], ":"))
+			}
+		} else if strings.Contains(line, "Loaded image:") {
+			// Handle "Loaded image: sha256:abc123..."
 			parts := strings.Split(line, ":")
 			if len(parts) >= 3 {
 				return strings.TrimSpace(strings.Join(parts[2:], ":"))
@@ -650,10 +821,17 @@ func (b *BaseBuilder) loadImageToDocker(tarPath, imageName string) (string, erro
 }
 
 func (b *BaseBuilder) extractImageIDFromLoadOutput(output string) string {
-	// Parse docker load output like "Loaded image: sha256:abc123..."
+	// Parse docker load output like "Loaded image: sha256:abc123..." or "Loaded image ID: sha256:abc123..."
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
-		if strings.Contains(line, "Loaded image:") {
+		if strings.Contains(line, "Loaded image ID:") {
+			// Handle "Loaded image ID: sha256:abc123..."
+			parts := strings.Split(line, ":")
+			if len(parts) >= 3 {
+				return strings.TrimSpace(strings.Join(parts[2:], ":"))
+			}
+		} else if strings.Contains(line, "Loaded image:") {
+			// Handle "Loaded image: sha256:abc123..."
 			parts := strings.Split(line, ":")
 			if len(parts) >= 3 {
 				return strings.TrimSpace(strings.Join(parts[2:], ":"))
