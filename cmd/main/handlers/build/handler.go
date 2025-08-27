@@ -29,7 +29,23 @@ func (h *BuildHandler) RunBuildEnvironment(cmd *cobra.Command, args []string) er
 		environmentName = args[0]
 	}
 
+	// Get build configuration flags
+	provider, _ := cmd.Flags().GetString("provider")
+	model, _ := cmd.Flags().GetString("model")
+	cloudshipaiKey, _ := cmd.Flags().GetString("cloudshipai-registration-key")
+	cloudshipaiEndpoint, _ := cmd.Flags().GetString("cloudshipai-endpoint")
+	installShip, _ := cmd.Flags().GetBool("ship")
+
+	// Validate required flags
+	if provider == "" {
+		return fmt.Errorf("--provider flag is required (openai, gemini, anthropic)")
+	}
+	if model == "" {
+		return fmt.Errorf("--model flag is required (e.g., gpt-5-mini, gemini-2.5-flash)")
+	}
+
 	log.Printf("Building containerized environment: %s", environmentName)
+	log.Printf("AI provider: %s, model: %s", provider, model)
 
 	configRoot, err := common.GetStationConfigRoot()
 	if err != nil {
@@ -41,7 +57,16 @@ func (h *BuildHandler) RunBuildEnvironment(cmd *cobra.Command, args []string) er
 		return fmt.Errorf("environment '%s' not found at %s", environmentName, envPath)
 	}
 
-	builder := NewEnvironmentBuilder(environmentName, envPath)
+	// Create build options
+	buildOptions := &BuildOptions{
+		Provider:            provider,
+		Model:              model,
+		CloudShipAIKey:     cloudshipaiKey,
+		CloudShipAIEndpoint: cloudshipaiEndpoint,
+		InstallShip:        installShip,
+	}
+
+	builder := NewEnvironmentBuilderWithOptions(environmentName, envPath, buildOptions)
 	containerImage, err := builder.Build(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to build container: %w", err)
