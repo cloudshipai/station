@@ -19,6 +19,15 @@ import (
 type EnvironmentBuilder struct {
 	environmentName string
 	environmentPath string
+	buildOptions    *BuildOptions
+}
+
+type BuildOptions struct {
+	Provider            string
+	Model              string
+	CloudShipAIKey     string
+	CloudShipAIEndpoint string
+	InstallShip        bool
 }
 
 type EnvironmentConfig struct {
@@ -39,6 +48,18 @@ func NewEnvironmentBuilder(environmentName, environmentPath string) *Environment
 	return &EnvironmentBuilder{
 		environmentName: environmentName,
 		environmentPath: environmentPath,
+		buildOptions: &BuildOptions{
+			Provider: "openai",
+			Model:    "gpt-5-mini",
+		},
+	}
+}
+
+func NewEnvironmentBuilderWithOptions(environmentName, environmentPath string, options *BuildOptions) *EnvironmentBuilder {
+	return &EnvironmentBuilder{
+		environmentName: environmentName,
+		environmentPath: environmentPath,
+		buildOptions:    options,
 	}
 }
 
@@ -93,7 +114,9 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	base := client.Container().From("ubuntu:22.04")
 
 	base = base.WithExec([]string{"apt-get", "update"}).
-		WithExec([]string{"apt-get", "install", "-y", "ca-certificates", "curl", "sqlite3", "git"})
+		WithExec([]string{"apt-get", "install", "-y", "ca-certificates", "curl", "sqlite3", "git"}).
+		WithExec([]string{"bash", "-c", "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"}).
+		WithExec([]string{"apt-get", "install", "-y", "nodejs"})
 
 	// Build the station binary first
 	if err := b.buildStationBinary(); err != nil {
@@ -104,11 +127,12 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	base = base.WithFile("/usr/local/bin/stn", stationBinary).
 		WithExec([]string{"chmod", "+x", "/usr/local/bin/stn"})
 
+	// Copy environment to proper Station configuration location
 	envDir := client.Host().Directory(b.environmentPath)
-	base = base.WithDirectory("/app/environment", envDir)
+	base = base.WithExec([]string{"mkdir", "-p", "/root/.config/station/environments/default"})
+	base = base.WithDirectory("/root/.config/station/environments/default", envDir)
 
-	dbPath := "/app/data/station.db"
-	base = base.WithExec([]string{"mkdir", "-p", "/app/data"})
+	dbPath := "/root/.config/station/station.db"
 
 	// For now, create a minimal database setup in project directory
 	projectRoot, err := os.Getwd()
@@ -126,11 +150,73 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	dbFile := client.Host().File(relDBPath)
 	base = base.WithFile(dbPath, dbFile)
 
-	base = base.WithEnvVariable("STATION_CONFIG_ROOT", "/app/environment").
-		WithEnvVariable("STATION_DB_PATH", dbPath).
-		WithWorkdir("/app")
+	base = base.WithWorkdir("/root").
+		WithEnvVariable("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
 
-	base = base.WithExec([]string{"stn", "init"})
+	// Build stn init command with proper flags
+	initArgs := []string{"stn", "init", 
+		"--provider", b.buildOptions.Provider,
+		"--model", b.buildOptions.Model,
+		"--yes", // Skip interactive prompts
+	}
+	
+	// Add CloudShip AI configuration if provided
+	if b.buildOptions.CloudShipAIKey != "" {
+		initArgs = append(initArgs, 
+			"--cloudshipai", b.buildOptions.CloudShipAIKey,
+			"--cloudshipai_endpoint", b.buildOptions.CloudShipAIEndpoint)
+	}
+	
+	// Ship CLI is installed directly in container build, no need for --ship flag
+	
+	base = base.WithExec(initArgs)
+	
+	// CRUCIAL FIX: Run sync to import agents into database
+	base = base.WithExec([]string{"stn", "sync", "default", "-i=false"})
+	
+	// Create Ship CLI installation script if requested
+	if b.buildOptions.InstallShip {
+		log.Printf("🚢 Creating Ship CLI installation script for runtime...")
+		shipInstaller := `#!/bin/bash
+set -e
+if [ ! -f /usr/local/bin/ship ]; then
+    echo "Installing Ship CLI at runtime..."
+    curl -fsSL https://github.com/cloudshipai/ship/releases/download/v0.7.0/ship_Linux_x86_64.tar.gz -o /tmp/ship.tar.gz
+    tar -xzf /tmp/ship.tar.gz -C /tmp
+    cp /tmp/ship /usr/local/bin/ship
+    chmod +x /usr/local/bin/ship
+    rm -f /tmp/ship.tar.gz
+    echo "✅ Ship CLI installed successfully"
+else
+    echo "✅ Ship CLI already available"
+fi
+`
+		base = base.WithNewFile("/usr/local/bin/install-ship.sh", shipInstaller).
+			WithExec([]string{"chmod", "+x", "/usr/local/bin/install-ship.sh"})
+		log.Printf("✅ Ship CLI runtime installer created")
+	}
+	
+	// Create entrypoint script that installs Ship if needed
+	if b.buildOptions.InstallShip {
+		entrypointScript := `#!/bin/bash
+set -e
+
+# Install Ship CLI at runtime if needed
+if [ -f /usr/local/bin/install-ship.sh ]; then
+    /usr/local/bin/install-ship.sh
+fi
+
+# Execute the original command
+exec "$@"
+`
+		base = base.WithNewFile("/usr/local/bin/entrypoint.sh", entrypointScript).
+			WithExec([]string{"chmod", "+x", "/usr/local/bin/entrypoint.sh"}).
+			WithEntrypoint([]string{"/usr/local/bin/entrypoint.sh"})
+		log.Printf("✅ Container entrypoint configured with Ship CLI installer")
+	}
+	
+	// Set environment variables that persist at runtime
+	base = base.WithEnvVariable("PATH", "/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 
 	return base, tempDBPath, nil
 }
