@@ -58,6 +58,18 @@ Station is purpose-built for **deployable sub-agents** - to bring intelligence i
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
+## Platform Overview
+
+### **Environment Management**
+Station provides a clean web interface for managing your AI agents across different environments:
+
+![Default Environment](./assets/default-environment.png)
+
+### **Specialized Agent Examples** 
+Pre-built agents for common DevOps workflows, like this Terraform quality analysis agent:
+
+![Terraform Quality Agent](./assets/terraform-quality-agent.png)
+
 ## Getting Started
 
 ### 1. **Initialize Station**
@@ -375,16 +387,35 @@ Station provides **three production-ready patterns** for integrating AI agents i
 ### 🐳 **Agent-as-a-Service (Docker)**
 Deploy agents in containerized environments for maximum isolation and scalability.
 
+**Build Production-Ready Containers:**
+```bash
+# Build containerized environment with agents pre-configured
+stn build env security-bundle \
+  --provider openai \
+  --model gpt-5-mini \
+  --cloudshipai-registration-key $CLOUDSHIP_KEY
+
+# Container includes:
+# ✅ Station binary + all dependencies (Node.js, npx)
+# ✅ Agents imported and ready to execute
+# ✅ Runtime variable resolution (PROJECT_ROOT, etc.)
+# ✅ All MCP tools connected and validated
+```
+
+**Use in CI/CD Pipelines:**
 ```yaml
-# GitHub Actions Example
+# GitHub Actions Example with Ship Security Tools
 - name: Run Security Analysis
   run: |
-    docker run \
-      -v $(pwd)/agents:/app/environment/agents:ro \
-      -v $(pwd)/config.yml:/root/.config/station/config.yaml:ro \
+    docker run --rm \
+      -v ${{ github.workspace }}:/workspace \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -e PROJECT_ROOT=/workspace \
       -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-      station-base:latest \
-      stn agent run terraform-security-agent "Analyze infrastructure for security vulnerabilities"
+      your-registry/station-security:latest \
+      stn agent run "Security Scanner" "Analyze project for vulnerabilities"
+
+# Docker socket access required for Ship security tools (trivy, grype, etc.)
 ```
 
 ### 🔧 **Direct Station Execution**
