@@ -51,6 +51,17 @@ For staging/production deployments, consider using 'stn build base' and injectin
 func init() {
 	buildCmd.AddCommand(buildBaseCmd)
 	buildCmd.AddCommand(buildEnvironmentCmd)
+	
+	// Add flags for environment build command
+	buildEnvironmentCmd.Flags().String("provider", "", "AI provider to configure (openai, gemini, anthropic)")
+	buildEnvironmentCmd.Flags().String("model", "", "AI model to use")
+	buildEnvironmentCmd.Flags().String("cloudshipai-registration-key", "", "CloudShip AI registration key for telemetry")
+	buildEnvironmentCmd.Flags().String("cloudshipai-endpoint", "127.0.0.1:50051", "CloudShip AI endpoint")
+	buildEnvironmentCmd.Flags().Bool("ship", false, "Install Ship CLI for security tools")
+	
+	// Make provider and model required
+	buildEnvironmentCmd.MarkFlagRequired("provider")
+	buildEnvironmentCmd.MarkFlagRequired("model")
 }
 
 // runBuildBase builds a base Station container
