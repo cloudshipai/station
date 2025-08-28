@@ -152,6 +152,86 @@ when connected to an LLM, station runs the web app
 
 Then open **http://localhost:8585** in your browser for the full Station management interface.
 
+## Station Bundles - Portable AI Environments
+
+Station bundles are pre-configured environment packages that contain specialized AI agents, MCP tools, and complete workflows ready for immediate deployment.
+
+### 🚀 **Quick Install from Registry**
+
+Install production-ready bundles from the [Station Registry](https://cloudshipai.github.io/registry):
+
+```bash
+# Install DevOps Security Bundle via UI
+# 1. Navigate to http://localhost:8585/bundles
+# 2. Paste URL: https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz
+# 3. Select environment name and click "Install"
+
+# Or install via API
+curl -X POST http://localhost:8585/bundles/install \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bundle_location": "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz",
+    "environment_name": "security-env",
+    "source": "remote"
+  }'
+```
+
+The DevOps Security Bundle includes:
+- **Security Scanner Agent** - Comprehensive vulnerability scanning with Checkov tools
+- **Terraform Auditor Agent** - Infrastructure as Code validation with TFLint
+- **16 Security Tools** - Ready-to-use tools for CI/CD security automation
+
+### 📦 **Creating Your Own Bundles**
+
+Turn any environment into a shareable bundle:
+
+```bash
+# Method 1: CLI Command (Recommended)
+stn bundle my-environment --output my-custom-bundle.tar.gz
+
+# Method 2: MCP Tools (For Claude Code/AI)
+create_bundle_from_environment(environmentName="my-environment", outputPath="./bundle.tar.gz")
+
+# Method 3: API Integration  
+curl -X POST http://localhost:8585/api/v1/bundles \
+  -H "Content-Type: application/json" \
+  -d '{"environment_name": "my-environment", "output_path": "./bundle.tar.gz"}'
+```
+
+### 🔄 **Bundle Structure**
+
+Station bundles use a simple, API-compatible format:
+```
+bundle.tar.gz
+├── agents/                    # Agent definition files
+│   ├── Security Scanner.prompt
+│   └── Terraform Auditor.prompt  
+├── ship-security.json         # MCP server configurations
+└── other-tools.json          # Additional MCP configs
+```
+
+### 🛠 **CI/CD Integration**
+
+Use bundles in your CI/CD pipelines with Docker:
+
+```yaml
+# GitHub Actions with Station Bundle
+- name: Security Analysis
+  run: |
+    docker run \
+      -v $(pwd):/workspace:ro \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+      -e ENCRYPTION_KEY=${{ secrets.STATION_ENCRYPTION_KEY }} \
+      epuerta18/station-default:latest \
+      bash -c "
+        stn agent run 'Security Scanner' 'Analyze /workspace for vulnerabilities'
+        stn agent run 'Terraform Auditor' 'Validate Terraform in /workspace'
+      "
+```
+
+**📚 Learn More:** [Creating Bundles Guide](https://cloudshipai.github.io/station/en/creating-bundles) | [Bundle Registry](https://cloudshipai.github.io/registry)
+
 ## What is a Deployable Sub-Agent?
 
 A sub-agent is simple: **a .prompt file + MCP tools**. Everything you need is in the dotprompt.

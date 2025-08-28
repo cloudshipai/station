@@ -26,6 +26,7 @@ type Server struct {
 	config             *config.Config
 	localMode          bool
 	agentExportService *services.AgentExportService
+	bundleHandler      *UnifiedBundleHandler
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -57,6 +58,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		config:             cfg,
 		localMode:          localMode,
 		agentExportService: services.NewAgentExportService(repos),
+		bundleHandler:      NewUnifiedBundleHandler(),
 	}
 
 	// Setup the server capabilities
