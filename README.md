@@ -72,85 +72,39 @@ Pre-built agents for common DevOps workflows, like this Terraform quality analys
 
 ## Getting Started
 
-### 1. **Initialize Station**
+### 1. **Install and Initialize**
 ```bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 stn init
 ```
 
-### 2. **Copy MCP Configuration** 
-Copy a filesystem template to get started:
+### 2. **Install Security Bundle**
 ```bash
-# Create the template.json config file
-cat > ~/.config/station/environments/default/template.json << 'EOF'
-{
-  "description": "Essential filesystem operations with MCP server integration",
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y", 
-        "@modelcontextprotocol/server-filesystem@latest",
-        "{{ .ROOT_PATH }}"
-      ]
-    }
-  },
-  "name": "filesystem-updated"
-}
-EOF
-
-
-# Interactively fill in the variables 
-stn sync 
-# stn sync will detect unresolved variables and prompt you to fill them in
-
-
-# Automatically set the the ROOT_PATH variable
-echo "ROOT_PATH: $HOME/projects" > ~/.config/station/environments/default/variables.yml
+curl -X POST http://localhost:8585/bundles/install \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bundle_location": "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz",
+    "environment_name": "security",
+    "source": "remote"
+  }'
 ```
 
-### 3. **Sync Configuration**
+### 3. **Sync and Connect**
 ```bash
-# stn sync <environment> 
-# defaults to default environment
-
 stn sync
-
-#stn sync development
+echo '{"mcpServers":{"station":{"command":"stn","args":["stdio"]}}}' > ~/.claude_desktop_config.json
 ```
 
-### 4. **Connect to Claude or Cursor**
-Add Station as an MCP server in your Claude Desktop or Cursor configuration:
-
-**Claude Desktop (`~/.claude_desktop_config.json`):**
-```json
-{
-  "mcpServers": {
-    "station": {
-      "command": "stn",
-      "args": ["stdio"]
-    }
-  }
-}
-```
-
-**Cursor (`.cursorrules`):**
-```json
-{
-  "mcpServers": {
-    "station": {
-      "command": "stn",
-      "args": ["stdio"]
-    }
-  }
-}
-```
-
-### 5. **Access Web Interface**
+### 4. **Test Your Agents**
 ```bash
-when connected to an LLM, station runs the web app
+# Test security scanning agent
+stn agent run "Security Scanner" "Scan the current directory for security vulnerabilities"
+
+# Open Station UI
+open http://localhost:8585
 ```
 
-Then open **http://localhost:8585** in your browser for the full Station management interface.
+**✅ You're Ready!** Station MCP tools are now available in Claude Code for creating agents, running security scans, and managing environments through natural conversation.
 
 ## Station Bundles - Portable AI Environments
 
