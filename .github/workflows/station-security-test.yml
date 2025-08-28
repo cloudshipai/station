@@ -15,7 +15,7 @@ jobs:
       
     - name: Run Station Security Analysis
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || env.OPENAI_API_KEY }}
       run: |
         echo "🚀 Starting Station DevOps Security Analysis"
         
