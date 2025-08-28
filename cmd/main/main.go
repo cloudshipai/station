@@ -140,7 +140,7 @@ func init() {
 	initCmd.Flags().String("cloudshipai", "", "CloudShip AI registration key for station management and monitoring")
 	initCmd.Flags().String("cloudshipai_endpoint", "https://station.cloudshipai.com", "CloudShip AI Lighthouse gRPC endpoint")
 	initCmd.Flags().String("otel-endpoint", "", "OpenTelemetry OTLP endpoint for telemetry export (e.g., http://localhost:4318)")
-	initCmd.Flags().Bool("telemetry", true, "Enable telemetry collection and export (default: true)")
+	initCmd.Flags().Bool("telemetry", false, "Enable telemetry collection and export (default: false)")
 	
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
@@ -289,7 +289,7 @@ func init() {
 	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
 	
 	// Set default values
-	viper.SetDefault("telemetry_enabled", true)
+	viper.SetDefault("telemetry_enabled", false)
 	viper.SetDefault("ai_provider", "gemini")
 	viper.SetDefault("ai_model", "gemini-2.5-flash")
 }

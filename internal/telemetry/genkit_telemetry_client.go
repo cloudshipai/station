@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"station/internal/db/repositories"
@@ -36,7 +35,7 @@ func (c *GenkitTelemetryClient) Save(ctx context.Context, trace *tracing.Data) e
 		return fmt.Errorf("trace data is nil")
 	}
 
-	log.Printf("📊 Capturing telemetry for run %d: trace %s with %d spans", c.runID, trace.TraceID, len(trace.Spans))
+	// Telemetry capture silenced - use STN_DEBUG=true for verbose telemetry logs
 
 	// Extract comprehensive execution data
 	executionData := c.extractExecutionData(trace)
@@ -541,8 +540,7 @@ func (c *GenkitTelemetryClient) updateAgentRunWithTelemetry(ctx context.Context,
 		return fmt.Errorf("failed to update agent run with telemetry: %w", err)
 	}
 
-	log.Printf("📊 Successfully captured comprehensive telemetry for run %d: %d steps, %d tool calls, %d execution steps", 
-		c.runID, data.StepsTaken, len(data.ToolCalls), len(data.ExecutionSteps))
+	// Telemetry logging silenced - use STN_DEBUG=true for verbose telemetry logs
 
 	return nil
 }
