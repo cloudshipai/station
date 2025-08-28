@@ -53,7 +53,7 @@ Get production-ready security agents in 3 simple steps:
 ```bash
 # 1. Install Station
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-stn init
+stn init --ship
 
 # 2. Install DevOps Security Bundle
 stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security
@@ -65,36 +65,8 @@ echo '{"mcpServers":{"station":{"command":"stn","args":["stdio"]}}}' > ~/.claude
 
 **✅ Ready!** Open [Station UI](http://localhost:8585) and start using security agents through Claude Code.
 
-![Station Interface](/station/mcp-servers.png)
+<img src="/station/mcp-servers.png" alt="Station Interface" style="cursor: pointer; border: 1px solid #ccc; border-radius: 8px;" onclick="window.open(this.src, '_blank')" />
 
-## Bundle Ecosystem
-
-```bash
-# Install Station
-curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-
-# Initialize and configure your first agent
-stn init
-stn template install https://github.com/cloudshipai/registry/raw/main/bundles/filesystem-bundle/filesystem-bundle.tar.gz
-stn sync production
-```
-
-**Add to Claude Desktop MCP config:**
-```json
-{
-  "mcpServers": {
-    "station": {
-      "command": "stn",
-      "args": ["stdio"]
-    }
-  }
-}
-```
-
-**Then use Station agents directly in Claude:**
-- "List my Station agents"
-- "Create a database monitoring agent"
-- "Run agent terraform-analyzer to check infrastructure changes"
 
 ## Architecture Overview
 

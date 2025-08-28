@@ -18,24 +18,26 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 ### 2. Initialize and Install Security Bundle
 
 ```bash
-# Initialize Station
-stn init
+# Initialize Station with Ship integration
+stn init --ship
 
 # Install DevOps Security Bundle
 stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security
 ```
 
+> **What is Ship?** [Ship](https://github.com/cloudshipai/ship) provides curated MCP tools for Station. The `--ship` flag automatically configures Station with production-ready tools for development workflows.
+
 ### 3. Sync and Connect
 
 **Sync your MCP tools and agents:**
 
-![Sync Ready Interface](/station/sync-ready.png)
+<img src="/station/sync-ready.png" alt="Sync Ready Interface" style="cursor: pointer; border: 1px solid #ccc; border-radius: 8px;" onclick="window.open(this.src, '_blank')" />
 
 ```bash
 stn sync
 ```
 
-![Sync Completed](/station/sync-finished.png)
+<img src="/station/sync-finished.png" alt="Sync Completed" style="cursor: pointer; border: 1px solid #ccc; border-radius: 8px;" onclick="window.open(this.src, '_blank')" />
 
 **Connect to Claude Code:**
 ```bash
@@ -54,7 +56,7 @@ echo '{
 **Open the Station UI:** [http://localhost:8585](http://localhost:8585)
 
 **View your MCP servers and tools:**
-![MCP Servers Interface](/station/mcp-servers.png)
+<img src="/station/mcp-servers.png" alt="MCP Servers Interface" style="cursor: pointer; border: 1px solid #ccc; border-radius: 8px;" onclick="window.open(this.src, '_blank')" />
 
 **Test your security agents:**
 ```bash
@@ -62,7 +64,7 @@ stn agent run "Security Scanner" "Scan the current directory for security vulner
 ```
 
 **Check execution results:**
-![Agent Run Details](/station/run-details.png)
+<img src="/station/run-details.png" alt="Agent Run Details" style="cursor: pointer; border: 1px solid #ccc; border-radius: 8px;" onclick="window.open(this.src, '_blank')" />
 
 **Connect to Claude Code** - Station MCP tools are now available for creating agents, running security scans, and managing environments through natural conversation.
 
