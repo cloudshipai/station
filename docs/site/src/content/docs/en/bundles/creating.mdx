@@ -1,52 +1,259 @@
 ---
 title: Creating Bundles
-description: How to create and package Station template bundles
+description: How to create and package Station bundles for distribution
 ---
 
 # Creating Bundles
 
-## 🚧 Coming Soon
+Station bundles package environments with agents, MCP configurations, and tools into distributable `.tar.gz` archives that can be shared and installed across different Station instances.
 
-This page is under construction. We're working on comprehensive documentation for creating and packaging Station template bundles.
+## Bundle Creation Methods
 
-## What This Will Cover
+### Method 1: Station UI (Recommended)
+1. Navigate to [http://localhost:8585/environments](http://localhost:8585/environments)
+2. Select your environment
+3. Click "Create Bundle"  
+4. Choose local save or upload to registry
 
-- **Bundle Structure** - Organizing agents, tools, and configurations
-- **Template Creation** - Creating reusable template configurations
-- **Variable Management** - Designing flexible template variables
-- **Bundle Packaging** - Creating distributable bundle archives
-- **Testing & Validation** - Ensuring bundles work across environments
+### Method 2: CLI Command
+```bash
+# Create bundle from environment
+stn bundle create my-environment
 
-## Quick Reference
+# Create with custom output path
+stn bundle create my-environment --output my-bundle.tar.gz
+```
 
-Bundle creation workflow:
+### Method 3: MCP Tools (For Claude Code/AI)
+```bash
+# Use MCP tools to create bundles programmatically
+create_bundle_from_environment(environmentName="my-environment", outputPath="./bundle.tar.gz")
+```
+
+## Setting Up Your Environment for Bundling
+
+### 1. Configure MCP Tools
+Create MCP server configurations in your environment:
 
 ```bash
-# Export current environment to template
-stn template create --env default
+# Initialize with Ship integration for curated tools
+stn init --ship
 
-# Bundle the template for distribution
-stn template bundle template-directory/
+# Add custom MCP servers
+echo '{
+  "description": "Filesystem operations with MCP server integration",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "{{ .ALLOWED_PATH }}"]
+    }
+  },
+  "name": "filesystem-config"
+}' > ~/.config/station/environments/default/filesystem-config.json
 
-# Test bundle installation
-stn template install bundle.tar.gz --env test
+# Create variables file for template processing
+echo "ALLOWED_PATH: /home/user/projects" > ~/.config/station/environments/default/variables.yml
+
+# Sync to discover tools
+stn sync
 ```
 
-## Example Bundle Structure
+### 2. Create and Test Agents
+```bash
+# Create agents using discovered MCP tools
+stn agent create "File Monitor" "Monitor filesystem changes" --tools filesystem
+
+# Test agent execution
+stn agent run "File Monitor" "Check recent file changes"
+```
+
+## Bundle Structure
+
+Station bundles use a standardized format:
 
 ```
-my-bundle/
-├── agents/
+bundle.tar.gz
+├── agents/                    # Agent definition files
 │   ├── file-monitor.prompt
-│   └── log-analyzer.prompt
-├── mcp-configs/
-│   ├── filesystem.json
-│   └── logs.json
-├── variables.yml
-└── README.md
+│   ├── security-scanner.prompt
+│   └── terraform-auditor.prompt
+├── mcp-configs/               # MCP server configurations  
+│   ├── filesystem-config.json
+│   ├── security-tools.json
+│   └── terraform-tools.json
+├── variables.yml              # Template variables
+├── bundle-info.json           # Bundle metadata
+└── README.md                  # Documentation
 ```
+
+### Bundle Metadata
+Each bundle includes metadata for validation:
+
+```json
+{
+  "name": "devops-security-bundle",
+  "version": "1.0.0",
+  "description": "Comprehensive DevOps security scanning tools",
+  "agents": [
+    "Security Scanner",
+    "Terraform Auditor", 
+    "Infrastructure Auditor"
+  ],
+  "mcp_configs": [
+    "checkov-config",
+    "tflint-config",
+    "filesystem-config"
+  ],
+  "tools_count": 16,
+  "created_at": "2024-08-28T12:00:00Z"
+}
+```
+
+## Installing Bundles
+
+### Via Station UI
+<img src="/station/install-bundle.png" alt="Install Bundle Interface" style="cursor: pointer; border: 1px solid #ccc; border-radius: 8px;" onclick="window.open(this.src, '_blank')" />
+
+1. Navigate to Bundles section
+2. Paste bundle URL or upload file  
+3. Select target environment name
+4. Click "Install Bundle"
+
+### Via CLI
+```bash
+# Install from local file
+stn bundle install ./my-bundle.tar.gz new-environment
+
+# Install from URL (e.g., GitHub release)
+stn bundle install https://github.com/user/repo/releases/download/v1.0/bundle.tar.gz production
+```
+
+## Real-World Example: DevOps Security Bundle
+
+Here's how to create a production-ready security bundle:
+
+### 1. Set up the environment
+```bash
+# Initialize with Ship integration
+stn init --ship
+
+# Add security-specific MCP tools
+stn sync
+```
+
+### 2. Create specialized agents
+```bash  
+# Create security scanning agents
+stn agent create "Security Scanner" "Comprehensive security vulnerability scanning" --tools checkov,tflint
+
+stn agent create "Terraform Auditor" "Infrastructure as Code security analysis" --tools tflint,filesystem  
+
+stn agent create "Infrastructure Auditor" "Cloud infrastructure compliance scanning" --tools checkov,filesystem
+```
+
+### 3. Test and validate
+```bash
+# Test each agent
+stn agent run "Security Scanner" "Scan current directory for vulnerabilities"
+stn agent run "Terraform Auditor" "Analyze Terraform configurations"
+```
+
+### 4. Create and test bundle
+```bash
+# Create bundle
+stn bundle create security-environment --output devops-security-bundle.tar.gz
+
+# Test installation in fresh environment  
+stn bundle install ./devops-security-bundle.tar.gz test-install
+```
+
+## Bundle Best Practices
+
+### 1. Environment Naming
+- Use descriptive names: `devops-security`, `data-science`, `frontend-tools`
+- Include version in bundle filename: `devops-security-v1.2.tar.gz`
+
+### 2. Documentation
+- Include README.md with setup instructions
+- Document required variables and their purposes
+- Provide usage examples for each agent
+
+### 3. Template Variables
+- Use meaningful variable names: `PROJECT_ROOT`, `API_KEY_PATH`
+- Set sensible defaults in variables.yml
+- Document all variables in README.md
+
+### 4. Testing
+- Test bundle installation in clean environments
+- Verify all tools are discovered correctly
+- Ensure agents execute successfully
+
+## CI/CD Integration
+
+### GitHub Actions Example
+```yaml
+name: Create and Test Bundle
+on:
+  push:
+    branches: [main]
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create Bundle  
+        run: |
+          # Use Station CLI to create bundle from environment
+          stn bundle create production --output ./production-bundle.tar.gz
+            
+      - name: Test Bundle Installation
+        run: |
+          docker run -v $(pwd):/workspace epuerta18/station-default:latest \
+            stn bundle install /workspace/production-bundle.tar.gz ci-test
+            
+      - name: Upload Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-bundle
+          path: ./production-bundle.tar.gz
+```
+
+### Docker Integration
+```dockerfile
+FROM epuerta18/station-default:latest
+COPY ./my-bundle.tar.gz /tmp/
+RUN stn bundle install /tmp/my-bundle.tar.gz production && \
+    stn sync production
+```
+
+## Publishing to Bundle Registry
+
+1. Create GitHub release with your bundle
+2. Tag with semantic versioning: `v1.0.0`  
+3. Upload `.tar.gz` bundle as release asset
+4. Submit to [Station Bundle Registry](https://github.com/cloudshipai/registry)
+
+## Troubleshooting
+
+### Bundle Creation Fails
+- Verify environment exists and has agents/configurations
+- Check file permissions in environment directory
+- Ensure all MCP servers are running
+
+### Bundle Installation Fails  
+- Verify bundle file exists and is not corrupted
+- Check target environment name doesn't already exist
+- Ensure Station server is running for CLI installs
+
+### Missing Tools After Installation
+- Run `stn sync <environment>` after installation
+- Verify MCP server commands are available
+- Check variables.yml has correct values for your system
 
 ## Next Steps
 
-- **[Bundle Registry](/station/en/bundles/registry)** - Discover existing bundles
-- **[Publishing Bundles](/station/en/bundles/publishing)** - Share your bundles
+- **[Bundle Registry](https://cloudshipai.github.io/registry)** - Discover existing bundles
+- **[CI/CD Integration](/station/en/ci-cd-integration)** - Automate bundle workflows
+- **[MCP Tools](/station/en/mcp/tools)** - Learn about available tools
