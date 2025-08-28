@@ -10,6 +10,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/logging"
 	"station/pkg/models"
 )
 
@@ -282,8 +283,8 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 		// 2. Extract and sync MCP servers from the template
 		serversCount, err := s.syncMCPServersFromTemplate(ctx, mcpConfig, env.ID, configName, options)
 		if err != nil {
-			fmt.Printf("❌ CRITICAL: Failed to sync MCP servers from template %s: %v\n", configName, err)
-			fmt.Printf("   📄 Template file: %s\n", jsonFile)
+			logging.Error(" CRITICAL: Failed to sync MCP servers from template %s: %v\n", configName, err)
+			logging.Info("    Template file: %s\n", jsonFile)
 			fmt.Printf("   🔧 This means MCP servers were NOT saved to database\n")
 			fmt.Printf("   ⚠️  Agents using tools from this config will fail\n")
 			result.ValidationErrors++
@@ -304,10 +305,10 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 				fmt.Printf("   🔧 Discovered %d tools from MCP servers\n", toolsDiscovered)
 			}
 			result.MCPServersConnected += serversCount
-			fmt.Printf("✅ Successfully synced template: %s (%d servers)\n", configName, serversCount)
+			logging.Info(" Successfully synced template: %s (%d servers)\n", configName, serversCount)
 		} else if serversCount > 0 {
 			result.MCPServersConnected += serversCount
-			fmt.Printf("✅ Successfully synced template: %s (%d servers)\n", configName, serversCount)
+			logging.Info(" Successfully synced template: %s (%d servers)\n", configName, serversCount)
 		} else {
 			fmt.Printf("ℹ️  Template %s contains no MCP servers (config-only file)\n", configName)
 		}
@@ -330,7 +331,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 		return 0, nil
 	}
 
-	fmt.Printf("   🔍 Processing %d MCP servers from config...\n", len(serversData))
+	logging.Info("    Processing %d MCP servers from config...\n", len(serversData))
 	successCount := 0
 	
 	// Process each server configuration
@@ -340,7 +341,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			continue
 		}
 
-		fmt.Printf("     🖥️  Processing server: %s\n", serverName)
+		logging.Info("       Processing server: %s\n", serverName)
 		
 		// Convert server config to proper format
 		serverConfigBytes, err := json.Marshal(serverConfigRaw)
@@ -399,7 +400,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 		existingServer, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
 		if err != nil {
 			// Server doesn't exist, create new one
-			fmt.Printf("     ➕ Creating new MCP server: %s\n", serverName)
+			logging.Info("      Creating new MCP server: %s\n", serverName)
 			newServer := &models.MCPServer{
 				Name:          serverName,
 				Command:       command,
@@ -484,14 +485,14 @@ func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID 
 		if err != nil {
 			return fmt.Errorf("failed to create file config record: %w", err)
 		}
-		fmt.Printf("   📄 Registered new file config: %s\n", configName)
+		logging.Info("    Registered new file config: %s\n", configName)
 	} else {
 		// Config exists, update it
 		err = s.repos.FileMCPConfigs.UpdateLastLoadedAt(existingConfig.ID)
 		if err != nil {
 			return fmt.Errorf("failed to update file config timestamp: %w", err)
 		}
-		fmt.Printf("   📄 Updated file config: %s\n", configName)
+		logging.Info("    Updated file config: %s\n", configName)
 	}
 	
 	return nil
