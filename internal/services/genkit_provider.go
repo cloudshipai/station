@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"station/internal/config"
@@ -26,6 +28,40 @@ type GenKitProvider struct {
 // NewGenKitProvider creates a new GenKit provider manager
 func NewGenKitProvider() *GenKitProvider {
 	return &GenKitProvider{}
+}
+
+// findAvailablePort finds an available port starting from the given port number
+func findAvailablePort(startPort int) (int, error) {
+	for port := startPort; port < startPort+100; port++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err != nil {
+			continue // Port is not available, try next
+		}
+		ln.Close() // Close the listener, port is available
+		return port, nil
+	}
+	return 0, fmt.Errorf("no available port found in range %d-%d", startPort, startPort+99)
+}
+
+// ensureGenkitReflectionPort ensures GENKIT_REFLECTION_PORT is set to an available port
+// This prevents port conflicts when running multiple Station instances
+func (gp *GenKitProvider) ensureGenkitReflectionPort() error {
+	// Check if GENKIT_REFLECTION_PORT is already set
+	if os.Getenv("GENKIT_REFLECTION_PORT") != "" {
+		return nil // Already configured, don't override
+	}
+
+	// Find an available port starting from 3100
+	port, err := findAvailablePort(3100)
+	if err != nil {
+		return fmt.Errorf("failed to find available port for GenKit reflection server: %w", err)
+	}
+
+	// Set the environment variable
+	os.Setenv("GENKIT_REFLECTION_PORT", strconv.Itoa(port))
+	logging.Debug("Set GenKit reflection server port to %d", port)
+	
+	return nil
 }
 
 // GetApp returns the initialized GenKit app, initializing if needed
@@ -60,6 +96,12 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 			gp.currentProvider, strings.ToLower(cfg.AIProvider))
 		// Note: GenKit doesn't provide a clean shutdown method, so we'll just replace the instance
 		gp.genkitApp = nil
+	}
+
+	// Ensure GenKit reflection server has an available port before initialization
+	// This prevents port conflicts when running multiple Station instances
+	if err := gp.ensureGenkitReflectionPort(); err != nil {
+		return fmt.Errorf("failed to configure GenKit reflection port: %w", err)
 	}
 
 	// Update tracked configuration
