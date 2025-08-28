@@ -104,7 +104,11 @@ stn agent run "Security Scanner" "Scan the current directory for security vulner
 open http://localhost:8585
 ```
 
-**✅ You're Ready!** Station MCP tools are now available in Claude Code for creating agents, running security scans, and managing environments through natural conversation.
+**✅ You're Ready!** View your agents, MCP servers, and execution results in the Station UI:
+
+![Station Interface](./docs/site/public/mcp-servers.png)
+
+Station MCP tools are now available in Claude Code for creating agents, running security scans, and managing environments through natural conversation.
 
 ## Station Bundles - Portable AI Environments
 

@@ -21,7 +21,14 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 # Initialize Station
 stn init
 
-# Install DevOps Security Bundle with Checkov and TFLint agents
+# Install DevOps Security Bundle via UI or API
+```
+
+**Via Station UI** (recommended):
+![Install Bundle Interface](/install-bundle.png)
+
+**Or via API:**
+```bash
 curl -X POST http://localhost:8585/bundles/install \
   -H "Content-Type: application/json" \
   -d '{
@@ -33,11 +40,18 @@ curl -X POST http://localhost:8585/bundles/install \
 
 ### 3. Sync and Connect
 
-```bash
-# Sync MCP tools and agents
-stn sync
+**Sync your MCP tools and agents:**
 
-# Add Station to Claude Desktop
+![Sync Ready Interface](/sync-ready.png)
+
+```bash
+stn sync
+```
+
+![Sync Completed](/sync-finished.png)
+
+**Connect to Claude Code:**
+```bash
 echo '{
   "mcpServers": {
     "station": {
@@ -52,22 +66,24 @@ echo '{
 
 **Open the Station UI:** [http://localhost:8585](http://localhost:8585)
 
-You'll see your installed security bundle with agents and MCP tools ready to use:
-
-![Station Environment View](/default-environment.png)
+**View your MCP servers and tools:**
+![MCP Servers Interface](/mcp-servers.png)
 
 **Test your security agents:**
 ```bash
 stn agent run "Security Scanner" "Scan the current directory for security vulnerabilities"
 ```
 
-**Connect to Claude Code** - Station MCP tools are now available for creating agents, running security scans, and managing environments directly from Claude conversations.
+**Check execution results:**
+![Agent Run Details](/run-details.png)
+
+**Connect to Claude Code** - Station MCP tools are now available for creating agents, running security scans, and managing environments through natural conversation.
 
 ## 🎯 What You Get
 
 - **2 Production-Ready Agents**: Security Scanner + Terraform Auditor
-- **16 Security Tools**: Checkov, TFLint, and more via Ship CLI
-- **Web Interface**: Manage agents, view runs, install bundles
+- **16 Security Tools**: Checkov, TFLint, and more via Ship CLI  
+- **Visual Interface**: See MCP connections, agent runs, and tool availability
 - **Claude Code Integration**: Create and run agents through natural conversation
 - **CI/CD Ready**: Use in GitHub Actions, GitLab CI, or any container environment
 

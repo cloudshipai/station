@@ -173,6 +173,9 @@ jobs:
               stn agent run 'Terraform Auditor' 'Analyze Terraform files for security and best practices'
             "
 
+This generates detailed security analysis results:
+![Agent Execution Results](/run-details.png)
+
       - name: Collect Reports
         if: always()
         run: |
