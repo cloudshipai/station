@@ -48,6 +48,27 @@ When you need agents for internal work, you need more than application-focused a
 
 ## Quick Start
 
+Get production-ready security agents in 3 simple steps:
+
+```bash
+# 1. Install Station
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+stn init
+
+# 2. Install DevOps Security Bundle
+stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security
+
+# 3. Sync and connect to Claude Code
+stn sync
+echo '{"mcpServers":{"station":{"command":"stn","args":["stdio"]}}}' > ~/.claude_desktop_config.json
+```
+
+**✅ Ready!** Open [Station UI](http://localhost:8585) and start using security agents through Claude Code.
+
+![Station Interface](/mcp-servers.png)
+
+## Bundle Ecosystem
+
 ```bash
 # Install Station
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash

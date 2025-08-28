@@ -80,13 +80,7 @@ stn init
 
 ### 2. **Install Security Bundle**
 ```bash
-curl -X POST http://localhost:8585/bundles/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bundle_location": "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz",
-    "environment_name": "security",
-    "source": "remote"
-  }'
+stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security
 ```
 
 ### 3. **Sync and Connect**
@@ -124,14 +118,8 @@ Install production-ready bundles from the [Station Registry](https://cloudshipai
 # 2. Paste URL: https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz
 # 3. Select environment name and click "Install"
 
-# Or install via API
-curl -X POST http://localhost:8585/bundles/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bundle_location": "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz",
-    "environment_name": "security-env",
-    "source": "remote"
-  }'
+# Or install via CLI
+stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security-env
 ```
 
 The DevOps Security Bundle includes:
@@ -150,10 +138,8 @@ stn bundle my-environment --output my-custom-bundle.tar.gz
 # Method 2: MCP Tools (For Claude Code/AI)
 create_bundle_from_environment(environmentName="my-environment", outputPath="./bundle.tar.gz")
 
-# Method 3: API Integration  
-curl -X POST http://localhost:8585/api/v1/bundles \
-  -H "Content-Type: application/json" \
-  -d '{"environment_name": "my-environment", "output_path": "./bundle.tar.gz"}'
+# Method 3: CLI Integration  
+stn bundle create my-environment
 ```
 
 ### 🔄 **Bundle Structure**

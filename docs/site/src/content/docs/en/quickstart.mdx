@@ -21,21 +21,8 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 # Initialize Station
 stn init
 
-# Install DevOps Security Bundle via UI or API
-```
-
-**Via Station UI** (recommended):
-![Install Bundle Interface](/install-bundle.png)
-
-**Or via API:**
-```bash
-curl -X POST http://localhost:8585/bundles/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bundle_location": "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz",
-    "environment_name": "security",
-    "source": "remote"
-  }'
+# Install DevOps Security Bundle
+stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security
 ```
 
 ### 3. Sync and Connect

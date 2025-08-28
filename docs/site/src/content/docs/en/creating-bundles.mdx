@@ -77,12 +77,10 @@ create_bundle_from_environment(environmentName="my-environment", outputPath="./b
 ```
 
 ### Method 3: API Integration
-Create bundles via the Station API for CI/CD integration:
+Create bundles via the Station CLI for CI/CD integration:
 
 ```bash
-curl -X POST http://localhost:8585/api/v1/bundles \
-  -H "Content-Type: application/json" \
-  -d '{"environment_name": "my-environment", "output_path": "./bundle.tar.gz"}'
+stn bundle create my-environment --output ./bundle.tar.gz
 ```
 
 ## Setting Up Your Environment for Bundling
@@ -161,22 +159,10 @@ other-tools.json                 # Additional MCP configs
 ### Via CLI
 ```bash
 # Install from local file
-curl -X POST http://localhost:8585/bundles/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bundle_location": "./my-bundle.tar.gz",
-    "environment_name": "new-environment", 
-    "source": "file"
-  }'
+stn bundle install ./my-bundle.tar.gz new-environment
 
 # Install from URL (e.g., GitHub release)
-curl -X POST http://localhost:8585/bundles/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bundle_location": "https://github.com/user/repo/releases/download/v1.0/bundle.tar.gz",
-    "environment_name": "production",
-    "source": "remote" 
-  }'
+stn bundle install https://github.com/user/repo/releases/download/v1.0/bundle.tar.gz production
 ```
 
 ## Real-World Example: DevOps Security Bundle
@@ -214,13 +200,7 @@ stn agent create --name "Terraform Auditor" \
 stn bundle security-environment --output devops-security-bundle.tar.gz
 
 # Test installation in fresh environment  
-curl -X POST http://localhost:8585/bundles/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bundle_location": "./devops-security-bundle.tar.gz",
-    "environment_name": "test-install",
-    "source": "file"
-  }'
+stn bundle install ./devops-security-bundle.tar.gz test-install
 ```
 
 ## Bundle Best Practices
@@ -291,17 +271,13 @@ jobs:
       
       - name: Create Bundle  
         run: |
-          # Use Station MCP tools to create bundle from environment
-          curl -X POST http://localhost:8585/api/v1/bundles \
-            -H "Content-Type: application/json" \
-            -d '{"environment_name": "production", "output_path": "./production-bundle.tar.gz"}'
+          # Use Station CLI to create bundle from environment
+          stn bundle create production --output ./production-bundle.tar.gz
             
       - name: Test Bundle Installation
         run: |
           docker run -v $(pwd):/workspace epuerta18/station-default:latest \
-            curl -X POST http://localhost:8585/bundles/install \
-            -H "Content-Type: application/json" \
-            -d '{"bundle_location": "/workspace/production-bundle.tar.gz", "environment_name": "ci-test", "source": "file"}'
+            stn bundle install /workspace/production-bundle.tar.gz ci-test
             
       - name: Upload Bundle Artifact
         uses: actions/upload-artifact@v4

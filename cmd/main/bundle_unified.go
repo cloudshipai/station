@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -10,28 +13,59 @@ import (
 	"station/internal/services"
 )
 
-// Unified bundle command that uses the same logic as the API
+// Unified bundle command with create and install subcommands
 var bundleCmd = &cobra.Command{
-	Use:   "bundle <environment>",
+	Use:   "bundle",
+	Short: "Bundle management commands",
+	Long: `Create and install Station bundles.
+	
+Subcommands:
+  create   Create a bundle from an environment
+  install  Install a bundle from URL or file path`,
+}
+
+// Bundle create subcommand
+var bundleCreateCmd = &cobra.Command{
+	Use:   "create <environment>",
 	Short: "Create a bundle from an environment",
 	Long: `Create a deployable bundle (.tar.gz) from an environment.
 This uses the same bundling logic as the API and creates bundles
 that are compatible with the bundle API installation endpoints.
 
 Examples:
-  stn bundle default              # Bundle the default environment
-  stn bundle production           # Bundle the production environment
-  stn bundle default --output my-bundle.tar.gz  # Custom output path`,
+  stn bundle create default              # Bundle the default environment
+  stn bundle create production           # Bundle the production environment  
+  stn bundle create default --output my-bundle.tar.gz  # Custom output path`,
 	Args: cobra.ExactArgs(1),
-	RunE: runBundle,
+	RunE: runBundleCreate,
+}
+
+// Bundle install subcommand
+var bundleInstallCmd = &cobra.Command{
+	Use:   "install <bundle-source> <environment-name>",
+	Short: "Install a bundle from URL or file path",
+	Long: `Install a bundle from a remote URL or local file path.
+This uses the same installation logic as the Station UI.
+
+Examples:
+  stn bundle install https://github.com/cloudshipai/registry/releases/download/v1.0.0/devops-security-bundle.tar.gz security
+  stn bundle install ./my-bundle.tar.gz production
+  stn bundle install /path/to/bundle.tar.gz development`,
+	Args: cobra.ExactArgs(2),
+	RunE: runBundleInstall,
 }
 
 func init() {
-	bundleCmd.Flags().String("output", "", "Output path for bundle (defaults to <environment>.tar.gz)")
-	bundleCmd.Flags().Bool("local", true, "Save bundle locally (always true for CLI)")
+	// Add flags to create subcommand
+	bundleCreateCmd.Flags().String("output", "", "Output path for bundle (defaults to <environment>.tar.gz)")
+	bundleCreateCmd.Flags().Bool("local", true, "Save bundle locally (always true for CLI)")
+	
+	// Add subcommands to main bundle command
+	bundleCmd.AddCommand(bundleCreateCmd)
+	bundleCmd.AddCommand(bundleInstallCmd)
 }
 
-func runBundle(cmd *cobra.Command, args []string) error {
+func runBundleCreate(cmd *cobra.Command, args []string) error {
 	environmentName := args[0]
 	outputPath, _ := cmd.Flags().GetString("output")
 
@@ -92,8 +126,76 @@ func runBundle(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✅ Bundle created: %s\n", outputPath)
 	fmt.Printf("📊 Size: %d bytes\n", len(tarData))
 	fmt.Printf("\n🚀 Install with:\n")
-	fmt.Printf("   Station API: POST /bundles/install {\"bundle_location\": \"%s\", \"environment_name\": \"new-env\", \"source\": \"file\"}\n", outputPath)
-	fmt.Printf("   Or copy to another Station instance and use the UI Bundle installation\n")
+	fmt.Printf("   stn bundle install %s <environment-name>\n", outputPath)
+	fmt.Printf("   Or use the Station UI Bundle installation\n")
+
+	return nil
+}
+
+func runBundleInstall(cmd *cobra.Command, args []string) error {
+	bundleSource := args[0]
+	environmentName := args[1]
+
+	fmt.Printf("📦 Installing bundle from: %s\n", bundleSource)
+	fmt.Printf("🎯 Target environment: %s\n", environmentName)
+
+	// Determine source type (URL or file path)
+	var sourceType string
+	if bundleSource[:4] == "http" {
+		sourceType = "url"
+	} else {
+		sourceType = "file"
+		// Check if local file exists
+		if _, err := os.Stat(bundleSource); os.IsNotExist(err) {
+			return fmt.Errorf("bundle file not found: %s", bundleSource)
+		}
+	}
+
+	// Create request payload
+	payload := map[string]interface{}{
+		"bundle_location":  bundleSource,
+		"environment_name": environmentName,
+		"source":          sourceType,
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to create request payload: %w", err)
+	}
+
+	// Make API request to Station server
+	apiURL := "http://localhost:8585/api/v1/bundles/install"
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return fmt.Errorf("failed to connect to Station API at %s: %w\nMake sure Station server is running with 'stn serve'", apiURL, err)
+	}
+	defer resp.Body.Close()
+
+	// Parse response
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to parse API response: %w", err)
+	}
+
+	// Check if installation was successful
+	if success, ok := result["success"].(bool); !ok || !success {
+		errorMsg, _ := result["error"].(string)
+		message, _ := result["message"].(string)
+		if errorMsg != "" {
+			return fmt.Errorf("bundle installation failed: %s", errorMsg)
+		}
+		if message != "" {
+			return fmt.Errorf("bundle installation failed: %s", message)
+		}
+		return fmt.Errorf("bundle installation failed: unknown error")
+	}
+
+	fmt.Printf("✅ Bundle installed successfully!\n")
+	fmt.Printf("🎯 Environment '%s' is ready to use\n", environmentName)
+	fmt.Printf("\n🔧 Next steps:\n")
+	fmt.Printf("   stn sync                     # Sync MCP tools\n")
+	fmt.Printf("   stn agent list --env %s     # List available agents\n", environmentName)
+	fmt.Printf("   open http://localhost:8585   # View in Station UI\n")
 
 	return nil
 }
