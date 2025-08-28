@@ -271,7 +271,7 @@ func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server s
 		attribute.Int("mcp.server.tools_count", len(tools)),
 	)
 	
-	logging.Info("✅ Pooled server %s started with %d tools", server.key, len(tools))
+	logging.Info(" Pooled server %s started with %d tools", server.key, len(tools))
 	return nil
 }
 
@@ -376,7 +376,7 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 	
 	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
 	if err != nil {
-		logging.Info("❌ CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
+		logging.Error(" CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
 		span.RecordError(err)
 		span.SetAttributes(
 			attribute.Bool("mcp.tool_discovery.success", false),
@@ -389,13 +389,13 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 		attribute.Bool("mcp.tool_discovery.success", true),
 		attribute.Int("mcp.tools_discovered", len(serverTools)),
 	)
-	logging.Info("✅ MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
+	logging.Info(" MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
 	
-	// DEBUG: Log actual tool names returned by MCP server
-	logging.Info("🔍 DEBUG: Tool names returned by MCP server '%s':", serverName)
+	// Log actual tool names returned by MCP server
+	logging.Info("Tool names returned by MCP server '%s':", serverName)
 	for i, tool := range serverTools {
 		toolName := tool.Name()
-		logging.Info("   🔧 MCP Tool %d: '%s'", i+1, toolName)
+		logging.Info("   MCP Tool %d: '%s'", i+1, toolName)
 	}
 	return mcpClient, serverTools, nil
 }
@@ -428,11 +428,11 @@ func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Contex
 				if tools, toolsExist := mcm.serverPool.tools[serverKey]; toolsExist {
 					allTools = append(allTools, tools...)
 					allClients = append(allClients, pooledClient) // Reuse pooled client
-					logging.Info("✅ Using pooled server %s with %d tools", serverKey, len(tools))
+					logging.Info(" Using pooled server %s with %d tools", serverKey, len(tools))
 				}
 			} else {
 				// Server not in pool - fallback to creating fresh connection
-				logging.Info("⚠️  Server %s not in pool, creating fresh connection", serverKey)
+				logging.Info("Warning:  Server %s not in pool, creating fresh connection", serverKey)
 				tools, client := mcm.connectToMCPServer(ctx, serverName, serverConfig)
 				if tools != nil {
 					allTools = append(allTools, tools...)
@@ -458,9 +458,9 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	}
 	
 	// Using legacy connection model (deprecated)
-	logging.Info("⚠️  Using legacy MCP connection model (deprecated). Enable pooling with STATION_MCP_POOLING=true for better performance.")
+	logging.Info("Warning:  Using legacy MCP connection model (deprecated). Enable pooling with STATION_MCP_POOLING=true for better performance.")
 	
-	// 🔍 PERFORMANCE: Track legacy MCP connection time
+	// PERFORMANCE: Track legacy MCP connection time
 	mcpConnStartTime := time.Now()
 	
 	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
@@ -474,25 +474,25 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	}
 
 	msg := fmt.Sprintf("Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
-	logging.Info("DEBUG MCPCONNMGR: %s", msg)
+	logging.Info("MCPCONNMGR: %s", msg)
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg)
 
 	// Get file configs for this environment
 	fileConfigs, err := mcm.repos.FileMCPConfigs.ListByEnvironment(environmentID)
 	if err != nil {
 		msg := fmt.Sprintf("FAILED to get file configs for environment %d: %v", environmentID, err)
-		logging.Info("DEBUG MCPCONNMGR: %s", msg)
+		logging.Info("MCPCONNMGR: %s", msg)
 		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg)
 		return nil, nil, fmt.Errorf("failed to get file configs for environment %d: %w", environmentID, err)
 	}
 
 	msg2 := fmt.Sprintf("Database query returned %d file configs for environment %d", len(fileConfigs), environmentID)
-	logging.Info("DEBUG MCPCONNMGR: %s", msg2)
+	logging.Info("MCPCONNMGR: %s", msg2)
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg2)
 	
 	for i, fc := range fileConfigs {
 		fcMsg := fmt.Sprintf("File config %d: name='%s', path='%s', env_id=%d", i, fc.ConfigName, fc.TemplatePath, fc.EnvironmentID)
-		logging.Info("DEBUG MCPCONNMGR: %s", fcMsg)
+		logging.Info("MCPCONNMGR: %s", fcMsg)
 		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcMsg)
 	}
 
@@ -501,18 +501,18 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 
 	// Connect to each MCP server from file configs and get their tools
 	processMsg := fmt.Sprintf("Processing %d file configs for tool discovery", len(fileConfigs))
-	logging.Info("DEBUG MCPCONNMGR: %s", processMsg)
+	logging.Info("MCPCONNMGR: %s", processMsg)
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + processMsg)
 	
 	for i, fileConfig := range fileConfigs {
 		fcProcessMsg := fmt.Sprintf("Processing file config %d: %s", i+1, fileConfig.ConfigName)
-		logging.Info("DEBUG MCPCONNMGR: %s", fcProcessMsg)
+		logging.Info("MCPCONNMGR: %s", fcProcessMsg)
 		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcProcessMsg)
 		
 		tools, clients := mcm.processFileConfig(ctx, fileConfig)
 		
 		fcResultMsg := fmt.Sprintf("File config %d returned %d tools and %d clients", i+1, len(tools), len(clients))
-		logging.Info("DEBUG MCPCONNMGR: %s", fcResultMsg)
+		logging.Info("MCPCONNMGR: %s", fcResultMsg)
 		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcResultMsg)
 		
 		allTools = append(allTools, tools...)
@@ -521,8 +521,8 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 
 	totalToolsMsg := fmt.Sprintf("Total tools discovered from all file config servers: %d", len(allTools))
 	totalClientsMsg := fmt.Sprintf("Total clients created: %d", len(allClients))
-	logging.Info("DEBUG MCPCONNMGR: %s", totalToolsMsg)
-	logging.Info("DEBUG MCPCONNMGR: %s", totalClientsMsg)
+	logging.Info("MCPCONNMGR: %s", totalToolsMsg)
+	logging.Info("MCPCONNMGR: %s", totalClientsMsg)
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + totalToolsMsg)
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + totalClientsMsg)
 	
@@ -530,37 +530,37 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: NOT CACHING - fresh connections every time")
 	
 	mcpConnDuration := time.Since(mcpConnStartTime)
-	logging.Info("🔍 MCP_CONN_PERF: Legacy connections completed in %v", mcpConnDuration)
+	logging.Info("MCP_CONN_PERF: Legacy connections completed in %v", mcpConnDuration)
 	
 	return allTools, allClients, nil
 }
 
 // processFileConfig handles a single file config and returns tools and clients
 func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConfig *repositories.FileConfigRecord) ([]ai.Tool, []*mcp.GenkitMCPClient) {
-	logging.Info("DEBUG MCPCONNMGR processFileConfig: Processing file config: %s", fileConfig.ConfigName)
+	logging.Info("MCPCONNMGR processFileConfig: Processing file config: %s", fileConfig.ConfigName)
 	
 	// Make template path absolute
 	configDir := os.ExpandEnv("$HOME/.config/station")
 	absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
-	logging.Info("DEBUG MCPCONNMGR processFileConfig: Reading config file: %s", absolutePath)
+	logging.Info("MCPCONNMGR processFileConfig: Reading config file: %s", absolutePath)
 	
 	// Read and process the config file
 	rawContent, err := os.ReadFile(absolutePath)
 	if err != nil {
-		logging.Info("DEBUG MCPCONNMGR processFileConfig: FAILED to read file config %s from path %s: %v", fileConfig.ConfigName, absolutePath, err)
+		logging.Info("MCPCONNMGR processFileConfig: FAILED to read file config %s from path %s: %v", fileConfig.ConfigName, absolutePath, err)
 		return nil, nil
 	}
-	logging.Info("DEBUG MCPCONNMGR processFileConfig: Successfully read %d bytes from config file", len(rawContent))
+	logging.Info("MCPCONNMGR processFileConfig: Successfully read %d bytes from config file", len(rawContent))
 
 	// Process template variables
-	logging.Info("DEBUG MCPCONNMGR processFileConfig: Processing template variables for config: %s", fileConfig.ConfigName)
+	logging.Info("MCPCONNMGR processFileConfig: Processing template variables for config: %s", fileConfig.ConfigName)
 	templateService := NewTemplateVariableService(configDir, mcm.repos)
 	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 	if err != nil {
-		logging.Info("DEBUG MCPCONNMGR processFileConfig: FAILED to process template variables for %s: %v", fileConfig.ConfigName, err)
+		logging.Info("MCPCONNMGR processFileConfig: FAILED to process template variables for %s: %v", fileConfig.ConfigName, err)
 		return nil, nil
 	}
-	logging.Info("DEBUG MCPCONNMGR processFileConfig: Template processing successful, rendered content length: %d", len(result.RenderedContent))
+	logging.Info("MCPCONNMGR processFileConfig: Template processing successful, rendered content length: %d", len(result.RenderedContent))
 
 	// Parse the config
 	var rawConfig map[string]interface{}
@@ -570,18 +570,18 @@ func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConf
 	}
 
 	// Extract servers
-	logging.Info("DEBUG MCPCONNMGR processFileConfig: Parsing servers from config: %s", fileConfig.ConfigName)
-	logging.Info("DEBUG MCPCONNMGR processFileConfig: Available top-level keys: %v", getMapKeys(rawConfig))
+	logging.Info("MCPCONNMGR processFileConfig: Parsing servers from config: %s", fileConfig.ConfigName)
+	logging.Info("MCPCONNMGR processFileConfig: Available top-level keys: %v", getMapKeys(rawConfig))
 	
 	var serversData map[string]interface{}
 	if mcpServers, ok := rawConfig["mcpServers"].(map[string]interface{}); ok {
 		serversData = mcpServers
-		logging.Info("DEBUG MCPCONNMGR processFileConfig: Found 'mcpServers' section with %d servers", len(serversData))
+		logging.Info("MCPCONNMGR processFileConfig: Found 'mcpServers' section with %d servers", len(serversData))
 	} else if servers, ok := rawConfig["servers"].(map[string]interface{}); ok {
 		serversData = servers
-		logging.Info("DEBUG MCPCONNMGR processFileConfig: Found 'servers' section with %d servers", len(serversData))
+		logging.Info("MCPCONNMGR processFileConfig: Found 'servers' section with %d servers", len(serversData))
 	} else {
-		logging.Info("DEBUG MCPCONNMGR processFileConfig: NO MCP servers found in config %s - available keys: %v", fileConfig.ConfigName, getMapKeys(rawConfig))
+		logging.Info("MCPCONNMGR processFileConfig: NO MCP servers found in config %s - available keys: %v", fileConfig.ConfigName, getMapKeys(rawConfig))
 		return nil, nil
 	}
 
@@ -676,7 +676,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		mcpClient = result.client
 		err = result.err
 	case <-clientCtx.Done():
-		logging.Info("🚨 CRITICAL: MCP client creation for server '%s' TIMED OUT after 10 seconds", serverName)
+		logging.Error("CRITICAL: CRITICAL: MCP client creation for server '%s' TIMED OUT after 10 seconds", serverName)
 		logging.Info("   💀 This indicates the MCP server is not responding or misconfigured")
 		logging.Info("   🔧 Check server command: %s %v", serverConfig.Command, serverConfig.Args)
 		logging.Info("   ⚠️  All tools from this server will be UNAVAILABLE")
@@ -684,7 +684,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	}
 	
 	if err != nil {
-		logging.Info("❌ CRITICAL: Failed to create MCP client for server '%s': %v", serverName, err)
+		logging.Error(" CRITICAL: Failed to create MCP client for server '%s': %v", serverName, err)
 		logging.Info("   🔧 Check server configuration and ensure the MCP server command is valid")
 		logging.Info("   📡 Command: %s %v", serverConfig.Command, serverConfig.Args)
 		return nil, nil
@@ -694,14 +694,14 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	toolCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	
-	logging.Info("DEBUG MCPCONNMGR connectToMCPServer: About to call GetActiveTools for server: %s", serverName)
+	logging.Info("MCPCONNMGR connectToMCPServer: About to call GetActiveTools for server: %s", serverName)
 	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
 	
 	// NOTE: Connection stays alive for tool execution during Generate() calls
 	
 	if err != nil {
 		// Enhanced error logging for tool discovery failures
-		logging.Info("❌ CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
+		logging.Error(" CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
 		logging.Info("   🔧 Server command/config may be invalid or server may not be responding")
 		logging.Info("   📡 This means NO TOOLS will be available from this server")
 		logging.Info("   ⚠️  Agents depending on tools from '%s' will fail during execution", serverName)
@@ -715,7 +715,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		return nil, mcpClient // Return client for cleanup even on error
 	}
 
-	logging.Info("✅ MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
+	logging.Info(" MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
 	debugLogToFile(fmt.Sprintf("SUCCESS: Server '%s' provided %d tools", serverName, len(serverTools)))
 	
 	for i, tool := range serverTools {
@@ -725,7 +725,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	}
 	
 	if len(serverTools) == 0 {
-		logging.Info("⚠️  WARNING: Server '%s' connected successfully but provided ZERO tools", serverName)
+		logging.Info("Warning:  WARNING: Server '%s' connected successfully but provided ZERO tools", serverName)
 		logging.Info("   This may indicate a server configuration issue or empty tool catalog")
 		debugLogToFile(fmt.Sprintf("WARNING: Server '%s' connected but provided zero tools", serverName))
 	}

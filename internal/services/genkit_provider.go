@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"station/internal/config"
@@ -76,6 +77,14 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 
 	// Initialize Genkit with the configured AI provider
 	logging.Info("Initializing GenKit with provider: %s, model: %s", cfg.AIProvider, cfg.AIModel)
+	
+	// Disable telemetry by default to prevent "traces export" connection errors
+	// Only enable if explicitly requested via environment variable
+	if os.Getenv("GENKIT_ENABLE_TELEMETRY") == "" && !cfg.TelemetryEnabled {
+		os.Setenv("OTEL_SDK_DISABLED", "true")
+		os.Setenv("GENKIT_ENV", "dev")
+		logging.Debug("Telemetry disabled by default (set GENKIT_ENABLE_TELEMETRY=true to enable)")
+	}
 	
 	var genkitApp *genkit.Genkit
 	switch strings.ToLower(cfg.AIProvider) {

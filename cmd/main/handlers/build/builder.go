@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"dagger.io/dagger"
@@ -508,15 +509,124 @@ func (b *EnvironmentBuilder) extractImageIDFromLoadOutput(output string) string 
 func (b *EnvironmentBuilder) buildStationBinary() error {
 	log.Printf("Building station binary...")
 	
-	cmd := exec.Command("go", "build", "-o", "stn", "./cmd/main")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to build binary: %w", err)
+	// First, try to use local stn binary from PATH (Linux systems only)
+	if runtime.GOOS == "linux" {
+		if stnPath, err := exec.LookPath("stn"); err == nil {
+			log.Printf("Using local Station binary from PATH: %s", stnPath)
+			if err := b.copyFile(stnPath, "stn"); err != nil {
+				log.Printf("Failed to copy local binary, trying download: %v", err)
+			} else {
+				log.Printf("Successfully copied local Station binary")
+				return nil
+			}
+		}
 	}
 	
-	log.Printf("Successfully built station binary")
+	// Second, download latest binary from install script
+	log.Printf("Downloading latest Station binary...")
+	if err := b.downloadStationBinary(); err != nil {
+		log.Printf("Failed to download binary, trying source build: %v", err)
+	} else {
+		return nil
+	}
+	
+	// Last resort: try to build from source if available
+	if _, err := os.Stat("go.mod"); err == nil {
+		log.Printf("Building from source...")
+		cmd := exec.Command("go", "build", "-o", "stn", "./cmd/main")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		
+		if err := cmd.Run(); err == nil {
+			log.Printf("Successfully built station binary from source")
+			return nil
+		}
+		return fmt.Errorf("source build failed: %w", err)
+	}
+	
+	return fmt.Errorf("failed to obtain Station binary: no local binary, download failed, and no source available")
+}
+
+// copyFile copies a file from src to dst
+func (b *EnvironmentBuilder) copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	// Copy file permissions
+	if info, err := sourceFile.Stat(); err == nil {
+		if err := destFile.Chmod(info.Mode()); err != nil {
+			return fmt.Errorf("failed to set file permissions: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// downloadStationBinary downloads the latest Station binary from the install script
+func (b *EnvironmentBuilder) downloadStationBinary() error {
+	log.Printf("Downloading latest Station binary from install script...")
+	
+	// Create temporary directory for installation
+	tempDir, err := os.MkdirTemp("", "station-install-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	
+	// Download and execute install script
+	installURL := "https://raw.githubusercontent.com/cloudshipai/station/main/install.sh"
+	cmd := exec.Command("bash", "-c", fmt.Sprintf("curl -fsSL %s | bash", installURL))
+	
+	// Set environment to install to temp directory
+	cmd.Env = append(os.Environ(), 
+		fmt.Sprintf("HOME=%s", tempDir),
+		"STATION_NO_PATH_UPDATE=1", // Don't modify PATH during installation
+	)
+	cmd.Dir = tempDir
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to download Station binary: %w\nOutput: %s", err, string(output))
+	}
+	
+	// Station binary should be installed in temp directory
+	possiblePaths := []string{
+		filepath.Join(tempDir, ".local", "bin", "stn"),
+		filepath.Join(tempDir, "stn"),
+		filepath.Join(tempDir, "bin", "stn"),
+	}
+	
+	var stationPath string
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			stationPath = path
+			break
+		}
+	}
+	
+	if stationPath == "" {
+		return fmt.Errorf("Station binary not found after installation\nOutput: %s", string(output))
+	}
+	
+	// Copy the downloaded binary to current directory
+	if err := b.copyFile(stationPath, "stn"); err != nil {
+		return fmt.Errorf("failed to copy downloaded binary: %w", err)
+	}
+	
+	log.Printf("Successfully downloaded and copied Station binary")
 	return nil
 }
 

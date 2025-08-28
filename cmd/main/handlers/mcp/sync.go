@@ -91,12 +91,12 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("🔄 Starting MCP sync...\n")
+	fmt.Printf("Starting MCP sync...\n")
 	if flags.DryRun {
-		fmt.Printf("📋 DRY RUN MODE - no changes will be applied\n")
+		fmt.Printf("DRY RUN MODE - no changes will be applied\n")
 	}
 	if flags.Validate {
-		fmt.Printf("✅ VALIDATION MODE - checking configurations only\n")
+		fmt.Printf("VALIDATION MODE - checking configurations only\n")
 	}
 	fmt.Printf("\n")
 
@@ -106,7 +106,7 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 	var totalSynced int
 
 	for _, envName := range environments {
-		fmt.Printf("🌍 Processing environment: %s\n", envName)
+		fmt.Printf("Processing environment: %s\n", envName)
 		
 		result, err := syncer.SyncEnvironment(context.Background(), envName, services.SyncOptions{
 			DryRun:      flags.DryRun,
@@ -117,7 +117,7 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 		})
 		
 		if err != nil {
-			fmt.Printf("❌ Failed to sync environment %s: %v\n", envName, err)
+			fmt.Printf("Failed to sync environment %s: %v\n", envName, err)
 			totalErrors++
 			continue
 		}
@@ -133,9 +133,9 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display summary
-	fmt.Printf("📊 Sync Summary:\n")
-	fmt.Printf("  🌍 Environments: %d processed\n", len(environments))
-	fmt.Printf("  🤖 Agents: %d processed, %d synced\n", totalAgents, totalSynced)
+	fmt.Printf("Sync Summary:\n")
+	fmt.Printf("  Environments: %d processed\n", len(environments))
+	fmt.Printf("  Agents: %d processed, %d synced\n", totalAgents, totalSynced)
 	
 	if totalErrors > 0 {
 		fmt.Printf("  ❌ Errors: %d validation errors\n", totalErrors)
@@ -174,7 +174,7 @@ func determineEnvironments(repos *repositories.Repositories, envFlag string) ([]
 func displaySyncResults(result *services.SyncResult, verbose bool) {
 	// Show agent processing results
 	if result.AgentsProcessed > 0 {
-		fmt.Printf("  🤖 Agents:\n")
+		fmt.Printf("  Agents:\n")
 		fmt.Printf("    📁 Found: %d .prompt files\n", result.AgentsProcessed)
 		fmt.Printf("    ✅ Synced: %d\n", result.AgentsSynced)
 		fmt.Printf("    ⏭️  Skipped: %d (no changes)\n", result.AgentsSkipped)
