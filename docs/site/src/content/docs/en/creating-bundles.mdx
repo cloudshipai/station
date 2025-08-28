@@ -287,11 +287,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Create Bundle
+      - name: Create Bundle  
         run: |
-          # Use Station container with pre-built environment
-          docker run -v $(pwd):/workspace epuerta18/station-default:latest \
-            stn bundle production --output production-bundle.tar.gz
+          # Use Station MCP tools to create bundle from environment
+          curl -X POST http://localhost:8585/api/v1/bundles \
+            -H "Content-Type: application/json" \
+            -d '{"environment_name": "production", "output_path": "./production-bundle.tar.gz"}'
             
       - name: Test Bundle Installation
         run: |

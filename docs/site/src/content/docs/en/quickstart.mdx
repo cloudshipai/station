@@ -1,107 +1,75 @@
 ---
 title: Quick Start
-description: Get Station running in minutes
+description: Get Station running in minutes with production-ready security agents
 ---
 
 # Quick Start
 
-Get Station up and running in minutes and deploy your first intelligent sub-agent.
+Get Station running with production-ready security agents in 3 simple steps.
 
-## Installation
+## 🚀 3-Step Setup
 
-### Automatic Install (Recommended)
+### 1. Install Station
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
-This script automatically detects your platform and installs the latest version.
-
-### Manual Installation
+### 2. Initialize and Install Security Bundle
 
 ```bash
-git clone https://github.com/cloudshipai/station
-cd station
-make local-install
-```
-
-This will build Station and install it to `~/.local/bin/stn`.
-
-## Setup Workflow
-
-### 1. Initialize Station
-
-```bash
+# Initialize Station
 stn init
+
+# Install DevOps Security Bundle with Checkov and TFLint agents
+curl -X POST http://localhost:8585/bundles/install \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bundle_location": "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz",
+    "environment_name": "security",
+    "source": "remote"
+  }'
 ```
 
-This creates the Station configuration directory and initializes the database.
-
-### 2. Configure MCP Tools
-
-Station works with Model Context Protocol (MCP) servers. Set up essential filesystem tools:
+### 3. Sync and Connect
 
 ```bash
-# Create the template.json config file
-cat > ~/.config/station/environments/default/template.json << 'EOF'
-{
-  "description": "Essential filesystem operations with MCP server integration",
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y", 
-        "@modelcontextprotocol/server-filesystem@latest",
-        "{{ .ALLOWED_PATH }}"
-      ]
-    }
-  },
-  "name": "filesystem-updated"
-}
-EOF
-
-# Create variables for template resolution
-echo "ALLOWED_PATH: /home/user/projects" > ~/.config/station/environments/default/variables.yml
-
-# Sync to discover tools
+# Sync MCP tools and agents
 stn sync
-```
 
-### 3. Create Your First Agent
-
-```bash
-stn agent create \
-  --name "System Monitor" \
-  --description "Monitor system resources and alert on issues"
-```
-
-### 4. Test Your Agent
-
-```bash
-stn agent run 1 "Check current disk usage and memory status"
-```
-
-### 5. Connect to Claude Desktop
-
-Add Station to your Claude Desktop MCP configuration:
-
-**Location:**
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`
-
-**Configuration:**
-```json
-{
+# Add Station to Claude Desktop
+echo '{
   "mcpServers": {
     "station": {
       "command": "stn",
       "args": ["stdio"]
     }
   }
-}
+}' > ~/.claude_desktop_config.json
 ```
 
-Restart Claude Desktop and you can now create and run agents through natural conversation.
+## ✅ You're Ready!
+
+**Open the Station UI:** [http://localhost:8585](http://localhost:8585)
+
+You'll see your installed security bundle with agents and MCP tools ready to use:
+
+![Station Default Environment](./assets/default-environment.png)
+
+**Test your security agents:**
+```bash
+stn agent run "Security Scanner" "Scan the current directory for security vulnerabilities"
+```
+
+**Connect to Claude Code** - Station MCP tools are now available for creating agents, running security scans, and managing environments directly from Claude conversations.
+
+## 🎯 What You Get
+
+- **2 Production-Ready Agents**: Security Scanner + Terraform Auditor
+- **16 Security Tools**: Checkov, TFLint, and more via Ship CLI
+- **Web Interface**: Manage agents, view runs, install bundles
+- **Claude Code Integration**: Create and run agents through natural conversation
+- **CI/CD Ready**: Use in GitHub Actions, GitLab CI, or any container environment
 
 ## Access Methods
 
