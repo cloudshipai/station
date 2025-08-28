@@ -67,7 +67,6 @@ func NewTelemetryService(config *TelemetryConfig) *TelemetryService {
 func (ts *TelemetryService) Initialize(ctx context.Context) error {
 	// Skip initialization if telemetry is disabled
 	if !ts.config.Enabled {
-		fmt.Printf("🔍 OTEL DEBUG: Telemetry disabled by configuration\n")
 		return nil
 	}
 
@@ -88,9 +87,7 @@ func (ts *TelemetryService) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to create OTEL resource: %w", err)
 	}
 
-	// Debug logging
-	fmt.Printf("🔍 OTEL DEBUG: Initializing telemetry with service name: %s\n", serviceName)
-	fmt.Printf("🔍 OTEL DEBUG: Environment: %s\n", ts.config.Environment)
+	// Debug logging silenced - use STN_DEBUG=true for telemetry debug info
 
 	// Initialize trace provider with appropriate exporter
 	traceProvider, err := ts.initTraceProvider(ctx, res)
@@ -101,8 +98,6 @@ func (ts *TelemetryService) Initialize(ctx context.Context) error {
 	// Set global providers - CRITICAL for spans to be exported
 	otel.SetTracerProvider(traceProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
-	
-	fmt.Printf("✅ OTEL DEBUG: Global TracerProvider set successfully\n")
 
 	// Create tracer and meter
 	ts.tracer = otel.Tracer(serviceName)
@@ -132,14 +127,9 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 
 	if otlpEndpoint != "" {
 		// Use OTLP exporter (production)
-		fmt.Printf("🔍 OTEL DEBUG: Using OTLP endpoint: %s\n", otlpEndpoint)
-		fmt.Printf("🔍 OTEL DEBUG: Protocol: %s\n", os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
-		
 		if os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL") == "grpc" {
-			fmt.Printf("🔍 OTEL DEBUG: Creating gRPC exporter\n")
 			exporter, err = otlptracegrpc.New(ctx)
 		} else {
-			fmt.Printf("🔍 OTEL DEBUG: Creating HTTP exporter\n")
 			// Parse the endpoint URL to extract just the host:port
 			endpoint := otlpEndpoint
 			if strings.HasPrefix(endpoint, "http://") {
@@ -148,22 +138,16 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 				endpoint = strings.TrimPrefix(endpoint, "https://")
 			}
 			
-			fmt.Printf("🔍 OTEL DEBUG: Using cleaned endpoint: %s\n", endpoint)
 			exporter, err = otlptracehttp.New(ctx,
 				otlptracehttp.WithEndpoint(endpoint),
 				otlptracehttp.WithInsecure(), // Use HTTP instead of HTTPS for localhost
 			)
 		}
 		if err != nil {
-			fmt.Printf("❌ OTEL ERROR: Failed to create OTLP exporter: %v\n", err)
 			return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 		}
-		fmt.Printf("✅ OTEL DEBUG: OTLP exporter created successfully\n")
 	} else {
-		// Development mode - use stdout or no-op
-		// For now, use a no-op exporter to avoid spamming logs
-		// In the future, we could add a stdout exporter for development
-		fmt.Printf("🔍 OTEL DEBUG: No OTLP endpoint configured, using no-op exporter\n")
+		// Development mode - use no-op exporter to avoid log spam
 		exporter = &noOpExporter{}
 	}
 
@@ -177,8 +161,6 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 		),
 		sdktrace.WithSampler(ts.getSampler()),
 	)
-	
-	fmt.Printf("🔍 OTEL DEBUG: TracerProvider configured with immediate export settings\n")
 
 	// Store shutdown function
 	ts.shutdownFunc = tp.Shutdown
@@ -254,13 +236,20 @@ func (ts *TelemetryService) getSampler() sdktrace.Sampler {
 
 // StartSpan creates a new span with common attributes
 func (ts *TelemetryService) StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	// Return no-op span if tracer is not initialized (telemetry disabled)
+	if ts.tracer == nil {
+		return ctx, trace.SpanFromContext(ctx)
+	}
 	ctx, span := ts.tracer.Start(ctx, name, opts...)
-	fmt.Printf("🔍 OTEL DEBUG: Created span '%s'\n", name)
 	return ctx, span
 }
 
 // RecordAgentExecution records metrics for an agent execution
 func (ts *TelemetryService) RecordAgentExecution(ctx context.Context, agentID int64, agentName, model string, duration time.Duration, success bool, tokenUsage map[string]interface{}) {
+	// Skip if telemetry is disabled
+	if ts.tracer == nil {
+		return
+	}
 	// Common attributes
 	attrs := []attribute.KeyValue{
 		attribute.Int64("agent.id", agentID),
@@ -292,6 +281,10 @@ func (ts *TelemetryService) RecordAgentExecution(ctx context.Context, agentID in
 
 // RecordToolCall records metrics for a tool call
 func (ts *TelemetryService) RecordToolCall(ctx context.Context, toolName string, success bool, duration time.Duration) {
+	// Skip if telemetry is disabled
+	if ts.tracer == nil {
+		return
+	}
 	attrs := []attribute.KeyValue{
 		attribute.String("tool.name", toolName),
 		attribute.Bool("tool.success", success),
@@ -302,6 +295,10 @@ func (ts *TelemetryService) RecordToolCall(ctx context.Context, toolName string,
 
 // RecordError records an error metric
 func (ts *TelemetryService) RecordError(ctx context.Context, errorType, component string) {
+	// Skip if telemetry is disabled
+	if ts.tracer == nil {
+		return
+	}
 	attrs := []attribute.KeyValue{
 		attribute.String("error.type", errorType),
 		attribute.String("component", component),
@@ -313,7 +310,6 @@ func (ts *TelemetryService) RecordError(ctx context.Context, errorType, componen
 // Shutdown gracefully shuts down the telemetry service
 func (ts *TelemetryService) Shutdown(ctx context.Context) error {
 	if ts.shutdownFunc != nil {
-		fmt.Printf("🔍 OTEL DEBUG: Shutting down telemetry service and flushing spans\n")
 		return ts.shutdownFunc(ctx)
 	}
 	return nil
@@ -322,7 +318,6 @@ func (ts *TelemetryService) Shutdown(ctx context.Context) error {
 // ForceFlush forces immediate export of all pending spans
 func (ts *TelemetryService) ForceFlush(ctx context.Context) error {
 	if tp, ok := otel.GetTracerProvider().(*sdktrace.TracerProvider); ok {
-		fmt.Printf("🔍 OTEL DEBUG: Force flushing spans to Jaeger\n")
 		return tp.ForceFlush(ctx)
 	}
 	return nil

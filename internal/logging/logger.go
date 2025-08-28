@@ -38,6 +38,13 @@ func Debug(format string, args ...interface{}) {
 	}
 }
 
+// Error logs error messages (always shown)
+func Error(format string, args ...interface{}) {
+	if globalLogger != nil {
+		globalLogger.infoLogger.Printf("ERROR: "+format, args...)
+	}
+}
+
 // IsDebugEnabled returns true if debug logging is enabled
 func IsDebugEnabled() bool {
 	return globalLogger != nil && globalLogger.debugEnabled

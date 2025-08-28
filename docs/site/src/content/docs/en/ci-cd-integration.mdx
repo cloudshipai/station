@@ -17,19 +17,95 @@ Station supports three primary integration patterns:
 
 Each pattern provides **database isolation**, ensuring that every CI run gets its own execution context with no shared state between pipelines or teams.
 
+```mermaid
+graph LR
+    A[CI Pipeline] --> B{Integration Pattern}
+    
+    B --> C[Agent-as-a-Service]
+    B --> D[Direct Execution]  
+    B --> E[Dagger Integration]
+    
+    C --> F[Docker Container]
+    F --> G[Station CLI]
+    F --> H[Ship CLI Tools]
+    F --> I[Isolated Database]
+    
+    D --> J[CI Runner]
+    J --> K[Station CLI]
+    J --> L[MCP Tools]
+    J --> M[Direct Access]
+    
+    E --> N[Dagger Module]
+    N --> O[Go Functions]
+    N --> P[Type Safety]
+    N --> Q[Programmatic Control]
+    
+    G --> R[Security Analysis]
+    K --> R
+    O --> R
+    
+    R --> S[AI-Generated Reports]
+    R --> T[Actionable Remediation]
+    
+    subgraph "Containerized (Recommended)"
+        C
+        F
+        G
+        H
+        I
+    end
+    
+    subgraph "Native Integration"
+        D
+        J
+        K
+        L
+        M
+    end
+    
+    subgraph "Programmatic"
+        E
+        N
+        O
+        P
+        Q
+    end
+```
+
 ## Agent-as-a-Service (Docker)
 
 Deploy Station agents in containerized environments for maximum isolation and scalability.
 
-### Building the Base Image
+### Building Agent Environment Images
 
-First, create a Station base image using the built-in Dagger integration:
+Station provides two ways to build containerized agent environments:
+
+#### Option 1: Build Environment-Specific Images (Recommended)
 
 ```bash
-# Build base Station image
+# Build environment with specific agents and tools
+stn build env production --provider openai --model gpt-5 --ship
+
+# This creates station-production:latest with:
+# ✅ Station CLI pre-installed (local binary or downloaded)  
+# ✅ Ship CLI v0.7.3+ with 80+ security tools
+# ✅ Pre-configured agents with tool assignments
+# ✅ MCP server configurations
+# ✅ Docker CLI for containerized tools
+# ✅ Complete security scanning environment
+
+# Verify the built environment
+docker images | grep station-production
+docker run --rm station-production:latest stn agent list
+```
+
+#### Option 2: Build Base Image (Legacy)
+
+```bash
+# Build base Station image (basic installation only)
 stn build base
 
-# Verify the image
+# Verify the image  
 docker images | grep station-base
 ```
 
@@ -39,6 +115,8 @@ This creates a `station-base:latest` image (286MB) with:
 - ✅ Database initialization ready
 - ✅ Environment directories configured
 
+> **💡 Tip**: Use `stn build env` for production deployments as it includes pre-configured agents and security tools. Use `stn build base` only when you need a minimal Station installation.
+
 ### Basic Agent Execution
 
 ```bash
@@ -46,6 +124,7 @@ This creates a `station-base:latest` image (286MB) with:
 docker run \
   -v $(pwd)/agents:/app/environment/agents:ro \
   -v $(pwd)/config.yml:/root/.config/station/config.yaml:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -e ENCRYPTION_KEY=your-encryption-key-32-chars \
   station-base:latest \
@@ -55,6 +134,8 @@ docker run \
     stn agent run terraform-security-agent 'Analyze infrastructure for vulnerabilities'
   "
 ```
+
+> **⚠️ Important**: Mount the Docker socket (`-v /var/run/docker.sock:/var/run/docker.sock`) when using Ship CLI security tools like Checkov, TFLint, or Trivy. These tools run in containers and require Docker access for proper execution.
 
 ### GitHub Actions Example
 
@@ -73,10 +154,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Station base image
+      - name: Build Station security environment
         run: |
           curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-          stn build base
+          stn build env security --provider openai --model gpt-4o --ship
 
       - name: Run Security Analysis
         run: |
@@ -84,9 +165,10 @@ jobs:
             -v $(pwd):/workspace:ro \
             -v $(pwd)/ci/agents:/app/environment/agents:ro \
             -v $(pwd)/ci/config.yml:/root/.config/station/config.yaml:ro \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
             -e ENCRYPTION_KEY=${{ secrets.STATION_ENCRYPTION_KEY }} \
-            station-base:latest \
+            station-security:latest \
             bash -c "
               stn init --yes --provider openai --model gpt-4o
               stn agent import default
@@ -113,12 +195,13 @@ jobs:
 # docker-compose.yml
 services:
   station-security:
-    image: station-base:latest
+    image: station-security:latest
     volumes:
       - ./agents:/app/environment/agents:ro
       - ./config.yml:/root/.config/station/config.yaml:ro
       - ./workspace:/workspace
       - security-reports:/workspace/reports
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ENCRYPTION_KEY=${STATION_ENCRYPTION_KEY}
