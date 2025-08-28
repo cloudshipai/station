@@ -75,7 +75,7 @@ Pre-built agents for common DevOps workflows, like this Terraform quality analys
 ### 1. **Install and Initialize**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-stn init
+stn init --ship
 ```
 
 ### 2. **Install Security Bundle**
