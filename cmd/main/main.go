@@ -50,7 +50,7 @@ func init() {
 	rootCmd.AddCommand(loadCmd)
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(mcpCmd)
-	rootCmd.AddCommand(templateCmd)
+	rootCmd.AddCommand(bundleCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(runsCmd)
 	rootCmd.AddCommand(webhookCmd)
@@ -86,16 +86,8 @@ func init() {
 	mcpCmd.AddCommand(mcpSyncCmd)
 	mcpCmd.AddCommand(mcpStatusCmd)
 	
-	templateCmd.AddCommand(templateCreateCmd)
-	templateCmd.AddCommand(templateValidateCmd)
-	templateCmd.AddCommand(templateBundleCmd)
-	templateCmd.AddCommand(templatePublishCmd)
-	templateCmd.AddCommand(templateInstallCmd)
-	templateCmd.AddCommand(templateListCmd)
-	templateCmd.AddCommand(templateRegistryCmd)
-	
-	templateRegistryCmd.AddCommand(templateRegistryAddCmd)
-	templateRegistryCmd.AddCommand(templateRegistryListCmd)
+	// Unified bundle command replaces the old template system
+	// bundleCmd is standalone and doesn't need subcommands
 	
 	
 	agentCmd.AddCommand(agentListCmd)

@@ -186,5 +186,13 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(deleteEnvironmentTool, s.handleDeleteEnvironment)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 22)
+	// Unified Bundle Management Tool (API-compatible)
+	createBundleFromEnvTool := mcp.NewTool("create_bundle_from_environment",
+		mcp.WithDescription("Create an API-compatible bundle (.tar.gz) from a Station environment. The bundle can be installed via the Station Bundle API or UI."),
+		mcp.WithString("environmentName", mcp.Required(), mcp.Description("Name of the environment to bundle (e.g., 'default', 'production')")),
+		mcp.WithString("outputPath", mcp.Description("Output path for the bundle file (optional, defaults to <environment>.tar.gz)")),
+	)
+	s.mcpServer.AddTool(createBundleFromEnvTool, s.handleCreateBundleFromEnvironment)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 23)
 }

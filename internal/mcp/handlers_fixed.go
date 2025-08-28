@@ -18,6 +18,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+// BundleEnvironmentRequest represents the input for creating a bundle from an environment
+type BundleEnvironmentRequest struct {
+	EnvironmentName string `json:"environmentName"`
+	OutputPath      string `json:"outputPath,omitempty"`
+}
+
 // Simplified handlers that work with the current repository interfaces
 
 // extractInt64FromTokenUsage safely extracts int64 from various numeric types in token usage
@@ -1539,6 +1545,33 @@ func (s *Server) handleDeleteEnvironment(ctx context.Context, request mcp.CallTo
 		response["message"] = fmt.Sprintf("Environment '%s' deleted from database, but file cleanup failed", name)
 	} else {
 		response["message"] = fmt.Sprintf("Failed to delete environment '%s'", name)
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+// Unified Bundle Management Handlers
+
+// handleCreateBundleFromEnvironment creates an API-compatible bundle from an environment
+func (s *Server) handleCreateBundleFromEnvironment(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract required parameters
+	environmentName, err := req.RequireString("environmentName")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'environmentName' parameter: %v", err)), nil
+	}
+
+	// Extract optional parameters
+	outputPath := req.GetString("outputPath", "")
+	
+	bundleReq := BundleEnvironmentRequest{
+		EnvironmentName: environmentName,
+		OutputPath:      outputPath,
+	}
+
+	response, err := s.bundleHandler.CreateBundle(ctx, bundleReq)
+	if err != nil {
+		return mcp.NewToolResultText(fmt.Sprintf("Error creating bundle: %v", err)), nil
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
