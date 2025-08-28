@@ -130,8 +130,8 @@ docker run \
   station-base:latest \
   bash -c "
     stn init --yes --provider openai --model gpt-4o
-    stn agent import default
-    stn agent run terraform-security-agent 'Analyze infrastructure for vulnerabilities'
+    stn sync
+    stn agent run 'Security Scanner' 'Analyze infrastructure for vulnerabilities'
   "
 ```
 
@@ -154,10 +154,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Station security environment
+      - name: Pull Station Docker Image
         run: |
-          curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-          stn build env security --provider openai --model gpt-4o --ship
+          docker pull epuerta18/station-default:latest
 
       - name: Run Security Analysis
         run: |
@@ -168,11 +167,10 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock \
             -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
             -e ENCRYPTION_KEY=${{ secrets.STATION_ENCRYPTION_KEY }} \
-            station-security:latest \
+            epuerta18/station-default:latest \
             bash -c "
-              stn init --yes --provider openai --model gpt-4o
-              stn agent import default
-              stn agent run security-scanner 'Comprehensive security analysis of /workspace'
+              stn agent run 'Security Scanner' 'Comprehensive security analysis of /workspace'
+              stn agent run 'Terraform Auditor' 'Analyze Terraform files for security and best practices'
             "
 
       - name: Collect Reports
@@ -208,7 +206,7 @@ services:
     command: >
       bash -c "
         stn init --yes --provider openai --model gpt-4o &&
-        stn agent import default &&
+        stn sync &&
         stn agent run terraform-security-agent 'Analyze /workspace for security issues'
       "
 
@@ -237,7 +235,7 @@ stn --version
 stn init --provider openai --model gpt-4o
 
 # Import agents from configuration files
-stn agent import production
+stn sync
 
 # Verify agents are loaded
 stn agent list
@@ -284,7 +282,7 @@ pipeline {
                 script {
                     sh '''
                         cp -r ci/agents ~/.config/station/environments/default/agents/
-                        stn agent import default
+                        stn sync
                         stn agent list
                     '''
                 }
@@ -628,7 +626,7 @@ telemetry_enabled: false
 **Agent not found error:**
 ```bash
 # Ensure agents are properly imported
-stn agent import default
+stn sync
 stn agent list
 ```
 
