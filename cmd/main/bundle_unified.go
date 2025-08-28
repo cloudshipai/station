@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 
@@ -139,62 +136,23 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 	fmt.Printf("📦 Installing bundle from: %s\n", bundleSource)
 	fmt.Printf("🎯 Target environment: %s\n", environmentName)
 
-	// Determine source type (URL or file path)
-	var sourceType string
-	if bundleSource[:4] == "http" {
-		sourceType = "url"
-	} else {
-		sourceType = "file"
-		// Check if local file exists
-		if _, err := os.Stat(bundleSource); os.IsNotExist(err) {
-			return fmt.Errorf("bundle file not found: %s", bundleSource)
+	// Use BundleService to install bundle directly (no server dependency)
+	bundleService := services.NewBundleService()
+	result, err := bundleService.InstallBundle(bundleSource, environmentName)
+	if err != nil || !result.Success {
+		errorMsg := result.Error
+		if errorMsg == "" && err != nil {
+			errorMsg = err.Error()
 		}
-	}
-
-	// Create request payload
-	payload := map[string]interface{}{
-		"bundle_location":  bundleSource,
-		"environment_name": environmentName,
-		"source":          sourceType,
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to create request payload: %w", err)
-	}
-
-	// Make API request to Station server
-	apiURL := "http://localhost:8585/api/v1/bundles/install"
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return fmt.Errorf("failed to connect to Station API at %s: %w\nMake sure Station server is running with 'stn serve'", apiURL, err)
-	}
-	defer resp.Body.Close()
-
-	// Parse response
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to parse API response: %w", err)
-	}
-
-	// Check if installation was successful
-	if success, ok := result["success"].(bool); !ok || !success {
-		errorMsg, _ := result["error"].(string)
-		message, _ := result["message"].(string)
-		if errorMsg != "" {
-			return fmt.Errorf("bundle installation failed: %s", errorMsg)
-		}
-		if message != "" {
-			return fmt.Errorf("bundle installation failed: %s", message)
-		}
-		return fmt.Errorf("bundle installation failed: unknown error")
+		return fmt.Errorf("bundle installation failed: %s", errorMsg)
 	}
 
 	fmt.Printf("✅ Bundle installed successfully!\n")
-	fmt.Printf("🎯 Environment '%s' is ready to use\n", environmentName)
+	fmt.Printf("🎯 Environment '%s' is ready to use\n", result.EnvironmentName)
+	fmt.Printf("📊 Installed: %d agents, %d MCP configs\n", result.InstalledAgents, result.InstalledMCPs)
 	fmt.Printf("\n🔧 Next steps:\n")
-	fmt.Printf("   stn sync                     # Sync MCP tools\n")
-	fmt.Printf("   stn agent list --env %s     # List available agents\n", environmentName)
+	fmt.Printf("   stn sync %s                  # Sync MCP tools\n", result.EnvironmentName)
+	fmt.Printf("   stn agent list --env %s     # List available agents\n", result.EnvironmentName)
 	fmt.Printf("   open http://localhost:8585   # View in Station UI\n")
 
 	return nil
