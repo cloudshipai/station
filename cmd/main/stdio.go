@@ -32,10 +32,17 @@ including agent management, file operations, and system resources.`,
 }
 
 func init() {
+	stdioCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
 	rootCmd.AddCommand(stdioCmd)
 }
 
 func runStdioServer(cmd *cobra.Command, args []string) error {
+	// Set GenKit environment based on --dev flag
+	devMode, _ := cmd.Flags().GetBool("dev")
+	if !devMode && os.Getenv("GENKIT_ENV") == "" {
+		os.Setenv("GENKIT_ENV", "prod") // Disable reflection server by default
+	}
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {

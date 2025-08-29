@@ -141,6 +141,7 @@ func init() {
 	serveCmd.Flags().String("database", "station.db", "Database file path")
 	serveCmd.Flags().Bool("debug", false, "Enable debug logging")
 	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
+	serveCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
 	
 	// Load command flags
 	loadCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
