@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 
 	"station/internal/config"
@@ -43,23 +42,18 @@ func findAvailablePort(startPort int) (int, error) {
 	return 0, fmt.Errorf("no available port found in range %d-%d", startPort, startPort+99)
 }
 
-// ensureGenkitReflectionPort ensures GENKIT_REFLECTION_PORT is set to an available port
+// ensureGenkitReflectionPort disables the GenKit reflection server entirely
 // This prevents port conflicts when running multiple Station instances
 func (gp *GenKitProvider) ensureGenkitReflectionPort() error {
-	// Check if GENKIT_REFLECTION_PORT is already set
-	if os.Getenv("GENKIT_REFLECTION_PORT") != "" {
-		return nil // Already configured, don't override
+	// Check if GENKIT_ENV is already set
+	if os.Getenv("GENKIT_ENV") != "" {
+		return nil // Already configured, don't override user setting
 	}
 
-	// Find an available port starting from 3100
-	port, err := findAvailablePort(3100)
-	if err != nil {
-		return fmt.Errorf("failed to find available port for GenKit reflection server: %w", err)
-	}
-
-	// Set the environment variable
-	os.Setenv("GENKIT_REFLECTION_PORT", strconv.Itoa(port))
-	logging.Debug("Set GenKit reflection server port to %d", port)
+	// Disable the GenKit reflection server entirely by setting GENKIT_ENV to prod
+	// The reflection server only starts when GENKIT_ENV=dev
+	os.Setenv("GENKIT_ENV", "prod")
+	logging.Debug("GenKit environment set to prod to disable reflection server")
 	
 	return nil
 }
