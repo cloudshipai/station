@@ -45,15 +45,19 @@ func findAvailablePort(startPort int) (int, error) {
 // ensureGenkitReflectionPort disables the GenKit reflection server entirely
 // This prevents port conflicts when running multiple Station instances
 func (gp *GenKitProvider) ensureGenkitReflectionPort() error {
+	currentEnv := os.Getenv("GENKIT_ENV")
+	logging.Debug("GenKit environment check - current GENKIT_ENV: '%s'", currentEnv)
+	
 	// Check if GENKIT_ENV is already set
-	if os.Getenv("GENKIT_ENV") != "" {
+	if currentEnv != "" {
+		logging.Debug("GENKIT_ENV already set to '%s', not overriding", currentEnv)
 		return nil // Already configured, don't override user setting
 	}
 
 	// Disable the GenKit reflection server entirely by setting GENKIT_ENV to prod
 	// The reflection server only starts when GENKIT_ENV=dev
 	os.Setenv("GENKIT_ENV", "prod")
-	logging.Debug("GenKit environment set to prod to disable reflection server")
+	logging.Debug("GenKit environment set to prod to disable reflection server (was empty)")
 	
 	return nil
 }
@@ -118,7 +122,7 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 	// Only enable if explicitly requested via environment variable
 	if os.Getenv("GENKIT_ENABLE_TELEMETRY") == "" && !cfg.TelemetryEnabled {
 		os.Setenv("OTEL_SDK_DISABLED", "true")
-		os.Setenv("GENKIT_ENV", "dev")
+		// Do NOT override GENKIT_ENV here - let ensureGenkitReflectionPort handle it
 		logging.Debug("Telemetry disabled by default (set GENKIT_ENABLE_TELEMETRY=true to enable)")
 	}
 	
@@ -141,6 +145,7 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		// Store reference to plugin for logging callbacks
 		gp.openaiPlugin = stationOpenAI
 		
+		logging.Debug("About to call genkit.Init for OpenAI with GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
 		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(stationOpenAI))
 		
 	case "googlegenai", "gemini":
