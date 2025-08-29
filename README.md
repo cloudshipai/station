@@ -54,9 +54,19 @@ Station is purpose-built for **deployable sub-agents** - to bring intelligence i
 
 ## Quickstart
 
+> **⚡ Quick Start**: Requires `OPENAI_API_KEY` in your environment
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+stn bootstrap --openai
 ```
+
+This single command sets up Station with:
+- **OpenAI integration** (gpt-5)
+- **Hello World agent** (default env - basic tasks)
+- **Playwright agent** (default env - web automation, 21 browser tools)
+- **DevOps Security Bundle** (security env - comprehensive security tools, 12 tools)
+- **Ship CLI filesystem tools**
 
 ## Platform Overview
 
@@ -70,12 +80,14 @@ Pre-built agents for common DevOps workflows, like this Terraform quality analys
 
 ![Terraform Quality Agent](./assets/terraform-quality-agent.png)
 
-## Getting Started
+## Manual Setup (Advanced)
+
+> **Note**: Requires `OPENAI_API_KEY` in your environment
 
 ### 1. **Install and Initialize**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-stn init --ship
+stn init --ship --provider openai --model gpt-5
 ```
 
 ### 2. **Install Security Bundle**
