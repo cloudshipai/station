@@ -45,6 +45,7 @@ func init() {
 	// Add subcommands
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(bootstrapCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(keyCmd)
 	rootCmd.AddCommand(loadCmd)
@@ -178,6 +179,9 @@ func init() {
 	syncCmd.Flags().Bool("validate", false, "Validate configurations only without syncing")
 	syncCmd.Flags().BoolP("interactive", "i", true, "Prompt for missing variables (default: true)")
 
+	// Bootstrap command flags
+	bootstrapCmd.Flags().Bool("openai", false, "Bootstrap with OpenAI provider (runs stn init --ship --provider openai --model gpt-5)")
+	
 	// Develop command flags
 	developCmd.Flags().String("env", "default", "Environment to load agents and MCP configs from")
 	developCmd.Flags().Int("port", 4000, "Port to run the Genkit development server on")

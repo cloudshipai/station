@@ -105,6 +105,22 @@ Examples:
 		Hidden: true, // Hidden easter egg command
 	}
 
+	bootstrapCmd = &cobra.Command{
+		Use:   "bootstrap",
+		Short: "Bootstrap Station with pre-configured agents and tools",
+		Long: `Bootstrap Station with a complete setup including agents and MCP tools.
+
+This command runs a full quickstart setup:
+• Runs stn init --ship --provider openai --model gpt-5
+• Creates hello world agent (no tools)
+• Creates playwright agent with @playwright/mcp integration
+• Installs devops-security-bundle from registry
+• Syncs all environments
+
+Perfect for getting started quickly with a fully configured Station instance.`,
+		RunE: runBootstrap,
+	}
+
 	uiCmd = &cobra.Command{
 		Use:   "ui",
 		Short: "Launch Station TUI interface",
@@ -639,16 +655,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 	
-	// Run ship sync after everything is set up (only if ship setup succeeded)
+	// Ship setup completed (no sync needed since no MCP configs created)
 	if shipSetupSucceeded {
-		logging.Info("🚢 Ship integration: Filesystem MCP tools configured")
-		logging.Info("🔄 Syncing MCP tools...")
-		if err := runSyncForEnvironment("default"); err != nil {
-			logging.Info("⚠️  Warning: Failed to sync MCP tools: %v", err)
-			logging.Info("   Run 'stn sync default' manually to complete setup")
-		} else {
-			logging.Info("✅ Ship MCP tools synced successfully")
-		}
+		logging.Info("🚢 Ship CLI installed and ready for MCP integration")
+		logging.Info("💡 Use 'stn bootstrap --openai' for quick start with agents and tools")
 	}
 	
 	if replicationSetup {
@@ -860,7 +870,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	return runMCPSync(cmd, args)
 }
 
-// setupShipIntegration installs latest ship CLI and sets up MCP configuration
+// setupShipIntegration installs latest ship CLI only (no MCP configuration)
 func setupShipIntegration(workspaceDir string) error {
 	// Always install latest ship CLI
 	logging.Info("   📦 Installing latest ship CLI...")
@@ -868,37 +878,7 @@ func setupShipIntegration(workspaceDir string) error {
 		return fmt.Errorf("failed to install ship CLI: %w", err)
 	}
 	
-	// Create filesystem MCP configuration in default environment
-	defaultEnvDir := filepath.Join(workspaceDir, "environments", "default")
-	mcpConfigPath := filepath.Join(defaultEnvDir, "mcp.json")
-	
-	shipMCPConfig := `{
-  "mcpServers": {
-    "filesystem": {
-      "command": "ship",
-      "args": ["mcp", "filesystem"]
-    }
-  }
-}`
-	
-	if err := os.WriteFile(mcpConfigPath, []byte(shipMCPConfig), 0644); err != nil {
-		return fmt.Errorf("failed to create ship MCP configuration: %w", err)
-	}
-	
-	// Create variables.yml file for template variables
-	variablesPath := filepath.Join(defaultEnvDir, "variables.yml")
-	defaultVariables := `# Environment variables for ship MCP integration  
-# Add any template variables needed for your ship MCP server here
-# Example:
-# ROOT_PATH: "/home/user/projects"
-# ALLOWED_DIRECTORIES: "/tmp,/home/user/workspace"
-`
-	
-	if err := os.WriteFile(variablesPath, []byte(defaultVariables), 0644); err != nil {
-		return fmt.Errorf("failed to create variables.yml: %w", err)
-	}
-	
-	logging.Info("   ✅ Ship MCP integration configured")
+	logging.Info("   ✅ Ship CLI installed")
 	return nil
 }
 
@@ -935,4 +915,200 @@ func runSyncForEnvironment(environment string) error {
 	args := []string{environment}
 	
 	return runMCPSync(cmd, args)
+}
+
+// runBootstrap implements the bootstrap command with complete Station setup
+func runBootstrap(cmd *cobra.Command, args []string) error {
+	openaiSetup, _ := cmd.Flags().GetBool("openai")
+	if !openaiSetup {
+		return fmt.Errorf("bootstrap requires a provider flag. Use --openai for OpenAI setup")
+	}
+	
+	workspaceDir := getWorkspacePath()
+	
+	fmt.Printf("🚀 Starting Station bootstrap with OpenAI integration...\n\n")
+	
+	// Step 1: Run stn init --ship --provider openai --model gpt-5
+	fmt.Printf("📦 Step 1/6: Initializing Station with OpenAI and Ship CLI...\n")
+	initCmd := exec.Command("stn", "init", "--ship", "--provider", "openai", "--model", "gpt-5", "--yes")
+	initCmd.Stdout = os.Stdout
+	initCmd.Stderr = os.Stderr
+	if err := initCmd.Run(); err != nil {
+		return fmt.Errorf("failed to run stn init: %w", err)
+	}
+	fmt.Printf("✅ Station initialized with OpenAI and Ship CLI\n\n")
+	
+	// Step 2: Create hello world agent (no tools)
+	fmt.Printf("🤖 Step 2/6: Creating Hello World agent...\n")
+	if err := createHelloWorldAgent(workspaceDir); err != nil {
+		return fmt.Errorf("failed to create hello world agent: %w", err)
+	}
+	fmt.Printf("✅ Hello World agent created\n\n")
+	
+	// Step 3: Create playwright MCP config
+	fmt.Printf("🎭 Step 3/6: Setting up Playwright MCP integration...\n")
+	if err := createPlaywrightMCP(workspaceDir); err != nil {
+		return fmt.Errorf("failed to create playwright MCP config: %w", err)
+	}
+	fmt.Printf("✅ Playwright MCP integration configured\n\n")
+	
+	// Step 4: Create playwright agent
+	fmt.Printf("🤖 Step 4/6: Creating Playwright agent...\n")
+	if err := createPlaywrightAgent(workspaceDir); err != nil {
+		return fmt.Errorf("failed to create playwright agent: %w", err)
+	}
+	fmt.Printf("✅ Playwright agent created\n\n")
+	
+	// Step 5: Install security bundle
+	fmt.Printf("🔒 Step 5/6: Installing DevOps Security Bundle...\n")
+	bundleCmd := exec.Command("stn", "bundle", "install", "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz", "security")
+	bundleCmd.Stdout = os.Stdout
+	bundleCmd.Stderr = os.Stderr
+	if err := bundleCmd.Run(); err != nil {
+		return fmt.Errorf("failed to install security bundle: %w", err)
+	}
+	fmt.Printf("✅ DevOps Security Bundle installed\n\n")
+	
+	// Step 6: Sync all environments
+	fmt.Printf("🔄 Step 6/6: Syncing all environments...\n")
+	
+	// Sync default environment
+	syncDefaultCmd := exec.Command("stn", "sync", "default")
+	syncDefaultCmd.Stdout = os.Stdout
+	syncDefaultCmd.Stderr = os.Stderr
+	if err := syncDefaultCmd.Run(); err != nil {
+		return fmt.Errorf("failed to sync default environment: %w", err)
+	}
+	
+	// Sync security environment  
+	syncSecurityCmd := exec.Command("stn", "sync", "security")
+	syncSecurityCmd.Stdout = os.Stdout
+	syncSecurityCmd.Stderr = os.Stderr
+	if err := syncSecurityCmd.Run(); err != nil {
+		return fmt.Errorf("failed to sync security environment: %w", err)
+	}
+	
+	fmt.Printf("✅ All environments synced\n\n")
+	
+	fmt.Printf("🎉 Bootstrap complete! Your Station is ready with:\n")
+	fmt.Printf("   • OpenAI integration (gpt-5)\n")
+	fmt.Printf("   • Ship CLI filesystem tools\n")
+	fmt.Printf("   • Hello World agent (default env - basic tasks)\n")
+	fmt.Printf("   • Playwright agent (default env - web automation)\n") 
+	fmt.Printf("   • DevOps Security Bundle (security env - comprehensive security tools)\n\n")
+	fmt.Printf("🚀 Next steps:\n")
+	fmt.Printf("   • Run 'stn serve' to start Station\n")
+	fmt.Printf("   • Connect via SSH: ssh admin@localhost -p 2222\n")
+	fmt.Printf("   • Or run 'stn stdio' for MCP integration\n")
+	
+	return nil
+}
+
+// createHelloWorldAgent creates a simple hello world agent with no tools
+func createHelloWorldAgent(workspaceDir string) error {
+	agentDir := filepath.Join(workspaceDir, "environments", "default", "agents")
+	if err := os.MkdirAll(agentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create agents directory: %w", err)
+	}
+	
+	agentContent := `---
+metadata:
+  name: "Hello World Agent"
+  description: "A friendly agent for basic tasks and greetings"
+  tags: ["basic", "hello-world", "simple"]
+model: gpt-5
+max_steps: 3
+tools: []
+---
+
+{{role "system"}}
+You are a helpful and friendly Hello World agent. You specialize in:
+• Greeting users warmly
+• Providing simple explanations
+• Creating basic code examples
+• Helping with introductory tasks
+
+Keep your responses concise and helpful. Always maintain a positive, encouraging tone.
+
+{{role "user"}}
+{{userInput}}
+`
+	
+	agentPath := filepath.Join(agentDir, "Hello World Agent.prompt")
+	return os.WriteFile(agentPath, []byte(agentContent), 0644)
+}
+
+// createPlaywrightMCP creates the playwright MCP configuration
+func createPlaywrightMCP(workspaceDir string) error {
+	defaultEnvDir := filepath.Join(workspaceDir, "environments", "default")
+	mcpConfigPath := filepath.Join(defaultEnvDir, "playwright.json")
+	
+	playwrightConfig := `{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    }
+  }
+}`
+	
+	return os.WriteFile(mcpConfigPath, []byte(playwrightConfig), 0644)
+}
+
+// createPlaywrightAgent creates an agent that uses playwright tools
+func createPlaywrightAgent(workspaceDir string) error {
+	agentDir := filepath.Join(workspaceDir, "environments", "default", "agents")
+	if err := os.MkdirAll(agentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create agents directory: %w", err)
+	}
+	
+	agentContent := `---
+metadata:
+  name: "Playwright Agent"
+  description: "Web automation agent using Playwright for browser interactions, testing, and scraping"
+  tags: ["web", "automation", "testing", "playwright", "browser"]
+model: gpt-5
+max_steps: 8
+tools:
+  - "__browser_take_screenshot"
+  - "__browser_navigate" 
+  - "__browser_click"
+  - "__browser_fill_form"
+  - "__browser_type"
+  - "__browser_wait_for"
+  - "__browser_evaluate"
+  - "__browser_snapshot"
+  - "__browser_hover"
+  - "__browser_drag"
+  - "__browser_tabs"
+  - "__browser_console_messages"
+---
+
+{{role "system"}}
+You are an expert web automation agent that uses Playwright to interact with web pages. You excel at:
+
+• **Web Navigation**: Opening pages, following links, handling navigation
+• **Element Interaction**: Clicking buttons, filling forms, typing text
+• **Data Extraction**: Scraping content, taking screenshots, getting page text
+• **Web Testing**: Verifying page elements, testing user workflows
+• **Browser Automation**: Handling dynamic content, waiting for elements
+
+**Key Capabilities:**
+- Take screenshots of web pages for visual verification
+- Navigate to any URL and interact with page elements
+- Fill out forms and submit data
+- Extract text content and data from pages
+- Wait for elements to load before interacting
+- Execute JavaScript in the browser context
+
+Always explain what you're doing with the web page and provide clear feedback about the results of your actions.
+
+{{role "user"}}
+{{userInput}}
+`
+	
+	agentPath := filepath.Join(agentDir, "Playwright Agent.prompt")
+	return os.WriteFile(agentPath, []byte(agentContent), 0644)
 }
