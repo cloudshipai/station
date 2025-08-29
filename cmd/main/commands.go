@@ -368,6 +368,12 @@ and makes them available in the Genkit developer UI for interactive testing.`,
 )
 
 func runServe(cmd *cobra.Command, args []string) error {
+	// Set GenKit environment based on --dev flag
+	devMode, _ := cmd.Flags().GetBool("dev")
+	if !devMode && os.Getenv("GENKIT_ENV") == "" {
+		os.Setenv("GENKIT_ENV", "prod") // Disable reflection server by default
+	}
+
 	// Check if configuration exists
 	configDir := getWorkspacePath()
 	configFile := filepath.Join(configDir, "config.yaml")
