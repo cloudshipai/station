@@ -18,7 +18,7 @@ func TestStatusService_GetEnvironmentStatuses(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create test agent
-	_, err = repos.Agents.Create("Test Agent", "Test Description", "Test prompt", 5, env.ID, 1, nil, true)
+	_, err = repos.Agents.Create("Test Agent", "Test Description", "Test prompt", 5, env.ID, 1, nil, nil, false)
 	require.NoError(t, err)
 
 	// Get environment statuses
@@ -46,10 +46,10 @@ func TestStatusService_GetEnvironmentStatuses_AllEnvironments(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create agents in different environments
-	_, err = repos.Agents.Create("Dev Agent", "Dev Agent", "Dev prompt", 3, env1.ID, 1, nil, true)
+	_, err = repos.Agents.Create("Dev Agent", "Dev Agent", "Dev prompt", 3, env1.ID, 1, nil, nil, false)
 	require.NoError(t, err)
 
-	_, err = repos.Agents.Create("Staging Agent", "Staging Agent", "Staging prompt", 5, env2.ID, 1, nil, true)
+	_, err = repos.Agents.Create("Staging Agent", "Staging Agent", "Staging prompt", 5, env2.ID, 1, nil, nil, false)
 	require.NoError(t, err)
 
 	// Get all environment statuses
