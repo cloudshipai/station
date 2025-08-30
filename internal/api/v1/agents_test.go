@@ -129,6 +129,20 @@ func (m *MockAgentService) GetExecutionEngine() interface{} {
 	return nil
 }
 
+func (m *MockAgentService) UpdateAgentPrompt(ctx context.Context, agentID int64, prompt string) error {
+	if m.shouldError {
+		return assert.AnError
+	}
+	
+	agent, exists := m.agents[agentID]
+	if !exists {
+		return assert.AnError
+	}
+	
+	agent.Prompt = prompt
+	return nil
+}
+
 // MockAgentExportService for testing - just set to nil since it's optional
 // The real handler will check for nil and skip export
 
