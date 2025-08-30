@@ -112,6 +112,22 @@ func (m *MockAgentService) DeleteAgent(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (m *MockAgentService) UpdateAgentPrompt(ctx context.Context, agentID int64, prompt string) error {
+	if agent, exists := m.agents[agentID]; exists {
+		agent.Prompt = prompt
+		return nil
+	}
+	return fmt.Errorf("agent %d not found", agentID)
+}
+
+func (m *MockAgentService) InitializeMCP(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockAgentService) GetExecutionEngine() interface{} {
+	return nil
+}
+
 // TestExecutionQueueRemoval validates that our simplified direct execution architecture works
 // across all entrypoints (API, CLI, MCP, Scheduler) without the ExecutionQueueService complexity.
 //
