@@ -105,6 +105,18 @@ func (m *MockAgentServiceForScheduler) DeleteAgent(ctx context.Context, agentID 
 	return nil
 }
 
+func (m *MockAgentServiceForScheduler) UpdateAgentPrompt(ctx context.Context, agentID int64, prompt string) error {
+	return nil
+}
+
+func (m *MockAgentServiceForScheduler) InitializeMCP(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockAgentServiceForScheduler) GetExecutionEngine() interface{} {
+	return nil
+}
+
 // TestSchedulerArchitecture validates the overall scheduler architecture changes
 func TestSchedulerArchitecture(t *testing.T) {
 	t.Run("NoExecutionQueueDependency", func(t *testing.T) {
