@@ -1,4 +1,4 @@
-# Binaries for programs and plugins
+# Binaries for programs and plugins - NEVER commit binaries to git
 *.exe
 *.exe~
 *.dll
@@ -7,6 +7,19 @@
 station
 station-cli
 stn
+stn-ui
+stn-*
+station-*
+
+# All binaries and archives
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+*.pkg
+*.dmg
+*.msi
+*.bin
 .genkit/
 .crush/
 # Test binary, built with `go test -c`
