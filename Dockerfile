@@ -2,10 +2,13 @@
 # Multi-stage build for minimal production image
 
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# Install build dependencies and Ship CLI
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev curl bash && \
+    curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash || true && \
+    export PATH="/root/.local/bin:$PATH" && \
+    echo 'export PATH="/root/.local/bin:$PATH"' >> ~/.bashrc
 
 # Set working directory
 WORKDIR /app
@@ -26,11 +29,20 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates sqlite tzdata
+RUN apk --no-cache add ca-certificates sqlite tzdata curl bash
+
+# Install Ship CLI as root
+RUN curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash || true
 
 # Create non-root user
 RUN addgroup -g 1001 -S station && \
     adduser -u 1001 -S station -G station
+
+# Copy Ship CLI to station user's local bin and set permissions
+RUN mkdir -p /home/station/.local/bin && \
+    cp /root/.local/bin/ship /home/station/.local/bin/ship 2>/dev/null || true && \
+    chown -R station:station /home/station/.local && \
+    echo 'export PATH="/home/station/.local/bin:$PATH"' >> /home/station/.bashrc
 
 # Set working directory
 WORKDIR /home/station
@@ -49,6 +61,7 @@ USER station
 ENV STATION_CONFIG_DIR=/home/station/.config/station
 ENV STATION_DATA_DIR=/home/station/data
 ENV STATION_DATABASE_URL=/home/station/data/station.db
+ENV PATH="/home/station/.local/bin:$PATH"
 
 # Expose ports
 EXPOSE 8080 2222 3000
