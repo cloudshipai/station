@@ -631,6 +631,7 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 
 // ExecuteAgentWithDotpromptAndLogging executes an agent with progressive logging callbacks
 func (e *GenKitExecutor) ExecuteAgentWithDotpromptAndLogging(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{})) (*ExecutionResponse, error) {
+	log.Printf("🔥🔥🔥 USING ExecuteAgentWithDotpromptAndLogging for agent %s", agent.Name)
 	// Store the callback for use during execution
 	e.logCallback = logCallback
 	
@@ -809,6 +810,7 @@ func (e *GenKitExecutor) extractToolNames(agentTools []*models.AgentToolWithDeta
 
 // ExecuteAgentWithStationGenerate executes an agent using the new Station GenKit integration
 func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{})) (*ExecutionResponse, error) {
+	log.Printf("🔥🔥🔥 USING ExecuteAgentWithStationGenerate for agent %s", agent.Name)
 	startTime := time.Now()
 	ctx := context.Background()
 
@@ -990,19 +992,39 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 		})
 	}
 
+	// Extract token usage from response if available
+	tokenUsage := make(map[string]interface{})
+	if response.Usage != nil {
+		tokenUsage["input_tokens"] = response.Usage.InputTokens
+		tokenUsage["output_tokens"] = response.Usage.OutputTokens
+		tokenUsage["total_tokens"] = response.Usage.InputTokens + response.Usage.OutputTokens
+	}
+
+	// Create basic execution step for model response (even if no tools used)
+	executionSteps := []interface{}{
+		map[string]interface{}{
+			"step":      1,
+			"type":      "model_response", 
+			"content":   response.Text(),
+			"timestamp": time.Now().Format(time.RFC3339),
+			"duration":  duration.Seconds(),
+		},
+	}
+	
+	// Convert to JSONArray
+	executionStepsArray := models.JSONArray(executionSteps)
+
 	// Convert GenKit ModelResponse to ExecutionResponse
 	return &ExecutionResponse{
-		Success:   true,
-		Response:  response.Text(),
-		Duration:  duration,
-		ModelName: modelName,
-		// Note: Tool calls, execution steps, and token usage will be populated
-		// by the Station tracking system through the logCallback
-		ToolCalls:      &models.JSONArray{}, // Placeholder
-		ExecutionSteps: &models.JSONArray{}, // Placeholder  
-		TokenUsage:     make(map[string]interface{}),             // Placeholder
-		StepsUsed:      1,  // Will be updated by tracking system
-		ToolsUsed:      0,  // Will be updated by tracking system
+		Success:        true,
+		Response:       response.Text(),
+		Duration:       duration,
+		ModelName:      modelName,
+		ToolCalls:      &models.JSONArray{}, // No tool calls in Station GenKit mode
+		ExecutionSteps: &executionStepsArray, // Basic execution step
+		TokenUsage:     tokenUsage,
+		StepsUsed:      1,  // One execution step
+		ToolsUsed:      0,  // No tools used
 	}, nil
 }
 
