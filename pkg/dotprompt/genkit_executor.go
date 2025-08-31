@@ -29,6 +29,10 @@ type ToolCallTracker struct {
 }
 
 // GenKitExecutor handles dotprompt-based agent execution using GenKit Generate
+// This implements ExecutorInterface and could be modularized into separate components:
+// - ProcessorInterface: dotprompt template processing 
+// - ToolManagerInterface: tool call management and limits
+// - Clean separation would improve maintainability of this 1,700+ line file
 type GenKitExecutor struct{
 	logCallback func(map[string]interface{})
 }

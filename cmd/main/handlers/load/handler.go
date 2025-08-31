@@ -58,7 +58,7 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 
 	var configFile string
 
-	// All HTTPS URLs now use the enhanced TurboTax flow with web content parsing
+	// All HTTPS URLs now use the TurboTax flow with web content parsing
 
 	// Check if we have a GitHub URL as argument (legacy flow)
 	if len(args) > 0 && isGitHubURL(args[0]) {
@@ -66,10 +66,10 @@ func (h *LoadHandler) RunLoad(cmd *cobra.Command, args []string) error {
 		return h.runGitHubDiscoveryFlow(args[0], environment, endpoint)
 	}
 
-	// Check if we have any HTTPS URL as argument (enhanced flow with web content parsing)
+	// Check if we have any HTTPS URL as argument (web content parsing flow)
 	if len(args) > 0 && isHTTPSURL(args[0]) {
-		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🌐 HTTPS URL detected, starting enhanced TurboTax wizard..."))
-		return h.runEnhancedTurboTaxFlow(args[0], environment, endpoint)
+		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🌐 HTTPS URL detected, starting TurboTax wizard..."))
+		return h.runWebContentTurboTaxFlow(args[0], environment, endpoint)
 	}
 
 	// Check if we have a direct file argument

@@ -158,8 +158,8 @@ func (g *GitHubDiscoveryService) DiscoverMCPServer(ctx context.Context, githubUR
 		return nil, fmt.Errorf("failed to fetch GitHub content: %w", err)
 	}
 
-	// Create enhanced analysis prompt with repository context
-	prompt := g.buildEnhancedAnalysisPrompt(githubURL, pageContent)
+	// Create comprehensive analysis prompt with repository context
+	prompt := g.buildAnalysisPrompt(githubURL, pageContent)
 
 	// Get model from OpenAI plugin - use GPT-4o for better analysis
 	model := g.openaiPlugin.Model(g.genkit, "gpt-4o")
@@ -327,8 +327,8 @@ You MUST respond with ONLY valid JSON in exactly this structure:
 Find ALL MCP server blocks, not just one. Each distinct server configuration should be a separate block.`, readmeContent)
 }
 
-// buildEnhancedAnalysisPrompt creates an enhanced prompt for analyzing GitHub repositories
-func (g *GitHubDiscoveryService) buildEnhancedAnalysisPrompt(githubURL string, pageContent string) string {
+// buildAnalysisPrompt creates a comprehensive prompt for analyzing GitHub repositories
+func (g *GitHubDiscoveryService) buildAnalysisPrompt(githubURL string, pageContent string) string {
 	return fmt.Sprintf(`You are an expert at analyzing GitHub repositories for MCP (Model Context Protocol) servers and understanding their proper configuration structures.
 
 TASK: Analyze the GitHub repository at %s to extract complete MCP server configuration information.

@@ -1,0 +1,38 @@
+# Station Development Hidden Notes
+
+## GenKit-Native Integration - VERIFIED WORKING ✅
+
+**Status**: Complete and functional as of commit `d1578ad1`
+**Branch**: `agent-loop-refactor`
+
+### What We Built
+- **StationGenerate()**: Thin wrapper around GenKit's native `genkit.Generate()` that eliminates duplicate agent loops
+- **Middleware Architecture**: Clean Station enhancements (context protection, progressive tracking, tool wrapping) via `ai.WithMiddleware()`
+- **Execution Flow**: `AgentExecutionEngine` → `ExecuteAgentWithStationGenerate()` → `StationGenerate()` → `genkit.Generate()`
+
+### Verification Results
+- ✅ Debug logging confirmed execution path: 4 input opts → 5 enhanced opts (middleware added)
+- ✅ Hello World Agent: ~10 second execution, proper "Hello, world!" AI responses
+- ✅ Context Management: Fixed to 200k default instead of hardcoded model detection
+- ✅ Integration: Uses existing execution infrastructure, no code duplication
+
+### Architecture Success
+- **Clean API Surface**: Single `StationGenerate()` entry point for all AI functionality
+- **Maintainable**: GenKit-native approach with clear middleware separation
+- **Extensible**: Easy to add plugins, tools, middleware for different providers
+- **Foundation**: Rock solid GenKit Go foundation established
+
+### Key Files
+- `pkg/genkit/station.go`: Core StationGenerate implementation
+- `pkg/dotprompt/genkit_executor.go`: ExecuteAgentWithStationGenerate method
+- `internal/services/agent_execution_engine.go`: Integration point
+- `pkg/context/manager.go`: Context detection fix (200k default)
+
+### Next Steps
+1. Clean up Enhanced naming conventions (safely, without breaking dependencies)
+2. Modularize dotprompt implementation with clean interface
+3. Test full functionality before merging to main
+
+---
+*Generated: 2025-08-31*
+*Commit: d1578ad1 on agent-loop-refactor*

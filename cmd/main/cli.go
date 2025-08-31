@@ -428,7 +428,7 @@ func createBundleFromEnvironment(bundlePath, envName, name, author, description 
 	}
 	
 	// Create bundle structure
-	if err := createEnhancedBundleStructure(bundlePath, name, author, description, envName, mergedMCPConfig, agents, variables); err != nil {
+	if err := createBundleStructure(bundlePath, name, author, description, envName, mergedMCPConfig, agents, variables); err != nil {
 		return fmt.Errorf("failed to create bundle structure: %w", err)
 	}
 	
@@ -1274,8 +1274,8 @@ func mergeMCPConfigs(configs []*MCPConfigInfo) (map[string]interface{}, error) {
 	return result, nil
 }
 
-// createEnhancedBundleStructure creates the bundle directory structure with scanned content
-func createEnhancedBundleStructure(bundlePath, name, author, description, envName string, mcpConfig map[string]interface{}, agents []*AgentPromptInfo, variables []*TemplateVariable) error {
+// createBundleStructure creates the bundle directory structure with scanned content
+func createBundleStructure(bundlePath, name, author, description, envName string, mcpConfig map[string]interface{}, agents []*AgentPromptInfo, variables []*TemplateVariable) error {
 	// Create main bundle files
 	
 	// 1. Create template.json with merged MCP configuration
