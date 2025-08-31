@@ -869,8 +869,11 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 		},
 		EnableToolWrapping:  true,
 		MaxToolOutputSize:   10000, // Limit tool output size
-		MaxTurns:           25,    // Consistent with existing implementation
+		MaxTurns:           0,     // Disabled - let generateOpts handle MaxTurns to match original pattern
 	}
+	
+	log.Printf("🔥 DEBUG-CONFIG: StationConfig created with MaxContextTokens=%d, ContextThreshold=%.2f", 
+		stationConfig.MaxContextTokens, stationConfig.ContextThreshold)
 
 	// Process dotprompt the same way as original execution
 	var genkitMessages []*ai.Message
@@ -888,11 +891,17 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 			}, nil
 		}
 		
-		// Render with user input
-		data := &dotprompt.DataArgument{
-			Input: map[string]interface{}{
+		// Render with user input using schema helper (same as original)
+		schemaHelper := schema.NewExportHelper()
+		schemaInputData, err := schemaHelper.GetMergedInputData(&agent, task, nil)
+		if err != nil {
+			// Fallback to basic userInput on schema error
+			schemaInputData = map[string]interface{}{
 				"userInput": task,
-			},
+			}
+		}
+		data := &dotprompt.DataArgument{
+			Input: schemaInputData, // Use schema-aware input data
 		}
 		renderedPrompt, err := promptFunc(data, nil)
 		if err != nil {
@@ -930,14 +939,18 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 		}
 	}
 	
+	// Build generate options exactly like the original ExecuteAgentWithDotprompt method
+	var generateOpts []ai.GenerateOption
+	generateOpts = append(generateOpts, ai.WithModelName(modelName))  // Use same as original
+	generateOpts = append(generateOpts, ai.WithMessages(genkitMessages...))
+	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
+	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
+
 	log.Printf("🔥 STATION-GENERATE: About to call StationGenerate with model=%s, messages=%d, tools=%d", 
 		modelName, len(genkitMessages), len(mcpTools))
 		
-	response, err := stationgenkit.StationGenerate(ctx, genkitApp, stationConfig,
-		ai.WithModelName(modelName),
-		ai.WithMessages(genkitMessages...),  // Use messages instead of prompt
-		ai.WithTools(mcpTools...),
-	)
+	// Call StationGenerate with generateOpts exactly like the original called genkit.Generate
+	response, err := stationgenkit.StationGenerate(ctx, genkitApp, stationConfig, generateOpts...)
 	
 	log.Printf("🔥 STATION-GENERATE: StationGenerate returned - response=%v, err=%v", response != nil, err)
 
