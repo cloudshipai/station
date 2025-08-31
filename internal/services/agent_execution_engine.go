@@ -239,7 +239,8 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			defer execSpan.End()
 		}
 		
-		response, err := executor.ExecuteAgentWithDatabaseConfigAndLogging(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
+		// Use the new Station GenKit native integration
+		response, err := executor.ExecuteAgentWithStationGenerate(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
 		log.Printf("🔥 AGENT-ENGINE: Dotprompt executor returned - response: %v, err: %v", response != nil, err)
 		
 		// Clean up MCP connections after execution is complete

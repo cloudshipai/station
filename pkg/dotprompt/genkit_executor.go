@@ -11,6 +11,7 @@ import (
 	"station/internal/logging"
 	"station/pkg/models"
 	"station/pkg/schema"
+	stationgenkit "station/pkg/genkit"
 	
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -800,6 +801,199 @@ func (e *GenKitExecutor) extractToolNames(agentTools []*models.AgentToolWithDeta
 		toolNames = append(toolNames, tool.ToolName)
 	}
 	return toolNames
+}
+
+// ExecuteAgentWithStationGenerate executes an agent using the new Station GenKit integration
+func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{})) (*ExecutionResponse, error) {
+	startTime := time.Now()
+	ctx := context.Background()
+
+	// Store the callback for use during execution
+	e.logCallback = logCallback
+
+	// Add detailed logging at key execution points
+	if logCallback != nil {
+		toolNames := make([]string, 0, len(mcpTools))
+		for _, tool := range mcpTools {
+			if namedTool, ok := tool.(interface{ Name() string }); ok {
+				toolNames = append(toolNames, namedTool.Name())
+			}
+		}
+		if len(toolNames) > 3 {
+			toolNames = append(toolNames[:3], fmt.Sprintf("...%d more", len(toolNames)-3))
+		}
+		
+		logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info", 
+			"message":   fmt.Sprintf("Starting Station GenKit execution for agent '%s' with system prompt (%d chars) and %s", 
+				agent.Name, len(agent.Prompt), func() string {
+					if len(toolNames) == 0 {
+						return "no tools"
+					}
+					return fmt.Sprintf("%d tools: [%s]", len(toolNames), strings.Join(toolNames, ", "))
+				}()),
+			"details": map[string]interface{}{
+				"agent_id":     agent.ID,
+				"agent_name":   agent.Name,
+				"system_prompt_length": len(agent.Prompt),
+				"tool_names":   toolNames,
+				"task_preview": func() string { if len(task) > 60 { return task[:60] + "..." }; return task }(),
+				"execution_mode": "station_genkit_native",
+			},
+		})
+	}
+
+	// Get AI model configuration from Station config
+	cfg, err := config.Load()
+	var modelName string
+	if err != nil || cfg == nil {
+		modelName = "openai/gpt-4o-mini" // fallback default
+	} else {
+		modelName = fmt.Sprintf("%s/%s", cfg.AIProvider, cfg.AIModel)
+		if modelName == "/" || modelName == "openai/" {
+			modelName = "openai/gpt-4o-mini" // fallback default
+		}
+	}
+
+	// Create Station GenKit configuration
+	stationConfig := &stationgenkit.StationConfig{
+		ContextThreshold:          0.85,  // Trigger context protection at 85%
+		MaxContextTokens:          128000, // GPT-4 context window
+		EnableProgressiveTracking: true,
+		LogCallback: func(event map[string]interface{}) {
+			if logCallback != nil {
+				// Forward Station tracking logs to the callback
+				logCallback(event)
+			}
+		},
+		EnableToolWrapping:  true,
+		MaxToolOutputSize:   10000, // Limit tool output size
+		MaxTurns:           25,    // Consistent with existing implementation
+	}
+
+	// Process dotprompt the same way as original execution
+	var genkitMessages []*ai.Message
+	if e.isDotpromptContent(agent.Prompt) {
+		// Use dotprompt library directly for multi-role rendering
+		dp := dotprompt.NewDotprompt(nil)
+		promptFunc, err := dp.Compile(agent.Prompt, nil)
+		if err != nil {
+			return &ExecutionResponse{
+				Success:  false,
+				Response: "",
+				Duration: time.Since(startTime),
+				Error:    fmt.Sprintf("failed to compile dotprompt: %v", err),
+				ModelName: modelName,
+			}, nil
+		}
+		
+		// Render with user input
+		data := &dotprompt.DataArgument{
+			Input: map[string]interface{}{
+				"userInput": task,
+			},
+		}
+		renderedPrompt, err := promptFunc(data, nil)
+		if err != nil {
+			return &ExecutionResponse{
+				Success:  false,
+				Response: "",
+				Duration: time.Since(startTime),
+				Error:    fmt.Sprintf("failed to render dotprompt: %v", err),
+				ModelName: modelName,
+			}, nil
+		}
+		
+		// Convert to GenKit messages
+		genkitMessages, err = e.convertDotpromptToGenkitMessages(renderedPrompt.Messages)
+		if err != nil {
+			return &ExecutionResponse{
+				Success:  false,
+				Response: "",
+				Duration: time.Since(startTime),
+				Error:    fmt.Sprintf("failed to convert messages: %v", err),
+				ModelName: modelName,
+			}, nil
+		}
+	} else {
+		// Simple prompt - create basic messages
+		genkitMessages = []*ai.Message{
+			{
+				Role: ai.RoleSystem,
+				Content: []*ai.Part{ai.NewTextPart(agent.Prompt)},
+			},
+			{
+				Role: ai.RoleUser,
+				Content: []*ai.Part{ai.NewTextPart(task)},
+			},
+		}
+	}
+	
+	log.Printf("🔥 STATION-GENERATE: About to call StationGenerate with model=%s, messages=%d, tools=%d", 
+		modelName, len(genkitMessages), len(mcpTools))
+		
+	response, err := stationgenkit.StationGenerate(ctx, genkitApp, stationConfig,
+		ai.WithModelName(modelName),
+		ai.WithMessages(genkitMessages...),  // Use messages instead of prompt
+		ai.WithTools(mcpTools...),
+	)
+	
+	log.Printf("🔥 STATION-GENERATE: StationGenerate returned - response=%v, err=%v", response != nil, err)
+
+	if err != nil {
+		duration := time.Since(startTime)
+		if logCallback != nil {
+			logCallback(map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+				"level":     "error",
+				"message":   "Station GenKit execution failed",
+				"details": map[string]interface{}{
+					"error": err.Error(),
+					"duration_seconds": duration.Seconds(),
+				},
+			})
+		}
+		return &ExecutionResponse{
+			Success:  false,
+			Response: "",
+			Duration: duration,
+			Error:    fmt.Sprintf("Station GenKit execution failed: %v", err),
+			ModelName: modelName,
+		}, nil
+	}
+
+	duration := time.Since(startTime)
+
+	// Log successful completion with details
+	if logCallback != nil {
+		logCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   "Station GenKit execution completed successfully",
+			"details": map[string]interface{}{
+				"success": true,
+				"duration_seconds": duration.Seconds(),
+				"response_length": len(response.Text()),
+				"model_name": modelName,
+			},
+		})
+	}
+
+	// Convert GenKit ModelResponse to ExecutionResponse
+	return &ExecutionResponse{
+		Success:   true,
+		Response:  response.Text(),
+		Duration:  duration,
+		ModelName: modelName,
+		// Note: Tool calls, execution steps, and token usage will be populated
+		// by the Station tracking system through the logCallback
+		ToolCalls:      &models.JSONArray{}, // Placeholder
+		ExecutionSteps: &models.JSONArray{}, // Placeholder  
+		TokenUsage:     make(map[string]interface{}),             // Placeholder
+		StepsUsed:      1,  // Will be updated by tracking system
+		ToolsUsed:      0,  // Will be updated by tracking system
+	}, nil
 }
 
 // isDotpromptContent checks if the prompt contains dotprompt frontmatter or multi-role syntax
