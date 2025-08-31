@@ -240,8 +240,20 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		}
 		
 		// Use the new Station GenKit native integration
+		log.Printf("🔥🔥🔥 EXECUTION ENGINE: About to call ExecuteAgentWithStationGenerate for agent %s", agent.Name)
 		response, err := executor.ExecuteAgentWithStationGenerate(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
 		log.Printf("🔥 AGENT-ENGINE: Dotprompt executor returned - response: %v, err: %v", response != nil, err)
+		if response != nil {
+			toolCallsLen := 0
+			if response.ToolCalls != nil {
+				toolCallsLen = len(*response.ToolCalls)
+			}
+			executionStepsLen := 0
+			if response.ExecutionSteps != nil {
+				executionStepsLen = len(*response.ExecutionSteps)
+			}
+			log.Printf("🔥🔥🔥 EXECUTION ENGINE: Response has %d tool calls, %d execution steps", toolCallsLen, executionStepsLen)
+		}
 		
 		// Clean up MCP connections after execution is complete
 		aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
