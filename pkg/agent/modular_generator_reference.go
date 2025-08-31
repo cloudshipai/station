@@ -14,9 +14,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// EnhancedGenerator integrates Station's context/turn/tool protection with GenKit
-// This replaces the monolithic generate.go approach with a clean, modular design
-type EnhancedGenerator struct {
+// ModularGenerator is a reference implementation showing how to integrate 
+// Station's context/turn/tool protection with GenKit in a modular design.
+// NOTE: This is currently unused - Station uses StationGenerate() instead.
+// Kept as reference for future modular component development.
+type ModularGenerator struct {
 	client          *openai.Client
 	modelName       string
 	contextManager  *stationctx.Manager
@@ -27,12 +29,12 @@ type EnhancedGenerator struct {
 	span            trace.Span
 }
 
-// NewEnhancedGenerator creates a GenKit-integrated generator with Station's protections
-func NewEnhancedGenerator(
+// NewModularGenerator creates a GenKit-integrated generator with Station's protections
+func NewModularGenerator(
 	client *openai.Client,
 	modelName string,
 	logCallback func(map[string]interface{}),
-) *EnhancedGenerator {
+) *ModularGenerator {
 	// Initialize context manager with model-specific limits
 	contextManager := stationctx.NewManager(modelName, logCallback)
 	
@@ -60,7 +62,7 @@ func NewEnhancedGenerator(
 	// Initialize conversation finalizer
 	finalizer := turns.NewConversationFinalizer(&openAIWrapper{client}, logCallback)
 	
-	return &EnhancedGenerator{
+	return &ModularGenerator{
 		client:         client,
 		modelName:      modelName,
 		contextManager: contextManager,
@@ -72,7 +74,7 @@ func NewEnhancedGenerator(
 }
 
 // Generate implements the GenKit generation pattern with Station's protections
-func (g *EnhancedGenerator) Generate(
+func (g *ModularGenerator) Generate(
 	ctx context.Context,
 	messages []*ai.Message,
 	aiTools []*ai.ToolDefinition,
@@ -144,7 +146,7 @@ func (g *EnhancedGenerator) Generate(
 }
 
 // preGenerationChecks validates the request before processing
-func (g *EnhancedGenerator) preGenerationChecks(messages []*ai.Message) error {
+func (g *ModularGenerator) preGenerationChecks(messages []*ai.Message) error {
 	if len(messages) == 0 {
 		return fmt.Errorf("no messages provided")
 	}
@@ -167,7 +169,7 @@ func (g *EnhancedGenerator) preGenerationChecks(messages []*ai.Message) error {
 }
 
 // updateContextUsage tracks token usage for conversation
-func (g *EnhancedGenerator) updateContextUsage(messages []*ai.Message) error {
+func (g *ModularGenerator) updateContextUsage(messages []*ai.Message) error {
 	// Estimate tokens for current messages
 	estimatedTokens := g.contextManager.EstimateTokensInMessages(messages)
 	
@@ -181,7 +183,7 @@ func (g *EnhancedGenerator) updateContextUsage(messages []*ai.Message) error {
 }
 
 // executeToolsWithProtection handles tool execution with full protection
-func (g *EnhancedGenerator) executeToolsWithProtection(
+func (g *ModularGenerator) executeToolsWithProtection(
 	ctx context.Context,
 	messages []*ai.Message,
 	aiTools []*ai.ToolDefinition,
@@ -230,7 +232,7 @@ func (g *EnhancedGenerator) executeToolsWithProtection(
 }
 
 // generateResponse creates the actual OpenAI API response
-func (g *EnhancedGenerator) generateResponse(
+func (g *ModularGenerator) generateResponse(
 	ctx context.Context,
 	messages []*ai.Message,
 	toolResults []*tools.ExecutionResult,
@@ -256,7 +258,7 @@ func (g *EnhancedGenerator) generateResponse(
 }
 
 // generateFinalResponse creates a forced completion response
-func (g *EnhancedGenerator) generateFinalResponse(
+func (g *ModularGenerator) generateFinalResponse(
 	ctx context.Context,
 	messages []*ai.Message,
 	reason turns.CompletionReason,
@@ -291,7 +293,7 @@ func (g *EnhancedGenerator) generateFinalResponse(
 }
 
 // postGenerationUpdates handles cleanup and metrics after generation
-func (g *EnhancedGenerator) postGenerationUpdates(response *ai.ModelResponse, duration time.Duration) {
+func (g *ModularGenerator) postGenerationUpdates(response *ai.ModelResponse, duration time.Duration) {
 	// Increment turn counter
 	g.turnLimiter.IncrementTurn()
 	
@@ -337,11 +339,11 @@ func (g *EnhancedGenerator) postGenerationUpdates(response *ai.ModelResponse, du
 }
 
 // Helper methods
-func (g *EnhancedGenerator) generateConversationID() string {
+func (g *ModularGenerator) generateConversationID() string {
 	return fmt.Sprintf("conv_%d", time.Now().UnixNano())
 }
 
-func (g *EnhancedGenerator) convertMessagesToOpenAI(messages []*ai.Message, toolResults []*tools.ExecutionResult) []openai.ChatCompletionMessageParamUnion {
+func (g *ModularGenerator) convertMessagesToOpenAI(messages []*ai.Message, toolResults []*tools.ExecutionResult) []openai.ChatCompletionMessageParamUnion {
 	// Simplified conversion - real implementation would handle all message types
 	oaiMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
 	
@@ -369,7 +371,7 @@ func (g *EnhancedGenerator) convertMessagesToOpenAI(messages []*ai.Message, tool
 	return oaiMessages
 }
 
-func (g *EnhancedGenerator) concatenateContent(content []*ai.Part) string {
+func (g *ModularGenerator) concatenateContent(content []*ai.Part) string {
 	if len(content) == 0 {
 		return ""
 	}
@@ -383,7 +385,7 @@ func (g *EnhancedGenerator) concatenateContent(content []*ai.Part) string {
 	return result
 }
 
-func (g *EnhancedGenerator) convertFromOpenAI(response *openai.ChatCompletion) *ai.ModelResponse {
+func (g *ModularGenerator) convertFromOpenAI(response *openai.ChatCompletion) *ai.ModelResponse {
 	if len(response.Choices) == 0 {
 		return &ai.ModelResponse{}
 	}

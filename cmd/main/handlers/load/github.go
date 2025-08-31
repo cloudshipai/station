@@ -252,8 +252,8 @@ func extractMCPBlocksFromContent(content string) []services.MCPServerBlock {
 	return blocks
 }
 
-// runEnhancedTurboTaxFlow handles HTTPS URLs with enhanced web content parsing and TurboTax wizard
-func (h *LoadHandler) runEnhancedTurboTaxFlow(url, environment, endpoint string) error {
+// runWebContentTurboTaxFlow handles HTTPS URLs with web content parsing and TurboTax wizard
+func (h *LoadHandler) runWebContentTurboTaxFlow(url, environment, endpoint string) error {
 	fmt.Printf("🌐 Analyzing web content from: %s\n", url)
 
 	// Fetch web content

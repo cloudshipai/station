@@ -284,8 +284,8 @@ func (g *StationModelGenerator) Generate(ctx context.Context, handleChunk func(c
 	// Convert GenKit tools to ai.ToolDefinition format
 	aiTools := g.convertToAITools()
 
-	// Create enhanced generator with Station's context protection
-	enhancedGen := agent.NewEnhancedGenerator(
+	// Create modular generator with Station's context protection
+	modularGen := agent.NewModularGenerator(
 		g.client,
 		g.modelName,
 		g.logCallback,
@@ -295,7 +295,7 @@ func (g *StationModelGenerator) Generate(ctx context.Context, handleChunk func(c
 	// - Context overflow protection (90% threshold like OpenCode)
 	// - Turn limit enforcement with guaranteed final LLM response
 	// - Context-protected tool execution with intelligent truncation
-	return enhancedGen.Generate(ctx, aiMessages, aiTools, handleChunk)
+	return modularGen.Generate(ctx, aiMessages, aiTools, handleChunk)
 }
 
 // convertToAIMessages converts OpenAI messages to ai.Message format

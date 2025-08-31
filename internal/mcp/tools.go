@@ -28,12 +28,12 @@ func NewToolsServer(repos *repositories.Repositories, mcpServer *server.MCPServe
 		agentService: agentService,
 		localMode:    localMode,
 	}
-	ts.setupEnhancedTools()
+	ts.setupAdvancedTools()
 	return ts
 }
 
-// setupEnhancedTools adds enhanced call_agent tools and prompts
-func (ts *ToolsServer) setupEnhancedTools() {
+// setupAdvancedTools adds advanced call_agent tools and prompts
+func (ts *ToolsServer) setupAdvancedTools() {
 	// Note: create_agent is now consolidated in the main MCP server (mcp.go)
 	
 	// Note: call_agent is now consolidated in the main MCP server (tools_setup.go) with advanced functionality
