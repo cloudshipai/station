@@ -21,6 +21,209 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// ExecutionTracker tracks tool execution and builds user-friendly execution steps
+type ExecutionTracker struct {
+	runID         int64
+	toolCalls     []interface{}
+	executionSteps []interface{}
+	activeTools   map[string]ToolExecution
+	stepCounter   int
+}
+
+// ToolExecution represents an active tool execution
+type ToolExecution struct {
+	ExecutionID string
+	ToolName    string
+	StartTime   time.Time
+	Parameters  map[string]interface{}
+}
+
+// ProcessLogEntry processes log entries from Station GenKit and builds execution steps
+func (et *ExecutionTracker) ProcessLogEntry(logEntry map[string]interface{}, repos *repositories.Repositories) {
+	message, ok := logEntry["message"].(string)
+	if !ok {
+		return
+	}
+	
+	details, hasDetails := logEntry["details"].(map[string]interface{})
+	if !hasDetails {
+		return  
+	}
+	
+	switch message {
+	case "Tool execution starting":
+		et.handleToolStart(details)
+		
+	case "Tool execution completed":
+		et.handleToolComplete(details, repos)
+		
+	case "Enhanced generation completed":
+		et.handleGenerationComplete(details, repos)
+	}
+}
+
+func (et *ExecutionTracker) handleToolStart(details map[string]interface{}) {
+	executionID, ok1 := details["execution_id"].(string)
+	toolName, ok2 := details["tool_name"].(string)
+	
+	if !ok1 || !ok2 {
+		return
+	}
+	
+	// Store active tool execution
+	et.activeTools[executionID] = ToolExecution{
+		ExecutionID: executionID,
+		ToolName:    toolName,
+		StartTime:   time.Now(),
+		Parameters:  make(map[string]interface{}), // Could extract from details if available
+	}
+	
+	// Create execution step for tool call start
+	step := map[string]interface{}{
+		"step":       et.stepCounter,
+		"type":       "tool_call_start",
+		"tool_name":  toolName,
+		"execution_id": executionID,
+		"content":    fmt.Sprintf("Calling %s", toolName),
+		"timestamp":  time.Now().Format(time.RFC3339),
+	}
+	
+	et.executionSteps = append(et.executionSteps, step)
+	et.stepCounter++
+}
+
+func (et *ExecutionTracker) handleToolComplete(details map[string]interface{}, repos *repositories.Repositories) {
+	executionID, ok1 := details["execution_id"].(string)
+	toolName, ok2 := details["tool_name"].(string)
+	success, ok3 := details["success"].(bool)
+	durationMs, ok4 := details["duration_ms"].(float64)
+	outputLength, ok5 := details["output_length"].(float64)
+	
+	if !ok1 || !ok2 || !ok3 {
+		return
+	}
+	
+	// Get the active tool execution
+	activeExec, exists := et.activeTools[executionID]
+	if !exists {
+		return
+	}
+
+	// Extract tool output response if available
+	var outputResponse interface{}
+	if outputData, hasOutput := details["output"]; hasOutput {
+		outputResponse = outputData
+	}
+	
+	// Create enhanced tool call record with actual input/output data
+	toolCall := map[string]interface{}{
+		"tool_name":    toolName,
+		"execution_id": executionID,
+		"success":      success,
+		"duration_ms":  durationMs,
+		"output_length": outputLength,
+		"started_at":   activeExec.StartTime.Format(time.RFC3339),
+		"completed_at": time.Now().Format(time.RFC3339),
+	}
+
+	// Add input parameters from the active tool execution
+	if activeExec.Parameters != nil && len(activeExec.Parameters) > 0 {
+		toolCall["input_parameters"] = activeExec.Parameters
+	}
+
+	// Add output response if available
+	if outputResponse != nil {
+		toolCall["output_response"] = outputResponse
+	}
+	
+	if errorMsg, hasError := details["error"].(string); hasError && errorMsg != "" {
+		toolCall["error"] = errorMsg
+	}
+	
+	et.toolCalls = append(et.toolCalls, toolCall)
+	
+	// Create enhanced execution step for tool completion
+	var content string
+	if success {
+		if ok4 && ok5 {
+			content = fmt.Sprintf("%s completed successfully (%.0fms, %d chars output)", 
+				toolName, durationMs, int(outputLength))
+		} else {
+			content = fmt.Sprintf("%s completed successfully", toolName)
+		}
+		
+		// Add output summary to content if available
+		if outputResponse != nil {
+			switch v := outputResponse.(type) {
+			case string:
+				if len(v) > 100 {
+					content += fmt.Sprintf(" - Response: %s...", v[:100])
+				} else if len(v) > 0 {
+					content += fmt.Sprintf(" - Response: %s", v)
+				}
+			case map[string]interface{}:
+				content += fmt.Sprintf(" - Response: JSON object with %d fields", len(v))
+			default:
+				content += fmt.Sprintf(" - Response: %T", v)
+			}
+		}
+	} else {
+		content = fmt.Sprintf("%s failed", toolName)
+		if errorMsg, hasError := details["error"].(string); hasError {
+			content += fmt.Sprintf(": %s", errorMsg)
+		}
+	}
+	
+	step := map[string]interface{}{
+		"step":         et.stepCounter,
+		"type":         "tool_call_complete",
+		"tool_name":    toolName,
+		"execution_id": executionID,
+		"content":      content,
+		"timestamp":    time.Now().Format(time.RFC3339),
+		"success":      success,
+		"duration_ms":  durationMs,
+	}
+	
+	// Add output response to execution step if available
+	if outputResponse != nil {
+		step["output_response"] = outputResponse
+	}
+	
+	// Add input parameters to completion step as well for completeness
+	if activeExec.Parameters != nil && len(activeExec.Parameters) > 0 {
+		step["input_parameters"] = activeExec.Parameters
+	}
+	
+	et.executionSteps = append(et.executionSteps, step)
+	et.stepCounter++
+	
+	// Clean up active tool
+	delete(et.activeTools, executionID)
+}
+
+func (et *ExecutionTracker) handleGenerationComplete(details map[string]interface{}, repos *repositories.Repositories) {
+	// Add final generation step
+	step := map[string]interface{}{
+		"step":      et.stepCounter,
+		"type":      "generation_complete", 
+		"content":   "AI response generation completed",
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+	
+	if duration, ok := details["duration"].(float64); ok {
+		step["duration_seconds"] = duration / 1000.0 // Convert ms to seconds
+	}
+	
+	et.executionSteps = append(et.executionSteps, step)
+	et.stepCounter++
+}
+
+// GetExecutionData returns the collected tool calls and execution steps
+func (et *ExecutionTracker) GetExecutionData() ([]interface{}, []interface{}) {
+	return et.toolCalls, et.executionSteps
+}
+
 // AgentExecutionResult contains the result of an agent execution
 type AgentExecutionResult struct {
 	Success        bool                     `json:"success"`
@@ -212,12 +415,31 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		log.Printf("🔥 MCP-SETUP: Creating dotprompt executor")
 		executor := dotprompt.NewGenKitExecutor()
 		
-		// Create a logging callback for real-time progress updates
+		// Enhanced execution tracking for tool calls and steps
+		executionTracker := &ExecutionTracker{
+			runID:         runID,
+			toolCalls:     []interface{}{},
+			executionSteps: []interface{}{},
+			activeTools:   make(map[string]ToolExecution),
+			stepCounter:   1,
+		}
+		
+		// Create a logging callback for real-time progress updates and execution tracking
 		logCallback := func(logEntry map[string]interface{}) {
+			// Always store debug logs (keep everything in database for debugging)
 			err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
 			if err != nil {
 				logging.Debug("Failed to append debug log: %v", err)
 			}
+			
+			// Always process tool execution events for user-friendly logging
+			// (ExecutionTracker needs these for database records and UI display)
+			executionTracker.ProcessLogEntry(logEntry, aee.repos)
+			
+			// TODO: The actual live execution log filtering would happen here
+			// where logs are sent to the UI for real-time display.
+			// For now, we filter at the database level by not storing framework noise
+			// or we filter in the UI layer to avoid breaking existing functionality.
 		}
 		
 		// Set the logging callback on the OpenAI plugin for detailed API call logging
@@ -243,16 +465,26 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		log.Printf("🔥🔥🔥 EXECUTION ENGINE: About to call ExecuteAgentWithStationGenerate for agent %s", agent.Name)
 		response, err := executor.ExecuteAgentWithStationGenerate(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
 		log.Printf("🔥 AGENT-ENGINE: Dotprompt executor returned - response: %v, err: %v", response != nil, err)
-		if response != nil {
-			toolCallsLen := 0
-			if response.ToolCalls != nil {
-				toolCallsLen = len(*response.ToolCalls)
+		
+		// Enhance response with execution tracker data
+		if response != nil && executionTracker != nil {
+			toolCalls, executionSteps := executionTracker.GetExecutionData()
+			
+			// Replace response data with tracked execution data
+			if len(toolCalls) > 0 {
+				toolCallsArray := models.JSONArray(toolCalls)
+				response.ToolCalls = &toolCallsArray
+				response.ToolsUsed = len(toolCalls)
 			}
-			executionStepsLen := 0
-			if response.ExecutionSteps != nil {
-				executionStepsLen = len(*response.ExecutionSteps)
+			
+			if len(executionSteps) > 0 {
+				executionStepsArray := models.JSONArray(executionSteps)
+				response.ExecutionSteps = &executionStepsArray
+				response.StepsUsed = len(executionSteps)
 			}
-			log.Printf("🔥🔥🔥 EXECUTION ENGINE: Response has %d tool calls, %d execution steps", toolCallsLen, executionStepsLen)
+			
+			log.Printf("🔥🔥🔥 EXECUTION ENGINE: Enhanced response with %d tool calls, %d execution steps", 
+				len(toolCalls), len(executionSteps))
 		}
 		
 		// Clean up MCP connections after execution is complete
@@ -544,4 +776,82 @@ func (aee *AgentExecutionEngine) extractTemplateVariables(dotpromptContent strin
 	}
 	
 	return variables
+}
+
+// shouldShowInLiveExecution filters out GenKit framework noise from live execution logs
+// while keeping user-relevant information visible
+func (aee *AgentExecutionEngine) shouldShowInLiveExecution(logEntry map[string]interface{}) bool {
+	message, ok := logEntry["message"].(string)
+	if !ok {
+		return false
+	}
+	
+	// Framework noise to filter out from live logs
+	frameworkNoise := []string{
+		"Context usage updated",
+		"Turn 1/25 completed",
+		"Turn 2/25 completed", 
+		"Turn 3/25 completed",
+		"Turn 4/25 completed",
+		"Turn 5/25 completed",
+		"Batch tool execution starting",
+		"Batch tool execution completed", 
+		"Enhanced generation starting",
+		"Enhanced generation completed",
+		"Station GenKit generation completed: success",
+		"Starting Station-enhanced GenKit generation",
+	}
+	
+	// Filter out turn completion messages (Turn X/Y completed)
+	if strings.Contains(message, "Turn ") && strings.Contains(message, " completed") {
+		return false
+	}
+	
+	// Filter out specific framework noise
+	for _, noise := range frameworkNoise {
+		if message == noise {
+			return false
+		}
+	}
+	
+	// Keep user-relevant logs
+	userRelevantMessages := []string{
+		"Tool execution starting",
+		"Tool execution completed", 
+		"Starting execution for agent",
+		"Starting Station GenKit execution for agent",
+		"Station GenKit execution completed successfully",
+	}
+	
+	for _, relevant := range userRelevantMessages {
+		if message == relevant {
+			return true
+		}
+	}
+	
+	// Default: show unknown messages (be conservative)
+	return true
+}
+
+// isToolExecutionEvent checks if a log entry is a tool execution event
+// that the ExecutionTracker needs to process
+func (aee *AgentExecutionEngine) isToolExecutionEvent(logEntry map[string]interface{}) bool {
+	message, ok := logEntry["message"].(string)
+	if !ok {
+		return false
+	}
+	
+	toolMessages := []string{
+		"Tool execution starting",
+		"Tool execution completed",
+		"Enhanced generation completed",
+	}
+	
+	for _, toolMsg := range toolMessages {
+		if message == toolMsg {
+			return true
+		}
+	}
+	
+	return false
 }
