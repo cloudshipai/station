@@ -872,8 +872,6 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 		MaxTurns:           0,     // Disabled - let generateOpts handle MaxTurns to match original pattern
 	}
 	
-	log.Printf("🔥 DEBUG-CONFIG: StationConfig created with MaxContextTokens=%d, ContextThreshold=%.2f", 
-		stationConfig.MaxContextTokens, stationConfig.ContextThreshold)
 
 	// Process dotprompt the same way as original execution
 	var genkitMessages []*ai.Message
@@ -946,13 +944,8 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
 	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
 
-	log.Printf("🔥 STATION-GENERATE: About to call StationGenerate with model=%s, messages=%d, tools=%d", 
-		modelName, len(genkitMessages), len(mcpTools))
-		
 	// Call StationGenerate with generateOpts exactly like the original called genkit.Generate
 	response, err := stationgenkit.StationGenerate(ctx, genkitApp, stationConfig, generateOpts...)
-	
-	log.Printf("🔥 STATION-GENERATE: StationGenerate returned - response=%v, err=%v", response != nil, err)
 
 	if err != nil {
 		duration := time.Since(startTime)
