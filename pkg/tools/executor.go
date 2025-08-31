@@ -74,17 +74,24 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolCall *ai.ToolRequest, ex
 	executionID := e.generateExecutionID()
 
 	if e.LogCallback != nil {
+		details := map[string]interface{}{
+			"tool_name":      toolCall.Name,
+			"execution_id":   executionID,
+			"turn_number":    execCtx.TurnNumber,
+			"remaining_tokens": execCtx.RemainingTokens,
+			"safe_action_limit": execCtx.SafeActionLimit,
+		}
+		
+		// Add input parameters if available
+		if toolCall.Input != nil {
+			details["input"] = toolCall.Input
+		}
+		
 		e.LogCallback(map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
 			"level":     "info",
 			"message":   "Tool execution starting",
-			"details": map[string]interface{}{
-				"tool_name":      toolCall.Name,
-				"execution_id":   executionID,
-				"turn_number":    execCtx.TurnNumber,
-				"remaining_tokens": execCtx.RemainingTokens,
-				"safe_action_limit": execCtx.SafeActionLimit,
-			},
+			"details":   details,
 		})
 	}
 
@@ -165,21 +172,28 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolCall *ai.ToolRequest, ex
 			logLevel = "warning"
 		}
 
+		completedDetails := map[string]interface{}{
+			"tool_name":       result.ToolName,
+			"execution_id":    result.ExecutionID,
+			"success":         result.Success,
+			"duration_ms":     result.Duration.Milliseconds(),
+			"tokens_used":     result.TokensUsed,
+			"output_length":   len(result.Output),
+			"truncated":       result.Truncated,
+			"original_length": result.OriginalLength,
+			"error":          result.Error,
+		}
+		
+		// Add actual output response for UI visibility
+		if result.Output != "" {
+			completedDetails["output"] = result.Output
+		}
+		
 		e.LogCallback(map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
 			"level":     logLevel,
 			"message":   "Tool execution completed",
-			"details": map[string]interface{}{
-				"tool_name":       result.ToolName,
-				"execution_id":    result.ExecutionID,
-				"success":         result.Success,
-				"duration_ms":     result.Duration.Milliseconds(),
-				"tokens_used":     result.TokensUsed,
-				"output_length":   len(result.Output),
-				"truncated":       result.Truncated,
-				"original_length": result.OriginalLength,
-				"error":          result.Error,
-			},
+			"details":   completedDetails,
 		})
 	}
 
