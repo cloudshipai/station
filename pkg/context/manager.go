@@ -68,8 +68,8 @@ func getModelContextLimit(modelName string) int {
 		return 32768 // Gemini 1.0 has 32k context
 	}
 	
-	// Default fallback for unknown models
-	return 4096
+	// Default fallback - 200k tokens works for most modern models
+	return 200000
 }
 
 // TrackTokenUsage updates the current token usage from generation response
