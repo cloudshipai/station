@@ -31,10 +31,6 @@ func isDirectReadmeURL(url string) bool {
 			strings.HasPrefix(url, "http://"))
 }
 
-// isHTTPSURL checks if the provided URL is a general HTTPS URL
-func isHTTPSURL(url string) bool {
-	return strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://")
-}
 
 // isDocumentationURL checks if the URL points to documentation that might contain MCP configs
 func isDocumentationURL(url string) bool {
@@ -252,38 +248,6 @@ func extractMCPBlocksFromContent(content string) []services.MCPServerBlock {
 	return blocks
 }
 
-// runWebContentTurboTaxFlow handles HTTPS URLs with web content parsing and TurboTax wizard
-func (h *LoadHandler) runWebContentTurboTaxFlow(url, environment, endpoint string) error {
-	fmt.Printf("🌐 Analyzing web content from: %s\n", url)
-
-	// Fetch web content
-	content, err := h.fetchWebContent(url)
-	if err != nil {
-		return fmt.Errorf("failed to fetch web content: %w", err)
-	}
-
-	if strings.TrimSpace(content) == "" {
-		return fmt.Errorf("no content found at the provided URL")
-	}
-
-	fmt.Println(getCLIStyles(h.themeManager).Info.Render("📄 Content fetched successfully, analyzing for MCP configurations..."))
-
-	// Extract MCP server blocks from the content
-	blocks := h.extractMCPConfigurationsFromContent(content, url)
-
-	if len(blocks) == 0 {
-		fmt.Println(getCLIStyles(h.themeManager).Info.Render("❌ No MCP server configurations found in the content"))
-		fmt.Println(getCLIStyles(h.themeManager).Help.Render("💡 Tip: Make sure the URL contains MCP server configurations in JSON format"))
-		return nil
-	}
-
-	fmt.Printf("✅ Found %d potential MCP server configuration(s)\n", len(blocks))
-
-	// Launch enhanced TurboTax-style wizard
-	fmt.Println("\n" + getCLIStyles(h.themeManager).Info.Render("🧙✨ Launching enhanced TurboTax wizard for MCP configuration..."))
-
-	return h.runTurboTaxWizardWithBlocks(blocks, environment, endpoint)
-}
 
 // fetchWebContent fetches content from a web URL
 func (h *LoadHandler) fetchWebContent(url string) (string, error) {
