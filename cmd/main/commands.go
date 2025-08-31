@@ -47,36 +47,6 @@ Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access
 		RunE:  runInit,
 	}
 
-	loadCmd = &cobra.Command{
-		Use:   "load [file|url]",
-		Short: "Load MCP configuration with intelligent template processing",
-		Long: `Load and process MCP configurations with automatic discovery:
-
-• No args: Auto-discover mcp.json or .mcp.json in current directory, or open interactive editor
-• GitHub URL: Extract configuration from README and use TurboTax wizard  
-• File path: Load configuration from specified file
-• File path + --detect: Use AI to detect placeholders and generate forms
-• -e/--editor: Open editor to paste template, then detect and generate forms
-
-Auto-Discovery:
-• Looks for: mcp.json, .mcp.json, mcp-config.json, .mcp-config.json
-• Loads to default environment unless --env specified
-• Falls back to interactive editor if no files found
-
-Interactive Editor Features:
-• Paste any MCP configuration template into the editor
-• AI automatically detects template variables ({{VAR}}, YOUR_KEY, <path>, etc.)
-• Interactive form to fill in variable values securely
-• Saves to file-based configuration system in specified environment
-
-Examples:
-  stn load                                    # Auto-discover config file (default env)
-  stn load --env production                   # Auto-discover, load to production env
-  stn load config.json --detect              # Load specific file with AI detection
-  stn load -e --env staging                  # Open editor for staging environment
-  stn load https://github.com/user/mcp-repo  # GitHub discovery with wizard`,
-		RunE: runLoad,
-	}
 
 	mcpAddCmd = &cobra.Command{
 		Use:   "add [config-name]",

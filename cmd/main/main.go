@@ -48,7 +48,6 @@ func init() {
 	rootCmd.AddCommand(bootstrapCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(keyCmd)
-	rootCmd.AddCommand(loadCmd)
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(mcpCmd)
 	rootCmd.AddCommand(bundleCmd)
@@ -144,13 +143,6 @@ func init() {
 	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
 	serveCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
 	
-	// Load command flags
-	loadCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	loadCmd.Flags().String("environment", "default", "Environment name to upload to")
-	loadCmd.Flags().String("env", "", "Environment name (creates if doesn't exist, overrides --environment)")
-	loadCmd.Flags().String("config-name", "", "Name for the MCP configuration")
-	loadCmd.Flags().Bool("detect", false, "Use AI to intelligently detect and generate forms for placeholders")
-	loadCmd.Flags().BoolP("editor", "e", false, "Open editor to paste template configuration")
 	
 	// MCP Add command flags
 	mcpAddCmd.Flags().StringP("environment", "e", "default", "Environment to add configuration to")
