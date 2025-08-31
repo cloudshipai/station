@@ -11,26 +11,15 @@ import (
 	"strconv"
 	"strings"
 
+	"station/cmd/main/handlers/dotprompt"
 	"station/internal/logging"
 	"station/pkg/models"
 	"station/pkg/schema"
-	
-	"gopkg.in/yaml.v2"
 )
 
-// DotPromptConfig represents the YAML frontmatter in a .prompt file
-type DotPromptConfig struct {
-	Model       string                 `yaml:"model"`
-	Config      map[string]interface{} `yaml:"config"`
-	Tools       []string               `yaml:"tools"`
-	Metadata    map[string]interface{} `yaml:"metadata"`
-	Station     map[string]interface{} `yaml:"station"`
-	Input       map[string]interface{} `yaml:"input"`
-	Output      map[string]interface{} `yaml:"output"`
-}
 
 // extractInputSchema extracts and validates input schema from dotprompt config using Picoschema parsing
-func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, error) {
+func (s *DeclarativeSync) extractInputSchema(config *dotprompt.DotPromptConfig) (*string, error) {
 	if config.Input == nil || config.Input["schema"] == nil {
 		return nil, nil
 	}
@@ -237,7 +226,8 @@ func (s *DeclarativeSync) syncSingleAgent(ctx context.Context, filePath, agentNa
 		return nil, fmt.Errorf("failed to read prompt file: %w", err)
 	}
 
-	config, promptContent, err := s.parseDotPrompt(string(content))
+	dotpromptHandler := dotprompt.NewHandler()
+	config, promptContent, err := dotpromptHandler.ParseDotPrompt(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse prompt file: %w", err)
 	}
@@ -286,31 +276,6 @@ func (s *DeclarativeSync) syncSingleAgent(ctx context.Context, filePath, agentNa
 	}
 }
 
-// parseDotPrompt parses a .prompt file with YAML frontmatter and prompt content
-func (s *DeclarativeSync) parseDotPrompt(content string) (*DotPromptConfig, string, error) {
-	// Split on the first occurrence of "---" after the initial "---"
-	parts := strings.Split(content, "---")
-	if len(parts) < 3 {
-		// No frontmatter, treat entire content as prompt
-		return &DotPromptConfig{}, content, nil
-	}
-
-	// Extract YAML frontmatter (first part after initial ---)
-	yamlContent := strings.TrimSpace(parts[1])
-	
-	// Extract prompt content (everything after second ---)
-	promptContent := strings.TrimSpace(strings.Join(parts[2:], "---"))
-
-	// Parse YAML frontmatter
-	var config DotPromptConfig
-	if yamlContent != "" {
-		if err := yaml.Unmarshal([]byte(yamlContent), &config); err != nil {
-			return nil, "", fmt.Errorf("failed to parse YAML frontmatter: %w", err)
-		}
-	}
-
-	return &config, promptContent, nil
-}
 
 // findAgentByName finds an agent by name in the specified environment
 func (s *DeclarativeSync) findAgentByName(agentName string, environmentID int64) (*models.Agent, error) {
@@ -329,7 +294,7 @@ func (s *DeclarativeSync) findAgentByName(agentName string, environmentID int64)
 }
 
 // createAgentFromFile creates a new agent in the database from a .prompt file
-func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, agentName, environmentName string, config *DotPromptConfig, promptContent, checksum string) (*SyncOperation, error) {
+func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, agentName, environmentName string, config *dotprompt.DotPromptConfig, promptContent, checksum string) (*SyncOperation, error) {
 	env, err := s.repos.Environments.GetByName(environmentName)
 	if err != nil {
 		return nil, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
@@ -407,7 +372,7 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 }
 
 // updateAgentFromFile updates an existing agent in the database from a .prompt file
-func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent *models.Agent, config *DotPromptConfig, promptContent, checksum string) (*SyncOperation, error) {
+func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent *models.Agent, config *dotprompt.DotPromptConfig, promptContent, checksum string) (*SyncOperation, error) {
 	// Extract configuration values with defaults
 	maxSteps := existingAgent.MaxSteps // keep existing
 	if config.Metadata != nil {
