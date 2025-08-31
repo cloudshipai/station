@@ -37,7 +37,11 @@ func NewManager(modelName string, logCallback LogCallback) *Manager {
 func getModelContextLimit(modelName string) int {
 	modelLower := strings.ToLower(modelName)
 	
-	// OpenAI models
+	
+	// OpenAI models (handle both with and without provider prefix)
+	if strings.Contains(modelLower, "gpt-5") {
+		return 128000 // GPT-5 has 128k context
+	}
 	if strings.Contains(modelLower, "gpt-4") {
 		if strings.Contains(modelLower, "gpt-4o") {
 			return 128000 // GPT-4o has 128k context
