@@ -1120,7 +1120,7 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 			logCallback(map[string]interface{}{
 				"timestamp": time.Now().Format(time.RFC3339),
 				"level":     "error",
-				"message":   "Station GenKit execution failed",
+				"message":   "Agent execution failed",
 				"details": map[string]interface{}{
 					"error": err.Error(),
 					"duration_seconds": duration.Seconds(),
@@ -1131,7 +1131,7 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 			Success:  false,
 			Response: "",
 			Duration: duration,
-			Error:    fmt.Sprintf("Station GenKit execution failed: %v", err),
+			Error:    fmt.Sprintf("Agent execution failed: %v", err),
 			ModelName: modelName,
 		}, nil
 	}
@@ -1143,7 +1143,7 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 		logCallback(map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
 			"level":     "info",
-			"message":   "Station GenKit execution completed successfully",
+			"message":   "Agent completed task execution successfully",
 			"details": map[string]interface{}{
 				"success": true,
 				"duration_seconds": duration.Seconds(),
