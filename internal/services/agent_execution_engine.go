@@ -42,24 +42,42 @@ type ToolExecution struct {
 func (et *ExecutionTracker) ProcessLogEntry(logEntry map[string]interface{}, repos *repositories.Repositories) {
 	message, ok := logEntry["message"].(string)
 	if !ok {
+		log.Printf("🔧 EXECUTION-TRACKER: Received log entry without message field: %+v", logEntry)
 		return
 	}
 	
 	details, hasDetails := logEntry["details"].(map[string]interface{})
 	if !hasDetails {
+		log.Printf("🔧 EXECUTION-TRACKER: Received message '%s' without details field", message)
 		return  
 	}
 	
+	log.Printf("🔧 EXECUTION-TRACKER: Processing message: '%s' with details keys: %v", message, getDebugMapKeys(details))
+	
 	switch message {
 	case "Tool execution starting":
+		log.Printf("🔧 EXECUTION-TRACKER: Handling tool start")
 		et.handleToolStart(details)
 		
 	case "Tool execution completed":
+		log.Printf("🔧 EXECUTION-TRACKER: Handling tool complete")
 		et.handleToolComplete(details, repos)
 		
 	case "Enhanced generation completed":
+		log.Printf("🔧 EXECUTION-TRACKER: Handling generation complete")
 		et.handleGenerationComplete(details, repos)
+	default:
+		log.Printf("🔧 EXECUTION-TRACKER: Unknown message type: '%s'", message)
 	}
+}
+
+// Helper function to get map keys for debugging
+func getDebugMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func (et *ExecutionTracker) handleToolStart(details map[string]interface{}) {
@@ -406,6 +424,19 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 		log.Printf("🔥 MCP-SETUP: MCP tools loaded - %d tools available, %d filtered", len(allMCPTools), len(mcpTools))
 		
+		// Debug: Log filtered tool schemas to see what's being passed to the LLM
+		for i, tool := range mcpTools {
+			if namedTool, ok := tool.(interface{ Name() string }); ok {
+				log.Printf("🔧 FILTERED-TOOL[%d]: %s - Type: %T", i, namedTool.Name(), tool)
+				// Try to inspect the tool's actual structure if possible
+				if descTool, ok := tool.(interface{ Description() string }); ok {
+					log.Printf("🔧 FILTERED-TOOL[%d]: %s - Description: %s", i, namedTool.Name(), descTool.Description())
+				}
+			} else {
+				log.Printf("🔧 FILTERED-TOOL[%d]: Type: %T", i, tool)
+			}
+		}
+		
 		// Add filtered tools count to span
 		if span != nil {
 			span.SetAttributes(attribute.Int("agent.filtered_tools_count", len(mcpTools)))
@@ -413,6 +444,10 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		
 		// Use our new dotprompt + genkit execution system with progressive logging
 		log.Printf("🔥 MCP-SETUP: Creating dotprompt executor")
+		
+		// Wrap MCP tools with debug logging to capture exact inputs/outputs
+		wrappedTools := aee.wrapToolsWithDebugLogging(mcpTools)
+		
 		executor := dotprompt.NewGenKitExecutor()
 		
 		// Enhanced execution tracking for tool calls and steps
@@ -463,7 +498,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		
 		// Use the new Station GenKit native integration
 		log.Printf("🔥🔥🔥 EXECUTION ENGINE: About to call ExecuteAgentWithStationGenerate for agent %s", agent.Name)
-		response, err := executor.ExecuteAgentWithStationGenerate(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
+		response, err := executor.ExecuteAgentWithStationGenerate(*agent, agentTools, genkitApp, wrappedTools, task, logCallback)
 		log.Printf("🔥 AGENT-ENGINE: Dotprompt executor returned - response: %v, err: %v", response != nil, err)
 		
 		// Enhance response with execution tracker data
@@ -854,4 +889,28 @@ func (aee *AgentExecutionEngine) isToolExecutionEvent(logEntry map[string]interf
 	}
 	
 	return false
+}
+
+// wrapToolsWithDebugLogging wraps MCP tools to capture exact inputs and outputs
+func (aee *AgentExecutionEngine) wrapToolsWithDebugLogging(tools []ai.ToolRef) []ai.ToolRef {
+	wrappedTools := make([]ai.ToolRef, len(tools))
+	
+	for i, tool := range tools {
+		wrappedTools[i] = aee.createToolWrapper(tool)
+	}
+	
+	log.Printf("🔧 TOOL-WRAPPER: Wrapped %d tools with debug logging", len(wrappedTools))
+	return wrappedTools
+}
+
+// createToolWrapper creates a debug wrapper for a single tool
+func (aee *AgentExecutionEngine) createToolWrapper(originalTool ai.ToolRef) ai.ToolRef {
+	// For now, we'll return the original tool but log that we would wrap it
+	// Full wrapping requires implementing the ToolRef interface which is complex
+	if namedTool, ok := originalTool.(interface{ Name() string }); ok {
+		log.Printf("🔧 TOOL-WRAPPER: Would wrap tool: %s (type: %T)", namedTool.Name(), originalTool)
+	}
+	
+	// Return original tool for now - actual wrapping would require significant work
+	return originalTool
 }

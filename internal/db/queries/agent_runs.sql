@@ -48,3 +48,9 @@ UPDATE agent_runs SET status = ? WHERE id = ?;
 
 -- name: UpdateAgentRunDebugLogs :exec
 UPDATE agent_runs SET debug_logs = ? WHERE id = ?;
+
+-- name: UpdateAgentRunToolsUsed :exec
+UPDATE agent_runs SET tools_used = ? WHERE id = ?;
+
+-- name: UpdateAgentRunToolCalls :exec
+UPDATE agent_runs SET tool_calls = ? WHERE id = ?;

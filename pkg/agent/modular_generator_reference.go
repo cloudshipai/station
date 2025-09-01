@@ -119,6 +119,12 @@ func (g *ModularGenerator) Generate(
 	// Phase 4: Tool Execution with Protection
 	var toolResults []*tools.ExecutionResult
 	if len(aiTools) > 0 {
+		if g.logCallback != nil {
+			g.logCallback(map[string]interface{}{
+				"level":   "debug",
+				"message": fmt.Sprintf("🔧 MODULAR-GENERATOR: About to executeToolsWithProtection with %d tools", len(aiTools)),
+			})
+		}
 		var err error
 		toolResults, err = g.executeToolsWithProtection(ctx, messages, aiTools, conversationID)
 		if err != nil {
@@ -130,6 +136,20 @@ func (g *ModularGenerator) Generate(
 					"error":   err.Error(),
 				})
 			}
+		} else {
+			if g.logCallback != nil {
+				g.logCallback(map[string]interface{}{
+					"level":   "debug",
+					"message": fmt.Sprintf("🔧 MODULAR-GENERATOR: executeToolsWithProtection completed with %d results", len(toolResults)),
+				})
+			}
+		}
+	} else {
+		if g.logCallback != nil {
+			g.logCallback(map[string]interface{}{
+				"level":   "debug",
+				"message": "🔧 MODULAR-GENERATOR: No tools provided, skipping tool execution",
+			})
 		}
 	}
 	
@@ -194,12 +214,31 @@ func (g *ModularGenerator) executeToolsWithProtection(
 		return nil, nil
 	}
 	
+	if g.logCallback != nil {
+		g.logCallback(map[string]interface{}{
+			"level":   "debug",
+			"message": fmt.Sprintf("🔧 MODULAR-GENERATOR executeToolsWithProtection: Processing %d available tools", len(aiTools)),
+		})
+		for i, tool := range aiTools {
+			g.logCallback(map[string]interface{}{
+				"level":   "debug", 
+				"message": fmt.Sprintf("🔧 MODULAR-GENERATOR Tool[%d]: %s", i, tool.Name),
+			})
+		}
+	}
+	
 	// Convert GenKit tools to our tool requests (simplified for example)
 	toolCalls := make([]*ai.ToolRequest, len(aiTools))
 	for i, tool := range aiTools {
 		toolCalls[i] = &ai.ToolRequest{
 			Name:  tool.Name,
-			Input: map[string]interface{}{}, // Would need actual input from conversation
+			Input: map[string]interface{}{}, // ❌ THIS IS THE PROBLEM - Would need actual input from conversation
+		}
+		if g.logCallback != nil {
+			g.logCallback(map[string]interface{}{
+				"level":   "debug",
+				"message": fmt.Sprintf("🔧 MODULAR-GENERATOR: Created tool call for %s with EMPTY INPUT - THIS IS THE BUG!", tool.Name),
+			})
 		}
 	}
 	

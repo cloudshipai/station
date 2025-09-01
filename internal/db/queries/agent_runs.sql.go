@@ -506,3 +506,31 @@ func (q *Queries) UpdateAgentRunStatus(ctx context.Context, arg UpdateAgentRunSt
 	_, err := q.db.ExecContext(ctx, updateAgentRunStatus, arg.Status, arg.ID)
 	return err
 }
+
+const updateAgentRunToolCalls = `-- name: UpdateAgentRunToolCalls :exec
+UPDATE agent_runs SET tool_calls = ? WHERE id = ?
+`
+
+type UpdateAgentRunToolCallsParams struct {
+	ToolCalls sql.NullString `json:"tool_calls"`
+	ID        int64          `json:"id"`
+}
+
+func (q *Queries) UpdateAgentRunToolCalls(ctx context.Context, arg UpdateAgentRunToolCallsParams) error {
+	_, err := q.db.ExecContext(ctx, updateAgentRunToolCalls, arg.ToolCalls, arg.ID)
+	return err
+}
+
+const updateAgentRunToolsUsed = `-- name: UpdateAgentRunToolsUsed :exec
+UPDATE agent_runs SET tools_used = ? WHERE id = ?
+`
+
+type UpdateAgentRunToolsUsedParams struct {
+	ToolsUsed sql.NullInt64 `json:"tools_used"`
+	ID        int64         `json:"id"`
+}
+
+func (q *Queries) UpdateAgentRunToolsUsed(ctx context.Context, arg UpdateAgentRunToolsUsedParams) error {
+	_, err := q.db.ExecContext(ctx, updateAgentRunToolsUsed, arg.ToolsUsed, arg.ID)
+	return err
+}

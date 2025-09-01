@@ -574,6 +574,19 @@ func (r *AgentRunRepo) UpdateStatus(ctx context.Context, id int64, status string
 	return r.queries.UpdateAgentRunStatus(ctx, params)
 }
 
+// UpdateToolsUsed updates the tools_used field for an agent run
+func (r *AgentRunRepo) UpdateToolsUsed(ctx context.Context, id int64, toolsUsed *int64) error {
+	var toolsUsedVal sql.NullInt64
+	if toolsUsed != nil {
+		toolsUsedVal = sql.NullInt64{Valid: true, Int64: *toolsUsed}
+	}
+	params := queries.UpdateAgentRunToolsUsedParams{
+		ToolsUsed: toolsUsedVal,
+		ID:        id,
+	}
+	return r.queries.UpdateAgentRunToolsUsed(ctx, params)
+}
+
 // UpdateDebugLogs updates the debug_logs field for an agent run
 func (r *AgentRunRepo) UpdateDebugLogs(ctx context.Context, id int64, debugLogs *models.JSONArray) error {
 	var debugLogsStr sql.NullString
@@ -612,4 +625,32 @@ func (r *AgentRunRepo) AppendDebugLog(ctx context.Context, id int64, logEntry ma
 	
 	debugLogs = append(debugLogs, logEntry)
 	return r.UpdateDebugLogs(ctx, id, &debugLogs)
+}
+
+func (r *AgentRunRepo) UpdateToolCalls(ctx context.Context, id int64, toolCalls *string) error {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.update_tool_calls",
+		trace.WithAttributes(
+			attribute.Int64("run.id", id),
+		),
+	)
+	defer span.End()
+
+	var toolCallsVal sql.NullString
+	if toolCalls != nil {
+		toolCallsVal = sql.NullString{Valid: true, String: *toolCalls}
+	}
+
+	params := queries.UpdateAgentRunToolCallsParams{
+		ToolCalls: toolCallsVal,
+		ID:        id,
+	}
+
+	if err := r.queries.UpdateAgentRunToolCalls(ctx, params); err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return fmt.Errorf("failed to update agent run tool_calls: %w", err)
+	}
+
+	span.SetAttributes(attribute.Bool("db.operation.success", true))
+	return nil
 }

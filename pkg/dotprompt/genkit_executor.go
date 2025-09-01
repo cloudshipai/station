@@ -2,6 +2,7 @@ package dotprompt
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	
 	"station/internal/config"
 	"station/internal/logging"
+	"station/pkg/debug"
 	"station/pkg/models"
 	"station/pkg/schema"
 	stationgenkit "station/pkg/genkit"
@@ -35,11 +37,14 @@ type ToolCallTracker struct {
 // - Clean separation would improve maintainability of this 1,700+ line file
 type GenKitExecutor struct{
 	logCallback func(map[string]interface{})
+	debugLogs   []map[string]interface{} // Collect debug logs during execution
 }
 
 // NewGenKitExecutor creates a new GenKit-based dotprompt executor
 func NewGenKitExecutor() *GenKitExecutor {
-	return &GenKitExecutor{}
+	return &GenKitExecutor{
+		debugLogs: make([]map[string]interface{}, 0),
+	}
 }
 
 // ExecuteAgentWithDotpromptTemplate is deprecated - use ExecuteAgentWithDatabaseConfig instead
@@ -393,6 +398,72 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	
 	responseText := response.Text()
 	
+	// === COMPLETE GENKIT RESPONSE INSPECTION ===
+	logging.Debug("=== FULL GENKIT RESPONSE OBJECT INSPECTION ===")
+	logging.Debug("Response FinishReason: %v", response.FinishReason)
+	logging.Debug("Response LatencyMs: %v", response.LatencyMs)
+	
+	// Usage inspection
+	if response.Usage != nil {
+		logging.Debug("Response Usage: InputTokens=%d, OutputTokens=%d, TotalTokens=%d", 
+			response.Usage.InputTokens, response.Usage.OutputTokens, response.Usage.TotalTokens)
+	} else {
+		logging.Debug("Response Usage: nil")
+	}
+	
+	// Custom data inspection
+	if response.Custom != nil {
+		logging.Debug("Response Custom data exists: %+v", response.Custom)
+	} else {
+		logging.Debug("Response Custom: nil")
+	}
+	
+	// Message inspection
+	if response.Message != nil {
+		logging.Debug("Response Message Role: %v", response.Message.Role)
+		logging.Debug("Response Message Content parts: %d", len(response.Message.Content))
+		for i, part := range response.Message.Content {
+			logging.Debug("  Message Part[%d]: IsText=%v, IsToolRequest=%v, IsToolResponse=%v", 
+				i, part.IsText(), part.IsToolRequest(), part.IsToolResponse())
+			if part.IsToolRequest() && part.ToolRequest != nil {
+				logging.Debug("    ToolRequest: Name=%s, Input=%+v", part.ToolRequest.Name, part.ToolRequest.Input)
+			}
+			if part.IsToolResponse() && part.ToolResponse != nil {
+				logging.Debug("    ToolResponse: Name=%s", part.ToolResponse.Name)
+			}
+		}
+	} else {
+		logging.Debug("Response Message: nil")
+	}
+	
+	// Request/conversation history inspection
+	if response.Request != nil {
+		logging.Debug("Response Request exists with %d messages", len(response.Request.Messages))
+		for i, msg := range response.Request.Messages {
+			logging.Debug("  Conversation Message[%d]: Role=%v, Content parts: %d", i, msg.Role, len(msg.Content))
+			for j, part := range msg.Content {
+				logging.Debug("    Content Part[%d]: IsText=%v, IsToolRequest=%v, IsToolResponse=%v", 
+					j, part.IsText(), part.IsToolRequest(), part.IsToolResponse())
+				if part.IsToolRequest() && part.ToolRequest != nil {
+					logging.Debug("      🔧 FOUND ToolRequest: Name=%s, Input=%+v", part.ToolRequest.Name, part.ToolRequest.Input)
+				}
+				if part.IsToolResponse() && part.ToolResponse != nil {
+					logging.Debug("      ✅ FOUND ToolResponse: Name=%s", part.ToolResponse.Name)
+				}
+				if part.IsText() && part.Text != "" {
+					preview := part.Text
+					if len(preview) > 100 {
+						preview = preview[:100] + "..."
+					}
+					logging.Debug("      💬 Text: %s", preview)
+				}
+			}
+		}
+	} else {
+		logging.Debug("Response Request: nil")
+	}
+	logging.Debug("=== END RESPONSE OBJECT INSPECTION ===")
+	
 	// Log model response completion
 	if e.logCallback != nil {
 		e.logCallback(map[string]interface{}{
@@ -532,10 +603,56 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		logging.Debug("No messages found in response.Request")
 	}
 	
-	// Note: Some AI providers put tool calls in different response fields,
-	// but this GenKit version uses response.Request.Messages
+	// Check for Station-enhanced tool call data in response.Custom
+	if response.Custom != nil {
+		if customMap, ok := response.Custom.(map[string]interface{}); ok {
+			if stationToolCalls, exists := customMap["station_tool_calls"]; exists {
+				logging.Debug("Found Station custom tool call data")
+				// Extract tool calls from Station's custom data
+				if toolCallsSlice, ok := stationToolCalls.([]interface{}); ok {
+					for i, toolCallRaw := range toolCallsSlice {
+						if toolCallMap, ok := toolCallRaw.(map[string]interface{}); ok {
+							// Convert Station ToolCallRecord to executor format
+							executorToolCall := map[string]interface{}{
+								"step":       stepCounter,
+								"tool_name":  toolCallMap["name"],
+								"tool_input": toolCallMap["input"],
+								"timestamp":  toolCallMap["timestamp"],
+								"duration":   toolCallMap["duration"],
+								"output":     toolCallMap["output"],
+							}
+							allToolCalls = append(allToolCalls, executorToolCall)
+							stepCounter++
+							
+							logging.Debug("  Station tool call[%d]: %s", i, toolCallMap["name"])
+						}
+					}
+				}
+			}
+			
+			// Also check for station_tools_used count for debugging
+			if toolsUsed, exists := customMap["station_tools_used"]; exists {
+				logging.Debug("Station reported %v tools used", toolsUsed)
+			}
+		}
+	}
 	
-	logging.Debug("EXTRACTION SUMMARY: %d tool calls, %d execution steps", len(allToolCalls), len(executionSteps))
+	// Note: Some AI providers put tool calls in different response fields,
+	// GenKit uses response.Request.Messages, but Station stores enhanced data in response.Custom
+	
+	// Simple approach: Use what GenKit provides
+	// Steps = total conversation messages (excluding system)
+	totalSteps := 1  // Default to at least 1 step
+	if response.Request != nil && response.Request.Messages != nil {
+		// Count non-system messages as steps
+		for _, msg := range response.Request.Messages {
+			if msg.Role != "system" {
+				totalSteps++
+			}
+		}
+	}
+	
+	logging.Debug("SIMPLE SUMMARY: %d tool calls, %d conversation steps from GenKit", len(allToolCalls), totalSteps)
 	
 	// Log detailed summary of extracted data
 	if len(allToolCalls) > 0 {
@@ -615,6 +732,25 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		logging.Debug("GenKit response is nil")
 	}
 
+	// Extract actual tool usage from collected debug logs
+	actualToolsUsed := len(allToolCalls)  // Default to GenKit extracted count
+	
+	// Extract from debug logs using existing proven logic
+	logging.Debug("🔧 DEBUG-LOG-COLLECTION: Collected %d debug log entries", len(e.debugLogs))
+	if len(e.debugLogs) > 0 {
+		if debugLogsJSON, err := json.Marshal(e.debugLogs); err == nil {
+			extractedToolCount, extractedToolNames := debug.ExtractToolUsageFromDebugLogs(string(debugLogsJSON))
+			if extractedToolCount > 0 {
+				actualToolsUsed = extractedToolCount
+				logging.Debug("🔧 TOOL-EXTRACTION: Extracted %d tool calls from debug logs: %v", extractedToolCount, extractedToolNames)
+			} else {
+				logging.Debug("🔧 TOOL-EXTRACTION: No tool calls found in %d debug log entries", len(e.debugLogs))
+			}
+		}
+	} else {
+		logging.Debug("🔧 DEBUG-LOG-COLLECTION: No debug logs collected during execution")
+	}
+
 	return &ExecutionResponse{
 		Success:        true,
 		Response:       responseText, // Use the responseText variable we created
@@ -622,8 +758,8 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		ExecutionSteps: executionStepsArray,
 		Duration:       time.Since(startTime),
 		ModelName:      modelName,
-		StepsUsed:      len(executionSteps), // Actual number of execution steps
-		ToolsUsed:      len(allToolCalls),   // Actual number of tools used
+		StepsUsed:      totalSteps, // Simple: total conversation steps from GenKit
+		ToolsUsed:      actualToolsUsed,     // Use debug log extraction for accuracy
 		TokenUsage:     tokenUsage,          // Add extracted token usage
 		Error:          "",
 	}, nil
@@ -632,8 +768,17 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 // ExecuteAgentWithDotpromptAndLogging executes an agent with progressive logging callbacks
 func (e *GenKitExecutor) ExecuteAgentWithDotpromptAndLogging(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{})) (*ExecutionResponse, error) {
 	log.Printf("🔥🔥🔥 USING ExecuteAgentWithDotpromptAndLogging for agent %s", agent.Name)
-	// Store the callback for use during execution
-	e.logCallback = logCallback
+	
+	// Create a wrapper callback that collects debug logs AND calls original callback
+	originalCallback := logCallback
+	e.logCallback = func(logEntry map[string]interface{}) {
+		// Collect debug logs for tool extraction
+		e.debugLogs = append(e.debugLogs, logEntry)
+		// Call the original callback
+		if originalCallback != nil {
+			originalCallback(logEntry)
+		}
+	}
 	
 	// Add detailed logging at key execution points
 	if logCallback != nil {
@@ -814,8 +959,16 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 	startTime := time.Now()
 	ctx := context.Background()
 
-	// Store the callback for use during execution
-	e.logCallback = logCallback
+	// Create a wrapper callback that collects debug logs AND calls original callback
+	originalCallback := logCallback
+	e.logCallback = func(logEntry map[string]interface{}) {
+		// Collect debug logs for tool extraction
+		e.debugLogs = append(e.debugLogs, logEntry)
+		// Call the original callback
+		if originalCallback != nil {
+			originalCallback(logEntry)
+		}
+	}
 
 	// Add detailed logging at key execution points
 	if logCallback != nil {
@@ -950,6 +1103,14 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
 	generateOpts = append(generateOpts, ai.WithTools(mcpTools...))
 
+	// Debug logging before calling StationGenerate 
+	log.Printf("🔧 DOTPROMPT-EXECUTOR: About to call StationGenerate with %d MCP tools", len(mcpTools))
+	for i, tool := range mcpTools {
+		if toolRef, ok := tool.(interface{ Name() string }); ok {
+			log.Printf("🔧 DOTPROMPT-EXECUTOR: Tool[%d]: %s", i, toolRef.Name())
+		}
+	}
+
 	// Call StationGenerate with generateOpts exactly like the original called genkit.Generate
 	response, err := stationgenkit.StationGenerate(ctx, genkitApp, stationConfig, generateOpts...)
 
@@ -1000,31 +1161,73 @@ func (e *GenKitExecutor) ExecuteAgentWithStationGenerate(agent models.Agent, age
 		tokenUsage["total_tokens"] = response.Usage.InputTokens + response.Usage.OutputTokens
 	}
 
-	// Create basic execution step for model response (even if no tools used)
-	executionSteps := []interface{}{
-		map[string]interface{}{
-			"step":      1,
-			"type":      "model_response", 
-			"content":   response.Text(),
-			"timestamp": time.Now().Format(time.RFC3339),
-			"duration":  duration.Seconds(),
-		},
+	// Extract enhanced tool call information from response custom data
+	var stationToolCalls []interface{}
+	var toolsUsed int
+	if response.Custom != nil {
+		if customMap, ok := response.Custom.(map[string]interface{}); ok {
+			if toolCallsRaw, exists := customMap["station_tool_calls"]; exists {
+				if toolCallsSlice, ok := toolCallsRaw.([]stationgenkit.ToolCallRecord); ok {
+				// Convert ToolCallRecord slice to interface{} slice for JSON serialization
+				for _, call := range toolCallsSlice {
+					stationToolCalls = append(stationToolCalls, map[string]interface{}{
+						"name":      call.Name,
+						"input":     call.Input,
+						"output":    call.Output,
+						"timestamp": call.Timestamp.Format(time.RFC3339),
+						"duration":  call.Duration.Seconds(),
+					})
+				}
+				toolsUsed = len(toolCallsSlice)
+				}
+			}
+		}
 	}
+
+	// Create execution steps including tool calls
+	executionSteps := []interface{}{}
+	stepNumber := 1
+	
+	// Add individual tool call steps
+	for _, toolCall := range stationToolCalls {
+		if toolCallMap, ok := toolCall.(map[string]interface{}); ok {
+			executionSteps = append(executionSteps, map[string]interface{}{
+				"step":      stepNumber,
+				"type":      "tool_call",
+				"tool_name": toolCallMap["name"],
+				"input":     toolCallMap["input"],
+				"output":    toolCallMap["output"],
+				"timestamp": toolCallMap["timestamp"],
+				"duration":  toolCallMap["duration"],
+			})
+			stepNumber++
+		}
+	}
+	
+	// Add final model response step
+	executionSteps = append(executionSteps, map[string]interface{}{
+		"step":      stepNumber,
+		"type":      "model_response", 
+		"content":   response.Text(),
+		"timestamp": time.Now().Format(time.RFC3339),
+		"duration":  duration.Seconds(),
+	})
 	
 	// Convert to JSONArray
 	executionStepsArray := models.JSONArray(executionSteps)
+	toolCallsArray := models.JSONArray(stationToolCalls)
 
-	// Convert GenKit ModelResponse to ExecutionResponse
+	// Convert GenKit ModelResponse to ExecutionResponse with enhanced tool call data
 	return &ExecutionResponse{
 		Success:        true,
 		Response:       response.Text(),
 		Duration:       duration,
 		ModelName:      modelName,
-		ToolCalls:      &models.JSONArray{}, // No tool calls in Station GenKit mode
-		ExecutionSteps: &executionStepsArray, // Basic execution step
+		ToolCalls:      &toolCallsArray,     // Enhanced with actual tool calls
+		ExecutionSteps: &executionStepsArray, // Enhanced with tool call steps
 		TokenUsage:     tokenUsage,
-		StepsUsed:      1,  // One execution step
-		ToolsUsed:      0,  // No tools used
+		StepsUsed:      len(executionSteps),  // Actual step count including tools
+		ToolsUsed:      toolsUsed,           // Actual tools used
 	}, nil
 }
 
