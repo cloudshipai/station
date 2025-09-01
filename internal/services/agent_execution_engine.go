@@ -47,7 +47,7 @@ func (et *ExecutionTracker) ProcessLogEntry(logEntry map[string]interface{}, rep
 	}
 	
 	details, hasDetails := logEntry["details"].(map[string]interface{})
-	if !hasDetails && message != "Station GenKit execution completed successfully" {
+	if !hasDetails && message != "Agent completed task execution successfully" {
 		log.Printf("🔧 EXECUTION-TRACKER: Received message '%s' without details field", message)
 		return  
 	}
@@ -70,11 +70,11 @@ func (et *ExecutionTracker) ProcessLogEntry(logEntry map[string]interface{}, rep
 	case "Enhanced generation completed":
 		log.Printf("🔧 EXECUTION-TRACKER: Handling generation complete")
 		et.handleGenerationComplete(details, repos)
-	case "Station GenKit execution completed successfully":
-		log.Printf("🔧 EXECUTION-TRACKER: Handling Station GenKit completion with tool calls")
+	case "Agent completed task execution successfully":
+		log.Printf("🔧 EXECUTION-TRACKER: Handling agent completion with tool calls")
 		et.handleStationGenKitComplete(logEntry, repos)
-	case "Station GenKit generation completed: success":
-		log.Printf("🔧 EXECUTION-TRACKER: Handling Station GenKit generation completion (with tool_calls in details)")
+	case "Agent generation completed: success":
+		log.Printf("🔧 EXECUTION-TRACKER: Handling agent generation completion (with tool_calls in details)")
 		et.handleStationGenKitComplete(logEntry, repos)
 	default:
 		log.Printf("🔧 EXECUTION-TRACKER: Unknown message type: '%s'", message)
@@ -924,12 +924,12 @@ func (aee *AgentExecutionEngine) shouldShowInLiveExecution(logEntry map[string]i
 		"Batch tool execution completed", 
 		"Enhanced generation starting",
 		"Enhanced generation completed",
-		"Station GenKit generation completed: success",
-		"Starting Station-enhanced GenKit generation",
+		"Agent generation completed: success",
+		"Agent is starting task execution",
 		// Additional GenKit/Station internal noise
 		"🔧 STATION-GENERATE: Processing generation request with 4 options",
 		"🔧 STATION-MIDDLEWARE: Request has 4 tools",
-		"Starting Station-enhanced GenKit generation",
+		"Agent is starting task execution",
 		"Turn 0: Model responded",
 		"Turn 1: Model responded",
 	}
@@ -961,8 +961,8 @@ func (aee *AgentExecutionEngine) shouldShowInLiveExecution(logEntry map[string]i
 		"Tool execution starting",
 		"Tool execution completed", 
 		"Starting execution for agent",
-		"Starting Station GenKit execution for agent",
-		"Station GenKit execution completed successfully",
+		"Agent is starting task execution",
+		"Agent completed task execution successfully",
 	}
 	
 	for _, relevant := range userRelevantMessages {

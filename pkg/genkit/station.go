@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +20,13 @@ import (
 	"github.com/firebase/genkit/go/core/logger"
 	"github.com/firebase/genkit/go/genkit"
 )
+
+// debugLog prints debug messages only when STATION_DEBUG=true
+func debugLog(format string, args ...interface{}) {
+	if os.Getenv("STATION_DEBUG") == "true" {
+		log.Printf(format, args...)
+	}
+}
 
 // ToolCallCollector accumulates tool calls during GenKit execution
 type ToolCallCollector struct {
@@ -94,11 +103,11 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 	toolCallCollector := &ToolCallCollector{
 		ToolCalls: make([]ToolCallRecord, 0),
 	}
-	log.Printf("🔧 STATION-GENERATE: Created toolCallCollector for execution")
+	debugLog("🔧 STATION-GENERATE: Created toolCallCollector for execution")
 	
 	// Add collector to context so middleware can access it
 	ctx = context.WithValue(ctx, "tool_call_collector", toolCallCollector)
-	log.Printf("🔧 STATION-GENERATE: Added toolCallCollector to context")
+	debugLog("🔧 STATION-GENERATE: Added toolCallCollector to context")
 	
 	// Create Station's enhancement middleware
 	stationMiddleware := createStationMiddleware(config)
@@ -144,9 +153,9 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 	// Log the enhanced generation start
 	if config.EnableProgressiveTracking && config.LogCallback != nil {
 		config.LogCallback(map[string]interface{}{
-			"event":       "station_generate_start",
+			"event":       "agent_execution_start",
 			"level":       "info", 
-			"message":     "Starting Station-enhanced GenKit generation",
+			"message":     "Agent is starting task execution",
 			"config": map[string]interface{}{
 				"context_threshold":    config.ContextThreshold,
 				"max_turns":           config.MaxTurns,
@@ -157,7 +166,7 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 	}
 	
 	// Debug: Log just before calling GenKit's native generate
-	log.Printf("🔧 STATION-GENERATE: About to call genkit.Generate with %d total options", len(enhancedOpts))
+	debugLog("🔧 STATION-GENERATE: About to call genkit.Generate with %d total options", len(enhancedOpts))
 
 	// Set up log capture for MCP tool calls
 	var logCapture *LogCapture
@@ -313,16 +322,19 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 									}
 									conversationToolCalls = append(conversationToolCalls, toolCallData)
 									log.Printf("🔧 STATION-GENERATE: Found conversation ToolRequest[%d,%d]: %s with input %v", i, j, part.ToolRequest.Name, part.ToolRequest.Input)
-								} else if part.IsToolResponse() {
+								} else if part.IsToolResponse() && part.ToolResponse != nil {
 									toolResponsesFound++
+									log.Printf("🔧 STATION-GENERATE: Found conversation ToolResponse[%d,%d]: %s", i, j, part.ToolResponse.Name)
+									log.Printf("🔧 STATION-GENERATE: ToolResponse Output: %+v", part.ToolResponse.Output)
+									
 									// Find the corresponding tool call and update it with output
 									for k := range conversationToolCalls {
 										if conversationToolCalls[k]["ref"] == part.ToolResponse.Ref {
 											conversationToolCalls[k]["output"] = part.ToolResponse.Output
+											log.Printf("🔧 STATION-GENERATE: Updated tool call %s with output: %+v", part.ToolResponse.Name, part.ToolResponse.Output)
 											break
 										}
 									}
-									log.Printf("🔧 STATION-GENERATE: Found conversation ToolResponse[%d,%d]: %s with output %v", i, j, part.ToolResponse.Name, part.ToolResponse.Output)
 								}
 							}
 						}
@@ -404,12 +416,12 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 		logCallbackData := map[string]interface{}{
 			"timestamp":   time.Now().Format(time.RFC3339),
 			"level":       "info",
-			"message":     "Station GenKit execution completed successfully",
+			"message":     "Agent completed task execution successfully",
 			"details": map[string]interface{}{
 				"success":          err == nil,
 				"duration_seconds": 0, // Duration will be calculated elsewhere
 				"response_length":  func() int { if response != nil { return len(response.Text()) } else { return 0 } }(),
-				"model_name":      "station-genkit", // Model name will be set elsewhere
+				"model_name":      "ai-agent", // Model name will be set elsewhere
 				"error":           func() string { if err != nil { return err.Error() } else { return "" } }(),
 				"usage":           usageData,
 				"tool_calls":      toolCallsInfo,
@@ -453,7 +465,7 @@ func createStationMiddleware(config *StationConfig) ai.ModelMiddleware {
 	return func(next ai.ModelFunc) ai.ModelFunc {
 		return func(ctx context.Context, req *ai.ModelRequest, cb ai.ModelStreamCallback) (*ai.ModelResponse, error) {
 			// Debug: Log that middleware is being called
-			log.Printf("🔧 STATION-MIDDLEWARE: Called with request containing %d messages, %d tools", len(req.Messages), len(req.Tools))
+			debugLog("🔧 STATION-MIDDLEWARE: Called with request containing %d messages, %d tools", len(req.Messages), len(req.Tools))
 			// 1. Context Protection - check before model call
 			if config.ContextThreshold > 0 {
 				contextManager := stationcontext.NewManager(config.MaxContextTokens, config.ContextThreshold)
@@ -567,6 +579,31 @@ func createStationMiddleware(config *StationConfig) ai.ModelMiddleware {
 			slog.Debug("Station middleware calling GenKit model", "messages", len(req.Messages))
 			
 			response, err := next(ctx, req, cb)
+			
+			// 4.5. Apply response truncation if tools returned too much data
+			if err != nil && config.MaxToolOutputSize > 0 {
+				// Check if error is context length exceeded due to large tool outputs
+				errorStr := err.Error()
+				if strings.Contains(errorStr, "context_length_exceeded") || 
+				   strings.Contains(errorStr, "Input tokens exceed") {
+					
+					debugLog("🔧 STATION-MIDDLEWARE: Context length exceeded - likely due to large tool outputs")
+					debugLog("🔧 STATION-MIDDLEWARE: MaxToolOutputSize configured: %d bytes", config.MaxToolOutputSize)
+					
+					if config.LogCallback != nil {
+						config.LogCallback(map[string]interface{}{
+							"event":   "context_overflow_detected", 
+							"level":   "warning",
+							"message": "Tool outputs caused context overflow - consider reducing tool output size",
+							"details": map[string]interface{}{
+								"max_tool_output_size": config.MaxToolOutputSize,
+								"error_type":           "context_length_exceeded",
+								"recommendation":       "Use more focused tool queries or enable tool output truncation",
+							},
+						})
+					}
+				}
+			}
 			
 			// 5. Progressive Tracking - log response  
 			if config.EnableProgressiveTracking && config.LogCallback != nil {
