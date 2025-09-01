@@ -318,13 +318,28 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 			}
 		}
 		
-		// Add tool calls extracted from conversation history (from response analysis above)
-		if response != nil {
-			if len(conversationToolCalls) > 0 {
-				toolCallsInfo["conversation_tool_calls"] = conversationToolCalls
-				toolCallsInfo["conversation_tools_used"] = len(conversationToolCalls)
-				log.Printf("🔧 STATION-GENERATE: Including %d tool calls from conversation history", len(conversationToolCalls))
+		// Prioritize toolCallCollector data (has responses) over conversation history (only requests)
+		// If toolCallCollector has data, use that as primary; otherwise fall back to conversation history
+		if toolCallCollector != nil && len(toolCallCollector.GetToolCalls()) > 0 {
+			// Use collector data as primary source (has both inputs and outputs)
+			collectorCalls := toolCallCollector.GetToolCalls()
+			conversationCallsFormatted := make([]map[string]interface{}, len(collectorCalls))
+			for i, call := range collectorCalls {
+				conversationCallsFormatted[i] = map[string]interface{}{
+					"tool_name": call.Name,
+					"input":     call.Input,
+					"output":    call.Output,
+					"ref":       fmt.Sprintf("collector_%d", i),
+				}
 			}
+			toolCallsInfo["conversation_tool_calls"] = conversationCallsFormatted
+			toolCallsInfo["conversation_tools_used"] = len(conversationCallsFormatted)
+			log.Printf("🔧 STATION-GENERATE: Using toolCallCollector data (%d calls with responses)", len(conversationCallsFormatted))
+		} else if response != nil && len(conversationToolCalls) > 0 {
+			// Fall back to conversation history if collector is empty (only has inputs)
+			toolCallsInfo["conversation_tool_calls"] = conversationToolCalls
+			toolCallsInfo["conversation_tools_used"] = len(conversationToolCalls)
+			log.Printf("🔧 STATION-GENERATE: Using conversation history (%d calls, inputs only)", len(conversationToolCalls))
 		}
 		
 		logCallbackData := map[string]interface{}{

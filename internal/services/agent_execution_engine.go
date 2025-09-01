@@ -554,20 +554,18 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		
 		// Create a logging callback for real-time progress updates and execution tracking
 		logCallback := func(logEntry map[string]interface{}) {
-			// Always store debug logs (keep everything in database for debugging)
-			err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
-			if err != nil {
-				logging.Debug("Failed to append debug log: %v", err)
+			// Filter out application logic leakage before storing - only store user-relevant logs
+			if aee.shouldShowInLiveExecution(logEntry) {
+				// Store user-relevant logs in database for UI display
+				err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
+				if err != nil {
+					logging.Debug("Failed to append debug log: %v", err)
+				}
 			}
 			
-			// Always process tool execution events for user-friendly logging
-			// (ExecutionTracker needs these for database records and UI display)
+			// Always process tool execution events for execution tracking (regardless of filtering)
+			// ExecutionTracker needs these for database records and UI display
 			executionTracker.ProcessLogEntry(logEntry, aee.repos)
-			
-			// TODO: The actual live execution log filtering would happen here
-			// where logs are sent to the UI for real-time display.
-			// For now, we filter at the database level by not storing framework noise
-			// or we filter in the UI layer to avoid breaking existing functionality.
 		}
 		
 		// Set the logging callback on the OpenAI plugin for detailed API call logging
