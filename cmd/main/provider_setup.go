@@ -23,9 +23,9 @@ type ProviderConfig struct {
 // Predefined models for each provider
 var providerModels = map[string][]string{
 	"openai": {
-		"gpt-5",
-		"gpt-5-mini",
-		"gpt-5-nano",
+		"gpt-4o",
+		"gpt-4o-mini", 
+		"gpt-3.5-turbo",
 	},
 	"gemini": {
 		"gemini-2.5-flash",
@@ -99,7 +99,7 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 // detectProviderFromEnv checks environment variables for API keys
 func detectProviderFromEnv() (string, string) {
 	if os.Getenv("OPENAI_API_KEY") != "" {
-		return "openai", "gpt-5-mini"
+		return "openai", "gpt-4o-mini"
 	}
 	if os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("GOOGLE_API_KEY") != "" {
 		return "gemini", defaultModel

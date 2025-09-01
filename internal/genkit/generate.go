@@ -384,6 +384,12 @@ func (g *StationModelGenerator) convertToModelResponse(resp *openai.ChatCompleti
 		logging.Debug("🔧 STATION-GENKIT Usage: No usage data available (total tokens: %d)", resp.Usage.TotalTokens)
 	}
 	
+	// Store the original request context so GenKit can track conversation history
+	originalRequest := &ai.ModelRequest{
+		Messages: g.convertToAIMessages(),
+		Tools:    g.convertToAITools(),
+	}
+	
 	return &ai.ModelResponse{
 		Message: &ai.Message{
 			Role:    ai.RoleModel,
@@ -391,7 +397,7 @@ func (g *StationModelGenerator) convertToModelResponse(resp *openai.ChatCompleti
 		},
 		FinishReason: finishReason,
 		Usage: usage,
-		Request: &ai.ModelRequest{}, // Match GenKit's reference OpenAI plugin pattern
+		Request: originalRequest, // Preserve conversation context for GenKit
 	}
 }
 
