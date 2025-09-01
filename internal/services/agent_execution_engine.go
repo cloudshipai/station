@@ -47,12 +47,16 @@ func (et *ExecutionTracker) ProcessLogEntry(logEntry map[string]interface{}, rep
 	}
 	
 	details, hasDetails := logEntry["details"].(map[string]interface{})
-	if !hasDetails {
+	if !hasDetails && message != "Station GenKit execution completed successfully" {
 		log.Printf("🔧 EXECUTION-TRACKER: Received message '%s' without details field", message)
 		return  
 	}
 	
-	log.Printf("🔧 EXECUTION-TRACKER: Processing message: '%s' with details keys: %v", message, getDebugMapKeys(details))
+	if hasDetails {
+		log.Printf("🔧 EXECUTION-TRACKER: Processing message: '%s' with details keys: %v", message, getDebugMapKeys(details))
+	} else {
+		log.Printf("🔧 EXECUTION-TRACKER: Processing message: '%s' with no details field", message)
+	}
 	
 	switch message {
 	case "Tool execution starting":
@@ -66,6 +70,12 @@ func (et *ExecutionTracker) ProcessLogEntry(logEntry map[string]interface{}, rep
 	case "Enhanced generation completed":
 		log.Printf("🔧 EXECUTION-TRACKER: Handling generation complete")
 		et.handleGenerationComplete(details, repos)
+	case "Station GenKit execution completed successfully":
+		log.Printf("🔧 EXECUTION-TRACKER: Handling Station GenKit completion with tool calls")
+		et.handleStationGenKitComplete(logEntry, repos)
+	case "Station GenKit generation completed: success":
+		log.Printf("🔧 EXECUTION-TRACKER: Handling Station GenKit generation completion (with tool_calls in details)")
+		et.handleStationGenKitComplete(logEntry, repos)
 	default:
 		log.Printf("🔧 EXECUTION-TRACKER: Unknown message type: '%s'", message)
 	}
@@ -235,6 +245,89 @@ func (et *ExecutionTracker) handleGenerationComplete(details map[string]interfac
 	
 	et.executionSteps = append(et.executionSteps, step)
 	et.stepCounter++
+}
+
+// handleStationGenKitComplete processes tool call data from Station GenKit completion
+func (et *ExecutionTracker) handleStationGenKitComplete(logEntry map[string]interface{}, repos *repositories.Repositories) {
+	log.Printf("🔧 EXECUTION-TRACKER: Processing Station GenKit completion logEntry: %+v", logEntry)
+	
+	// Debug: Check what keys are available in the top-level logEntry
+	log.Printf("🔧 EXECUTION-TRACKER: Available logEntry keys: %v", getDebugMapKeys(logEntry))
+	
+	// Extract details from logEntry
+	details, hasDetails := logEntry["details"].(map[string]interface{})
+	if !hasDetails {
+		log.Printf("🔧 EXECUTION-TRACKER: No details found in logEntry")
+		return
+	}
+	
+	// Extract tool call information from details field (station.go puts tool_calls in details)
+	if toolCallsData, ok := details["tool_calls"].(map[string]interface{}); ok {
+		log.Printf("🔧 EXECUTION-TRACKER: Found tool_calls data: %+v", toolCallsData)
+		
+		// Process conversation tool calls (from GenKit conversation history)
+		if conversationToolCalls, ok := toolCallsData["conversation_tool_calls"].([]map[string]interface{}); ok {
+			log.Printf("🔧 EXECUTION-TRACKER: Processing %d conversation tool calls", len(conversationToolCalls))
+			
+			for i, toolCall := range conversationToolCalls {
+				log.Printf("🔧 EXECUTION-TRACKER: Processing tool call %d: %+v", i, toolCall)
+				
+				// Extract tool call data
+				toolName, hasName := toolCall["tool_name"].(string)
+				input, hasInput := toolCall["input"]
+				output, hasOutput := toolCall["output"]
+				
+				if hasName {
+					// Add tool call to the tracked tool calls
+					toolCallEntry := map[string]interface{}{
+						"tool_name": toolName,
+						"input":     input,
+						"output":    output,
+						"timestamp": time.Now().Format(time.RFC3339),
+					}
+					
+					et.toolCalls = append(et.toolCalls, toolCallEntry)
+					log.Printf("🔧 EXECUTION-TRACKER: Added tool call: %s", toolName)
+					
+					// Add execution step for this tool call
+					step := map[string]interface{}{
+						"step":      et.stepCounter,
+						"type":      "tool_call",
+						"content":   fmt.Sprintf("Called %s", toolName),
+						"timestamp": time.Now().Format(time.RFC3339),
+						"tool_name": toolName,
+					}
+					
+					if hasInput {
+						step["input"] = input
+					}
+					if hasOutput {
+						step["output"] = output
+					}
+					
+					et.executionSteps = append(et.executionSteps, step)
+					et.stepCounter++
+					
+					log.Printf("🔧 EXECUTION-TRACKER: Added execution step for tool: %s", toolName)
+				}
+			}
+		}
+	} else {
+		log.Printf("🔧 EXECUTION-TRACKER: No tool_calls found in details")
+	}
+	
+	// Add final completion step
+	step := map[string]interface{}{
+		"step":      et.stepCounter,
+		"type":      "model_response",
+		"content":   "Generation completed with tool calls processed",
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+	
+	et.executionSteps = append(et.executionSteps, step)
+	et.stepCounter++
+	
+	log.Printf("🔧 EXECUTION-TRACKER: Completed Station GenKit processing - %d tool calls, %d steps", len(et.toolCalls), len(et.executionSteps))
 }
 
 // GetExecutionData returns the collected tool calls and execution steps

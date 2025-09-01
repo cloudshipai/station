@@ -385,9 +385,29 @@ func (g *StationModelGenerator) convertToModelResponse(resp *openai.ChatCompleti
 	}
 	
 	// Store the original request context so GenKit can track conversation history
+	convertedMessages := g.convertToAIMessages()
 	originalRequest := &ai.ModelRequest{
-		Messages: g.convertToAIMessages(),
+		Messages: convertedMessages,
 		Tools:    g.convertToAITools(),
+	}
+	
+	// DEBUG: Log what we're putting in the request
+	logging.Debug("🔧 TOOL-EXTRACTION: Converting %d OpenAI messages to %d AI messages", len(g.messages), len(convertedMessages))
+	for i, aiMsg := range convertedMessages {
+		logging.Debug("🔧 TOOL-EXTRACTION: AI Message[%d] - Role: %s, Parts: %d", i, aiMsg.Role, len(aiMsg.Content))
+		for j, part := range aiMsg.Content {
+			if part.IsToolRequest() && part.ToolRequest != nil {
+				logging.Debug("🔧 TOOL-EXTRACTION: Found ToolRequest[%d,%d]: %s with input %v", i, j, part.ToolRequest.Name, part.ToolRequest.Input)
+			} else if part.IsToolResponse() && part.ToolResponse != nil {
+				logging.Debug("🔧 TOOL-EXTRACTION: Found ToolResponse[%d,%d]: %s with output %v", i, j, part.ToolResponse.Name, part.ToolResponse.Output)
+			} else if part.IsText() {
+				textLen := len(part.Text)
+				if textLen > 50 {
+					textLen = 50
+				}
+				logging.Debug("🔧 TOOL-EXTRACTION: Found Text[%d,%d]: %s", i, j, part.Text[:textLen])
+			}
+		}
 	}
 	
 	return &ai.ModelResponse{
