@@ -94,9 +94,11 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 	toolCallCollector := &ToolCallCollector{
 		ToolCalls: make([]ToolCallRecord, 0),
 	}
+	log.Printf("🔧 STATION-GENERATE: Created toolCallCollector for execution")
 	
 	// Add collector to context so middleware can access it
 	ctx = context.WithValue(ctx, "tool_call_collector", toolCallCollector)
+	log.Printf("🔧 STATION-GENERATE: Added toolCallCollector to context")
 	
 	// Create Station's enhancement middleware
 	stationMiddleware := createStationMiddleware(config)
@@ -213,6 +215,18 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 				log.Printf("🔧 STATION-GENERATE: Final response has NO Usage field (nil)")
 			}
 			
+			// ENHANCED DEBUG: Log the complete response structure
+			log.Printf("🔧 STATION-GENERATE: Response.FinishReason: %q", response.FinishReason)
+			log.Printf("🔧 STATION-GENERATE: Response.Message != nil: %t", response.Message != nil)
+			if response.Message != nil {
+				log.Printf("🔧 STATION-GENERATE: Response.Message.Role: %q", response.Message.Role)
+				log.Printf("🔧 STATION-GENERATE: Response.Message.Content length: %d", len(response.Message.Content))
+			}
+			log.Printf("🔧 STATION-GENERATE: Response.Request != nil: %t", response.Request != nil)
+			if response.Request != nil && response.Request.Messages != nil {
+				log.Printf("🔧 STATION-GENERATE: Response.Request.Messages length: %d", len(response.Request.Messages))
+			}
+			
 			// Extract tool calls from the response message history and conversation context
 			toolCallsFound := 0
 			toolResponsesFound := 0
@@ -243,28 +257,73 @@ func StationGenerate(ctx context.Context, genkitApp *genkit.Genkit, config *Stat
 			log.Printf("🔧 STATION-GENERATE: Checking for conversation history in response...")
 			if response.Request != nil && response.Request.Messages != nil {
 				log.Printf("🔧 STATION-GENERATE: Response contains request with %d conversation messages", len(response.Request.Messages))
+				
+				// Log all messages to understand the conversation structure
+				for i, msg := range response.Request.Messages {
+					log.Printf("🔧 STATION-GENERATE: Message[%d] - Role: %v, Parts: %d", i, msg.Role, len(msg.Content))
+					for j, part := range msg.Content {
+						if part.IsText() {
+							// Show full text for tool role messages to debug why content is empty
+							if msg.Role == "tool" {
+								log.Printf("🔧 STATION-GENERATE:   Part[%d] - TOOL Text (length %d): %q", j, len(part.Text), part.Text)
+							} else {
+								log.Printf("🔧 STATION-GENERATE:   Part[%d] - Text: %.100s...", j, part.Text)
+							}
+						} else if part.IsToolRequest() {
+							log.Printf("🔧 STATION-GENERATE:   Part[%d] - ToolRequest: %s", j, part.ToolRequest.Name)
+						} else if part.IsToolResponse() {
+							log.Printf("🔧 STATION-GENERATE:   Part[%d] - ToolResponse: %s", j, part.ToolResponse.Name)
+						}
+					}
+				}
+				
+				// Build a map to track tool requests by index for matching with responses
+				toolRequestsByIndex := make(map[int]int) // maps message index to tool call index
+				
 				for i, msg := range response.Request.Messages {
 					if msg.Content != nil {
-						for j, part := range msg.Content {
-							if part.IsToolRequest() {
-								toolCallsFound++
-								toolCallData := map[string]interface{}{
-									"tool_name": part.ToolRequest.Name,
-									"input": part.ToolRequest.Input,
-									"ref": part.ToolRequest.Ref,
-								}
-								conversationToolCalls = append(conversationToolCalls, toolCallData)
-								log.Printf("🔧 STATION-GENERATE: Found conversation ToolRequest[%d,%d]: %s with input %v", i, j, part.ToolRequest.Name, part.ToolRequest.Input)
-							} else if part.IsToolResponse() {
-								toolResponsesFound++
-								// Find the corresponding tool call and update it with output
-								for k := range conversationToolCalls {
-									if conversationToolCalls[k]["ref"] == part.ToolResponse.Ref {
-										conversationToolCalls[k]["output"] = part.ToolResponse.Output
-										break
+						// Check if this is a tool role message first
+						if msg.Role == "tool" {
+							// Handle tool role messages - these contain the actual tool responses as text
+							for j, part := range msg.Content {
+								if part.IsText() {
+									toolResponsesFound++
+									// Find the most recent tool call to match this response with
+									// Tool responses come after tool requests, so we match with the last unmatched tool call
+									for k := len(conversationToolCalls) - 1; k >= 0; k-- {
+										if conversationToolCalls[k]["output"] == nil {
+											conversationToolCalls[k]["output"] = part.Text
+											log.Printf("🔧 STATION-GENERATE: Found tool role response[%d,%d]: matched with %s", i, j, conversationToolCalls[k]["tool_name"])
+											log.Printf("🔧 STATION-GENERATE: Tool response content: %q (length: %d)", part.Text, len(part.Text))
+											break
+										}
 									}
 								}
-								log.Printf("🔧 STATION-GENERATE: Found conversation ToolResponse[%d,%d]: %s with output %v", i, j, part.ToolResponse.Name, part.ToolResponse.Output)
+							}
+						} else {
+							// Handle regular messages (model, user, system roles)
+							for j, part := range msg.Content {
+								if part.IsToolRequest() {
+									toolCallsFound++
+									toolRequestsByIndex[i] = len(conversationToolCalls) // Track where this tool call is in the array
+									toolCallData := map[string]interface{}{
+										"tool_name": part.ToolRequest.Name,
+										"input": part.ToolRequest.Input,
+										"ref": part.ToolRequest.Ref,
+									}
+									conversationToolCalls = append(conversationToolCalls, toolCallData)
+									log.Printf("🔧 STATION-GENERATE: Found conversation ToolRequest[%d,%d]: %s with input %v", i, j, part.ToolRequest.Name, part.ToolRequest.Input)
+								} else if part.IsToolResponse() {
+									toolResponsesFound++
+									// Find the corresponding tool call and update it with output
+									for k := range conversationToolCalls {
+										if conversationToolCalls[k]["ref"] == part.ToolResponse.Ref {
+											conversationToolCalls[k]["output"] = part.ToolResponse.Output
+											break
+										}
+									}
+									log.Printf("🔧 STATION-GENERATE: Found conversation ToolResponse[%d,%d]: %s with output %v", i, j, part.ToolResponse.Name, part.ToolResponse.Output)
+								}
 							}
 						}
 					}
@@ -447,6 +506,7 @@ func createStationMiddleware(config *StationConfig) ai.ModelMiddleware {
 			
 			// 3. Enhanced Callback Logging - capture tool calls in streaming  
 			if cb != nil {
+				log.Printf("🔧 STATION-GENERATE: Setting up streaming callback for tool capture")
 				originalCb := cb
 				cb = func(ctx context.Context, chunk *ai.ModelResponseChunk) error {
 					// Extract tool call collector from context
