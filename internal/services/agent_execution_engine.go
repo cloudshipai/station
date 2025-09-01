@@ -928,10 +928,26 @@ func (aee *AgentExecutionEngine) shouldShowInLiveExecution(logEntry map[string]i
 		"Enhanced generation completed",
 		"Station GenKit generation completed: success",
 		"Starting Station-enhanced GenKit generation",
+		// Additional GenKit/Station internal noise
+		"🔧 STATION-GENERATE: Processing generation request with 4 options",
+		"🔧 STATION-MIDDLEWARE: Request has 4 tools",
+		"Starting Station-enhanced GenKit generation",
+		"Turn 0: Model responded",
+		"Turn 1: Model responded",
 	}
 	
 	// Filter out turn completion messages (Turn X/Y completed)
 	if strings.Contains(message, "Turn ") && strings.Contains(message, " completed") {
+		return false
+	}
+	
+	// Filter out turn messages with patterns
+	if strings.Contains(message, "Turn ") && (strings.Contains(message, "Sending request to model") || strings.Contains(message, "Model requested") || strings.Contains(message, "Model responded")) {
+		return false
+	}
+	
+	// Filter out debug messages starting with emojis (application logic)
+	if strings.HasPrefix(message, "🔧 ") || strings.HasPrefix(message, "🔥 ") || strings.HasPrefix(message, "📊 ") || strings.HasPrefix(message, "⚡ ") {
 		return false
 	}
 	
