@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -14,6 +16,7 @@ import (
 	"station/pkg/models"
 
 	"github.com/firebase/genkit/go/ai"
+	"github.com/firebase/genkit/go/core/logger"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	"go.opentelemetry.io/otel"
@@ -374,6 +377,18 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 	toolCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	
+	// ENABLE GENKIT MCP DEBUG LOGGING: Set global debug level for GenKit MCP client tool calls
+	// This enables the detailed request/response logging in GenKit's MCP client
+	originalLevel := logger.GetLevel()
+	logger.SetLevel(slog.LevelDebug)
+	log.Printf("🔧 GENKIT-MCP-DEBUG: Enabled DEBUG logging for MCP tool calls on server: %s", serverName)
+	
+	// Restore original level after this operation
+	defer func() {
+		logger.SetLevel(originalLevel)
+		log.Printf("🔧 GENKIT-MCP-DEBUG: Restored original log level for server: %s", serverName)
+	}()
+	
 	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
 	if err != nil {
 		logging.Error(" CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
@@ -694,8 +709,21 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	toolCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	
+	// ENABLE GENKIT MCP DEBUG LOGGING: Set global debug level for GenKit MCP client tool calls
+	// This enables the detailed request/response logging in GenKit's MCP client
+	originalLevel := logger.GetLevel()
+	logger.SetLevel(slog.LevelDebug)
+	log.Printf("🔧 GENKIT-MCP-DEBUG: Enabled DEBUG logging for MCP tool calls on server: %s", serverName)
+	
+	// Restore original level after this operation
+	defer func() {
+		logger.SetLevel(originalLevel)
+		log.Printf("🔧 GENKIT-MCP-DEBUG: Restored original log level for server: %s", serverName)
+	}()
+	
 	logging.Info("MCPCONNMGR connectToMCPServer: About to call GetActiveTools for server: %s", serverName)
 	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
+	
 	
 	// NOTE: Connection stays alive for tool execution during Generate() calls
 	

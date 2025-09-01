@@ -12,6 +12,7 @@ import (
 
 	"station/internal/logging"
 	"station/internal/services"
+	"station/pkg/debug"
 	"station/pkg/models"
 	"station/pkg/schema"
 
@@ -344,6 +345,39 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 		if err != nil {
 			logging.Info("Warning: Failed to update run %d completion metadata: %v", runID, err)
 		}
+		
+		// Extract actual tool usage and tool call details from debug logs and update database
+		go func() {
+			if run, err := s.repos.AgentRuns.GetByID(ctx, runID); err == nil && run.DebugLogs != nil {
+				if debugLogsBytes, err := json.Marshal(*run.DebugLogs); err == nil {
+					debugLogsStr := string(debugLogsBytes)
+					
+					// Extract tool usage count
+					if extractedToolCount, _ := debug.ExtractToolUsageFromDebugLogs(debugLogsStr); extractedToolCount > 0 {
+						extractedVal := int64(extractedToolCount)
+						updateErr := s.repos.AgentRuns.UpdateToolsUsed(ctx, runID, &extractedVal)
+						if updateErr != nil {
+							logging.Debug("Failed to update tools_used for run %d: %v", runID, updateErr)
+						} else {
+							logging.Debug("Updated run %d with %d tools used from debug logs", runID, extractedToolCount)
+						}
+					}
+					
+					// Extract detailed tool call information
+					if toolCalls, err := debug.ExtractToolCallsFromDebugLogs(debugLogsStr); err == nil && len(toolCalls) > 0 {
+						if toolCallsBytes, err := json.Marshal(toolCalls); err == nil {
+							toolCallsJSON := string(toolCallsBytes)
+							updateErr := s.repos.AgentRuns.UpdateToolCalls(ctx, runID, &toolCallsJSON)
+							if updateErr != nil {
+								logging.Debug("Failed to update tool_calls for run %d: %v", runID, updateErr)
+							} else {
+								logging.Debug("Updated run %d with %d detailed tool calls", runID, len(toolCalls))
+							}
+						}
+					}
+				}
+			}
+		}()
 		
 		// Convert AgentExecutionResult to Message for response
 		response = &services.Message{

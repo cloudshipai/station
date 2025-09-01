@@ -23,7 +23,6 @@ import (
 	"fmt"
 
 	"station/internal/logging"
-	"station/pkg/agent"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/openai/openai-go"
@@ -232,7 +231,15 @@ func (g *StationModelGenerator) WithTools(tools []*ai.ToolDefinition) *StationMo
 	}
 
 	if tools == nil {
+		logging.Debug("🔧 STATION-GENKIT WithTools: No tools provided")
 		return g
+	}
+
+	logging.Debug("🔧 STATION-GENKIT WithTools: Processing %d tools for LLM", len(tools))
+	for i, tool := range tools {
+		if tool != nil {
+			logging.Debug("🔧 STATION-GENKIT WithTools[%d]: %s - %s", i, tool.Name, tool.Description)
+		}
 	}
 
 	toolParams := make([]openai.ChatCompletionToolParam, 0, len(tools))
@@ -260,12 +267,17 @@ func (g *StationModelGenerator) WithTools(tools []*ai.ToolDefinition) *StationMo
 		// Only set ParallelToolCalls when tools are provided
 		// OpenAI API requires this field only when tools are specified
 		g.request.ParallelToolCalls = openai.Bool(false) // Prevent obsessive parallel tool calling
+		logging.Debug("🔧 STATION-GENKIT WithTools: Set %d tools for OpenAI request", len(toolParams))
+	} else {
+		logging.Debug("🔧 STATION-GENKIT WithTools: No valid tools to set")
 	}
 
 	return g
 }
 
-// Generate executes the generation request using Station's enhanced modular architecture
+// Generate executes the generation request using native OpenAI generation 
+// FIXED 2025-09-01: Removed buggy ModularGenerator that pre-executed all tools with empty inputs.
+// Now uses OpenAI's native API directly, letting the LLM decide which tools to call and when.
 func (g *StationModelGenerator) Generate(ctx context.Context, handleChunk func(context.Context, *ai.ModelResponseChunk) error) (*ai.ModelResponse, error) {
 	// Check for any errors that occurred during building
 	if g.err != nil {
@@ -278,24 +290,109 @@ func (g *StationModelGenerator) Generate(ctx context.Context, handleChunk func(c
 		return nil, fmt.Errorf("no messages provided")
 	}
 
-	// Convert GenKit messages to ai.Message format for our enhanced generator
-	aiMessages := g.convertToAIMessages()
+	logging.Debug("🔧 STATION-GENKIT Generate: Using native OpenAI API (ModularGenerator removed)")
+	logging.Debug("🔧 STATION-GENKIT Generate: %d messages, %d tools", len(g.messages), len(g.tools))
+
+	// Set the messages and tools in the request
+	g.request.Messages = g.messages
+	if len(g.tools) > 0 {
+		g.request.Tools = g.tools
+		logging.Debug("🔧 STATION-GENKIT Generate: Set %d tools for native OpenAI", len(g.tools))
+	}
+
+	// Use OpenAI's native completion API - this allows the LLM to decide which tools to call
+	logging.Debug("🔧 STATION-GENKIT Generate: Calling OpenAI ChatCompletion API")
 	
-	// Convert GenKit tools to ai.ToolDefinition format
-	aiTools := g.convertToAITools()
+	completionResp, err := g.client.Chat.Completions.New(ctx, *g.request)
+	if err != nil {
+		logging.Debug("Station GenKit: OpenAI API call failed: %v", err)
+		return nil, fmt.Errorf("OpenAI API call failed: %w", err)
+	}
 
-	// Create modular generator with Station's context protection
-	modularGen := agent.NewModularGenerator(
-		g.client,
-		g.modelName,
-		g.logCallback,
-	)
+	// Debug: Log the OpenAI response to see if Usage is present
+	if completionResp.Usage.TotalTokens > 0 {
+		logging.Debug("🔧 STATION-GENKIT OpenAI Response Usage: Input: %d, Output: %d, Total: %d", 
+			completionResp.Usage.PromptTokens, completionResp.Usage.CompletionTokens, completionResp.Usage.TotalTokens)
+	} else {
+		logging.Debug("🔧 STATION-GENKIT OpenAI Response: No Usage data (total tokens: %d)", completionResp.Usage.TotalTokens)
+	}
 
-	// Delegate to our enhanced generator which handles:
-	// - Context overflow protection (90% threshold like OpenCode)
-	// - Turn limit enforcement with guaranteed final LLM response
-	// - Context-protected tool execution with intelligent truncation
-	return modularGen.Generate(ctx, aiMessages, aiTools, handleChunk)
+	// Convert OpenAI response to GenKit ModelResponse
+	return g.convertToModelResponse(completionResp), nil
+}
+
+// convertToModelResponse converts OpenAI ChatCompletion response to GenKit ModelResponse format
+func (g *StationModelGenerator) convertToModelResponse(resp *openai.ChatCompletion) *ai.ModelResponse {
+	if resp == nil || len(resp.Choices) == 0 {
+		return &ai.ModelResponse{
+			Message: &ai.Message{
+				Role:    ai.RoleModel,
+				Content: []*ai.Part{ai.NewTextPart("No response from model")},
+			},
+			FinishReason: ai.FinishReasonOther,
+		}
+	}
+
+	choice := resp.Choices[0]
+	message := choice.Message
+	
+	// Convert content parts
+	parts := make([]*ai.Part, 0)
+	
+	// Add text content if present
+	if message.Content != "" {
+		parts = append(parts, ai.NewTextPart(message.Content))
+		logging.Debug("🔧 STATION-GENKIT Response: Added text content (%d chars)", len(message.Content))
+	}
+	
+	// Add tool calls if present - these are LLM-requested tool calls with real parameters
+	if len(message.ToolCalls) > 0 {
+		logging.Debug("🔧 STATION-GENKIT Response: LLM requested %d tool calls", len(message.ToolCalls))
+		for i, tc := range message.ToolCalls {
+			toolRequest := &ai.ToolRequest{
+				Ref:   tc.ID,
+				Name:  tc.Function.Name,
+				Input: jsonStringToMap(tc.Function.Arguments),
+			}
+			parts = append(parts, ai.NewToolRequestPart(toolRequest))
+			logging.Debug("🔧 STATION-GENKIT Response: LLM Tool[%d] - %s (ID: %s) with args: %s", 
+				i, tc.Function.Name, tc.ID, tc.Function.Arguments)
+		}
+	}
+
+	// Convert finish reason - use Stop as default since tool calls will continue in agent loop
+	finishReason := ai.FinishReasonStop
+	
+	// Check if we have tool calls - if so, GenKit will handle the continuation
+	if len(message.ToolCalls) > 0 {
+		logging.Debug("🔧 STATION-GENKIT Response: Tool calls present - GenKit will continue agent loop")
+	}
+
+	logging.Debug("🔧 STATION-GENKIT Response: Converted to %d parts, finish: %v", len(parts), finishReason)
+	
+	// Convert usage information from OpenAI response to GenKit format
+	var usage *ai.GenerationUsage
+	if resp.Usage.TotalTokens > 0 {
+		usage = &ai.GenerationUsage{
+			InputTokens:  int(resp.Usage.PromptTokens),
+			OutputTokens: int(resp.Usage.CompletionTokens),
+			TotalTokens:  int(resp.Usage.TotalTokens),
+		}
+		logging.Debug("🔧 STATION-GENKIT Usage: Input: %d, Output: %d, Total: %d", 
+			usage.InputTokens, usage.OutputTokens, usage.TotalTokens)
+	} else {
+		logging.Debug("🔧 STATION-GENKIT Usage: No usage data available (total tokens: %d)", resp.Usage.TotalTokens)
+	}
+	
+	return &ai.ModelResponse{
+		Message: &ai.Message{
+			Role:    ai.RoleModel,
+			Content: parts,
+		},
+		FinishReason: finishReason,
+		Usage: usage,
+		Request: &ai.ModelRequest{}, // Match GenKit's reference OpenAI plugin pattern
+	}
 }
 
 // convertToAIMessages converts OpenAI messages to ai.Message format
