@@ -311,7 +311,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		config.MaxSteps,
 		config.EnvironmentID,
 		config.CreatedBy,
-		nil, // input_schema - not set in basic config
+		config.InputSchema, // Use input schema from config
 		config.CronSchedule,
 		config.ScheduleEnabled,
 	)
