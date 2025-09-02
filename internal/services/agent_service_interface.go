@@ -35,6 +35,7 @@ type AgentConfig struct {
 	AssignedTools []string `json:"assigned_tools"` // List of tool names to assign to this agent
 	MaxSteps      int64    `json:"max_steps"`     // Maximum steps for agent execution (matches db field type)
 	CreatedBy     int64    `json:"created_by"`    // User ID who created the agent
+	InputSchema   *string  `json:"input_schema,omitempty"`   // JSON schema for input variables
 	ModelProvider string   `json:"model_provider,omitempty"` // Model provider (e.g., "openai", "anthropic")
 	ModelID       string   `json:"model_id,omitempty"`       // Specific model ID (e.g., "gpt-4o", "claude-3-5-sonnet-20241022")
 	CronSchedule  *string  `json:"cron_schedule,omitempty"`  // Cron schedule for automated runs

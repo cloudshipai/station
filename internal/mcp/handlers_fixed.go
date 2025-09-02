@@ -102,15 +102,34 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
+	// Convert prompt to multi-role format if needed (same logic as export function)
+	var finalPrompt string
+	if s.isMultiRolePrompt(prompt) {
+		// Already multi-role, use as-is
+		finalPrompt = prompt
+	} else {
+		// Convert single prompt to multi-role format
+		var promptBuilder strings.Builder
+		promptBuilder.WriteString("{{role \"system\"}}\n")
+		promptBuilder.WriteString(prompt)
+		promptBuilder.WriteString("\n\n{{role \"user\"}}\n")
+		promptBuilder.WriteString("{{userInput}}")
+		finalPrompt = promptBuilder.String()
+	}
+	
+	// Set default input schema for proper dotprompt compatibility
+	defaultInputSchema := `{"type": "object", "properties": {"userInput": {"type": "string", "description": "User input for the agent"}}}`
+	
 	// Create the agent using unified service layer
 	config := &services.AgentConfig{
 		EnvironmentID: environmentID,
 		Name:          name,
 		Description:   description,
-		Prompt:        prompt,
+		Prompt:        finalPrompt,
 		AssignedTools: toolNames,
 		MaxSteps:      int64(maxSteps),
 		CreatedBy:     1, // Console user
+		InputSchema:   &defaultInputSchema,
 	}
 	
 	createdAgent, err := s.agentService.CreateAgent(ctx, config)
@@ -1171,6 +1190,7 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 func (s *Server) isMultiRolePrompt(prompt string) bool {
 	return strings.Contains(prompt, "{{role \"") || strings.Contains(prompt, "{{role '")
 }
+
 
 func (s *Server) handleExportAgents(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// Get optional parameters
