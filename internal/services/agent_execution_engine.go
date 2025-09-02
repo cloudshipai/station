@@ -214,9 +214,12 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		
 		// Create a logging callback for real-time progress updates
 		logCallback := func(logEntry map[string]interface{}) {
-			err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
-			if err != nil {
-				logging.Debug("Failed to append debug log: %v", err)
+			// Only store user-relevant logs in database for UI display
+			if aee.shouldShowInLiveExecution(logEntry) {
+				err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
+				if err != nil {
+					logging.Debug("Failed to append debug log: %v", err)
+				}
 			}
 		}
 		
@@ -531,4 +534,60 @@ func (aee *AgentExecutionEngine) extractTemplateVariables(dotpromptContent strin
 	}
 	
 	return variables
+}
+
+// shouldShowInLiveExecution filters out GenKit framework noise from live execution logs
+// while keeping user-relevant information visible
+func (aee *AgentExecutionEngine) shouldShowInLiveExecution(logEntry map[string]interface{}) bool {
+	message, ok := logEntry["message"].(string)
+	if !ok {
+		return false
+	}
+	
+	// Framework noise to filter out from live logs
+	frameworkNoise := []string{
+		"Context usage updated",
+		"Turn 1/25 completed",
+		"Turn 2/25 completed", 
+		"Turn 3/25 completed",
+		"Turn 4/25 completed",
+		"Turn 5/25 completed",
+		"Batch tool execution starting",
+		"Batch tool execution completed", 
+		"Enhanced generation starting",
+		"Enhanced generation completed",
+		"Station GenKit generation completed: success",
+		"Starting Station-enhanced GenKit generation",
+		// Additional GenKit/Station internal noise
+		"🔧 STATION-GENERATE: Processing generation request with 4 options",
+		"🔧 STATION-MIDDLEWARE: Request has 4 tools",
+		"Starting Station-enhanced GenKit generation",
+		"Turn 0: Model responded",
+		"Turn 1: Model responded",
+	}
+	
+	// Filter out turn completion messages (Turn X/Y completed)
+	if strings.Contains(message, "Turn ") && strings.Contains(message, " completed") {
+		return false
+	}
+	
+	// Filter out turn messages with patterns
+	if strings.Contains(message, "Turn ") && (strings.Contains(message, "Sending request to model") || strings.Contains(message, "Model requested") || strings.Contains(message, "Model responded")) {
+		return false
+	}
+	
+	// Filter out debug messages starting with emojis (application logic)
+	if strings.HasPrefix(message, "🔧 ") || strings.HasPrefix(message, "🔥 ") || strings.HasPrefix(message, "📊 ") || strings.HasPrefix(message, "⚡ ") {
+		return false
+	}
+	
+	// Filter out specific framework noise
+	for _, noise := range frameworkNoise {
+		if message == noise {
+			return false
+		}
+	}
+	
+	// Keep user-relevant logs
+	return true
 }

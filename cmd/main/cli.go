@@ -24,7 +24,6 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"station/cmd/main/handlers"
-	"station/cmd/main/handlers/load"
 	"station/cmd/main/handlers/mcp"
 	"station/internal/db"
 	"station/internal/tui"
@@ -211,20 +210,7 @@ func runUI(cmd *cobra.Command, args []string) error {
 
 // runMCPAdd implements the "station mcp add" command
 func runMCPAdd(cmd *cobra.Command, args []string) error {
-	environment, _ := cmd.Flags().GetString("environment")
-	endpoint, _ := cmd.Flags().GetString("endpoint")
-	
-	// Get config name from args or generate default
-	var configName string
-	if len(args) > 0 {
-		configName = args[0]
-	} else {
-		configName = "new-mcp-config"
-	}
-	
-	// Use the load handler's editor functionality
-	loadHandler := load.NewLoadHandler(themeManager)
-	return loadHandler.HandleMCPEditor(endpoint, environment, configName)
+	return fmt.Errorf("mcp add editor functionality removed with load command deprecation - use 'stn sync' with file-based configuration instead")
 }
 
 // runMCPAddFlags handles flag-based mode
