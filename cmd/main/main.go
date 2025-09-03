@@ -92,8 +92,6 @@ func init() {
 	agentCmd.AddCommand(agentShowCmd)
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentDeleteCmd)
-	agentCmd.AddCommand(agentExportCmd)
-	agentCmd.AddCommand(agentImportCmd)
 	
 	runsCmd.AddCommand(runsListCmd)
 	runsCmd.AddCommand(runsInspectCmd)
