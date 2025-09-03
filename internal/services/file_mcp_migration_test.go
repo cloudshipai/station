@@ -237,8 +237,6 @@ func TestFileMCPServiceCompatibility(t *testing.T) {
 		toolDiscovery := NewToolDiscoveryService(repos)
 		assert.NotNil(t, toolDiscovery)
 
-		webhookService := NewWebhookService(repos)
-		assert.NotNil(t, webhookService)
 
 		// Test that agent service can be created with simplified signature
 		agentService := NewAgentService(repos)
@@ -247,7 +245,6 @@ func TestFileMCPServiceCompatibility(t *testing.T) {
 
 		t.Logf("✅ Service compatibility validation passed")
 		t.Logf("   ToolDiscoveryService: ✓")
-		t.Logf("   WebhookService: ✓")
 		t.Logf("   AgentExecutionEngine: ✓")
 	})
 

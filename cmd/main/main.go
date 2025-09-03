@@ -53,7 +53,6 @@ func init() {
 	rootCmd.AddCommand(bundleCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(runsCmd)
-	rootCmd.AddCommand(webhookCmd)
 	rootCmd.AddCommand(settingsCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(developCmd)
@@ -108,14 +107,6 @@ func init() {
 	runsCmd.AddCommand(runsListCmd)
 	runsCmd.AddCommand(runsInspectCmd)
 	
-	webhookCmd.AddCommand(webhookListCmd)
-	webhookCmd.AddCommand(webhookCreateCmd)
-	webhookCmd.AddCommand(webhookDeleteCmd)
-	webhookCmd.AddCommand(webhookShowCmd)
-	webhookCmd.AddCommand(webhookEnableCmd)
-	webhookCmd.AddCommand(webhookDisableCmd)
-	webhookCmd.AddCommand(webhookDeliveriesCmd)
-	webhookCmd.AddCommand(webhookTestCmd)
 	
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
@@ -243,24 +234,6 @@ func init() {
 	runsInspectCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	runsInspectCmd.Flags().BoolP("verbose", "v", false, "Show detailed run information including tool calls, execution steps, and metadata")
 	
-	// Webhook command flags
-	webhookListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	webhookCreateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	webhookCreateCmd.Flags().String("name", "", "Webhook name (required)")
-	webhookCreateCmd.Flags().String("url", "", "Webhook URL (required)")
-	webhookCreateCmd.Flags().String("secret", "", "Webhook secret for signature validation")
-	webhookCreateCmd.Flags().StringSlice("events", []string{"agent_run_completed"}, "Events to subscribe to")
-	webhookCreateCmd.Flags().StringToString("headers", map[string]string{}, "Custom headers (key=value)")
-	webhookCreateCmd.Flags().Int("timeout", 30, "Timeout in seconds")
-	webhookCreateCmd.Flags().Int("retries", 3, "Number of retry attempts")
-	webhookCreateCmd.Flags().BoolP("interactive", "i", false, "Interactive mode with forms")
-	webhookDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	webhookDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
-	webhookShowCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	webhookEnableCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	webhookDisableCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	webhookDeliveriesCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	webhookDeliveriesCmd.Flags().Int("limit", 50, "Maximum number of deliveries to display")
 	
 	// Settings command flags
 	settingsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")

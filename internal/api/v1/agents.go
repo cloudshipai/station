@@ -216,10 +216,6 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 			log.Printf("Agent execution completed successfully (Run ID: %d)", agentRun.ID)
 		}
 		
-		// Send webhook notification if service available
-		if h.webhookService != nil {
-			h.webhookService.NotifyAgentRunCompleted(ctx, agentRun, agent)
-		}
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{

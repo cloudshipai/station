@@ -16,7 +16,6 @@ type APIHandlers struct {
 	// mcpConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService
 	// genkitService removed - service no longer exists
-	webhookService       *services.WebhookService
 	// executionQueueSvc removed - using direct execution instead
 	agentExportService   *services.AgentExportService
 	localMode            bool
@@ -26,14 +25,12 @@ type APIHandlers struct {
 func NewAPIHandlers(
 	repos *repositories.Repositories,
 	toolDiscoveryService *services.ToolDiscoveryService,
-	webhookService *services.WebhookService,
 	localMode bool,
 ) *APIHandlers {
 	return &APIHandlers{
 		repos:                repos,
 		agentService:         services.NewAgentService(repos),
 		toolDiscoveryService: toolDiscoveryService,
-		webhookService:       webhookService,
 		agentExportService:   services.NewAgentExportService(repos),
 		localMode:            localMode,
 	}
@@ -100,23 +97,6 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	}
 	h.registerSettingsRoutes(settingsGroup)
 
-	// Webhook routes - admin only
-	webhookGroup := router.Group("/webhooks")
-	if !h.localMode {
-		webhookGroup.Use(h.requireAdminInServerMode())
-	}
-	h.registerWebhookRoutes(webhookGroup)
-
-	// Webhook deliveries routes - admin only
-	deliveriesGroup := webhookGroup.Group("/:id/deliveries")
-	deliveriesGroup.GET("", h.listWebhookDeliveries)
-	
-	// All webhook deliveries route
-	allDeliveriesGroup := router.Group("/webhook-deliveries")
-	if !h.localMode {
-		allDeliveriesGroup.Use(h.requireAdminInServerMode())
-	}
-	allDeliveriesGroup.GET("", h.listAllWebhookDeliveries)
 
 	// Sync route - admin only in server mode
 	syncGroup := router.Group("/sync")

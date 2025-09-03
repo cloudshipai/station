@@ -10,6 +10,5 @@ package v1
 // - mcp_configs.go: MCP configuration handlers (upload, decrypt, manage configs)
 // - tools.go: Tool listing and filtering handlers
 // - settings.go: Settings management handlers
-// - webhooks.go: Webhook and webhook delivery handlers
 //
 // This modular approach makes the codebase more maintainable and easier to navigate.
