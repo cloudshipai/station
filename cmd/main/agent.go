@@ -45,30 +45,6 @@ var (
 	}
 
 
-	agentExportCmd = &cobra.Command{
-		Use:   "export <name> [environment]",
-		Short: "Export agent to dotprompt format",
-		Long: `Export an agent configuration to dotprompt format under environments/<env>/agents/.
-Creates a <agent-name>.prompt file with YAML frontmatter containing:
-- Model configuration and parameters
-- Tool dependencies and MCP server mappings
-- Custom metadata and execution settings
-
-This enables GitOps-ready agent management and cross-environment deployment.`,
-		Args: cobra.RangeArgs(1, 2),
-		RunE: runAgentExport,
-	}
-
-	agentImportCmd = &cobra.Command{
-		Use:   "import [environment]",
-		Short: "Import agents from file-based configs",
-		Long: `Import all agent configurations from environments/<env>/agents/ directory.
-Scans for agent JSON files and creates agents if they don't already exist.
-Skips existing agents to prevent duplicates.
-
-This enables GitOps-ready agent deployment from version-controlled configs.`,
-		RunE: runAgentImport,
-	}
 
 )
 
@@ -96,16 +72,4 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 	return agentHandler.RunAgentDelete(cmd, args)
 }
 
-
-// runAgentExport exports an agent to file-based config
-func runAgentExport(cmd *cobra.Command, args []string) error {
-	agentHandler := agent.NewAgentHandler(themeManager)
-	return agentHandler.RunAgentExport(cmd, args)
-}
-
-// runAgentImport imports agents from file-based configs
-func runAgentImport(cmd *cobra.Command, args []string) error {
-	agentHandler := agent.NewAgentHandler(themeManager)
-	return agentHandler.RunAgentImport(cmd, args)
-}
 
