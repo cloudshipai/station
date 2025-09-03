@@ -539,7 +539,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	
 	// Set workspace and database paths
-	if workspaceDir != configDir {
+	// Check if database URL is already set via environment variable
+	if existingDatabaseURL := os.Getenv("STATION_DATABASE_URL"); existingDatabaseURL != "" {
+		viper.Set("database_url", existingDatabaseURL)
+	} else if workspaceDir != configDir {
 		// Custom workspace: database goes to workspace, workspace setting saved
 		viper.Set("workspace", workspaceDir)
 		viper.Set("database_url", filepath.Join(workspaceDir, "station.db"))
@@ -573,7 +576,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Initialize database and run migrations
 	fmt.Printf("🗄️  Initializing database...\n")
-	databasePath := filepath.Join(configDir, "station.db")
+	databasePath := viper.GetString("database_url")
 	database, err := db.New(databasePath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
