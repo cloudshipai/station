@@ -22,24 +22,6 @@ func NewToolDiscoveryService(repos *repositories.Repositories) *ToolDiscoverySer
 	}
 }
 
-func (s *ToolDiscoveryService) DiscoverTools(environmentID int64) (*ToolDiscoveryResult, error) {
-	result := &ToolDiscoveryResult{
-		EnvironmentID: environmentID,
-		StartedAt:     time.Now(),
-	}
-
-	// This method is deprecated - use DiscoverToolsFromFileConfig instead
-	result.AddError(NewToolDiscoveryError(
-		ErrorTypeInvalidConfig,
-		"",
-		"Legacy discovery method deprecated - use file-based configs",
-		"",
-	))
-	result.CompletedAt = time.Now()
-	result.Success = false
-	return result, nil
-
-}
 
 
 func (s *ToolDiscoveryService) clearExistingData(mcpConfigID int64) error {

@@ -43,7 +43,6 @@ type AgentExecutionEngine struct {
 	agentService       AgentServiceInterface
 	genkitProvider     *GenKitProvider
 	mcpConnManager     *MCPConnectionManager
-	telemetryManager   *TelemetryManager
 	telemetryService   *TelemetryService // For creating spans
 	activeMCPClients   []*mcp.GenkitMCPClient // Store active connections for cleanup after execution
 }
@@ -63,7 +62,6 @@ func NewAgentExecutionEngine(repos *repositories.Repositories, agentService Agen
 		agentService:      agentService,
 		genkitProvider:    NewGenKitProvider(),
 		mcpConnManager:    mcpConnManager,
-		telemetryManager:  NewTelemetryManager(),
 	}
 }
 

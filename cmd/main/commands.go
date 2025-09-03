@@ -11,9 +11,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	
+	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/logging"
+	"station/internal/services"
 )
 
 // Command definitions
@@ -126,13 +128,6 @@ Perfect for getting started quickly with a fully configured Station instance.`,
 		RunE:  runMCPDelete,
 	}
 
-	mcpSyncCmd = &cobra.Command{
-		Use:   "sync <environment>",
-		Short: "Sync file-based configs to database",
-		Long:  "Declaratively sync all file-based MCP configs for an environment to the database, removing orphaned agent tools",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runMCPSync,
-	}
 
 	mcpStatusCmd = &cobra.Command{
 		Use:   "status [environment]",
@@ -766,14 +761,12 @@ See \` + "`" + `docs/GITOPS-DEPLOYMENT.md\` + "`" + ` for the complete GitOps de
 
 // runSync handles the top-level sync command
 func runSync(cmd *cobra.Command, args []string) error {
-	// If no environment specified, default to "default"
 	if len(args) == 0 {
-		args = []string{"default"}
+		return fmt.Errorf("environment name is required")
 	}
 	
-	// Use the existing MCP sync functionality but make it more general
-	// For now, delegate to runMCPSync but we can expand this later
-	return runMCPSync(cmd, args)
+	environment := args[0]
+	return runSyncForEnvironment(environment)
 }
 
 // setupShipIntegration installs latest ship CLI only (no MCP configuration)
@@ -806,21 +799,54 @@ func installShipCLI() error {
 	return err
 }
 
-// runSyncForEnvironment runs sync for a specific environment
+// runSyncForEnvironment runs sync for a specific environment using DeclarativeSync service
 func runSyncForEnvironment(environment string) error {
-	// Reload viper configuration to ensure database path is set correctly
-	configDir := getXDGConfigDir()
-	configFile := filepath.Join(configDir, "config.yaml")
-	viper.SetConfigFile(configFile)
-	if err := viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("failed to read config for sync: %w", err)
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
 	}
+
+	// Initialize database
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+
+	// Create sync service
+	syncer := services.NewDeclarativeSync(repos, cfg)
+
+	fmt.Printf("Starting sync for environment: %s\n", environment)
 	
-	// Create a mock command to pass to runMCPSync
-	cmd := &cobra.Command{}
-	args := []string{environment}
+	// Sync the specific environment
+	result, err := syncer.SyncEnvironment(context.Background(), environment, services.SyncOptions{
+		DryRun:      false,
+		Validate:    false,
+		Interactive: true,
+		Verbose:     false,
+		Confirm:     false,
+	})
 	
-	return runMCPSync(cmd, args)
+	if err != nil {
+		return fmt.Errorf("sync failed for environment %s: %w", environment, err)
+	}
+
+	// Display results
+	fmt.Printf("\nSync completed for environment: %s\n", environment)
+	fmt.Printf("  Agents: %d processed, %d synced\n", result.AgentsProcessed, result.AgentsSynced)
+	fmt.Printf("  MCP Servers: %d processed, %d connected\n", result.MCPServersProcessed, result.MCPServersConnected)
+	
+	if result.ValidationErrors > 0 {
+		fmt.Printf("  ⚠️  Validation Errors: %d\n", result.ValidationErrors)
+		return fmt.Errorf("sync completed with %d validation errors", result.ValidationErrors)
+	} else {
+		fmt.Printf("  ✅ All configurations synced successfully\n")
+	}
+
+	return nil
 }
 
 // runBootstrap implements the bootstrap command with complete Station setup
