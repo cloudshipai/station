@@ -53,10 +53,7 @@ func NewAgentService(repos *repositories.Repositories) *AgentService {
 	// Create execution engine with self-reference
 	service.executionEngine = NewAgentExecutionEngine(repos, service)
 	
-	// Pass telemetry to execution engine
-	service.executionEngine.telemetryManager = NewTelemetryManager()
-	
-	// Also pass telemetry service directly for span creation
+	// Pass telemetry service to execution engine for span creation
 	service.executionEngine.telemetryService = service.telemetry
 	
 	return service

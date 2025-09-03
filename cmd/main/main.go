@@ -82,7 +82,6 @@ func init() {
 	mcpCmd.AddCommand(mcpToolsCmd)
 	mcpCmd.AddCommand(mcpAddCmd)
 	mcpCmd.AddCommand(mcpDeleteCmd)
-	mcpCmd.AddCommand(mcpSyncCmd)
 	mcpCmd.AddCommand(mcpStatusCmd)
 	
 	// Unified bundle command replaces the old template system
@@ -142,10 +141,6 @@ func init() {
 	mcpDeleteCmd.Flags().String("environment", "default", "Environment to delete from")
 	mcpDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
 	
-	mcpSyncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
-	mcpSyncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
-	mcpSyncCmd.Flags().Bool("force", false, "Force sync even if no changes detected")
-	mcpSyncCmd.Flags().BoolP("interactive", "i", true, "Prompt for missing variables (default: true)")
 	
 	// Sync command flags (top-level)
 	syncCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
