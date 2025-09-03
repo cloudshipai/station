@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"station/internal/db/repositories"
 	"station/internal/theme"
 	"station/pkg/models"
@@ -26,21 +25,10 @@ func (h *MCPHandler) RunMCPList(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("📋 MCP Configurations")
 	fmt.Println(banner)
 
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 
-	// Determine if we're in local mode
-	isLocal := endpoint == "" && viper.GetBool("local_mode")
-	
-	if isLocal {
-		fmt.Println(styles.Info.Render("🏠 Listing local configurations"))
-		return h.listMCPConfigsLocal(environment)
-	} else if endpoint != "" {
-		fmt.Println(styles.Info.Render("🌐 Listing configurations from: " + endpoint))
-		return h.listMCPConfigsRemote(environment, endpoint)
-	} else {
-		return fmt.Errorf("no endpoint specified and local_mode is false in config. Use --endpoint flag or enable local_mode in config")
-	}
+	fmt.Println(styles.Info.Render("🏠 Listing local configurations"))
+	return h.listMCPConfigsLocal(environment)
 }
 
 // RunMCPTools implements the "station mcp tools" command
@@ -49,7 +37,6 @@ func (h *MCPHandler) RunMCPTools(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("🔧 MCP Tools")
 	fmt.Println(banner)
 
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 	filter, _ := cmd.Flags().GetString("filter")
 	
@@ -58,18 +45,8 @@ func (h *MCPHandler) RunMCPTools(cmd *cobra.Command, args []string) error {
 		environment = args[0]
 	}
 
-	// Determine if we're in local mode
-	isLocal := endpoint == "" && viper.GetBool("local_mode")
-	
-	if isLocal {
-		fmt.Println(styles.Info.Render("🏠 Listing local tools"))
-		return h.listMCPToolsLocal(environment, filter)
-	} else if endpoint != "" {
-		fmt.Println(styles.Info.Render("🌐 Listing tools from: " + endpoint))
-		return h.listMCPToolsRemote(environment, filter, endpoint)
-	} else {
-		return fmt.Errorf("no endpoint specified and local_mode is false in config. Use --endpoint flag or enable local_mode in config")
-	}
+	fmt.Println(styles.Info.Render("🏠 Listing local tools"))
+	return h.listMCPToolsLocal(environment, filter)
 }
 
 // RunMCPDelete implements the "station mcp delete" command
@@ -79,22 +56,11 @@ func (h *MCPHandler) RunMCPDelete(cmd *cobra.Command, args []string) error {
 	fmt.Println(banner)
 
 	configID := args[0]
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 	confirm, _ := cmd.Flags().GetBool("confirm")
 
-	// Determine if we're in local mode
-	isLocal := endpoint == "" && viper.GetBool("local_mode")
-	
-	if isLocal {
-		fmt.Println(styles.Info.Render("🏠 Deleting from local database"))
-		return h.deleteMCPConfigLocal(configID, environment, confirm)
-	} else if endpoint != "" {
-		fmt.Println(styles.Info.Render("🌐 Deleting from: " + endpoint))
-		return h.deleteMCPConfigRemote(configID, environment, endpoint, confirm)
-	} else {
-		return fmt.Errorf("no endpoint specified and local_mode is false in config. Use --endpoint flag or enable local_mode in config")
-	}
+	fmt.Println(styles.Info.Render("🏠 Deleting from local database"))
+	return h.deleteMCPConfigLocal(configID, environment, confirm)
 }
 
 // RunMCPSync implements the "station mcp sync" command
@@ -104,22 +70,11 @@ func (h *MCPHandler) RunMCPSync(cmd *cobra.Command, args []string) error {
 	fmt.Println(banner)
 
 	environment := args[0]
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	interactive, _ := cmd.Flags().GetBool("interactive")
 
-	// Determine if we're in local mode
-	isLocal := endpoint == "" && viper.GetBool("local_mode")
-	
-	if isLocal {
-		fmt.Println(styles.Info.Render("🏠 Syncing local configurations"))
-		return h.syncMCPConfigsLocal(environment, dryRun, interactive)
-	} else if endpoint != "" {
-		fmt.Println(styles.Info.Render("🌐 Syncing with: " + endpoint))
-		return fmt.Errorf("remote sync not yet implemented")
-	} else {
-		return fmt.Errorf("no endpoint specified and local_mode is false in config. Use --endpoint flag or enable local_mode in config")
-	}
+	fmt.Println(styles.Info.Render("🏠 Syncing local configurations"))
+	return h.syncMCPConfigsLocal(environment, dryRun, interactive)
 }
 
 // RunMCPStatus implements the "station mcp status" command  
@@ -129,25 +84,14 @@ func (h *MCPHandler) RunMCPStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println(banner)
 
 	environment, _ := cmd.Flags().GetString("environment")
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 
-	// Determine if we're in local mode
-	isLocal := endpoint == "" && viper.GetBool("local_mode")
-	
-	if isLocal {
-		fmt.Println(styles.Info.Render("🏠 Checking local configurations"))
-		return h.statusMCPConfigsLocal(environment)
-	} else if endpoint != "" {
-		fmt.Println(styles.Info.Render("🌐 Checking status at: " + endpoint))
-		return fmt.Errorf("remote status not yet implemented")
-	} else {
-		return fmt.Errorf("no endpoint specified and local_mode is false in config. Use --endpoint flag or enable local_mode in config")
-	}
+	fmt.Println(styles.Info.Render("🏠 Checking local configurations"))
+	return h.statusMCPConfigsLocal(environment)
 }
 
 // AddServerToConfig adds a single server to an existing MCP configuration (public method)
-func (h *MCPHandler) AddServerToConfig(configID, serverName, command string, args []string, envVars map[string]string, environment, endpoint string) (string, error) {
-	return h.addServerToConfig(configID, serverName, command, args, envVars, environment, endpoint)
+func (h *MCPHandler) AddServerToConfig(configID, serverName, command string, args []string, envVars map[string]string, environment string) (string, error) {
+	return h.addServerToConfig(configID, serverName, command, args, envVars, environment, "")
 }
 
 // getOrCreateEnvironmentID gets environment ID from database, creating if needed for file-based configs

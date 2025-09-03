@@ -24,7 +24,6 @@ type SpinnerModel struct {
 	// Fields for add-server command
 	configID   string
 	serverName string
-	endpoint   string
 	env        string
 	command    string
 	args       []string
@@ -47,16 +46,14 @@ type MCPAddFormModel struct {
 	args         []string
 	envVars      map[string]string
 	environment  string
-	endpoint     string
 	
 	themeManager *theme.ThemeManager
 }
 
-func NewMCPAddForm(endpoint, environment string, themeManager *theme.ThemeManager) *MCPAddFormModel {
+func NewMCPAddForm(environment string, themeManager *theme.ThemeManager) *MCPAddFormModel {
 	m := &MCPAddFormModel{
 		inputs:       make([]textinput.Model, 4), // 4 main fields
 		environment:  environment,
-		endpoint:     endpoint,
 		envVars:      make(map[string]string),
 		themeManager: themeManager,
 	}
@@ -232,7 +229,7 @@ func NewSpinnerModel(message string, themeManager *theme.ThemeManager) SpinnerMo
 	}
 }
 
-func NewSpinnerModelWithServerConfig(message, configID, serverName, command string, args []string, envVars map[string]string, env, endpoint string, themeManager *theme.ThemeManager) SpinnerModel {
+func NewSpinnerModelWithServerConfig(message, configID, serverName, command string, args []string, envVars map[string]string, env string, themeManager *theme.ThemeManager) SpinnerModel {
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#bb9af7"))
 
@@ -241,7 +238,6 @@ func NewSpinnerModelWithServerConfig(message, configID, serverName, command stri
 		message:      message,
 		configID:     configID,
 		serverName:   serverName,
-		endpoint:     endpoint,
 		env:          env,
 		command:      command,
 		args:         args,
@@ -255,7 +251,7 @@ func (m SpinnerModel) Init() tea.Cmd {
 	if m.configID != "" && m.serverName != "" {
 		return tea.Batch(m.spinner.Tick, func() tea.Msg {
 			handler := mcp.NewMCPHandler(m.themeManager)
-			result, err := handler.AddServerToConfig(m.configID, m.serverName, m.command, m.args, m.envVars, m.env, m.endpoint)
+			result, err := handler.AddServerToConfig(m.configID, m.serverName, m.command, m.args, m.envVars, m.env)
 			return FinishedMsg{
 				success: err == nil,
 				result:  result,
@@ -313,7 +309,6 @@ func (m *MCPAddFormModel) GetCommand() string      { return m.command }
 func (m *MCPAddFormModel) GetArgs() []string       { return m.args }
 func (m *MCPAddFormModel) GetEnvVars() map[string]string { return m.envVars }
 func (m *MCPAddFormModel) GetEnvironment() string  { return m.environment }
-func (m *MCPAddFormModel) GetEndpoint() string     { return m.endpoint }
 func (m *MCPAddFormModel) IsCancelled() bool       { return m.cancelled }
 
 // Getter methods for SpinnerModel

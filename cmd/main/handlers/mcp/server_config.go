@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/spf13/viper"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/pkg/crypto"
@@ -12,19 +11,7 @@ import (
 
 // addServerToConfig adds a single server to an existing MCP configuration
 func (h *MCPHandler) addServerToConfig(configID, serverName, command string, args []string, envVars map[string]string, environment, endpoint string) (string, error) {
-	// Determine if we're in local mode
-	isLocal := endpoint == "" && viper.GetBool("local_mode")
-	
-	if isLocal {
-		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🏠 Running in local mode"))
-		return h.addServerToConfigLocal(configID, serverName, command, args, envVars, environment)
-	} else if endpoint != "" {
-		fmt.Println(getCLIStyles(h.themeManager).Info.Render("🌐 Connecting to: " + endpoint))
-		return h.addServerToConfigRemote(configID, serverName, command, args, envVars, environment, endpoint)
-	}
-	
-	// Default to local mode
-	fmt.Println(getCLIStyles(h.themeManager).Info.Render("🏠 No endpoint specified, using local mode"))
+	fmt.Println(getCLIStyles(h.themeManager).Info.Render("🏠 Running in local mode"))
 	return h.addServerToConfigLocal(configID, serverName, command, args, envVars, environment)
 }
 
@@ -111,9 +98,3 @@ func (h *MCPHandler) addServerToConfigLocal(configID, serverName, command string
 		serverName, config.ConfigName), nil
 }
 
-// addServerToConfigRemote adds server to remote configuration
-func (h *MCPHandler) addServerToConfigRemote(configID, serverName, command string, args []string, envVars map[string]string, environment, endpoint string) (string, error) {
-	// This would require a new API endpoint for adding servers to existing configs
-	// For now, return an informative message
-	return "", fmt.Errorf("remote server addition not yet implemented - use local mode or upload full config")
-}

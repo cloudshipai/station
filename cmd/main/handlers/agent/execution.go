@@ -14,7 +14,6 @@ import (
 // RunAgentRun executes an agent with a given task
 // This delegates to existing working implementations
 func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	tail, _ := cmd.Flags().GetBool("tail")
 
 	// Validate arguments
@@ -25,27 +24,17 @@ func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
 	agentName := args[0]
 	task := args[1]
 
-	if endpoint != "" {
-		// Remote execution
-		agentID, err := strconv.ParseInt(agentName, 10, 64)
+	// Local execution - delegate to the existing working function
+	agentID, err := strconv.ParseInt(agentName, 10, 64)
+	if err != nil {
+		// Not a number, try to find by name
+		agentID, err = h.findAgentByName(agentName, cmd)
 		if err != nil {
-			return fmt.Errorf("invalid agent ID: %v", err)
+			return fmt.Errorf("failed to find agent '%s': %v", agentName, err)
 		}
-		
-		return h.runAgentRemote(agentID, task, endpoint, tail)
-	} else {
-		// Local execution - delegate to the existing working function
-		agentID, err := strconv.ParseInt(agentName, 10, 64)
-		if err != nil {
-			// Not a number, try to find by name
-			agentID, err = h.findAgentByName(agentName, cmd)
-			if err != nil {
-				return fmt.Errorf("failed to find agent '%s': %v", agentName, err)
-			}
-		}
-		
-		return h.runAgentLocal(agentID, task, tail)
 	}
+	
+	return h.runAgentLocal(agentID, task, tail)
 }
 
 // displayExecutionResults shows the results of an agent execution
