@@ -53,6 +53,14 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - **Result**: MCP agents now have full logging, live execution tracking, and proper metadata
   - **Location**: `agent_service_impl.go:105-177`, `agent_service_interface.go:16-17`, `execution_queue.go:316-319`
 
+- **Complete Webhook Removal**: ✅ Streamlined platform focus (Dec 2024)
+  - **Scope**: Removed 3,340+ lines across 44 files including CLI handlers, API endpoints, services, and database layer
+  - **Components Removed**: Webhook delivery system, HTTP retry logic, notification infrastructure, management UI
+  - **Preserved**: Settings table and CLI commands (list/get/set) for general system configuration
+  - **Impact**: Platform now focused exclusively on core agent execution and MCP integration capabilities
+  - **Migration**: Created `015_add_settings_only.sql` preserving settings functionality without webhook dependencies
+  - **Commit**: `e3ba63d8` - Complete cleanup positioning Station as streamlined AI agent orchestration platform
+
 ### Known Issues
 - **SSH/MCP Shutdown Performance**: Graceful shutdown takes ~1m25s (should be <10s)
   - Likely causes: hanging MCP connections, database locks, resource cleanup delays
@@ -70,6 +78,7 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 - **Agent Management**: Scheduling, execution, and monitoring system  
 - **Environment Management**: Multi-environment tool isolation (dev/staging/prod)
 - **File Configuration System**: GitOps-ready config management with template variables
+- **Settings Management**: System configuration via CLI commands (list/get/set operations)
 - **Security Layer**: Audit logging, access controls, secure file-based configuration
 
 ### Key Directories
