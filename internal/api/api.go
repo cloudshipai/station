@@ -35,7 +35,6 @@ type Server struct {
 	// hybridConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService
 	// genkitService removed - service no longer exists
-	webhookService       *services.WebhookService
 	// executionQueueSvc removed - using direct execution instead
 	localMode            bool
 }
@@ -45,7 +44,6 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Serv
 	// keyManager removed - no longer needed for file-based configs
 	
 	// Initialize services (MCPConfigService removed - using file-based configs only)
-	webhookService := services.NewWebhookService(repos)
 	
 	// Initialize file config components
 	fs := afero.NewOsFs()
@@ -90,7 +88,6 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Serv
 		repos:                repos,
 		fileConfigService:    fileConfigService,
 		toolDiscoveryService: toolDiscoveryService,
-		webhookService:       webhookService,
 		localMode:            localMode,
 	}
 }
@@ -144,7 +141,6 @@ func (s *Server) Start(ctx context.Context) error {
 	apiHandlers := v1.NewAPIHandlers(
 		s.repos,
 		s.toolDiscoveryService,
-		s.webhookService,
 		s.localMode,
 	)
 	apiHandlers.RegisterRoutes(v1Group)

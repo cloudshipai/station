@@ -88,8 +88,6 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Initialize agent service for API endpoints
 	agentSvc := services.NewAgentService(repos)
 	
-	// Initialize webhook service 
-	_ = services.NewWebhookService(repos) // Not used in stdio mode
 	
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")

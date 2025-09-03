@@ -219,73 +219,6 @@ Perfect for getting started quickly with a fully configured Station instance.`,
 		RunE:  runTemplateRegistryList,
 	}
 
-	// Webhook commands
-	webhookCmd = &cobra.Command{
-		Use:   "webhook",
-		Short: "Webhook management commands",
-		Long:  "Manage webhook endpoints and delivery settings",
-	}
-
-	webhookListCmd = &cobra.Command{
-		Use:   "list",
-		Short: "List all webhooks",
-		Long:  "Display all registered webhook endpoints with their status",
-		RunE:  runWebhookList,
-	}
-
-	webhookCreateCmd = &cobra.Command{
-		Use:   "create",
-		Short: "Create a new webhook",
-		Long:  "Create a new webhook endpoint for receiving notifications",
-		RunE:  runWebhookCreate,
-	}
-
-	webhookDeleteCmd = &cobra.Command{
-		Use:   "delete <webhook-id>",
-		Short: "Delete a webhook",
-		Long:  "Delete a webhook endpoint by ID",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWebhookDelete,
-	}
-
-	webhookShowCmd = &cobra.Command{
-		Use:   "show <webhook-id>",
-		Short: "Show webhook details",
-		Long:  "Display detailed information about a specific webhook",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWebhookShow,
-	}
-
-	webhookEnableCmd = &cobra.Command{
-		Use:   "enable <webhook-id>",
-		Short: "Enable a webhook",
-		Long:  "Enable a webhook to start receiving notifications",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWebhookEnable,
-	}
-
-	webhookDisableCmd = &cobra.Command{
-		Use:   "disable <webhook-id>",
-		Short: "Disable a webhook",
-		Long:  "Disable a webhook to stop receiving notifications",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWebhookDisable,
-	}
-
-	webhookDeliveriesCmd = &cobra.Command{
-		Use:   "deliveries [webhook-id]",
-		Short: "Show webhook deliveries",
-		Long:  "Display webhook delivery history. Optionally filter by webhook ID",
-		RunE:  runWebhookDeliveries,
-	}
-
-	webhookTestCmd = &cobra.Command{
-		Use:   "test <endpoint-url>",
-		Short: "Test webhook by sending POST to endpoint",
-		Long:  "Send a test agent_run_completed webhook payload to the specified endpoint URL",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWebhookTest,
-	}
 
 	// Settings commands
 	settingsCmd = &cobra.Command{
@@ -768,7 +701,7 @@ ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
 
 # Optional: Additional MCP server credentials
 # GITHUB_TOKEN=ghp_your-github-token
-# SLACK_WEBHOOK_URL=https://hooks.slack.com/your-webhook`
+`
 
 	envExamplePath := filepath.Join(configDir, ".env.example")
 	if err := os.WriteFile(envExamplePath, []byte(envExampleContent), 0644); err != nil {
@@ -1084,4 +1017,130 @@ Always explain what you're doing with the web page and provide clear feedback ab
 	
 	agentPath := filepath.Join(agentDir, "Playwright Agent.prompt")
 	return os.WriteFile(agentPath, []byte(agentContent), 0644)
+}
+
+// Settings command functions
+
+func runSettingsList(cmd *cobra.Command, args []string) error {
+	// Get database path from config
+	databasePath := viper.GetString("database_url")
+	if databasePath == "" {
+		configDir := getWorkspacePath()
+		databasePath = filepath.Join(configDir, "station.db")
+	}
+
+	// Initialize database connection
+	database, err := db.New(databasePath)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	// Initialize repositories
+	repos := repositories.New(database)
+	
+	// Get all settings
+	settings, err := repos.Settings.GetAll()
+	if err != nil {
+		return fmt.Errorf("failed to list settings: %w", err)
+	}
+
+	if len(settings) == 0 {
+		fmt.Println("No settings found.")
+		return nil
+	}
+
+	fmt.Printf("Settings (%d total):\n\n", len(settings))
+	for _, setting := range settings {
+		fmt.Printf("Key: %s\n", setting.Key)
+		fmt.Printf("Value: %s\n", setting.Value)
+		if setting.Description != nil {
+			fmt.Printf("Description: %s\n", *setting.Description)
+		}
+		fmt.Printf("Updated: %s\n", setting.UpdatedAt.Format(time.RFC3339))
+		fmt.Println()
+	}
+
+	return nil
+}
+
+func runSettingsGet(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("setting key is required")
+	}
+
+	key := args[0]
+
+	// Get database path from config
+	databasePath := viper.GetString("database_url")
+	if databasePath == "" {
+		configDir := getWorkspacePath()
+		databasePath = filepath.Join(configDir, "station.db")
+	}
+
+	// Initialize database connection
+	database, err := db.New(databasePath)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	// Initialize repositories
+	repos := repositories.New(database)
+	
+	// Get the setting
+	setting, err := repos.Settings.GetByKey(key)
+	if err != nil {
+		return fmt.Errorf("setting '%s' not found", key)
+	}
+
+	fmt.Printf("Key: %s\n", setting.Key)
+	fmt.Printf("Value: %s\n", setting.Value)
+	if setting.Description != nil {
+		fmt.Printf("Description: %s\n", *setting.Description)
+	}
+	fmt.Printf("Created: %s\n", setting.CreatedAt.Format(time.RFC3339))
+	fmt.Printf("Updated: %s\n", setting.UpdatedAt.Format(time.RFC3339))
+
+	return nil
+}
+
+func runSettingsSet(cmd *cobra.Command, args []string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("setting key and value are required")
+	}
+
+	key := args[0]
+	value := args[1]
+	description, _ := cmd.Flags().GetString("description")
+
+	// Get database path from config
+	databasePath := viper.GetString("database_url")
+	if databasePath == "" {
+		configDir := getWorkspacePath()
+		databasePath = filepath.Join(configDir, "station.db")
+	}
+
+	// Initialize database connection
+	database, err := db.New(databasePath)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	// Initialize repositories
+	repos := repositories.New(database)
+	
+	// Set the setting
+	err = repos.Settings.Set(key, value, description)
+	if err != nil {
+		return fmt.Errorf("failed to set setting: %w", err)
+	}
+
+	fmt.Printf("Setting '%s' has been set to '%s'\n", key, value)
+	if description != "" {
+		fmt.Printf("Description: %s\n", description)
+	}
+
+	return nil
 }

@@ -114,7 +114,6 @@ func runMainServer() error {
 	}
 
 	// Initialize required services
-	webhookSvc := services.NewWebhookService(repos)
 	
 	// Create default environment if none exists
 	if err := ensureDefaultEnvironment(ctx, repos); err != nil {
@@ -145,27 +144,6 @@ func runMainServer() error {
 	}
 	defer schedulerSvc.Stop()
 	
-	// Start webhook retry processor
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		log.Printf("🪝 Starting webhook retry processor...")
-		
-		ticker := time.NewTicker(1 * time.Minute) // Process retries every minute
-		defer ticker.Stop()
-		
-		for {
-			select {
-			case <-ticker.C:
-				if err := webhookSvc.ProcessRetries(ctx); err != nil {
-					log.Printf("Webhook retry processing error: %v", err)
-				}
-			case <-ctx.Done():
-				log.Printf("🪝 Webhook retry processor stopping...")
-				return
-			}
-		}
-	}()
 
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
