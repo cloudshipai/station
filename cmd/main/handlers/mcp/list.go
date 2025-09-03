@@ -1,10 +1,7 @@
 package mcp
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 
 	"station/internal/db"
@@ -162,50 +159,6 @@ func (h *MCPHandler) printConfigTableWithEnvironments(configsWithEnv []struct {
 	fmt.Printf("└──────────────────────────────────────────────────────────────────────────────────┘\n")
 }
 
-// listMCPConfigsRemote lists MCP configs from remote API
-func (h *MCPHandler) listMCPConfigsRemote(environment, endpoint string) error {
-	// Get environment ID
-	envID, err := getEnvironmentID(endpoint, environment)
-	if err != nil {
-		return fmt.Errorf("failed to get environment ID: %w", err)
-	}
-
-	// List configs
-	url := fmt.Sprintf("%s/api/v1/environments/%d/mcp-configs", endpoint, envID)
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("failed to list configurations: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to list configurations: status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Configs []*models.MCPConfig `json:"configs"`
-		Count   int                 `json:"count"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if result.Count == 0 {
-		fmt.Println("• No configurations found")
-		return nil
-	}
-
-	fmt.Printf("Found %d configuration(s):\n", result.Count)
-	for _, config := range result.Configs {
-		fmt.Printf("• %s v%d (ID: %d) - %s\n", 
-			config.ConfigName, config.Version, config.ID, 
-			config.CreatedAt.Format("Jan 2, 2006 15:04"))
-	}
-
-	return nil
-}
 
 // listMCPToolsLocal lists MCP tools from local database
 func (h *MCPHandler) listMCPToolsLocal(environment, filter string) error {
@@ -284,57 +237,3 @@ func (h *MCPHandler) listMCPToolsLocal(environment, filter string) error {
 	return nil
 }
 
-// listMCPToolsRemote lists MCP tools from remote API
-func (h *MCPHandler) listMCPToolsRemote(environment, filter, endpoint string) error {
-	// Get environment ID
-	envID, err := getEnvironmentID(endpoint, environment)
-	if err != nil {
-		return fmt.Errorf("failed to get environment ID: %w", err)
-	}
-
-	// Build URL with filter
-	url := fmt.Sprintf("%s/api/v1/environments/%d/tools", endpoint, envID)
-	if filter != "" {
-		url += "?filter=" + filter
-	}
-
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("failed to list tools: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to list tools: status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Tools  []*models.MCPToolWithDetails `json:"tools"`
-		Count  int                          `json:"count"`
-		Filter string                       `json:"filter"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if result.Filter != "" {
-		fmt.Printf("Filter: %s\n", result.Filter)
-	}
-
-	if result.Count == 0 {
-		fmt.Println("• No tools found")
-		return nil
-	}
-
-	fmt.Printf("Found %d tool(s):\n", result.Count)
-	styles := getCLIStyles(h.themeManager)
-	for _, tool := range result.Tools {
-		fmt.Printf("• %s - %s\n", styles.Success.Render(tool.Name), tool.Description)
-		fmt.Printf("  Config: %s v%d | Server: %s\n", 
-			tool.ConfigName, tool.ConfigVersion, tool.ServerName)
-	}
-
-	return nil
-}

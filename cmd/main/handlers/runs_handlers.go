@@ -4,15 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 
 	"github.com/spf13/cobra"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/theme"
-	"station/pkg/models"
 )
 
 // RunsHandler handles runs-related CLI commands
@@ -30,16 +27,10 @@ func (h *RunsHandler) RunRunsList(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("🏃 Agent Runs")
 	fmt.Println(banner)
 
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	limit, _ := cmd.Flags().GetInt("limit")
 
-	if endpoint != "" {
-		fmt.Println(styles.Info.Render("🌐 Listing runs from: " + endpoint))
-		return h.listRunsRemote(endpoint, limit)
-	} else {
-		fmt.Println(styles.Info.Render("🏠 Listing local runs"))
-		return h.listRunsLocal(limit)
-	}
+	fmt.Println(styles.Info.Render("🏠 Listing local runs"))
+	return h.listRunsLocal(limit)
 }
 
 // RunRunsInspect inspects a specific run
@@ -53,20 +44,14 @@ func (h *RunsHandler) RunRunsInspect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid run ID: %s", args[0])
 	}
 
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	styles := getCLIStyles(h.themeManager)
 	banner := styles.Banner.Render("🔍 Run Details")
 	fmt.Println(banner)
 
-	if endpoint != "" {
-		fmt.Println(styles.Info.Render("🌐 Getting run from: " + endpoint))
-		return h.inspectRunRemote(runID, endpoint, verbose)
-	} else {
-		fmt.Println(styles.Info.Render("🏠 Getting local run"))
-		return h.inspectRunLocal(runID, verbose)
-	}
+	fmt.Println(styles.Info.Render("🏠 Getting local run"))
+	return h.inspectRunLocal(runID, verbose)
 }
 
 // Local operations
@@ -245,139 +230,6 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 	return nil
 }
 
-// Remote operations
-
-func (h *RunsHandler) listRunsRemote(endpoint string, limit int) error {
-	url := fmt.Sprintf("%s/api/v1/runs", endpoint)
-	if limit > 0 {
-		url += fmt.Sprintf("?limit=%d", limit)
-	}
-	
-	req, err := makeAuthenticatedRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("server error: status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Runs  []*models.AgentRunWithDetails `json:"runs"`
-		Count int                           `json:"count"`
-		Limit int64                         `json:"limit"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if result.Count == 0 {
-		fmt.Println("• No runs found")
-		return nil
-	}
-
-	styles := getCLIStyles(h.themeManager)
-	fmt.Printf("Found %d recent run(s):\n", result.Count)
-	for _, run := range result.Runs {
-		statusIcon := h.getStatusIcon(run.Status)
-		fmt.Printf("• Run %d: %s %s", run.ID, statusIcon, styles.Success.Render(run.AgentName))
-		fmt.Printf(" [%s]", run.StartedAt.Format("Jan 2 15:04"))
-		if run.CompletedAt != nil {
-			duration := run.CompletedAt.Sub(run.StartedAt)
-			fmt.Printf(" (%.1fs)", duration.Seconds())
-		}
-		fmt.Printf("\n  Task: %s\n", h.truncateString(run.Task, 80))
-	}
-
-	return nil
-}
-
-func (h *RunsHandler) inspectRunRemote(runID int64, endpoint string, verbose bool) error {
-	url := fmt.Sprintf("%s/api/v1/runs/%d", endpoint, runID)
-	
-	req, err := makeAuthenticatedRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("server error: status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Run *models.AgentRunWithDetails `json:"run"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	run := result.Run
-	styles := getCLIStyles(h.themeManager)
-	statusIcon := h.getStatusIcon(run.Status)
-	
-	fmt.Printf("Run: %d %s\n", run.ID, statusIcon)
-	fmt.Printf("Agent: %s (ID: %d)\n", styles.Success.Render(run.AgentName), run.AgentID)
-	fmt.Printf("Status: %s\n", h.colorizeStatus(run.Status))
-	fmt.Printf("Task: %s\n", run.Task)
-	fmt.Printf("Started: %s\n", run.StartedAt.Format("Jan 2, 2006 15:04:05"))
-	
-	if run.CompletedAt != nil {
-		duration := run.CompletedAt.Sub(run.StartedAt)
-		fmt.Printf("Completed: %s (Duration: %.1fs)\n", run.CompletedAt.Format("Jan 2, 2006 15:04:05"), duration.Seconds())
-	} else {
-		fmt.Printf("Status: Running...\n")
-	}
-	
-	fmt.Printf("Steps Taken: %d\n", run.StepsTaken)
-	
-	if run.FinalResponse != "" {
-		fmt.Printf("\nResponse:\n%s\n", run.FinalResponse)
-	}
-
-	// Show tool calls if available
-	if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
-		fmt.Printf("\nTool Calls (%d):\n", len(*run.ToolCalls))
-		for i, toolCall := range *run.ToolCalls {
-			if i >= 10 { // Limit to first 10 tool calls
-				fmt.Printf("... and %d more\n", len(*run.ToolCalls)-10)
-				break
-			}
-			fmt.Printf("• %v\n", toolCall)
-		}
-	}
-
-	// Show execution steps if available
-	if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
-		fmt.Printf("\nExecution Steps (%d):\n", len(*run.ExecutionSteps))
-		for i, step := range *run.ExecutionSteps {
-			if i >= 5 { // Limit to first 5 steps
-				fmt.Printf("... and %d more\n", len(*run.ExecutionSteps)-5)
-				break
-			}
-			fmt.Printf("• %v\n", step)
-		}
-	}
-
-	return nil
-}
 
 // Helper functions
 

@@ -216,7 +216,6 @@ func runMCPAdd(cmd *cobra.Command, args []string) error {
 // runMCPAddFlags handles flag-based mode
 func runMCPAddFlags(cmd *cobra.Command, args []string) error {
 	// Get flags
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 	configID, _ := cmd.Flags().GetString("config-id")
 	serverName, _ := cmd.Flags().GetString("server-name")
@@ -243,7 +242,7 @@ func runMCPAddFlags(cmd *cobra.Command, args []string) error {
 	// Create spinner model with server configuration
 	model := handlers.NewSpinnerModelWithServerConfig(
 		fmt.Sprintf("Adding server '%s' to configuration '%s'...", serverName, configID),
-		configID, serverName, command, argsSlice, envVars, environment, endpoint, themeManager)
+		configID, serverName, command, argsSlice, envVars, environment, themeManager)
 
 	// Start the spinner
 	program := tea.NewProgram(model)
@@ -275,11 +274,10 @@ func runMCPAddInteractive(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Get basic flags that might be pre-set
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 	
 	// Create the interactive form model
-	formModel := handlers.NewMCPAddForm(endpoint, environment, themeManager)
+	formModel := handlers.NewMCPAddForm(environment, themeManager)
 	
 	// Run the interactive form
 	program := tea.NewProgram(formModel, tea.WithAltScreen())
@@ -303,7 +301,7 @@ func runMCPAddInteractive(cmd *cobra.Command, args []string) error {
 	
 	// Now execute the actual addition
 	mcpHandler := mcp.NewMCPHandler(themeManager)
-	result, err := mcpHandler.AddServerToConfig(final.GetConfigID(), final.GetServerName(), final.GetCommand(), final.GetArgs(), final.GetEnvVars(), final.GetEnvironment(), final.GetEndpoint())
+	result, err := mcpHandler.AddServerToConfig(final.GetConfigID(), final.GetServerName(), final.GetCommand(), final.GetArgs(), final.GetEnvVars(), final.GetEnvironment())
 	if err != nil {
 		fmt.Println(getCLIStyles(themeManager).Error.Render("❌ Failed to add server: " + err.Error()))
 		return err

@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -30,19 +29,12 @@ func (h *AgentHandler) RunAgentList(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("🤖 Agents")
 	fmt.Println(banner)
 
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
-
-	if endpoint != "" {
-		return h.listAgentsRemote(endpoint)
-	} else {
-		return h.listAgentsLocalWithFilter(environment)
-	}
+	return h.listAgentsLocalWithFilter(environment)
 }
 
 // RunAgentShow shows details of a specific agent
 func (h *AgentHandler) RunAgentShow(cmd *cobra.Command, args []string) error {
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 
 	if len(args) != 1 {
@@ -50,16 +42,7 @@ func (h *AgentHandler) RunAgentShow(cmd *cobra.Command, args []string) error {
 	}
 
 	agentName := args[0]
-
-	if endpoint != "" {
-		agentID, err := strconv.ParseInt(agentName, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid agent ID: %v", err)
-		}
-		return h.showAgentRemote(agentID, endpoint)
-	} else {
-		return h.showAgentLocalByName(agentName, environment)
-	}
+	return h.showAgentLocalByName(agentName, environment)
 }
 
 // showAgentLocalByName shows details of an agent by name and environment
@@ -143,7 +126,6 @@ func (h *AgentHandler) showAgentLocalByName(agentName, environment string) error
 
 // RunAgentDelete deletes an agent
 func (h *AgentHandler) RunAgentDelete(cmd *cobra.Command, args []string) error {
-	endpoint, _ := cmd.Flags().GetString("endpoint")
 	environment, _ := cmd.Flags().GetString("environment")
 
 	if len(args) != 1 {
@@ -151,16 +133,7 @@ func (h *AgentHandler) RunAgentDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	agentName := args[0]
-
-	if endpoint != "" {
-		agentID, err := strconv.ParseInt(agentName, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid agent ID: %v", err)
-		}
-		return h.deleteAgentRemote(agentID, endpoint)
-	} else {
-		return h.deleteAgentLocalByName(agentName, environment)
-	}
+	return h.deleteAgentLocalByName(agentName, environment)
 }
 
 // deleteAgentLocalByName deletes an agent by name and environment
