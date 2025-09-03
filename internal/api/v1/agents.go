@@ -11,13 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/afero"
 	"station/internal/auth"
 	"station/internal/services"
 	"station/pkg/models"
-	agent_bundle "station/pkg/agent-bundle"
-	"station/pkg/agent-bundle/manager"
-	"station/pkg/agent-bundle/validator"
 
 	"github.com/gin-gonic/gin"
 )
@@ -34,8 +30,6 @@ func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 	group.GET("/:id/prompt", h.getAgentPrompt)
 	group.PUT("/:id/prompt", h.updateAgentPrompt)
 	
-	// Agent template installation endpoint
-	group.POST("/templates/install", h.installAgentTemplate)
 }
 
 // Agent handlers
@@ -532,77 +526,6 @@ func (h *APIHandlers) deleteAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Agent deleted successfully"})
 }
 
-// installAgentTemplate installs an agent from a template bundle
-func (h *APIHandlers) installAgentTemplate(c *gin.Context) {
-	var req struct {
-		BundlePath  string                 `json:"bundle_path" binding:"required"`
-		Environment string                 `json:"environment"`
-		Variables   map[string]interface{} `json:"variables"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Set default environment if not provided
-	if req.Environment == "" {
-		req.Environment = "default"
-	}
-
-	// Validate that environment exists
-	envs, err := h.repos.Environments.List()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list environments"})
-		return
-	}
-
-	var foundEnv *models.Environment
-	for _, env := range envs {
-		if env.Name == req.Environment {
-			foundEnv = env
-			break
-		}
-	}
-
-	if foundEnv == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Environment '%s' not found", req.Environment)})
-		return
-	}
-
-	// Create manager with dependencies (using mock for now - TODO: implement real resolver)
-	fs := afero.NewOsFs()
-	bundleValidator := validator.New(fs)
-	mockResolver := &MockResolver{}
-	bundleManager := manager.New(fs, bundleValidator, mockResolver)
-
-	// Install the bundle
-	result, err := bundleManager.Install(req.BundlePath, req.Environment, req.Variables)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to install agent template",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	if !result.Success {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Agent template installation failed",
-			"details": result.Error,
-		})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message":        "Agent template installed successfully",
-		"agent_id":       result.AgentID,
-		"agent_name":     result.AgentName,
-		"environment":    result.Environment,
-		"tools_installed": result.ToolsInstalled,
-		"mcp_bundles":    result.MCPBundles,
-	})
-}
 
 // getAgentPrompt returns the agent's prompt file content
 func (h *APIHandlers) getAgentPrompt(c *gin.Context) {
@@ -777,33 +700,3 @@ func extractSystemPromptFromContent(content string) string {
 	return prompt
 }
 
-// MockResolver for template installation API (reused from CLI handler)
-type MockResolver struct{}
-
-func (r *MockResolver) Resolve(ctx context.Context, deps []agent_bundle.MCPBundleDependency, env string) (*agent_bundle.ResolutionResult, error) {
-	return &agent_bundle.ResolutionResult{
-		Success: true,
-		ResolvedBundles: []agent_bundle.MCPBundleRef{
-			{Name: "filesystem-tools", Version: "1.0.0", Source: "registry"},
-		},
-		MissingBundles: []agent_bundle.MCPBundleDependency{},
-		Conflicts:      []agent_bundle.ToolConflict{},
-		InstallOrder:   []string{"filesystem-tools"},
-	}, nil
-}
-
-func (r *MockResolver) InstallMCPBundles(ctx context.Context, bundles []agent_bundle.MCPBundleRef, env string) error {
-	return nil
-}
-
-func (r *MockResolver) ValidateToolAvailability(ctx context.Context, tools []agent_bundle.ToolRequirement, env string) error {
-	return nil
-}
-
-func (r *MockResolver) ResolveConflicts(conflicts []agent_bundle.ToolConflict) (*agent_bundle.ConflictResolution, error) {
-	return &agent_bundle.ConflictResolution{
-		Strategy:    "auto",
-		Resolutions: make(map[string]string),
-		Warnings:    []string{},
-	}, nil
-}
