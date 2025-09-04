@@ -18,12 +18,19 @@ func NewExportHelper() *ExportHelper {
 func (h *ExportHelper) GenerateInputSchemaSection(agent *models.Agent) (string, error) {
 	var content strings.Builder
 	
-	// Start input schema section
+	// Start input schema section with JSON Schema format
 	content.WriteString("input:\n")
 	content.WriteString("  schema:\n")
+	content.WriteString("    type: object\n")
+	content.WriteString("    properties:\n")
 	
 	// Always include the mandatory userInput
-	content.WriteString("    userInput: string\n")
+	content.WriteString("      userInput:\n")
+	content.WriteString("        type: string\n")
+	content.WriteString("        description: User input for the agent\n")
+	
+	// Track required fields
+	requiredFields := []string{"userInput"}
 	
 	// Add custom schema if defined
 	if agent.InputSchema != nil && *agent.InputSchema != "" {
@@ -32,13 +39,23 @@ func (h *ExportHelper) GenerateInputSchemaSection(agent *models.Agent) (string, 
 			return "", fmt.Errorf("invalid input schema in agent: %w", err)
 		}
 		
-		// Convert to dotprompt format and add custom variables
+		// Convert to JSON Schema format and add custom variables
 		for key, variable := range customSchema {
 			// Skip userInput as it's already added
 			if key != "userInput" {
-				dotpromptDefinition := h.convertVariableToPicoschema(key, variable)
-				content.WriteString(fmt.Sprintf("    %s: %s\n", key, dotpromptDefinition))
+				h.writeJSONSchemaProperty(&content, key, variable)
+				if variable.Required {
+					requiredFields = append(requiredFields, key)
+				}
 			}
+		}
+	}
+	
+	// Add required fields array
+	if len(requiredFields) > 0 {
+		content.WriteString("    required:\n")
+		for _, field := range requiredFields {
+			content.WriteString(fmt.Sprintf("      - %s\n", field))
 		}
 	}
 	
@@ -84,8 +101,37 @@ func (h *ExportHelper) GetMergedInputData(agent *models.Agent, userInput string,
 	return result, nil
 }
 
-// convertTypeToDotprompt converts schema type to dotprompt type string
-func (h *ExportHelper) convertTypeToDotprompt(schemaType InputSchemaType) string {
+
+// writeJSONSchemaProperty writes a JSON Schema property to the content builder
+func (h *ExportHelper) writeJSONSchemaProperty(content *strings.Builder, key string, variable *InputVariable) {
+	content.WriteString(fmt.Sprintf("      %s:\n", key))
+	
+	// Handle enum types
+	if len(variable.Enum) > 0 {
+		content.WriteString("        type: string\n")
+		content.WriteString("        enum:\n")
+		for _, val := range variable.Enum {
+			content.WriteString(fmt.Sprintf("          - %s\n", val))
+		}
+	} else {
+		// Handle regular types
+		jsonType := h.convertTypeToJSONSchema(variable.Type)
+		content.WriteString(fmt.Sprintf("        type: %s\n", jsonType))
+	}
+	
+	// Add description if present
+	if variable.Description != "" {
+		content.WriteString(fmt.Sprintf("        description: %s\n", variable.Description))
+	}
+	
+	// Add default value if present
+	if variable.Default != nil {
+		content.WriteString(fmt.Sprintf("        default: %v\n", variable.Default))
+	}
+}
+
+// convertTypeToJSONSchema converts schema type to JSON Schema type string
+func (h *ExportHelper) convertTypeToJSONSchema(schemaType InputSchemaType) string {
 	switch schemaType {
 	case TypeString:
 		return "string"
@@ -100,23 +146,6 @@ func (h *ExportHelper) convertTypeToDotprompt(schemaType InputSchemaType) string
 	default:
 		return "string" // fallback
 	}
-}
-
-// convertVariableToPicoschema converts a full InputVariable to proper Picoschema format
-func (h *ExportHelper) convertVariableToPicoschema(key string, variable *InputVariable) string {
-	// Handle enum types with values
-	if len(variable.Enum) > 0 {
-		// For enum, we need to return as an array, not a string
-		return fmt.Sprintf("%v", variable.Enum)
-	}
-	
-	// Handle non-enum types with description
-	typeStr := h.convertTypeToDotprompt(variable.Type)
-	if variable.Description != "" {
-		return fmt.Sprintf("%s, %s", typeStr, variable.Description)
-	}
-	
-	return typeStr
 }
 
 // ValidateInputSchema validates that an input schema JSON is valid
