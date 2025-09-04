@@ -77,13 +77,23 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		log.Printf("🔥 DEBUG-FLOW: Step 1 - Built dotprompt content successfully")
 	}
 	
-	// 2. Use dotprompt library directly for multi-role rendering (bypasses GenKit constraint)
-	logging.Debug("DEBUG-FLOW: Step 2 - Creating dotprompt instance")
+	// 2. Extract config from frontmatter BEFORE calling dotprompt library
+	logging.Debug("DEBUG-FLOW: Step 2 - Extracting config from frontmatter")
+	var configTemperature *float32
+	if parser := NewParser(); parser != nil {
+		if parsed, err := parser.Parse(dotpromptContent); err == nil && parsed.Config != nil && parsed.Config.Config.Temperature != nil {
+			configTemperature = parsed.Config.Config.Temperature
+			logging.Debug("DEBUG-FLOW: Step 2 - Extracted temperature: %f", *configTemperature)
+		}
+	}
+	
+	// 3. Use dotprompt library directly for multi-role rendering (bypasses GenKit constraint)
+	logging.Debug("DEBUG-FLOW: Step 3 - Creating dotprompt instance")
 	dp := dotprompt.NewDotprompt(nil)
-	logging.Debug("DEBUG-FLOW: Step 2 - Compiling dotprompt content (length: %d)", len(dotpromptContent))
+	logging.Debug("DEBUG-FLOW: Step 3 - Compiling dotprompt content (length: %d)", len(dotpromptContent))
 	promptFunc, err := dp.Compile(dotpromptContent, nil)
 	if err != nil {
-		logging.Debug("DEBUG-FLOW: Step 2 - FAILED to compile dotprompt: %v", err)
+		logging.Debug("DEBUG-FLOW: Step 3 - FAILED to compile dotprompt: %v", err)
 		return &ExecutionResponse{
 			Success:   false,
 			Response:  "",
@@ -93,10 +103,10 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	logging.Debug("Dotprompt compiled successfully")
-	logging.Debug("DEBUG-FLOW: Step 2 - Dotprompt compiled successfully")
+	logging.Debug("DEBUG-FLOW: Step 3 - Dotprompt compiled successfully")
 	
-	// 3. Render the prompt with merged input data (default + custom schema)
-	logging.Debug("DEBUG-FLOW: Step 3 - Creating schema helper")
+	// 4. Render the prompt with merged input data (default + custom schema)
+	logging.Debug("DEBUG-FLOW: Step 4 - Creating schema helper")
 	schemaHelper := schema.NewExportHelper()
 	
 	// For now, only use userInput. Custom input data can be added via call_agent variables parameter
@@ -212,6 +222,16 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	maxToolCalls := 25  // Allow 25 tool calls, then force final response
 	// Set GenKit maxTurns higher than our custom limit to let our logic handle it
 	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
+	
+	// Add temperature config if extracted from frontmatter
+	if configTemperature != nil {
+		configMap := map[string]interface{}{
+			"temperature": *configTemperature,
+		}
+		generateOpts = append(generateOpts, ai.WithConfig(configMap))
+		logging.Debug("DEBUG-FLOW: Step 7 - Added temperature config: %f", *configTemperature)
+	}
+	
 	logging.Debug("DEBUG-FLOW: Step 7 - Basic options set (model: %s, messages: %d, maxTurns: 30)", modelName, len(genkitMessages))
 	
 	// Add tool call limits to prevent obsessive tool calling
@@ -937,7 +957,6 @@ func (e *GenKitExecutor) buildDotpromptFromAgent(agent models.Agent, agentTools 
 	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
 	content.WriteString("config:\n")
 	content.WriteString("  temperature: 0.3\n")
-	content.WriteString("  max_tokens: 2000\n")
 	// NOTE: Removed maxTurns from config - we handle turn limiting manually
 	
 	// Input schema with merged custom and default variables

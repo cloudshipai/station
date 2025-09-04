@@ -187,8 +187,8 @@ func TestWithConfig(t *testing.T) {
 
 	config := map[string]interface{}{
 		"temperature":    0.7,
-		"max_tokens":     150,
-		"top_p":          1.0,
+		// max_tokens removed - different models have vastly different limits
+		// top_p removed - focus on temperature only
 	}
 
 	result := generator.WithConfig(config)

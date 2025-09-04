@@ -87,6 +87,8 @@ metadata:
   description: "%s"
   tags: ["station", "agent"]
 model: gpt-4o-mini
+config:
+  temperature: 0.3
 max_steps: %d`, agent.Name, agent.Description, agent.MaxSteps)
 
 	// Add tools if any

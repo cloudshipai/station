@@ -1019,7 +1019,6 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
 	content.WriteString("config:\n")
 	content.WriteString("  temperature: 0.3\n")
-	content.WriteString("  max_tokens: 2000\n")
 	
 	// Input schema with merged custom and default variables
 	schemaHelper := schema.NewExportHelper()

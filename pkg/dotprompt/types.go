@@ -22,9 +22,8 @@ type DotpromptConfig struct {
 // GenerationConfig contains model generation parameters
 type GenerationConfig struct {
 	Temperature *float32 `yaml:"temperature,omitempty"`
-	MaxTokens   *int     `yaml:"max_tokens,omitempty"`
-	TopP        *float32 `yaml:"top_p,omitempty"`
-	TopK        *int     `yaml:"top_k,omitempty"`
+	// Note: max_tokens removed - different models have vastly different limits
+	// TopP/TopK removed - focus on temperature only as requested
 }
 
 // InputConfig defines input schema for the agent
