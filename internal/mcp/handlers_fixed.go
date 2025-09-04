@@ -98,7 +98,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	var toolNames []string
 	if request.Params.Arguments != nil {
 		if argsMap, ok := request.Params.Arguments.(map[string]interface{}); ok {
-			if toolNamesArg, ok := argsMap["tool_names"]; ok {
+			if toolNamesArg, exists := argsMap["tool_names"]; exists {
 				if toolNamesArray, ok := toolNamesArg.([]interface{}); ok {
 					for _, toolName := range toolNamesArray {
 						if str, ok := toolName.(string); ok {
@@ -127,44 +127,8 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create agent: %v", err)), nil
 	}
 
-	// Assign tools to the agent
-	var assignedTools []string
-	var skippedTools []string
-	
-	if len(toolNames) > 0 {
-		// Assign specific tools if provided
-		for _, toolName := range toolNames {
-			// Find tool by name in the agent's environment
-			tool, err := s.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
-			if err != nil {
-				skippedTools = append(skippedTools, fmt.Sprintf("%s (not found)", toolName))
-				continue
-			}
-			
-			// Assign tool to agent
-			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
-			if err != nil {
-				skippedTools = append(skippedTools, fmt.Sprintf("%s (failed: %v)", toolName, err))
-				continue
-			}
-			
-			assignedTools = append(assignedTools, toolName)
-		}
-	} else {
-		// If no specific tools provided, assign all available tools in the environment
-		allTools, err := s.repos.MCPTools.GetByEnvironmentID(environmentID)
-		if err == nil {
-			for _, tool := range allTools {
-				// Assign tool to agent
-				_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
-				if err != nil {
-					skippedTools = append(skippedTools, fmt.Sprintf("%s (failed: %v)", tool.Name, err))
-					continue
-				}
-				assignedTools = append(assignedTools, tool.Name)
-			}
-		}
-	}
+	// Tool assignment is handled by AgentService.CreateAgent
+	// No duplicate tool assignment logic needed here
 
 	response := map[string]interface{}{
 		"success": true,
@@ -178,33 +142,8 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		"message": fmt.Sprintf("Agent '%s' created successfully with max_steps=%d in environment_id=%d", name, createdAgent.MaxSteps, createdAgent.EnvironmentID),
 	}
 	
-	// Add tool assignment status to response
-	if len(toolNames) > 0 {
-		toolAssignment := map[string]interface{}{
-			"requested_tools": toolNames,
-			"assigned_tools":  assignedTools,
-			"assigned_count":  len(assignedTools),
-		}
-		
-		if len(skippedTools) > 0 {
-			toolAssignment["skipped_tools"] = skippedTools
-			toolAssignment["skipped_count"] = len(skippedTools)
-		}
-		
-		if len(assignedTools) == len(toolNames) {
-			toolAssignment["status"] = "success"
-		} else if len(assignedTools) > 0 {
-			toolAssignment["status"] = "partial"
-		} else {
-			toolAssignment["status"] = "failed"
-		}
-		
-		response["tool_assignment"] = toolAssignment
-		
-		// Update message to include tool assignment info
-		response["message"] = fmt.Sprintf("Agent '%s' created successfully with max_steps=%d in environment_id=%d. Tools assigned: %d/%d", 
-			name, createdAgent.MaxSteps, createdAgent.EnvironmentID, len(assignedTools), len(toolNames))
-	}
+	// Tool assignment details are handled by the AgentService
+	// Simple response without duplicate tool assignment tracking
 
 	// Automatically export agent to file-based config after successful DB save and tool assignment
 	if s.agentExportService != nil {
