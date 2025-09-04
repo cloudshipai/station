@@ -223,14 +223,19 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	// Set GenKit maxTurns higher than our custom limit to let our logic handle it
 	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
 	
-	// Add temperature config if extracted from frontmatter
+	// Add temperature config (extracted from frontmatter or use default)
+	temperature := float32(0.3) // Default temperature
 	if configTemperature != nil {
-		configMap := map[string]interface{}{
-			"temperature": *configTemperature,
-		}
-		generateOpts = append(generateOpts, ai.WithConfig(configMap))
-		logging.Debug("DEBUG-FLOW: Step 7 - Added temperature config: %f", *configTemperature)
+		temperature = *configTemperature
+		logging.Debug("DEBUG-FLOW: Step 7 - Using frontmatter temperature: %f", temperature)
+	} else {
+		logging.Debug("DEBUG-FLOW: Step 7 - Using default temperature: %f", temperature)
 	}
+	
+	configMap := map[string]interface{}{
+		"temperature": temperature,
+	}
+	generateOpts = append(generateOpts, ai.WithConfig(configMap))
 	
 	logging.Debug("DEBUG-FLOW: Step 7 - Basic options set (model: %s, messages: %d, maxTurns: 30)", modelName, len(genkitMessages))
 	
