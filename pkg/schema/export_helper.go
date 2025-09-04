@@ -1,9 +1,12 @@
 package schema
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"station/pkg/models"
+
+	"github.com/xeipuuv/gojsonschema"
 )
 
 // ExportHelper handles dotprompt export with input schema merging
@@ -34,18 +37,32 @@ func (h *ExportHelper) GenerateInputSchemaSection(agent *models.Agent) (string, 
 	
 	// Add custom schema if defined
 	if agent.InputSchema != nil && *agent.InputSchema != "" {
-		customSchema, err := ParseInputSchema(*agent.InputSchema)
-		if err != nil {
+		// First validate the schema
+		if err := h.ValidateInputSchema(*agent.InputSchema); err != nil {
 			return "", fmt.Errorf("invalid input schema in agent: %w", err)
 		}
 		
-		// Convert to JSON Schema format and add custom variables
-		for key, variable := range customSchema {
-			// Skip userInput as it's already added
-			if key != "userInput" {
-				h.writeJSONSchemaProperty(&content, key, variable)
-				if variable.Required {
-					requiredFields = append(requiredFields, key)
+		// Parse the JSON schema to extract properties
+		var schema map[string]interface{}
+		if err := json.Unmarshal([]byte(*agent.InputSchema), &schema); err != nil {
+			return "", fmt.Errorf("failed to parse input schema: %w", err)
+		}
+		
+		// Extract properties from the schema
+		if properties, ok := schema["properties"].(map[string]interface{}); ok {
+			for key, prop := range properties {
+				// Skip userInput as it's already added
+				if key != "userInput" {
+					h.writeJSONSchemaPropertyFromRaw(&content, key, prop)
+				}
+			}
+		}
+		
+		// Extract required fields from the schema
+		if required, ok := schema["required"].([]interface{}); ok {
+			for _, field := range required {
+				if fieldName, ok := field.(string); ok && fieldName != "userInput" {
+					requiredFields = append(requiredFields, fieldName)
 				}
 			}
 		}
@@ -71,29 +88,22 @@ func (h *ExportHelper) GetMergedInputData(agent *models.Agent, userInput string,
 	
 	// If agent has custom schema, validate and merge
 	if agent.InputSchema != nil && *agent.InputSchema != "" {
-		customSchema, err := ParseInputSchema(*agent.InputSchema)
-		if err != nil {
+		// First validate the schema itself
+		if err := h.ValidateInputSchema(*agent.InputSchema); err != nil {
 			return nil, fmt.Errorf("invalid agent input schema: %w", err)
 		}
 		
-		// Validate custom data against schema
+		// Merge custom data (excluding userInput)
 		if customData != nil {
-			if err := customSchema.ValidateInputData(customData); err != nil {
-				return nil, fmt.Errorf("input validation failed: %w", err)
-			}
-			
-			// Merge custom data (excluding userInput)
 			for key, value := range customData {
 				if key != "userInput" {
 					result[key] = value
 				}
 			}
-		}
-		
-		// Add default values for missing non-required fields
-		for key, variable := range customSchema {
-			if key != "userInput" && result[key] == nil && variable.Default != nil {
-				result[key] = variable.Default
+			
+			// Validate merged data against schema using gojsonschema
+			if err := h.validateDataAgainstSchema(result, *agent.InputSchema); err != nil {
+				return nil, fmt.Errorf("input validation failed: %w", err)
 			}
 		}
 	}
@@ -101,59 +111,86 @@ func (h *ExportHelper) GetMergedInputData(agent *models.Agent, userInput string,
 	return result, nil
 }
 
+// validateDataAgainstSchema validates input data against a JSON Schema
+func (h *ExportHelper) validateDataAgainstSchema(data map[string]interface{}, schemaJSON string) error {
+	// Load the schema
+	schemaLoader := gojsonschema.NewStringLoader(schemaJSON)
+	
+	// Convert data to JSON for validation
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data for validation: %w", err)
+	}
+	dataLoader := gojsonschema.NewStringLoader(string(dataJSON))
+	
+	// Validate
+	result, err := gojsonschema.Validate(schemaLoader, dataLoader)
+	if err != nil {
+		return fmt.Errorf("validation error: %w", err)
+	}
+	
+	if !result.Valid() {
+		var errors []string
+		for _, desc := range result.Errors() {
+			errors = append(errors, desc.String())
+		}
+		return fmt.Errorf("validation failed: %s", strings.Join(errors, "; "))
+	}
+	
+	return nil
+}
 
-// writeJSONSchemaProperty writes a JSON Schema property to the content builder
-func (h *ExportHelper) writeJSONSchemaProperty(content *strings.Builder, key string, variable *InputVariable) {
+
+// writeJSONSchemaPropertyFromRaw writes a JSON Schema property from raw parsed JSON
+func (h *ExportHelper) writeJSONSchemaPropertyFromRaw(content *strings.Builder, key string, property interface{}) {
 	content.WriteString(fmt.Sprintf("      %s:\n", key))
 	
-	// Handle enum types
-	if len(variable.Enum) > 0 {
-		content.WriteString("        type: string\n")
-		content.WriteString("        enum:\n")
-		for _, val := range variable.Enum {
-			content.WriteString(fmt.Sprintf("          - %s\n", val))
+	if propMap, ok := property.(map[string]interface{}); ok {
+		// Write type
+		if propType, exists := propMap["type"]; exists {
+			content.WriteString(fmt.Sprintf("        type: %v\n", propType))
 		}
-	} else {
-		// Handle regular types
-		jsonType := h.convertTypeToJSONSchema(variable.Type)
-		content.WriteString(fmt.Sprintf("        type: %s\n", jsonType))
-	}
-	
-	// Add description if present
-	if variable.Description != "" {
-		content.WriteString(fmt.Sprintf("        description: %s\n", variable.Description))
-	}
-	
-	// Add default value if present
-	if variable.Default != nil {
-		content.WriteString(fmt.Sprintf("        default: %v\n", variable.Default))
-	}
-}
-
-// convertTypeToJSONSchema converts schema type to JSON Schema type string
-func (h *ExportHelper) convertTypeToJSONSchema(schemaType InputSchemaType) string {
-	switch schemaType {
-	case TypeString:
-		return "string"
-	case TypeNumber:
-		return "number"
-	case TypeBoolean:
-		return "boolean"
-	case TypeArray:
-		return "array"
-	case TypeObject:
-		return "object"
-	default:
-		return "string" // fallback
+		
+		// Write enum if present
+		if enumValues, exists := propMap["enum"]; exists {
+			if enumArray, ok := enumValues.([]interface{}); ok {
+				content.WriteString("        enum:\n")
+				for _, val := range enumArray {
+					content.WriteString(fmt.Sprintf("          - %v\n", val))
+				}
+			}
+		}
+		
+		// Write description if present
+		if desc, exists := propMap["description"]; exists {
+			content.WriteString(fmt.Sprintf("        description: %v\n", desc))
+		}
+		
+		// Write default if present
+		if defaultVal, exists := propMap["default"]; exists {
+			content.WriteString(fmt.Sprintf("        default: %v\n", defaultVal))
+		}
 	}
 }
 
-// ValidateInputSchema validates that an input schema JSON is valid
+// ValidateInputSchema validates that an input schema JSON is valid using proper JSON Schema validation
 func (h *ExportHelper) ValidateInputSchema(schemaJSON string) error {
 	if schemaJSON == "" {
 		return nil // Empty schema is valid
 	}
 	
-	_, err := ParseInputSchema(schemaJSON)
-	return err
+	// Parse as JSON to ensure it's valid JSON first
+	var schemaObj interface{}
+	if err := json.Unmarshal([]byte(schemaJSON), &schemaObj); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	
+	// Validate as JSON Schema using gojsonschema
+	schemaLoader := gojsonschema.NewStringLoader(schemaJSON)
+	_, err := gojsonschema.NewSchema(schemaLoader)
+	if err != nil {
+		return fmt.Errorf("invalid JSON Schema: %w", err)
+	}
+	
+	return nil
 }
