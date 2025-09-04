@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -8,6 +9,7 @@ import (
 
 	"station/internal/db/repositories"
 	"station/pkg/models"
+	"station/pkg/schema"
 )
 
 // AgentExportService handles automatic export of agents to file-based config
@@ -70,8 +72,7 @@ func (s *AgentExportService) ExportAgentAfterSave(agentID int64) error {
 	return nil
 }
 
-// generateDotpromptContent generates the dotprompt file content
-// This is extracted from the MCP handler logic to be reusable
+// generateDotpromptContent generates the dotprompt file content with proper role structure
 func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environmentName string) string {
 	// Build tools list
 	var toolNames []string
@@ -79,34 +80,79 @@ func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools
 		toolNames = append(toolNames, tool.ToolName)
 	}
 
-	// Generate YAML frontmatter
-	frontmatter := fmt.Sprintf(`---
-model: "gemini-2.0-flash-exp"
-config:
-  temperature: 0.3
-  max_tokens: 2000
+	// Start with YAML frontmatter
+	content := fmt.Sprintf(`---
 metadata:
   name: "%s"
   description: "%s"
-  version: "1.0.0"`, agent.Name, agent.Description)
+  tags: ["station", "agent"]
+model: gpt-4o-mini
+max_steps: %d`, agent.Name, agent.Description, agent.MaxSteps)
 
 	// Add tools if any
 	if len(toolNames) > 0 {
-		frontmatter += "\ntools:\n"
+		content += "\ntools:\n"
 		for _, toolName := range toolNames {
-			frontmatter += fmt.Sprintf("  - \"%s\"\n", toolName)
+			content += fmt.Sprintf("  - \"%s\"\n", toolName)
 		}
 	}
 
-	// Add station-specific metadata
-	frontmatter += fmt.Sprintf(`station:
-  execution_metadata:
-    max_steps: %d
-    environment: "%s"
-    agent_id: %d
----
+	// Add input schema (always include - contains at minimum userInput)
+	inputSchemaSection, err := s.generateInputSchemaSection(agent)
+	if err == nil {
+		content += inputSchemaSection
+	}
 
-%s`, agent.MaxSteps, environmentName, agent.ID, agent.Prompt)
+	// Close frontmatter and add role-based prompt structure
+	content += "---\n\n"
 
-	return frontmatter
+	// Add system role with the agent's prompt
+	content += "{{role \"system\"}}\n"
+	content += agent.Prompt
+	content += "\n\n"
+
+	// Add user role with handlebars template
+	content += "{{role \"user\"}}\n"
+	content += "{{userInput}}"
+
+	// Add custom variable handlebars if they exist
+	if agent.InputSchema != nil && *agent.InputSchema != "" {
+		customVars := s.extractCustomVariableNames(agent)
+		for _, varName := range customVars {
+			content += fmt.Sprintf("\n\n**%s:** {{%s}}", varName, varName)
+		}
+	}
+
+	return content
+}
+
+// generateInputSchemaSection generates the input schema for dotprompt
+func (s *AgentExportService) generateInputSchemaSection(agent *models.Agent) (string, error) {
+	// Use the existing ExportHelper for proper schema generation
+	helper := schema.NewExportHelper()
+	return helper.GenerateInputSchemaSection(agent)
+}
+
+// extractCustomVariableNames extracts variable names from input schema JSON
+func (s *AgentExportService) extractCustomVariableNames(agent *models.Agent) []string {
+	var varNames []string
+	
+	if agent.InputSchema == nil || *agent.InputSchema == "" {
+		return varNames
+	}
+	
+	// Parse the JSON schema to extract variable names
+	var schemaMap map[string]interface{}
+	if err := json.Unmarshal([]byte(*agent.InputSchema), &schemaMap); err != nil {
+		return varNames
+	}
+	
+	// Extract all keys except userInput
+	for key := range schemaMap {
+		if key != "userInput" {
+			varNames = append(varNames, key)
+		}
+	}
+	
+	return varNames
 }

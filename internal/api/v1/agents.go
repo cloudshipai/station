@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -223,12 +224,13 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 
 func (h *APIHandlers) createAgent(c *gin.Context) {
 	var req struct {
-		Name          string   `json:"name" binding:"required"`
-		Description   string   `json:"description" binding:"required"`
-		Prompt        string   `json:"prompt" binding:"required"`
-		EnvironmentID int64    `json:"environment_id" binding:"required"`
-		MaxSteps      int64    `json:"max_steps"`
-		AssignedTools []string `json:"assigned_tools"`
+		Name          string      `json:"name" binding:"required"`
+		Description   string      `json:"description" binding:"required"`
+		Prompt        string      `json:"prompt" binding:"required"`
+		EnvironmentID int64       `json:"environment_id" binding:"required"`
+		MaxSteps      int64       `json:"max_steps"`
+		AssignedTools []string    `json:"assigned_tools"`
+		InputSchema   interface{} `json:"input_schema,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -252,6 +254,18 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		req.MaxSteps = 25
 	}
 
+	// Process input schema if provided
+	var inputSchemaJSON *string
+	if req.InputSchema != nil {
+		schemaBytes, err := json.Marshal(req.InputSchema)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input schema format"})
+			return
+		}
+		schemaStr := string(schemaBytes)
+		inputSchemaJSON = &schemaStr
+	}
+
 	// Create AgentConfig for unified service
 	config := &services.AgentConfig{
 		EnvironmentID: req.EnvironmentID,
@@ -261,6 +275,7 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 		AssignedTools: req.AssignedTools,
 		MaxSteps:      req.MaxSteps,
 		CreatedBy:     createdBy,
+		InputSchema:   inputSchemaJSON,
 	}
 
 	// Create the agent using the unified service

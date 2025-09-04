@@ -83,7 +83,16 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	// Extract optional parameters
 	maxSteps := request.GetInt("max_steps", 5) // Default to 5 if not provided
 	
-	// Note: input_schema support can be added to AgentConfig in the future if needed
+	// Extract and validate input_schema if provided
+	var inputSchema *string
+	if inputSchemaParam := request.GetString("input_schema", ""); inputSchemaParam != "" {
+		// Validate the schema JSON before storing
+		helper := schema.NewExportHelper()
+		if err := helper.ValidateInputSchema(inputSchemaParam); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid input_schema JSON: %v", err)), nil
+		}
+		inputSchema = &inputSchemaParam
+	}
 	
 	// Extract tool_names array if provided
 	var toolNames []string
@@ -110,6 +119,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		AssignedTools: toolNames,
 		MaxSteps:      int64(maxSteps),
 		CreatedBy:     1, // Console user
+		InputSchema:   inputSchema,
 	}
 	
 	createdAgent, err := s.agentService.CreateAgent(ctx, config)

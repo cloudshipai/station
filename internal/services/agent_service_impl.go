@@ -21,12 +21,14 @@ type AgentService struct {
 	repos           *repositories.Repositories
 	executionEngine *AgentExecutionEngine
 	telemetry       *TelemetryService
+	exportService   *AgentExportService
 }
 
 // NewAgentService creates a new agent service
 func NewAgentService(repos *repositories.Repositories) *AgentService {
 	service := &AgentService{
-		repos: repos,
+		repos:         repos,
+		exportService: NewAgentExportService(repos),
 	}
 	
 	// Initialize telemetry service with config
@@ -308,7 +310,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		config.MaxSteps,
 		config.EnvironmentID,
 		config.CreatedBy,
-		nil, // input_schema - not set in basic config
+		config.InputSchema,
 		config.CronSchedule,
 		config.ScheduleEnabled,
 	)
@@ -322,6 +324,12 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		if assignedCount == 0 {
 			return nil, fmt.Errorf("failed to assign any tools to agent")
 		}
+	}
+
+	// Auto-export the agent to dotprompt format
+	if err := s.exportService.ExportAgentAfterSave(agent.ID); err != nil {
+		// Log the error but don't fail agent creation
+		fmt.Printf("Warning: Failed to auto-export agent to dotprompt format: %v\n", err)
 	}
 
 	return agent, nil
