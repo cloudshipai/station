@@ -1,87 +1,239 @@
-# Station Architecture
+# Station Architecture Overview
 
-Station is designed as a self-bootstrapping AI agent runtime that manages itself through its own MCP (Model Context Protocol) interface.
+Station is a secure, self-hosted platform for deploying intelligent MCP agents with a clean layered architecture that separates concerns between agent management, execution, and tool integration.
 
-## Core Architecture
+## System Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│   Claude    │────▶│   Station    │────▶│   Your Tools    │
-│ (MCP Client)│ MCP │  (Runtime)   │     │ FS, GH, AWS     │
-└─────────────┘     └──────────────┘     └─────────────────┘
-                           │
-                    ┌──────▼───────┐     ┌─────────────────┐
-                    │Self-Bootstrap│────▶│ Station's Own   │
-                    │Intelligence  │stdio│   MCP Server    │
-                    │   (Genkit)   │     │  (13 tools)     │ 
-                    └──────────────┘     └─────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Station Platform                         │
+├─────────────────────────────────────────────────────────────┤
+│  Client Interfaces                                          │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │  CLI (stn)  │ │  Web UI     │ │ MCP Server  │           │
+│  │             │ │ (React)     │ │ (stdio)     │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+├─────────────────────────────────────────────────────────────┤
+│  API Layer                                                  │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │  REST API   │ │  MCP        │ │ WebSocket   │           │
+│  │  Handlers   │ │ Handlers    │ │ Events      │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+├─────────────────────────────────────────────────────────────┤
+│  Core Services                                              │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │   Agent     │ │    MCP      │ │Environment  │           │
+│  │  Service    │ │   Service   │ │  Service    │           │
+│  │             │ │             │ │             │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+├─────────────────────────────────────────────────────────────┤
+│  Execution Engine                                           │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │   GenKit    │ │ Execution   │ │   OpenAI    │           │
+│  │Integration  │ │  Logger     │ │   Plugin    │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+├─────────────────────────────────────────────────────────────┤
+│  Data Layer                                                 │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │   SQLite    │ │ File Config │ │   Agent     │           │
+│  │  Database   │ │   System    │ │ .prompt     │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+├─────────────────────────────────────────────────────────────┤
+│  MCP Tool Ecosystem                                         │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │ Filesystem  │ │    Ship     │ │   Custom    │           │
+│  │    Tools    │ │ Security    │ │    Tools    │           │
+│  │             │ │   (300+)    │ │             │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Key Components
+## Core Components
 
-### 1. Runtime Engine
-The core Station binary provides:
-- **Agent Execution Queue**: Manages concurrent agent runs with worker pools
-- **MCP Server Management**: Handles connections to external MCP servers
-- **Environment Isolation**: Separates configurations across dev/staging/prod
-- **Security Layer**: Encrypts secrets and manages permissions
+### 1. Agent Management System
 
-### 2. Self-Bootstrapping Intelligence
-Station uses Google's Genkit framework with its own MCP server:
-- **AI-Powered Tool Selection**: Analyzes requirements and assigns optimal tools
-- **Dynamic Execution Planning**: Adjusts iteration limits (1-25) based on task complexity
-- **Self-Management**: Station creates and manages agents using its own MCP interface
-- **Multi-Provider Support**: OpenAI (Station's fixed plugin), Google, Anthropic, Ollama with smart fallbacks
+**Purpose**: Manages the complete lifecycle of AI agents from creation to execution.
 
-#### AI Provider Architecture
-Station implements custom AI provider plugins to ensure reliable multi-turn conversations:
+**Key Components**:
+- **Agent Service** (`internal/services/agent_service_impl.go`)
+  - Agent CRUD operations with database persistence
+  - Input schema validation using JSON Schema format
+  - Auto-export to dotprompt format on creation
+  
+- **Agent Export Service** (`internal/services/agent_export_service.go`)
+  - Automatic `.prompt` file generation in proper dotprompt format
+  - Multi-role handlebars template structure (`{{role "system"}}`, `{{role "user"}}`)
+  - Custom variable extraction and formatting
 
-**Station OpenAI Plugin** (`internal/genkit/`):
-- **Custom Implementation**: Complete reimplementation of GenKit Go's OpenAI plugin
-- **Critical Bug Fixes**: Resolves tool_call_id bugs that prevented multi-turn agent workflows
-- **Enhanced Debugging**: Comprehensive logging for tool call flow tracing
-- **API Compliance**: Proper handling of OpenAI's 40-character tool_call_id limits
+**Agent Structure**:
+```yaml
+---
+metadata:
+  name: "Agent Name"
+  description: "Agent description"
+  tags: ["category", "type"]
+model: gpt-4o-mini
+max_steps: 8
+tools:
+  - "__read_text_file"
+  - "__list_directory"
+input:
+  schema:
+    type: object
+    properties:
+      userInput:
+        type: string
+        description: User input for the agent
+    required: ["userInput"]
+---
 
-**Provider Selection Logic**:
+{{role "system"}}
+You are an expert agent specialized in...
+
+{{role "user"}}
+{{userInput}}
+```
+
+### 2. Environment Management
+
+**Purpose**: Provides multi-environment isolation for development, staging, and production deployments.
+
+**Structure**:
+```
+~/.config/station/environments/
+├── default/
+│   ├── agents/           # Agent .prompt files
+│   ├── template.json     # MCP server configurations
+│   └── variables.yml     # Environment variables
+├── staging/
+└── production/
+```
+
+**Environment Configuration**:
+- **Template System**: Go template processing with variable substitution
+- **MCP Server Pool**: Environment-specific tool access and isolation
+- **Variable Resolution**: Runtime variable injection for deployment flexibility
+
+### 3. MCP Integration Architecture
+
+**Purpose**: Provides secure, standardized tool access through Model Context Protocol.
+
+**MCP Handler System** (`internal/mcp/handlers_fixed.go`):
+- **Tool Discovery**: Automatic tool enumeration from connected MCP servers
+- **Agent Creation**: Complete MCP-based agent lifecycle with custom schema support
+- **Secure Execution**: Sandboxed tool execution with audit logging
+
+**Supported MCP Servers**:
+- **Filesystem Server**: File operations (read, write, list, search)
+- **Ship Security Server**: 300+ security tools (checkov, trivy, semgrep, gitleaks)
+- **Custom Servers**: User-defined MCP tool integration
+
+### 4. Execution Engine - Layered Architecture
+
+Station uses a clean layered architecture for agent execution that separates API integration from user visibility.
+
+#### Layer 1: GenKit Integration
+**File**: `internal/genkit/openai_minimal.go` (300 lines)
+**Purpose**: Clean API integration with OpenAI
+
 ```go
-switch cfg.AIProvider {
-case "openai":   // Uses Station's fixed plugin
-case "gemini":   // Uses Google's official plugin  
-case "anthropic":// Uses OpenAI-compatible mode
+type MinimalStationOpenAI struct {
+    APIKey      string
+    BaseURL     string
+    LogCallback func(map[string]interface{}) // Integration point
 }
 ```
 
-**Technical Fixes**:
-- **Tool Call ID Preservation**: Uses `ToolRequest.Ref` instead of `ToolRequest.Name`
-- **Parameter Order Correction**: Fixes OpenAI ToolMessage parameter swap
-- **Length Validation**: Ensures compliance with API character limits
+**Critical Fix**: Station maintains the fix for GenKit's ToolMessage parameter order bug:
+```go
+// Station's CORRECT implementation
+tm := openai.ToolMessage(outputJSON, toolCallID)
 
-> 📋 **See**: [Station OpenAI Plugin Fix Documentation](/docs/bug-reports/STATION_OPENAI_PLUGIN_FIX.md) for complete technical details.
+// GenKit's INCORRECT implementation (fixed in our plugin)
+// tm := openai.ToolMessage(toolCallID, outputJSON) ❌
+```
 
-### 3. MCP Integration Layer
-Station acts as both MCP client and server:
-- **MCP Client**: Connects to external servers (filesystem, GitHub, AWS, etc.)
-- **MCP Server**: Provides 13 management tools via stdio interface
-- **Tool Discovery**: Auto-detects available tools and capabilities
-- **Protocol Translation**: Handles different MCP server implementations
+#### Layer 2: Execution Logging
+**File**: `internal/execution/logging/execution_logger.go` (350 lines)
+**Purpose**: User-visible execution tracking and database storage
 
-## Self-Bootstrapping Flow
+```go
+type ExecutionLogger struct {
+    runID       int
+    entries     []LogEntry
+    stepCounter int
+    startTime   time.Time
+}
+```
 
-### Agent Creation Process
-1. **User Request**: `./stn agent create "name" "description" --domain "devops"`
-2. **MCP Connection**: Station connects to its own stdio MCP server
-3. **AI Analysis**: Genkit analyzes requirements using available MCP tools
-4. **Tool Selection**: AI selects optimal tools from agent's environment
-5. **Agent Creation**: Station creates agent with intelligent configuration
-6. **Tool Assignment**: Assigns specific tools based on domain and requirements
+**Features**:
+- Real-time execution step tracking
+- Tool call parameter logging
+- Token usage monitoring  
+- Database persistence for user visibility
+- JSON serialization for structured logging
 
-### Agent Execution Process
-1. **Execution Request**: `./stn agent run 1 "task description"`
-2. **Environment Setup**: Load agent's assigned tools from environment MCP servers
-3. **Tool Filtering**: Only provide tools assigned to the specific agent
-4. **AI Execution**: Genkit executes with filtered tools and dynamic iteration limits
-5. **Result Processing**: Parse steps, tool calls, and execution metadata
-6. **Storage**: Store run results with detailed execution information
+#### Integration Points
+```go
+// OpenAI plugin calls execution logger
+plugin.LogCallback = func(data map[string]interface{}) {
+    logger.LogModelCall(data)
+}
+
+// Logger saves to database for user access
+func (l *ExecutionLogger) SaveToDB(repos *repository.Repositories) error {
+    return repos.Runs.UpdateCompletionWithMetadata(l.runID, metadata)
+}
+```
+
+### 5. File-Based Configuration System
+
+**Purpose**: GitOps-ready configuration management replacing database-driven configs.
+
+**Template Processing**:
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "{{ .PROJECT_ROOT }}"]
+    }
+  }
+}
+```
+
+**Variable Resolution**:
+```yaml
+# variables.yml
+PROJECT_ROOT: "/workspace"
+AWS_REGION: "us-east-1"
+```
+
+**Benefits**:
+- Version control friendly
+- Environment-specific variable injection
+- Template validation and error checking
+- Automatic sync and deployment capabilities
+
+### 6. Bundle System
+
+**Purpose**: Portable environment packaging for distribution and deployment.
+
+**Bundle Structure**:
+```
+bundle.tar.gz
+├── agents/                    # Agent .prompt files
+│   ├── Security Scanner.prompt
+│   └── Code Reviewer.prompt
+├── template.json             # MCP server configurations
+└── variables.yml            # Default environment variables
+```
+
+**Bundle Lifecycle**:
+1. **Creation**: Package existing environment into shareable bundle
+2. **Distribution**: Publish to Station Registry with metadata
+3. **Installation**: Deploy bundle to new environment with variable prompting
+4. **Synchronization**: Update MCP servers and validate tool connections
 
 ## Environment Architecture
 
