@@ -612,7 +612,7 @@ func (s *Server) handleGetPrompt(ctx context.Context, request mcp.CallToolReques
 
 	switch promptName {
 	case "export_agents_guide":
-		promptContent = "# Agent Export Guide\n\nStation provides multiple ways to export agents to .prompt files for version control and deployment.\n\n## Export Single Agent\n\nUse the export_agent tool to export a specific agent:\n\n```json\n{\n  \"tool\": \"export_agent\",\n  \"parameters\": {\n    \"agent_id\": \"42\",\n    \"output_path\": \"/path/to/agent.prompt\"  // Optional\n  }\n}\n```\n\n## Export All Agents\n\nUse the export_agents tool to export multiple agents at once:\n\n```json\n{\n  \"tool\": \"export_agents\",\n  \"parameters\": {\n    \"environment_id\": \"1\",              // Optional: filter by environment\n    \"output_directory\": \"/path/to/dir\", // Optional: custom output directory\n    \"enabled_only\": true                // Optional: only export enabled agents\n  }\n}\n```\n\n## Export Format\n\nExported agents are saved as .prompt files with YAML frontmatter:\n\n```yaml\n---\nmodel: \"gemini-2.0-flash-exp\"\nconfig:\n  temperature: 0.3\n  max_tokens: 2000\nmetadata:\n  name: \"Agent Name\"\n  description: \"Agent description\"\n  version: \"1.0.0\"\ntools:\n  - \"tool_name_1\"\n  - \"tool_name_2\"\nstation:\n  execution_metadata:\n    max_steps: 5\n    environment: \"production\"\n    agent_id: 42\n---\n\nYour agent prompt content goes here...\n```\n\n## Benefits\n\n- **Version Control**: Track agent changes in git\n- **Deployment**: Deploy agents across environments\n- **Backup**: Preserve agent configurations\n- **Sharing**: Share agents with team members"
+		promptContent = "# Agent Export Guide\n\nStation provides multiple ways to export agents to .prompt files for version control and deployment.\n\n## Export Single Agent\n\nUse the export_agent tool to export a specific agent:\n\n```json\n{\n  \"tool\": \"export_agent\",\n  \"parameters\": {\n    \"agent_id\": \"42\",\n    \"output_path\": \"/path/to/agent.prompt\"  // Optional\n  }\n}\n```\n\n## Export All Agents\n\nUse the export_agents tool to export multiple agents at once:\n\n```json\n{\n  \"tool\": \"export_agents\",\n  \"parameters\": {\n    \"environment_id\": \"1\",              // Optional: filter by environment\n    \"output_directory\": \"/path/to/dir\", // Optional: custom output directory\n    \"enabled_only\": true                // Optional: only export enabled agents\n  }\n}\n```\n\n## Export Format\n\nExported agents are saved as .prompt files with YAML frontmatter:\n\n```yaml\n---\nmodel: \"gemini-2.0-flash-exp\"\nmetadata:\n  name: \"Agent Name\"\n  description: \"Agent description\"\n  version: \"1.0.0\"\ntools:\n  - \"tool_name_1\"\n  - \"tool_name_2\"\nstation:\n  execution_metadata:\n    max_steps: 5\n    environment: \"production\"\n    agent_id: 42\n---\n\nYour agent prompt content goes here...\n```\n\n## Benefits\n\n- **Version Control**: Track agent changes in git\n- **Deployment**: Deploy agents across environments\n- **Backup**: Preserve agent configurations\n- **Sharing**: Share agents with team members"
 		found = true
 
 	case "agent_export_reminder":
@@ -1017,8 +1017,7 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 	// YAML frontmatter with multi-role support
 	content.WriteString("---\n")
 	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
-	content.WriteString("config:\n")
-	content.WriteString("  temperature: 0.3\n")
+	// config section removed - temperature not supported by gpt-5 model
 	
 	// Input schema with merged custom and default variables
 	schemaHelper := schema.NewExportHelper()
