@@ -77,15 +77,8 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 		log.Printf("🔥 DEBUG-FLOW: Step 1 - Built dotprompt content successfully")
 	}
 	
-	// 2. Extract config from frontmatter BEFORE calling dotprompt library
-	logging.Debug("DEBUG-FLOW: Step 2 - Extracting config from frontmatter")
-	var configTemperature *float32
-	if parser := NewParser(); parser != nil {
-		if parsed, err := parser.Parse(dotpromptContent); err == nil && parsed.Config != nil && parsed.Config.Config.Temperature != nil {
-			configTemperature = parsed.Config.Config.Temperature
-			logging.Debug("DEBUG-FLOW: Step 2 - Extracted temperature: %f", *configTemperature)
-		}
-	}
+	// 2. Parse frontmatter config (temperature configuration removed for gpt-5 compatibility)
+	logging.Debug("DEBUG-FLOW: Step 2 - Parsing frontmatter config")
 	
 	// 3. Use dotprompt library directly for multi-role rendering (bypasses GenKit constraint)
 	logging.Debug("DEBUG-FLOW: Step 3 - Creating dotprompt instance")
@@ -223,19 +216,8 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	// Set GenKit maxTurns higher than our custom limit to let our logic handle it
 	generateOpts = append(generateOpts, ai.WithMaxTurns(30)) // Higher than our 25 to prevent GenKit interference
 	
-	// Add temperature config (extracted from frontmatter or use default)
-	temperature := float32(0.3) // Default temperature
-	if configTemperature != nil {
-		temperature = *configTemperature
-		logging.Debug("DEBUG-FLOW: Step 7 - Using frontmatter temperature: %f", temperature)
-	} else {
-		logging.Debug("DEBUG-FLOW: Step 7 - Using default temperature: %f", temperature)
-	}
-	
-	configMap := map[string]interface{}{
-		"temperature": temperature,
-	}
-	generateOpts = append(generateOpts, ai.WithConfig(configMap))
+	// Temperature configuration removed for gpt-5 model compatibility
+	// gpt-5 uses default temperature of 1 and doesn't accept temperature parameter
 	
 	logging.Debug("DEBUG-FLOW: Step 7 - Basic options set (model: %s, messages: %d, maxTurns: 30)", modelName, len(genkitMessages))
 	
@@ -960,8 +942,7 @@ func (e *GenKitExecutor) buildDotpromptFromAgent(agent models.Agent, agentTools 
 	// YAML frontmatter with multi-role support (same as export logic)
 	content.WriteString("---\n")
 	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
-	content.WriteString("config:\n")
-	content.WriteString("  temperature: 0.3\n")
+	// config section removed - temperature not supported by gpt-5 model
 	// NOTE: Removed maxTurns from config - we handle turn limiting manually
 	
 	// Input schema with merged custom and default variables

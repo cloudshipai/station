@@ -80,15 +80,13 @@ func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools
 		toolNames = append(toolNames, tool.ToolName)
 	}
 
-	// Start with YAML frontmatter
+	// Start with YAML frontmatter (temperature config removed for gpt-5 compatibility)
 	content := fmt.Sprintf(`---
 metadata:
   name: "%s"
   description: "%s"
   tags: ["station", "agent"]
 model: gpt-4o-mini
-config:
-  temperature: 0.3
 max_steps: %d`, agent.Name, agent.Description, agent.MaxSteps)
 
 	// Add tools if any
