@@ -518,9 +518,13 @@ func (c *GenkitTelemetryClient) updateAgentRunWithTelemetry(ctx context.Context,
 	toolCallsJSONArray := (*models.JSONArray)(&toolCallsArray)
 	executionStepsJSONArray := (*models.JSONArray)(&executionStepsArray)
 	
+	// Determine status from multiple failure indicators
 	status := "completed"
 	if data.ErrorInfo != nil {
 		status = "failed"
+	} else if data.StepsTaken == 0 && data.TotalDuration > 300000 && len(data.ToolCalls) == 0 {
+		// Timeout pattern: >5min with no progress (no steps, no tool calls)
+		status = "timeout" // Use timeout status for better debugging
 	}
 	
 	completedAt := time.Now()

@@ -781,12 +781,22 @@ func (e *GenKitExecutor) ExecuteAgentWithDatabaseConfigAndLogging(agent models.A
 		}, nil
 	}
 	
-	// Log successful completion
+	// Log execution completion with accurate status
 	if logCallback != nil {
+		var message string
+		var level string
+		if result.Success {
+			message = "Agent execution completed successfully"
+			level = "info"
+		} else {
+			message = "Agent execution completed with failure"
+			level = "error"
+		}
+		
 		logCallback(map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
-			"level":     "info",
-			"message":   "Agent execution completed successfully",
+			"level":     level,
+			"message":   message,
 			"details": map[string]interface{}{
 				"success":      result.Success,
 				"duration":     result.Duration,
