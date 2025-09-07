@@ -18,7 +18,6 @@ package genkit
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -613,6 +612,15 @@ func (g *StationModelGenerator) generateComplete(ctx context.Context) (*ai.Model
 		}
 	}
 	
+	// CONTEXT MANAGEMENT: Check for large tool responses and summarize before API call
+	logging.Debug("Station GenKit: About to call context management with %d messages", len(g.request.Messages))
+	if err := g.manageContextSize(ctx); err != nil {
+		logging.Debug("Station GenKit: Context management failed: %v", err)
+		// Continue anyway - context management is best effort
+	} else {
+		logging.Debug("Station GenKit: Context management completed successfully")
+	}
+	
 	logging.Debug("Station GenKit: Calling OpenAI API with model=%s", g.request.Model)
 	
 	// Log API call start for real-time progress tracking
@@ -1132,42 +1140,6 @@ func convertStationToolCall(part *ai.Part) openai.ChatCompletionMessageToolCallP
 	return param
 }
 
-// generateToolCallID creates a short tool call ID similar to OpenAI's format
-func generateToolCallID() string {
-	// Generate 8 random bytes for a 16-character hex string
-	bytes := make([]byte, 8)
-	rand.Read(bytes)
-	return fmt.Sprintf("call_%x", bytes)[:12] // Format: call_abc123ef (12 chars total)
-}
-
-func jsonStringToMap(jsonString string) map[string]any {
-	var result map[string]any
-	if err := json.Unmarshal([]byte(jsonString), &result); err != nil {
-		panic(fmt.Errorf("unmarshal failed to parse json string %s: %w", jsonString, err))
-	}
-	return result
-}
-
-func anyToJSONString(data any) string {
-	jsonBytes, err := json.Marshal(data)
-	if err != nil {
-		panic(fmt.Errorf("failed to marshal any to JSON string: data, %#v %w", data, err))
-	}
-	return string(jsonBytes)
-}
-
-// Helper functions for progressive logging
-
-// getCurrentTimestampNano returns current timestamp in nanoseconds for high precision logging
-func getCurrentTimestampNano() int64 {
-	return time.Now().UnixNano()
-}
-
-// getMaxTokensFromRequest extracts max_tokens from the request if present
-func getMaxTokensFromRequest(req *openai.ChatCompletionNewParams) interface{} {
-	// The MaxTokens field is an Opt[int64], just return the value directly
-	return req.MaxTokens.Value
-}
 
 // ConversationAnalysis represents the analyzed conversation pattern for agent loop insights
 type ConversationAnalysis struct {
