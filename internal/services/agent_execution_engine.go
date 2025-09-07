@@ -152,7 +152,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			defer mcpLoadSpan.End()
 		}
 		
+		logging.Info("🔥 AGENT-ENGINE: About to call GetEnvironmentMCPTools for env %d", agent.EnvironmentID)
 		allMCPTools, mcpClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+		logging.Info("🔥 AGENT-ENGINE: GetEnvironmentMCPTools RETURNED - %d tools, %d clients, err=%v", len(allMCPTools), len(mcpClients), err != nil)
 		if err != nil {
 			if mcpLoadSpan != nil {
 				mcpLoadSpan.RecordError(err)
@@ -176,10 +178,13 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		aee.activeMCPClients = mcpClients
 		
 		// Filter to only include tools assigned to this agent (same filtering logic as traditional)
+		logging.Info("🔥 AGENT-ENGINE: About to filter tools - %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
 		logging.Debug("Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
 		var mcpTools []ai.ToolRef
-		for _, assignedTool := range agentTools {
-			for _, mcpTool := range allMCPTools {
+		logging.Info("🔥 TOOL-FILTER: Starting tool filtering loop with %d assigned tools", len(agentTools))
+		for i, assignedTool := range agentTools {
+			logging.Info("🔥 TOOL-FILTER: Processing assigned tool %d/%d: %s", i+1, len(agentTools), assignedTool.ToolName)
+			for j, mcpTool := range allMCPTools {
 				// Match by tool name - same method as traditional execution
 				var toolName string
 				if named, ok := mcpTool.(interface{ Name() string }); ok {
@@ -191,12 +196,19 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 					toolName = fmt.Sprintf("%T", mcpTool)
 				}
 				
+				if j < 5 || strings.Contains(toolName, "opencode") { // Log first 5 tools and any opencode tools
+					logging.Info("🔥 TOOL-FILTER: Checking MCP tool %d: %s vs assigned %s", j, toolName, assignedTool.ToolName)
+				}
+				
 				if toolName == assignedTool.ToolName {
+					logging.Info("🔥 TOOL-FILTER: MATCHED! Adding tool %s", toolName)
 					mcpTools = append(mcpTools, mcpTool)
 					break
 				}
 			}
+			logging.Info("🔥 TOOL-FILTER: Completed processing assigned tool %s", assignedTool.ToolName)
 		}
+		logging.Info("🔥 TOOL-FILTER: Tool filtering loop completed - found %d matching tools", len(mcpTools))
 		
 		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 		log.Printf("🔥 MCP-SETUP: MCP tools loaded - %d tools available, %d filtered", len(allMCPTools), len(mcpTools))

@@ -343,7 +343,7 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 			Version: "1.0.0",
 			StreamableHTTP: &mcp.StreamableHTTPConfig{
 				BaseURL: serverConfig.URL,
-				Timeout: 30 * time.Second,
+				Timeout: 180 * time.Second, // 3 minutes for long-running tools like OpenCode
 			},
 		})
 	} else if serverConfig.Command != "" {
@@ -644,7 +644,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 				Version: "1.0.0",
 				StreamableHTTP: &mcp.StreamableHTTPConfig{
 					BaseURL: serverConfig.URL,
-					Timeout: 30 * time.Second,
+					Timeout: 180 * time.Second, // 3 minutes for long-running tools like OpenCode
 				},
 			})
 		} else if serverConfig.Command != "" {
