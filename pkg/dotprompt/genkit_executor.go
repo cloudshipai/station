@@ -2,8 +2,11 @@ package dotprompt
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	
@@ -78,11 +81,16 @@ func (e *GenKitExecutor) ExecuteAgentWithDotprompt(agent models.Agent, agentTool
 	}
 	
 	// 2. Parse frontmatter config (temperature configuration removed for gpt-5 compatibility)
+	// Direct stderr write to bypass potential logging system hang
+	fmt.Fprintf(os.Stderr, "🔥 DIRECT-STDERR: Step 2 - About to parse frontmatter config\n")
+	log.Printf("🔥 DEBUG-FLOW: Step 2 - Parsing frontmatter config")
 	logging.Debug("DEBUG-FLOW: Step 2 - Parsing frontmatter config")
 	
 	// 3. Use dotprompt library directly for multi-role rendering (bypasses GenKit constraint)
+	log.Printf("🔥 DEBUG-FLOW: Step 3 - Creating dotprompt instance")
 	logging.Debug("DEBUG-FLOW: Step 3 - Creating dotprompt instance")
 	dp := dotprompt.NewDotprompt(nil)
+	log.Printf("🔥 DEBUG-FLOW: Step 3 - Compiling dotprompt content (length: %d)", len(dotpromptContent))
 	logging.Debug("DEBUG-FLOW: Step 3 - Compiling dotprompt content (length: %d)", len(dotpromptContent))
 	promptFunc, err := dp.Compile(dotpromptContent, nil)
 	if err != nil {
@@ -1097,9 +1105,30 @@ func (e *GenKitExecutor) generateWithCustomTurnLimit(ctx context.Context, genkit
 	// First attempt: normal generation with tools
 	logging.Debug("CRITICAL: About to call genkit.Generate with model=%s, opts=%d", modelName, len(generateOpts))
 	
+	// Extract and log OpenCode tool usage before Generate call
+	e.logOpenCodeToolUsage(generateOpts, tracker, "BEFORE_GENERATE")
+	
+	// Add aggressive logging around GenKit Generate call
+	fmt.Fprintf(os.Stderr, "🔥 CRITICAL: About to call genkit.Generate - checking for OpenCode tools in options\n")
+	for i, opt := range generateOpts {
+		optStr := fmt.Sprintf("%+v", opt)
+		if strings.Contains(optStr, "opencode") || strings.Contains(optStr, "__opencode_run") {
+			truncLen := 200
+			if len(optStr) < truncLen {
+				truncLen = len(optStr)
+			}
+			fmt.Fprintf(os.Stderr, "🔥 OPENCODE-DETECTED: Generate option %d contains OpenCode: %s\n", i, optStr[:truncLen])
+		}
+	}
+	
 	generateStart := time.Now()
+	fmt.Fprintf(os.Stderr, "🔥 CRITICAL: Calling genkit.Generate NOW with %d options\n", len(generateOpts))
 	response, err := genkit.Generate(ctx, genkitApp, generateOpts...)
 	generateDuration := time.Since(generateStart)
+	fmt.Fprintf(os.Stderr, "🔥 CRITICAL: genkit.Generate RETURNED after %v, err=%v\n", generateDuration, err != nil)
+	
+	// Log OpenCode tool results after Generate call
+	e.logOpenCodeToolResults(response, tracker, "AFTER_GENERATE", generateDuration)
 	
 	// Log immediately after GenKit call (before any other processing)
 	if tracker.LogCallback != nil {
@@ -1541,3 +1570,189 @@ func (e *GenKitExecutor) isInformationGatheringTool(toolName string) bool {
 	
 	return infoTools[toolName]
 }
+
+// logOpenCodeToolUsage logs OpenCode tool usage before Generate call
+func (e *GenKitExecutor) logOpenCodeToolUsage(generateOpts []ai.GenerateOption, tracker *ToolCallTracker, phase string) {
+	if tracker == nil || tracker.LogCallback == nil {
+		return
+	}
+
+	// Look for OpenCode tools in the options
+	var openCodeToolsFound []string
+	var messagesToOpenCode []string
+	var requestMessages int
+
+	for _, opt := range generateOpts {
+		// Try to extract messages to see if there are OpenCode tool requests
+		// This is a best-effort inspection since GenerateOption is interface{}
+		optStr := fmt.Sprintf("%+v", opt)
+		if strings.Contains(optStr, "__opencode_run") {
+			openCodeToolsFound = append(openCodeToolsFound, "__opencode_run")
+		}
+		if strings.Contains(optStr, "opencode") {
+			openCodeToolsFound = append(openCodeToolsFound, "generic_opencode")
+		}
+		
+		// Count messages by looking for message-like patterns
+		if strings.Contains(optStr, "Messages:") || strings.Contains(optStr, "Content:") {
+			requestMessages++
+		}
+		
+		// Extract any OpenCode-related content
+		if strings.Contains(strings.ToLower(optStr), "opencode") || strings.Contains(optStr, "__opencode_run") {
+			messagesToOpenCode = append(messagesToOpenCode, optStr[:min(500, len(optStr))])
+		}
+	}
+
+	if len(openCodeToolsFound) > 0 || len(messagesToOpenCode) > 0 {
+		tracker.LogCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   fmt.Sprintf("🔧 OPENCODE TOOL DETECTED - %s", phase),
+			"details": map[string]interface{}{
+				"phase":                  phase,
+				"opencode_tools_found":   openCodeToolsFound,
+				"opencode_tool_count":    len(openCodeToolsFound),
+				"request_messages_count": requestMessages,
+				"generate_opts_count":    len(generateOpts),
+				"opencode_content_snippets": messagesToOpenCode,
+				"timestamp_ms":           time.Now().UnixMilli(),
+			},
+		})
+		
+		// Write to dedicated OpenCode log file for debugging
+		if err := e.writeOpenCodeLogFile(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"phase":     phase,
+			"tools":     openCodeToolsFound,
+			"messages":  messagesToOpenCode,
+		}); err != nil {
+			logging.Debug("Failed to write OpenCode debug log: %v", err)
+		}
+	}
+}
+
+// logOpenCodeToolResults logs OpenCode tool results after Generate call
+func (e *GenKitExecutor) logOpenCodeToolResults(response *ai.ModelResponse, tracker *ToolCallTracker, phase string, duration time.Duration) {
+	if tracker == nil || tracker.LogCallback == nil {
+		return
+	}
+
+	if response == nil {
+		tracker.LogCallback(map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "warning",
+			"message":   fmt.Sprintf("🔧 OPENCODE RESULT - %s - NULL RESPONSE", phase),
+			"details": map[string]interface{}{
+				"phase":        phase,
+				"duration":     duration.String(),
+				"response_nil": true,
+				"timestamp_ms": time.Now().UnixMilli(),
+			},
+		})
+		return
+	}
+
+	// Check if response contains OpenCode-related content
+	var openCodeResults []string
+	var toolCallsFound []map[string]interface{}
+	var hasOpenCodeOutput bool
+
+	responseStr := fmt.Sprintf("%+v", response)
+	if strings.Contains(strings.ToLower(responseStr), "opencode") || 
+		strings.Contains(responseStr, "__opencode_run") {
+		hasOpenCodeOutput = true
+		openCodeResults = append(openCodeResults, responseStr[:min(1000, len(responseStr))])
+	}
+
+	// Extract tool calls from response
+	if response.Message != nil {
+		for _, part := range response.Message.Content {
+			if part.ToolRequest != nil {
+				toolCall := map[string]interface{}{
+					"tool_name": part.ToolRequest.Name,
+					"tool_id":   part.ToolRequest.Ref,
+				}
+				
+				if strings.Contains(part.ToolRequest.Name, "opencode") || 
+					part.ToolRequest.Name == "__opencode_run" {
+					toolCall["is_opencode"] = true
+					hasOpenCodeOutput = true
+				}
+				
+				toolCallsFound = append(toolCallsFound, toolCall)
+			}
+			
+			if part.ToolResponse != nil {
+				if strings.Contains(strings.ToLower(fmt.Sprintf("%+v", part.ToolResponse)), "opencode") {
+					hasOpenCodeOutput = true
+					openCodeResults = append(openCodeResults, fmt.Sprintf("ToolResponse: %+v", part.ToolResponse)[:min(1000, len(fmt.Sprintf("%+v", part.ToolResponse)))])
+				}
+			}
+		}
+	}
+
+	if hasOpenCodeOutput || len(toolCallsFound) > 0 {
+		logData := map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+			"level":     "info",
+			"message":   fmt.Sprintf("🔧 OPENCODE RESULTS - %s - Duration: %v", phase, duration),
+			"details": map[string]interface{}{
+				"phase":                 phase,
+				"duration":              duration.String(),
+				"duration_ms":           duration.Milliseconds(),
+				"has_opencode_output":   hasOpenCodeOutput,
+				"tool_calls_found":      toolCallsFound,
+				"tool_calls_count":      len(toolCallsFound),
+				"opencode_results":      openCodeResults,
+				"response_has_message":  response.Message != nil,
+				"response_has_content":  response.Message != nil && len(response.Message.Content) > 0,
+				"timestamp_ms":          time.Now().UnixMilli(),
+			},
+		}
+
+		tracker.LogCallback(logData)
+		
+		// Write detailed results to OpenCode log file
+		if err := e.writeOpenCodeLogFile(logData); err != nil {
+			logging.Debug("Failed to write OpenCode result log: %v", err)
+		}
+	}
+}
+
+// writeOpenCodeLogFile writes OpenCode debug information to a dedicated log file
+func (e *GenKitExecutor) writeOpenCodeLogFile(data map[string]interface{}) error {
+	// Create debug log in home directory for easy access
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %v", err)
+		}
+	}
+	
+	logPath := filepath.Join(homeDir, "opencode-debug.log")
+	
+	// Convert data to JSON for structured logging
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal log data: %v", err)
+	}
+	
+	// Append to log file with timestamp
+	logEntry := fmt.Sprintf("\n=== %s ===\n%s\n", time.Now().Format(time.RFC3339), string(jsonData))
+	
+	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %v", err)
+	}
+	defer file.Close()
+	
+	if _, err := file.WriteString(logEntry); err != nil {
+		return fmt.Errorf("failed to write to log file: %v", err)
+	}
+	
+	return nil
+}
+
