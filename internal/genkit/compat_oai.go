@@ -150,12 +150,31 @@ func (o *StationOpenAICompatible) DefineModel(g *genkit.Genkit, provider, name s
 // Model returns the [ai.Model] with the given name.
 // It returns nil if the model was not defined.
 func (o *StationOpenAICompatible) Model(g *genkit.Genkit, name string, provider string) ai.Model {
-	return genkit.LookupModel(g, provider, name)
+	model := genkit.LookupModel(g, provider, name)
+	if model == nil {
+		// Auto-register unknown models for custom base URLs (like Cloudflare, Ollama, etc.)
+		// This allows Station to work with any OpenAI-compatible API without hardcoding every model
+		_, err := o.DefineModel(g, provider, name, ai.ModelInfo{
+			Label: fmt.Sprintf("Auto-registered model: %s", name),
+			Supports: &ai.ModelSupports{
+				Multiturn:  true,
+				Tools:      true,
+				SystemRole: true,
+				Media:      false,
+			},
+			Versions: []string{name},
+		})
+		if err == nil {
+			model = genkit.LookupModel(g, provider, name)
+		}
+	}
+	return model
 }
 
 // IsDefinedModel reports whether the named [Model] is defined by this plugin.
 func (o *StationOpenAICompatible) IsDefinedModel(g *genkit.Genkit, name string, provider string) bool {
-	return genkit.LookupModel(g, provider, name) != nil
+	// Use the Model method which auto-registers unknown models
+	return o.Model(g, name, provider) != nil
 }
 
 func (o *StationOpenAICompatible) ListActions(ctx context.Context) []core.ActionDesc {

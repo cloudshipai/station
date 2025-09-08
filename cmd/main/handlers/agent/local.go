@@ -591,6 +591,12 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		toolsUsed = &toolsUsedVal
 	}
 	
+	// Determine status based on execution result success
+	status := "completed"
+	if !result.Success {
+		status = "failed"
+	}
+	
 	err = repos.AgentRuns.UpdateCompletionWithMetadata(
 		ctx,
 		agentRun.ID,
@@ -598,7 +604,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		result.StepsTaken,
 		result.ToolCalls,
 		result.ExecutionSteps,
-		"completed",
+		status,
 		&completedAt,
 		inputTokens,
 		outputTokens,

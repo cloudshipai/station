@@ -64,7 +64,8 @@ Please complete the requested task using available tools.
 			},
 		}
 		
-		// Execute with Gemini model
+		// Note: ExecuteAgentWithDotpromptTemplate is deprecated
+		// This test expects failure due to deprecated method
 		response, err := executor.ExecuteAgentWithDotpromptTemplate(extractor, req)
 		
 		// For unit tests, we expect this to work with mock/test data
