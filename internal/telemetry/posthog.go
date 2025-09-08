@@ -29,9 +29,10 @@ func NewTelemetryService(enabled bool) *TelemetryService {
 		"phc_3h5yqMKKJsnxofsqFxCEoUFmn3vbm2UFXDDKuhdai9f",
 		posthog.Config{
 			Endpoint: "https://us.i.posthog.com",
-			// Send events more frequently for better responsiveness
-			Interval: time.Second * 5,
-			BatchSize: 1, // Send events immediately for testing
+			// Send events immediately for better debugging
+			Interval: time.Second * 1,  // Very frequent sending
+			BatchSize: 1,               // Send each event immediately
+			Verbose:   false,           // Disable verbose for now due to logger interface issue
 		},
 	)
 	if err != nil {
@@ -105,6 +106,9 @@ func (t *TelemetryService) TrackEvent(eventName string, properties map[string]in
 
 	if err != nil {
 		log.Printf("Failed to track event %s: %v", eventName, err)
+	} else {
+		// Debug logging to confirm events are being sent
+		log.Printf("📊 Telemetry event sent: %s (user: %s)", eventName, t.userID[:12])
 	}
 }
 

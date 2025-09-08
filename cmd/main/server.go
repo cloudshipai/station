@@ -158,7 +158,7 @@ func runMainServer() error {
 	sshServer := ssh.New(cfg, database, repos, agentSvc, localMode)
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
-	apiServer := api.New(cfg, database, localMode)
+	apiServer := api.New(cfg, database, localMode, telemetryService)
 	
 	// Initialize ToolDiscoveryService for API config uploads
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
@@ -234,6 +234,11 @@ func runMainServer() error {
 		}
 	}()
 
+	// Track server startup telemetry
+	if telemetryService != nil {
+		telemetryService.TrackServerModeStarted(cfg.APIPort, cfg.MCPPort, cfg.SSHPort)
+	}
+	
 	fmt.Printf("\n✅ Station is running!\n")
 	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
 	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)

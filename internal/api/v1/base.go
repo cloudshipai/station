@@ -7,6 +7,7 @@ import (
 	"station/internal/auth"
 	"station/internal/db/repositories"
 	"station/internal/services"
+	"station/internal/telemetry"
 )
 
 // APIHandlers contains all the API handlers and their dependencies
@@ -18,6 +19,7 @@ type APIHandlers struct {
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
 	agentExportService   *services.AgentExportService
+	telemetryService     *telemetry.TelemetryService
 	localMode            bool
 }
 
@@ -25,6 +27,7 @@ type APIHandlers struct {
 func NewAPIHandlers(
 	repos *repositories.Repositories,
 	toolDiscoveryService *services.ToolDiscoveryService,
+	telemetryService *telemetry.TelemetryService,
 	localMode bool,
 ) *APIHandlers {
 	return &APIHandlers{
@@ -32,12 +35,32 @@ func NewAPIHandlers(
 		agentService:         services.NewAgentService(repos),
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
+		telemetryService:     telemetryService,
 		localMode:            localMode,
 	}
 }
 
+// telemetryMiddleware tracks API requests
+func (h *APIHandlers) telemetryMiddleware() gin.HandlerFunc {
+	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+		// Track API request telemetry
+		if h.telemetryService != nil {
+			h.telemetryService.TrackAPIRequest(
+				param.Path,
+				param.Method,
+				param.StatusCode,
+				param.Latency.Milliseconds(),
+			)
+		}
+		return ""
+	})
+}
+
 // RegisterRoutes registers all v1 API routes
 func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
+	// Add telemetry middleware
+	router.Use(h.telemetryMiddleware())
+	
 	// Create auth middleware
 	authMiddleware := auth.NewAuthMiddleware(h.repos)
 	

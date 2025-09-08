@@ -18,6 +18,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/filesystem"
 	"station/internal/services"
+	"station/internal/telemetry"
 	"station/internal/template"
 	"station/internal/variables"
 	"station/pkg/config"
@@ -34,12 +35,13 @@ type Server struct {
 	fileConfigService    *services.FileConfigService
 	// hybridConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService
+	telemetryService     *telemetry.TelemetryService
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
 	localMode            bool
 }
 
-func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Server {
+func New(cfg *internalconfig.Config, database db.Database, localMode bool, telemetryService *telemetry.TelemetryService) *Server {
 	repos := repositories.New(database)
 	// keyManager removed - no longer needed for file-based configs
 	
@@ -88,6 +90,7 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool) *Serv
 		repos:                repos,
 		fileConfigService:    fileConfigService,
 		toolDiscoveryService: toolDiscoveryService,
+		telemetryService:     telemetryService,
 		localMode:            localMode,
 	}
 }
@@ -141,6 +144,7 @@ func (s *Server) Start(ctx context.Context) error {
 	apiHandlers := v1.NewAPIHandlers(
 		s.repos,
 		s.toolDiscoveryService,
+		s.telemetryService,
 		s.localMode,
 	)
 	apiHandlers.RegisterRoutes(v1Group)
