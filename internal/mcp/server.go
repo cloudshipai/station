@@ -11,6 +11,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
+	"station/internal/telemetry"
 
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -27,6 +28,7 @@ type Server struct {
 	localMode          bool
 	agentExportService *services.AgentExportService
 	bundleHandler      *UnifiedBundleHandler
+	telemetryService   *telemetry.TelemetryService
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {

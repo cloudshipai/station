@@ -623,6 +623,16 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		return fmt.Errorf("failed to get updated run: %w", err)
 	}
 	
+	// Track agent execution telemetry
+	if h.telemetryService != nil {
+		h.telemetryService.TrackAgentExecuted(
+			agent.ID,
+			int64(result.Duration.Milliseconds()),
+			result.Success,
+			int(result.StepsTaken),
+		)
+	}
+	
 	fmt.Printf("✅ Agent execution completed via stdio MCP!\n")
 	return h.displayExecutionResults(updatedRun)
 }

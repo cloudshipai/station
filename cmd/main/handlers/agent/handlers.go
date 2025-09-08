@@ -4,33 +4,47 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/common"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
+	"station/internal/telemetry"
 	"station/internal/theme"
 	"station/pkg/models"
 )
 
 // AgentHandler handles agent-related CLI commands
 type AgentHandler struct {
-	themeManager *theme.ThemeManager
+	themeManager     *theme.ThemeManager
+	telemetryService *telemetry.TelemetryService
 }
 
-func NewAgentHandler(themeManager *theme.ThemeManager) *AgentHandler {
-	return &AgentHandler{themeManager: themeManager}
+func NewAgentHandler(themeManager *theme.ThemeManager, telemetryService *telemetry.TelemetryService) *AgentHandler {
+	return &AgentHandler{
+		themeManager:     themeManager,
+		telemetryService: telemetryService,
+	}
 }
 
 // RunAgentList lists all agents
 func (h *AgentHandler) RunAgentList(cmd *cobra.Command, args []string) error {
+	startTime := time.Now()
 	styles := common.GetCLIStyles(h.themeManager)
 	banner := styles.Banner.Render("🤖 Agents")
 	fmt.Println(banner)
 
 	environment, _ := cmd.Flags().GetString("environment")
-	return h.listAgentsLocalWithFilter(environment)
+	err := h.listAgentsLocalWithFilter(environment)
+	
+	// Track telemetry
+	if h.telemetryService != nil {
+		h.telemetryService.TrackCLICommand("agent", "list", err == nil, time.Since(startTime).Milliseconds())
+	}
+	
+	return err
 }
 
 // RunAgentShow shows details of a specific agent
@@ -194,7 +208,22 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	// Delete the agent
 	err = agentService.DeleteAgent(context.Background(), targetAgent.ID)
 	if err != nil {
+		// Track failed deletion
+		if h.telemetryService != nil {
+			h.telemetryService.TrackError("agent_deletion_failed", err.Error(), map[string]interface{}{
+				"agent_name": targetAgent.Name,
+				"agent_id":   targetAgent.ID,
+			})
+		}
 		return fmt.Errorf("failed to delete agent: %v", err)
+	}
+
+	// Track successful deletion
+	if h.telemetryService != nil {
+		h.telemetryService.TrackEvent("stn_agent_deleted", map[string]interface{}{
+			"agent_id":      targetAgent.ID,
+			"environment_id": targetAgent.EnvironmentID,
+		})
 	}
 
 	fmt.Printf("✅ Agent '%s' deleted successfully\n", targetAgent.Name)

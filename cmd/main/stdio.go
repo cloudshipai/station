@@ -104,7 +104,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	if isPortAvailable(cfg.APIPort) {
 		fmt.Fprintf(os.Stderr, "🚀 Starting API server on port %d in stdio mode\n", cfg.APIPort)
 		
-		apiServer = api.New(cfg, database, localMode)
+		apiServer = api.New(cfg, database, localMode, telemetryService)
 		apiCtx, apiCancel = context.WithCancel(ctx)
 		
 		wg.Add(1)
@@ -118,6 +118,11 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "⚠️  Port %d already in use, skipping API server (another Station instance running?)\n", cfg.APIPort)
 	}
 
+	// Track stdio mode startup telemetry  
+	if telemetryService != nil {
+		telemetryService.TrackStdioModeStarted(apiServer != nil)
+	}
+	
 	// Log startup message to stderr (so it doesn't interfere with stdio protocol)
 	fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in stdio mode\n")
 	fmt.Fprintf(os.Stderr, "Local mode: %t\n", localMode)
