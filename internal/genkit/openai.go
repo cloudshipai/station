@@ -108,6 +108,36 @@ var (
 			},
 			Versions: []string{"o1-mini", "o1-mini-2024-09-12"},
 		},
+		"@cf/openai/gpt-oss-120b": {
+			Label: "Cloudflare Workers AI GPT-OSS 120B",
+			Supports: &ai.ModelSupports{
+				Multiturn:  true,
+				Tools:      true,
+				SystemRole: true,
+				Media:      false,
+			},
+			Versions: []string{"@cf/openai/gpt-oss-120b"},
+		},
+		"@cf/qwen/qwen2.5-coder-32b-instruct": {
+			Label: "Cloudflare Workers AI Qwen 2.5 Coder 32B",
+			Supports: &ai.ModelSupports{
+				Multiturn:  true,
+				Tools:      true,
+				SystemRole: true,
+				Media:      false,
+			},
+			Versions: []string{"@cf/qwen/qwen2.5-coder-32b-instruct"},
+		},
+		"@cf/meta/llama-4-scout-17b-16e-instruct": {
+			Label: "Cloudflare Workers AI Llama 4 Scout 17B",
+			Supports: &ai.ModelSupports{
+				Multiturn:  true,
+				Tools:      true,
+				SystemRole: true,
+				Media:      false,
+			},
+			Versions: []string{"@cf/meta/llama-4-scout-17b-16e-instruct"},
+		},
 	}
 
 	// Embedding models disabled for now due to API compatibility issues

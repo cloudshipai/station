@@ -273,6 +273,12 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 			toolsUsed = &toolsUsedVal
 		}
 		
+		// Determine status based on execution result success (same as CLI)
+		status := "completed"
+		if !result.Success {
+			status = "failed"
+		}
+		
 		// Update database with complete metadata (same as CLI)
 		err = s.repos.AgentRuns.UpdateCompletionWithMetadata(
 			ctx,
@@ -281,7 +287,7 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 			result.StepsTaken,      // steps_taken
 			result.ToolCalls,       // tool_calls  
 			result.ExecutionSteps,  // execution_steps
-			"completed",           // status
+			status,                // status - now respects result.Success
 			&completedAt,          // completed_at
 			inputTokens,           // input_tokens
 			outputTokens,          // output_tokens

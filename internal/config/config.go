@@ -183,6 +183,15 @@ func getAIAPIKey() string {
 			return key
 		}
 		return os.Getenv("GEMINI_API_KEY")
+	case "cloudflare":
+		// Cloudflare Workers AI uses CF_TOKEN for authentication
+		if key := os.Getenv("CF_TOKEN"); key != "" {
+			return key
+		}
+		if key := os.Getenv("CLOUDFLARE_API_KEY"); key != "" {
+			return key
+		}
+		return os.Getenv("CLOUDFLARE_API_TOKEN")
 	case "ollama":
 		// Ollama typically doesn't need API keys for local instances
 		return ""
@@ -208,6 +217,8 @@ func getAIModelDefault() string {
 		return "gpt-4o" // Latest GPT-4o model
 	case "gemini":
 		return "gemini-pro" // Google's main model
+	case "cloudflare":
+		return "@cf/openai/gpt-oss-120b" // Cloudflare Workers AI GPT-OSS model
 	case "ollama":
 		return "llama3" // Popular local model
 	default:

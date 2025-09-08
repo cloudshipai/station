@@ -201,7 +201,7 @@ func TestStationGenKitExecutorIntegration(t *testing.T) {
 	mcpTools := []ai.ToolRef{} // Empty for this test
 	task := "Please respond with a brief hello message"
 
-	response, err := executor.ExecuteAgentWithDotprompt(agent, agentTools, genkitApp, mcpTools, task)
+	response, err := executor.ExecuteAgent(agent, agentTools, genkitApp, mcpTools, task, nil)
 
 	fmt.Printf("Execution completed:\n")
 	fmt.Printf("  Success: %v\n", response.Success)
