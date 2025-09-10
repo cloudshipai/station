@@ -262,7 +262,7 @@ func (g *StationModelGenerator) WithTools(tools []*ai.ToolDefinition) *StationMo
 		g.tools = toolParams
 		// Only set ParallelToolCalls when tools are provided
 		// OpenAI API requires this field only when tools are specified
-		g.request.ParallelToolCalls = openai.Bool(false) // Disable parallel tool execution to avoid OpenCode race conditions
+		g.request.ParallelToolCalls = openai.Bool(true) // Enable parallel tool execution for improved performance
 	}
 
 	return g
