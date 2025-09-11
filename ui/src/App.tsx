@@ -220,17 +220,13 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
                       {runDetails.completed_at ? new Date(runDetails.completed_at).toLocaleString() : 'N/A'}
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <div className="text-sm text-tokyo-comment">Steps Taken</div>
-                    <div className="font-mono text-tokyo-purple">{runDetails.steps_taken || 0}</div>
-                  </div>
                 </div>
               </div>
 
               {/* Token Usage */}
               <div>
                 <h3 className="text-lg font-mono font-medium text-tokyo-fg mb-3">Token Usage</h3>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <div className="text-sm text-tokyo-comment">Input Tokens</div>
                     <div className="font-mono text-tokyo-cyan">{runDetails.input_tokens || 'N/A'}</div>
@@ -242,10 +238,6 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
                   <div className="space-y-2">
                     <div className="text-sm text-tokyo-comment">Total Tokens</div>
                     <div className="font-mono text-tokyo-green">{runDetails.total_tokens || 'N/A'}</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-sm text-tokyo-comment">Tools Used</div>
-                    <div className="font-mono text-tokyo-blue">{runDetails.tools_used || 0}</div>
                   </div>
                 </div>
               </div>
@@ -277,44 +269,6 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
                 </div>
               </div>
 
-              {/* Tool Calls */}
-              {runDetails.tool_calls && runDetails.tool_calls.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-mono font-medium text-tokyo-fg mb-3">Tool Calls</h3>
-                  <div className="space-y-2">
-                    {(runDetails.tool_calls || []).map((call: any, index: number) => (
-                      <div key={index} className="bg-tokyo-bg border border-tokyo-blue7 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-mono text-tokyo-green">{call.tool_name}</span>
-                          {call.server_name && (
-                            <span className="text-sm text-tokyo-comment">via {call.server_name}</span>
-                          )}
-                        </div>
-                        {call.arguments && (
-                          <div className="mb-2">
-                            <div className="text-sm text-tokyo-comment mb-1">Arguments:</div>
-                            <pre className="text-xs text-tokyo-fg font-mono bg-tokyo-bg-dark p-2 rounded overflow-x-auto">
-                              {JSON.stringify(call.arguments, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-                        {call.result && (
-                          <div>
-                            <div className="text-sm text-tokyo-comment mb-1">Result:</div>
-                            <div className="text-sm text-tokyo-cyan font-mono">{call.result}</div>
-                          </div>
-                        )}
-                        {call.error && (
-                          <div>
-                            <div className="text-sm text-tokyo-comment mb-1">Error:</div>
-                            <div className="text-sm text-tokyo-red font-mono">{call.error}</div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Execution Steps */}
               {runDetails.execution_steps && runDetails.execution_steps.length > 0 && (
@@ -334,22 +288,6 @@ const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isO
                           )}
                         </div>
                         <div className="text-tokyo-fg font-mono whitespace-pre-wrap">
-                          {step.type === 'tool_call' && (
-                            <div>
-                              <div className="text-tokyo-cyan mb-2">🔧 {step.tool_name}</div>
-                              <div className="text-tokyo-comment text-sm">
-                                Input: {JSON.stringify(step.input, null, 2)}
-                              </div>
-                            </div>
-                          )}
-                          {step.type === 'tool_response' && (
-                            <div>
-                              <div className="text-tokyo-green mb-2">✅ {step.tool_name} Response</div>
-                              <div className="text-tokyo-fg text-sm">
-                                {typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2)}
-                              </div>
-                            </div>
-                          )}
                           {step.type === 'model_reasoning' && (
                             <div>
                               <div className="text-tokyo-purple mb-2">🤔 Model Reasoning</div>

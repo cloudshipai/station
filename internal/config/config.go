@@ -215,7 +215,11 @@ func getAIModelDefault() string {
 	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
 	switch provider {
 	case "openai":
-		return "gpt-4o" // Latest GPT-4o model
+		// Official GenKit v1.0.1 OpenAI plugin supported models:
+		// Latest: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4.5-preview
+		// Production: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo  
+		// Reasoning: o3-mini, o1, o1-preview, o1-mini
+		return "gpt-4o-mini" // Fast and cost-effective default
 	case "gemini":
 		return "gemini-pro" // Google's main model
 	case "cloudflare":
@@ -223,6 +227,38 @@ func getAIModelDefault() string {
 	case "ollama":
 		return "llama3" // Popular local model
 	default:
-		return "gpt-4o" // Safe fallback
+		return "gpt-4o-mini" // Safe, cost-effective fallback
+	}
+}
+
+// GetSupportedOpenAIModels returns the list of models supported by the official GenKit v1.0.1 OpenAI plugin
+func GetSupportedOpenAIModels() []string {
+	return []string{
+		// Latest Models
+		"gpt-4.1",
+		"gpt-4.1-mini", 
+		"gpt-4.1-nano",
+		"gpt-4.5-preview",
+		// Production Models
+		"gpt-4o",
+		"gpt-4o-mini",
+		"gpt-4-turbo",
+		"gpt-4",
+		"gpt-3.5-turbo",
+		// Reasoning Models
+		"o3-mini",
+		"o1",
+		"o1-preview", 
+		"o1-mini",
+	}
+}
+
+// GetRecommendedOpenAIModels returns recommended models for different use cases
+func GetRecommendedOpenAIModels() map[string]string {
+	return map[string]string{
+		"cost_effective": "gpt-4o-mini",
+		"balanced":       "gpt-4o",
+		"latest":         "gpt-4.1",
+		"reasoning":      "o1-mini",
 	}
 }

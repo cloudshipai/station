@@ -9,7 +9,6 @@ import (
 
 	"station/internal/config"
 	"station/internal/logging"
-	// Note: stationGenkit "station/internal/genkit" - custom plugin code preserved but not used
 
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/compat_oai/openai"

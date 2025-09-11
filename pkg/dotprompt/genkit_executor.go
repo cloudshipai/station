@@ -446,9 +446,77 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 	
 	logging.Debug("=== TOOL CALLS & EXECUTION STEPS EXTRACTION ===")
 	
-	// Check if any tool calls were made in the response
+	// Method 1: Extract from response.History() - the complete conversation
+	fmt.Printf("🔥 TOOL-EXTRACTION: Starting History() extraction method\n")
+	history := response.History()
+	fmt.Printf("🔥 TOOL-EXTRACTION: response.History() returned %d messages\n", len(history))
+	
+	for msgIdx, msg := range history {
+		fmt.Printf("🔥 TOOL-EXTRACTION: History Message[%d]: Role=%s, ContentParts=%d\n", msgIdx, msg.Role, len(msg.Content))
+		
+		for partIdx, part := range msg.Content {
+			fmt.Printf("🔥 TOOL-EXTRACTION: History Part[%d]: IsToolRequest=%t, IsToolResponse=%t, IsText=%t\n", 
+				partIdx, part.IsToolRequest(), part.IsToolResponse(), part.IsText())
+			
+			if part.IsToolRequest() && part.ToolRequest != nil {
+				fmt.Printf("🔥 TOOL-EXTRACTION: FOUND ToolRequest in History: Name=%s, Ref=%s\n", part.ToolRequest.Name, part.ToolRequest.Ref)
+				
+				toolCall := map[string]interface{}{
+					"step":           stepCounter,
+					"tool_name":      part.ToolRequest.Name,
+					"tool_input":     part.ToolRequest.Input,
+					"tool_call_id":   part.ToolRequest.Ref,
+					"message_role":   string(msg.Role),
+					"extraction_method": "history_toolrequest",
+				}
+				allToolCalls = append(allToolCalls, toolCall)
+				stepCounter++
+				
+				// Log tool call in real-time
+				if e.logCallback != nil {
+					e.logCallback(map[string]interface{}{
+						"timestamp": time.Now().Format(time.RFC3339),
+						"level":     "info",
+						"message":   "Tool executed (from history)",
+						"details": map[string]interface{}{
+							"tool_name":         part.ToolRequest.Name,
+							"step":              stepCounter - 1,
+							"tool_call_id":      part.ToolRequest.Ref,
+							"input":             part.ToolRequest.Input,
+							"extraction_method": "history_toolrequest",
+						},
+					})
+				}
+				
+				// Add execution step
+				executionStep := map[string]interface{}{
+					"step":      stepCounter - 1,
+					"type":      "tool_call",
+					"tool_name": part.ToolRequest.Name,
+					"input":     part.ToolRequest.Input,
+					"timestamp": time.Now().Format(time.RFC3339),
+				}
+				executionSteps = append(executionSteps, executionStep)
+			} else if part.IsToolResponse() && part.ToolResponse != nil {
+				fmt.Printf("🔥 TOOL-EXTRACTION: FOUND ToolResponse in History: Name=%s\n", part.ToolResponse.Name)
+				
+				// Add tool response as execution step
+				executionStep := map[string]interface{}{
+					"step":      stepCounter,
+					"type":      "tool_response",
+					"tool_name": part.ToolResponse.Name,
+					"output":    part.ToolResponse.Output,
+					"timestamp": time.Now().Format(time.RFC3339),
+				}
+				executionSteps = append(executionSteps, executionStep)
+				stepCounter++
+			}
+		}
+	}
+	
+	// Fallback Method 2: Check response.Request.Messages (for compatibility)
 	if response.Request != nil && response.Request.Messages != nil {
-		logging.Debug("Processing %d messages from response.Request", len(response.Request.Messages))
+		fmt.Printf("🔥 TOOL-EXTRACTION: Fallback - Processing %d messages from response.Request\n", len(response.Request.Messages))
 		
 		for msgIdx, msg := range response.Request.Messages {
 			logging.Debug("  Message[%d]: Role=%s, ContentParts=%d", msgIdx, msg.Role, len(msg.Content))

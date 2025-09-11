@@ -92,7 +92,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs }) => {
       </div>
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="p-4 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg">
           <div className="text-2xl font-mono font-bold text-tokyo-green">{filteredRuns.length}</div>
           <div className="text-sm text-tokyo-comment">Total Runs</div>
@@ -108,12 +108,6 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs }) => {
             {filteredRuns.length > 0 ? Math.round(filteredRuns.reduce((sum, run) => sum + (run.duration_seconds || 0), 0) / filteredRuns.length * 10) / 10 : 0}s
           </div>
           <div className="text-sm text-tokyo-comment">Avg Duration</div>
-        </div>
-        <div className="p-4 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg">
-          <div className="text-2xl font-mono font-bold text-tokyo-cyan">
-            {filteredRuns.reduce((sum, run) => sum + (run.tools_used || 0), 0)}
-          </div>
-          <div className="text-sm text-tokyo-comment">Tools Used</div>
         </div>
       </div>
 
