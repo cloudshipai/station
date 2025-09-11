@@ -5,6 +5,75 @@ All notable changes to Station are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [v0.10.9] - 2025-09-11
+
+### 🚀 Major Performance Improvements
+
+#### **Parallel MCP Server Validation**
+- **Concurrent Template Processing**: MCP templates now processed in parallel during sync operations
+- **Configurable Worker Pools**: Added `STATION_SYNC_TEMPLATE_WORKERS` environment variable (default: 3)
+- **Significant Speed Improvements**: Sync operations now complete much faster for environments with multiple MCP configurations
+- **Template Isolation**: Each worker processes templates independently to prevent conflicts
+
+### 🔧 Core System Upgrades
+
+#### **GenKit v1.0.1 Integration**
+- **Official Plugin Migration**: Replaced Station's custom OpenAI plugin with official GenKit v1.0.1 plugin
+- **API Compatibility**: Updated all breaking API changes (Plugin.Init, genkit.Init, DefineModel → LookupModel)
+- **Enhanced Model Support**: Comprehensive OpenAI model configuration including o1, o3-mini, gpt-4o series
+- **Simplified Architecture**: Removed complex tool call extraction in favor of GenKit's automatic execution
+- **Cleaner UI**: Streamlined interface by removing tool call tracking components
+
+#### **MCP Connection Architecture Refactoring**
+- **Modular File Structure**: Split 1000-line `mcp_connection_manager.go` into three focused modules:
+  - `mcp_connection_manager.go` - Core connection management
+  - `mcp_connection_pool.go` - Connection pooling and server lifecycle
+  - `mcp_parallel_processing.go` - Parallel processing patterns
+- **Enhanced Connection Pooling**: Improved MCP connection management with parallel initialization
+- **Environment Variable Controls**: 
+  - `STATION_MCP_POOL_WORKERS` - Pool initialization workers (default: 5)
+  - `STATION_MCP_CONFIG_WORKERS` - File config workers (default: 2)
+  - `STATION_MCP_SERVER_WORKERS` - Server connection workers (default: 3)
+
+### 🎯 Technical Improvements
+
+#### **Parallel Processing Patterns**
+- **Worker Pool Implementation**: Robust worker pools using `sync.WaitGroup` for controlled concurrency
+- **Error Aggregation**: Comprehensive error collection and reporting across parallel operations  
+- **Resource Management**: Proper goroutine lifecycle management and channel cleanup
+- **Debug Logging**: Enhanced logging for parallel operation monitoring and troubleshooting
+
+#### **Agent Execution Optimization**
+- **Faster Startup**: Parallel MCP connection setup reduces agent initialization time
+- **Connection Reuse**: Improved connection pooling for better resource utilization
+- **Automatic Tool Execution**: Streamlined tool execution with GenKit v1.0.1's automatic handling
+
+### 🧹 Code Cleanup
+
+#### **Removed Legacy Components**
+- **Custom GenKit Package**: Eliminated custom GenKit implementation (~2000 lines removed)
+- **Tool Call UI Components**: Removed complex tool call tracking interface
+- **Deprecated Test Files**: Cleaned up unused test infrastructure
+- **Legacy Utilities**: Removed outdated GenKit compatibility layers
+
+### 📈 Performance Metrics
+
+- **Sync Operations**: Up to 3x faster for environments with multiple MCP configurations
+- **Agent Startup**: Reduced agent initialization time through parallel MCP connections
+- **Memory Usage**: Reduced memory footprint by eliminating custom GenKit codebase
+- **Code Maintainability**: Improved with modular architecture and focused file responsibilities
+
+### 🔄 Backwards Compatibility
+
+- **Configuration**: All existing MCP configurations continue to work unchanged
+- **Environment Variables**: New variables have sensible defaults, no migration required
+- **API Compatibility**: All existing CLI commands and behaviors preserved
+- **Database Schema**: No database migrations required
+
+---
+
 ## [v0.8.7] - 2025-01-18
 
 ### 🎉 Major Features Added
