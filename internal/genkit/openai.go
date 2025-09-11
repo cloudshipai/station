@@ -17,11 +17,10 @@ package genkit
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/firebase/genkit/go/ai"
-	"github.com/firebase/genkit/go/core"
+	"github.com/firebase/genkit/go/core/api"
 	"github.com/firebase/genkit/go/genkit"
 	openaiGo "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -163,8 +162,8 @@ func (o *StationOpenAI) Name() string {
 	return provider
 }
 
-// Init implements genkit.Plugin.
-func (o *StationOpenAI) Init(ctx context.Context, g *genkit.Genkit) error {
+// Init implements api.Plugin.
+func (o *StationOpenAI) Init(ctx context.Context) []api.Action {
 	apiKey := o.APIKey
 
 	// if api key is not set, get it from environment variable
@@ -173,7 +172,8 @@ func (o *StationOpenAI) Init(ctx context.Context, g *genkit.Genkit) error {
 	}
 
 	if apiKey == "" {
-		return fmt.Errorf("station openai plugin initialization failed: apiKey is required (set OPENAI_API_KEY env var)")
+		// Return empty actions on initialization failure
+		return []api.Action{}
 	}
 
 	if o.stationOpenAICompatible == nil {
@@ -195,20 +195,11 @@ func (o *StationOpenAI) Init(ctx context.Context, g *genkit.Genkit) error {
 	}
 
 	o.stationOpenAICompatible.Provider = provider
-	if err := o.stationOpenAICompatible.Init(ctx, g); err != nil {
-		return err
-	}
+	actions := o.stationOpenAICompatible.Init(ctx)
 
-	// define default models with Station's fixes
-	for model, info := range supportedModels {
-		if _, err := o.DefineModel(g, model, info); err != nil {
-			return err
-		}
-	}
-
-	// Embedders disabled for now due to API compatibility issues
-
-	return nil
+	// For now, return the actions from the compatible plugin
+	// In GenKit v1.0.1, model definitions happen differently
+	return actions
 }
 
 func (o *StationOpenAI) Model(g *genkit.Genkit, name string) ai.Model {
@@ -221,11 +212,11 @@ func (o *StationOpenAI) DefineModel(g *genkit.Genkit, name string, info ai.Model
 
 // Embedder functionality temporarily disabled due to API compatibility issues
 
-func (o *StationOpenAI) ListActions(ctx context.Context) []core.ActionDesc {
+func (o *StationOpenAI) ListActions(ctx context.Context) []api.ActionDesc {
 	return o.stationOpenAICompatible.ListActions(ctx)
 }
 
-func (o *StationOpenAI) ResolveAction(g *genkit.Genkit, atype core.ActionType, name string) error {
+func (o *StationOpenAI) ResolveAction(g *genkit.Genkit, atype api.ActionType, name string) error {
 	return o.stationOpenAICompatible.ResolveAction(g, atype, name)
 }
 

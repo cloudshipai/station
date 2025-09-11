@@ -94,8 +94,9 @@ func SetupOpenTelemetryWithGenkit(ctx context.Context, g *genkit.Genkit, cfg OTe
 		trace.WithMaxExportBatchSize(100),
 	)
 
-	// Register the span processor with Genkit
-	genkit.RegisterSpanProcessor(g, spanProcessor)
+	// FIXME: RegisterSpanProcessor removed in GenKit v1.0.1
+	// Need to find new way to integrate with GenKit's telemetry system
+	// genkit.RegisterSpanProcessor(g, spanProcessor)
 
 	// Create trace provider with the processor and resource
 	tracerProvider := trace.NewTracerProvider(

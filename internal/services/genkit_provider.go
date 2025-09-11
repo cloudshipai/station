@@ -146,7 +146,8 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		gp.openaiPlugin = stationOpenAI
 		
 		logging.Debug("About to call genkit.Init for OpenAI with GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
-		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(stationOpenAI))
+		genkitApp = genkit.Init(ctx, genkit.WithPlugins(stationOpenAI))
+		err = nil // GenKit v1.0.1 Init doesn't return error
 		
 	case "googlegenai", "gemini":
 		logging.Debug("Setting up Google AI plugin with model: %s", cfg.AIModel)
@@ -155,7 +156,8 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		// This matches the official GenKit examples approach
 		geminiPlugin := &googlegenai.GoogleAI{}
 		
-		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
+		genkitApp = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
+		err = nil // GenKit v1.0.1 Init doesn't return error
 		
 	default:
 		return fmt.Errorf("unsupported AI provider: %s\n\n"+
