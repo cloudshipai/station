@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	"station/internal/config"
-	stationGenkit "station/internal/genkit"
 	"station/internal/logging"
+	// Note: stationGenkit "station/internal/genkit" - custom plugin code preserved but not used
 
 	"github.com/firebase/genkit/go/genkit"
+	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
+	"github.com/openai/openai-go/option"
 )
 
 // GenKitProvider manages GenKit initialization and AI provider configuration
@@ -21,7 +23,8 @@ type GenKitProvider struct {
 	currentProvider string // Track current AI provider to detect changes
 	currentAPIKey   string // Track current API key to detect changes
 	currentBaseURL  string // Track current base URL to detect changes
-	openaiPlugin    *stationGenkit.StationOpenAI // Keep reference to OpenAI plugin for logging callbacks
+	openaiPlugin    *openai.OpenAI // Official GenKit v1.0.1 OpenAI plugin
+	// Note: Station custom plugin code preserved in internal/genkit/ but not used in production
 }
 
 // NewGenKitProvider creates a new GenKit provider manager
@@ -129,24 +132,26 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 	var genkitApp *genkit.Genkit
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
-		logging.Debug("Setting up Station's fixed OpenAI plugin with model: %s", cfg.AIModel)
+		logging.Debug("Setting up official GenKit v1.0.1 OpenAI plugin with model: %s", cfg.AIModel)
 		
-		// Use Station's fixed OpenAI plugin that handles tool_call_id properly
-		stationOpenAI := &stationGenkit.StationOpenAI{
-			APIKey: cfg.AIAPIKey,
-		}
-		
-		// Set base URL if provided for OpenAI-compatible APIs
+		// Build request options for official plugin
+		var opts []option.RequestOption
 		if cfg.AIBaseURL != "" {
-			stationOpenAI.BaseURL = cfg.AIBaseURL
-			logging.Debug("Using custom OpenAI base URL: %s", cfg.AIBaseURL)
+			logging.Debug("Using custom OpenAI base URL with official plugin: %s", cfg.AIBaseURL)
+			opts = append(opts, option.WithBaseURL(cfg.AIBaseURL))
 		}
 		
-		// Store reference to plugin for logging callbacks
-		gp.openaiPlugin = stationOpenAI
+		// Use official GenKit v1.0.1 OpenAI plugin (includes our tool_call_id fixes upstream)
+		openaiPlugin := &openai.OpenAI{
+			APIKey: cfg.AIAPIKey,
+			Opts:   opts,
+		}
 		
-		logging.Debug("About to call genkit.Init for OpenAI with GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
-		genkitApp = genkit.Init(ctx, genkit.WithPlugins(stationOpenAI))
+		// Store reference for potential future use
+		gp.openaiPlugin = openaiPlugin
+		
+		logging.Debug("About to call genkit.Init for official OpenAI plugin with GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
+		genkitApp = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
 		err = nil // GenKit v1.0.1 Init doesn't return error
 		
 	case "googlegenai", "gemini":
@@ -183,8 +188,18 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 
 // SetOpenAILogCallback sets the logging callback for the OpenAI plugin (if using OpenAI provider)
 func (gp *GenKitProvider) SetOpenAILogCallback(callback func(map[string]interface{})) {
-	if gp.openaiPlugin != nil {
-		gp.openaiPlugin.SetLogCallback(callback)
+	// Official GenKit plugin may not support custom logging callbacks
+	// This functionality may need to be implemented differently or via GenKit's built-in logging
+	logging.Debug("Logging callback not yet implemented for official GenKit OpenAI plugin")
+}
+
+// GetPluginInfo returns information about the currently configured plugin
+func (gp *GenKitProvider) GetPluginInfo() map[string]interface{} {
+	return map[string]interface{}{
+		"provider":      gp.currentProvider,
+		"plugin_type":   "Official GenKit v1.0.1 OpenAI Plugin",
+		"plugin_status": gp.openaiPlugin != nil,
+		"note":          "Station custom plugin code preserved but not used in production",
 	}
 }
 
