@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"station/internal/config"
@@ -233,89 +234,204 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 		templateService.SetVariableResolver(s.customVariableResolver)
 	}
 
-	// Process each JSON template file
-	for _, jsonFile := range jsonFiles {
-		configName := filepath.Base(jsonFile)
-		configName = configName[:len(configName)-len(filepath.Ext(configName))] // Remove extension
+	// Process JSON template files in parallel for faster MCP server validation
+	if len(jsonFiles) > 0 {
+		parallelResult, err := s.processJSONTemplatesParallel(ctx, jsonFiles, environmentName, templateService, options)
+		if err != nil {
+			return nil, fmt.Errorf("parallel template processing failed: %w", err)
+		}
 		
-		fmt.Printf("Processing MCP template: %s\n", configName)
-		
-		// Read the template file
-		templateContent, err := os.ReadFile(jsonFile)
-		if err != nil {
-			fmt.Printf("Warning: Failed to read template file %s: %v\n", jsonFile, err)
-			result.ValidationErrors++
-			continue
-		}
-
-		// Get environment from database
-		env, err := s.repos.Environments.GetByName(environmentName)
-		if err != nil {
-			fmt.Printf("Warning: Failed to get environment %s: %v\n", environmentName, err)
-			result.ValidationErrors++
-			continue
-		}
-
-		// Process template with variables using the shared template service
-		templateResult, err := templateService.ProcessTemplateWithVariables(env.ID, configName, string(templateContent), options.Interactive)
-		if err != nil {
-			fmt.Printf("Warning: Failed to process template variables for %s: %v\n", configName, err)
-			result.ValidationErrors++
-			continue
-		}
-
-		// Parse the rendered JSON to extract MCP server configurations
-		var mcpConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(templateResult.RenderedContent), &mcpConfig); err != nil {
-			fmt.Printf("Warning: Failed to parse rendered template %s: %v\n", configName, err)
-			result.ValidationErrors++
-			continue
-		}
-
-		// 1. Register/update the file config in database
-		err = s.registerOrUpdateFileConfig(ctx, env.ID, configName, jsonFile, envDir, templateResult, options)
-		if err != nil {
-			fmt.Printf("Warning: Failed to register file config %s: %v\n", configName, err)
-			result.ValidationErrors++
-			continue
-		}
-
-		// 2. Extract and sync MCP servers from the template
-		serversCount, err := s.syncMCPServersFromTemplate(ctx, mcpConfig, env.ID, configName, options)
-		if err != nil {
-			logging.Error(" CRITICAL: Failed to sync MCP servers from template %s: %v\n", configName, err)
-			logging.Info("    Template file: %s\n", jsonFile)
-			fmt.Printf("   🔧 This means MCP servers were NOT saved to database\n")
-			fmt.Printf("   ⚠️  Agents using tools from this config will fail\n")
-			result.ValidationErrors++
-			result.ValidationMessages = append(result.ValidationMessages, 
-				fmt.Sprintf("Template %s: Failed to sync MCP servers - %v", configName, err))
-			continue
-		}
-
-		// 3. Perform tool discovery for the servers that were created/updated
-		if serversCount > 0 && !options.DryRun {
-			toolsDiscovered, err := s.performToolDiscovery(ctx, env.ID, configName)
-			if err != nil {
-				fmt.Printf("⚠️  WARNING: MCP servers synced but tool discovery failed for %s: %v\n", configName, err)
-				fmt.Printf("   🔧 Servers are in database but tools are not available\n")
-				fmt.Printf("   💡 Try running 'stn serve' to discover tools, or check MCP server configuration\n")
-				// Don't treat this as a critical error - servers are still synced
-			} else {
-				fmt.Printf("   🔧 Discovered %d tools from MCP servers\n", toolsDiscovered)
-			}
-			result.MCPServersConnected += serversCount
-			logging.Info(" Successfully synced template: %s (%d servers)\n", configName, serversCount)
-		} else if serversCount > 0 {
-			result.MCPServersConnected += serversCount
-			logging.Info(" Successfully synced template: %s (%d servers)\n", configName, serversCount)
-		} else {
-			fmt.Printf("ℹ️  Template %s contains no MCP servers (config-only file)\n", configName)
-		}
+		// Merge parallel results
+		result.ValidationErrors += parallelResult.ValidationErrors
+		result.MCPServersConnected += parallelResult.MCPServersConnected
+		result.ValidationMessages = append(result.ValidationMessages, parallelResult.ValidationMessages...)
+		result.Operations = append(result.Operations, parallelResult.Operations...)
 	}
 
 	return result, nil
 }
+
+// processJSONTemplatesParallel processes multiple JSON templates in parallel
+func (s *DeclarativeSync) processJSONTemplatesParallel(ctx context.Context, jsonFiles []string, environmentName string, templateService *TemplateVariableService, options SyncOptions) (*SyncResult, error) {
+	// Create worker pool with configurable concurrency
+	maxWorkers := getEnvIntOrDefault("STATION_SYNC_TEMPLATE_WORKERS", 3) // Default: 3 workers
+	if len(jsonFiles) < maxWorkers {
+		maxWorkers = len(jsonFiles)
+	}
+	
+	fmt.Printf("Processing %d MCP templates in parallel with %d workers\n", len(jsonFiles), maxWorkers)
+	
+	// Channel to send template jobs to workers
+	type templateJob struct {
+		jsonFile   string
+		configName string
+	}
+	jobChan := make(chan templateJob, len(jsonFiles))
+	
+	// Channel to collect results (reuse defined templateResult type)
+	resultChan := make(chan templateResult, len(jsonFiles))
+	
+	// Start worker goroutines
+	var wg sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for job := range jobChan {
+				fmt.Printf("Worker %d processing template: %s\n", workerID, job.configName)
+				result := s.processTemplateJob(ctx, job.jsonFile, job.configName, environmentName, templateService, options)
+				resultChan <- result
+			}
+		}(i)
+	}
+	
+	// Send all template jobs to workers
+	for _, jsonFile := range jsonFiles {
+		configName := filepath.Base(jsonFile)
+		configName = configName[:len(configName)-len(filepath.Ext(configName))] // Remove extension
+		jobChan <- templateJob{
+			jsonFile:   jsonFile,
+			configName: configName,
+		}
+	}
+	close(jobChan)
+	
+	// Wait for all workers to complete
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+	
+	// Collect results
+	var aggregatedResult = &SyncResult{
+		Environment:        environmentName,
+		Operations:         []SyncOperation{},
+		ValidationMessages: []string{},
+	}
+	successCount := 0
+	
+	for result := range resultChan {
+		if result.error != nil {
+			fmt.Printf("Template %s processing failed: %v\n", result.configName, result.error)
+			aggregatedResult.ValidationErrors++
+			aggregatedResult.ValidationMessages = append(aggregatedResult.ValidationMessages, 
+				fmt.Sprintf("Template %s: %v", result.configName, result.error))
+		} else {
+			successCount++
+			fmt.Printf("✅ Template %s processed: %d MCP servers\n", result.configName, result.mcpServersCount)
+		}
+		
+		// Aggregate results
+		aggregatedResult.ValidationErrors += result.validationErrors
+		aggregatedResult.MCPServersConnected += result.mcpServersCount
+		aggregatedResult.ValidationMessages = append(aggregatedResult.ValidationMessages, result.validationMessages...)
+		aggregatedResult.Operations = append(aggregatedResult.Operations, result.operations...)
+	}
+	
+	fmt.Printf("Parallel template processing completed: %d templates, %d successful\n", 
+		len(jsonFiles), successCount)
+	
+	return aggregatedResult, nil
+}
+
+// templateResult holds the result of processing a single template
+type templateResult struct {
+	configName         string
+	validationErrors   int
+	validationMessages []string
+	mcpServersCount    int
+	operations         []SyncOperation
+	error              error
+}
+
+// processTemplateJob processes a single template file job
+func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, configName, environmentName string, templateService *TemplateVariableService, options SyncOptions) templateResult {
+	result := templateResult{
+		configName:         configName,
+		validationMessages: []string{},
+		operations:         []SyncOperation{},
+	}
+	
+	// Read the template file
+	templateContent, err := os.ReadFile(jsonFile)
+	if err != nil {
+		result.error = fmt.Errorf("failed to read template file: %w", err)
+		return result
+	}
+
+	// Get environment from database
+	env, err := s.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		result.error = fmt.Errorf("failed to get environment: %w", err)
+		return result
+	}
+
+	// Process template with variables using the shared template service
+	templateResult, err := templateService.ProcessTemplateWithVariables(env.ID, configName, string(templateContent), options.Interactive)
+	if err != nil {
+		result.error = fmt.Errorf("failed to process template variables: %w", err)
+		return result
+	}
+
+	// Parse the rendered JSON to extract MCP server configurations
+	var mcpConfig map[string]interface{}
+	if err := json.Unmarshal([]byte(templateResult.RenderedContent), &mcpConfig); err != nil {
+		result.error = fmt.Errorf("failed to parse rendered template: %w", err)
+		return result
+	}
+
+	// Calculate environment directory for file config registration
+	var workspaceDir string
+	if s.config.Workspace != "" {
+		workspaceDir = s.config.Workspace
+	} else {
+		configHome := os.Getenv("XDG_CONFIG_HOME")
+		if configHome == "" {
+			homeDir, _ := os.UserHomeDir()
+			configHome = filepath.Join(homeDir, ".config")
+		}
+		workspaceDir = filepath.Join(configHome, "station")
+	}
+	envDir := filepath.Join(workspaceDir, "environments", environmentName)
+
+	// 1. Register/update the file config in database
+	err = s.registerOrUpdateFileConfig(ctx, env.ID, configName, jsonFile, envDir, templateResult, options)
+	if err != nil {
+		result.error = fmt.Errorf("failed to register file config: %w", err)
+		return result
+	}
+
+	// 2. Extract and sync MCP servers from the template
+	serversCount, err := s.syncMCPServersFromTemplate(ctx, mcpConfig, env.ID, configName, options)
+	if err != nil {
+		result.error = fmt.Errorf("failed to sync MCP servers: %w", err)
+		return result
+	}
+
+	// 3. Perform tool discovery for the servers that were created/updated
+	if serversCount > 0 && !options.DryRun {
+		toolsDiscovered, err := s.performToolDiscovery(ctx, env.ID, configName)
+		if err != nil {
+			// Don't treat tool discovery failure as fatal - servers are still synced
+			result.validationMessages = append(result.validationMessages, 
+				fmt.Sprintf("Template %s: Tool discovery failed - %v", configName, err))
+		} else {
+			fmt.Printf("   🔧 Discovered %d tools from MCP servers\n", toolsDiscovered)
+		}
+		result.mcpServersCount = serversCount
+	} else if serversCount > 0 {
+		result.mcpServersCount = serversCount
+	}
+
+	result.operations = append(result.operations, SyncOperation{
+		Type:        OpTypeValidate,
+		Target:      configName,
+		Description: fmt.Sprintf("Template %s processed with %d MCP servers", configName, serversCount),
+	})
+
+	return result
+}
+
 
 // syncMCPServersFromTemplate extracts MCP servers from a rendered template and updates the database
 // Returns the number of servers successfully synced
