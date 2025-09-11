@@ -28,6 +28,7 @@ type Config struct {
 	AIAPIKey          string // The API key for the AI provider  
 	AIModel           string // Model name (e.g., gpt-4o, llama3, gemini-pro)
 	AIBaseURL         string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
+	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
 }
 
 func Load() (*Config, error) {

@@ -8,16 +8,18 @@ import (
 	"strings"
 
 	"github.com/firebase/genkit/go/genkit"
+	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
+	"github.com/openai/openai-go/option"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
-	stationGenkit "station/internal/genkit"
 	"station/internal/logging"
 	"station/internal/services"
+	// Note: stationGenkit "station/internal/genkit" - custom plugin preserved but not used
 )
 
 // runDevelop implements the "stn develop" command
@@ -137,19 +139,22 @@ func initializeGenKitWithPromptDir(ctx context.Context, promptDir string) (*genk
 	var genkitApp *genkit.Genkit
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
-		logging.Debug("Setting up Station's OpenAI plugin for development")
+		logging.Debug("Setting up official GenKit v1.0.1 OpenAI plugin for development")
 		
-		stationOpenAI := &stationGenkit.StationOpenAI{
-			APIKey: cfg.AIAPIKey,
+		// Build request options
+		var opts []option.RequestOption
+		if cfg.AIBaseURL != "" {
+			logging.Debug("Using custom OpenAI base URL: %s", cfg.AIBaseURL)
+			opts = append(opts, option.WithBaseURL(cfg.AIBaseURL))
 		}
 		
-		if cfg.AIBaseURL != "" {
-			stationOpenAI.BaseURL = cfg.AIBaseURL
-			logging.Debug("Using custom OpenAI base URL: %s", cfg.AIBaseURL)
+		openaiPlugin := &openai.OpenAI{
+			APIKey: cfg.AIAPIKey,
+			Opts:   opts,
 		}
 		
 		genkitApp = genkit.Init(ctx, 
-			genkit.WithPlugins(stationOpenAI),
+			genkit.WithPlugins(openaiPlugin),
 			genkit.WithPromptDir(promptDir),
 		)
 		err = nil // GenKit v1.0.1 Init doesn't return error
