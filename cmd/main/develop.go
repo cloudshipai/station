@@ -19,7 +19,6 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/internal/services"
-	// Note: stationGenkit "station/internal/genkit" - custom plugin preserved but not used
 )
 
 // runDevelop implements the "stn develop" command

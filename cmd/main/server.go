@@ -26,7 +26,6 @@ import (
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 	"github.com/openai/openai-go/option"
 	"github.com/spf13/viper"
-	// Note: stationGenkit "station/internal/genkit" - custom plugin preserved but not used
 )
 
 // genkitSetup holds the initialized Genkit components

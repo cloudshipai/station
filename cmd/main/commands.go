@@ -420,6 +420,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// Interactive provider setup
 		providerConfig, err = setupProviderInteractively()
 		if err != nil {
+			defaultProvider, defaultModel := getDefaultProvider()
 			fmt.Printf("⚠️  Provider setup failed: %v\n", err)
 			fmt.Printf("💡 Using defaults: provider=%s, model=%s\n", defaultProvider, defaultModel)
 			providerConfig = &ProviderConfig{Provider: defaultProvider, Model: defaultModel, BaseURL: baseURL}
@@ -427,13 +428,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	} else {
 		// Use flags, defaults, or skip if config exists
 		if provider == "" {
-			provider = defaultProvider
+			provider, _ = getDefaultProvider()
 		}
 		if model == "" {
 			if provider == "openai" {
-				model = "gpt-5-mini"
+				recommended := config.GetRecommendedOpenAIModels()
+				model = recommended["cost_effective"]
 			} else {
-				model = defaultModel
+				model = "gemini-2.5-flash"
 			}
 		}
 		providerConfig = &ProviderConfig{Provider: provider, Model: model, BaseURL: baseURL}

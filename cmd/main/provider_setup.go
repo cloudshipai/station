@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"station/internal/config"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbletea"
@@ -20,27 +22,27 @@ type ProviderConfig struct {
 	BaseURL  string
 }
 
-// Predefined models for each provider
-var providerModels = map[string][]string{
-	"openai": {
-		"gpt-5",
-		"gpt-5-mini",
-		"gpt-5-nano",
-	},
-	"gemini": {
-		"gemini-2.5-flash",
-		"gemini-2.5-pro",
-	},
+// getProviderModels returns available models for each provider
+func getProviderModels() map[string][]string {
+	return map[string][]string{
+		"openai": config.GetSupportedOpenAIModels(),
+		"gemini": {
+			"gemini-2.5-flash",
+			"gemini-2.5-pro",
+		},
+	}
 }
 
-// Default selections
-var defaultProvider = "gemini"
-var defaultModel = "gemini-2.5-flash"
+// getDefaultProvider returns the default provider and model
+func getDefaultProvider() (string, string) {
+	recommended := config.GetRecommendedOpenAIModels()
+	return "openai", recommended["cost_effective"] // Use cost-effective default
+}
 
 // Provider descriptions for better UX
 var providerDescriptions = map[string]string{
+	"openai": "OpenAI models - GPT-4o, o1, reasoning models (13 supported models)",
 	"gemini": "Google's Gemini models - Fast, capable, and cost-effective",
-	"openai": "OpenAI & OpenAI-compatible models - GPT, Claude, Ollama, etc.", 
 	"custom": "Configure a custom provider (any OpenAI-compatible endpoint)",
 }
 
@@ -99,10 +101,11 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 // detectProviderFromEnv checks environment variables for API keys
 func detectProviderFromEnv() (string, string) {
 	if os.Getenv("OPENAI_API_KEY") != "" {
-		return "openai", "gpt-5-mini"
+		recommended := config.GetRecommendedOpenAIModels()
+		return "openai", recommended["cost_effective"]
 	}
 	if os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("GOOGLE_API_KEY") != "" {
-		return "gemini", defaultModel
+		return "gemini", "gemini-2.5-flash"
 	}
 	return "", ""
 }
@@ -330,8 +333,8 @@ var (
 // selectProvider shows interactive provider selection
 func selectProvider() (string, error) {
 	items := []list.Item{
-		item("gemini"),
-		item("openai"), 
+		item("openai"),
+		item("gemini"), 
 		item("custom"),
 	}
 
@@ -366,6 +369,7 @@ func selectProvider() (string, error) {
 
 // selectModel shows interactive model selection for a provider
 func selectModel(provider string) (string, error) {
+	providerModels := getProviderModels()
 	models, exists := providerModels[provider]
 	if !exists {
 		return "", fmt.Errorf("unknown provider: %s", provider)

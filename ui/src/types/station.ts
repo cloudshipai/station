@@ -69,8 +69,6 @@ export interface AgentRun {
   user_id: number;
   task: string;
   final_response: string;
-  steps_taken: number;
-  tool_calls?: any[];
   execution_steps?: any[];
   status: 'pending' | 'running' | 'completed' | 'failed';
   started_at: string;
@@ -81,7 +79,6 @@ export interface AgentRun {
   total_tokens?: number;
   duration_seconds?: number;
   model_name?: string;
-  tools_used?: number;
 }
 
 export interface AgentRunWithDetails extends AgentRun {
