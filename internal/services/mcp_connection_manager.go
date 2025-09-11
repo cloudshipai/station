@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,24 +35,6 @@ func (cache *EnvironmentToolCache) IsValid() bool {
 	return time.Since(cache.CachedAt) < cache.ValidFor
 }
 
-// MCPServerPool represents a pool of persistent MCP server connections
-type MCPServerPool struct {
-	servers       map[string]*mcp.GenkitMCPClient // serverKey -> persistent client
-	serverConfigs map[string]interface{}          // serverKey -> config for restart
-	tools         map[string][]ai.Tool            // serverKey -> cached tools
-	mutex         sync.RWMutex
-	initialized   bool                            // prevent multiple initializations
-}
-
-// NewMCPServerPool creates a new server pool
-func NewMCPServerPool() *MCPServerPool {
-	return &MCPServerPool{
-		servers:       make(map[string]*mcp.GenkitMCPClient),
-		serverConfigs: make(map[string]interface{}),
-		tools:         make(map[string][]ai.Tool),
-	}
-}
-
 // MCPConnectionManager handles MCP server connections and tool discovery lifecycle
 type MCPConnectionManager struct {
 	repos            *repositories.Repositories
@@ -61,28 +44,6 @@ type MCPConnectionManager struct {
 	cacheMutex       sync.RWMutex
 	serverPool       *MCPServerPool
 	poolingEnabled   bool // Feature flag for connection pooling
-}
-
-// debugLogToFile writes debug messages to a file for investigation
-func debugLogToFile(message string) {
-	// Use user's home directory for cross-platform compatibility
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return // Silently fail if can't get home dir
-	}
-	logFile := fmt.Sprintf("%s/.config/station/debug-mcp-sync.log", homeDir)
-	
-	// Ensure directory exists
-	logDir := fmt.Sprintf("%s/.config/station", homeDir)
-	os.MkdirAll(logDir, 0755)
-	
-	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return // Silently fail if can't write
-	}
-	defer f.Close()
-	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
-	f.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, message))
 }
 
 // getMapKeys returns the keys of a map for debugging
@@ -116,6 +77,16 @@ func getEnvBoolOrDefault(key string, defaultValue bool) bool {
 			return true
 		case "false", "0", "no", "off":
 			return false
+		}
+	}
+	return defaultValue
+}
+
+// getEnvIntOrDefault gets an integer environment variable with a default value
+func getEnvIntOrDefault(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
 		}
 	}
 	return defaultValue
@@ -164,24 +135,14 @@ func (mcm *MCPConnectionManager) InitializeServerPool(ctx context.Context) error
 		allServers = append(allServers, servers...)
 	}
 	
-	// Start unique servers
+	// Start unique servers in parallel for faster initialization
 	uniqueServers := mcm.deduplicateServers(allServers)
-	for _, server := range uniqueServers {
-		if err := mcm.startPooledServer(ctx, server); err != nil {
-			logging.Info("Warning: failed to start pooled server %s: %v", server.key, err)
-		}
+	if err := mcm.startPooledServersParallel(ctx, uniqueServers); err != nil {
+		return fmt.Errorf("failed to start pooled servers in parallel: %w", err)
 	}
 	
 	logging.Info("MCP server pool initialized with %d servers", len(uniqueServers))
 	return nil
-}
-
-// serverDefinition represents a unique server configuration
-type serverDefinition struct {
-	key           string      // unique identifier
-	name          string      // server name
-	config        interface{} // server config
-	environmentID int64       // originating environment
 }
 
 // extractServerDefinitions extracts server definitions from file configs
@@ -203,76 +164,6 @@ func (mcm *MCPConnectionManager) extractServerDefinitions(environmentID int64, f
 	}
 	
 	return servers
-}
-
-// generateServerKey creates a unique key for a server configuration
-func (mcm *MCPConnectionManager) generateServerKey(serverName string, serverConfig interface{}) string {
-	// Simple key generation - could be made more sophisticated
-	configBytes, _ := json.Marshal(serverConfig)
-	return fmt.Sprintf("%s:%x", serverName, configBytes[:8]) // Use first 8 bytes of config hash
-}
-
-// deduplicateServers removes duplicate server configurations
-func (mcm *MCPConnectionManager) deduplicateServers(servers []serverDefinition) []serverDefinition {
-	seen := make(map[string]bool)
-	var unique []serverDefinition
-	
-	for _, server := range servers {
-		if !seen[server.key] {
-			seen[server.key] = true
-			unique = append(unique, server)
-		}
-	}
-	
-	return unique
-}
-
-// startPooledServer starts a server and adds it to the pool
-func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server serverDefinition) error {
-	// Create telemetry span for MCP server startup
-	tracer := otel.Tracer("station-mcp")
-	ctx, span := tracer.Start(ctx, "mcp.server.start",
-		trace.WithAttributes(
-			attribute.String("mcp.server.name", server.name),
-			attribute.String("mcp.server.key", server.key),
-		),
-	)
-	defer span.End()
-	
-	mcm.serverPool.mutex.Lock()
-	defer mcm.serverPool.mutex.Unlock()
-	
-	// Check if already started
-	if _, exists := mcm.serverPool.servers[server.key]; exists {
-		span.SetAttributes(attribute.Bool("mcp.server.already_running", true))
-		return nil
-	}
-	
-	logging.Info("Starting pooled MCP server: %s", server.key)
-	
-	// Create server client (same logic as connectToMCPServer)
-	client, tools, err := mcm.createServerClient(ctx, server.name, server.config)
-	if err != nil {
-		span.RecordError(err)
-		span.SetAttributes(
-			attribute.Bool("mcp.server.success", false),
-			attribute.String("mcp.server.error", err.Error()),
-		)
-		return fmt.Errorf("failed to create server client for %s: %w", server.key, err)
-	}
-	
-	// Store in pool
-	mcm.serverPool.servers[server.key] = client
-	mcm.serverPool.serverConfigs[server.key] = server.config
-	mcm.serverPool.tools[server.key] = tools
-	
-	span.SetAttributes(
-		attribute.Bool("mcp.server.success", true),
-		attribute.Int("mcp.server.tools_count", len(tools)),
-	)
-	
-	logging.Info(" Pooled server %s started with %d tools", server.key, len(tools))
-	return nil
 }
 
 // parseFileConfig extracts server configurations from a file config
@@ -400,56 +291,6 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 	return mcpClient, serverTools, nil
 }
 
-// getPooledEnvironmentMCPTools uses the server pool for fast tool access
-func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, []*mcp.GenkitMCPClient, error) {
-	logging.Info("Using pooled MCP connections for environment %d", environmentID)
-	
-	// Get file configs for this environment
-	fileConfigs, err := mcm.repos.FileMCPConfigs.ListByEnvironment(environmentID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get file configs for environment %d: %w", environmentID, err)
-	}
-	
-	var allTools []ai.Tool
-	var allClients []*mcp.GenkitMCPClient
-	
-	// Find matching servers in the pool
-	mcm.serverPool.mutex.RLock()
-	defer mcm.serverPool.mutex.RUnlock()
-	
-	for _, fileConfig := range fileConfigs {
-		serverConfigs := mcm.parseFileConfig(fileConfig)
-		for serverName, serverConfig := range serverConfigs {
-			serverKey := mcm.generateServerKey(serverName, serverConfig)
-			
-			// Check if server exists in pool
-			if pooledClient, exists := mcm.serverPool.servers[serverKey]; exists {
-				// Use cached tools from pool
-				if tools, toolsExist := mcm.serverPool.tools[serverKey]; toolsExist {
-					allTools = append(allTools, tools...)
-					allClients = append(allClients, pooledClient) // Reuse pooled client
-					logging.Info(" Using pooled server %s with %d tools", serverKey, len(tools))
-				}
-			} else {
-				// Server not in pool - fallback to creating fresh connection
-				logging.Info("Warning:  Server %s not in pool, creating fresh connection", serverKey)
-				tools, client := mcm.connectToMCPServer(ctx, serverName, serverConfig)
-				if tools != nil {
-					allTools = append(allTools, tools...)
-				}
-				if client != nil {
-					allClients = append(allClients, client)
-				}
-			}
-		}
-	}
-	
-	logging.Info("Pooled connection manager returned %d tools and %d clients for environment %d", 
-		len(allTools), len(allClients), environmentID)
-	
-	return allTools, allClients, nil
-}
-
 // GetEnvironmentMCPTools connects to MCP servers from file configs and gets their tools
 // This replaces the large method that was in the old wrapper classes
 func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, []*mcp.GenkitMCPClient, error) {
@@ -496,28 +337,12 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcMsg)
 	}
 
-	var allTools []ai.Tool
-	var allClients []*mcp.GenkitMCPClient
-
-	// Connect to each MCP server from file configs and get their tools
-	processMsg := fmt.Sprintf("Processing %d file configs for tool discovery", len(fileConfigs))
+	// Connect to each MCP server from file configs and get their tools in parallel
+	processMsg := fmt.Sprintf("Processing %d file configs for tool discovery (parallel)", len(fileConfigs))
 	logging.Info("MCPCONNMGR: %s", processMsg)
 	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + processMsg)
 	
-	for i, fileConfig := range fileConfigs {
-		fcProcessMsg := fmt.Sprintf("Processing file config %d: %s", i+1, fileConfig.ConfigName)
-		logging.Info("MCPCONNMGR: %s", fcProcessMsg)
-		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcProcessMsg)
-		
-		tools, clients := mcm.processFileConfig(ctx, fileConfig)
-		
-		fcResultMsg := fmt.Sprintf("File config %d returned %d tools and %d clients", i+1, len(tools), len(clients))
-		logging.Info("MCPCONNMGR: %s", fcResultMsg)
-		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcResultMsg)
-		
-		allTools = append(allTools, tools...)
-		allClients = append(allClients, clients...)
-	}
+	allTools, allClients := mcm.processFileConfigsParallel(ctx, fileConfigs)
 
 	totalToolsMsg := fmt.Sprintf("Total tools discovered from all file config servers: %d", len(allTools))
 	totalClientsMsg := fmt.Sprintf("Total clients created: %d", len(allClients))
@@ -585,21 +410,8 @@ func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConf
 		return nil, nil
 	}
 
-	var allTools []ai.Tool
-	var allClients []*mcp.GenkitMCPClient
-
-	// Process each server
-	for serverName, serverConfigRaw := range serversData {
-		tools, client := mcm.connectToMCPServer(ctx, serverName, serverConfigRaw)
-		if tools != nil {
-			allTools = append(allTools, tools...)
-		}
-		if client != nil {
-			allClients = append(allClients, client)
-		}
-	}
-
-	return allTools, allClients
+	// Process each server in parallel for faster connection setup
+	return mcm.processServersParallel(ctx, serversData)
 }
 
 // connectToMCPServer connects to a single MCP server and gets its tools
@@ -748,30 +560,4 @@ func (mcm *MCPConnectionManager) CleanupConnections(clients []*mcp.GenkitMCPClie
 			client.Disconnect()
 		}
 	}
-}
-
-// ShutdownServerPool gracefully shuts down all pooled servers
-func (mcm *MCPConnectionManager) ShutdownServerPool() {
-	if !mcm.poolingEnabled {
-		return
-	}
-	
-	mcm.serverPool.mutex.Lock()
-	defer mcm.serverPool.mutex.Unlock()
-	
-	logging.Info("Shutting down MCP server pool with %d servers", len(mcm.serverPool.servers))
-	
-	for serverKey, client := range mcm.serverPool.servers {
-		logging.Info("Disconnecting pooled server: %s", serverKey)
-		if client != nil {
-			client.Disconnect()
-		}
-	}
-	
-	// Clear pool
-	mcm.serverPool.servers = make(map[string]*mcp.GenkitMCPClient)
-	mcm.serverPool.serverConfigs = make(map[string]interface{})
-	mcm.serverPool.tools = make(map[string][]ai.Tool)
-	
-	logging.Info("MCP server pool shutdown complete")
 }
