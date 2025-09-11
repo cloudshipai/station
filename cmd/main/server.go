@@ -40,7 +40,6 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 	var genkitApp *genkit.Genkit
 	var openaiPlugin *stationGenkit.StationOpenAI
 	var geminiPlugin *googlegenai.GoogleAI
-	var err error
 	
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
@@ -55,10 +54,8 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 		if cfg.AIBaseURL != "" {
 			openaiPlugin.BaseURL = cfg.AIBaseURL
 		}
-		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize Genkit with OpenAI: %w", err)
-		}
+		genkitApp = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
+		// GenKit v1.0.1 Init doesn't return error
 	case "gemini":
 		// Validate API key for Gemini
 		if cfg.AIAPIKey == "" {
@@ -67,10 +64,8 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 		geminiPlugin = &googlegenai.GoogleAI{
 			APIKey: cfg.AIAPIKey,
 		}
-		genkitApp, err = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize Genkit with Gemini: %w", err)
-		}
+		genkitApp = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
+		// GenKit v1.0.1 Init doesn't return error
 	case "ollama":
 		// For now, main server only supports OpenAI - Ollama support will be added
 		return nil, fmt.Errorf("Ollama provider not yet supported in main server (use OpenAI for now)")

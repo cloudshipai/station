@@ -30,7 +30,7 @@ import (
 	"sync"
 
 	"github.com/firebase/genkit/go/ai"
-	"github.com/firebase/genkit/go/core"
+	"github.com/firebase/genkit/go/core/api"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -83,12 +83,13 @@ type StationOpenAICompatible struct {
 	LogCallback func(map[string]interface{})
 }
 
-// Init implements genkit.Plugin.
-func (o *StationOpenAICompatible) Init(ctx context.Context, g *genkit.Genkit) error {
+// Init implements api.Plugin.
+func (o *StationOpenAICompatible) Init(ctx context.Context) []api.Action {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.initted {
-		return errors.New("station openai compat plugin already initialized")
+		// Return empty actions if already initialized
+		return []api.Action{}
 	}
 
 	// create client
@@ -96,7 +97,16 @@ func (o *StationOpenAICompatible) Init(ctx context.Context, g *genkit.Genkit) er
 	o.client = &client
 	o.initted = true
 
-	return nil
+	// Return empty actions for now - actions will be created dynamically via DefineModel
+	return []api.Action{}
+}
+
+// listActionsAsActions converts ActionDesc to Action interface
+// This is a placeholder implementation for the new v1.0.1 Plugin interface
+func (o *StationOpenAICompatible) listActionsAsActions(ctx context.Context) []api.Action {
+	// For now, return empty slice - models will be defined dynamically
+	// In GenKit v1.0.1, the plugin system works differently
+	return []api.Action{}
 }
 
 // Name implements genkit.Plugin.
@@ -122,10 +132,16 @@ func (o *StationOpenAICompatible) DefineModel(g *genkit.Genkit, provider, name s
 	// Strip provider prefix if present to check against supportedModels
 	modelName := strings.TrimPrefix(name, provider+"/")
 
-	return genkit.DefineModel(g, provider, name, &info, func(
+	// Convert ai.ModelInfo to ai.ModelOptions for GenKit v1.0.1 API
+	opts := &ai.ModelOptions{
+		Label:    info.Label,
+		Supports: info.Supports,
+	}
+	
+	return genkit.DefineModel(g, name, opts, func(
 		ctx context.Context,
 		input *ai.ModelRequest,
-		cb func(context.Context, *ai.ModelResponseChunk) error,
+		cb ai.ModelStreamCallback,
 	) (*ai.ModelResponse, error) {
 		// Configure the response generator with input using Station's fixed version
 		generator := NewStationModelGenerator(o.client, modelName).WithMessages(input.Messages).WithConfig(input.Config).WithTools(input.Tools)
@@ -150,7 +166,9 @@ func (o *StationOpenAICompatible) DefineModel(g *genkit.Genkit, provider, name s
 // Model returns the [ai.Model] with the given name.
 // It returns nil if the model was not defined.
 func (o *StationOpenAICompatible) Model(g *genkit.Genkit, name string, provider string) ai.Model {
-	model := genkit.LookupModel(g, provider, name)
+	// In GenKit v1.0.1, models are looked up by full name (provider/model)
+	fullName := fmt.Sprintf("%s/%s", provider, name)
+	model := genkit.LookupModel(g, fullName)
 	if model == nil {
 		// Auto-register unknown models for custom base URLs (like Cloudflare, Ollama, etc.)
 		// This allows Station to work with any OpenAI-compatible API without hardcoding every model
@@ -165,7 +183,7 @@ func (o *StationOpenAICompatible) Model(g *genkit.Genkit, name string, provider 
 			Versions: []string{name},
 		})
 		if err == nil {
-			model = genkit.LookupModel(g, provider, name)
+			model = genkit.LookupModel(g, fullName)
 		}
 	}
 	return model
@@ -177,8 +195,8 @@ func (o *StationOpenAICompatible) IsDefinedModel(g *genkit.Genkit, name string, 
 	return o.Model(g, name, provider) != nil
 }
 
-func (o *StationOpenAICompatible) ListActions(ctx context.Context) []core.ActionDesc {
-	actions := []core.ActionDesc{}
+func (o *StationOpenAICompatible) ListActions(ctx context.Context) []api.ActionDesc {
+	actions := []api.ActionDesc{}
 
 	models, err := listOpenAIModels(ctx, o.client)
 	if err != nil {
@@ -201,10 +219,10 @@ func (o *StationOpenAICompatible) ListActions(ctx context.Context) []core.Action
 		}
 		metadata["label"] = fmt.Sprintf("%s - %s", o.Provider, name)
 
-		actions = append(actions, core.ActionDesc{
-			Type:     core.ActionTypeModel,
+		actions = append(actions, api.ActionDesc{
+			Type:     api.ActionTypeModel,
 			Name:     fmt.Sprintf("%s/%s", o.Provider, name),
-			Key:      fmt.Sprintf("/%s/%s/%s", core.ActionTypeModel, o.Provider, name),
+			Key:      fmt.Sprintf("/%s/%s/%s", api.ActionTypeModel, o.Provider, name),
 			Metadata: metadata,
 		})
 	}
@@ -212,9 +230,9 @@ func (o *StationOpenAICompatible) ListActions(ctx context.Context) []core.Action
 	return actions
 }
 
-func (o *StationOpenAICompatible) ResolveAction(g *genkit.Genkit, atype core.ActionType, name string) error {
+func (o *StationOpenAICompatible) ResolveAction(g *genkit.Genkit, atype api.ActionType, name string) error {
 	switch atype {
-	case core.ActionTypeModel:
+	case api.ActionTypeModel:
 		o.DefineModel(g, o.Provider, name, ai.ModelInfo{
 			Label:    fmt.Sprintf("%s - %s", o.Provider, name),
 			Stage:    ai.ModelStageStable,

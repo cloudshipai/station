@@ -141,11 +141,8 @@ func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir, 
 		}
 		
 		// Define the prompt in GenKit with proper configuration
-		_, err = genkit.DefinePrompt(genkitApp, agentName, promptOptions...)
-		if err != nil {
-			fmt.Printf("   ⚠️  Warning: failed to define prompt %s: %v\n", agentName, err)
-			return nil // Continue with other files
-		}
+		_ = genkit.DefinePrompt(genkitApp, agentName, promptOptions...)
+		// GenKit v1.0.1 DefinePrompt doesn't return error
 		
 		fmt.Printf("   ✅ Agent Prompt: %s\n", agentName)
 		promptCount++

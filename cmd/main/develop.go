@@ -148,20 +148,22 @@ func initializeGenKitWithPromptDir(ctx context.Context, promptDir string) (*genk
 			logging.Debug("Using custom OpenAI base URL: %s", cfg.AIBaseURL)
 		}
 		
-		genkitApp, err = genkit.Init(ctx, 
+		genkitApp = genkit.Init(ctx, 
 			genkit.WithPlugins(stationOpenAI),
 			genkit.WithPromptDir(promptDir),
 		)
+		err = nil // GenKit v1.0.1 Init doesn't return error
 		
 	case "googlegenai", "gemini":
 		logging.Debug("Setting up Google AI plugin for development")
 		
 		geminiPlugin := &googlegenai.GoogleAI{}
 		
-		genkitApp, err = genkit.Init(ctx, 
+		genkitApp = genkit.Init(ctx, 
 			genkit.WithPlugins(geminiPlugin),
 			genkit.WithPromptDir(promptDir),
 		)
+		err = nil // GenKit v1.0.1 Init doesn't return error
 		
 	default:
 		return nil, fmt.Errorf("unsupported AI provider for development: %s", cfg.AIProvider)
