@@ -13,8 +13,8 @@ import (
 	"station/internal/mcp"
 	"station/internal/mcp_agents"
 	"station/internal/services"
+	"station/internal/lighthouse"
 	"station/internal/ssh"
-	"station/pkg/cloudshipai"
 	"station/pkg/crypto"
 	"strings"
 	"sync"
@@ -127,8 +127,15 @@ func runMainServer() error {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
 	
-	// Initialize agent service with AgentExecutionEngine
-	agentSvc := services.NewAgentService(repos)
+	// Initialize Lighthouse client for CloudShip integration
+	mode := lighthouse.DetectModeFromCommand()
+	lighthouseClient, err := lighthouse.InitializeLighthouseFromConfig(cfg, mode)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Lighthouse client: %v", err)
+	}
+	
+	// Initialize agent service with AgentExecutionEngine and Lighthouse integration
+	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
 	
 	// Initialize MCP for the agent service
 	if err := agentSvc.InitializeMCP(ctx); err != nil {
@@ -165,12 +172,6 @@ func runMainServer() error {
 	
 	// Set services for the API server  
 	apiServer.SetServices(toolDiscoveryService)
-
-	// Initialize CloudShip AI client
-	cloudshipaiClient := cloudshipai.NewClient()
-	if err := cloudshipaiClient.Start(); err != nil {
-		log.Printf("Warning: Failed to start CloudShip AI client: %v", err)
-	}
 
 	wg.Add(5) // SSH, MCP, Dynamic Agent MCP, API, and webhook retry processor
 
@@ -259,8 +260,12 @@ func runMainServer() error {
 	// Signal all goroutines to start shutdown immediately
 	cancel()
 	
-	// Stop CloudShip AI client
-	cloudshipaiClient.Stop()
+	// Stop Lighthouse client
+	if lighthouseClient != nil {
+		if err := lighthouseClient.Close(); err != nil {
+			log.Printf("Error stopping Lighthouse client: %v", err)
+		}
+	}
 
 	// Create done channel with aggressive timeout handling
 	done := make(chan struct{})

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
@@ -116,9 +118,14 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("Press Ctrl+C to exit and cleanup MCP connections...")
 	
-	// Block indefinitely until interrupted
-	select {}
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	
+	// Block until we receive a signal
+	<-sigChan
+	
+	fmt.Println("\n🧹 Shutting down gracefully...")
 	return nil
 }
 

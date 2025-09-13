@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -9,8 +10,10 @@ import (
 	"time"
 
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
 	"station/internal/logging"
 	"station/pkg/models"
+	"station/pkg/types"
 	dotprompt "station/pkg/dotprompt"
 
 	"github.com/firebase/genkit/go/ai"
@@ -39,16 +42,23 @@ type AgentExecutionResult struct {
 
 // AgentExecutionEngine handles the execution of agents using GenKit and MCP
 type AgentExecutionEngine struct {
-	repos              *repositories.Repositories
-	agentService       AgentServiceInterface
-	genkitProvider     *GenKitProvider
-	mcpConnManager     *MCPConnectionManager
-	telemetryService   *TelemetryService // For creating spans
-	activeMCPClients   []*mcp.GenkitMCPClient // Store active connections for cleanup after execution
+	repos                     *repositories.Repositories
+	agentService              AgentServiceInterface
+	genkitProvider            *GenKitProvider
+	mcpConnManager            *MCPConnectionManager
+	telemetryService          *TelemetryService // For creating spans
+	lighthouseClient          *lighthouse.LighthouseClient // For CloudShip integration
+	deploymentContextService  *DeploymentContextService // For gathering deployment context
+	activeMCPClients          []*mcp.GenkitMCPClient // Store active connections for cleanup after execution
 }
 
 // NewAgentExecutionEngine creates a new agent execution engine
 func NewAgentExecutionEngine(repos *repositories.Repositories, agentService AgentServiceInterface) *AgentExecutionEngine {
+	return NewAgentExecutionEngineWithLighthouse(repos, agentService, nil)
+}
+
+// NewAgentExecutionEngineWithLighthouse creates a new agent execution engine with optional Lighthouse integration
+func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, agentService AgentServiceInterface, lighthouseClient *lighthouse.LighthouseClient) *AgentExecutionEngine {
 	mcpConnManager := NewMCPConnectionManager(repos, nil)
 	
 	// Check environment variable for connection pooling
@@ -58,10 +68,12 @@ func NewAgentExecutionEngine(repos *repositories.Repositories, agentService Agen
 	}
 	
 	return &AgentExecutionEngine{
-		repos:             repos,
-		agentService:      agentService,
-		genkitProvider:    NewGenKitProvider(),
-		mcpConnManager:    mcpConnManager,
+		repos:                     repos,
+		agentService:              agentService,
+		genkitProvider:            NewGenKitProvider(),
+		mcpConnManager:            mcpConnManager,
+		lighthouseClient:          lighthouseClient,
+		deploymentContextService:  NewDeploymentContextService(),
 	}
 }
 
@@ -307,7 +319,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		}
 
 		// Convert ExecutionResponse to AgentExecutionResult  
-		return &AgentExecutionResult{
+		result := &AgentExecutionResult{
 			Success:        response.Success,
 			Response:       response.Response,
 			Duration:       duration,
@@ -319,13 +331,290 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			TokenUsage:     response.TokenUsage,           // ✅ Pass through token usage from dotprompt
 			ToolCalls:      response.ToolCalls,           // ✅ Pass through tool calls
 			ExecutionSteps: response.ExecutionSteps,     // ✅ Pass through execution steps
-		}, nil
+		}
+		
+		// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
+		aee.sendToLighthouse(ctx, agent, task, runID, startTime, result, userVariables)
+		
+		return result, nil
 }
 
 
 // GetGenkitProvider returns the genkit provider for external access
 func (aee *AgentExecutionEngine) GetGenkitProvider() *GenKitProvider {
 	return aee.genkitProvider
+}
+
+// sendToLighthouse sends agent run data to CloudShip Lighthouse (async, non-blocking)
+func (aee *AgentExecutionEngine) sendToLighthouse(ctx context.Context, agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult, userVariables map[string]interface{}) {
+	// Skip if no Lighthouse client configured
+	if aee.lighthouseClient == nil || !aee.lighthouseClient.IsRegistered() {
+		return // Graceful degradation - no cloud integration
+	}
+	
+	// Convert AgentExecutionResult to types.AgentRun for Lighthouse
+	agentRun := aee.convertToAgentRun(agent, task, runID, startTime, result)
+	
+	// Determine deployment mode and send appropriate data
+	mode := aee.lighthouseClient.GetMode()
+	logging.Debug("Lighthouse client mode detected: %v (comparing with ModeCLI: %v)", mode, lighthouse.ModeCLI)
+	switch mode {
+	case lighthouse.ModeStdio:
+		// stdio mode: Local development context
+		context := aee.deploymentContextService.GatherContextForMode("stdio")
+		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		
+	case lighthouse.ModeServe:
+		// serve mode: Server deployment context  
+		context := aee.deploymentContextService.GatherContextForMode("serve")
+		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		
+	case lighthouse.ModeCLI:
+		// CLI mode: Rich execution context (may include CI/CD)
+		context := aee.deploymentContextService.GatherContextForMode("cli")
+		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		logging.Info("Successfully sent CLI run data with deployment context for run_id: %d", runID)
+		
+	default:
+		// Unknown mode - send basic run data
+		aee.lighthouseClient.SendRun(agentRun, "unknown", map[string]string{
+			"mode": "unknown",
+		})
+	}
+	
+	logging.Debug("Completed CloudShip Lighthouse integration (run_id: %d, mode: %s)", runID, mode)
+}
+
+// convertToAgentRun converts Station models to Lighthouse types
+func (aee *AgentExecutionEngine) convertToAgentRun(agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult) *types.AgentRun {
+	status := "completed"
+	if !result.Success {
+		status = "failed"
+	}
+	
+	return &types.AgentRun{
+		ID:             fmt.Sprintf("run_%d", runID),
+		AgentID:        fmt.Sprintf("agent_%d", agent.ID),
+		AgentName:      agent.Name,
+		Task:           task,
+		Response:       result.Response,
+		Status:         status,
+		DurationMs:     result.Duration.Milliseconds(),
+		ModelName:      result.ModelName,
+		StartedAt:      startTime,
+		CompletedAt:    startTime.Add(result.Duration),
+		ToolCalls:      aee.convertToolCalls(result.ToolCalls),
+		ExecutionSteps: aee.convertExecutionSteps(result.ExecutionSteps),
+		TokenUsage:     aee.convertTokenUsage(result.TokenUsage),
+		Metadata: map[string]string{
+			"steps_used":  fmt.Sprintf("%d", result.StepsUsed),
+			"tools_used":  fmt.Sprintf("%d", result.ToolsUsed),
+			"run_id":      fmt.Sprintf("%d", runID),
+			"agent_id":    fmt.Sprintf("%d", agent.ID),
+		},
+	}
+}
+
+// convertToolCalls converts Station tool calls to Lighthouse format
+func (aee *AgentExecutionEngine) convertToolCalls(toolCalls *models.JSONArray) []types.ToolCall {
+	if toolCalls == nil {
+		return nil
+	}
+	
+	// Convert JSONArray slice to ToolCall types
+	var lighthouseCalls []types.ToolCall
+	for _, item := range *toolCalls {
+		if toolCallMap, ok := item.(map[string]interface{}); ok {
+			toolCall := types.ToolCall{
+				Timestamp: time.Now(), // Default timestamp
+			}
+			
+			if name, exists := toolCallMap["tool_name"]; exists {
+				if nameStr, ok := name.(string); ok {
+					toolCall.ToolName = nameStr
+				}
+			}
+			
+			if params, exists := toolCallMap["parameters"]; exists {
+				toolCall.Parameters = params
+			}
+			
+			if result, exists := toolCallMap["result"]; exists {
+				if resultStr, ok := result.(string); ok {
+					toolCall.Result = resultStr
+				} else {
+					// Convert non-string results to JSON
+					if jsonBytes, err := json.Marshal(result); err == nil {
+						toolCall.Result = string(jsonBytes)
+					}
+				}
+			}
+			
+			if duration, exists := toolCallMap["duration_ms"]; exists {
+				if durationFloat, ok := duration.(float64); ok {
+					toolCall.DurationMs = int64(durationFloat)
+				}
+			}
+			
+			if success, exists := toolCallMap["success"]; exists {
+				if successBool, ok := success.(bool); ok {
+					toolCall.Success = successBool
+				}
+			}
+			
+			lighthouseCalls = append(lighthouseCalls, toolCall)
+		}
+	}
+	
+	return lighthouseCalls
+}
+
+// convertExecutionSteps converts Station execution steps to Lighthouse format  
+func (aee *AgentExecutionEngine) convertExecutionSteps(steps *models.JSONArray) []types.ExecutionStep {
+	if steps == nil {
+		return nil
+	}
+	
+	// Convert JSONArray slice to ExecutionStep types
+	var lighthouseSteps []types.ExecutionStep
+	for _, item := range *steps {
+		if stepMap, ok := item.(map[string]interface{}); ok {
+			step := types.ExecutionStep{
+				Timestamp: time.Now(), // Default timestamp
+			}
+			
+			if stepNum, exists := stepMap["step_number"]; exists {
+				if stepNumFloat, ok := stepNum.(float64); ok {
+					step.StepNumber = int(stepNumFloat)
+				}
+			}
+			
+			if desc, exists := stepMap["description"]; exists {
+				if descStr, ok := desc.(string); ok {
+					step.Description = descStr
+				}
+			}
+			
+			if stepType, exists := stepMap["type"]; exists {
+				if typeStr, ok := stepType.(string); ok {
+					step.Type = typeStr
+				}
+			}
+			
+			if duration, exists := stepMap["duration_ms"]; exists {
+				if durationFloat, ok := duration.(float64); ok {
+					step.DurationMs = int64(durationFloat)
+				}
+			}
+			
+			lighthouseSteps = append(lighthouseSteps, step)
+		}
+	}
+	
+	return lighthouseSteps
+}
+
+// convertTokenUsage converts Station token usage to Lighthouse format
+func (aee *AgentExecutionEngine) convertTokenUsage(usage map[string]interface{}) *types.TokenUsage {
+	if usage == nil {
+		return nil
+	}
+	
+	tokenUsage := &types.TokenUsage{}
+	
+	if val, ok := usage["prompt_tokens"]; ok {
+		if intVal, ok := val.(int); ok {
+			tokenUsage.PromptTokens = intVal
+		}
+	}
+	
+	if val, ok := usage["completion_tokens"]; ok {
+		if intVal, ok := val.(int); ok {
+			tokenUsage.CompletionTokens = intVal
+		}
+	}
+	
+	if val, ok := usage["total_tokens"]; ok {
+		if intVal, ok := val.(int); ok {
+			tokenUsage.TotalTokens = intVal
+		}
+	}
+	
+	if val, ok := usage["cost_usd"]; ok {
+		if floatVal, ok := val.(float64); ok {
+			tokenUsage.CostUSD = floatVal
+		}
+	}
+	
+	return tokenUsage
+}
+
+// buildDeploymentContext creates deployment context for CLI mode
+func (aee *AgentExecutionEngine) buildDeploymentContext() *types.DeploymentContext {
+	return &types.DeploymentContext{
+		CommandLine:        strings.Join(os.Args, " "),
+		WorkingDirectory:   func() string { wd, _ := os.Getwd(); return wd }(),
+		EnvVars:            aee.getRelevantEnvVars(),
+		Arguments:          os.Args[1:], // Skip program name
+		GitBranch:          aee.getGitBranch(),
+		GitCommit:          aee.getGitCommit(), 
+		StationVersion:     "v0.11.0", // TODO: get from version package
+	}
+}
+
+// buildSystemSnapshot creates system snapshot for CLI mode
+func (aee *AgentExecutionEngine) buildSystemSnapshot() *types.SystemSnapshot {
+	return &types.SystemSnapshot{
+		Agents:         []types.AgentConfig{}, // TODO: implement
+		MCPServers:     []types.MCPConfig{},   // TODO: implement  
+		Variables:      map[string]string{},   // TODO: implement
+		AvailableTools: []types.ToolInfo{},    // TODO: implement
+		Metrics:        nil,                   // TODO: implement
+	}
+}
+
+// Helper functions for deployment context
+
+func (aee *AgentExecutionEngine) getRelevantEnvVars() map[string]string {
+	envVars := make(map[string]string)
+	
+	// Collect relevant environment variables (avoid secrets)
+	relevantKeys := []string{
+		"GITHUB_ACTIONS", "GITHUB_WORKFLOW", "GITHUB_REPOSITORY", 
+		"GITHUB_REF", "GITHUB_SHA", "RUNNER_OS", "CI",
+		"NODE_ENV", "ENVIRONMENT", "STATION_MODE",
+		// Add some general environment variables for debug
+		"HOME", "USER", "SHELL", "PWD", "PATH",
+		"TERM", "LANG", "XDG_CONFIG_HOME",
+	}
+	
+	for _, key := range relevantKeys {
+		if val := os.Getenv(key); val != "" {
+			envVars[key] = val
+		}
+	}
+	
+	return envVars
+}
+
+func (aee *AgentExecutionEngine) getGitBranch() string {
+	// Simple git branch detection - could be enhanced
+	if branch := os.Getenv("GITHUB_REF"); branch != "" {
+		// Extract branch name from refs/heads/branch-name
+		if strings.HasPrefix(branch, "refs/heads/") {
+			return strings.TrimPrefix(branch, "refs/heads/")
+		}
+		return branch
+	}
+	return ""
+}
+
+func (aee *AgentExecutionEngine) getGitCommit() string {
+	// Simple git commit detection - could be enhanced
+	if commit := os.Getenv("GITHUB_SHA"); commit != "" {
+		return commit
+	}
+	return ""
 }
 
 // TestStdioMCPConnection tests the MCP connection for debugging
@@ -601,3 +890,73 @@ func (aee *AgentExecutionEngine) shouldShowInLiveExecution(logEntry map[string]i
 	// Keep user-relevant logs
 	return true
 }
+
+// Helper methods for CLI mode SendEphemeralSnapshot
+
+func (aee *AgentExecutionEngine) getCommandLine() string {
+	return strings.Join(os.Args, " ")
+}
+
+func (aee *AgentExecutionEngine) getCurrentWorkingDir() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return wd
+}
+
+
+func (aee *AgentExecutionEngine) getCommandArguments() []string {
+	if len(os.Args) > 1 {
+		return os.Args[1:]
+	}
+	return []string{}
+}
+
+
+func (aee *AgentExecutionEngine) getStationVersion() string {
+	// Import version package to get actual version
+	return "0.11.0" // Placeholder
+}
+
+func (aee *AgentExecutionEngine) getAgentSnapshot() []types.AgentConfig {
+	// This would query all agents in the current environment
+	// For now, return empty slice to avoid complexity
+	return []types.AgentConfig{}
+}
+
+func (aee *AgentExecutionEngine) getMcpServerSnapshot() []types.MCPConfig {
+	// This would query all MCP server configurations
+	// For now, return empty slice to avoid complexity
+	return []types.MCPConfig{}
+}
+
+func (aee *AgentExecutionEngine) convertUserVariables(userVars map[string]interface{}) map[string]string {
+	converted := make(map[string]string)
+	for k, v := range userVars {
+		converted[k] = fmt.Sprintf("%v", v)
+	}
+	return converted
+}
+
+func (aee *AgentExecutionEngine) getToolSnapshot() []types.ToolInfo {
+	// This would query all available tools from MCP servers
+	// For now, return empty slice to avoid complexity
+	return []types.ToolInfo{}
+}
+
+func (aee *AgentExecutionEngine) getSystemMetrics() *types.SystemMetrics {
+	// Basic system metrics - could be enhanced with actual system monitoring
+	return &types.SystemMetrics{
+		CPUUsagePercent:    0.0,
+		MemoryUsagePercent: 0.0,
+		DiskUsageMB:        0,
+		UptimeSeconds:      0,
+		ActiveConnections:  0,
+		ActiveRuns:         1, // Current execution
+		NetworkInBytes:     0,
+		NetworkOutBytes:    0,
+		AdditionalMetrics:  make(map[string]string),
+	}
+}
+

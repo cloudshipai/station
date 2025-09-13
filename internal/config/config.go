@@ -28,7 +28,17 @@ type Config struct {
 	AIAPIKey          string // The API key for the AI provider  
 	AIModel           string // Model name (e.g., gpt-4o, llama3, gemini-pro)
 	AIBaseURL         string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
+	// CloudShip Integration
+	CloudShip         CloudShipConfig
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
+}
+
+// CloudShipConfig holds CloudShip Lighthouse integration settings
+type CloudShipConfig struct {
+	Enabled         bool   `yaml:"enabled"`          // Enable CloudShip integration
+	RegistrationKey string `yaml:"registration_key"` // CloudShip registration key
+	Endpoint        string `yaml:"endpoint"`         // Lighthouse gRPC endpoint
+	StationID       string `yaml:"station_id"`       // Station ID (auto-generated)
 }
 
 func Load() (*Config, error) {
@@ -51,6 +61,13 @@ func Load() (*Config, error) {
 		AIAPIKey:         getAIAPIKey(), // Smart fallback for API keys
 		AIModel:          getAIModelDefault(), // Provider-specific defaults
 		AIBaseURL:        getEnvOrDefault("STN_AI_BASE_URL", ""), // Empty means use provider default
+		// CloudShip Integration (disabled by default)
+		CloudShip: CloudShipConfig{
+			Enabled:         getEnvBoolOrDefault("STN_CLOUDSHIP_ENABLED", false),
+			RegistrationKey: getEnvOrDefault("STN_CLOUDSHIP_KEY", ""),
+			Endpoint:        getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudship.ai:443"),
+			StationID:       getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
+		},
 	}
 
 	// Override with values from config file (if available) using Viper
@@ -103,6 +120,20 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("workspace") {
 		cfg.Workspace = viper.GetString("workspace")
+	}
+	
+	// CloudShip configuration overrides from config file
+	if viper.IsSet("cloudship.enabled") {
+		cfg.CloudShip.Enabled = viper.GetBool("cloudship.enabled")
+	}
+	if viper.IsSet("cloudship.registration_key") {
+		cfg.CloudShip.RegistrationKey = viper.GetString("cloudship.registration_key")
+	}
+	if viper.IsSet("cloudship.endpoint") {
+		cfg.CloudShip.Endpoint = viper.GetString("cloudship.endpoint")
+	}
+	if viper.IsSet("cloudship.station_id") {
+		cfg.CloudShip.StationID = viper.GetString("cloudship.station_id")
 	}
 
 	// Validate that encryption key exists either in config file or environment
