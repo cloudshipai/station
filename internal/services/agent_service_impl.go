@@ -10,6 +10,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
 	"station/pkg/models"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -54,6 +55,43 @@ func NewAgentService(repos *repositories.Repositories) *AgentService {
 	
 	// Create execution engine with self-reference
 	service.executionEngine = NewAgentExecutionEngine(repos, service)
+	
+	// Pass telemetry service to execution engine for span creation
+	service.executionEngine.telemetryService = service.telemetry
+	
+	return service
+}
+
+// NewAgentServiceWithLighthouse creates a new agent service with Lighthouse integration
+func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseClient *lighthouse.LighthouseClient) *AgentService {
+	service := &AgentService{
+		repos:         repos,
+		exportService: NewAgentExportService(repos),
+	}
+	
+	// Initialize telemetry service with config
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("Warning: Failed to load config for telemetry: %v", err)
+		// Use default config
+		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
+	}
+	
+	telemetryConfig := &TelemetryConfig{
+		Enabled:      cfg.TelemetryEnabled,
+		OTLPEndpoint: cfg.OTELEndpoint,
+		ServiceName:  "station",
+		Environment:  cfg.Environment,
+	}
+	
+	service.telemetry = NewTelemetryService(telemetryConfig)
+	if err := service.telemetry.Initialize(context.Background()); err != nil {
+		log.Printf("Warning: Failed to initialize telemetry: %v", err)
+		// Continue without telemetry rather than failing
+	}
+	
+	// Create execution engine with Lighthouse client integration
+	service.executionEngine = NewAgentExecutionEngineWithLighthouse(repos, service, lighthouseClient)
 	
 	// Pass telemetry service to execution engine for span creation
 	service.executionEngine.telemetryService = service.telemetry

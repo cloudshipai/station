@@ -12,7 +12,6 @@ import (
 	"station/internal/theme"
 	"station/internal/version"
 	"station/cmd/main/handlers/file_config"
-	"station/pkg/cloudshipai"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -22,7 +21,6 @@ import (
 var (
 	cfgFile          string
 	themeManager     *theme.ThemeManager
-	cloudshipaiClient *cloudshipai.Client
 	telemetryService *telemetry.TelemetryService
 	rootCmd          = &cobra.Command{
 		Use:   "stn",
@@ -109,8 +107,8 @@ func init() {
 	initCmd.Flags().String("model", "", "AI model name - if not set, shows interactive selection based on provider")
 	initCmd.Flags().String("base-url", "", "Base URL for OpenAI-compatible endpoints (e.g., http://localhost:11434/v1 for Ollama)")
 	initCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
-	initCmd.Flags().String("cloudshipai", "", "CloudShip AI registration key for station management and monitoring")
-	initCmd.Flags().String("cloudshipai_endpoint", "https://station.cloudshipai.com", "CloudShip AI Lighthouse gRPC endpoint")
+	initCmd.Flags().String("cloudship-key", "", "CloudShip registration key for station management and monitoring")
+	initCmd.Flags().String("cloudship-endpoint", "lighthouse.cloudship.ai:443", "CloudShip Lighthouse gRPC endpoint")
 	initCmd.Flags().String("otel-endpoint", "", "OpenTelemetry OTLP endpoint for telemetry export (e.g., http://localhost:4318)")
 	initCmd.Flags().Bool("telemetry", false, "Enable telemetry collection and export (default: false)")
 	
@@ -237,15 +235,8 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Printf("Using config file: %s\n", viper.ConfigFileUsed())
 		
-		// Initialize CloudShip AI client if configured
-		if viper.GetBool("cloudshipai.enabled") {
-			cloudshipaiClient = cloudshipai.NewClient()
-			if err := cloudshipaiClient.Start(); err != nil {
-				// Don't fail the entire CLI, just warn
-				fmt.Printf("Warning: Failed to start CloudShip AI client: %v\n", err)
-				cloudshipaiClient = nil
-			}
-		}
+		// CloudShip integration is now handled by the Lighthouse client
+		// in individual command contexts (stdio, serve, CLI modes)
 	}
 }
 
@@ -360,8 +351,5 @@ func main() {
 		telemetryService.Close()
 	}
 	
-	// Cleanup CloudShip AI client
-	if cloudshipaiClient != nil {
-		cloudshipaiClient.Stop()
-	}
+	// CloudShip cleanup is now handled by individual command contexts
 }

@@ -16,6 +16,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
 	"station/internal/services"
 	"station/internal/theme"
 	"station/pkg/models"
@@ -348,8 +349,8 @@ func (h *AgentHandler) showAgentLocal(agentID int64) error {
 func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool) error {
 	styles := getCLIStyles(h.themeManager)
 	
-	// Load configuration and connect to database
-	cfg, err := loadStationConfig()
+	// Load configuration and connect to database (including environment variables)
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -470,17 +471,29 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	
 	repos := repositories.New(database)
 	
-	// Load config to get encryption key
-	_, err = loadStationConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load Station config: %w", err)
-	}
+	// Use the config passed to the function (includes environment variables)
+	// No need to reload - cfg already contains CloudShip settings from environment variables
 	
 	// keyManager removed - no longer needed for file-based configs
 	
 	// Initialize services for file-based configs (MCPConfigService removed)
-	// Create agent service (simplified for file-based system)
-	agentService := services.NewAgentService(repos)
+	// Initialize Lighthouse client for CloudShip integration
+	mode := lighthouse.DetectModeFromCommand()
+	fmt.Printf("Debug: CloudShip config - Enabled: %v, Key: %v, Endpoint: %v\n", 
+		cfg.CloudShip.Enabled, 
+		cfg.CloudShip.RegistrationKey != "",
+		cfg.CloudShip.Endpoint)
+	lighthouseClient, err := lighthouse.InitializeLighthouseFromConfig(cfg, mode)
+	if err != nil {
+		fmt.Printf("Warning: Failed to initialize Lighthouse client: %v\n", err)
+	} else if lighthouseClient != nil {
+		fmt.Printf("✅ Lighthouse client initialized successfully for mode: %s\n", mode)
+	} else {
+		fmt.Printf("💡 Lighthouse client disabled (CloudShip integration not configured)\n")
+	}
+	
+	// Create agent service with Lighthouse integration
+	agentService := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
 	
 	// Get console user for execution tracking  
 	consoleUser, err := repos.Users.GetByUsername("console")
@@ -631,6 +644,13 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			result.Success,
 			int(result.StepsTaken),
 		)
+	}
+	
+	// Stop Lighthouse client
+	if lighthouseClient != nil {
+		if err := lighthouseClient.Close(); err != nil {
+			fmt.Printf("Warning: Error stopping Lighthouse client: %v\n", err)
+		}
 	}
 	
 	fmt.Printf("✅ Agent execution completed via stdio MCP!\n")

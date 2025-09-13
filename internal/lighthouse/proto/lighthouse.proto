@@ -1,0 +1,444 @@
+syntax = "proto3";
+
+package lighthouse.v1;
+option go_package = "github.com/cloudshipai/lighthouse/internal/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// Lighthouse service for Station-CloudShip integration
+// Handles all three deployment modes: stdio, serve, cli
+service LighthouseService {
+    // Registration & Connection Management
+    rpc RegisterStation(RegisterStationRequest) returns (RegisterStationResponse);
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    
+    // Run Data Collection (All Modes)
+    rpc SendRun(SendRunRequest) returns (SendRunResponse);
+    rpc SendRunStream(stream SendRunRequest) returns (stream SendRunResponse);
+    
+    // CLI Mode Versioned Snapshots
+    rpc SendEphemeralSnapshot(EphemeralSnapshotRequest) returns (EphemeralSnapshotResponse);
+    
+    // Configuration Management (Server Mode Only)
+    rpc Connect(stream ConnectRequest) returns (stream CloudShipCommand);
+    rpc SyncConfiguration(SyncConfigRequest) returns (SyncConfigResponse);
+    
+    // System Health Monitoring (Server Mode Primarily)
+    rpc SendSystemHealth(SystemHealthRequest) returns (SystemHealthResponse);
+    
+    // MCP Proxy (Server Mode Only)
+    rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+    rpc CallTool(CallToolRequest) returns (CallToolResponse);
+    rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+    rpc ExecuteAgent(ExecuteAgentRequest) returns (stream ExecuteAgentResponse);
+}
+
+// Deployment mode enumeration
+enum DeploymentMode {
+    DEPLOYMENT_MODE_UNSPECIFIED = 0;
+    DEPLOYMENT_MODE_STDIO = 1;    // Local development, MCP client usage
+    DEPLOYMENT_MODE_SERVE = 2;    // Team/production server
+    DEPLOYMENT_MODE_CLI = 3;      // CI/CD & ephemeral executions
+}
+
+// Run status enumeration
+enum RunStatus {
+    RUN_STATUS_UNSPECIFIED = 0;
+    RUN_STATUS_QUEUED = 1;       // CloudShip UI initiated
+    RUN_STATUS_DISPATCHED = 2;   // Sent to station
+    RUN_STATUS_RUNNING = 3;      // Active execution
+    RUN_STATUS_COMPLETED = 4;    // Finished successfully
+    RUN_STATUS_FAILED = 5;       // Error occurred
+    RUN_STATUS_TIMEOUT = 6;      // Execution timeout
+    RUN_STATUS_CANCELLED = 7;    // User cancelled
+}
+
+// Run source enumeration
+enum RunSource {
+    RUN_SOURCE_UNSPECIFIED = 0;
+    RUN_SOURCE_ANALYTICS = 1;     // Station completed run data
+    RUN_SOURCE_UI_TRIGGERED = 2;  // CloudShip UI initiated
+    RUN_SOURCE_CLI_SNAPSHOT = 3;  // Ephemeral execution context
+}
+
+// Step type enumeration
+enum StepType {
+    STEP_TYPE_UNSPECIFIED = 0;
+    STEP_TYPE_TOOL_CALL = 1;
+    STEP_TYPE_LLM_CALL = 2;
+    STEP_TYPE_PROCESSING = 3;
+}
+
+// System status enumeration
+enum SystemStatus {
+    SYSTEM_STATUS_UNSPECIFIED = 0;
+    SYSTEM_STATUS_HEALTHY = 1;
+    SYSTEM_STATUS_WARNING = 2;
+    SYSTEM_STATUS_CRITICAL = 3;
+    SYSTEM_STATUS_OFFLINE = 4;
+}
+
+// Registration status enumeration
+enum RegistrationStatus {
+    REGISTRATION_STATUS_UNSPECIFIED = 0;
+    REGISTRATION_STATUS_UNREGISTERED = 1;    // No registration key provided
+    REGISTRATION_STATUS_REGISTERED = 2;      // Successfully registered with CloudShip
+    REGISTRATION_STATUS_INVALID_KEY = 3;     // Invalid registration key
+    REGISTRATION_STATUS_RATE_LIMITED = 4;    // Too many attempts
+}
+
+// ============================================================================
+// REGISTRATION MESSAGES
+// ============================================================================
+
+message RegisterStationRequest {
+    string station_id = 1;           // Generated UUID or provided
+    string registration_key = 2;     // CloudShip registration key (optional)
+    string user_id = 3;             // From registration key
+    string environment_name = 4;    // e.g., "production", "dev"
+    DeploymentMode mode = 5;        // server, local, cicd
+    StationCapabilities capabilities = 6;
+    map<string, string> metadata = 7; // Version, OS, etc.
+}
+
+message RegisterStationResponse {
+    bool success = 1;
+    string station_id = 2;          // Confirmed station ID
+    string error_message = 3;
+    RegistrationStatus status = 4;
+    CloudShipConfig cloudship_config = 5; // Only if registered
+}
+
+message StationCapabilities {
+    bool can_execute_agents = 1;
+    bool has_mcp_servers = 2;
+    bool supports_bidirectional = 3;
+    repeated string environments = 4;
+    int32 agent_count = 5;
+    int32 tool_count = 6;
+}
+
+message CloudShipConfig {
+    string endpoint = 1;
+    int32 heartbeat_interval = 2;
+    bool auto_sync_config = 3;
+    map<string, string> settings = 4;
+}
+
+// ============================================================================
+// RUN DATA COLLECTION MESSAGES
+// ============================================================================
+
+message SendRunRequest {
+    string registration_key = 1;    // Registration key as station identifier
+    string environment = 2;         // Environment name
+    DeploymentMode mode = 3;        // Deployment mode (stdio, serve, cli)
+    RunSource source = 4;           // Run source (analytics, ui_triggered, cli_snapshot)
+    AgentRunData run_data = 5;      // Complete run information
+    map<string, string> labels = 6; // Additional labels
+}
+
+message SendRunResponse {
+    bool success = 1;
+    string message = 2;
+    string run_id = 3;              // Confirmed run ID in CloudShip
+}
+
+message AgentRunData {
+    string run_id = 1;              // Unique run ID from Station
+    string agent_id = 2;            // Agent identifier
+    string agent_name = 3;          // Agent display name
+    string task = 4;                // User input/task
+    string response = 5;            // Agent output
+    repeated ToolCall tool_calls = 6;
+    repeated ExecutionStep execution_steps = 7;
+    TokenUsage token_usage = 8;
+    int64 duration_ms = 9;
+    string model_name = 10;
+    RunStatus status = 11;
+    google.protobuf.Timestamp started_at = 12;
+    google.protobuf.Timestamp completed_at = 13;
+    map<string, string> metadata = 14;
+    string station_version = 15;    // Station version for debugging/compatibility
+}
+
+message ToolCall {
+    string tool_name = 1;
+    map<string, string> parameters = 2;  // JSON-serialized parameters
+    string result = 3;                    // JSON-serialized result
+    int64 duration_ms = 4;
+    bool success = 5;
+    google.protobuf.Timestamp timestamp = 6;
+}
+
+message ExecutionStep {
+    int32 step_number = 1;
+    string description = 2;
+    StepType type = 3;
+    int64 duration_ms = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+
+message TokenUsage {
+    int32 prompt_tokens = 1;
+    int32 completion_tokens = 2;
+    int32 total_tokens = 3;
+    double cost_usd = 4;
+}
+
+// ============================================================================
+// CLI MODE EPHEMERAL SNAPSHOTS
+// ============================================================================
+
+message EphemeralSnapshotRequest {
+    string registration_key = 1;    // Registration key as station ID
+    string environment = 2;         // Environment name
+    RunSource source = 3;           // Source type (should be RUN_SOURCE_CLI_SNAPSHOT)
+    DeploymentContext context = 4;  // Rich execution context
+    AgentRunData run_data = 5;      // Complete run information
+    SystemSnapshot system = 6;     // System state at execution time
+}
+
+message EphemeralSnapshotResponse {
+    bool success = 1;
+    string message = 2;
+    string snapshot_id = 3;
+}
+
+message DeploymentContext {
+    string command_line = 1;        // Full stn command executed
+    string working_directory = 2;   // Execution directory
+    map<string, string> env_vars = 3; // Relevant environment variables
+    repeated string arguments = 4;   // Command arguments
+    string git_branch = 5;          // Current git branch if in repo
+    string git_commit = 6;          // Current commit hash
+    string station_version = 7;     // Station version
+}
+
+message SystemSnapshot {
+    repeated AgentConfig agents = 1;     // All agents in environment
+    repeated MCPConfig mcp_servers = 2;  // All MCP server configs
+    map<string, string> variables = 3;   // Template variables
+    repeated ToolInfo available_tools = 4; // Tool inventory
+    SystemMetrics metrics = 5;           // System performance at execution
+}
+
+// ============================================================================
+// CONFIGURATION MANAGEMENT (SERVE MODE)
+// ============================================================================
+
+message SyncConfigRequest {
+    string registration_key = 1;
+    repeated AgentConfig agents = 2;
+    repeated MCPConfig mcp_servers = 3;
+    map<string, string> variables = 4;
+    int64 config_version = 5;
+}
+
+message SyncConfigResponse {
+    bool success = 1;
+    string message = 2;
+    int32 synced_agents = 3;
+    int32 synced_mcp_servers = 4;
+}
+
+message AgentConfig {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string prompt_template = 4;
+    string model_name = 5;
+    int32 max_steps = 6;
+    repeated string tools = 7;
+    map<string, string> variables = 8;
+    repeated string tags = 9;
+    google.protobuf.Timestamp created_at = 10;
+    google.protobuf.Timestamp updated_at = 11;
+}
+
+message MCPConfig {
+    string name = 1;
+    string command = 2;
+    repeated string args = 3;
+    map<string, string> env_vars = 4;
+    map<string, string> variables = 5;
+    bool enabled = 6;
+    google.protobuf.Timestamp created_at = 7;
+    google.protobuf.Timestamp updated_at = 8;
+}
+
+message ToolInfo {
+    string name = 1;
+    string description = 2;
+    string mcp_server = 3;
+    repeated string categories = 4;
+}
+
+// ============================================================================
+// BIDIRECTIONAL STREAMING (SERVE MODE)
+// ============================================================================
+
+message ConnectRequest {
+    string registration_key = 1;
+    string environment = 2;
+    SystemMetrics metrics = 3;
+}
+
+message CloudShipCommand {
+    oneof command {
+        CreateAgentCommand create_agent = 1;
+        UpdateAgentCommand update_agent = 2;
+        DeleteAgentCommand delete_agent = 3;
+        SyncMCPServersCommand sync_mcp = 4;
+        ExecuteAgentCommand execute_agent = 5;
+        GetEnvironmentCommand get_env = 6;
+    }
+}
+
+message CreateAgentCommand {
+    string agent_id = 1;
+    AgentConfig config = 2;
+}
+
+message UpdateAgentCommand {
+    string agent_id = 1;
+    AgentConfig config = 2;
+}
+
+message DeleteAgentCommand {
+    string agent_id = 1;
+}
+
+message SyncMCPServersCommand {
+    repeated MCPConfig mcp_servers = 1;
+}
+
+message ExecuteAgentCommand {
+    string agent_id = 1;
+    string task = 2;
+    string run_id = 3;
+    map<string, string> variables = 4;
+}
+
+message GetEnvironmentCommand {
+    string environment = 1;
+}
+
+// ============================================================================
+// SYSTEM HEALTH MONITORING
+// ============================================================================
+
+message SystemHealthRequest {
+    string registration_key = 1;
+    string environment = 2;
+    SystemStatus status = 3;
+    SystemMetrics metrics = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+
+message SystemHealthResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message SystemMetrics {
+    double cpu_usage_percent = 1;
+    double memory_usage_percent = 2;
+    int64 disk_usage_mb = 3;
+    int64 uptime_seconds = 4;
+    int32 active_connections = 5;
+    int32 active_runs = 6;
+    int64 network_in_bytes = 7;
+    int64 network_out_bytes = 8;
+    map<string, string> additional_metrics = 9;
+}
+
+// ============================================================================
+// HEARTBEAT MESSAGES (ALL MODES)
+// ============================================================================
+
+message HeartbeatRequest {
+    string registration_key = 1;
+    string environment = 2;
+    SystemStatus status = 3;
+    SystemMetrics metrics = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+
+message HeartbeatResponse {
+    bool success = 1;
+    string message = 2;
+    repeated string pending_commands = 3;
+    CloudShipConfig updated_config = 4;
+}
+
+// ============================================================================
+// MCP PROXY MESSAGES (SERVE MODE)
+// ============================================================================
+
+message ListToolsRequest {
+    string registration_key = 1;
+    string environment = 2;
+}
+
+message ListToolsResponse {
+    repeated ToolInfo tools = 1;
+}
+
+message CallToolRequest {
+    string registration_key = 1;
+    string environment = 2;
+    string tool_name = 3;
+    map<string, string> parameters = 4;
+}
+
+message CallToolResponse {
+    bool success = 1;
+    string result = 2;
+    string error_message = 3;
+}
+
+message ListAgentsRequest {
+    string registration_key = 1;
+    string environment = 2;
+}
+
+message ListAgentsResponse {
+    repeated AgentConfig agents = 1;
+}
+
+message ExecuteAgentRequest {
+    string registration_key = 1;
+    string environment = 2;
+    string agent_id = 3;
+    string task = 4;
+    map<string, string> variables = 5;
+}
+
+message ExecuteAgentResponse {
+    oneof response {
+        ExecutionStarted started = 1;
+        ExecutionStep step = 2;
+        ExecutionCompleted completed = 3;
+        ExecutionError error = 4;
+    }
+}
+
+message ExecutionStarted {
+    string run_id = 1;
+    google.protobuf.Timestamp started_at = 2;
+}
+
+message ExecutionCompleted {
+    string run_id = 1;
+    string result = 2;
+    TokenUsage token_usage = 3;
+    int64 duration_ms = 4;
+    google.protobuf.Timestamp completed_at = 5;
+}
+
+message ExecutionError {
+    string run_id = 1;
+    string error_message = 2;
+    google.protobuf.Timestamp error_at = 3;
+}
