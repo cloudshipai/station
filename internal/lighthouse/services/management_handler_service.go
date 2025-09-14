@@ -1,0 +1,442 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+
+	"station/internal/db/repositories"
+	"station/internal/lighthouse"
+	"station/internal/lighthouse/proto"
+	"station/internal/logging"
+	"station/internal/services"
+	"station/pkg/models"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// ManagementHandlerService handles management commands from CloudShip via ManagementChannel
+type ManagementHandlerService struct {
+	agentService     services.AgentServiceInterface
+	repos            *repositories.Repositories
+	lighthouseClient *lighthouse.LighthouseClient
+	registrationKey  string
+}
+
+// NewManagementHandlerService creates a new management handler service
+func NewManagementHandlerService(
+	agentService services.AgentServiceInterface,
+	repos *repositories.Repositories,
+	lighthouseClient *lighthouse.LighthouseClient,
+	registrationKey string,
+) *ManagementHandlerService {
+	return &ManagementHandlerService{
+		agentService:     agentService,
+		repos:            repos,
+		lighthouseClient: lighthouseClient,
+		registrationKey:  registrationKey,
+	}
+}
+
+// ProcessManagementRequest processes incoming management requests and returns responses
+func (mhs *ManagementHandlerService) ProcessManagementRequest(ctx context.Context, req *proto.ManagementMessage) (*proto.ManagementMessage, error) {
+	if req.IsResponse {
+		// This is a response, not a request - shouldn't be processed here
+		return nil, fmt.Errorf("received response message in request processor")
+	}
+
+	logging.Debug("Processing management request: request_id=%s, station_id=%s", req.RequestId, req.RegistrationKey)
+
+	// Create response message base
+	resp := &proto.ManagementMessage{
+		RequestId:       req.RequestId,
+		RegistrationKey: req.RegistrationKey,
+		IsResponse:      true,
+		Success:         true,
+	}
+
+	// Process specific request type
+	switch request := req.Message.(type) {
+	case *proto.ManagementMessage_ListAgentsRequest:
+		response, err := mhs.handleListAgents(ctx, request.ListAgentsRequest)
+		if err != nil {
+			logging.Error("Failed to list agents: %v", err)
+			resp.Success = false
+			resp.Message = &proto.ManagementMessage_Error{
+				Error: &proto.ManagementError{
+					Code:    proto.ErrorCode_UNKNOWN_ERROR,
+					Message: err.Error(),
+				},
+			}
+		} else {
+			resp.Message = &proto.ManagementMessage_ListAgentsResponse{
+				ListAgentsResponse: response,
+			}
+		}
+
+	case *proto.ManagementMessage_ListToolsRequest:
+		response, err := mhs.handleListTools(ctx, request.ListToolsRequest)
+		if err != nil {
+			logging.Error("Failed to list tools: %v", err)
+			resp.Success = false
+			resp.Message = &proto.ManagementMessage_Error{
+				Error: &proto.ManagementError{
+					Code:    proto.ErrorCode_UNKNOWN_ERROR,
+					Message: err.Error(),
+				},
+			}
+		} else {
+			resp.Message = &proto.ManagementMessage_ListToolsResponse{
+				ListToolsResponse: response,
+			}
+		}
+
+	case *proto.ManagementMessage_GetEnvironmentsRequest:
+		response, err := mhs.handleGetEnvironments(ctx, request.GetEnvironmentsRequest)
+		if err != nil {
+			logging.Error("Failed to get environments: %v", err)
+			resp.Success = false
+			resp.Message = &proto.ManagementMessage_Error{
+				Error: &proto.ManagementError{
+					Code:    proto.ErrorCode_UNKNOWN_ERROR,
+					Message: err.Error(),
+				},
+			}
+		} else {
+			resp.Message = &proto.ManagementMessage_GetEnvironmentsResponse{
+				GetEnvironmentsResponse: response,
+			}
+		}
+
+	case *proto.ManagementMessage_GetSystemStatusRequest:
+		response, err := mhs.handleGetSystemStatus(ctx, request.GetSystemStatusRequest)
+		if err != nil {
+			logging.Error("Failed to get system status: %v", err)
+			resp.Success = false
+			resp.Message = &proto.ManagementMessage_Error{
+				Error: &proto.ManagementError{
+					Code:    proto.ErrorCode_UNKNOWN_ERROR,
+					Message: err.Error(),
+				},
+			}
+		} else {
+			resp.Message = &proto.ManagementMessage_GetSystemStatusResponse{
+				GetSystemStatusResponse: response,
+			}
+		}
+
+	case *proto.ManagementMessage_ExecuteAgentRequest:
+		response, err := mhs.handleExecuteAgent(ctx, request.ExecuteAgentRequest)
+		if err != nil {
+			logging.Error("Failed to execute agent: %v", err)
+			resp.Success = false
+			resp.Message = &proto.ManagementMessage_Error{
+				Error: &proto.ManagementError{
+					Code:    proto.ErrorCode_EXECUTION_ERROR,
+					Message: err.Error(),
+				},
+			}
+		} else {
+			resp.Message = &proto.ManagementMessage_ExecuteAgentResponse{
+				ExecuteAgentResponse: response,
+			}
+		}
+
+	case *proto.ManagementMessage_ListActiveRunsRequest:
+		response, err := mhs.handleListActiveRuns(ctx, request.ListActiveRunsRequest)
+		if err != nil {
+			logging.Error("Failed to list active runs: %v", err)
+			resp.Success = false
+			resp.Message = &proto.ManagementMessage_Error{
+				Error: &proto.ManagementError{
+					Code:    proto.ErrorCode_UNKNOWN_ERROR,
+					Message: err.Error(),
+				},
+			}
+		} else {
+			resp.Message = &proto.ManagementMessage_ListActiveRunsResponse{
+				ListActiveRunsResponse: response,
+			}
+		}
+
+	case *proto.ManagementMessage_CancelExecutionRequest:
+		response, err := mhs.handleCancelExecution(ctx, request.CancelExecutionRequest)
+		if err != nil {
+			logging.Error("Failed to cancel execution: %v", err)
+			resp.Success = false
+			resp.Message = &proto.ManagementMessage_Error{
+				Error: &proto.ManagementError{
+					Code:    proto.ErrorCode_EXECUTION_ERROR,
+					Message: err.Error(),
+				},
+			}
+		} else {
+			resp.Message = &proto.ManagementMessage_CancelExecutionResponse{
+				CancelExecutionResponse: response,
+			}
+		}
+
+	default:
+		logging.Error("Unknown management request type: %T", request)
+		resp.Success = false
+		resp.Message = &proto.ManagementMessage_Error{
+			Error: &proto.ManagementError{
+				Code:    proto.ErrorCode_UNKNOWN_ERROR,
+				Message: "Unknown request type",
+			},
+		}
+	}
+
+	logging.Debug("Management request processed: request_id=%s, success=%v", req.RequestId, resp.Success)
+	return resp, nil
+}
+
+// handleListAgents processes list agents requests
+func (mhs *ManagementHandlerService) handleListAgents(ctx context.Context, req *proto.ListAgentsManagementRequest) (*proto.ListAgentsManagementResponse, error) {
+	logging.Info("Listing agents for environment: %s", req.Environment)
+
+	// Default to "default" environment if not specified
+	environmentName := req.Environment
+	if environmentName == "" {
+		environmentName = "default"
+	}
+
+	// Get environment by name to get environment ID
+	env, err := mhs.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return nil, fmt.Errorf("environment %s not found: %v", environmentName, err)
+	}
+
+	// Get agents from the agent service using environment ID
+	agents, err := mhs.agentService.ListAgentsByEnvironment(ctx, env.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agents: %v", err)
+	}
+
+	logging.Info("Found %d agents in environment '%s'", len(agents), environmentName)
+
+	// Convert agents to proto format for response
+	var protoAgents []*proto.AgentInfo
+	for _, agent := range agents {
+		// Get tools for this agent
+		agentTools, err := mhs.repos.AgentTools.ListAgentTools(agent.ID)
+		if err != nil {
+			logging.Error("Failed to get tools for agent %d: %v", agent.ID, err)
+			// Continue with empty tools rather than failing
+			agentTools = []*models.AgentToolWithDetails{}
+		}
+
+		// Extract tool names
+		var toolNames []string
+		for _, tool := range agentTools {
+			toolNames = append(toolNames, tool.ToolName)
+		}
+
+		// Convert timestamps
+		var createdAt, updatedAt *timestamppb.Timestamp
+		if !agent.CreatedAt.IsZero() {
+			createdAt = timestamppb.New(agent.CreatedAt)
+		}
+		if !agent.UpdatedAt.IsZero() {
+			updatedAt = timestamppb.New(agent.UpdatedAt)
+		}
+
+		// Handle cron schedule
+		cronSchedule := ""
+		scheduleEnabled := false
+		if agent.CronSchedule != nil {
+			cronSchedule = *agent.CronSchedule
+			scheduleEnabled = agent.ScheduleEnabled
+		}
+
+		protoAgent := &proto.AgentInfo{
+			Id:              fmt.Sprintf("%d", agent.ID),
+			Name:            agent.Name,
+			Description:     agent.Description,
+			Prompt:          agent.Prompt,
+			ModelName:       "gpt-4o-mini", // Default model
+			MaxSteps:        int32(agent.MaxSteps),
+			AssignedTools:   toolNames,
+			EnvironmentName: environmentName,
+			ScheduleEnabled: scheduleEnabled,
+			CronSchedule:    cronSchedule,
+			CreatedAt:       createdAt,
+			UpdatedAt:       updatedAt,
+			Status:          proto.AgentStatus_AGENT_STATUS_ACTIVE, // Default to active
+		}
+		protoAgents = append(protoAgents, protoAgent)
+	}
+
+	return &proto.ListAgentsManagementResponse{
+		Agents:      protoAgents,
+		TotalAgents: int32(len(protoAgents)),
+	}, nil
+}
+
+// handleListTools processes list tools requests
+func (mhs *ManagementHandlerService) handleListTools(ctx context.Context, req *proto.ListToolsManagementRequest) (*proto.ListToolsManagementResponse, error) {
+	logging.Info("Listing tools for environment: %s", req.Environment)
+
+	environmentName := req.Environment
+	if environmentName == "" {
+		environmentName = "default"
+	}
+
+	// For now, return a placeholder response
+	// TODO: Implement actual tool listing from MCP servers
+	return &proto.ListToolsManagementResponse{
+		Tools:           []*proto.ToolInfo{},
+		EnvironmentName: environmentName,
+		TotalTools:      0,
+		McpServers:      []string{},
+	}, nil
+}
+
+// handleGetEnvironments processes get environments requests
+func (mhs *ManagementHandlerService) handleGetEnvironments(ctx context.Context, req *proto.GetEnvironmentsRequest) (*proto.GetEnvironmentsResponse, error) {
+	logging.Info("Getting all environments")
+
+	environments, err := mhs.repos.Environments.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environments: %v", err)
+	}
+
+	var protoEnvs []*proto.EnvironmentInfo
+	for _, env := range environments {
+		// Get agent count for this environment
+		agents, err := mhs.agentService.ListAgentsByEnvironment(ctx, env.ID)
+		agentCount := 0
+		if err == nil {
+			agentCount = len(agents)
+		}
+
+		protoEnv := &proto.EnvironmentInfo{
+			Name:       env.Name,
+			AgentCount: int32(agentCount),
+			ToolCount:  0,                   // TODO: Get actual tool count
+			McpServers: []string{},          // TODO: Get actual MCP servers
+			Variables:  map[string]string{}, // TODO: Get actual variables
+			IsDefault:  env.Name == "default",
+		}
+		protoEnvs = append(protoEnvs, protoEnv)
+	}
+
+	return &proto.GetEnvironmentsResponse{
+		Environments: protoEnvs,
+	}, nil
+}
+
+// handleGetSystemStatus processes get system status requests
+func (mhs *ManagementHandlerService) handleGetSystemStatus(ctx context.Context, req *proto.GetSystemStatusRequest) (*proto.GetSystemStatusResponse, error) {
+	logging.Info("Getting system status")
+
+	// TODO: Get actual system metrics and active executions
+	return &proto.GetSystemStatusResponse{
+		Health: proto.SystemHealth_SYSTEM_HEALTHY,
+		Metrics: &proto.SystemMetrics{
+			CpuUsagePercent:    25.0,
+			MemoryUsagePercent: 45.0,
+			ActiveConnections:  1,
+			ActiveRuns:         0,
+		},
+		ActiveExecutions:     []*proto.ActiveExecution{},
+		StationVersion:       "v0.11.0",
+		Uptime:               fmt.Sprintf("%.0f minutes", time.Since(time.Now().Add(-30*time.Minute)).Minutes()),
+		LighthouseConnection: proto.ConnectionStatus_CONNECTION_CONNECTED,
+	}, nil
+}
+
+// handleExecuteAgent processes execute agent requests
+func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, req *proto.ExecuteAgentManagementRequest) (*proto.ExecuteAgentManagementResponse, error) {
+	logging.Info("Executing agent %s with task: %s", req.AgentId, req.Task)
+
+	// Convert agent ID to int64
+	agentID, err := strconv.ParseInt(req.AgentId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID: %s", req.AgentId)
+	}
+
+	// Generate execution ID for tracking
+	executionID := fmt.Sprintf("exec_%d_%d", agentID, time.Now().Unix())
+
+	// Send QUEUED status update to CloudShip
+	mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_QUEUED, "Agent execution queued", 0)
+
+	// Send RUNNING status update to CloudShip
+	mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_RUNNING, "Agent execution started", 1)
+
+	// Execute the agent - this will create the run, execute it, and send data to CloudShip automatically
+	result, err := mhs.agentService.ExecuteAgent(ctx, agentID, req.Task, make(map[string]interface{}))
+	if err != nil {
+		// Send FAILED status update on error
+		mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Agent execution failed: %v", err), 1)
+		return nil, fmt.Errorf("failed to execute agent: %v", err)
+	}
+
+	// Send COMPLETED status update on success
+	mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_COMPLETED, "Agent execution completed successfully", 1)
+
+	return &proto.ExecuteAgentManagementResponse{
+		ExecutionId:     executionID,
+		Status:          proto.ExecutionStatus_EXECUTION_COMPLETED,
+		StepNumber:      1,
+		StepDescription: result.Content,
+		ToolCalls:       []*proto.ToolCall{},
+		Timestamp:       timestamppb.Now(),
+	}, nil
+}
+
+// handleListActiveRuns processes list active runs requests
+func (mhs *ManagementHandlerService) handleListActiveRuns(ctx context.Context, req *proto.ListActiveRunsRequest) (*proto.ListActiveRunsResponse, error) {
+	logging.Info("Listing active runs")
+
+	// TODO: Get actual active runs from execution queue or similar service
+	return &proto.ListActiveRunsResponse{
+		ActiveRuns:  []*proto.ActiveExecution{},
+		TotalActive: 0,
+	}, nil
+}
+
+// handleCancelExecution processes cancel execution requests
+func (mhs *ManagementHandlerService) handleCancelExecution(ctx context.Context, req *proto.CancelExecutionRequest) (*proto.CancelExecutionResponse, error) {
+	logging.Info("Cancelling execution: %s", req.ExecutionId)
+
+	// TODO: Implement actual execution cancellation
+	return &proto.CancelExecutionResponse{
+		Cancelled: false,
+		Message:   "Execution cancellation not yet implemented",
+	}, nil
+}
+
+// sendStatusUpdate sends a proactive status update to CloudShip via ManagementChannel
+func (mhs *ManagementHandlerService) sendStatusUpdate(executionID string, status proto.ExecutionStatus, description string, stepNumber int32) {
+	if mhs.lighthouseClient == nil || !mhs.lighthouseClient.IsConnected() {
+		logging.Debug("Cannot send status update - lighthouse client not connected")
+		return
+	}
+
+	// Create status update message as ExecuteAgentManagementResponse with IsResponse: false
+	statusMsg := &proto.ManagementMessage{
+		RequestId:       "",                  // No request ID needed for proactive status updates
+		RegistrationKey: mhs.registrationKey, // Registration key is the source of truth for Station identity
+		IsResponse:      false,               // IMPORTANT: Status updates are proactive, not responses
+		Success:         true,
+		Message: &proto.ManagementMessage_ExecuteAgentResponse{
+			ExecuteAgentResponse: &proto.ExecuteAgentManagementResponse{
+				ExecutionId:     executionID,
+				Status:          status,
+				PartialResponse: description,
+				StepNumber:      stepNumber,
+				Timestamp:       timestamppb.Now(),
+			},
+		},
+	}
+
+	// For now, log the status update - actual stream sending would need architecture changes
+	logging.Info("Status Update [%s]: %s - %s (step %d)", executionID, status.String(), description, stepNumber)
+	logging.Debug("Status message prepared: %v", statusMsg)
+
+	// TODO: Implement actual sending via management channel stream
+	// This would require refactoring to pass the stream reference or using a message queue
+}

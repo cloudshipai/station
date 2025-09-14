@@ -14,6 +14,7 @@ import (
 	"station/internal/mcp_agents"
 	"station/internal/services"
 	"station/internal/lighthouse"
+	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/ssh"
 	"station/pkg/crypto"
 	"strings"
@@ -151,6 +152,26 @@ func runMainServer() error {
 	}
 	defer schedulerSvc.Stop()
 	
+	// Initialize remote control service for server mode CloudShip integration
+	var remoteControlSvc *lighthouseServices.RemoteControlService
+	if lighthouseClient != nil && lighthouseClient.IsRegistered() && lighthouseClient.GetMode() == lighthouse.ModeServe {
+		log.Printf("🌐 Initializing server mode remote control via CloudShip")
+		remoteControlSvc = lighthouseServices.NewRemoteControlService(
+			lighthouseClient,
+			agentSvc,
+			repos,
+			cfg.CloudShip.RegistrationKey,
+			"default", // TODO: use actual environment name
+		)
+		
+		// Start remote control service
+		if err := remoteControlSvc.Start(ctx); err != nil {
+			log.Printf("Warning: Failed to start remote control service: %v", err)
+		} else {
+			log.Printf("✅ Server mode remote control active - CloudShip can manage this Station")
+		}
+	}
+	
 
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
@@ -165,7 +186,7 @@ func runMainServer() error {
 	sshServer := ssh.New(cfg, database, repos, agentSvc, localMode)
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
-	apiServer := api.New(cfg, database, localMode, telemetryService)
+	apiServer := api.New(cfg, database, localMode, nil)
 	
 	// Initialize ToolDiscoveryService for API config uploads
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
@@ -235,10 +256,7 @@ func runMainServer() error {
 		}
 	}()
 
-	// Track server startup telemetry
-	if telemetryService != nil {
-		telemetryService.TrackServerModeStarted(cfg.APIPort, cfg.MCPPort, cfg.SSHPort)
-	}
+	// Remove telemetry tracking
 	
 	fmt.Printf("\n✅ Station is running!\n")
 	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
@@ -259,6 +277,15 @@ func runMainServer() error {
 
 	// Signal all goroutines to start shutdown immediately
 	cancel()
+	
+	// Stop remote control service
+	if remoteControlSvc != nil {
+		if err := remoteControlSvc.Stop(); err != nil {
+			log.Printf("Error stopping remote control service: %v", err)
+		} else {
+			log.Printf("🌐 Remote control service stopped gracefully")
+		}
+	}
 	
 	// Stop Lighthouse client
 	if lighthouseClient != nil {

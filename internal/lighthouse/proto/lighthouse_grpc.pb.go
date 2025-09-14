@@ -26,6 +26,7 @@ const (
 	LighthouseService_SendEphemeralSnapshot_FullMethodName = "/lighthouse.v1.LighthouseService/SendEphemeralSnapshot"
 	LighthouseService_Connect_FullMethodName               = "/lighthouse.v1.LighthouseService/Connect"
 	LighthouseService_SyncConfiguration_FullMethodName     = "/lighthouse.v1.LighthouseService/SyncConfiguration"
+	LighthouseService_ManagementChannel_FullMethodName     = "/lighthouse.v1.LighthouseService/ManagementChannel"
 	LighthouseService_SendSystemHealth_FullMethodName      = "/lighthouse.v1.LighthouseService/SendSystemHealth"
 	LighthouseService_ListTools_FullMethodName             = "/lighthouse.v1.LighthouseService/ListTools"
 	LighthouseService_CallTool_FullMethodName              = "/lighthouse.v1.LighthouseService/CallTool"
@@ -51,9 +52,11 @@ type LighthouseServiceClient interface {
 	// Configuration Management (Server Mode Only)
 	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ConnectRequest, CloudShipCommand], error)
 	SyncConfiguration(ctx context.Context, in *SyncConfigRequest, opts ...grpc.CallOption) (*SyncConfigResponse, error)
+	// Management Channel (Bidirectional for firewall traversal)
+	ManagementChannel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ManagementMessage, ManagementMessage], error)
 	// System Health Monitoring (Server Mode Primarily)
 	SendSystemHealth(ctx context.Context, in *SystemHealthRequest, opts ...grpc.CallOption) (*SystemHealthResponse, error)
-	// MCP Proxy (Server Mode Only)
+	// Legacy MCP Proxy (Deprecated - use ManagementChannel)
 	ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error)
 	CallTool(ctx context.Context, in *CallToolRequest, opts ...grpc.CallOption) (*CallToolResponse, error)
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
@@ -144,6 +147,19 @@ func (c *lighthouseServiceClient) SyncConfiguration(ctx context.Context, in *Syn
 	return out, nil
 }
 
+func (c *lighthouseServiceClient) ManagementChannel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ManagementMessage, ManagementMessage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &LighthouseService_ServiceDesc.Streams[2], LighthouseService_ManagementChannel_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ManagementMessage, ManagementMessage]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LighthouseService_ManagementChannelClient = grpc.BidiStreamingClient[ManagementMessage, ManagementMessage]
+
 func (c *lighthouseServiceClient) SendSystemHealth(ctx context.Context, in *SystemHealthRequest, opts ...grpc.CallOption) (*SystemHealthResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SystemHealthResponse)
@@ -186,7 +202,7 @@ func (c *lighthouseServiceClient) ListAgents(ctx context.Context, in *ListAgents
 
 func (c *lighthouseServiceClient) ExecuteAgent(ctx context.Context, in *ExecuteAgentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ExecuteAgentResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &LighthouseService_ServiceDesc.Streams[2], LighthouseService_ExecuteAgent_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &LighthouseService_ServiceDesc.Streams[3], LighthouseService_ExecuteAgent_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -221,9 +237,11 @@ type LighthouseServiceServer interface {
 	// Configuration Management (Server Mode Only)
 	Connect(grpc.BidiStreamingServer[ConnectRequest, CloudShipCommand]) error
 	SyncConfiguration(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error)
+	// Management Channel (Bidirectional for firewall traversal)
+	ManagementChannel(grpc.BidiStreamingServer[ManagementMessage, ManagementMessage]) error
 	// System Health Monitoring (Server Mode Primarily)
 	SendSystemHealth(context.Context, *SystemHealthRequest) (*SystemHealthResponse, error)
-	// MCP Proxy (Server Mode Only)
+	// Legacy MCP Proxy (Deprecated - use ManagementChannel)
 	ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error)
 	CallTool(context.Context, *CallToolRequest) (*CallToolResponse, error)
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
@@ -258,6 +276,9 @@ func (UnimplementedLighthouseServiceServer) Connect(grpc.BidiStreamingServer[Con
 }
 func (UnimplementedLighthouseServiceServer) SyncConfiguration(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncConfiguration not implemented")
+}
+func (UnimplementedLighthouseServiceServer) ManagementChannel(grpc.BidiStreamingServer[ManagementMessage, ManagementMessage]) error {
+	return status.Errorf(codes.Unimplemented, "method ManagementChannel not implemented")
 }
 func (UnimplementedLighthouseServiceServer) SendSystemHealth(context.Context, *SystemHealthRequest) (*SystemHealthResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendSystemHealth not implemented")
@@ -399,6 +420,13 @@ func _LighthouseService_SyncConfiguration_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LighthouseService_ManagementChannel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(LighthouseServiceServer).ManagementChannel(&grpc.GenericServerStream[ManagementMessage, ManagementMessage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LighthouseService_ManagementChannelServer = grpc.BidiStreamingServer[ManagementMessage, ManagementMessage]
+
 func _LighthouseService_SendSystemHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SystemHealthRequest)
 	if err := dec(in); err != nil {
@@ -536,6 +564,12 @@ var LighthouseService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Connect",
 			Handler:       _LighthouseService_Connect_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ManagementChannel",
+			Handler:       _LighthouseService_ManagementChannel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
