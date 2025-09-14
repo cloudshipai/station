@@ -15,23 +15,23 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.AgentRunData {
 	if run == nil {
 		return nil
 	}
-	
+
 	return &proto.AgentRunData{
-		RunId:           run.ID,
-		AgentId:         run.AgentID,
-		AgentName:       run.AgentName,
-		Task:            run.Task,
-		Response:        run.Response,
-		ToolCalls:       convertToolCallsToProto(run.ToolCalls),
-		ExecutionSteps:  convertExecutionStepsToProto(run.ExecutionSteps),
-		TokenUsage:      convertTokenUsageToProto(run.TokenUsage),
-		DurationMs:      run.DurationMs,
-		ModelName:       run.ModelName,
-		Status:          convertRunStatusToProto(run.Status),
-		StartedAt:       timestampFromTime(run.StartedAt),
-		CompletedAt:     timestampFromTime(run.CompletedAt),
-		Metadata:        run.Metadata,
-		StationVersion:  version.GetVersion(),  // Add Station version for debugging/compatibility
+		RunId:          run.ID,
+		AgentId:        run.AgentID,
+		AgentName:      run.AgentName,
+		Task:           run.Task,
+		Response:       run.Response,
+		ToolCalls:      convertToolCallsToProto(run.ToolCalls),
+		ExecutionSteps: convertExecutionStepsToProto(run.ExecutionSteps),
+		TokenUsage:     convertTokenUsageToProto(run.TokenUsage),
+		DurationMs:     run.DurationMs,
+		ModelName:      run.ModelName,
+		Status:         convertRunStatusToProto(run.Status),
+		StartedAt:      timestampFromTime(run.StartedAt),
+		CompletedAt:    timestampFromTime(run.CompletedAt),
+		Metadata:       run.Metadata,
+		StationVersion: version.GetVersion(), // Add Station version for debugging/compatibility
 	}
 }
 
@@ -40,7 +40,7 @@ func convertToolCallsToProto(toolCalls []types.ToolCall) []*proto.ToolCall {
 	if toolCalls == nil {
 		return nil
 	}
-	
+
 	protoToolCalls := make([]*proto.ToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
 		protoToolCalls[i] = &proto.ToolCall{
@@ -60,7 +60,7 @@ func convertExecutionStepsToProto(steps []types.ExecutionStep) []*proto.Executio
 	if steps == nil {
 		return nil
 	}
-	
+
 	protoSteps := make([]*proto.ExecutionStep, len(steps))
 	for i, step := range steps {
 		protoSteps[i] = &proto.ExecutionStep{
@@ -79,7 +79,7 @@ func convertTokenUsageToProto(usage *types.TokenUsage) *proto.TokenUsage {
 	if usage == nil {
 		return nil
 	}
-	
+
 	return &proto.TokenUsage{
 		PromptTokens:     int32(usage.PromptTokens),
 		CompletionTokens: int32(usage.CompletionTokens),
@@ -93,15 +93,15 @@ func convertDeploymentContextToProto(context *types.DeploymentContext) *proto.De
 	if context == nil {
 		return nil
 	}
-	
+
 	return &proto.DeploymentContext{
-		CommandLine:        context.CommandLine,
-		WorkingDirectory:   context.WorkingDirectory,
-		EnvVars:            context.EnvVars,
-		Arguments:          context.Arguments,
-		GitBranch:          context.GitBranch,
-		GitCommit:          context.GitCommit,
-		StationVersion:     context.StationVersion,
+		CommandLine:      context.CommandLine,
+		WorkingDirectory: context.WorkingDirectory,
+		EnvVars:          context.EnvVars,
+		Arguments:        context.Arguments,
+		GitBranch:        context.GitBranch,
+		GitCommit:        context.GitCommit,
+		StationVersion:   context.StationVersion,
 	}
 }
 
@@ -110,7 +110,7 @@ func convertSystemSnapshotToProto(snapshot *types.SystemSnapshot) *proto.SystemS
 	if snapshot == nil {
 		return nil
 	}
-	
+
 	return &proto.SystemSnapshot{
 		Agents:         convertAgentConfigsToProto(snapshot.Agents),
 		McpServers:     convertMCPConfigsToProto(snapshot.MCPServers),
@@ -125,7 +125,7 @@ func convertAgentConfigsToProto(agents []types.AgentConfig) []*proto.AgentConfig
 	if agents == nil {
 		return nil
 	}
-	
+
 	protoAgents := make([]*proto.AgentConfig, len(agents))
 	for i, agent := range agents {
 		protoAgents[i] = &proto.AgentConfig{
@@ -150,7 +150,7 @@ func convertMCPConfigsToProto(mcpServers []types.MCPConfig) []*proto.MCPConfig {
 	if mcpServers == nil {
 		return nil
 	}
-	
+
 	protoServers := make([]*proto.MCPConfig, len(mcpServers))
 	for i, server := range mcpServers {
 		protoServers[i] = &proto.MCPConfig{
@@ -172,7 +172,7 @@ func convertToolInfosToProto(tools []types.ToolInfo) []*proto.ToolInfo {
 	if tools == nil {
 		return nil
 	}
-	
+
 	protoTools := make([]*proto.ToolInfo, len(tools))
 	for i, tool := range tools {
 		protoTools[i] = &proto.ToolInfo{
@@ -190,7 +190,7 @@ func convertSystemMetricsToProto(metrics *types.SystemMetrics) *proto.SystemMetr
 	if metrics == nil {
 		return nil
 	}
-	
+
 	return &proto.SystemMetrics{
 		CpuUsagePercent:    metrics.CPUUsagePercent,
 		MemoryUsagePercent: metrics.MemoryUsagePercent,
@@ -239,23 +239,23 @@ func convertToStringMap(params interface{}) map[string]string {
 	if params == nil {
 		return nil
 	}
-	
+
 	// If it's already a string map, return it
 	if stringMap, ok := params.(map[string]string); ok {
 		return stringMap
 	}
-	
+
 	// Try to convert via JSON marshaling/unmarshaling
 	jsonBytes, err := json.Marshal(params)
 	if err != nil {
 		return map[string]string{"error": "failed to marshal parameters"}
 	}
-	
+
 	var result map[string]interface{}
 	if err := json.Unmarshal(jsonBytes, &result); err != nil {
 		return map[string]string{"error": "failed to unmarshal parameters"}
 	}
-	
+
 	// Convert all values to strings
 	stringMap := make(map[string]string)
 	for k, v := range result {
@@ -270,7 +270,7 @@ func convertToStringMap(params interface{}) map[string]string {
 			}
 		}
 	}
-	
+
 	return stringMap
 }
 
