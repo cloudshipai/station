@@ -26,15 +26,18 @@ func NewRemoteControlService(
 	registrationKey string,
 	environment string,
 ) *RemoteControlService {
-	// Create management handler service - registration key is the source of truth for Station identity
-	managementHandler := NewManagementHandlerService(agentService, repos, lighthouseClient, registrationKey)
-
-	// Create management channel service (new architecture)
+	// Create management channel service first (new architecture)
 	managementChannel := NewManagementChannelService(
 		lighthouseClient,
-		managementHandler,
+		nil, // Will set handler after creating it
 		registrationKey,
 	)
+
+	// Create management handler service with management channel reference for SendRun
+	managementHandler := NewManagementHandlerServiceWithChannel(agentService, repos, lighthouseClient, registrationKey, managementChannel)
+
+	// Set the handler in the management channel
+	managementChannel.managementHandler = managementHandler
 
 	// Legacy streaming service disabled - CloudShip team only implemented ManagementChannel
 	// metricsService := NewMetricsService()
@@ -60,9 +63,9 @@ func NewRemoteControlService(
 func (rcs *RemoteControlService) Start(ctx context.Context) error {
 	logging.Info("Starting Station remote control service for server mode")
 
-	// Verify we have a registered Lighthouse client
-	if rcs.lighthouseClient == nil || !rcs.lighthouseClient.IsRegistered() {
-		logging.Info("Lighthouse client not registered - remote control functionality will be disabled")
+	// Verify we have a Lighthouse client (will attempt registration/reconnection)
+	if rcs.lighthouseClient == nil {
+		logging.Info("No Lighthouse client available - remote control functionality will be disabled")
 		return nil
 	}
 

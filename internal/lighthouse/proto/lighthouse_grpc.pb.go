@@ -60,7 +60,7 @@ type LighthouseServiceClient interface {
 	ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error)
 	CallTool(ctx context.Context, in *CallToolRequest, opts ...grpc.CallOption) (*CallToolResponse, error)
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
-	ExecuteAgent(ctx context.Context, in *ExecuteAgentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ExecuteAgentResponse], error)
+	ExecuteAgent(ctx context.Context, in *ExecuteAgentRequest, opts ...grpc.CallOption) (*ExecuteAgentResponse, error)
 }
 
 type lighthouseServiceClient struct {
@@ -200,24 +200,15 @@ func (c *lighthouseServiceClient) ListAgents(ctx context.Context, in *ListAgents
 	return out, nil
 }
 
-func (c *lighthouseServiceClient) ExecuteAgent(ctx context.Context, in *ExecuteAgentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ExecuteAgentResponse], error) {
+func (c *lighthouseServiceClient) ExecuteAgent(ctx context.Context, in *ExecuteAgentRequest, opts ...grpc.CallOption) (*ExecuteAgentResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &LighthouseService_ServiceDesc.Streams[3], LighthouseService_ExecuteAgent_FullMethodName, cOpts...)
+	out := new(ExecuteAgentResponse)
+	err := c.cc.Invoke(ctx, LighthouseService_ExecuteAgent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[ExecuteAgentRequest, ExecuteAgentResponse]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return out, nil
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type LighthouseService_ExecuteAgentClient = grpc.ServerStreamingClient[ExecuteAgentResponse]
 
 // LighthouseServiceServer is the server API for LighthouseService service.
 // All implementations must embed UnimplementedLighthouseServiceServer
@@ -245,7 +236,7 @@ type LighthouseServiceServer interface {
 	ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error)
 	CallTool(context.Context, *CallToolRequest) (*CallToolResponse, error)
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
-	ExecuteAgent(*ExecuteAgentRequest, grpc.ServerStreamingServer[ExecuteAgentResponse]) error
+	ExecuteAgent(context.Context, *ExecuteAgentRequest) (*ExecuteAgentResponse, error)
 	mustEmbedUnimplementedLighthouseServiceServer()
 }
 
@@ -292,8 +283,8 @@ func (UnimplementedLighthouseServiceServer) CallTool(context.Context, *CallToolR
 func (UnimplementedLighthouseServiceServer) ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListAgents not implemented")
 }
-func (UnimplementedLighthouseServiceServer) ExecuteAgent(*ExecuteAgentRequest, grpc.ServerStreamingServer[ExecuteAgentResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method ExecuteAgent not implemented")
+func (UnimplementedLighthouseServiceServer) ExecuteAgent(context.Context, *ExecuteAgentRequest) (*ExecuteAgentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteAgent not implemented")
 }
 func (UnimplementedLighthouseServiceServer) mustEmbedUnimplementedLighthouseServiceServer() {}
 func (UnimplementedLighthouseServiceServer) testEmbeddedByValue()                           {}
@@ -499,16 +490,23 @@ func _LighthouseService_ListAgents_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _LighthouseService_ExecuteAgent_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ExecuteAgentRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _LighthouseService_ExecuteAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(LighthouseServiceServer).ExecuteAgent(m, &grpc.GenericServerStream[ExecuteAgentRequest, ExecuteAgentResponse]{ServerStream: stream})
+	if interceptor == nil {
+		return srv.(LighthouseServiceServer).ExecuteAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LighthouseService_ExecuteAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LighthouseServiceServer).ExecuteAgent(ctx, req.(*ExecuteAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type LighthouseService_ExecuteAgentServer = grpc.ServerStreamingServer[ExecuteAgentResponse]
 
 // LighthouseService_ServiceDesc is the grpc.ServiceDesc for LighthouseService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -553,6 +551,10 @@ var LighthouseService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ListAgents",
 			Handler:    _LighthouseService_ListAgents_Handler,
 		},
+		{
+			MethodName: "ExecuteAgent",
+			Handler:    _LighthouseService_ExecuteAgent_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -572,11 +574,6 @@ var LighthouseService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _LighthouseService_ManagementChannel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
-		},
-		{
-			StreamName:    "ExecuteAgent",
-			Handler:       _LighthouseService_ExecuteAgent_Handler,
-			ServerStreams: true,
 		},
 	},
 	Metadata: "internal/lighthouse/proto/lighthouse.proto",

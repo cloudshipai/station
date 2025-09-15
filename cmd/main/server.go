@@ -154,7 +154,7 @@ func runMainServer() error {
 	
 	// Initialize remote control service for server mode CloudShip integration
 	var remoteControlSvc *lighthouseServices.RemoteControlService
-	if lighthouseClient != nil && lighthouseClient.IsRegistered() && lighthouseClient.GetMode() == lighthouse.ModeServe {
+	if lighthouseClient != nil && lighthouseClient.GetMode() == lighthouse.ModeServe {
 		log.Printf("🌐 Initializing server mode remote control via CloudShip")
 		remoteControlSvc = lighthouseServices.NewRemoteControlService(
 			lighthouseClient,
