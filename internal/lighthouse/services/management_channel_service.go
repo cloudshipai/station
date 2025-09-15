@@ -18,6 +18,7 @@ type ManagementChannelService struct {
 	registrationKey   string
 	connectionCtx     context.Context
 	connectionCancel  context.CancelFunc
+	currentStream     proto.LighthouseService_ManagementChannelClient
 }
 
 // NewManagementChannelService creates a new management channel service
@@ -109,6 +110,9 @@ func (mcs *ManagementChannelService) establishConnection() error {
 
 	logging.Info("Successfully established ManagementChannel stream")
 
+	// Store stream reference for SendRun method
+	mcs.currentStream = stream
+
 	// Send station registration message first
 	registrationMsg := &proto.ManagementMessage{
 		RequestId:       fmt.Sprintf("registration_%d", time.Now().Unix()),
@@ -139,8 +143,12 @@ func (mcs *ManagementChannelService) establishConnection() error {
 	// Wait for error or context cancellation
 	select {
 	case <-mcs.connectionCtx.Done():
+		// Clear stream reference on context cancellation
+		mcs.currentStream = nil
 		return mcs.connectionCtx.Err()
 	case err := <-errChan:
+		// Clear stream reference on error
+		mcs.currentStream = nil
 		if err != nil {
 			return fmt.Errorf("management channel error: %w", err)
 		}
@@ -151,7 +159,8 @@ func (mcs *ManagementChannelService) establishConnection() error {
 // receiveMessages handles incoming messages from CloudShip
 func (mcs *ManagementChannelService) receiveMessages(stream proto.LighthouseService_ManagementChannelClient) error {
 	// Create heartbeat ticker to detect broken connections
-	heartbeatTicker := time.NewTicker(60 * time.Second)
+	// Reduced frequency to avoid "too_many_pings" errors from CloudShip
+	heartbeatTicker := time.NewTicker(5 * time.Minute)
 	defer heartbeatTicker.Stop()
 
 	for {
@@ -255,6 +264,54 @@ func (mcs *ManagementChannelService) processRequest(stream proto.LighthouseServi
 	logging.Info("Successfully sent management response: %s (request_id: %s)", mcs.getRequestType(req), req.RequestId)
 }
 
+// SendRun sends a completed agent run via ManagementChannel
+func (mcs *ManagementChannelService) SendRun(agentRunData *proto.AgentRunData, tags map[string]string) error {
+	// Create SendRun request message
+	sendRunMsg := &proto.ManagementMessage{
+		RequestId:       fmt.Sprintf("sendrun_%d", time.Now().Unix()),
+		RegistrationKey: mcs.registrationKey,
+		IsResponse:      false,
+		Success:         true,
+		Message: &proto.ManagementMessage_SendRunRequest{
+			SendRunRequest: &proto.SendRunRequest{
+				RegistrationKey: mcs.registrationKey,
+				Environment:     "cloudship",
+				Mode:            proto.DeploymentMode_DEPLOYMENT_MODE_SERVE,
+				Source:          proto.RunSource_RUN_SOURCE_UI_TRIGGERED,
+				RunData:         agentRunData,
+				Labels:          tags,
+			},
+		},
+	}
+
+	// We need access to the current stream to send the message
+	// For now, we'll store the current stream reference
+	if mcs.currentStream == nil {
+		return fmt.Errorf("no active management channel stream")
+	}
+
+	if err := mcs.currentStream.Send(sendRunMsg); err != nil {
+		logging.Error("Failed to send SendRun message: %v", err)
+		return fmt.Errorf("failed to send SendRun message: %w", err)
+	}
+
+	logging.Debug("Successfully sent SendRun message for run %s", agentRunData.RunId)
+	return nil
+}
+
+// SendStatusUpdate sends a status update message via ManagementChannel
+func (mcs *ManagementChannelService) SendStatusUpdate(statusMsg *proto.ManagementMessage) error {
+	if mcs.currentStream == nil {
+		return fmt.Errorf("no active management channel stream")
+	}
+	
+	if err := mcs.currentStream.Send(statusMsg); err != nil {
+		return fmt.Errorf("failed to send status update: %w", err)
+	}
+	
+	return nil
+}
+
 // getRequestType returns a human-readable request type for logging
 func (mcs *ManagementChannelService) getRequestType(msg *proto.ManagementMessage) string {
 	switch msg.Message.(type) {
@@ -274,6 +331,8 @@ func (mcs *ManagementChannelService) getRequestType(msg *proto.ManagementMessage
 		return "CancelExecution"
 	case *proto.ManagementMessage_StationRegistration:
 		return "StationRegistration"
+	case *proto.ManagementMessage_SendRunRequest:
+		return "SendRun"
 	default:
 		return "Unknown"
 	}

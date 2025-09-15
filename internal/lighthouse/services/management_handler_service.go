@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -12,16 +13,45 @@ import (
 	"station/internal/logging"
 	"station/internal/services"
 	"station/pkg/models"
+	"station/pkg/types"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// extractInt64FromTokenUsage safely extracts int64 from various numeric types in token usage
+// (Same helper function as MCP handlers use)
+func extractInt64FromTokenUsage(value interface{}) *int64 {
+	if value == nil {
+		return nil
+	}
+	
+	switch v := value.(type) {
+	case int64:
+		return &v
+	case int:
+		val := int64(v)
+		return &val
+	case int32:
+		val := int64(v)
+		return &val
+	case float64:
+		val := int64(v)
+		return &val
+	case float32:
+		val := int64(v)
+		return &val
+	default:
+		return nil
+	}
+}
+
 // ManagementHandlerService handles management commands from CloudShip via ManagementChannel
 type ManagementHandlerService struct {
-	agentService     services.AgentServiceInterface
-	repos            *repositories.Repositories
-	lighthouseClient *lighthouse.LighthouseClient
-	registrationKey  string
+	agentService      services.AgentServiceInterface
+	repos             *repositories.Repositories
+	lighthouseClient  *lighthouse.LighthouseClient
+	registrationKey   string
+	managementChannel *ManagementChannelService
 }
 
 // NewManagementHandlerService creates a new management handler service
@@ -36,6 +66,23 @@ func NewManagementHandlerService(
 		repos:            repos,
 		lighthouseClient: lighthouseClient,
 		registrationKey:  registrationKey,
+	}
+}
+
+// NewManagementHandlerServiceWithChannel creates a new management handler service with ManagementChannel reference for SendRun
+func NewManagementHandlerServiceWithChannel(
+	agentService services.AgentServiceInterface,
+	repos *repositories.Repositories,
+	lighthouseClient *lighthouse.LighthouseClient,
+	registrationKey string,
+	managementChannel *ManagementChannelService,
+) *ManagementHandlerService {
+	return &ManagementHandlerService{
+		agentService:      agentService,
+		repos:             repos,
+		lighthouseClient:  lighthouseClient,
+		registrationKey:   registrationKey,
+		managementChannel: managementChannel,
 	}
 }
 
@@ -127,7 +174,7 @@ func (mhs *ManagementHandlerService) ProcessManagementRequest(ctx context.Contex
 		}
 
 	case *proto.ManagementMessage_ExecuteAgentRequest:
-		response, err := mhs.handleExecuteAgent(ctx, request.ExecuteAgentRequest)
+		response, err := mhs.handleExecuteAgent(ctx, req.RequestId, request.ExecuteAgentRequest)
 		if err != nil {
 			logging.Error("Failed to execute agent: %v", err)
 			resp.Success = false
@@ -347,8 +394,8 @@ func (mhs *ManagementHandlerService) handleGetSystemStatus(ctx context.Context, 
 	}, nil
 }
 
-// handleExecuteAgent processes execute agent requests
-func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, req *proto.ExecuteAgentManagementRequest) (*proto.ExecuteAgentManagementResponse, error) {
+// handleExecuteAgent processes execute agent requests using unified execution flow (same as MCP/CLI)
+func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, originalRequestId string, req *proto.ExecuteAgentManagementRequest) (*proto.ExecuteAgentManagementResponse, error) {
 	logging.Info("Executing agent %s with task: %s", req.AgentId, req.Task)
 
 	// Convert agent ID to int64
@@ -357,31 +404,131 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, req
 		return nil, fmt.Errorf("invalid agent ID: %s", req.AgentId)
 	}
 
-	// Generate execution ID for tracking
-	executionID := fmt.Sprintf("exec_%d_%d", agentID, time.Now().Unix())
+	// Use CloudShip's original request ID as the execution ID for status updates
+	// This ensures CloudShip can match status updates to the run they created
+	executionID := originalRequestId
 
 	// Send QUEUED status update to CloudShip
-	mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_QUEUED, "Agent execution queued", 0)
+	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_QUEUED, "Agent execution queued", 0)
 
 	// Send RUNNING status update to CloudShip
-	mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_RUNNING, "Agent execution started", 1)
+	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_RUNNING, "Agent execution started", 1)
 
-	// Execute the agent - this will create the run, execute it, and send data to CloudShip automatically
-	result, err := mhs.agentService.ExecuteAgent(ctx, agentID, req.Task, make(map[string]interface{}))
+	// Use unified execution flow (same as MCP and CLI) to ensure proper database run creation
+	var userID int64 = 1 // Default user ID for CloudShip executions
+	
+	// Create agent run first to get a proper run ID (same as MCP handleCallAgent)
+	run, err := mhs.repos.AgentRuns.Create(ctx, agentID, userID, req.Task, "", 0, nil, nil, "running", nil)
 	if err != nil {
+		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Failed to create agent run: %v", err), 1)
+		return nil, fmt.Errorf("failed to create agent run: %v", err)
+	}
+	runID := run.ID
+	logging.Info("Created CloudShip agent run ID: %d", runID)
+	
+	// Get agent details for unified execution flow
+	agent, err := mhs.repos.Agents.GetByID(agentID)
+	if err != nil {
+		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Agent not found: %v", err), 1)
+		return nil, fmt.Errorf("agent not found: %v", err)
+	}
+	
+	// Create concrete agent service to access execution engine (same as MCP)
+	concreteAgentService := services.NewAgentService(mhs.repos)
+	
+	// Use the same unified execution flow as MCP and CLI with empty variables
+	userVariables := make(map[string]interface{})
+	result, execErr := concreteAgentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, req.Task, runID, userVariables)
+	
+	if execErr != nil {
+		// Update run as failed (same as MCP)
+		completedAt := time.Now()
+		errorMsg := fmt.Sprintf("CloudShip execution failed: %v", execErr)
+		updateErr := mhs.repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx, runID, errorMsg, 0, nil, nil, "failed", &completedAt,
+			nil, nil, nil, nil, nil, nil,
+		)
+		if updateErr != nil {
+			logging.Info("Warning: Failed to update failed run %d: %v", runID, updateErr)
+		}
+		
 		// Send FAILED status update on error
-		mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Agent execution failed: %v", err), 1)
-		return nil, fmt.Errorf("failed to execute agent: %v", err)
+		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Agent execution failed: %v", execErr), 1)
+		return nil, fmt.Errorf("failed to execute agent: %v", execErr)
+	}
+
+	// Update run as successful (same as CLI and MCP)
+	completedAt := time.Now()
+	
+	// Extract token usage from result
+	var inputTokens, outputTokens, totalTokens *int64
+	if result != nil && result.TokenUsage != nil {
+		inputTokens = extractInt64FromTokenUsage(result.TokenUsage["inputTokens"])
+		outputTokens = extractInt64FromTokenUsage(result.TokenUsage["outputTokens"])
+		totalTokens = extractInt64FromTokenUsage(result.TokenUsage["totalTokens"])
+	}
+	
+	// Calculate duration in seconds
+	var durationSeconds *float64
+	if result != nil {
+		dur := result.Duration.Seconds()
+		durationSeconds = &dur
+	}
+	
+	// Update completion with metadata (same as CLI)
+	updateErr := mhs.repos.AgentRuns.UpdateCompletionWithMetadata(
+		ctx, runID, result.Response, result.StepsTaken, result.ToolCalls, result.ExecutionSteps, 
+		"completed", &completedAt, inputTokens, outputTokens, totalTokens, durationSeconds, 
+		&result.ModelName, nil,
+	)
+	if updateErr != nil {
+		logging.Info("Warning: Failed to update completed run %d: %v", runID, updateErr)
 	}
 
 	// Send COMPLETED status update on success
-	mhs.sendStatusUpdate(executionID, proto.ExecutionStatus_EXECUTION_COMPLETED, "Agent execution completed successfully", 1)
+	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_COMPLETED, "Agent execution completed successfully", 1)
+
+	// Send completed run data to CloudShip via SendRun
+	runDetails, err := mhs.repos.AgentRuns.GetByIDWithDetails(ctx, runID)
+	if err != nil {
+		logging.Info("Warning: Failed to get run details for CloudShip SendRun (run_id: %d): %v", runID, err)
+	} else {
+		// Convert database run to proto.AgentRun for ManagementChannel
+		protoAgentRun := mhs.convertRunDetailsToProtoAgentRun(runDetails)
+		if protoAgentRun != nil {
+			// Send run data to CloudShip via ManagementChannel
+			if mhs.managementChannel != nil {
+				tags := map[string]string{
+					"execution_id": executionID,
+					"source":       "cloudship_management",
+					"environment":  "cloudship",
+				}
+				if err := mhs.managementChannel.SendRun(protoAgentRun, tags); err != nil {
+					logging.Error("Failed to send run data via ManagementChannel: %v", err)
+				} else {
+					logging.Debug("Sent completed run data to CloudShip via ManagementChannel (run_id: %d, execution_id: %s)", runID, executionID)
+				}
+			} else {
+				logging.Error("ManagementChannel not available for SendRun - falling back to direct lighthouse client")
+				// Convert to types.AgentRun for fallback
+				typesAgentRun := mhs.convertRunDetailsToAgentRun(runDetails)
+				if typesAgentRun != nil {
+					mhs.lighthouseClient.SendRun(typesAgentRun, "cloudship", map[string]string{
+						"execution_id": executionID,
+						"source":       "cloudship_management",
+						"environment":  "cloudship",
+					})
+					logging.Debug("Sent completed run data to CloudShip via lighthouse client fallback (run_id: %d, execution_id: %s)", runID, executionID)
+				}
+			}
+		}
+	}
 
 	return &proto.ExecuteAgentManagementResponse{
 		ExecutionId:     executionID,
 		Status:          proto.ExecutionStatus_EXECUTION_COMPLETED,
 		StepNumber:      1,
-		StepDescription: result.Content,
+		StepDescription: result.Response,
 		ToolCalls:       []*proto.ToolCall{},
 		Timestamp:       timestamppb.Now(),
 	}, nil
@@ -409,8 +556,8 @@ func (mhs *ManagementHandlerService) handleCancelExecution(ctx context.Context, 
 	}, nil
 }
 
-// sendStatusUpdate sends a proactive status update to CloudShip via ManagementChannel
-func (mhs *ManagementHandlerService) sendStatusUpdate(executionID string, status proto.ExecutionStatus, description string, stepNumber int32) {
+// sendStatusUpdate sends a status update to CloudShip via ManagementChannel as response to original request
+func (mhs *ManagementHandlerService) sendStatusUpdate(originalRequestId, executionID string, status proto.ExecutionStatus, description string, stepNumber int32) {
 	if mhs.lighthouseClient == nil || !mhs.lighthouseClient.IsConnected() {
 		logging.Debug("Cannot send status update - lighthouse client not connected")
 		return
@@ -418,9 +565,9 @@ func (mhs *ManagementHandlerService) sendStatusUpdate(executionID string, status
 
 	// Create status update message as ExecuteAgentManagementResponse with IsResponse: false
 	statusMsg := &proto.ManagementMessage{
-		RequestId:       "",                  // No request ID needed for proactive status updates
+		RequestId:       originalRequestId,   // Use original request ID from ExecuteAgent request
 		RegistrationKey: mhs.registrationKey, // Registration key is the source of truth for Station identity
-		IsResponse:      false,               // IMPORTANT: Status updates are proactive, not responses
+		IsResponse:      true,                // CloudShip expects status updates as responses
 		Success:         true,
 		Message: &proto.ManagementMessage_ExecuteAgentResponse{
 			ExecuteAgentResponse: &proto.ExecuteAgentManagementResponse{
@@ -433,10 +580,165 @@ func (mhs *ManagementHandlerService) sendStatusUpdate(executionID string, status
 		},
 	}
 
-	// For now, log the status update - actual stream sending would need architecture changes
+	// Log the status update
 	logging.Info("Status Update [%s]: %s - %s (step %d)", executionID, status.String(), description, stepNumber)
 	logging.Debug("Status message prepared: %v", statusMsg)
 
-	// TODO: Implement actual sending via management channel stream
-	// This would require refactoring to pass the stream reference or using a message queue
+	// FIXED: Actually send the status update via management channel
+	if mhs.managementChannel != nil {
+		if err := mhs.managementChannel.SendStatusUpdate(statusMsg); err != nil {
+			logging.Error("Failed to send status update for execution %s: %v", executionID, err)
+			return
+		}
+		logging.Debug("Successfully sent status update for execution %s: %s", executionID, status.String())
+	} else {
+		logging.Error("Cannot send status update - management channel not available")
+	}
+}
+
+// convertRunDetailsToAgentRun converts database AgentRunWithDetails to types.AgentRun for CloudShip
+func (mhs *ManagementHandlerService) convertRunDetailsToAgentRun(runDetails *models.AgentRunWithDetails) *types.AgentRun {
+	if runDetails == nil {
+		return nil
+	}
+
+	// Parse tool calls from JSON if available
+	var toolCalls []types.ToolCall
+	if runDetails.ToolCalls != nil {
+		if toolCallsBytes, err := json.Marshal(*runDetails.ToolCalls); err == nil {
+			var parsedToolCalls []types.ToolCall
+			if err := json.Unmarshal(toolCallsBytes, &parsedToolCalls); err == nil {
+				toolCalls = parsedToolCalls
+			}
+		}
+	}
+
+	// Parse execution steps from JSON if available  
+	var executionSteps []types.ExecutionStep
+	if runDetails.ExecutionSteps != nil {
+		if stepsBytes, err := json.Marshal(*runDetails.ExecutionSteps); err == nil {
+			var parsedSteps []types.ExecutionStep
+			if err := json.Unmarshal(stepsBytes, &parsedSteps); err == nil {
+				executionSteps = parsedSteps
+			}
+		}
+	}
+
+	// Calculate token usage if available
+	var tokenUsage *types.TokenUsage
+	if runDetails.InputTokens != nil && runDetails.OutputTokens != nil && runDetails.TotalTokens != nil {
+		tokenUsage = &types.TokenUsage{
+			PromptTokens:     int(*runDetails.InputTokens),
+			CompletionTokens: int(*runDetails.OutputTokens),
+			TotalTokens:      int(*runDetails.TotalTokens),
+			CostUSD:          0.0, // Cost calculation would need to be added
+		}
+	}
+
+	// Calculate duration in milliseconds
+	var durationMs int64
+	if runDetails.DurationSeconds != nil {
+		durationMs = int64(*runDetails.DurationSeconds * 1000)
+	}
+
+	// Handle optional fields
+	var completedAt time.Time
+	if runDetails.CompletedAt != nil {
+		completedAt = *runDetails.CompletedAt
+	}
+
+	startedAt := runDetails.StartedAt
+
+	modelName := ""
+	if runDetails.ModelName != nil {
+		modelName = *runDetails.ModelName
+	}
+
+	return &types.AgentRun{
+		ID:             fmt.Sprintf("run_%d", runDetails.ID),
+		AgentID:        fmt.Sprintf("agent_%d", runDetails.AgentID),
+		AgentName:      runDetails.AgentName,
+		Task:           runDetails.Task,
+		Response:       runDetails.FinalResponse,
+		Status:         runDetails.Status,
+		DurationMs:     durationMs,
+		ModelName:      modelName,
+		StartedAt:      startedAt,
+		CompletedAt:    completedAt,
+		ToolCalls:      toolCalls,
+		ExecutionSteps: executionSteps,
+		TokenUsage:     tokenUsage,
+		Metadata: map[string]string{
+			"run_id":      fmt.Sprintf("%d", runDetails.ID),
+			"agent_id":    fmt.Sprintf("%d", runDetails.AgentID),
+			"steps_taken": fmt.Sprintf("%d", runDetails.StepsTaken),
+			"user_id":     fmt.Sprintf("%d", runDetails.UserID),
+			"username":    runDetails.Username,
+		},
+	}
+}
+
+// convertRunDetailsToProtoAgentRun converts database AgentRunWithDetails to proto.AgentRunData for ManagementChannel SendRun
+func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails *models.AgentRunWithDetails) *proto.AgentRunData {
+	if runDetails == nil {
+		return nil
+	}
+
+	// Calculate duration in milliseconds
+	var durationMs int64
+	if runDetails.DurationSeconds != nil {
+		durationMs = int64(*runDetails.DurationSeconds * 1000)
+	}
+
+	// Handle optional fields
+	var completedAt *timestamppb.Timestamp
+	if runDetails.CompletedAt != nil {
+		completedAt = timestamppb.New(*runDetails.CompletedAt)
+	}
+
+	startedAt := timestamppb.New(runDetails.StartedAt)
+
+	modelName := ""
+	if runDetails.ModelName != nil {
+		modelName = *runDetails.ModelName
+	}
+
+	// Create token usage data if available
+	var tokenUsage *proto.TokenUsage
+	if runDetails.InputTokens != nil || runDetails.OutputTokens != nil || runDetails.TotalTokens != nil {
+		tokenUsage = &proto.TokenUsage{}
+		
+		if runDetails.InputTokens != nil {
+			tokenUsage.PromptTokens = int32(*runDetails.InputTokens)
+		}
+		
+		if runDetails.OutputTokens != nil {
+			tokenUsage.CompletionTokens = int32(*runDetails.OutputTokens)
+		}
+		
+		if runDetails.TotalTokens != nil {
+			tokenUsage.TotalTokens = int32(*runDetails.TotalTokens)
+		}
+	}
+
+	// Create proto AgentRunData
+	return &proto.AgentRunData{
+		RunId:       fmt.Sprintf("run_%d", runDetails.ID),
+		AgentId:     fmt.Sprintf("agent_%d", runDetails.AgentID),
+		AgentName:   runDetails.AgentName,
+		Task:        runDetails.Task,
+		Response:    runDetails.FinalResponse,
+		TokenUsage:  tokenUsage,
+		DurationMs:  durationMs,
+		ModelName:   modelName,
+		StartedAt:   startedAt,
+		CompletedAt: completedAt,
+		Metadata: map[string]string{
+			"run_id":      fmt.Sprintf("%d", runDetails.ID),
+			"agent_id":    fmt.Sprintf("%d", runDetails.AgentID),
+			"steps_taken": fmt.Sprintf("%d", runDetails.StepsTaken),
+			"user_id":     fmt.Sprintf("%d", runDetails.UserID),
+			"username":    runDetails.Username,
+		},
+	}
 }

@@ -3883,7 +3883,7 @@ func (x *ExecutionError) GetErrorAt() *timestamp.Timestamp {
 type ManagementMessage struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	RequestId       string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`                   // For correlating requests and responses
-	RegistrationKey string                 `protobuf:"bytes,2,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // Registration key as station identifier for routing
+	RegistrationKey string                 `protobuf:"bytes,2,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // Station registration key for routing (NOT database station_id)
 	IsResponse      bool                   `protobuf:"varint,3,opt,name=is_response,json=isResponse,proto3" json:"is_response,omitempty"`               // true for responses, false for requests
 	Success         bool                   `protobuf:"varint,4,opt,name=success,proto3" json:"success,omitempty"`                                       // Only meaningful for responses
 	// Types that are valid to be assigned to Message:
@@ -3895,6 +3895,7 @@ type ManagementMessage struct {
 	//	*ManagementMessage_GetSystemStatusRequest
 	//	*ManagementMessage_ListActiveRunsRequest
 	//	*ManagementMessage_CancelExecutionRequest
+	//	*ManagementMessage_SendRunRequest
 	//	*ManagementMessage_ListAgentsResponse
 	//	*ManagementMessage_ListToolsResponse
 	//	*ManagementMessage_GetEnvironmentsResponse
@@ -3902,6 +3903,7 @@ type ManagementMessage struct {
 	//	*ManagementMessage_GetSystemStatusResponse
 	//	*ManagementMessage_ListActiveRunsResponse
 	//	*ManagementMessage_CancelExecutionResponse
+	//	*ManagementMessage_SendRunResponse
 	//	*ManagementMessage_Error
 	//	*ManagementMessage_StationRegistration
 	Message       isManagementMessage_Message `protobuf_oneof:"message"`
@@ -4037,6 +4039,15 @@ func (x *ManagementMessage) GetCancelExecutionRequest() *CancelExecutionRequest 
 	return nil
 }
 
+func (x *ManagementMessage) GetSendRunRequest() *SendRunRequest {
+	if x != nil {
+		if x, ok := x.Message.(*ManagementMessage_SendRunRequest); ok {
+			return x.SendRunRequest
+		}
+	}
+	return nil
+}
+
 func (x *ManagementMessage) GetListAgentsResponse() *ListAgentsManagementResponse {
 	if x != nil {
 		if x, ok := x.Message.(*ManagementMessage_ListAgentsResponse); ok {
@@ -4100,6 +4111,15 @@ func (x *ManagementMessage) GetCancelExecutionResponse() *CancelExecutionRespons
 	return nil
 }
 
+func (x *ManagementMessage) GetSendRunResponse() *SendRunResponse {
+	if x != nil {
+		if x, ok := x.Message.(*ManagementMessage_SendRunResponse); ok {
+			return x.SendRunResponse
+		}
+	}
+	return nil
+}
+
 func (x *ManagementMessage) GetError() *ManagementError {
 	if x != nil {
 		if x, ok := x.Message.(*ManagementMessage_Error); ok {
@@ -4151,6 +4171,10 @@ type ManagementMessage_CancelExecutionRequest struct {
 	CancelExecutionRequest *CancelExecutionRequest `protobuf:"bytes,16,opt,name=cancel_execution_request,json=cancelExecutionRequest,proto3,oneof"`
 }
 
+type ManagementMessage_SendRunRequest struct {
+	SendRunRequest *SendRunRequest `protobuf:"bytes,17,opt,name=send_run_request,json=sendRunRequest,proto3,oneof"`
+}
+
 type ManagementMessage_ListAgentsResponse struct {
 	// Response messages (can be sent by either Lighthouse or Station)
 	ListAgentsResponse *ListAgentsManagementResponse `protobuf:"bytes,20,opt,name=list_agents_response,json=listAgentsResponse,proto3,oneof"`
@@ -4180,8 +4204,12 @@ type ManagementMessage_CancelExecutionResponse struct {
 	CancelExecutionResponse *CancelExecutionResponse `protobuf:"bytes,26,opt,name=cancel_execution_response,json=cancelExecutionResponse,proto3,oneof"`
 }
 
+type ManagementMessage_SendRunResponse struct {
+	SendRunResponse *SendRunResponse `protobuf:"bytes,27,opt,name=send_run_response,json=sendRunResponse,proto3,oneof"`
+}
+
 type ManagementMessage_Error struct {
-	Error *ManagementError `protobuf:"bytes,27,opt,name=error,proto3,oneof"`
+	Error *ManagementError `protobuf:"bytes,28,opt,name=error,proto3,oneof"`
 }
 
 type ManagementMessage_StationRegistration struct {
@@ -4203,6 +4231,8 @@ func (*ManagementMessage_ListActiveRunsRequest) isManagementMessage_Message() {}
 
 func (*ManagementMessage_CancelExecutionRequest) isManagementMessage_Message() {}
 
+func (*ManagementMessage_SendRunRequest) isManagementMessage_Message() {}
+
 func (*ManagementMessage_ListAgentsResponse) isManagementMessage_Message() {}
 
 func (*ManagementMessage_ListToolsResponse) isManagementMessage_Message() {}
@@ -4217,6 +4247,8 @@ func (*ManagementMessage_ListActiveRunsResponse) isManagementMessage_Message() {
 
 func (*ManagementMessage_CancelExecutionResponse) isManagementMessage_Message() {}
 
+func (*ManagementMessage_SendRunResponse) isManagementMessage_Message() {}
+
 func (*ManagementMessage_Error) isManagementMessage_Message() {}
 
 func (*ManagementMessage_StationRegistration) isManagementMessage_Message() {}
@@ -4224,7 +4256,7 @@ func (*ManagementMessage_StationRegistration) isManagementMessage_Message() {}
 // Station registration for management channel
 type StationRegistrationMessage struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // Registration key serves as both auth and station identifier
+	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // Station registration key (REQUIRED for routing)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -5747,7 +5779,7 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\x0eExecutionError\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x125\n" +
-	"\berror_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aerrorAt\"\xa0\r\n" +
+	"\berror_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aerrorAt\"\xb9\x0e\n" +
 	"\x11ManagementMessage\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12)\n" +
@@ -5762,15 +5794,17 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\x15execute_agent_request\x18\r \x01(\v2,.lighthouse.v1.ExecuteAgentManagementRequestH\x00R\x13executeAgentRequest\x12b\n" +
 	"\x19get_system_status_request\x18\x0e \x01(\v2%.lighthouse.v1.GetSystemStatusRequestH\x00R\x16getSystemStatusRequest\x12_\n" +
 	"\x18list_active_runs_request\x18\x0f \x01(\v2$.lighthouse.v1.ListActiveRunsRequestH\x00R\x15listActiveRunsRequest\x12a\n" +
-	"\x18cancel_execution_request\x18\x10 \x01(\v2%.lighthouse.v1.CancelExecutionRequestH\x00R\x16cancelExecutionRequest\x12_\n" +
+	"\x18cancel_execution_request\x18\x10 \x01(\v2%.lighthouse.v1.CancelExecutionRequestH\x00R\x16cancelExecutionRequest\x12I\n" +
+	"\x10send_run_request\x18\x11 \x01(\v2\x1d.lighthouse.v1.SendRunRequestH\x00R\x0esendRunRequest\x12_\n" +
 	"\x14list_agents_response\x18\x14 \x01(\v2+.lighthouse.v1.ListAgentsManagementResponseH\x00R\x12listAgentsResponse\x12\\\n" +
 	"\x13list_tools_response\x18\x15 \x01(\v2*.lighthouse.v1.ListToolsManagementResponseH\x00R\x11listToolsResponse\x12d\n" +
 	"\x19get_environments_response\x18\x16 \x01(\v2&.lighthouse.v1.GetEnvironmentsResponseH\x00R\x17getEnvironmentsResponse\x12e\n" +
 	"\x16execute_agent_response\x18\x17 \x01(\v2-.lighthouse.v1.ExecuteAgentManagementResponseH\x00R\x14executeAgentResponse\x12e\n" +
 	"\x1aget_system_status_response\x18\x18 \x01(\v2&.lighthouse.v1.GetSystemStatusResponseH\x00R\x17getSystemStatusResponse\x12b\n" +
 	"\x19list_active_runs_response\x18\x19 \x01(\v2%.lighthouse.v1.ListActiveRunsResponseH\x00R\x16listActiveRunsResponse\x12d\n" +
-	"\x19cancel_execution_response\x18\x1a \x01(\v2&.lighthouse.v1.CancelExecutionResponseH\x00R\x17cancelExecutionResponse\x126\n" +
-	"\x05error\x18\x1b \x01(\v2\x1e.lighthouse.v1.ManagementErrorH\x00R\x05error\x12^\n" +
+	"\x19cancel_execution_response\x18\x1a \x01(\v2&.lighthouse.v1.CancelExecutionResponseH\x00R\x17cancelExecutionResponse\x12L\n" +
+	"\x11send_run_response\x18\x1b \x01(\v2\x1e.lighthouse.v1.SendRunResponseH\x00R\x0fsendRunResponse\x126\n" +
+	"\x05error\x18\x1c \x01(\v2\x1e.lighthouse.v1.ManagementErrorH\x00R\x05error\x12^\n" +
 	"\x14station_registration\x18\x1e \x01(\v2).lighthouse.v1.StationRegistrationMessageH\x00R\x13stationRegistrationB\t\n" +
 	"\amessage\"G\n" +
 	"\x1aStationRegistrationMessage\x12)\n" +
@@ -5940,7 +5974,7 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\x15ENVIRONMENT_NOT_FOUND\x10\x02\x12\x13\n" +
 	"\x0fEXECUTION_ERROR\x10\x03\x12\x11\n" +
 	"\rTIMEOUT_ERROR\x10\x04\x12\x15\n" +
-	"\x11PERMISSION_DENIED\x10\x052\xfd\b\n" +
+	"\x11PERMISSION_DENIED\x10\x052\xfb\b\n" +
 	"\x11LighthouseService\x12`\n" +
 	"\x0fRegisterStation\x12%.lighthouse.v1.RegisterStationRequest\x1a&.lighthouse.v1.RegisterStationResponse\x12N\n" +
 	"\tHeartbeat\x12\x1f.lighthouse.v1.HeartbeatRequest\x1a .lighthouse.v1.HeartbeatResponse\x12H\n" +
@@ -5954,8 +5988,8 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\tListTools\x12\x1f.lighthouse.v1.ListToolsRequest\x1a .lighthouse.v1.ListToolsResponse\x12K\n" +
 	"\bCallTool\x12\x1e.lighthouse.v1.CallToolRequest\x1a\x1f.lighthouse.v1.CallToolResponse\x12Q\n" +
 	"\n" +
-	"ListAgents\x12 .lighthouse.v1.ListAgentsRequest\x1a!.lighthouse.v1.ListAgentsResponse\x12Y\n" +
-	"\fExecuteAgent\x12\".lighthouse.v1.ExecuteAgentRequest\x1a#.lighthouse.v1.ExecuteAgentResponse0\x01B2Z0github.com/cloudshipai/lighthouse/internal/protob\x06proto3"
+	"ListAgents\x12 .lighthouse.v1.ListAgentsRequest\x1a!.lighthouse.v1.ListAgentsResponse\x12W\n" +
+	"\fExecuteAgent\x12\".lighthouse.v1.ExecuteAgentRequest\x1a#.lighthouse.v1.ExecuteAgentResponseB2Z0github.com/cloudshipai/lighthouse/internal/protob\x06proto3"
 
 var (
 	file_internal_lighthouse_proto_lighthouse_proto_rawDescOnce sync.Once
@@ -6147,66 +6181,68 @@ var file_internal_lighthouse_proto_lighthouse_proto_depIdxs = []int32{
 	67,  // 77: lighthouse.v1.ManagementMessage.get_system_status_request:type_name -> lighthouse.v1.GetSystemStatusRequest
 	70,  // 78: lighthouse.v1.ManagementMessage.list_active_runs_request:type_name -> lighthouse.v1.ListActiveRunsRequest
 	72,  // 79: lighthouse.v1.ManagementMessage.cancel_execution_request:type_name -> lighthouse.v1.CancelExecutionRequest
-	58,  // 80: lighthouse.v1.ManagementMessage.list_agents_response:type_name -> lighthouse.v1.ListAgentsManagementResponse
-	61,  // 81: lighthouse.v1.ManagementMessage.list_tools_response:type_name -> lighthouse.v1.ListToolsManagementResponse
-	63,  // 82: lighthouse.v1.ManagementMessage.get_environments_response:type_name -> lighthouse.v1.GetEnvironmentsResponse
-	66,  // 83: lighthouse.v1.ManagementMessage.execute_agent_response:type_name -> lighthouse.v1.ExecuteAgentManagementResponse
-	68,  // 84: lighthouse.v1.ManagementMessage.get_system_status_response:type_name -> lighthouse.v1.GetSystemStatusResponse
-	71,  // 85: lighthouse.v1.ManagementMessage.list_active_runs_response:type_name -> lighthouse.v1.ListActiveRunsResponse
-	73,  // 86: lighthouse.v1.ManagementMessage.cancel_execution_response:type_name -> lighthouse.v1.CancelExecutionResponse
-	74,  // 87: lighthouse.v1.ManagementMessage.error:type_name -> lighthouse.v1.ManagementError
-	56,  // 88: lighthouse.v1.ManagementMessage.station_registration:type_name -> lighthouse.v1.StationRegistrationMessage
-	59,  // 89: lighthouse.v1.ListAgentsManagementResponse.agents:type_name -> lighthouse.v1.AgentInfo
-	92,  // 90: lighthouse.v1.AgentInfo.created_at:type_name -> google.protobuf.Timestamp
-	92,  // 91: lighthouse.v1.AgentInfo.updated_at:type_name -> google.protobuf.Timestamp
-	6,   // 92: lighthouse.v1.AgentInfo.status:type_name -> lighthouse.v1.AgentStatus
-	29,  // 93: lighthouse.v1.ListToolsManagementResponse.tools:type_name -> lighthouse.v1.ToolInfo
-	64,  // 94: lighthouse.v1.GetEnvironmentsResponse.environments:type_name -> lighthouse.v1.EnvironmentInfo
-	90,  // 95: lighthouse.v1.EnvironmentInfo.variables:type_name -> lighthouse.v1.EnvironmentInfo.VariablesEntry
-	91,  // 96: lighthouse.v1.ExecuteAgentManagementRequest.variables:type_name -> lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
-	7,   // 97: lighthouse.v1.ExecuteAgentManagementResponse.status:type_name -> lighthouse.v1.ExecutionStatus
-	18,  // 98: lighthouse.v1.ExecuteAgentManagementResponse.tool_calls:type_name -> lighthouse.v1.ToolCall
-	20,  // 99: lighthouse.v1.ExecuteAgentManagementResponse.token_usage:type_name -> lighthouse.v1.TokenUsage
-	92,  // 100: lighthouse.v1.ExecuteAgentManagementResponse.timestamp:type_name -> google.protobuf.Timestamp
-	8,   // 101: lighthouse.v1.GetSystemStatusResponse.health:type_name -> lighthouse.v1.SystemHealth
-	41,  // 102: lighthouse.v1.GetSystemStatusResponse.metrics:type_name -> lighthouse.v1.SystemMetrics
-	69,  // 103: lighthouse.v1.GetSystemStatusResponse.active_executions:type_name -> lighthouse.v1.ActiveExecution
-	9,   // 104: lighthouse.v1.GetSystemStatusResponse.lighthouse_connection:type_name -> lighthouse.v1.ConnectionStatus
-	7,   // 105: lighthouse.v1.ActiveExecution.status:type_name -> lighthouse.v1.ExecutionStatus
-	92,  // 106: lighthouse.v1.ActiveExecution.started_at:type_name -> google.protobuf.Timestamp
-	69,  // 107: lighthouse.v1.ListActiveRunsResponse.active_runs:type_name -> lighthouse.v1.ActiveExecution
-	10,  // 108: lighthouse.v1.ManagementError.code:type_name -> lighthouse.v1.ErrorCode
-	11,  // 109: lighthouse.v1.LighthouseService.RegisterStation:input_type -> lighthouse.v1.RegisterStationRequest
-	42,  // 110: lighthouse.v1.LighthouseService.Heartbeat:input_type -> lighthouse.v1.HeartbeatRequest
-	15,  // 111: lighthouse.v1.LighthouseService.SendRun:input_type -> lighthouse.v1.SendRunRequest
-	15,  // 112: lighthouse.v1.LighthouseService.SendRunStream:input_type -> lighthouse.v1.SendRunRequest
-	21,  // 113: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:input_type -> lighthouse.v1.EphemeralSnapshotRequest
-	30,  // 114: lighthouse.v1.LighthouseService.Connect:input_type -> lighthouse.v1.ConnectRequest
-	25,  // 115: lighthouse.v1.LighthouseService.SyncConfiguration:input_type -> lighthouse.v1.SyncConfigRequest
-	55,  // 116: lighthouse.v1.LighthouseService.ManagementChannel:input_type -> lighthouse.v1.ManagementMessage
-	39,  // 117: lighthouse.v1.LighthouseService.SendSystemHealth:input_type -> lighthouse.v1.SystemHealthRequest
-	44,  // 118: lighthouse.v1.LighthouseService.ListTools:input_type -> lighthouse.v1.ListToolsRequest
-	46,  // 119: lighthouse.v1.LighthouseService.CallTool:input_type -> lighthouse.v1.CallToolRequest
-	48,  // 120: lighthouse.v1.LighthouseService.ListAgents:input_type -> lighthouse.v1.ListAgentsRequest
-	50,  // 121: lighthouse.v1.LighthouseService.ExecuteAgent:input_type -> lighthouse.v1.ExecuteAgentRequest
-	12,  // 122: lighthouse.v1.LighthouseService.RegisterStation:output_type -> lighthouse.v1.RegisterStationResponse
-	43,  // 123: lighthouse.v1.LighthouseService.Heartbeat:output_type -> lighthouse.v1.HeartbeatResponse
-	16,  // 124: lighthouse.v1.LighthouseService.SendRun:output_type -> lighthouse.v1.SendRunResponse
-	16,  // 125: lighthouse.v1.LighthouseService.SendRunStream:output_type -> lighthouse.v1.SendRunResponse
-	22,  // 126: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:output_type -> lighthouse.v1.EphemeralSnapshotResponse
-	31,  // 127: lighthouse.v1.LighthouseService.Connect:output_type -> lighthouse.v1.CloudShipCommand
-	26,  // 128: lighthouse.v1.LighthouseService.SyncConfiguration:output_type -> lighthouse.v1.SyncConfigResponse
-	55,  // 129: lighthouse.v1.LighthouseService.ManagementChannel:output_type -> lighthouse.v1.ManagementMessage
-	40,  // 130: lighthouse.v1.LighthouseService.SendSystemHealth:output_type -> lighthouse.v1.SystemHealthResponse
-	45,  // 131: lighthouse.v1.LighthouseService.ListTools:output_type -> lighthouse.v1.ListToolsResponse
-	47,  // 132: lighthouse.v1.LighthouseService.CallTool:output_type -> lighthouse.v1.CallToolResponse
-	49,  // 133: lighthouse.v1.LighthouseService.ListAgents:output_type -> lighthouse.v1.ListAgentsResponse
-	51,  // 134: lighthouse.v1.LighthouseService.ExecuteAgent:output_type -> lighthouse.v1.ExecuteAgentResponse
-	122, // [122:135] is the sub-list for method output_type
-	109, // [109:122] is the sub-list for method input_type
-	109, // [109:109] is the sub-list for extension type_name
-	109, // [109:109] is the sub-list for extension extendee
-	0,   // [0:109] is the sub-list for field type_name
+	15,  // 80: lighthouse.v1.ManagementMessage.send_run_request:type_name -> lighthouse.v1.SendRunRequest
+	58,  // 81: lighthouse.v1.ManagementMessage.list_agents_response:type_name -> lighthouse.v1.ListAgentsManagementResponse
+	61,  // 82: lighthouse.v1.ManagementMessage.list_tools_response:type_name -> lighthouse.v1.ListToolsManagementResponse
+	63,  // 83: lighthouse.v1.ManagementMessage.get_environments_response:type_name -> lighthouse.v1.GetEnvironmentsResponse
+	66,  // 84: lighthouse.v1.ManagementMessage.execute_agent_response:type_name -> lighthouse.v1.ExecuteAgentManagementResponse
+	68,  // 85: lighthouse.v1.ManagementMessage.get_system_status_response:type_name -> lighthouse.v1.GetSystemStatusResponse
+	71,  // 86: lighthouse.v1.ManagementMessage.list_active_runs_response:type_name -> lighthouse.v1.ListActiveRunsResponse
+	73,  // 87: lighthouse.v1.ManagementMessage.cancel_execution_response:type_name -> lighthouse.v1.CancelExecutionResponse
+	16,  // 88: lighthouse.v1.ManagementMessage.send_run_response:type_name -> lighthouse.v1.SendRunResponse
+	74,  // 89: lighthouse.v1.ManagementMessage.error:type_name -> lighthouse.v1.ManagementError
+	56,  // 90: lighthouse.v1.ManagementMessage.station_registration:type_name -> lighthouse.v1.StationRegistrationMessage
+	59,  // 91: lighthouse.v1.ListAgentsManagementResponse.agents:type_name -> lighthouse.v1.AgentInfo
+	92,  // 92: lighthouse.v1.AgentInfo.created_at:type_name -> google.protobuf.Timestamp
+	92,  // 93: lighthouse.v1.AgentInfo.updated_at:type_name -> google.protobuf.Timestamp
+	6,   // 94: lighthouse.v1.AgentInfo.status:type_name -> lighthouse.v1.AgentStatus
+	29,  // 95: lighthouse.v1.ListToolsManagementResponse.tools:type_name -> lighthouse.v1.ToolInfo
+	64,  // 96: lighthouse.v1.GetEnvironmentsResponse.environments:type_name -> lighthouse.v1.EnvironmentInfo
+	90,  // 97: lighthouse.v1.EnvironmentInfo.variables:type_name -> lighthouse.v1.EnvironmentInfo.VariablesEntry
+	91,  // 98: lighthouse.v1.ExecuteAgentManagementRequest.variables:type_name -> lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
+	7,   // 99: lighthouse.v1.ExecuteAgentManagementResponse.status:type_name -> lighthouse.v1.ExecutionStatus
+	18,  // 100: lighthouse.v1.ExecuteAgentManagementResponse.tool_calls:type_name -> lighthouse.v1.ToolCall
+	20,  // 101: lighthouse.v1.ExecuteAgentManagementResponse.token_usage:type_name -> lighthouse.v1.TokenUsage
+	92,  // 102: lighthouse.v1.ExecuteAgentManagementResponse.timestamp:type_name -> google.protobuf.Timestamp
+	8,   // 103: lighthouse.v1.GetSystemStatusResponse.health:type_name -> lighthouse.v1.SystemHealth
+	41,  // 104: lighthouse.v1.GetSystemStatusResponse.metrics:type_name -> lighthouse.v1.SystemMetrics
+	69,  // 105: lighthouse.v1.GetSystemStatusResponse.active_executions:type_name -> lighthouse.v1.ActiveExecution
+	9,   // 106: lighthouse.v1.GetSystemStatusResponse.lighthouse_connection:type_name -> lighthouse.v1.ConnectionStatus
+	7,   // 107: lighthouse.v1.ActiveExecution.status:type_name -> lighthouse.v1.ExecutionStatus
+	92,  // 108: lighthouse.v1.ActiveExecution.started_at:type_name -> google.protobuf.Timestamp
+	69,  // 109: lighthouse.v1.ListActiveRunsResponse.active_runs:type_name -> lighthouse.v1.ActiveExecution
+	10,  // 110: lighthouse.v1.ManagementError.code:type_name -> lighthouse.v1.ErrorCode
+	11,  // 111: lighthouse.v1.LighthouseService.RegisterStation:input_type -> lighthouse.v1.RegisterStationRequest
+	42,  // 112: lighthouse.v1.LighthouseService.Heartbeat:input_type -> lighthouse.v1.HeartbeatRequest
+	15,  // 113: lighthouse.v1.LighthouseService.SendRun:input_type -> lighthouse.v1.SendRunRequest
+	15,  // 114: lighthouse.v1.LighthouseService.SendRunStream:input_type -> lighthouse.v1.SendRunRequest
+	21,  // 115: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:input_type -> lighthouse.v1.EphemeralSnapshotRequest
+	30,  // 116: lighthouse.v1.LighthouseService.Connect:input_type -> lighthouse.v1.ConnectRequest
+	25,  // 117: lighthouse.v1.LighthouseService.SyncConfiguration:input_type -> lighthouse.v1.SyncConfigRequest
+	55,  // 118: lighthouse.v1.LighthouseService.ManagementChannel:input_type -> lighthouse.v1.ManagementMessage
+	39,  // 119: lighthouse.v1.LighthouseService.SendSystemHealth:input_type -> lighthouse.v1.SystemHealthRequest
+	44,  // 120: lighthouse.v1.LighthouseService.ListTools:input_type -> lighthouse.v1.ListToolsRequest
+	46,  // 121: lighthouse.v1.LighthouseService.CallTool:input_type -> lighthouse.v1.CallToolRequest
+	48,  // 122: lighthouse.v1.LighthouseService.ListAgents:input_type -> lighthouse.v1.ListAgentsRequest
+	50,  // 123: lighthouse.v1.LighthouseService.ExecuteAgent:input_type -> lighthouse.v1.ExecuteAgentRequest
+	12,  // 124: lighthouse.v1.LighthouseService.RegisterStation:output_type -> lighthouse.v1.RegisterStationResponse
+	43,  // 125: lighthouse.v1.LighthouseService.Heartbeat:output_type -> lighthouse.v1.HeartbeatResponse
+	16,  // 126: lighthouse.v1.LighthouseService.SendRun:output_type -> lighthouse.v1.SendRunResponse
+	16,  // 127: lighthouse.v1.LighthouseService.SendRunStream:output_type -> lighthouse.v1.SendRunResponse
+	22,  // 128: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:output_type -> lighthouse.v1.EphemeralSnapshotResponse
+	31,  // 129: lighthouse.v1.LighthouseService.Connect:output_type -> lighthouse.v1.CloudShipCommand
+	26,  // 130: lighthouse.v1.LighthouseService.SyncConfiguration:output_type -> lighthouse.v1.SyncConfigResponse
+	55,  // 131: lighthouse.v1.LighthouseService.ManagementChannel:output_type -> lighthouse.v1.ManagementMessage
+	40,  // 132: lighthouse.v1.LighthouseService.SendSystemHealth:output_type -> lighthouse.v1.SystemHealthResponse
+	45,  // 133: lighthouse.v1.LighthouseService.ListTools:output_type -> lighthouse.v1.ListToolsResponse
+	47,  // 134: lighthouse.v1.LighthouseService.CallTool:output_type -> lighthouse.v1.CallToolResponse
+	49,  // 135: lighthouse.v1.LighthouseService.ListAgents:output_type -> lighthouse.v1.ListAgentsResponse
+	51,  // 136: lighthouse.v1.LighthouseService.ExecuteAgent:output_type -> lighthouse.v1.ExecuteAgentResponse
+	124, // [124:137] is the sub-list for method output_type
+	111, // [111:124] is the sub-list for method input_type
+	111, // [111:111] is the sub-list for extension type_name
+	111, // [111:111] is the sub-list for extension extendee
+	0,   // [0:111] is the sub-list for field type_name
 }
 
 func init() { file_internal_lighthouse_proto_lighthouse_proto_init() }
@@ -6237,6 +6273,7 @@ func file_internal_lighthouse_proto_lighthouse_proto_init() {
 		(*ManagementMessage_GetSystemStatusRequest)(nil),
 		(*ManagementMessage_ListActiveRunsRequest)(nil),
 		(*ManagementMessage_CancelExecutionRequest)(nil),
+		(*ManagementMessage_SendRunRequest)(nil),
 		(*ManagementMessage_ListAgentsResponse)(nil),
 		(*ManagementMessage_ListToolsResponse)(nil),
 		(*ManagementMessage_GetEnvironmentsResponse)(nil),
@@ -6244,6 +6281,7 @@ func file_internal_lighthouse_proto_lighthouse_proto_init() {
 		(*ManagementMessage_GetSystemStatusResponse)(nil),
 		(*ManagementMessage_ListActiveRunsResponse)(nil),
 		(*ManagementMessage_CancelExecutionResponse)(nil),
+		(*ManagementMessage_SendRunResponse)(nil),
 		(*ManagementMessage_Error)(nil),
 		(*ManagementMessage_StationRegistration)(nil),
 	}
