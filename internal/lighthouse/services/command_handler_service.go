@@ -141,6 +141,7 @@ func (chs *CommandHandlerService) handleCreateAgentCommand(ctx context.Context, 
 		CronSchedule:    nil, // CloudShip agents are not scheduled by default
 		ScheduleEnabled: false,
 	}
+	
 
 	// Create the agent
 	agent, err := chs.agentService.CreateAgent(ctx, agentConfig)

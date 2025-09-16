@@ -37,6 +37,14 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 		result.InputSchema = &agent.InputSchema.String
 	}
 	
+	if agent.OutputSchema.Valid {
+		result.OutputSchema = &agent.OutputSchema.String
+	}
+	
+	if agent.OutputSchemaPreset.Valid {
+		result.OutputSchemaPreset = &agent.OutputSchemaPreset.String
+	}
+	
 	if agent.CronSchedule.Valid {
 		result.CronSchedule = &agent.CronSchedule.String
 	}
@@ -60,7 +68,7 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 	return result
 }
 
-func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool) (*models.Agent, error) {
+func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string) (*models.Agent, error) {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 	
 	params := queries.CreateAgentParams{
@@ -80,6 +88,14 @@ func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environme
 	
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+	
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+	
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
 	}
 	
 	created, err := r.queries.CreateAgent(context.Background(), params)
@@ -153,7 +169,7 @@ func (r *AgentRepo) ListByUser(userID int64) ([]*models.Agent, error) {
 	return result, nil
 }
 
-func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool) error {
+func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string) error {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 	
 	params := queries.UpdateAgentParams{
@@ -172,6 +188,14 @@ func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps 
 	
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+	
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+	
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
 	}
 	
 	return r.queries.UpdateAgent(context.Background(), params)
