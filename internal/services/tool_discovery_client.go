@@ -97,7 +97,7 @@ func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, server
 					}
 				}
 			}
-			
+
 			// Extract environment variables for stdio client
 			var envSlice []string
 			if envMap, exists := serverConfig["env"]; exists {
@@ -109,9 +109,9 @@ func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, server
 					}
 				}
 			}
-			
+
 			log.Printf("Creating stdio client for command: %s with %d env vars", cmdStr, len(envSlice))
-			
+
 			// Use transport API to properly pass environment variables
 			t := transport.NewStdio(cmdStr, envSlice, args...)
 			mcpClient = client.NewClient(t)
@@ -144,8 +144,8 @@ func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, server
 		return nil, fmt.Errorf("failed to initialize: %w", err)
 	}
 
-	log.Printf("Connected to MCP server: %s (version %s)", 
-		serverInfo.ServerInfo.Name, 
+	log.Printf("Connected to MCP server: %s (version %s)",
+		serverInfo.ServerInfo.Name,
 		serverInfo.ServerInfo.Version)
 
 	// Check capabilities
@@ -159,62 +159,6 @@ func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, server
 	toolsResult, err := mcpClient.ListTools(ctx, toolsRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tools: %w", err)
-	}
-
-	return toolsResult.Tools, nil
-}
-
-// discoverToolsFromServerConfig handles individual server tool discovery
-func (c *MCPClient) discoverToolsFromServerConfig(ctx context.Context, serverName string, serverConfigJSON []byte) ([]mcp.Tool, error) {
-	// Parse server config to determine transport type
-	var serverConfig map[string]interface{}
-	if err := json.Unmarshal(serverConfigJSON, &serverConfig); err != nil {
-		return nil, fmt.Errorf("invalid server config: %w", err)
-	}
-
-	// Create appropriate transport based on server configuration
-	mcpTransport, err := c.createTransportFromConfig(serverConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transport: %v", err)
-	}
-
-	// Create universal mcp-go client
-	mcpClient := client.NewClient(mcpTransport)
-
-	// Start connection
-	if err := mcpClient.Start(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start client: %v", err)
-	}
-	defer mcpClient.Close()
-
-	// Initialize MCP session
-	initRequest := mcp.InitializeRequest{}
-	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initRequest.Params.ClientInfo = mcp.Implementation{
-		Name:    "Station Tool Discovery",
-		Version: "1.0.0",
-	}
-
-	serverInfo, err := mcpClient.Initialize(ctx, initRequest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize: %v", err)
-	}
-
-	log.Printf("Connected to MCP server: %s (version %s)", 
-		serverInfo.ServerInfo.Name, 
-		serverInfo.ServerInfo.Version)
-
-	// Check capabilities
-	if serverInfo.Capabilities.Tools == nil {
-		log.Printf("Server %s does not support tools", serverName)
-		return []mcp.Tool{}, nil
-	}
-
-	// Discover tools
-	toolsRequest := mcp.ListToolsRequest{}
-	toolsResult, err := mcpClient.ListTools(ctx, toolsRequest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tools: %v", err)
 	}
 
 	return toolsResult.Tools, nil
@@ -260,8 +204,8 @@ func (c *MCPClient) DiscoverToolsFromServer(serverConfig models.MCPServerConfig)
 		return nil, fmt.Errorf("failed to initialize: %v", err)
 	}
 
-	log.Printf("Connected to MCP server: %s (version %s)", 
-		serverInfo.ServerInfo.Name, 
+	log.Printf("Connected to MCP server: %s (version %s)",
+		serverInfo.ServerInfo.Name,
 		serverInfo.ServerInfo.Version)
 
 	// Check if server supports tools
@@ -334,28 +278,28 @@ func (c *MCPClient) createTransportFromFields(command, url string, args []string
 	// Option 1: Stdio transport (subprocess-based)
 	if command != "" {
 		log.Printf("Creating stdio transport for command: %s", command)
-		
+
 		// Convert env map to slice of strings
 		var envSlice []string
 		for key, value := range env {
 			envSlice = append(envSlice, fmt.Sprintf("%s=%s", key, value))
 		}
-		
+
 		return transport.NewStdio(command, envSlice, args...), nil
 	}
-	
+
 	// Option 2: URL-based transports (HTTP/SSE)
 	if url != "" {
 		return c.createHTTPTransport(url, env)
 	}
-	
+
 	// Option 3: Backwards compatibility - check args for URLs
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 			return c.createHTTPTransport(arg, env)
 		}
 	}
-	
+
 	return nil, fmt.Errorf("no valid transport configuration found - provide either 'command' for stdio transport or 'url' for HTTP/SSE transport")
 }
 
@@ -364,28 +308,28 @@ func (c *MCPClient) createTransport(serverConfig models.MCPServerConfig) (transp
 	// Option 1: Stdio transport (subprocess-based)
 	if serverConfig.Command != "" {
 		log.Printf("Creating stdio transport for command: %s", serverConfig.Command)
-		
+
 		// Convert env map to slice of strings
 		var envSlice []string
 		for key, value := range serverConfig.Env {
 			envSlice = append(envSlice, fmt.Sprintf("%s=%s", key, value))
 		}
-		
+
 		return transport.NewStdio(serverConfig.Command, envSlice, serverConfig.Args...), nil
 	}
-	
+
 	// Option 2: URL-based transports (HTTP/SSE)
 	if serverConfig.URL != "" {
 		return c.createHTTPTransport(serverConfig.URL, serverConfig.Env)
 	}
-	
+
 	// Option 3: Check if we have a URL in the args or other fields for backwards compatibility
 	for _, arg := range serverConfig.Args {
 		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 			return c.createHTTPTransport(arg, serverConfig.Env)
 		}
 	}
-	
+
 	return nil, fmt.Errorf("no valid transport configuration found - provide either 'command' for stdio transport or 'url' for HTTP/SSE transport")
 }
 
@@ -396,12 +340,12 @@ func (c *MCPClient) createHTTPTransport(baseURL string, envVars map[string]strin
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL format: %v", err)
 	}
-	
+
 	log.Printf("Creating HTTP transport for URL: %s", baseURL)
-	
+
 	// Prepare SSE client options
 	var options []transport.ClientOption
-	
+
 	// Add headers from environment variables
 	if len(envVars) > 0 {
 		headers := make(map[string]string)
@@ -420,7 +364,7 @@ func (c *MCPClient) createHTTPTransport(baseURL string, envVars map[string]strin
 			options = append(options, transport.WithHeaders(headers))
 		}
 	}
-	
+
 	// Use SSE transport for HTTP URLs (most widely supported)
 	log.Printf("Using SSE transport for URL: %s", baseURL)
 	return transport.NewSSE(baseURL, options...)
