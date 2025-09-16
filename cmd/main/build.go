@@ -66,12 +66,12 @@ func init() {
 
 // runBuildBase builds a base Station container
 func runBuildBase(cmd *cobra.Command, args []string) error {
-	buildHandler := build.NewBuildHandler(themeManager)
+	buildHandler := build.NewBuildHandler(nil)
 	return buildHandler.RunBuildBase(cmd, args)
 }
 
 // runBuildEnvironment builds a containerized environment
 func runBuildEnvironment(cmd *cobra.Command, args []string) error {
-	buildHandler := build.NewBuildHandler(themeManager)
+	buildHandler := build.NewBuildHandler(nil)
 	return buildHandler.RunBuildEnvironment(cmd, args)
 }

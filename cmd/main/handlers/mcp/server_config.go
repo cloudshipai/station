@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"station/internal/config"
 	"fmt"
 	"strconv"
 
@@ -18,7 +19,7 @@ func (h *MCPHandler) addServerToConfig(configID, serverName, command string, arg
 // addServerToConfigLocal adds server to local configuration
 func (h *MCPHandler) addServerToConfigLocal(configID, serverName, command string, args []string, envVars map[string]string, environment string) (string, error) {
 	// Load Station config
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return "", fmt.Errorf("failed to load Station config: %w", err)
 	}

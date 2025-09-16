@@ -11,7 +11,6 @@ import (
 	"station/internal/telemetry"
 	"station/internal/theme"
 	"station/internal/version"
-	"station/cmd/main/handlers/file_config"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -57,18 +56,10 @@ func init() {
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(buildCmd)
 	
-	// Initialize file config handler and integrate with mcp commands
-	fileConfigHandler := file_config.NewFileConfigHandler()
-	fileConfigHandler.RegisterMCPCommands(mcpCmd)
+	// Legacy file-config handlers removed - use 'stn sync' instead
 	
 	configCmd.AddCommand(configShowCmd)
 	configCmd.AddCommand(configEditCmd)
-	configCmd.AddCommand(themeCmd)
-	
-	themeCmd.AddCommand(themeListCmd)
-	themeCmd.AddCommand(themeSetCmd)
-	themeCmd.AddCommand(themePreviewCmd)
-	themeCmd.AddCommand(themeSelectCmd)
 	
 	keyCmd.AddCommand(keyGenerateCmd)
 	keyCmd.AddCommand(keySetCmd)

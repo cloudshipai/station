@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"station/internal/config"
 	"context"
 	"fmt"
 	"os"
@@ -30,7 +31,7 @@ func (h *MCPHandler) validateEnvironmentExists(envName string) bool {
 
 // syncMCPConfigsLocal performs declarative sync of file-based configs to database
 func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool, interactive bool) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -122,7 +123,7 @@ func (h *MCPHandler) syncMCPConfigsLocal(environment string, dryRun bool, intera
 
 // statusMCPConfigsLocal shows validation status table
 func (h *MCPHandler) statusMCPConfigsLocal(environment string) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}

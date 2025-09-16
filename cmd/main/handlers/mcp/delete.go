@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"station/internal/config"
 	"fmt"
 	"log"
 	"os"
@@ -15,7 +16,7 @@ import (
 // deleteMCPConfigLocal deletes an MCP configuration from local database
 func (h *MCPHandler) deleteMCPConfigLocal(configID, environment string, confirm bool) error {
 	// Load Station config
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}

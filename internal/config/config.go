@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,7 +19,6 @@ type Config struct {
 	TelemetryEnabled  bool
 	OTELEndpoint      string // OpenTelemetry OTLP endpoint for exporting traces
 	Debug             bool   // Debug mode enables verbose logging
-	EncryptionKey     string // Encryption key (can be loaded from config file or env var)
 	// Workspace Configuration
 	Workspace         string // Custom workspace path (overrides XDG paths)
 	// AI Provider Configuration
@@ -53,7 +51,6 @@ func Load() (*Config, error) {
 		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true), // Default enabled with opt-out
 		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", ""), // Default empty (no export)
 		Debug:            getEnvBoolOrDefault("STN_DEBUG", false), // Default to info level
-		EncryptionKey:    os.Getenv("ENCRYPTION_KEY"), // Load from environment
 		// Workspace Configuration  
 		Workspace:        getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults
@@ -71,9 +68,6 @@ func Load() (*Config, error) {
 	}
 
 	// Override with values from config file (if available) using Viper
-	if viper.IsSet("encryption_key") {
-		cfg.EncryptionKey = viper.GetString("encryption_key")
-	}
 	if viper.IsSet("database_url") {
 		cfg.DatabaseURL = viper.GetString("database_url")
 	}
@@ -136,10 +130,6 @@ func Load() (*Config, error) {
 		cfg.CloudShip.StationID = viper.GetString("cloudship.station_id")
 	}
 
-	// Validate that encryption key exists either in config file or environment
-	if cfg.EncryptionKey == "" {
-		return nil, fmt.Errorf("encryption key is required - either in config file or ENCRYPTION_KEY environment variable")
-	}
 	return cfg, nil
 }
 
