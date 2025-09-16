@@ -11,6 +11,7 @@ import (
 	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
+	"station/internal/logging"
 	"station/pkg/models"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -484,8 +485,9 @@ func (s *AgentService) UpdateAgentPrompt(ctx context.Context, agentID int64, pro
 
 // InitializeMCP initializes MCP for the agent service
 func (s *AgentService) InitializeMCP(ctx context.Context) error {
-	// Test the stdio MCP connection
-	return s.executionEngine.TestStdioMCPConnection(ctx)
+	// MCP connection testing removed - connections are established on-demand during execution
+	logging.Info("MCP initialization: connections will be established on-demand during agent execution")
+	return nil
 }
 
 // assignToolsToAgent assigns tools to an agent and returns the count of tools assigned

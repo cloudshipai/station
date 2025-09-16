@@ -17,7 +17,6 @@ import (
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/plugins/mcp"
-	googledotprompt "github.com/google/dotprompt/go/dotprompt"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -234,12 +233,10 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 
 	// Create a logging callback for real-time progress updates
 	logCallback := func(logEntry map[string]interface{}) {
-		// Only store user-relevant logs in database for UI display
-		if aee.shouldShowInLiveExecution(logEntry) {
-			err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
-			if err != nil {
-				logging.Debug("Failed to append debug log: %v", err)
-			}
+		// Store all logs in database for UI display (filtering handled by UI layer if needed)
+		err := aee.repos.AgentRuns.AppendDebugLog(ctx, runID, logEntry)
+		if err != nil {
+			logging.Debug("Failed to append debug log: %v", err)
 		}
 	}
 
@@ -340,7 +337,7 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 	}
 
 	// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
-	aee.sendToLighthouse(ctx, agent, task, runID, startTime, result, userVariables)
+	aee.sendToLighthouse(agent, task, runID, startTime, result)
 
 	return result, nil
 }
@@ -351,7 +348,7 @@ func (aee *AgentExecutionEngine) GetGenkitProvider() *GenKitProvider {
 }
 
 // sendToLighthouse sends agent run data to CloudShip Lighthouse (async, non-blocking)
-func (aee *AgentExecutionEngine) sendToLighthouse(ctx context.Context, agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult, userVariables map[string]interface{}) {
+func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult) {
 	// Skip if no Lighthouse client configured
 	if aee.lighthouseClient == nil || !aee.lighthouseClient.IsRegistered() {
 		return // Graceful degradation - no cloud integration
@@ -554,363 +551,9 @@ func (aee *AgentExecutionEngine) convertTokenUsage(usage map[string]interface{})
 	return tokenUsage
 }
 
-func (aee *AgentExecutionEngine) getGitBranch() string {
-	// Simple git branch detection - could be enhanced
-	if branch := os.Getenv("GITHUB_REF"); branch != "" {
-		// Extract branch name from refs/heads/branch-name
-		if strings.HasPrefix(branch, "refs/heads/") {
-			return strings.TrimPrefix(branch, "refs/heads/")
-		}
-		return branch
-	}
-	return ""
-}
 
-func (aee *AgentExecutionEngine) getGitCommit() string {
-	// Simple git commit detection - could be enhanced
-	if commit := os.Getenv("GITHUB_SHA"); commit != "" {
-		return commit
-	}
-	return ""
-}
 
-// TestStdioMCPConnection tests the MCP connection for debugging
-func (aee *AgentExecutionEngine) TestStdioMCPConnection(ctx context.Context) error {
-	logging.Info("Testing stdio MCP connection...")
 
-	genkitApp, err := aee.genkitProvider.GetApp(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to initialize Genkit for MCP test: %w", err)
-	}
 
-	// Update MCP connection manager
-	aee.mcpConnManager.genkitApp = genkitApp
 
-	// Test getting tools from default environment (ID: 1)
-	tools, clients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, 1)
-	if err != nil {
-		return fmt.Errorf("failed to get MCP tools: %w", err)
-	}
 
-	// Cleanup connections
-	defer aee.mcpConnManager.CleanupConnections(clients)
-
-	logging.Info("✅ MCP connection test successful - discovered %d tools", len(tools))
-
-	for i, tool := range tools {
-		if named, ok := tool.(interface{ Name() string }); ok {
-			logging.Info("  Tool %d: %s", i+1, named.Name())
-		} else {
-			logging.Info("  Tool %d: %T (no Name method)", i+1, tool)
-		}
-	}
-
-	return nil
-}
-
-// RenderAgentPromptWithDotprompt renders agent prompt with dotprompt if it contains frontmatter
-func (aee *AgentExecutionEngine) RenderAgentPromptWithDotprompt(agentPrompt string, userVariables map[string]interface{}) (string, error) {
-	// Check if this is a dotprompt with YAML frontmatter
-	if !aee.isDotpromptContent(agentPrompt) {
-		// Not a dotprompt, return as-is
-		return agentPrompt, nil
-	}
-
-	logging.Debug("Agent prompt is dotprompt format, rendering with %d variables", len(userVariables))
-
-	// Do inline dotprompt rendering to avoid import cycle
-	renderedPrompt, err := aee.renderDotpromptInline(agentPrompt, userVariables)
-	if err != nil {
-		return "", fmt.Errorf("failed to render dotprompt: %w", err)
-	}
-
-	logging.Debug("Dotprompt rendering successful, result length: %d characters", len(renderedPrompt))
-	return renderedPrompt, nil
-}
-
-// isDotpromptContent checks if the prompt contains dotprompt frontmatter or multi-role syntax
-func (aee *AgentExecutionEngine) isDotpromptContent(prompt string) bool {
-	trimmed := strings.TrimSpace(prompt)
-
-	// Check for YAML frontmatter markers
-	hasFrontmatter := strings.HasPrefix(trimmed, "---") &&
-		strings.Contains(prompt, "\n---\n")
-
-	// Check for multi-role dotprompt syntax
-	hasMultiRole := strings.Contains(prompt, "{{role \"") || strings.Contains(prompt, "{{role '")
-
-	return hasFrontmatter || hasMultiRole
-}
-
-// renderDotpromptInline renders dotprompt content inline to avoid import cycles
-func (aee *AgentExecutionEngine) renderDotpromptInline(dotpromptContent string, userVariables map[string]interface{}) (string, error) {
-	// 1. Create dotprompt instance
-	dp := googledotprompt.NewDotprompt(nil) // Use default options
-
-	// 2. Prepare data for rendering with user-defined variables only
-	data := &googledotprompt.DataArgument{
-		Input:   userVariables,    // User-defined variables like {{my_folder}}, {{my_var}}
-		Context: map[string]any{}, // Keep context empty unless needed
-	}
-
-	// 3. Render the template
-	rendered, err := dp.Render(dotpromptContent, data, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to render dotprompt: %w", err)
-	}
-
-	// 4. Convert messages to text (extract just the content, no role prefixes)
-	var renderedText strings.Builder
-	for i, msg := range rendered.Messages {
-		if i > 0 {
-			renderedText.WriteString("\n\n")
-		}
-		// Don't include role prefix - just the content
-		for _, part := range msg.Content {
-			if textPart, ok := part.(*googledotprompt.TextPart); ok {
-				renderedText.WriteString(textPart.Text)
-			}
-		}
-	}
-
-	return renderedText.String(), nil
-}
-
-// AgentSchema represents the input/output schema for an agent
-type AgentSchema struct {
-	AgentID      int64                  `json:"agent_id"`
-	AgentName    string                 `json:"agent_name"`
-	HasSchema    bool                   `json:"has_schema"`
-	InputSchema  map[string]interface{} `json:"input_schema,omitempty"`
-	OutputSchema map[string]interface{} `json:"output_schema,omitempty"`
-	Variables    []string               `json:"variables,omitempty"` // Available template variables
-}
-
-// GetAgentSchema extracts schema information from agent's dotprompt content using GenKit's parser
-func (aee *AgentExecutionEngine) GetAgentSchema(agent *models.Agent) (*AgentSchema, error) {
-	schema := &AgentSchema{
-		AgentID:   agent.ID,
-		AgentName: agent.Name,
-		HasSchema: false,
-		Variables: []string{},
-	}
-
-	if !aee.isDotpromptContent(agent.Prompt) {
-		// Simple text prompt - no schema
-		return schema, nil
-	}
-
-	// Use GenKit's dotprompt parser to properly parse the template
-	parsedPrompt, err := googledotprompt.ParseDocument(agent.Prompt)
-	if err != nil {
-		return schema, fmt.Errorf("failed to parse dotprompt document: %w", err)
-	}
-
-	schema.HasSchema = true
-
-	// Extract input schema from parsed metadata
-	if parsedPrompt.Input.Schema != nil {
-		// Schema is of type 'any', so we need to properly handle it
-		if schemaMap, ok := parsedPrompt.Input.Schema.(map[string]interface{}); ok {
-			schema.InputSchema = schemaMap
-
-			// Extract variable names from the input schema
-			for varName := range schemaMap {
-				schema.Variables = append(schema.Variables, varName)
-			}
-		} else {
-			// Store the raw schema even if it's not a map
-			if schemaAny, ok := parsedPrompt.Input.Schema.(interface{}); ok {
-				// Try to convert to map[string]interface{} for JSON serialization
-				schema.InputSchema = map[string]interface{}{"schema": schemaAny}
-			}
-		}
-	}
-
-	// Extract output schema from parsed metadata
-	if parsedPrompt.Output.Schema != nil {
-		if schemaMap, ok := parsedPrompt.Output.Schema.(map[string]interface{}); ok {
-			schema.OutputSchema = schemaMap
-		} else {
-			// Store the raw schema even if it's not a map
-			if schemaAny, ok := parsedPrompt.Output.Schema.(interface{}); ok {
-				schema.OutputSchema = map[string]interface{}{"schema": schemaAny}
-			}
-		}
-	}
-
-	// Also extract variables from template content as fallback
-	if len(schema.Variables) == 0 {
-		variables := aee.extractTemplateVariables(agent.Prompt)
-		schema.Variables = variables
-	}
-
-	return schema, nil
-}
-
-// extractTemplateVariables finds all {{variable}} patterns in the template content as fallback
-func (aee *AgentExecutionEngine) extractTemplateVariables(dotpromptContent string) []string {
-	// Extract template content (after frontmatter)
-	parts := strings.SplitN(strings.TrimSpace(dotpromptContent), "\n---\n", 2)
-	templateContent := parts[len(parts)-1] // Use last part (template content)
-
-	// Find all {{variable}} patterns
-	var variables []string
-	variableMap := make(map[string]bool) // Use map to deduplicate
-
-	// Simple regex to find {{variable}} patterns
-	start := 0
-	for {
-		openIndex := strings.Index(templateContent[start:], "{{")
-		if openIndex == -1 {
-			break
-		}
-		openIndex += start
-
-		closeIndex := strings.Index(templateContent[openIndex:], "}}")
-		if closeIndex == -1 {
-			break
-		}
-		closeIndex += openIndex
-
-		// Extract variable name
-		varContent := strings.TrimSpace(templateContent[openIndex+2 : closeIndex])
-
-		// Handle simple variable names (no complex handlebars logic)
-		if varContent != "" && !strings.Contains(varContent, " ") && !strings.Contains(varContent, "#") {
-			variableMap[varContent] = true
-		}
-
-		start = closeIndex + 2
-	}
-
-	// Convert map to slice
-	for variable := range variableMap {
-		variables = append(variables, variable)
-	}
-
-	return variables
-}
-
-// shouldShowInLiveExecution filters out GenKit framework noise from live execution logs
-// while keeping user-relevant information visible
-func (aee *AgentExecutionEngine) shouldShowInLiveExecution(logEntry map[string]interface{}) bool {
-	message, ok := logEntry["message"].(string)
-	if !ok {
-		return false
-	}
-
-	// Framework noise to filter out from live logs
-	frameworkNoise := []string{
-		"Context usage updated",
-		"Turn 1/25 completed",
-		"Turn 2/25 completed",
-		"Turn 3/25 completed",
-		"Turn 4/25 completed",
-		"Turn 5/25 completed",
-		"Batch tool execution starting",
-		"Batch tool execution completed",
-		"Enhanced generation starting",
-		"Enhanced generation completed",
-		"Station GenKit generation completed: success",
-		"Starting Station-enhanced GenKit generation",
-		// Additional GenKit/Station internal noise
-		"🔧 STATION-GENERATE: Processing generation request with 4 options",
-		"🔧 STATION-MIDDLEWARE: Request has 4 tools",
-		"Starting Station-enhanced GenKit generation",
-		"Turn 0: Model responded",
-		"Turn 1: Model responded",
-	}
-
-	// Filter out turn completion messages (Turn X/Y completed)
-	if strings.Contains(message, "Turn ") && strings.Contains(message, " completed") {
-		return false
-	}
-
-	// Filter out turn messages with patterns
-	if strings.Contains(message, "Turn ") && (strings.Contains(message, "Sending request to model") || strings.Contains(message, "Model requested") || strings.Contains(message, "Model responded")) {
-		return false
-	}
-
-	// Filter out debug messages starting with emojis (application logic)
-	if strings.HasPrefix(message, "🔧 ") || strings.HasPrefix(message, "🔥 ") || strings.HasPrefix(message, "📊 ") || strings.HasPrefix(message, "⚡ ") {
-		return false
-	}
-
-	// Filter out specific framework noise
-	for _, noise := range frameworkNoise {
-		if message == noise {
-			return false
-		}
-	}
-
-	// Keep user-relevant logs
-	return true
-}
-
-// Helper methods for CLI mode SendEphemeralSnapshot
-
-func (aee *AgentExecutionEngine) getCommandLine() string {
-	return strings.Join(os.Args, " ")
-}
-
-func (aee *AgentExecutionEngine) getCurrentWorkingDir() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	return wd
-}
-
-func (aee *AgentExecutionEngine) getCommandArguments() []string {
-	if len(os.Args) > 1 {
-		return os.Args[1:]
-	}
-	return []string{}
-}
-
-func (aee *AgentExecutionEngine) getStationVersion() string {
-	// Import version package to get actual version
-	return "0.11.0" // Placeholder
-}
-
-func (aee *AgentExecutionEngine) getAgentSnapshot() []types.AgentConfig {
-	// This would query all agents in the current environment
-	// For now, return empty slice to avoid complexity
-	return []types.AgentConfig{}
-}
-
-func (aee *AgentExecutionEngine) getMcpServerSnapshot() []types.MCPConfig {
-	// This would query all MCP server configurations
-	// For now, return empty slice to avoid complexity
-	return []types.MCPConfig{}
-}
-
-func (aee *AgentExecutionEngine) convertUserVariables(userVars map[string]interface{}) map[string]string {
-	converted := make(map[string]string)
-	for k, v := range userVars {
-		converted[k] = fmt.Sprintf("%v", v)
-	}
-	return converted
-}
-
-func (aee *AgentExecutionEngine) getToolSnapshot() []types.ToolInfo {
-	// This would query all available tools from MCP servers
-	// For now, return empty slice to avoid complexity
-	return []types.ToolInfo{}
-}
-
-func (aee *AgentExecutionEngine) getSystemMetrics() *types.SystemMetrics {
-	// Basic system metrics - could be enhanced with actual system monitoring
-	return &types.SystemMetrics{
-		CPUUsagePercent:    0.0,
-		MemoryUsagePercent: 0.0,
-		DiskUsageMB:        0,
-		UptimeSeconds:      0,
-		ActiveConnections:  0,
-		ActiveRuns:         1, // Current execution
-		NetworkInBytes:     0,
-		NetworkOutBytes:    0,
-		AdditionalMetrics:  make(map[string]string),
-	}
-}
