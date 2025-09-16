@@ -107,7 +107,7 @@ func (lc *LighthouseClient) getStationCapabilities() *proto.StationCapabilities 
 	return &proto.StationCapabilities{
 		CanExecuteAgents:      true,
 		HasMcpServers:         true,
-		SupportsBidirectional: lc.mode == ModeServe,
+		SupportsBidirectional: lc.mode == ModeServe || lc.mode == ModeStdio,
 		Environments:          []string{lc.config.Environment},
 		AgentCount:            0, // TODO: get actual count
 		ToolCount:             0, // TODO: get actual count
