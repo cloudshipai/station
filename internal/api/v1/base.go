@@ -15,7 +15,7 @@ type APIHandlers struct {
 	repos                *repositories.Repositories
 	agentService         services.AgentServiceInterface
 	// mcpConfigService removed - using file-based configs only
-	toolDiscoveryService *services.ToolDiscoveryService
+	// toolDiscoveryService removed - using DeclarativeSync for tool discovery
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
 	agentExportService   *services.AgentExportService
@@ -26,14 +26,14 @@ type APIHandlers struct {
 // NewAPIHandlers creates a new API handlers instance
 func NewAPIHandlers(
 	repos *repositories.Repositories,
-	toolDiscoveryService *services.ToolDiscoveryService,
+	toolDiscoveryService *services.ToolDiscoveryService, // deprecated - kept for compatibility
 	telemetryService *telemetry.TelemetryService,
 	localMode bool,
 ) *APIHandlers {
 	return &APIHandlers{
 		repos:                repos,
 		agentService:         services.NewAgentService(repos),
-		toolDiscoveryService: toolDiscoveryService,
+		// toolDiscoveryService removed - use DeclarativeSync
 		agentExportService:   services.NewAgentExportService(repos),
 		telemetryService:     telemetryService,
 		localMode:            localMode,

@@ -15,7 +15,6 @@ import (
 	internalconfig "station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/internal/services"
 	"station/internal/telemetry"
 	"station/internal/ui"
 	// "station/pkg/crypto" // Removed - no longer needed for file-based configs
@@ -28,7 +27,7 @@ type Server struct {
 	repos                *repositories.Repositories
 	// mcpConfigService removed - using file-based configs only
 	// FileConfigService removed - using DeclarativeSync directly
-	toolDiscoveryService *services.ToolDiscoveryService
+	// toolDiscoveryService removed - using DeclarativeSync for tool discovery
 	telemetryService     *telemetry.TelemetryService
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
@@ -41,8 +40,7 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool, telem
 	
 	// Initialize services (MCPConfigService removed - using file-based configs only)
 	
-	// Initialize tool discovery service
-	toolDiscoveryService := services.NewToolDiscoveryService(repos)
+	// ToolDiscoveryService removed - using DeclarativeSync for tool discovery
 	
 	// FileConfigService and FileConfigManager removed - using DeclarativeSync directly when needed
 	
@@ -50,16 +48,13 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool, telem
 		cfg:                  cfg,
 		db:                   database,
 		repos:                repos,
-		toolDiscoveryService: toolDiscoveryService,
+		// toolDiscoveryService removed
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 	}
 }
 
-// SetServices allows setting optional services after creation (simplified for file-based configs)
-func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService) {
-	s.toolDiscoveryService = toolDiscoveryService
-}
+// SetServices removed - ToolDiscoveryService deprecated in favor of DeclarativeSync
 
 func (s *Server) Start(ctx context.Context) error {
 	// Set Gin to release mode for production
@@ -104,7 +99,7 @@ func (s *Server) Start(ctx context.Context) error {
 	v1Group := router.Group("/api/v1")
 	apiHandlers := v1.NewAPIHandlers(
 		s.repos,
-		s.toolDiscoveryService,
+		nil, // toolDiscoveryService removed - use DeclarativeSync
 		s.telemetryService,
 		s.localMode,
 	)
