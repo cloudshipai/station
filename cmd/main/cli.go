@@ -23,9 +23,10 @@ import (
 	
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
-	"station/cmd/main/handlers"
-	"station/cmd/main/handlers/mcp"
+	"station/internal/config"
 	"station/internal/db"
+	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/internal/tui"
 	"station/pkg/bundle"
 	bundlecli "station/pkg/bundle/cli"
@@ -155,20 +156,154 @@ func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir, 
 
 // runMCPList implements the "station mcp list" command
 func runMCPList(cmd *cobra.Command, args []string) error {
-	mcpHandler := mcp.NewMCPHandler(nil)
-	return mcpHandler.RunMCPList(cmd, args)
+	// Load Station config
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Initialize database
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	
+	// Get environment (default to "default" if not specified)
+	environmentName := "default"
+	if len(args) > 0 {
+		environmentName = args[0]
+	}
+	
+	env, err := repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
+	}
+	
+	// Get file-based MCP configs
+	configs, err := repos.FileMCPConfigs.ListByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get MCP configs: %w", err)
+	}
+	
+	fmt.Printf("MCP Servers in environment '%s':\n\n", environmentName)
+	for _, config := range configs {
+		fmt.Printf("📦 %s\n", config.ConfigName)
+		fmt.Printf("   Config ID: %d\n", config.ID)
+		fmt.Printf("   Updated: %s\n\n", config.UpdatedAt.Format("2006-01-02 15:04:05"))
+	}
+	
+	if len(configs) == 0 {
+		fmt.Printf("No MCP servers configured in environment '%s'\n", environmentName)
+		fmt.Printf("Use 'stn sync' to synchronize MCP configurations\n")
+	}
+	
+	return nil
 }
 
 // runMCPTools implements the "station mcp tools" command
 func runMCPTools(cmd *cobra.Command, args []string) error {
-	mcpHandler := mcp.NewMCPHandler(nil)
-	return mcpHandler.RunMCPTools(cmd, args)
+	// Load Station config
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Initialize database
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	toolDiscoveryService := services.NewToolDiscoveryService(repos)
+	
+	// Get environment (default to "default" if not specified)
+	environmentName := "default"
+	if len(args) > 0 {
+		environmentName = args[0]
+	}
+	
+	env, err := repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
+	}
+	
+	// Get discovered tools
+	tools, err := toolDiscoveryService.GetToolsByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get tools: %w", err)
+	}
+	
+	fmt.Printf("MCP Tools in environment '%s':\n\n", environmentName)
+	for _, tool := range tools {
+		fmt.Printf("🔧 %s\n", tool.Name)
+		if tool.Description != "" {
+			fmt.Printf("   %s\n", tool.Description)
+		}
+		fmt.Printf("   Tool ID: %d\n\n", tool.ID)
+	}
+	
+	if len(tools) == 0 {
+		fmt.Printf("No tools discovered in environment '%s'\n", environmentName)
+		fmt.Printf("Use 'stn sync' to discover tools from configured MCP servers\n")
+	}
+	
+	return nil
 }
 
 // runMCPDelete implements the "station mcp delete" command
 func runMCPDelete(cmd *cobra.Command, args []string) error {
-	mcpHandler := mcp.NewMCPHandler(nil)
-	return mcpHandler.RunMCPDelete(cmd, args)
+	if len(args) < 1 {
+		return fmt.Errorf("usage: stn mcp delete <config-name> [environment]")
+	}
+	
+	configName := args[0]
+	environmentName := "default"
+	if len(args) > 1 {
+		environmentName = args[1]
+	}
+	
+	// Load Station config
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Initialize database
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	
+	// Get environment
+	env, err := repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
+	}
+	
+	// Get the config to delete
+	mcpConfig, err := repos.FileMCPConfigs.GetByEnvironmentAndName(env.ID, configName)
+	if err != nil {
+		return fmt.Errorf("MCP config '%s' not found in environment '%s': %w", configName, environmentName, err)
+	}
+	
+	// Delete the file-based config
+	err = repos.FileMCPConfigs.Delete(mcpConfig.ID)
+	if err != nil {
+		return fmt.Errorf("failed to delete MCP config: %w", err)
+	}
+	
+	fmt.Printf("✅ Deleted MCP config '%s' from environment '%s'\n", configName, environmentName)
+	fmt.Printf("Note: You may want to run 'stn sync' to update tool discovery\n")
+	
+	return nil
 }
 
 // runUI implements the "station ui" command
@@ -212,13 +347,13 @@ func runMCPAdd(cmd *cobra.Command, args []string) error {
 
 // runMCPAddFlags handles flag-based mode
 func runMCPAddFlags(cmd *cobra.Command, args []string) error {
-	// Get flags
-	environment, _ := cmd.Flags().GetString("environment")
+	// Get flags (unused but kept for compatibility)
+	_, _ = cmd.Flags().GetString("environment")
 	configID, _ := cmd.Flags().GetString("config-id")
 	serverName, _ := cmd.Flags().GetString("server-name")
 	command, _ := cmd.Flags().GetString("command")
-	argsSlice, _ := cmd.Flags().GetStringSlice("args")
-	envVars, _ := cmd.Flags().GetStringToString("env")
+	_, _ = cmd.Flags().GetStringSlice("args")
+	_, _ = cmd.Flags().GetStringToString("env")
 
 	// Validate required flags
 	if configID == "" {
@@ -236,30 +371,8 @@ func runMCPAddFlags(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("🔧 Add MCP Server to Configuration")
 	fmt.Println(banner)
 
-	// Create spinner model with server configuration
-	model := handlers.NewSpinnerModelWithServerConfig(
-		fmt.Sprintf("Adding server '%s' to configuration '%s'...", serverName, configID),
-		configID, serverName, command, argsSlice, envVars, environment, nil)
-
-	// Start the spinner
-	program := tea.NewProgram(model)
-	finalModel, err := program.Run()
-	if err != nil {
-		return fmt.Errorf("failed to run spinner: %w", err)
-	}
-
-	// Check results
-	final := finalModel.(handlers.SpinnerModel)
-	if final.GetError() != nil {
-		fmt.Println(getCLIStyles(nil).Error.Render("❌ Failed to add server: " + final.GetError().Error()))
-		return final.GetError()
-	}
-
-	// Show success banner
-	showSuccessBanner(fmt.Sprintf("Server '%s' successfully added to configuration!", serverName), nil)
-	fmt.Printf("Result: %s\n", final.GetResult())
-
-	return nil
+	// MCP server addition via CLI form is deprecated
+	return fmt.Errorf("MCP server addition via CLI deprecated - use file-based configuration in ~/.config/station/environments/<env>/template.json and run 'stn sync'")
 }
 
 // runMCPAddInteractive handles interactive mode with beautiful forms
@@ -271,53 +384,74 @@ func runMCPAddInteractive(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Get basic flags that might be pre-set
-	environment, _ := cmd.Flags().GetString("environment")
+	_, _ = cmd.Flags().GetString("environment")
 	
-	// Create the interactive form model
-	formModel := handlers.NewMCPAddForm(environment, nil)
-	
-	// Run the interactive form
-	program := tea.NewProgram(formModel, tea.WithAltScreen())
-	finalModel, err := program.Run()
-	if err != nil {
-		return fmt.Errorf("failed to run interactive form: %w", err)
-	}
-	
-	// Check if user cancelled
-	final := finalModel.(*handlers.MCPAddFormModel)
-	if final.IsCancelled() {
-		fmt.Println(getCLIStyles(nil).Info.Render("Operation cancelled"))
-		return nil
-	}
-	
-	// Show completion banner with collected data
-	showSuccessBanner("MCP Server Configuration Complete!", nil)
-	fmt.Printf("Adding server: %s\n", getCLIStyles(nil).Success.Render(final.GetServerName()))
-	fmt.Printf("To config: %s\n", getCLIStyles(nil).Success.Render(final.GetConfigID()))
-	fmt.Printf("Command: %s %v\n", getCLIStyles(nil).Success.Render(final.GetCommand()), final.GetArgs())
-	
-	// Now execute the actual addition
-	mcpHandler := mcp.NewMCPHandler(nil)
-	result, err := mcpHandler.AddServerToConfig(final.GetConfigID(), final.GetServerName(), final.GetCommand(), final.GetArgs(), final.GetEnvVars(), final.GetEnvironment())
-	if err != nil {
-		fmt.Println(getCLIStyles(nil).Error.Render("❌ Failed to add server: " + err.Error()))
-		return err
-	}
-	
-	fmt.Printf("Result: %s\n", result)
-	return nil
+	// Interactive MCP configuration deprecated
+	return fmt.Errorf("Interactive MCP configuration deprecated - use file-based configuration in ~/.config/station/environments/<env>/template.json and run 'stn sync'")
 }
 
-// runMCPSync implements the "station mcp sync" command
-func runMCPSync(cmd *cobra.Command, args []string) error {
-	mcpHandler := mcp.NewMCPHandler(nil)
-	return mcpHandler.RunMCPSync(cmd, args)
-}
+// runMCPSync removed - use 'stn sync' instead
 
 // runMCPStatus implements the "station mcp status" command
 func runMCPStatus(cmd *cobra.Command, args []string) error {
-	mcpHandler := mcp.NewMCPHandler(nil)
-	return mcpHandler.RunMCPStatus(cmd, args)
+	// Load Station config
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Initialize database
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	repos := repositories.New(database)
+	toolDiscoveryService := services.NewToolDiscoveryService(repos)
+	
+	// Get environment (default to "default" if not specified)
+	environmentName := "default"
+	if len(args) > 0 {
+		environmentName = args[0]
+	}
+	
+	env, err := repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
+	}
+	
+	// Get file-based MCP configs
+	configs, err := repos.FileMCPConfigs.ListByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get MCP configs: %w", err)
+	}
+	
+	// Get discovered tools
+	tools, err := toolDiscoveryService.GetToolsByEnvironment(env.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get tools: %w", err)
+	}
+	
+	fmt.Printf("MCP Status for environment '%s':\n\n", environmentName)
+	fmt.Printf("📦 Configured Servers: %d\n", len(configs))
+	fmt.Printf("🔧 Discovered Tools: %d\n\n", len(tools))
+	
+	if len(configs) > 0 {
+		fmt.Printf("Server Configurations:\n")
+		for _, config := range configs {
+			fmt.Printf("  • %s (updated: %s)\n", config.ConfigName, config.UpdatedAt.Format("2006-01-02 15:04"))
+		}
+		fmt.Println()
+	}
+	
+	if len(configs) == 0 {
+		fmt.Printf("No MCP servers configured. Use 'stn sync' to synchronize configurations.\n")
+	} else if len(tools) == 0 {
+		fmt.Printf("No tools discovered. You may need to run 'stn sync' to discover tools.\n")
+	}
+	
+	return nil
 }
 
 // runTemplateCreate implements the "station template create" command

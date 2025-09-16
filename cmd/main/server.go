@@ -181,7 +181,11 @@ func runMainServer() error {
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
 	apiServer := api.New(cfg, database, localMode, nil)
 
-	// ToolDiscoveryService removed - use DeclarativeSync for tool discovery
+	// Initialize ToolDiscoveryService for lighthouse and API compatibility
+	toolDiscoveryService := services.NewToolDiscoveryService(repos)
+	
+	// Set services for the API server
+	apiServer.SetServices(toolDiscoveryService)
 
 	wg.Add(5) // SSH, MCP, Dynamic Agent MCP, API, and webhook retry processor
 
