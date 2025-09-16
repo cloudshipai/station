@@ -352,6 +352,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		config.InputSchema,
 		config.CronSchedule,
 		config.ScheduleEnabled,
+		config.OutputSchema,
+		config.OutputSchemaPreset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -400,6 +402,8 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *A
 		nil, // input_schema - not set in basic config
 		config.CronSchedule,
 		config.ScheduleEnabled,
+		nil, // outputSchema - not supported in basic config yet
+		nil, // outputSchemaPreset - not supported in basic config yet
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)

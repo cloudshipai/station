@@ -238,6 +238,12 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		return nil, fmt.Errorf("failed to extract input schema: %w", err)
 	}
 
+	// Extract output schema from frontmatter
+	outputSchema, outputSchemaPreset, err := s.extractOutputSchema(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract output schema: %w", err)
+	}
+
 	// Create agent using individual parameters
 	createdAgent, err := s.repos.Agents.Create(
 		agentName,
@@ -249,6 +255,8 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		inputSchema, // input_schema - extracted from frontmatter
 		nil, // cronSchedule
 		true, // scheduleEnabled
+		outputSchema, // outputSchema - extracted from dotprompt frontmatter
+		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -311,6 +319,12 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		return nil, fmt.Errorf("failed to extract input schema: %w", err)
 	}
 
+	// Extract output schema from frontmatter
+	outputSchema, outputSchemaPreset, err := s.extractOutputSchema(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract output schema: %w", err)
+	}
+
 	// Check if anything actually changed
 	needsUpdate := false
 	if existingAgent.Prompt != promptContent {
@@ -333,6 +347,32 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		newSchemaStr = *inputSchema
 	}
 	if currentSchemaStr != newSchemaStr {
+		needsUpdate = true
+	}
+	
+	// Check if output schema changed
+	currentOutputSchemaStr := ""
+	if existingAgent.OutputSchema != nil {
+		currentOutputSchemaStr = *existingAgent.OutputSchema
+	}
+	newOutputSchemaStr := ""
+	if outputSchema != nil {
+		newOutputSchemaStr = *outputSchema
+	}
+	if currentOutputSchemaStr != newOutputSchemaStr {
+		needsUpdate = true
+	}
+	
+	// Check if output schema preset changed
+	currentOutputPresetStr := ""
+	if existingAgent.OutputSchemaPreset != nil {
+		currentOutputPresetStr = *existingAgent.OutputSchemaPreset
+	}
+	newOutputPresetStr := ""
+	if outputSchemaPreset != nil {
+		newOutputPresetStr = *outputSchemaPreset
+	}
+	if currentOutputPresetStr != newOutputPresetStr {
 		needsUpdate = true
 	}
 	
@@ -404,6 +444,8 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		inputSchema, // input_schema - extracted from frontmatter
 		nil, // cronSchedule
 		true, // scheduleEnabled
+		outputSchema, // outputSchema - extracted from dotprompt frontmatter
+		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
@@ -516,6 +558,43 @@ func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, 
 	
 	schemaStr := string(schemaJSON)
 	return &schemaStr, nil
+}
+
+// extractOutputSchema extracts output schema and preset information from dotprompt config
+func (s *DeclarativeSync) extractOutputSchema(config *DotPromptConfig) (*string, *string, error) {
+	if config.Output == nil {
+		return nil, nil, nil
+	}
+	
+	var outputSchema *string
+	var outputSchemaPreset *string
+	
+	// Check for schema field (custom output schema in Picoschema YAML format)
+	if schemaData, exists := config.Output["schema"]; exists {
+		// Convert the YAML schema to JSON string for database storage
+		schemaBytes, err := json.Marshal(schemaData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to marshal output schema to JSON: %w", err)
+		}
+		schemaJSON := string(schemaBytes)
+		
+		// Validate the output schema JSON before storing
+		helper := schema.NewExportHelper()
+		if err := helper.ValidateOutputSchema(schemaJSON); err != nil {
+			return nil, nil, fmt.Errorf("invalid output schema in agent file: %w", err)
+		}
+		
+		outputSchema = &schemaJSON
+	}
+	
+	// Check for preset field (predefined schema shortcut like "finops")
+	if presetData, exists := config.Output["preset"]; exists {
+		if presetStr, ok := presetData.(string); ok {
+			outputSchemaPreset = &presetStr
+		}
+	}
+	
+	return outputSchema, outputSchemaPreset, nil
 }
 
 // parsePicoschemaField parses a single Picoschema field definition

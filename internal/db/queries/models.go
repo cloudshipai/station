@@ -9,22 +9,24 @@ import (
 )
 
 type Agent struct {
-	ID               int64          `json:"id"`
-	Name             string         `json:"name"`
-	Description      string         `json:"description"`
-	Prompt           string         `json:"prompt"`
-	MaxSteps         int64          `json:"max_steps"`
-	EnvironmentID    int64          `json:"environment_id"`
-	CreatedBy        int64          `json:"created_by"`
-	ModelID          sql.NullInt64  `json:"model_id"`
-	InputSchema      sql.NullString `json:"input_schema"`
-	CronSchedule     sql.NullString `json:"cron_schedule"`
-	IsScheduled      sql.NullBool   `json:"is_scheduled"`
-	LastScheduledRun sql.NullTime   `json:"last_scheduled_run"`
-	NextScheduledRun sql.NullTime   `json:"next_scheduled_run"`
-	ScheduleEnabled  sql.NullBool   `json:"schedule_enabled"`
-	CreatedAt        sql.NullTime   `json:"created_at"`
-	UpdatedAt        sql.NullTime   `json:"updated_at"`
+	ID                 int64          `json:"id"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	Prompt             string         `json:"prompt"`
+	MaxSteps           int64          `json:"max_steps"`
+	EnvironmentID      int64          `json:"environment_id"`
+	CreatedBy          int64          `json:"created_by"`
+	ModelID            sql.NullInt64  `json:"model_id"`
+	InputSchema        sql.NullString `json:"input_schema"`
+	OutputSchema       sql.NullString `json:"output_schema"`
+	OutputSchemaPreset sql.NullString `json:"output_schema_preset"`
+	CronSchedule       sql.NullString `json:"cron_schedule"`
+	IsScheduled        sql.NullBool   `json:"is_scheduled"`
+	LastScheduledRun   sql.NullTime   `json:"last_scheduled_run"`
+	NextScheduledRun   sql.NullTime   `json:"next_scheduled_run"`
+	ScheduleEnabled    sql.NullBool   `json:"schedule_enabled"`
+	CreatedAt          sql.NullTime   `json:"created_at"`
+	UpdatedAt          sql.NullTime   `json:"updated_at"`
 }
 
 type AgentRun struct {

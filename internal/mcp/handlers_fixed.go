@@ -85,13 +85,29 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	
 	// Extract and validate input_schema if provided
 	var inputSchema *string
+	helper := schema.NewExportHelper()  // Create helper for schema validation
 	if inputSchemaParam := request.GetString("input_schema", ""); inputSchemaParam != "" {
 		// Validate the schema JSON before storing
-		helper := schema.NewExportHelper()
 		if err := helper.ValidateInputSchema(inputSchemaParam); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Invalid input_schema JSON: %v", err)), nil
 		}
 		inputSchema = &inputSchemaParam
+	}
+	
+	// Extract output schema parameters
+	var outputSchema *string
+	var outputSchemaPreset *string
+	
+	if outputSchemaParam := request.GetString("output_schema", ""); outputSchemaParam != "" {
+		// Validate output schema before using it
+		if err := helper.ValidateOutputSchema(outputSchemaParam); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid output schema: %v", err)), nil
+		}
+		outputSchema = &outputSchemaParam
+	}
+	
+	if outputPresetParam := request.GetString("output_schema_preset", ""); outputPresetParam != "" {
+		outputSchemaPreset = &outputPresetParam
 	}
 	
 	// Extract tool_names array if provided
@@ -112,14 +128,16 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 
 	// Create the agent using unified service layer
 	config := &services.AgentConfig{
-		EnvironmentID: environmentID,
-		Name:          name,
-		Description:   description,
-		Prompt:        prompt,
-		AssignedTools: toolNames,
-		MaxSteps:      int64(maxSteps),
-		CreatedBy:     1, // Console user
-		InputSchema:   inputSchema,
+		EnvironmentID:       environmentID,
+		Name:                name,
+		Description:         description,
+		Prompt:              prompt,
+		AssignedTools:       toolNames,
+		MaxSteps:            int64(maxSteps),
+		CreatedBy:           1, // Console user
+		InputSchema:         inputSchema,
+		OutputSchema:        outputSchema,
+		OutputSchemaPreset:  outputSchemaPreset,
 	}
 	
 	createdAgent, err := s.agentService.CreateAgent(ctx, config)
@@ -447,15 +465,81 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
 	}
 
-	// For now, return success with current agent data
+	// Extract optional parameters, preserving existing values if not provided
+	name := request.GetString("name", existingAgent.Name)
+	description := request.GetString("description", existingAgent.Description)
+	prompt := request.GetString("prompt", existingAgent.Prompt)
+	maxSteps := int64(request.GetInt("max_steps", int(existingAgent.MaxSteps)))
+
+	// Handle output schema parameters
+	var outputSchema *string
+	var outputSchemaPreset *string
+	
+	helper := schema.NewExportHelper()  // Create helper for schema validation
+	if outputSchemaParam := request.GetString("output_schema", ""); outputSchemaParam != "" {
+		// Validate output schema before using it
+		if err := helper.ValidateOutputSchema(outputSchemaParam); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid output schema: %v", err)), nil
+		}
+		outputSchema = &outputSchemaParam
+	} else if existingAgent.OutputSchema != nil {
+		outputSchema = existingAgent.OutputSchema
+	}
+	
+	if outputSchemaPresetParam := request.GetString("output_schema_preset", ""); outputSchemaPresetParam != "" {
+		outputSchemaPreset = &outputSchemaPresetParam
+		// Clear output_schema if preset is provided
+		outputSchema = nil
+	} else if existingAgent.OutputSchemaPreset != nil {
+		outputSchemaPreset = existingAgent.OutputSchemaPreset
+	}
+
+	// Update the agent
+	err = s.repos.Agents.Update(
+		agentID,
+		name,
+		description, 
+		prompt,
+		maxSteps,
+		existingAgent.InputSchema, // Keep existing input schema for now
+		existingAgent.CronSchedule, // Keep existing schedule
+		existingAgent.ScheduleEnabled, // Keep existing schedule setting
+		outputSchema,
+		outputSchemaPreset,
+	)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent: %v", err)), nil
+	}
+
+	// Export agent to filesystem after successful update
+	if s.agentExportService != nil {
+		if err := s.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+			// Add export error info to response for user awareness
+			response := map[string]interface{}{
+				"success": true,
+				"agent": map[string]interface{}{
+					"id":          agentID,
+					"name":        name,
+					"description": description,
+					"max_steps":   maxSteps,
+				},
+				"message": fmt.Sprintf("Agent '%s' updated successfully", name),
+				"export_warning": fmt.Sprintf("Agent updated but export failed: %v. Use 'stn agent export %s' to export manually.", err, name),
+			}
+			resultJSON, _ := json.MarshalIndent(response, "", "  ")
+			return mcp.NewToolResultText(string(resultJSON)), nil
+		}
+	}
+
 	response := map[string]interface{}{
 		"success": true,
 		"agent": map[string]interface{}{
-			"id":          existingAgent.ID,
-			"name":        existingAgent.Name,
-			"description": existingAgent.Description,
+			"id":          agentID,
+			"name":        name,
+			"description": description,
+			"max_steps":   maxSteps,
 		},
-		"message": "Agent update functionality pending - repository signature mismatch",
+		"message": fmt.Sprintf("Agent '%s' updated successfully", name),
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
@@ -686,15 +770,72 @@ func (s *Server) handleListEnvironments(ctx context.Context, request mcp.CallToo
 }
 
 func (s *Server) handleListAgents(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract pagination parameters
+	limit := request.GetInt("limit", 50)
+	offset := request.GetInt("offset", 0)
+	
+	// Extract optional filters
+	environmentID := request.GetString("environment_id", "")
+	enabledOnly := request.GetBool("enabled_only", false)
+
 	agents, err := s.repos.Agents.List()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to list agents: %v", err)), nil
 	}
 
+	// Apply environment filter if provided
+	if environmentID != "" {
+		envID, err := strconv.ParseInt(environmentID, 10, 64)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid environment_id format: %v", err)), nil
+		}
+		filteredAgents := make([]*models.Agent, 0)
+		for _, agent := range agents {
+			if agent.EnvironmentID == envID {
+				filteredAgents = append(filteredAgents, agent)
+			}
+		}
+		agents = filteredAgents
+	}
+
+	// Apply enabled filter if provided
+	if enabledOnly {
+		filteredAgents := make([]*models.Agent, 0)
+		for _, agent := range agents {
+			// For now, consider all agents as enabled unless explicitly disabled
+			// This can be enhanced when agent enabled/disabled status is implemented
+			filteredAgents = append(filteredAgents, agent)
+		}
+		agents = filteredAgents
+	}
+
+	totalCount := len(agents)
+
+	// Apply pagination
+	start := offset
+	if start > totalCount {
+		start = totalCount
+	}
+	
+	end := start + limit
+	if end > totalCount {
+		end = totalCount
+	}
+
+	paginatedAgents := agents[start:end]
+
 	response := map[string]interface{}{
 		"success": true,
-		"agents":  agents,
-		"count":   len(agents),
+		"agents":  paginatedAgents,
+		"count":   len(paginatedAgents),
+		"pagination": map[string]interface{}{
+			"count":        len(paginatedAgents),
+			"total":        totalCount,
+			"limit":        limit,
+			"offset":       offset,
+			"has_more":     end < totalCount,
+			"next_offset":  end,
+		},
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
