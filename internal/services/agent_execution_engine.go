@@ -86,6 +86,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, ag
 // ExecuteAgentViaStdioMCPWithVariables executes an agent with user-defined variables for dotprompt rendering
 func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
+	log.Printf("🔥 STDIO-DEBUG: ExecuteAgentViaStdioMCPWithVariables called for agent %s (ID: %d)", agent.Name, agent.ID)
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
 	// Create telemetry span if telemetry service is available
@@ -264,8 +265,14 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			defer execSpan.End()
 		}
 		
-		response, err := executor.ExecuteAgent(*agent, agentTools, genkitApp, mcpTools, task, logCallback)
-		log.Printf("🔥 AGENT-ENGINE: Dotprompt executor returned - response: %v, err: %v", response != nil, err)
+		// Get environment name using repository layer for dotprompt file path resolution
+		environment, err := aee.repos.Environments.GetByID(agent.EnvironmentID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get environment (ID: %d) for agent %s: %w", agent.EnvironmentID, agent.Name, err)
+		}
+		
+		// Use clean, unified dotprompt.Execute() execution path
+		response, err := executor.ExecuteAgent(*agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name)
 		
 		// Clean up MCP connections after execution is complete
 		aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
