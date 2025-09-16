@@ -13,6 +13,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
+	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/mcp"
 	"station/internal/services"
 
@@ -90,8 +91,27 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 
 	// Initialize agent service with Lighthouse integration (same as server mode)
 	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
-	
-	
+
+	// Initialize remote control service for bidirectional management (same as server mode)
+	var remoteControlSvc *lighthouseServices.RemoteControlService
+	if lighthouseClient != nil && (lighthouseClient.GetMode() == lighthouse.ModeServe || lighthouseClient.GetMode() == lighthouse.ModeStdio) {
+		log.Printf("🌐 Initializing stdio mode remote control via CloudShip")
+		remoteControlSvc = lighthouseServices.NewRemoteControlService(
+			lighthouseClient,
+			agentSvc,
+			repos,
+			cfg.CloudShip.RegistrationKey,
+			"default", // TODO: use actual environment name
+		)
+
+		// Start remote control service
+		if err := remoteControlSvc.Start(ctx); err != nil {
+			log.Printf("Warning: Failed to start remote control service: %v", err)
+		} else {
+			log.Printf("✅ Stdio mode remote control active - CloudShip can manage this Station")
+		}
+	}
+
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
 
@@ -138,21 +158,37 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 
 	// Start MCP server in stdio mode (this blocks until stdin closes)
 	if err := mcpServer.StartStdio(ctx); err != nil {
-		// Clean shutdown of API server if it was started
+		// Clean shutdown of services if MCP server fails to start
 		if apiCancel != nil {
 			fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
 			apiCancel()
 			wg.Wait()
 		}
+		if remoteControlSvc != nil {
+			fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
+			if stopErr := remoteControlSvc.Stop(); stopErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Error stopping remote control service: %v\n", stopErr)
+			}
+		}
 		return fmt.Errorf("failed to start MCP stdio server: %w", err)
 	}
 
-	// Clean shutdown of API server when stdio closes
+	// Clean shutdown of services when stdio closes
 	if apiCancel != nil {
 		fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
 		apiCancel()
 		wg.Wait()
 	}
+
+	// Clean shutdown of remote control service
+	if remoteControlSvc != nil {
+		fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
+		if err := remoteControlSvc.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Error stopping remote control service: %v\n", err)
+		}
+	}
+
+	// Note: Lighthouse client cleanup happens automatically via context cancellation
 
 	return nil
 }

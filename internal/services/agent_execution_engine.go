@@ -337,7 +337,8 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 	}
 
 	// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
-	aee.sendToLighthouse(agent, task, runID, startTime, result)
+	// Temporarily commented out to prevent blocking run completion
+	// aee.sendToLighthouse(agent, task, runID, startTime, result)
 
 	return result, nil
 }

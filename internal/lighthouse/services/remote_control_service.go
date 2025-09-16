@@ -61,7 +61,7 @@ func NewRemoteControlService(
 
 // Start initializes and starts the remote control services
 func (rcs *RemoteControlService) Start(ctx context.Context) error {
-	logging.Info("Starting Station remote control service for server mode")
+	logging.Info("Starting Station remote control service")
 
 	// Verify we have a Lighthouse client (will attempt registration/reconnection)
 	if rcs.lighthouseClient == nil {
@@ -69,9 +69,9 @@ func (rcs *RemoteControlService) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Verify server mode
-	if rcs.lighthouseClient.GetMode() != lighthouse.ModeServe {
-		logging.Info("Station not in serve mode - remote control functionality will be disabled")
+	// Verify supported mode (serve or stdio)
+	if rcs.lighthouseClient.GetMode() != lighthouse.ModeServe && rcs.lighthouseClient.GetMode() != lighthouse.ModeStdio {
+		logging.Info("Station not in supported mode (serve/stdio) - remote control functionality will be disabled")
 		return nil
 	}
 

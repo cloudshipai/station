@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"time"
-	
+
 	"station/internal/config"
 	"station/pkg/models"
-	
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
@@ -35,6 +35,7 @@ func NewGenKitExecutor() *GenKitExecutor {
 	return &GenKitExecutor{}
 }
 
+
 // ExecuteAgent executes an agent using dotprompt.Execute() with registered MCP tools
 func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{}), environmentName string) (*ExecutionResponse, error) {
 	startTime := time.Now()
@@ -50,7 +51,7 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 			Error:    fmt.Sprintf("failed to get agent prompt path: %v", err),
 		}, nil
 	}
-	
+
 	// Load dotprompt file
 	agentPrompt := genkit.LoadPrompt(genkitApp, promptPath, "")
 	if agentPrompt == nil {
