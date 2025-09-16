@@ -408,6 +408,18 @@ func (aee *AgentExecutionEngine) convertToAgentRun(agent *models.Agent, task str
 		ToolCalls:      aee.convertToolCalls(result.ToolCalls),
 		ExecutionSteps: aee.convertExecutionSteps(result.ExecutionSteps),
 		TokenUsage:     aee.convertTokenUsage(result.TokenUsage),
+		OutputSchema:   func() string {
+			if agent.OutputSchema != nil {
+				return *agent.OutputSchema
+			}
+			return ""
+		}(),
+		OutputSchemaPreset: func() string {
+			if agent.OutputSchemaPreset != nil {
+				return *agent.OutputSchemaPreset
+			}
+			return ""
+		}(),
 		Metadata: map[string]string{
 			"steps_used": fmt.Sprintf("%d", result.StepsUsed),
 			"tools_used": fmt.Sprintf("%d", result.ToolsUsed),
