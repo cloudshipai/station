@@ -17,9 +17,11 @@ type AgentRun struct {
 	StartedAt      time.Time         `json:"started_at"`
 	CompletedAt    time.Time         `json:"completed_at"`
 	ToolCalls      []ToolCall        `json:"tool_calls"`
-	ExecutionSteps []ExecutionStep   `json:"execution_steps"`
-	TokenUsage     *TokenUsage       `json:"token_usage"`
-	Metadata       map[string]string `json:"metadata"`
+	ExecutionSteps     []ExecutionStep   `json:"execution_steps"`
+	TokenUsage         *TokenUsage       `json:"token_usage"`
+	Metadata           map[string]string `json:"metadata"`
+	OutputSchema       string            `json:"output_schema,omitempty"`       // JSON schema for output format
+	OutputSchemaPreset string            `json:"output_schema_preset,omitempty"` // Preset name (e.g., "finops")
 }
 
 // ToolCall represents a single tool execution within an agent run

@@ -16,6 +16,19 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.AgentRunData {
 		return nil
 	}
 
+	metadata := run.Metadata
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+
+	// Add preset information to metadata
+	if run.OutputSchemaPreset != "" {
+		metadata["output_schema_preset"] = run.OutputSchemaPreset
+	}
+	if run.OutputSchema != "" {
+		metadata["has_output_schema"] = "true"
+	}
+
 	return &proto.AgentRunData{
 		RunId:          run.ID,
 		AgentId:        run.AgentID,
@@ -30,7 +43,7 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.AgentRunData {
 		Status:         convertRunStatusToProto(run.Status),
 		StartedAt:      timestampFromTime(run.StartedAt),
 		CompletedAt:    timestampFromTime(run.CompletedAt),
-		Metadata:       run.Metadata,
+		Metadata:       metadata,
 		StationVersion: version.GetVersion(), // Add Station version for debugging/compatibility
 	}
 }

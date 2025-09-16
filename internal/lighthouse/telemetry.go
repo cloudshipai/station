@@ -35,6 +35,40 @@ func (lc *LighthouseClient) SendRun(runData *types.AgentRun, environment string,
 			logging.Info("Lighthouse run buffer full, dropping run data (run_id: %s)", runData.ID)
 		}
 	}
+
+	// Send to Data Ingestion service if finops preset is used
+	if runData.OutputSchemaPreset == "finops" {
+		lc.sendFinOpsData(runData, environment)
+	}
+}
+
+// sendFinOpsData sends structured finops data to the Data Ingestion service
+func (lc *LighthouseClient) sendFinOpsData(runData *types.AgentRun, environment string) {
+	logging.Debug("Detected finops preset - sending structured data to Data Ingestion service")
+
+	// Create data ingestion client
+	dataClient, err := NewDataIngestionClient(lc.config)
+	if err != nil {
+		logging.Info("Failed to create data ingestion client for finops data: %v", err)
+		return
+	}
+
+	// Send the finops data (context with timeout)
+	ctx, cancel := context.WithTimeout(lc.ctx, lc.config.RequestTimeout)
+	defer cancel()
+
+	if err := dataClient.Connect(ctx); err != nil {
+		logging.Info("Failed to connect to data ingestion service for finops data: %v", err)
+		return
+	}
+	defer dataClient.Close()
+
+	if err := dataClient.SendFinOpsData(ctx, runData, environment); err != nil {
+		logging.Info("Failed to send finops data to Data Ingestion service: %v", err)
+		return
+	}
+
+	logging.Debug("Successfully sent finops structured data for run %s", runData.ID)
 }
 
 // SendEphemeralSnapshot sends CLI mode rich context snapshot
