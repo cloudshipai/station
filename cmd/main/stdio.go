@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
 	"station/internal/mcp"
 	"station/internal/services"
 
@@ -79,8 +81,15 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize Genkit: %v (agent execution will be limited)\n", err)
 	}
 
-	// Initialize agent service for API endpoints
-	agentSvc := services.NewAgentService(repos)
+	// Initialize Lighthouse client for CloudShip integration (same as server mode)
+	mode := lighthouse.DetectModeFromCommand()
+	lighthouseClient, err := lighthouse.InitializeLighthouseFromConfig(cfg, mode)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Lighthouse client: %v", err)
+	}
+
+	// Initialize agent service with Lighthouse integration (same as server mode)
+	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
 	
 	
 	// Check if we're in local mode
