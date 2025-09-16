@@ -176,15 +176,3 @@ func (e *GenKitExecutor) getModelName() string {
 	}
 }
 
-
-// DEPRECATED METHODS FOR TEST COMPATIBILITY
-
-// ExecuteAgentWithDotpromptTemplate is deprecated
-func (e *GenKitExecutor) ExecuteAgentWithDotpromptTemplate(extractor *RuntimeExtraction, request *ExecutionRequest) (*ExecutionResponse, error) {
-	return nil, fmt.Errorf("ExecuteAgentWithDotpromptTemplate is deprecated - use ExecuteAgent instead")
-}
-
-// ExecuteAgentWithGenerate is deprecated
-func (e *GenKitExecutor) ExecuteAgentWithGenerate(extractor *RuntimeExtraction, request *ExecutionRequest) (*ExecutionResponse, error) {
-	return nil, fmt.Errorf("ExecuteAgentWithGenerate is deprecated - use ExecuteAgent instead")
-}

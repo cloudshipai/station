@@ -528,7 +528,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	fmt.Printf("🤖 Executing agent using self-bootstrapping architecture...\n")
 	
 	// Execute the agent using our stdio MCP approach
-	result, err := agentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, agentRun.ID, map[string]interface{}{})
+	result, err := agentService.GetExecutionEngine().Execute(ctx, agent, task, agentRun.ID, map[string]interface{}{})
 	if err != nil {
 		// Store original error before it gets overwritten
 		originalErr := err

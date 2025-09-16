@@ -138,7 +138,7 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with %d variables", agent.ID, agent.Name, len(userVariables))
 	
 	// Execute using AgentExecutionEngine directly with stdio MCP and user variables
-	result, err := s.executionEngine.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
+	result, err := s.executionEngine.Execute(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
 	
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
@@ -258,7 +258,7 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with run ID %d and %d variables", agent.ID, agent.Name, runID, len(userVariables))
 	
 	// Execute using AgentExecutionEngine directly with stdio MCP and user variables - PASS THE REAL RUN ID
-	result, err := s.executionEngine.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, userVariables) // Use real run ID!
+	result, err := s.executionEngine.Execute(ctx, agent, task, runID, userVariables) // Use real run ID!
 	
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -77,16 +76,16 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 	}
 }
 
-// ExecuteAgentViaStdioMCP executes an agent using self-bootstrapping stdio MCP architecture
-func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCP(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
-	// Default to empty user variables for backward compatibility
-	return aee.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, map[string]interface{}{})
+// ExecuteAgent executes an agent using the unified execution architecture
+func (aee *AgentExecutionEngine) ExecuteAgent(ctx context.Context, agent *models.Agent, task string, runID int64) (*AgentExecutionResult, error) {
+	// Default to empty user variables for backward compatibility  
+	return aee.Execute(ctx, agent, task, runID, map[string]interface{}{})
 }
 
-// ExecuteAgentViaStdioMCPWithVariables executes an agent with user-defined variables for dotprompt rendering
-func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
+// Execute executes an agent with optional user variables for dotprompt rendering
+func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
 	startTime := time.Now()
-	log.Printf("🔥 STDIO-DEBUG: ExecuteAgentViaStdioMCPWithVariables called for agent %s (ID: %d)", agent.Name, agent.ID)
+	logging.Debug("Execute called for agent %s (ID: %d)", agent.Name, agent.ID)
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
 	// Create telemetry span if telemetry service is available
@@ -165,9 +164,9 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 			defer mcpLoadSpan.End()
 		}
 		
-		logging.Info("🔥 AGENT-ENGINE: About to call GetEnvironmentMCPTools for env %d", agent.EnvironmentID)
+		logging.Debug("About to call GetEnvironmentMCPTools for env %d", agent.EnvironmentID)
 		allMCPTools, mcpClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
-		logging.Info("🔥 AGENT-ENGINE: GetEnvironmentMCPTools RETURNED - %d tools, %d clients, err=%v", len(allMCPTools), len(mcpClients), err != nil)
+		logging.Debug("GetEnvironmentMCPTools returned %d tools, %d clients, err=%v", len(allMCPTools), len(mcpClients), err != nil)
 		if err != nil {
 			if mcpLoadSpan != nil {
 				mcpLoadSpan.RecordError(err)
@@ -191,12 +190,11 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		aee.activeMCPClients = mcpClients
 		
 		// Filter to only include tools assigned to this agent (same filtering logic as traditional)
-		logging.Info("🔥 AGENT-ENGINE: About to filter tools - %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
 		logging.Debug("Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
 		var mcpTools []ai.ToolRef
-		logging.Info("🔥 TOOL-FILTER: Starting tool filtering loop with %d assigned tools", len(agentTools))
+		logging.Debug("Starting tool filtering loop with %d assigned tools", len(agentTools))
 		for i, assignedTool := range agentTools {
-			logging.Info("🔥 TOOL-FILTER: Processing assigned tool %d/%d: %s", i+1, len(agentTools), assignedTool.ToolName)
+			logging.Debug("Processing assigned tool %d/%d: %s", i+1, len(agentTools), assignedTool.ToolName)
 			for j, mcpTool := range allMCPTools {
 				// Match by tool name - same method as traditional execution
 				var toolName string
@@ -210,21 +208,20 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 				}
 				
 				if j < 5 || strings.Contains(toolName, "opencode") { // Log first 5 tools and any opencode tools
-					logging.Info("🔥 TOOL-FILTER: Checking MCP tool %d: %s vs assigned %s", j, toolName, assignedTool.ToolName)
+					logging.Debug("Checking MCP tool %d: %s vs assigned %s", j, toolName, assignedTool.ToolName)
 				}
 				
 				if toolName == assignedTool.ToolName {
-					logging.Info("🔥 TOOL-FILTER: MATCHED! Adding tool %s", toolName)
+					logging.Debug("MATCHED! Adding tool %s", toolName)
 					mcpTools = append(mcpTools, mcpTool)
 					break
 				}
 			}
-			logging.Info("🔥 TOOL-FILTER: Completed processing assigned tool %s", assignedTool.ToolName)
+			logging.Debug("Completed processing assigned tool %s", assignedTool.ToolName)
 		}
-		logging.Info("🔥 TOOL-FILTER: Tool filtering loop completed - found %d matching tools", len(mcpTools))
+		logging.Debug("Tool filtering loop completed - found %d matching tools", len(mcpTools))
 		
 		logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
-		log.Printf("🔥 MCP-SETUP: MCP tools loaded - %d tools available, %d filtered", len(allMCPTools), len(mcpTools))
 		
 		// Add filtered tools count to span
 		if span != nil {
@@ -232,7 +229,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		}
 		
 		// Use our new dotprompt + genkit execution system with progressive logging
-		log.Printf("🔥 MCP-SETUP: Creating dotprompt executor")
+		logging.Debug("Creating dotprompt executor")
 		executor := dotprompt.NewGenKitExecutor()
 		
 		// Create a logging callback for real-time progress updates
@@ -249,7 +246,7 @@ func (aee *AgentExecutionEngine) ExecuteAgentViaStdioMCPWithVariables(ctx contex
 		// Set the logging callback on the OpenAI plugin for detailed API call logging
 		aee.genkitProvider.SetOpenAILogCallback(logCallback)
 		
-		log.Printf("🔥 AGENT-ENGINE: About to call dotprompt executor - agent: %s", agent.Name)
+		logging.Debug("About to call dotprompt executor - agent: %s", agent.Name)
 		
 		// Create execution span
 		var execSpan trace.Span
