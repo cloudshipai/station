@@ -118,7 +118,7 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
-	google.golang.org/genai v1.20.0 // indirect
+	google.golang.org/genai v1.24.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
 	modernc.org/libc v1.66.3 // indirect
@@ -134,7 +134,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/ssh v0.0.0-20250128164007-98fd5ae11894
 	github.com/charmbracelet/wish v1.4.7
-	github.com/firebase/genkit/go v1.0.1
+	github.com/firebase/genkit/go v1.0.3
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang/protobuf v1.5.4
 	github.com/google/dotprompt/go v0.0.0-20250611200215-bb73406b05ca

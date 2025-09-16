@@ -228,11 +228,11 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 			return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
 		}
 		
-		// Create concrete agent service to access execution engine (same as CLI)
-		concreteAgentService := services.NewAgentService(s.repos)
+		// Create agent service to access execution engine (same as CLI)
+		agentService := services.NewAgentService(s.repos)
 		
 		// Use the same unified execution flow as CLI 
-		result, execErr := concreteAgentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, userVariables)
+		result, execErr := agentService.GetExecutionEngine().Execute(ctx, agent, task, runID, userVariables)
 		if execErr != nil {
 			// Update run as failed (same as CLI)
 			completedAt := time.Now()

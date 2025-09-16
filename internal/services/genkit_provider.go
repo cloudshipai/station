@@ -149,18 +149,30 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		// Store reference for potential future use
 		gp.openaiPlugin = openaiPlugin
 		
-		logging.Debug("About to call genkit.Init for official OpenAI plugin with GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
-		genkitApp = genkit.Init(ctx, genkit.WithPlugins(openaiPlugin))
+		// Create prompt directory for dotprompt support
+		promptDir := "/tmp/station-prompts"
+		os.MkdirAll(promptDir, 0755)
+		
+		logging.Debug("About to call genkit.Init for official OpenAI plugin with prompt directory support, GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
+		genkitApp = genkit.Init(ctx, 
+			genkit.WithPlugins(openaiPlugin),
+			genkit.WithPromptDir(promptDir))
 		err = nil // GenKit v1.0.1 Init doesn't return error
 		
 	case "googlegenai", "gemini":
 		logging.Debug("Setting up Google AI plugin with model: %s", cfg.AIModel)
 		
+		// Create prompt directory for dotprompt support
+		promptDir := "/tmp/station-prompts"
+		os.MkdirAll(promptDir, 0755)
+		
 		// Let GoogleAI plugin automatically pick up GEMINI_API_KEY or GOOGLE_API_KEY from environment
 		// This matches the official GenKit examples approach
 		geminiPlugin := &googlegenai.GoogleAI{}
 		
-		genkitApp = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
+		genkitApp = genkit.Init(ctx, 
+			genkit.WithPlugins(geminiPlugin),
+			genkit.WithPromptDir(promptDir))
 		err = nil // GenKit v1.0.1 Init doesn't return error
 		
 	default:

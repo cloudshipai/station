@@ -4821,6 +4821,7 @@ type ExecuteAgentManagementRequest struct {
 	Environment    string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
 	Variables      map[string]string      `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	TimeoutSeconds int32                  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	RunId          string                 `protobuf:"bytes,6,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"` // CloudShip's run ID for execution tracking
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -4888,6 +4889,13 @@ func (x *ExecuteAgentManagementRequest) GetTimeoutSeconds() int32 {
 		return x.TimeoutSeconds
 	}
 	return 0
+}
+
+func (x *ExecuteAgentManagementRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
 }
 
 type ExecuteAgentManagementResponse struct {
@@ -5857,13 +5865,14 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"is_default\x18\x06 \x01(\bR\tisDefault\x1a<\n" +
 	"\x0eVariablesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb2\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc9\x02\n" +
 	"\x1dExecuteAgentManagementRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04task\x18\x02 \x01(\tR\x04task\x12 \n" +
 	"\venvironment\x18\x03 \x01(\tR\venvironment\x12Y\n" +
 	"\tvariables\x18\x04 \x03(\v2;.lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntryR\tvariables\x12'\n" +
-	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\x1a<\n" +
+	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\x12\x15\n" +
+	"\x06run_id\x18\x06 \x01(\tR\x05runId\x1a<\n" +
 	"\x0eVariablesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa0\x03\n" +

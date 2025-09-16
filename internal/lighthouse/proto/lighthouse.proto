@@ -569,6 +569,7 @@ message ExecuteAgentManagementRequest {
     string environment = 3;
     map<string, string> variables = 4;
     int32 timeout_seconds = 5;
+    string run_id = 6;  // CloudShip's run ID for execution tracking
 }
 
 message ExecuteAgentManagementResponse {

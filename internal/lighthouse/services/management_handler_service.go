@@ -414,17 +414,25 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 	// Send RUNNING status update to CloudShip
 	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_RUNNING, "Agent execution started", 1)
 
-	// Use unified execution flow (same as MCP and CLI) to ensure proper database run creation
+	// Use CloudShip's provided run_id for correlation tracking
+	// Store it for status updates and telemetry correlation
 	var userID int64 = 1 // Default user ID for CloudShip executions
 	
-	// Create agent run first to get a proper run ID (same as MCP handleCallAgent)
+	// Parse CloudShip's run_id to int64 for consistency with our database
+	cloudShipRunID, err := strconv.ParseInt(req.RunId, 10, 64)
+	if err != nil {
+		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Invalid run_id format: %v", err), 1)
+		return nil, fmt.Errorf("invalid run_id format: %v", err)
+	}
+	
+	// Create local agent run (we'll correlate with CloudShip's ID in SendRun)
 	run, err := mhs.repos.AgentRuns.Create(ctx, agentID, userID, req.Task, "", 0, nil, nil, "running", nil)
 	if err != nil {
 		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Failed to create agent run: %v", err), 1)
 		return nil, fmt.Errorf("failed to create agent run: %v", err)
 	}
 	runID := run.ID
-	logging.Info("Created CloudShip agent run ID: %d", runID)
+	logging.Info("Using CloudShip's run ID: %d (local ID: %d) for execution tracking", cloudShipRunID, runID)
 	
 	// Get agent details for unified execution flow
 	agent, err := mhs.repos.Agents.GetByID(agentID)
@@ -433,12 +441,12 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		return nil, fmt.Errorf("agent not found: %v", err)
 	}
 	
-	// Create concrete agent service to access execution engine (same as MCP)
-	concreteAgentService := services.NewAgentService(mhs.repos)
+	// Create agent service to access execution engine (same as MCP)
+	agentService := services.NewAgentService(mhs.repos)
 	
 	// Use the same unified execution flow as MCP and CLI with empty variables
 	userVariables := make(map[string]interface{})
-	result, execErr := concreteAgentService.GetExecutionEngine().ExecuteAgentViaStdioMCPWithVariables(ctx, agent, req.Task, runID, userVariables)
+	result, execErr := agentService.GetExecutionEngine().Execute(ctx, agent, req.Task, runID, userVariables)
 	
 	if execErr != nil {
 		// Update run as failed (same as MCP)
