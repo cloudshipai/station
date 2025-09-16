@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"station/internal/logging"
 	"station/internal/services"
 	"station/pkg/models"
 	"station/pkg/schema"
@@ -226,11 +225,6 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 	var response *services.Message
 	var execErr error
 	
-	// Create metadata for execution
-	metadata := map[string]interface{}{
-		"source": "mcp",
-		"user_variables": userVariables,
-	}
 	
 	if storeRun {
 		// Create agent run first to get a proper run ID
@@ -240,91 +234,19 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 		}
 		runID = run.ID
 		
-		// Get agent details for unified execution flow
-		agent, err := s.repos.Agents.GetByID(agentID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
-		}
-		
-		// Create agent service to access execution engine (same as CLI)
-		agentService := services.NewAgentService(s.repos)
-		
-		// Use the same unified execution flow as CLI 
-		result, execErr := agentService.GetExecutionEngine().Execute(ctx, agent, task, runID, userVariables)
+		// Use the lighthouse-enabled agent service (same as CLI and server initialization)
+		// This ensures CloudShip telemetry and finops preset detection work correctly
+		result, execErr := s.agentService.ExecuteAgentWithRunID(ctx, agentID, task, runID, userVariables)
 		if execErr != nil {
-			// Update run as failed (same as CLI)
-			completedAt := time.Now()
-			errorMsg := fmt.Sprintf("MCP execution failed: %v", execErr)
-			updateErr := s.repos.AgentRuns.UpdateCompletionWithMetadata(
-				ctx, runID, errorMsg, 0, nil, nil, "failed", &completedAt,
-				nil, nil, nil, nil, nil, nil,
-			)
-			if updateErr != nil {
-				logging.Info("Warning: Failed to update failed run %d: %v", runID, updateErr)
-			}
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
 		}
-		
-		// Update run as completed with full metadata (same as CLI)
-		completedAt := time.Now()
-		durationSeconds := result.Duration.Seconds()
-		
-		// Extract token usage from result using exact same logic as CLI
-		var inputTokens, outputTokens, totalTokens *int64
-		var toolsUsed *int64
-		
-		if result.TokenUsage != nil {
-			// Use same field names and extraction logic as CLI
-			if inputVal := extractInt64FromTokenUsage(result.TokenUsage["input_tokens"]); inputVal != nil {
-				inputTokens = inputVal
-			}
-			if outputVal := extractInt64FromTokenUsage(result.TokenUsage["output_tokens"]); outputVal != nil {
-				outputTokens = outputVal
-			}
-			if totalVal := extractInt64FromTokenUsage(result.TokenUsage["total_tokens"]); totalVal != nil {
-				totalTokens = totalVal
-			}
-		}
-		
-		if result.StepsUsed > 0 {
-			toolsUsedVal := int64(result.StepsUsed) // Using StepsUsed as proxy for tools used
-			toolsUsed = &toolsUsedVal
-		}
-		
-		// Determine status based on execution result success (same as CLI)
-		status := "completed"
-		if !result.Success {
-			status = "failed"
-		}
-		
-		// Update database with complete metadata (same as CLI)
-		err = s.repos.AgentRuns.UpdateCompletionWithMetadata(
-			ctx,
-			runID,
-			result.Response,        // final_response
-			result.StepsTaken,      // steps_taken
-			result.ToolCalls,       // tool_calls  
-			result.ExecutionSteps,  // execution_steps
-			status,                // status - now respects result.Success
-			&completedAt,          // completed_at
-			inputTokens,           // input_tokens
-			outputTokens,          // output_tokens
-			totalTokens,           // total_tokens
-			&durationSeconds,      // duration_seconds
-			&result.ModelName,     // model_name
-			toolsUsed,            // tools_used
-		)
-		if err != nil {
-			logging.Info("Warning: Failed to update run %d completion metadata: %v", runID, err)
-		}
-		
-		// Convert AgentExecutionResult to Message for response
-		response = &services.Message{
-			Content: result.Response,
-		}
+
+		// ExecuteAgentWithRunID handles all metadata and lighthouse telemetry automatically
+		// Return the result content
+		response = result
 	} else {
 		// Execute without run storage using simplified flow
-		response, execErr = s.agentService.ExecuteAgentWithRunID(ctx, agentID, task, 0, metadata)
+		response, execErr = s.agentService.ExecuteAgent(ctx, agentID, task, userVariables)
 		if execErr != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to execute agent: %v", execErr)), nil
 		}
