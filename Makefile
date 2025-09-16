@@ -235,7 +235,6 @@ help:
 	@echo "CloudShip Integration:"
 	@echo "  make proto-gen    - Generate Go code from existing proto files"
 	@echo "  make proto-clean  - Clean generated proto files"  
-	@echo "  make proto-update - Update proto from CloudShip team and regenerate"
 	@echo ""
 	@echo "Version Control:"
 	@echo "  make build VERSION=v1.2.3 - Build with custom version"
@@ -300,17 +299,4 @@ proto-gen:
 		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
 		internal/lighthouse/proto/lighthouse.proto
 	@echo "✅ Proto code generated successfully"
-
-# Update proto file from CloudShip team and regenerate
-proto-update:
-	@echo "🔄 Updating proto files from CloudShip..."
-	@if [ ! -f "$(HOME)/projects/cloudshipai/lighthouse/proto-dist/data_ingestion.proto" ]; then \
-		echo "❌ CloudShip data_ingestion.proto not found at $(HOME)/projects/cloudshipai/lighthouse/proto-dist/data_ingestion.proto"; \
-		echo "💡 Clone CloudShip repo or update the path in this Makefile"; \
-		exit 1; \
-	fi
-	@cp "$(HOME)/projects/cloudshipai/lighthouse/proto-dist/data_ingestion.proto" internal/lighthouse/proto/
-	@sed -i 's|option go_package = "./internal/proto";|option go_package = "station/internal/lighthouse/proto";|g' internal/lighthouse/proto/data_ingestion.proto
-	@$(MAKE) proto-gen
-	@echo "✅ Proto files updated from CloudShip and regenerated"
 
