@@ -278,6 +278,7 @@ jaeger-down:
 proto-clean:
 	@echo "🧹 Cleaning generated proto files..."
 	@rm -f internal/lighthouse/proto/*.pb.go
+	@rm -f data_ingestion*.pb.go
 	@echo "✅ Proto files cleaned"
 
 # Generate Go code from proto files
@@ -303,12 +304,13 @@ proto-gen:
 # Update proto file from CloudShip team and regenerate
 proto-update:
 	@echo "🔄 Updating proto files from CloudShip..."
-	@if [ ! -f "$(HOME)/projects/cloudshipai/lighthouse/internal/proto/lighthouse.proto" ]; then \
-		echo "❌ CloudShip proto file not found at $(HOME)/projects/cloudshipai/lighthouse/internal/proto/lighthouse.proto"; \
+	@if [ ! -f "$(HOME)/projects/cloudshipai/lighthouse/proto-dist/data_ingestion.proto" ]; then \
+		echo "❌ CloudShip data_ingestion.proto not found at $(HOME)/projects/cloudshipai/lighthouse/proto-dist/data_ingestion.proto"; \
 		echo "💡 Clone CloudShip repo or update the path in this Makefile"; \
 		exit 1; \
 	fi
-	@cp "$(HOME)/projects/cloudshipai/lighthouse/internal/proto/lighthouse.proto" internal/lighthouse/proto/
+	@cp "$(HOME)/projects/cloudshipai/lighthouse/proto-dist/data_ingestion.proto" internal/lighthouse/proto/
+	@sed -i 's|option go_package = "./internal/proto";|option go_package = "station/internal/lighthouse/proto";|g' internal/lighthouse/proto/data_ingestion.proto
 	@$(MAKE) proto-gen
 	@echo "✅ Proto files updated from CloudShip and regenerated"
 

@@ -1,0 +1,323 @@
+syntax = "proto3";
+
+package lighthouse.ingestion;
+option go_package = "station/internal/lighthouse/proto";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/any.proto";
+
+// ============================================================================
+// FLEXIBLE DATA INGESTION SERVICE
+// ============================================================================
+
+service DataIngestionService {
+    // Single record ingestion
+    rpc IngestData(IngestDataRequest) returns (IngestDataResponse);
+    
+    // Batch ingestion for high-throughput scenarios
+    rpc IngestBatch(IngestBatchRequest) returns (IngestBatchResponse);
+    
+    // Streaming ingestion for real-time data
+    rpc IngestStream(stream IngestDataRequest) returns (stream IngestDataResponse);
+    
+    // Get ingestion status and metrics
+    rpc GetIngestionStatus(IngestionStatusRequest) returns (IngestionStatusResponse);
+}
+
+// ============================================================================
+// FLEXIBLE DATA INGESTION MESSAGES
+// ============================================================================
+
+// Main data ingestion request supporting any structured payload
+message IngestDataRequest {
+    // Authentication & routing
+    string registration_key = 1;       // Station registration key for auth
+    string organization_id = 2;        // Target organization UUID
+    string workspace_id = 3;           // Target workspace UUID (optional)
+    string table_id = 4;              // Target table UUID (optional)
+    
+    // Data classification
+    string app = 5;                   // Application name: "finops", "agent", "monitoring", "custom"
+    string app_type = 6;              // App-specific type: "cost-discovery", "station-run", "health-check"
+    string source_id = 7;             // Data source identifier (station_id, agent_id, etc.)
+    
+    // Flexible payload
+    google.protobuf.Struct data = 8;  // Actual data payload (JSON-like structure)
+    
+    // Enhanced metadata
+    map<string, string> metadata = 9; // Static metadata (provider, region, version, etc.)
+    google.protobuf.Struct dynamic_metadata = 10; // Complex/nested metadata structures
+    
+    // Temporal information
+    google.protobuf.Timestamp timestamp = 11;  // Data timestamp
+    google.protobuf.Timestamp ingested_at = 12; // Ingestion timestamp (auto-set if empty)
+    
+    // Data lineage & traceability
+    string correlation_id = 13;       // For tracking related data across requests
+    string batch_id = 14;            // For grouping related records
+    string parent_id = 15;           // For hierarchical data relationships
+    
+    // Processing hints
+    ProcessingOptions processing_options = 16;
+}
+
+message IngestDataResponse {
+    bool success = 1;
+    string message = 2;
+    string record_id = 3;             // Generated record UUID
+    int32 records_processed = 4;      // For batch operations
+    repeated ValidationError validation_errors = 5;
+    ProcessingMetrics metrics = 6;
+}
+
+// Batch ingestion for high-throughput scenarios
+message IngestBatchRequest {
+    repeated IngestDataRequest records = 1;
+    BatchOptions options = 2;
+}
+
+message IngestBatchResponse {
+    bool success = 1;
+    string message = 2;
+    int32 total_records = 3;
+    int32 successful_records = 4;
+    int32 failed_records = 5;
+    repeated string record_ids = 6;
+    repeated BatchError errors = 7;
+    ProcessingMetrics metrics = 8;
+}
+
+// ============================================================================
+// PROCESSING OPTIONS & CONFIGURATION
+// ============================================================================
+
+message ProcessingOptions {
+    // Validation options
+    bool strict_validation = 1;      // Fail on any validation error
+    bool auto_create_schema = 2;     // Auto-create columns for new fields
+    SchemaMode schema_mode = 3;      // How to handle schema evolution
+    
+    // Storage options
+    bool store_raw_payload = 4;      // Keep original payload for debugging
+    CompressionType compression = 5; // Compress large payloads
+    int32 ttl_days = 6;             // Time-to-live for data retention
+    
+    // Processing options
+    bool async_processing = 7;       // Process in background
+    Priority priority = 8;          // Processing priority
+    repeated string tags = 9;        // Tags for categorization
+    
+    // Indexing hints
+    repeated string index_fields = 10; // Fields to index for fast queries
+    bool full_text_index = 11;      // Enable full-text search
+}
+
+enum SchemaMode {
+    SCHEMA_MODE_STRICT = 0;         // Must match existing schema
+    SCHEMA_MODE_FLEXIBLE = 1;       // Auto-evolve schema
+    SCHEMA_MODE_APPEND_ONLY = 2;    // Only add new fields, never modify
+}
+
+enum CompressionType {
+    COMPRESSION_NONE = 0;
+    COMPRESSION_GZIP = 1;
+    COMPRESSION_SNAPPY = 2;
+    COMPRESSION_LZ4 = 3;
+}
+
+enum Priority {
+    PRIORITY_LOW = 0;
+    PRIORITY_NORMAL = 1;
+    PRIORITY_HIGH = 2;
+    PRIORITY_CRITICAL = 3;
+}
+
+message BatchOptions {
+    int32 batch_size = 1;           // Records per batch
+    bool fail_fast = 2;             // Stop on first error
+    bool parallel_processing = 3;   // Process batches in parallel
+    int32 max_concurrent_batches = 4;
+    int32 timeout_seconds = 5;
+}
+
+// ============================================================================
+// ERROR HANDLING & VALIDATION
+// ============================================================================
+
+message ValidationError {
+    string field_path = 1;          // JSON path to the field with error
+    string error_code = 2;          // ERROR_TYPE_* code
+    string message = 3;             // Human-readable error message
+    google.protobuf.Any expected_value = 4; // What was expected
+    google.protobuf.Any actual_value = 5;   // What was received
+}
+
+message BatchError {
+    int32 record_index = 1;         // Which record in the batch failed
+    repeated ValidationError validation_errors = 2;
+    string error_message = 3;
+}
+
+message ProcessingMetrics {
+    int64 processing_time_ms = 1;   // Total processing time
+    int64 validation_time_ms = 2;   // Time spent on validation
+    int64 storage_time_ms = 3;      // Time spent storing data
+    int64 indexing_time_ms = 4;     // Time spent updating indexes
+    int32 bytes_processed = 5;      // Size of processed data
+    int32 fields_created = 6;       // New fields auto-created
+    int32 records_deduplicated = 7; // Duplicate records skipped
+}
+
+// ============================================================================
+// STATUS & MONITORING
+// ============================================================================
+
+message IngestionStatusRequest {
+    string organization_id = 1;
+    string workspace_id = 2;        // Optional filter
+    string app = 3;                 // Optional filter
+    string app_type = 4;            // Optional filter
+    google.protobuf.Timestamp since = 5; // Get stats since this time
+}
+
+message IngestionStatusResponse {
+    IngestionStats stats = 1;
+    repeated DataSourceStats source_stats = 2;
+    SystemHealth health = 3;
+}
+
+message IngestionStats {
+    int64 total_records_ingested = 1;
+    int64 records_last_hour = 2;
+    int64 records_last_day = 3;
+    int64 total_bytes_ingested = 4;
+    int64 bytes_last_hour = 5;
+    int64 bytes_last_day = 6;
+    double average_processing_time_ms = 7;
+    int32 active_sources = 8;
+    int32 failed_ingestions_last_hour = 9;
+    google.protobuf.Timestamp last_ingestion = 10;
+}
+
+message DataSourceStats {
+    string source_id = 1;
+    string app = 2;
+    string app_type = 3;
+    int64 records_ingested = 4;
+    int64 bytes_ingested = 5;
+    double avg_processing_time_ms = 6;
+    int32 error_count = 7;
+    google.protobuf.Timestamp last_successful_ingestion = 8;
+    google.protobuf.Timestamp last_failed_ingestion = 9;
+    string last_error_message = 10;
+}
+
+message SystemHealth {
+    HealthStatus status = 1;
+    string message = 2;
+    double cpu_usage_percent = 3;
+    double memory_usage_percent = 4;
+    int64 disk_usage_bytes = 5;
+    int32 active_connections = 6;
+    int32 pending_records = 7;
+    int32 processing_threads = 8;
+}
+
+enum HealthStatus {
+    HEALTH_UNKNOWN = 0;
+    HEALTH_HEALTHY = 1;
+    HEALTH_WARNING = 2;
+    HEALTH_CRITICAL = 3;
+    HEALTH_DOWN = 4;
+}
+
+// ============================================================================
+// COMMON APP-SPECIFIC PAYLOAD EXAMPLES
+// ============================================================================
+
+// These are example structures - the actual data goes in the flexible 
+// google.protobuf.Struct data field above
+
+// Example for app="finops", app_type="cost-discovery"
+message FinOpsCostData {
+    string provider = 1;            // "aws", "gcp", "azure"
+    string account_id = 2;
+    string service = 3;             // "ec2", "s3", "compute-engine"
+    string resource_id = 4;
+    double cost = 5;
+    string currency = 6;
+    string billing_period = 7;
+    repeated Tag tags = 8;
+    ResourceSpecs specs = 9;
+}
+
+// Example for app="agent", app_type="station-run"
+message AgentRunData {
+    string agent_id = 1;
+    string run_id = 2;
+    string task = 3;
+    string response = 4;
+    int64 duration_ms = 5;
+    repeated ToolCall tool_calls = 6;
+    TokenUsage token_usage = 7;
+    RunStatus status = 8;
+}
+
+// Example for app="monitoring", app_type="health-check"
+message HealthCheckData {
+    string component = 1;
+    string status = 2;
+    double response_time_ms = 3;
+    repeated HealthMetric metrics = 4;
+    string error_message = 5;
+}
+
+// ============================================================================
+// COMMON UTILITY MESSAGES
+// ============================================================================
+
+message Tag {
+    string key = 1;
+    string value = 2;
+}
+
+message ResourceSpecs {
+    int32 cpu_count = 1;
+    int64 memory_mb = 2;
+    int64 storage_gb = 3;
+    string instance_type = 4;
+    map<string, string> additional_specs = 5;
+}
+
+message ToolCall {
+    string tool_name = 1;
+    google.protobuf.Struct parameters = 2;
+    google.protobuf.Struct result = 3;
+    int64 duration_ms = 4;
+    bool success = 5;
+    google.protobuf.Timestamp timestamp = 6;
+}
+
+message TokenUsage {
+    int32 prompt_tokens = 1;
+    int32 completion_tokens = 2;
+    int32 total_tokens = 3;
+    double cost_usd = 4;
+}
+
+message HealthMetric {
+    string name = 1;
+    double value = 2;
+    string unit = 3;
+    string status = 4;           // "ok", "warning", "critical"
+}
+
+enum RunStatus {
+    RUN_STATUS_UNKNOWN = 0;
+    RUN_STATUS_QUEUED = 1;
+    RUN_STATUS_RUNNING = 2;
+    RUN_STATUS_COMPLETED = 3;
+    RUN_STATUS_FAILED = 4;
+    RUN_STATUS_CANCELLED = 5;
+}
