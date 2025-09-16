@@ -10,6 +10,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
 	"station/internal/services"
 	"station/internal/telemetry"
 
@@ -29,6 +30,7 @@ type Server struct {
 	agentExportService *services.AgentExportService
 	bundleHandler      *UnifiedBundleHandler
 	telemetryService   *telemetry.TelemetryService
+	lighthouseClient   *lighthouse.LighthouseClient // For surgical telemetry integration
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -134,4 +136,9 @@ func (s *Server) requireAuthInServerMode(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// SetLighthouseClient sets the lighthouse client for surgical telemetry integration
+func (s *Server) SetLighthouseClient(client *lighthouse.LighthouseClient) {
+	s.lighthouseClient = client
 }

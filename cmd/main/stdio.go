@@ -118,6 +118,12 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Create MCP server for stdio communication
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
 
+	// Set lighthouse client for surgical telemetry integration
+	if lighthouseClient != nil {
+		mcpServer.SetLighthouseClient(lighthouseClient)
+		log.Printf("✅ Lighthouse client configured for MCP server telemetry")
+	}
+
 	// Try to start API server if port is available (avoid conflicts with other stdio instances)
 	var apiServer *api.Server
 	var apiCtx context.Context
