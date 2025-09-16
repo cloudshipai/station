@@ -13,7 +13,6 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/mcp"
 	"station/internal/services"
-	"station/pkg/crypto"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -70,11 +69,6 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to ensure default environment: %w", err)
 	}
 
-	// Initialize key manager using config
-	_, err = crypto.NewKeyManagerFromConfig(cfg.EncryptionKey)
-	if err != nil {
-		return fmt.Errorf("failed to initialize key manager: %w", err)
-	}
 
 	// Initialize minimal services for API server only
 	ctx := context.Background()

@@ -8,8 +8,6 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
-	"station/internal/config"
 	"station/internal/theme"
 	"station/pkg/models"
 )
@@ -29,21 +27,6 @@ type CLIStyles struct {
 	Form     lipgloss.Style
 }
 
-// loadStationConfig loads the Station configuration
-func loadStationConfig() (*config.Config, error) {
-	encryptionKey := viper.GetString("encryption_key")
-	if encryptionKey == "" {
-		return nil, fmt.Errorf("no encryption key found. Run 'station init' first")
-	}
-
-	return &config.Config{
-		DatabaseURL:   viper.GetString("database_url"),
-		APIPort:       viper.GetInt("api_port"),
-		SSHPort:       viper.GetInt("ssh_port"),
-		MCPPort:       viper.GetInt("mcp_port"),
-		EncryptionKey: encryptionKey,
-	}, nil
-}
 
 // getCLIStyles returns theme-aware CLI styles
 func getCLIStyles(themeManager *theme.ThemeManager) CLIStyles {

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -41,21 +40,6 @@ type CLIStyles struct {
 
 // Helper functions
 
-// loadStationConfig loads the Station configuration
-func loadStationConfig() (*config.Config, error) {
-	encryptionKey := viper.GetString("encryption_key")
-	if encryptionKey == "" {
-		return nil, fmt.Errorf("no encryption key found. Run 'station init' first")
-	}
-
-	return &config.Config{
-		DatabaseURL:   viper.GetString("database_url"),
-		APIPort:       viper.GetInt("api_port"),
-		SSHPort:       viper.GetInt("ssh_port"),
-		MCPPort:       viper.GetInt("mcp_port"),
-		EncryptionKey: encryptionKey,
-	}, nil
-}
 
 // getCLIStyles returns theme-aware CLI styles
 func getCLIStyles(themeManager *theme.ThemeManager) CLIStyles {
@@ -163,7 +147,7 @@ func makeAuthenticatedRequest(method, url string, body io.Reader) (*http.Request
 // Local agent operations
 
 func (h *AgentHandler) listAgentsLocal() error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -213,7 +197,7 @@ func (h *AgentHandler) listAgentsLocal() error {
 }
 
 func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -302,7 +286,7 @@ func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
 }
 
 func (h *AgentHandler) showAgentLocal(agentID int64) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -386,7 +370,7 @@ func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool) erro
 }
 
 func (h *AgentHandler) deleteAgentLocal(agentID int64) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -699,7 +683,7 @@ func (h *AgentHandler) monitorExecution(runID int64, apiPort int) error {
 	fmt.Printf("⏳ Monitoring execution progress...\n")
 	
 	// Load fresh config and database connection for each check to avoid locks
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"station/internal/config"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 
 // listMCPConfigsLocal lists MCP configs from local database
 func (h *MCPHandler) listMCPConfigsLocal(environment string) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -162,7 +163,7 @@ func (h *MCPHandler) printConfigTableWithEnvironments(configsWithEnv []struct {
 
 // listMCPToolsLocal lists MCP tools from local database
 func (h *MCPHandler) listMCPToolsLocal(environment, filter string) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}

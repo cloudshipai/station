@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/theme"
@@ -57,7 +58,7 @@ func (h *RunsHandler) RunRunsInspect(cmd *cobra.Command, args []string) error {
 // Local operations
 
 func (h *RunsHandler) listRunsLocal(limit int) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
@@ -102,7 +103,7 @@ func (h *RunsHandler) listRunsLocal(limit int) error {
 }
 
 func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"station/internal/config"
 	"fmt"
 	"strconv"
 	"time"
@@ -84,7 +85,7 @@ func (h *AgentHandler) displayExecutionResults(run *models.AgentRun) error {
 func (h *AgentHandler) findAgentByName(agentName string, cmd *cobra.Command) (int64, error) {
 	environment, _ := cmd.Flags().GetString("env")
 	
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return 0, fmt.Errorf("failed to load station config: %v", err)
 	}
