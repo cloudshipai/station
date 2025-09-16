@@ -29,6 +29,20 @@ func NewChatModel(database *db.DB, repos *repositories.Repositories, genkitServi
 	}
 }
 
+func NewModel(database *db.DB, genkitService services.AgentServiceInterface) *Model {
+	var repos *repositories.Repositories
+	if database != nil {
+		repos = repositories.New(database)
+	}
+	
+	return &Model{
+		db:            database,
+		repos:         repos,
+		genkitService: genkitService,
+		content:       "Welcome to Station TUI\n\nPress 'q' to quit",
+	}
+}
+
 func (m *Model) Init() tea.Cmd {
 	return nil
 }

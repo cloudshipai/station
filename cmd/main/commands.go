@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	
+
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -46,9 +46,8 @@ Use --provider and --model flags to skip interactive setup.
 Use --yes flag to use sensible defaults without any prompts.
 Use --replicate flag to also configure Litestream for database replication to cloud storage.
 Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access.`,
-		RunE:  runInit,
+		RunE: runInit,
 	}
-
 
 	mcpAddCmd = &cobra.Command{
 		Use:   "add [config-name]",
@@ -66,7 +65,7 @@ When you run 'stn sync', you'll be prompted for any template variables found.
 Examples:
   stn mcp add filesystem          # Creates filesystem.json via editor
   stn mcp add --env prod database # Creates database.json in prod environment`,
-		RunE:  runMCPAdd,
+		RunE: runMCPAdd,
 	}
 
 	blastoffCmd = &cobra.Command{
@@ -128,7 +127,6 @@ Perfect for getting started quickly with a fully configured Station instance.`,
 		RunE:  runMCPDelete,
 	}
 
-
 	mcpStatusCmd = &cobra.Command{
 		Use:   "status [environment]",
 		Short: "Show MCP configuration status",
@@ -150,8 +148,8 @@ Perfect for getting started quickly with a fully configured Station instance.`,
 		Example: `  stn template create my-bundle                    # Create empty bundle
   stn template create my-bundle --env default        # Create from default environment
   stn template create my-bundle --env production     # Create from production environment`,
-		Args:  cobra.ExactArgs(1),
-		RunE:  runTemplateCreate,
+		Args: cobra.ExactArgs(1),
+		RunE: runTemplateCreate,
 	}
 
 	templateValidateCmd = &cobra.Command{
@@ -214,7 +212,6 @@ Perfect for getting started quickly with a fully configured Station instance.`,
 		RunE:  runTemplateRegistryList,
 	}
 
-
 	// Settings commands
 	settingsCmd = &cobra.Command{
 		Use:   "settings",
@@ -249,7 +246,7 @@ Perfect for getting started quickly with a fully configured Station instance.`,
 	syncCmd = &cobra.Command{
 		Use:   "sync [environment]",
 		Short: "Sync all file-based configurations",
-		Long:  `Declaratively synchronize all file-based configurations to the database.
+		Long: `Declaratively synchronize all file-based configurations to the database.
 This includes agents (.prompt files), MCP configurations, and environment settings.`,
 		Example: `  stn sync                    # Sync all environments (interactive)
   stn sync production         # Sync specific environment  
@@ -291,7 +288,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Check if configuration exists
 	configDir := getWorkspacePath()
 	configFile := filepath.Join(configDir, "config.yaml")
-	
+
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		fmt.Printf("Configuration not found. Please run 'station init' first.\n")
 		fmt.Printf("Expected config file: %s\n", configFile)
@@ -309,7 +306,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	fmt.Printf("MCP Port: %d\n", viper.GetInt("mcp_port"))
 	fmt.Printf("API Port: %d\n", viper.GetInt("api_port"))
 	fmt.Printf("Database: %s\n", viper.GetString("database_url"))
-	
+
 	// Set environment variables for the main application to use
 	os.Setenv("ENCRYPTION_KEY", encryptionKey)
 	os.Setenv("SSH_PORT", fmt.Sprintf("%d", viper.GetInt("ssh_port")))
@@ -331,41 +328,41 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// Set workspace to the directory containing the config file
 		workspaceDir := filepath.Dir(filepath.Clean(configPath))
 		workspaceDir, _ = filepath.Abs(workspaceDir)
-		
+
 		// Set the workspace in viper for the session
 		viper.Set("workspace", workspaceDir)
-		
+
 		// Also set database path relative to workspace
 		databasePath := filepath.Join(workspaceDir, "station.db")
 		viper.Set("database_url", databasePath)
 	}
-	
+
 	// Config file always stays in secure default location
-	configDir := getXDGConfigDir()  // Use XDG, not workspace
+	configDir := getXDGConfigDir() // Use XDG, not workspace
 	configFile := filepath.Join(configDir, "config.yaml")
-	
+
 	// Workspace directory for content (environments, bundles, etc.)
 	workspaceDir := getWorkspacePath()
-	
+
 	// Check if replication setup is requested
 	replicationSetup, _ := cmd.Flags().GetBool("replicate")
-	
+
 	// Check if ship setup is requested
 	shipSetup, _ := cmd.Flags().GetBool("ship")
-	
+
 	// Check CloudShip AI configuration
 	cloudshipaiKey, _ := cmd.Flags().GetString("cloudshipai")
 	cloudshipaiEndpoint, _ := cmd.Flags().GetString("cloudshipai_endpoint")
-	
+
 	// Check environment variable if flag not provided
 	if cloudshipaiKey == "" {
 		cloudshipaiKey = os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY")
 	}
-	
+
 	// Check OTEL configuration
 	otelEndpoint, _ := cmd.Flags().GetString("otel-endpoint")
 	telemetryEnabled, _ := cmd.Flags().GetBool("telemetry")
-	
+
 	// Check environment variable if flag not provided
 	if otelEndpoint == "" {
 		otelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -380,11 +377,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if workspaceDir != configDir {
 		fmt.Printf("Workspace directory: %s\n", workspaceDir)
 	}
-	
+
 	if configExists {
 		fmt.Printf("⚠️  Configuration already exists - skipping interactive setup\n")
 	}
-	
+
 	if replicationSetup {
 		fmt.Printf("🔄 Replication mode: Setting up Litestream for database replication\n")
 	}
@@ -393,21 +390,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	
+
 	// Create workspace directory if different from config directory
 	if workspaceDir != configDir {
 		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
 			return fmt.Errorf("failed to create workspace directory: %w", err)
 		}
 	}
-
-	// Generate encryption key
-	fmt.Printf("🔐 Generating encryption key...\n")
-	key, encryptionKey, err := generateEncryptionKey()
-	if err != nil {
-		return fmt.Errorf("failed to generate encryption key: %w", err)
-	}
-	_ = key // Use the raw key if needed elsewhere
 
 	// Provider and model setup
 	var providerConfig *ProviderConfig
@@ -439,7 +428,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 			}
 		}
 		providerConfig = &ProviderConfig{Provider: provider, Model: model, BaseURL: baseURL}
-		
+
 		if !configExists {
 			fmt.Printf("🤖 Using AI provider: %s\n", providerConfig.Provider)
 			fmt.Printf("   Model: %s\n", providerConfig.Model)
@@ -450,7 +439,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Set default configuration
-	viper.Set("encryption_key", encryptionKey)
 	viper.Set("ssh_port", 2222)
 	viper.Set("mcp_port", 3000)
 	viper.Set("api_port", 8585)
@@ -458,7 +446,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	viper.Set("admin_username", "admin")
 	viper.Set("debug", false)
 	viper.Set("local_mode", true) // Default to local mode
-	
+
 	// Set AI provider configuration
 	if !configExists {
 		viper.Set("ai_provider", providerConfig.Provider)
@@ -467,7 +455,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 			viper.Set("ai_base_url", providerConfig.BaseURL)
 		}
 	}
-	
+
 	// Set workspace and database paths
 	// Check if database URL is already set via environment variable
 	if existingDatabaseURL := os.Getenv("STATION_DATABASE_URL"); existingDatabaseURL != "" {
@@ -480,7 +468,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// Default: database in config directory, no workspace setting needed
 		viper.Set("database_url", filepath.Join(configDir, "station.db"))
 	}
-	
+
 	// Set CloudShip AI configuration if provided
 	if cloudshipaiKey != "" {
 		viper.Set("cloudshipai.registration_key", cloudshipaiKey)
@@ -489,7 +477,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("🌩️  CloudShip AI integration enabled\n")
 		fmt.Printf("   Endpoint: %s\n", cloudshipaiEndpoint)
 	}
-	
+
 	// Set OTEL configuration
 	viper.Set("telemetry_enabled", telemetryEnabled)
 	if otelEndpoint != "" {
@@ -549,7 +537,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
 	fmt.Printf("🔑 Encryption key generated and saved securely\n")
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(workspaceDir, "environments", "default"))
-	
+
 	if !configExists {
 		fmt.Printf("🤖 AI Provider: %s\n", providerConfig.Provider)
 		fmt.Printf("🧠 Model: %s\n", providerConfig.Model)
@@ -557,13 +545,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 			fmt.Printf("🔗 Base URL: %s\n", providerConfig.BaseURL)
 		}
 	}
-	
+
 	// Ship setup completed (no sync needed since no MCP configs created)
 	if shipSetupSucceeded {
 		logging.Info("🚢 Ship CLI installed and ready for MCP integration")
 		logging.Info("💡 Use 'stn bootstrap --openai' for quick start with agents and tools")
 	}
-	
+
 	if replicationSetup {
 		fmt.Printf("🔄 Replication setup: Litestream configuration created at %s\n", filepath.Join(configDir, "litestream.yml"))
 		fmt.Printf("🐳 Docker files: Check examples/deployments/ for production deployment\n")
@@ -592,7 +580,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 // initDefaultEnvironment creates the default environment and file structure
 func initDefaultEnvironment(database db.Database) error {
 	repos := repositories.New(database)
-	
+
 	// Create default environment if it doesn't exist
 	defaultEnv, err := repos.Environments.GetByName("default")
 	if err != nil {
@@ -606,29 +594,29 @@ func initDefaultEnvironment(database db.Database) error {
 	} else {
 		fmt.Printf("   ℹ️  Default environment already exists (ID: %d)\n", defaultEnv.ID)
 	}
-	
+
 	// Create file config directory structure in XDG config dir
 	xdgConfigDir := getWorkspacePath()
 	configDir := filepath.Join(xdgConfigDir, "environments", "default")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	
+
 	// Create variables directory
 	varsDir := filepath.Join(xdgConfigDir, "vars")
 	if err := os.MkdirAll(varsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create variables directory: %w", err)
 	}
-	
+
 	fmt.Printf("   📁 Created file config directories\n")
-	
+
 	return nil
 }
 
 // setupReplicationConfiguration creates Litestream configuration and deployment examples
 func setupReplicationConfiguration(configDir string) error {
 	fmt.Printf("🔄 Setting up Litestream replication configuration...\n")
-	
+
 	// Create Litestream configuration with clear user guidance
 	litestreamConfigContent := `# Litestream Database Replication Configuration
 # Configure where and how Station's SQLite database is replicated
@@ -680,7 +668,7 @@ dbs:
 		return fmt.Errorf("failed to create litestream.yml: %w", err)
 	}
 	fmt.Printf("   ✅ Created %s\n", litestreamConfigPath)
-	
+
 	// Create .env.example for Docker Compose
 	envExampleContent := `# Litestream Configuration for GitOps Deployments
 LITESTREAM_S3_BUCKET=your-station-backups
@@ -705,19 +693,19 @@ ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
 		return fmt.Errorf("failed to create .env.example: %w", err)
 	}
 	fmt.Printf("   ✅ Created %s\n", envExamplePath)
-	
+
 	// Create gitops directory with basic structure
 	gitopsDir := filepath.Join(configDir, "gitops")
 	if err := os.MkdirAll(gitopsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create gitops directory: %w", err)
 	}
-	
+
 	// Create basic agent template structure
 	agentTemplateDir := filepath.Join(gitopsDir, "agent-templates", "sample-agent")
 	if err := os.MkdirAll(agentTemplateDir, 0755); err != nil {
 		return fmt.Errorf("failed to create agent template directory: %w", err)
 	}
-	
+
 	// Create README with GitOps instructions
 	readmeContent := `# Station GitOps Setup
 
@@ -757,7 +745,7 @@ See \` + "`" + `docs/GITOPS-DEPLOYMENT.md\` + "`" + ` for the complete GitOps de
 	}
 	fmt.Printf("   ✅ Created %s\n", readmePath)
 	fmt.Printf("   📁 Created GitOps directory structure at %s\n", gitopsDir)
-	
+
 	return nil
 }
 
@@ -766,7 +754,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("environment name is required")
 	}
-	
+
 	environment := args[0]
 	return runSyncForEnvironment(environment)
 }
@@ -778,7 +766,7 @@ func setupShipIntegration(workspaceDir string) error {
 	if err := installShipCLI(); err != nil {
 		return fmt.Errorf("failed to install ship CLI: %w", err)
 	}
-	
+
 	logging.Info("   ✅ Ship CLI installed")
 	return nil
 }
@@ -788,16 +776,16 @@ func installShipCLI() error {
 	// Add timeout to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	
+
 	cmd := exec.CommandContext(ctx, "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	err := cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
 		return fmt.Errorf("ship CLI installation timed out after 2 minutes. Please install manually or check your internet connection")
 	}
-	
+
 	return err
 }
 
@@ -822,7 +810,7 @@ func runSyncForEnvironment(environment string) error {
 	syncer := services.NewDeclarativeSync(repos, cfg)
 
 	fmt.Printf("Starting sync for environment: %s\n", environment)
-	
+
 	// Sync the specific environment
 	result, err := syncer.SyncEnvironment(context.Background(), environment, services.SyncOptions{
 		DryRun:      false,
@@ -831,7 +819,7 @@ func runSyncForEnvironment(environment string) error {
 		Verbose:     false,
 		Confirm:     false,
 	})
-	
+
 	if err != nil {
 		return fmt.Errorf("sync failed for environment %s: %w", environment, err)
 	}
@@ -840,7 +828,7 @@ func runSyncForEnvironment(environment string) error {
 	fmt.Printf("\nSync completed for environment: %s\n", environment)
 	fmt.Printf("  Agents: %d processed, %d synced\n", result.AgentsProcessed, result.AgentsSynced)
 	fmt.Printf("  MCP Servers: %d processed, %d connected\n", result.MCPServersProcessed, result.MCPServersConnected)
-	
+
 	if result.ValidationErrors > 0 {
 		fmt.Printf("  ⚠️  Validation Errors: %d\n", result.ValidationErrors)
 		return fmt.Errorf("sync completed with %d validation errors", result.ValidationErrors)
@@ -857,11 +845,11 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	if !openaiSetup {
 		return fmt.Errorf("bootstrap requires a provider flag. Use --openai for OpenAI setup")
 	}
-	
+
 	workspaceDir := getWorkspacePath()
-	
+
 	fmt.Printf("🚀 Starting Station bootstrap with OpenAI integration...\n\n")
-	
+
 	// Step 1: Run stn init --ship --provider openai --model gpt-5
 	fmt.Printf("📦 Step 1/6: Initializing Station with OpenAI and Ship CLI...\n")
 	initCmd := exec.Command("stn", "init", "--ship", "--provider", "openai", "--model", "gpt-5", "--yes")
@@ -871,28 +859,28 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to run stn init: %w", err)
 	}
 	fmt.Printf("✅ Station initialized with OpenAI and Ship CLI\n\n")
-	
+
 	// Step 2: Create hello world agent (no tools)
 	fmt.Printf("🤖 Step 2/6: Creating Hello World agent...\n")
 	if err := createHelloWorldAgent(workspaceDir); err != nil {
 		return fmt.Errorf("failed to create hello world agent: %w", err)
 	}
 	fmt.Printf("✅ Hello World agent created\n\n")
-	
+
 	// Step 3: Create playwright MCP config
 	fmt.Printf("🎭 Step 3/6: Setting up Playwright MCP integration...\n")
 	if err := createPlaywrightMCP(workspaceDir); err != nil {
 		return fmt.Errorf("failed to create playwright MCP config: %w", err)
 	}
 	fmt.Printf("✅ Playwright MCP integration configured\n\n")
-	
+
 	// Step 4: Create playwright agent
 	fmt.Printf("🤖 Step 4/6: Creating Playwright agent...\n")
 	if err := createPlaywrightAgent(workspaceDir); err != nil {
 		return fmt.Errorf("failed to create playwright agent: %w", err)
 	}
 	fmt.Printf("✅ Playwright agent created\n\n")
-	
+
 	// Step 5: Install security bundle
 	fmt.Printf("🔒 Step 5/6: Installing DevOps Security Bundle...\n")
 	bundleCmd := exec.Command("stn", "bundle", "install", "https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz", "security")
@@ -902,10 +890,10 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to install security bundle: %w", err)
 	}
 	fmt.Printf("✅ DevOps Security Bundle installed\n\n")
-	
+
 	// Step 6: Sync all environments
 	fmt.Printf("🔄 Step 6/6: Syncing all environments...\n")
-	
+
 	// Sync default environment
 	syncDefaultCmd := exec.Command("stn", "sync", "default")
 	syncDefaultCmd.Stdout = os.Stdout
@@ -913,28 +901,28 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	if err := syncDefaultCmd.Run(); err != nil {
 		return fmt.Errorf("failed to sync default environment: %w", err)
 	}
-	
-	// Sync security environment  
+
+	// Sync security environment
 	syncSecurityCmd := exec.Command("stn", "sync", "security")
 	syncSecurityCmd.Stdout = os.Stdout
 	syncSecurityCmd.Stderr = os.Stderr
 	if err := syncSecurityCmd.Run(); err != nil {
 		return fmt.Errorf("failed to sync security environment: %w", err)
 	}
-	
+
 	fmt.Printf("✅ All environments synced\n\n")
-	
+
 	fmt.Printf("🎉 Bootstrap complete! Your Station is ready with:\n")
 	fmt.Printf("   • OpenAI integration (gpt-5)\n")
 	fmt.Printf("   • Ship CLI filesystem tools\n")
 	fmt.Printf("   • Hello World agent (default env - basic tasks)\n")
-	fmt.Printf("   • Playwright agent (default env - web automation)\n") 
+	fmt.Printf("   • Playwright agent (default env - web automation)\n")
 	fmt.Printf("   • DevOps Security Bundle (security env - comprehensive security tools)\n\n")
 	fmt.Printf("🚀 Next steps:\n")
 	fmt.Printf("   • Run 'stn serve' to start Station\n")
 	fmt.Printf("   • Connect via SSH: ssh admin@localhost -p 2222\n")
 	fmt.Printf("   • Or run 'stn stdio' for MCP integration\n")
-	
+
 	return nil
 }
 
@@ -944,7 +932,7 @@ func createHelloWorldAgent(workspaceDir string) error {
 	if err := os.MkdirAll(agentDir, 0755); err != nil {
 		return fmt.Errorf("failed to create agents directory: %w", err)
 	}
-	
+
 	agentContent := `---
 metadata:
   name: "Hello World Agent"
@@ -967,7 +955,7 @@ Keep your responses concise and helpful. Always maintain a positive, encouraging
 {{role "user"}}
 {{userInput}}
 `
-	
+
 	agentPath := filepath.Join(agentDir, "Hello World Agent.prompt")
 	return os.WriteFile(agentPath, []byte(agentContent), 0644)
 }
@@ -976,7 +964,7 @@ Keep your responses concise and helpful. Always maintain a positive, encouraging
 func createPlaywrightMCP(workspaceDir string) error {
 	defaultEnvDir := filepath.Join(workspaceDir, "environments", "default")
 	mcpConfigPath := filepath.Join(defaultEnvDir, "playwright.json")
-	
+
 	playwrightConfig := `{
   "mcpServers": {
     "playwright": {
@@ -987,7 +975,7 @@ func createPlaywrightMCP(workspaceDir string) error {
     }
   }
 }`
-	
+
 	return os.WriteFile(mcpConfigPath, []byte(playwrightConfig), 0644)
 }
 
@@ -997,7 +985,7 @@ func createPlaywrightAgent(workspaceDir string) error {
 	if err := os.MkdirAll(agentDir, 0755); err != nil {
 		return fmt.Errorf("failed to create agents directory: %w", err)
 	}
-	
+
 	agentContent := `---
 metadata:
   name: "Playwright Agent"
@@ -1042,7 +1030,7 @@ Always explain what you're doing with the web page and provide clear feedback ab
 {{role "user"}}
 {{userInput}}
 `
-	
+
 	agentPath := filepath.Join(agentDir, "Playwright Agent.prompt")
 	return os.WriteFile(agentPath, []byte(agentContent), 0644)
 }
@@ -1066,7 +1054,7 @@ func runSettingsList(cmd *cobra.Command, args []string) error {
 
 	// Initialize repositories
 	repos := repositories.New(database)
-	
+
 	// Get all settings
 	settings, err := repos.Settings.GetAll()
 	if err != nil {
@@ -1115,7 +1103,7 @@ func runSettingsGet(cmd *cobra.Command, args []string) error {
 
 	// Initialize repositories
 	repos := repositories.New(database)
-	
+
 	// Get the setting
 	setting, err := repos.Settings.GetByKey(key)
 	if err != nil {
@@ -1158,7 +1146,7 @@ func runSettingsSet(cmd *cobra.Command, args []string) error {
 
 	// Initialize repositories
 	repos := repositories.New(database)
-	
+
 	// Set the setting
 	err = repos.Settings.Set(key, value, description)
 	if err != nil {
