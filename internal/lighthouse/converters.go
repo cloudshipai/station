@@ -2,6 +2,7 @@ package lighthouse
 
 import (
 	"encoding/json"
+	"fmt"
 	"station/internal/lighthouse/proto"
 	"station/internal/version"
 	"station/pkg/types"
@@ -29,6 +30,12 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.AgentRunData {
 		metadata["has_output_schema"] = "true"
 	}
 
+	// TEMPORARY FIX: Manually set the correct status value for CloudShip compatibility
+	// CloudShip expects LighthouseRunStatus enum values (COMPLETED = 4) but we're sending RunStatus (COMPLETED = 4)
+	// The values should be the same, but there might be a marshaling issue
+	statusValue := ConvertRunStatusToProto(run.Status)
+	fmt.Printf("DEBUG: AgentRunData - Status string: '%s', Proto value: %d\n", run.Status, statusValue)
+
 	return &proto.AgentRunData{
 		RunId:          run.ID,
 		AgentId:        run.AgentID,
@@ -40,7 +47,7 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.AgentRunData {
 		TokenUsage:     convertTokenUsageToProto(run.TokenUsage),
 		DurationMs:     run.DurationMs,
 		ModelName:      run.ModelName,
-		Status:         convertRunStatusToProto(run.Status),
+		Status:         statusValue,
 		StartedAt:      timestampFromTime(run.StartedAt),
 		CompletedAt:    timestampFromTime(run.CompletedAt),
 		Metadata:       metadata,
@@ -219,17 +226,21 @@ func convertSystemMetricsToProto(metrics *types.SystemMetrics) *proto.SystemMetr
 
 // Helper conversion functions
 
-func convertRunStatusToProto(status string) proto.RunStatus {
+func ConvertRunStatusToProto(status string) proto.RunStatus {
 	switch status {
 	case "completed":
+		// TODO: Remove debug logging after fixing status issue
+		fmt.Printf("DEBUG: Converting status 'completed' to RUN_STATUS_COMPLETED (value: %d)\n", proto.RunStatus_RUN_STATUS_COMPLETED)
 		return proto.RunStatus_RUN_STATUS_COMPLETED
 	case "failed":
+		fmt.Printf("DEBUG: Converting status 'failed' to RUN_STATUS_FAILED (value: %d)\n", proto.RunStatus_RUN_STATUS_FAILED)
 		return proto.RunStatus_RUN_STATUS_FAILED
 	case "timeout":
 		return proto.RunStatus_RUN_STATUS_TIMEOUT
 	case "cancelled":
 		return proto.RunStatus_RUN_STATUS_CANCELLED
 	default:
+		fmt.Printf("DEBUG: Converting unknown status '%s' to RUN_STATUS_UNSPECIFIED (value: %d)\n", status, proto.RunStatus_RUN_STATUS_UNSPECIFIED)
 		return proto.RunStatus_RUN_STATUS_UNSPECIFIED
 	}
 }

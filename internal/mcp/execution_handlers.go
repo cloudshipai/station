@@ -227,7 +227,7 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 
 					debugLog(fmt.Sprintf("Converting run %d to lighthouse format", runID))
 					// Convert result to lighthouse format
-					lighthouseRun := convertToLighthouseRun(agent, task, runID, result)
+					lighthouseRun := ConvertToLighthouseRun(agent, task, runID, result)
 					debugLog(fmt.Sprintf("Lighthouse run created: ID=%s, AgentID=%s, Status=%s", lighthouseRun.ID, lighthouseRun.AgentID, lighthouseRun.Status))
 
 					debugLog(fmt.Sprintf("Sending run %d to lighthouse - Data: AgentID=%s, Status=%s, Response length=%d",
