@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"station/internal/lighthouse"
 	"station/internal/logging"
 	"station/internal/services"
 	"station/pkg/models"
@@ -89,6 +91,13 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 	if userVariables == nil {
 		userVariables = make(map[string]interface{}) // Default to empty map
 	}
+
+	// DEBUG: Temporary file logging to verify execution path
+	debugFile := "/tmp/station-lighthouse-debug.log"
+	debugLog := func(msg string) {
+		os.WriteFile(debugFile, []byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), msg)), os.ModeAppend|0644)
+	}
+	debugLog(fmt.Sprintf("handleCallAgent called for agentID=%d, storeRun=%v", agentID, storeRun))
 
 	// Use execution queue for proper tracing and storage
 	var runID int64
@@ -188,26 +197,59 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 
 		// 🚀 Surgical Lighthouse Integration: Send telemetry AFTER execution completes
 		// This avoids GenKit conflicts by using a separate lighthouse client
-		if s.lighthouseClient != nil && s.lighthouseClient.IsRegistered() {
-			go func() {
-				// Send lighthouse telemetry asynchronously (non-blocking)
-				defer func() {
-					if r := recover(); r != nil {
-						logging.Debug("Lighthouse telemetry error (non-critical): %v", r)
-					}
+
+		// DEBUG: Temporary file logging to verify telemetry
+		debugFile := "/tmp/station-lighthouse-debug.log"
+		debugLog := func(msg string) {
+			os.WriteFile(debugFile, []byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), msg)), os.ModeAppend|0644)
+		}
+
+		debugLog(fmt.Sprintf("Lighthouse integration check for run %d", runID))
+		debugLog(fmt.Sprintf("lighthouseClient != nil: %v", s.lighthouseClient != nil))
+
+		if s.lighthouseClient != nil {
+			isRegistered := s.lighthouseClient.IsRegistered()
+			debugLog(fmt.Sprintf("lighthouseClient.IsRegistered(): %v", isRegistered))
+
+			// Update lighthouse status
+			lighthouse.SetConnected(true, "localhost:50051")
+			lighthouse.SetRegistered(isRegistered, "GLm2oiyW_uI_ACfr8DYUYGkrEngvSxJXTWlyYqJTcq0") // TODO: Get from client
+
+			if isRegistered {
+				go func() {
+					// Send lighthouse telemetry asynchronously (non-blocking)
+					defer func() {
+						if r := recover(); r != nil {
+							debugLog(fmt.Sprintf("Lighthouse telemetry panic: %v", r))
+							logging.Debug("Lighthouse telemetry error (non-critical): %v", r)
+						}
+					}()
+
+					debugLog(fmt.Sprintf("Converting run %d to lighthouse format", runID))
+					// Convert result to lighthouse format
+					lighthouseRun := convertToLighthouseRun(agent, task, runID, result)
+					debugLog(fmt.Sprintf("Lighthouse run created: ID=%s, AgentID=%s, Status=%s", lighthouseRun.ID, lighthouseRun.AgentID, lighthouseRun.Status))
+
+					debugLog(fmt.Sprintf("Sending run %d to lighthouse - Data: AgentID=%s, Status=%s, Response length=%d",
+						runID, lighthouseRun.AgentID, lighthouseRun.Status, len(lighthouseRun.Response)))
+
+					// Send via lighthouse client
+					s.lighthouseClient.SendRun(lighthouseRun, "default", map[string]string{
+						"source": "mcp",
+						"mode":   "stdio",
+					})
+
+					lighthouse.RecordSuccess()
+					debugLog(fmt.Sprintf("Lighthouse telemetry sent successfully for MCP run %d", runID))
+					logging.Debug("Lighthouse telemetry sent for MCP run %d", runID)
 				}()
-
-				// Convert result to lighthouse format
-				lighthouseRun := convertToLighthouseRun(agent, task, runID, result)
-
-				// Send via lighthouse client
-				s.lighthouseClient.SendRun(lighthouseRun, "default", map[string]string{
-					"source": "mcp",
-					"mode":   "stdio",
-				})
-
-				logging.Debug("Lighthouse telemetry sent for MCP run %d", runID)
-			}()
+			} else {
+				lighthouse.RecordError("Lighthouse client is not registered - registration key not found in database")
+				debugLog("Lighthouse client is not registered")
+			}
+		} else {
+			lighthouse.RecordError("Lighthouse client is not initialized")
+			debugLog("Lighthouse client is nil")
 		}
 	} else {
 		// Execute without run storage using simplified flow
