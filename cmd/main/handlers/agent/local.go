@@ -19,6 +19,7 @@ import (
 	"station/internal/services"
 	"station/internal/theme"
 	"station/pkg/models"
+	"station/pkg/types"
 )
 
 
@@ -629,7 +630,96 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			int(result.StepsTaken),
 		)
 	}
-	
+
+	// 🚀 Lighthouse Integration: Send telemetry AFTER execution completes (same as MCP flow)
+	// This ensures CLI execution sends telemetry data to CloudShip just like MCP mode
+	if lighthouseClient != nil && lighthouseClient.IsRegistered() {
+		// DEBUG: File logging to verify telemetry (matches MCP debug approach)
+		debugFile := "/tmp/station-lighthouse-debug.log"
+		debugLog := func(msg string) {
+			os.WriteFile(debugFile, []byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), msg)), os.ModeAppend|0644)
+		}
+
+		debugLog(fmt.Sprintf("CLI Lighthouse integration starting for run %d", agentRun.ID))
+		debugLog(fmt.Sprintf("CLI Agent Info: Name='%s', ID=%d", agent.Name, agent.ID))
+		debugLog(fmt.Sprintf("CLI Result: Success=%t, Duration=%v", result.Success, result.Duration))
+		// IMPORTANT: CLI mode uses SYNCHRONOUS telemetry to avoid client shutdown race condition
+		// Unlike MCP mode, CLI lighthouse client shuts down immediately after agent completion
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					debugLog(fmt.Sprintf("CLI Lighthouse telemetry panic: %v", r))
+				}
+			}()
+
+			// Convert result to lighthouse format (simplified version)
+			status := "completed"
+			if !result.Success {
+				status = "failed"
+			}
+
+			// Calculate times based on result duration
+			completedAt := time.Now()
+			startedAt := completedAt.Add(-result.Duration)
+
+			// Create proper types.AgentRun structure (same as MCP conversion function)
+			lighthouseRun := &types.AgentRun{
+				ID:          fmt.Sprintf("run_%d", agentRun.ID),
+				AgentID:     fmt.Sprintf("agent_%d", agent.ID),
+				AgentName:   agent.Name,
+				Task:        task,
+				Response:    result.Response,
+				Status:      status,
+				DurationMs:  result.Duration.Milliseconds(),
+				ModelName:   result.ModelName,
+				StartedAt:   startedAt,
+				CompletedAt: completedAt, // Use time.Time not pointer
+				ToolCalls:   convertToolCallsToLighthouse(result.ToolCalls),
+				ExecutionSteps: convertExecutionStepsToLighthouse(result.ExecutionSteps),
+				TokenUsage:     &types.TokenUsage{
+					PromptTokens:     int(getValueOrZero(inputTokens)),
+					CompletionTokens: int(getValueOrZero(outputTokens)),
+					TotalTokens:      int(getValueOrZero(totalTokens)),
+					CostUSD:          0.0, // Cost calculation not implemented in CLI
+				},
+				OutputSchema: func() string {
+					if agent.OutputSchema != nil {
+						return *agent.OutputSchema
+					}
+					return ""
+				}(),
+				OutputSchemaPreset: func() string {
+					if agent.OutputSchemaPreset != nil {
+						return *agent.OutputSchemaPreset
+					}
+					return ""
+				}(),
+				Metadata: map[string]string{
+					"source": "cli",
+					"mode":   "cli",
+				},
+			}
+
+			debugLog(fmt.Sprintf("CLI Lighthouse run created: ID=%s, AgentID=%s, Status=%s", lighthouseRun.ID, lighthouseRun.AgentID, lighthouseRun.Status))
+			debugLog(fmt.Sprintf("Sending CLI run %d to lighthouse - Data: AgentID=%s, Status=%s, Response length=%d",
+				agentRun.ID, lighthouseRun.AgentID, lighthouseRun.Status, len(lighthouseRun.Response)))
+
+			// Send via lighthouse client (same as MCP flow)
+			lighthouseClient.SendRun(lighthouseRun, "default", map[string]string{
+				"source": "cli",
+				"mode":   "cli",
+			})
+
+			lighthouse.RecordSuccess()
+			debugLog(fmt.Sprintf("Lighthouse telemetry sent successfully for CLI run %d", agentRun.ID))
+			fmt.Printf("✅ Lighthouse telemetry sent for CLI run %d\n", agentRun.ID)
+		}()
+	} else if lighthouseClient != nil {
+		lighthouse.RecordError("CLI: Lighthouse client is not registered")
+	} else {
+		lighthouse.RecordError("CLI: Lighthouse client is not initialized")
+	}
+
 	// Stop Lighthouse client
 	if lighthouseClient != nil {
 		if err := lighthouseClient.Close(); err != nil {
@@ -735,6 +825,97 @@ func (h *AgentHandler) monitorExecutionWithTail(runID int64, apiPort int) error 
 	// TODO: Implement real-time streaming updates
 	fmt.Printf("📺 Monitoring execution with tail mode...\n")
 	return h.monitorExecution(runID, apiPort)
+}
+
+// convertToolCallsToLighthouse converts tool calls to lighthouse format (simplified version of MCP function)
+func convertToolCallsToLighthouse(toolCalls interface{}) []types.ToolCall {
+	if toolCalls == nil {
+		return nil
+	}
+
+	// Handle the case where toolCalls is a pointer to a slice
+	if ptr, ok := toolCalls.(*[]interface{}); ok && ptr != nil {
+		toolCalls = *ptr
+	}
+
+	calls, ok := toolCalls.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var lighthouseCalls []types.ToolCall
+	for _, call := range calls {
+		if callMap, ok := call.(map[string]interface{}); ok {
+			toolCall := types.ToolCall{
+				ToolName:   getStringFromMap(callMap, "tool_name"),
+				Parameters: callMap["parameters"],
+				Timestamp:  time.Now(),
+			}
+			lighthouseCalls = append(lighthouseCalls, toolCall)
+		}
+	}
+	return lighthouseCalls
+}
+
+// convertExecutionStepsToLighthouse converts execution steps to lighthouse format (simplified version of MCP function)
+func convertExecutionStepsToLighthouse(executionSteps interface{}) []types.ExecutionStep {
+	if executionSteps == nil {
+		return nil
+	}
+
+	// Handle the case where executionSteps is a pointer to a slice
+	if ptr, ok := executionSteps.(*[]interface{}); ok && ptr != nil {
+		executionSteps = *ptr
+	}
+
+	steps, ok := executionSteps.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var lighthouseSteps []types.ExecutionStep
+	for _, step := range steps {
+		if stepMap, ok := step.(map[string]interface{}); ok {
+			execStep := types.ExecutionStep{
+				StepNumber:  getIntFromMap(stepMap, "step_number"),
+				Description: getStringFromMap(stepMap, "description"),
+				Type:        getStringFromMap(stepMap, "type"),
+				DurationMs:  int64(getIntFromMap(stepMap, "duration_ms")),
+				Timestamp:   time.Now(),
+			}
+			lighthouseSteps = append(lighthouseSteps, execStep)
+		}
+	}
+	return lighthouseSteps
+}
+
+// Helper functions for type conversion
+func getStringFromMap(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+func getIntFromMap(m map[string]interface{}, key string) int {
+	if val, ok := m[key]; ok {
+		if i, ok := val.(int); ok {
+			return i
+		}
+		if f, ok := val.(float64); ok {
+			return int(f)
+		}
+	}
+	return 0
+}
+
+func getValueOrZero(ptr *int64) int64 {
+	if ptr != nil {
+		return *ptr
+	}
+	return 0
 }
 
 

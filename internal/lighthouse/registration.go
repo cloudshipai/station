@@ -44,6 +44,11 @@ func (lc *LighthouseClient) register() error {
 	lc.stationID = resp.StationId
 	lc.mu.Unlock()
 
+	// Update global lighthouse status
+	SetConnected(true, lc.config.Endpoint)
+	SetRegistered(true, lc.config.RegistrationKey)
+	RecordSuccess()
+
 	logging.Info("Station registered with CloudShip (ID: %s, Mode: %s)", resp.StationId, lc.mode)
 	return nil
 }
