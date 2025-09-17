@@ -397,6 +397,7 @@ func (mhs *ManagementHandlerService) handleGetSystemStatus(ctx context.Context, 
 // handleExecuteAgent processes execute agent requests using unified execution flow (same as MCP/CLI)
 func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, originalRequestId string, req *proto.ExecuteAgentManagementRequest) (*proto.ExecuteAgentManagementResponse, error) {
 	logging.Info("Executing agent %s with task: %s", req.AgentId, req.Task)
+	logging.Debug("DEBUG: CloudShip payload - request_id: %s, run_id: '%s', agent_id: %s", originalRequestId, req.RunId, req.AgentId)
 
 	// Convert agent ID to int64
 	agentID, err := strconv.ParseInt(req.AgentId, 10, 64)
@@ -404,26 +405,26 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		return nil, fmt.Errorf("invalid agent ID: %s", req.AgentId)
 	}
 
-	// Use CloudShip's original request ID as the execution ID for status updates
-	// This ensures CloudShip can match status updates to the run they created
-	executionID := originalRequestId
+	// For management commands, CloudShip provides the run_id that we must use for all tracking
+	// This is the primary identifier - NOT our internal database ID
+	var cloudShipRunID string
+	if req.RunId != "" {
+		cloudShipRunID = req.RunId
+	} else {
+		// If CloudShip doesn't provide run_id, use the request_id as fallback
+		cloudShipRunID = originalRequestId
+	}
 
-	// Send QUEUED status update to CloudShip
+	// Use CloudShip's run_id as the execution ID for all status updates and tracking
+	executionID := cloudShipRunID
+
+	// Send QUEUED status update to CloudShip using their run_id
 	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_QUEUED, "Agent execution queued", 0)
 
-	// Send RUNNING status update to CloudShip
+	// Send RUNNING status update to CloudShip using their run_id
 	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_RUNNING, "Agent execution started", 1)
 
-	// Use CloudShip's provided run_id for correlation tracking
-	// Store it for status updates and telemetry correlation
 	var userID int64 = 1 // Default user ID for CloudShip executions
-	
-	// Parse CloudShip's run_id to int64 for consistency with our database
-	cloudShipRunID, err := strconv.ParseInt(req.RunId, 10, 64)
-	if err != nil {
-		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Invalid run_id format: %v", err), 1)
-		return nil, fmt.Errorf("invalid run_id format: %v", err)
-	}
 	
 	// Create local agent run (we'll correlate with CloudShip's ID in SendRun)
 	run, err := mhs.repos.AgentRuns.Create(ctx, agentID, userID, req.Task, "", 0, nil, nil, "running", nil)
@@ -432,7 +433,7 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		return nil, fmt.Errorf("failed to create agent run: %v", err)
 	}
 	runID := run.ID
-	logging.Info("Using CloudShip's run ID: %d (local ID: %d) for execution tracking", cloudShipRunID, runID)
+	logging.Info("Using CloudShip's run ID: %s (local database ID: %d) for execution tracking", cloudShipRunID, runID)
 	
 	// Get agent details for unified execution flow
 	agent, err := mhs.repos.Agents.GetByID(agentID)
@@ -504,12 +505,18 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		// Convert database run to proto.AgentRun for ManagementChannel
 		protoAgentRun := mhs.convertRunDetailsToProtoAgentRun(runDetails)
 		if protoAgentRun != nil {
-			// Send run data to CloudShip via ManagementChannel
+			// CRITICAL: For management commands, override the RunId with CloudShip's original run_id
+			// This ensures CloudShip can correlate the telemetry data properly
+			protoAgentRun.RunId = cloudShipRunID
+
+			// Send run data to CloudShip via ManagementChannel using CloudShip's run_id as primary identifier
 			if mhs.managementChannel != nil {
 				tags := map[string]string{
-					"execution_id": executionID,
-					"source":       "cloudship_management",
-					"environment":  "cloudship",
+					"cloudship_run_id": cloudShipRunID,
+					"execution_id":     executionID,
+					"source":           "cloudship_management",
+					"environment":      "cloudship",
+					"local_run_id":     fmt.Sprintf("%d", runID),
 				}
 				if err := mhs.managementChannel.SendRun(protoAgentRun, tags); err != nil {
 					logging.Error("Failed to send run data via ManagementChannel: %v", err)
@@ -521,10 +528,14 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 				// Convert to types.AgentRun for fallback
 				typesAgentRun := mhs.convertRunDetailsToAgentRun(runDetails)
 				if typesAgentRun != nil {
+					// CRITICAL: For management commands, override the ID with CloudShip's original run_id
+					typesAgentRun.ID = cloudShipRunID
 					mhs.lighthouseClient.SendRun(typesAgentRun, "cloudship", map[string]string{
-						"execution_id": executionID,
-						"source":       "cloudship_management",
-						"environment":  "cloudship",
+						"cloudship_run_id": cloudShipRunID,
+						"execution_id":     executionID,
+						"source":           "cloudship_management",
+						"environment":      "cloudship",
+						"local_run_id":     fmt.Sprintf("%d", runID),
 					})
 					logging.Debug("Sent completed run data to CloudShip via lighthouse client fallback (run_id: %d, execution_id: %s)", runID, executionID)
 				}
@@ -736,6 +747,7 @@ func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails
 		AgentName:   runDetails.AgentName,
 		Task:        runDetails.Task,
 		Response:    runDetails.FinalResponse,
+		Status:      lighthouse.ConvertRunStatusToProto(runDetails.Status),
 		TokenUsage:  tokenUsage,
 		DurationMs:  durationMs,
 		ModelName:   modelName,

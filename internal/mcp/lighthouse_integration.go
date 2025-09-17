@@ -9,8 +9,8 @@ import (
 	"station/pkg/types"
 )
 
-// convertToLighthouseRun converts MCP execution result to Lighthouse format
-func convertToLighthouseRun(agent *models.Agent, task string, runID int64, result *services.AgentExecutionResult) *types.AgentRun {
+// ConvertToLighthouseRun converts MCP execution result to Lighthouse format
+func ConvertToLighthouseRun(agent *models.Agent, task string, runID int64, result *services.AgentExecutionResult) *types.AgentRun {
 	status := "completed"
 	if !result.Success {
 		status = "failed"

@@ -14,6 +14,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
 	lighthouseServices "station/internal/lighthouse/services"
+	"station/internal/logging"
 	"station/internal/mcp"
 	"station/internal/services"
 
@@ -50,6 +51,17 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Setup debug logging to file if in dev mode
+	if devMode {
+		if logFile, err := os.OpenFile("/tmp/station-stdio-debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+			log.SetOutput(logFile)
+			log.Printf("=== Station stdio debug session started ===")
+
+			// Initialize internal logging system with debug enabled and file output
+			logging.Initialize(true)
+		}
 	}
 
 	// Initialize database

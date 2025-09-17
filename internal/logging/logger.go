@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"io"
 	"log"
 	"os"
 )
@@ -17,10 +18,16 @@ var globalLogger *Logger
 
 // Initialize sets up the global logger with debug mode setting
 func Initialize(debugMode bool) {
+	// Try to use the same output destination as the default log package
+	var output io.Writer = os.Stdout
+	if log.Writer() != os.Stderr {
+		output = log.Writer()
+	}
+
 	globalLogger = &Logger{
 		debugEnabled: debugMode,
-		infoLogger:   log.New(os.Stdout, "", log.LstdFlags),
-		debugLogger:  log.New(os.Stdout, "", log.LstdFlags),
+		infoLogger:   log.New(output, "", log.LstdFlags),
+		debugLogger:  log.New(output, "", log.LstdFlags),
 	}
 }
 
