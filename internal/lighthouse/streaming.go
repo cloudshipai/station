@@ -58,8 +58,8 @@ func (lc *LighthouseClient) startBackgroundWorkers() {
 		}
 	}()
 
-	// Health data worker (serve mode only)
-	if lc.mode == ModeServe {
+	// Health data worker (serve mode and stdio mode)
+	if lc.mode == ModeServe || lc.mode == ModeStdio {
 		lc.wg.Add(1)
 		go func() {
 			defer lc.wg.Done()
@@ -73,7 +73,7 @@ func (lc *LighthouseClient) startBackgroundWorkers() {
 			}
 		}()
 
-		// Heartbeat worker (serve mode only)
+		// Heartbeat worker (serve mode and stdio mode)
 		lc.wg.Add(1)
 		go func() {
 			defer lc.wg.Done()

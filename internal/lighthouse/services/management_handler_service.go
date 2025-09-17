@@ -469,12 +469,12 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 	// Update run as successful (same as CLI and MCP)
 	completedAt := time.Now()
 	
-	// Extract token usage from result
+	// Extract token usage from result (using same field names as MCP handlers)
 	var inputTokens, outputTokens, totalTokens *int64
 	if result != nil && result.TokenUsage != nil {
-		inputTokens = extractInt64FromTokenUsage(result.TokenUsage["inputTokens"])
-		outputTokens = extractInt64FromTokenUsage(result.TokenUsage["outputTokens"])
-		totalTokens = extractInt64FromTokenUsage(result.TokenUsage["totalTokens"])
+		inputTokens = extractInt64FromTokenUsage(result.TokenUsage["input_tokens"])
+		outputTokens = extractInt64FromTokenUsage(result.TokenUsage["output_tokens"])
+		totalTokens = extractInt64FromTokenUsage(result.TokenUsage["total_tokens"])
 	}
 	
 	// Calculate duration in seconds

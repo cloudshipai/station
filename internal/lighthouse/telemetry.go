@@ -112,10 +112,10 @@ func (lc *LighthouseClient) SendEphemeralSnapshot(runData *types.AgentRun, deplo
 	return nil
 }
 
-// SendSystemHealth sends system health metrics (serve mode primarily)
+// SendSystemHealth sends system health metrics (serve mode and stdio mode)
 func (lc *LighthouseClient) SendSystemHealth(status proto.SystemStatus, metrics *types.SystemMetrics) {
-	if !lc.IsRegistered() || lc.mode != ModeServe {
-		return // Only for serve mode
+	if !lc.IsRegistered() || (lc.mode != ModeServe && lc.mode != ModeStdio) {
+		return // Only for serve mode and stdio mode
 	}
 
 	req := &proto.SystemHealthRequest{
