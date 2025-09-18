@@ -182,12 +182,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 			apiCancel()
 			wg.Wait()
 		}
-		if remoteControlSvc != nil {
-			fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
-			if stopErr := remoteControlSvc.Stop(); stopErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Error stopping remote control service: %v\n", stopErr)
-			}
-		}
+		// Note: Keep remote control service running for CloudShip management even on MCP failure
+		// Management channel should remain active for troubleshooting
 		return fmt.Errorf("failed to start MCP stdio server: %w", err)
 	}
 
@@ -198,13 +194,9 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		wg.Wait()
 	}
 
-	// Clean shutdown of remote control service
-	if remoteControlSvc != nil {
-		fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
-		if err := remoteControlSvc.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Error stopping remote control service: %v\n", err)
-		}
-	}
+	// Note: Keep remote control service running in stdio mode for CloudShip management
+	// The management channel needs to stay active to receive commands from CloudShip
+	// Remote control service will be cleaned up automatically via context cancellation
 
 	// Note: Lighthouse client cleanup happens automatically via context cancellation
 
