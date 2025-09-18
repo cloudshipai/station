@@ -7,6 +7,7 @@ import (
 	"station/internal/lighthouse/proto"
 	"station/internal/logging"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -28,11 +29,11 @@ func (lc *LighthouseClient) connect() error {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	// Configure keep-alive
+	// Configure keep-alive with 2024 best practices
 	keepaliveParams := keepalive.ClientParameters{
-		Time:                lc.config.KeepAlive,
-		Timeout:             lc.config.ConnectTimeout,
-		PermitWithoutStream: true,
+		Time:                10 * time.Second, // Ping every 10s for quick failure detection
+		Timeout:             5 * time.Second,  // Wait 5s for ping response
+		PermitWithoutStream: true,             // Allow pings even without active streams
 	}
 	opts = append(opts, grpc.WithKeepaliveParams(keepaliveParams))
 

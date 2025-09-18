@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"time"
 
 	"station/internal/lighthouse"
@@ -59,10 +60,11 @@ func (mcs *ManagementChannelService) Stop() error {
 	return nil
 }
 
-// maintainConnection handles connection lifecycle and reconnection
+// maintainConnection handles connection lifecycle and reconnection with 2024 best practices
 func (mcs *ManagementChannelService) maintainConnection() {
-	retryDelay := 5 * time.Second
+	retryDelay := 1 * time.Second
 	maxRetryDelay := 30 * time.Second
+	baseDelay := 1 * time.Second
 
 	for {
 		select {
@@ -71,18 +73,25 @@ func (mcs *ManagementChannelService) maintainConnection() {
 			return
 		default:
 			if err := mcs.establishConnection(); err != nil {
-				logging.Error("Management channel connection failed: %v, retrying in %v", err, retryDelay)
+				// Add jitter to prevent thundering herd
+				jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
+				actualDelay := retryDelay + jitter
 
-				// Exponential backoff with max delay
-				time.Sleep(retryDelay)
-				if retryDelay < maxRetryDelay {
-					retryDelay = retryDelay * 2
+				logging.Error("Management channel connection failed: %v, retrying in %v", err, actualDelay)
+
+				// Sleep with jitter
+				time.Sleep(actualDelay)
+
+				// Exponential backoff: multiply by 1.5 with cap at maxRetryDelay
+				retryDelay = time.Duration(float64(retryDelay) * 1.5)
+				if retryDelay > maxRetryDelay {
+					retryDelay = maxRetryDelay
 				}
 				continue
 			}
 
 			// Reset retry delay on successful connection
-			retryDelay = 5 * time.Second
+			retryDelay = baseDelay
 		}
 	}
 }
@@ -103,8 +112,12 @@ func (mcs *ManagementChannelService) establishConnection() error {
 		logging.Debug("LighthouseClient already connected, proceeding with stream creation")
 	}
 
-	// Create the management channel stream
-	stream, err := mcs.lighthouseClient.ManagementChannel(mcs.connectionCtx)
+	// Create independent stream context that doesn't get canceled during normal operations
+	// This prevents "context canceled" errors that break the stream
+	streamCtx := context.Background()
+
+	// Create the management channel stream with independent context
+	stream, err := mcs.lighthouseClient.ManagementChannel(streamCtx)
 	if err != nil {
 		return fmt.Errorf("failed to create management channel stream: %w", err)
 	}
