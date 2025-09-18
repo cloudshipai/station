@@ -68,8 +68,10 @@ type Agent struct {
 	MaxSteps          int64      `json:"max_steps" db:"max_steps"`
 	EnvironmentID     int64      `json:"environment_id" db:"environment_id"`
 	CreatedBy         int64      `json:"created_by" db:"created_by"`
-	InputSchema       *string    `json:"input_schema,omitempty" db:"input_schema"`
-	CronSchedule      *string    `json:"cron_schedule,omitempty" db:"cron_schedule"`
+	InputSchema         *string    `json:"input_schema,omitempty" db:"input_schema"`
+	OutputSchema        *string    `json:"output_schema,omitempty" db:"output_schema"`
+	OutputSchemaPreset  *string    `json:"output_schema_preset,omitempty" db:"output_schema_preset"`
+	CronSchedule        *string    `json:"cron_schedule,omitempty" db:"cron_schedule"`
 	IsScheduled       bool       `json:"is_scheduled" db:"is_scheduled"`
 	LastScheduledRun  *time.Time `json:"last_scheduled_run,omitempty" db:"last_scheduled_run"`
 	NextScheduledRun  *time.Time `json:"next_scheduled_run,omitempty" db:"next_scheduled_run"`

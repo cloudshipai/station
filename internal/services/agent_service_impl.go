@@ -10,6 +10,8 @@ import (
 
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
+	"station/internal/logging"
 	"station/pkg/models"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -61,6 +63,43 @@ func NewAgentService(repos *repositories.Repositories) *AgentService {
 	return service
 }
 
+// NewAgentServiceWithLighthouse creates a new agent service with Lighthouse integration
+func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseClient *lighthouse.LighthouseClient) *AgentService {
+	service := &AgentService{
+		repos:         repos,
+		exportService: NewAgentExportService(repos),
+	}
+	
+	// Initialize telemetry service with config
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("Warning: Failed to load config for telemetry: %v", err)
+		// Use default config
+		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
+	}
+	
+	telemetryConfig := &TelemetryConfig{
+		Enabled:      cfg.TelemetryEnabled,
+		OTLPEndpoint: cfg.OTELEndpoint,
+		ServiceName:  "station",
+		Environment:  cfg.Environment,
+	}
+	
+	service.telemetry = NewTelemetryService(telemetryConfig)
+	if err := service.telemetry.Initialize(context.Background()); err != nil {
+		log.Printf("Warning: Failed to initialize telemetry: %v", err)
+		// Continue without telemetry rather than failing
+	}
+	
+	// Create execution engine with Lighthouse client integration
+	service.executionEngine = NewAgentExecutionEngineWithLighthouse(repos, service, lighthouseClient)
+	
+	// Pass telemetry service to execution engine for span creation
+	service.executionEngine.telemetryService = service.telemetry
+	
+	return service
+}
+
 // ExecuteAgent executes an agent with a specific task and optional user variables
 func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task string, userVariables map[string]interface{}) (*Message, error) {
 	// Start telemetry span
@@ -100,7 +139,7 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with %d variables", agent.ID, agent.Name, len(userVariables))
 	
 	// Execute using AgentExecutionEngine directly with stdio MCP and user variables
-	result, err := s.executionEngine.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
+	result, err := s.executionEngine.Execute(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
 	
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
@@ -220,7 +259,7 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with run ID %d and %d variables", agent.ID, agent.Name, runID, len(userVariables))
 	
 	// Execute using AgentExecutionEngine directly with stdio MCP and user variables - PASS THE REAL RUN ID
-	result, err := s.executionEngine.ExecuteAgentViaStdioMCPWithVariables(ctx, agent, task, runID, userVariables) // Use real run ID!
+	result, err := s.executionEngine.Execute(ctx, agent, task, runID, userVariables) // Use real run ID!
 	
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
@@ -313,6 +352,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		config.InputSchema,
 		config.CronSchedule,
 		config.ScheduleEnabled,
+		config.OutputSchema,
+		config.OutputSchemaPreset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -361,6 +402,8 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *A
 		nil, // input_schema - not set in basic config
 		config.CronSchedule,
 		config.ScheduleEnabled,
+		nil, // outputSchema - not supported in basic config yet
+		nil, // outputSchemaPreset - not supported in basic config yet
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
@@ -446,8 +489,9 @@ func (s *AgentService) UpdateAgentPrompt(ctx context.Context, agentID int64, pro
 
 // InitializeMCP initializes MCP for the agent service
 func (s *AgentService) InitializeMCP(ctx context.Context) error {
-	// Test the stdio MCP connection
-	return s.executionEngine.TestStdioMCPConnection(ctx)
+	// MCP connection testing removed - connections are established on-demand during execution
+	logging.Info("MCP initialization: connections will be established on-demand during agent execution")
+	return nil
 }
 
 // assignToolsToAgent assigns tools to an agent and returns the count of tools assigned

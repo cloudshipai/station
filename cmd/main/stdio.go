@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"sync"
@@ -11,9 +12,11 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
+	lighthouseServices "station/internal/lighthouse/services"
+	"station/internal/logging"
 	"station/internal/mcp"
 	"station/internal/services"
-	"station/pkg/crypto"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -50,6 +53,17 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Setup debug logging to file if in dev mode
+	if devMode {
+		if logFile, err := os.OpenFile("/tmp/station-stdio-debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+			log.SetOutput(logFile)
+			log.Printf("=== Station stdio debug session started ===")
+
+			// Initialize internal logging system with debug enabled and file output
+			logging.Initialize(true)
+		}
+	}
+
 	// Initialize database
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
@@ -70,13 +84,10 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to ensure default environment: %w", err)
 	}
 
-	// Initialize key manager using config
-	_, err = crypto.NewKeyManagerFromConfig(cfg.EncryptionKey)
-	if err != nil {
-		return fmt.Errorf("failed to initialize key manager: %w", err)
-	}
 
 	// Initialize minimal services for API server only
+	// Use separate contexts: one for long-lived services (management channel), one for MCP server
+	longLivedCtx := context.Background()
 	ctx := context.Background()
 	
 	// Initialize Genkit with configured AI provider
@@ -85,15 +96,47 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize Genkit: %v (agent execution will be limited)\n", err)
 	}
 
-	// Initialize agent service for API endpoints
-	agentSvc := services.NewAgentService(repos)
-	
-	
+	// Initialize Lighthouse client for CloudShip integration (same as server mode)
+	mode := lighthouse.DetectModeFromCommand()
+	lighthouseClient, err := lighthouse.InitializeLighthouseFromConfig(cfg, mode)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Lighthouse client: %v", err)
+	}
+
+	// Initialize agent service with Lighthouse integration (same as server mode)
+	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
+
+	// Initialize remote control service for bidirectional management (same as server mode)
+	var remoteControlSvc *lighthouseServices.RemoteControlService
+	if lighthouseClient != nil && (lighthouseClient.GetMode() == lighthouse.ModeServe || lighthouseClient.GetMode() == lighthouse.ModeStdio) {
+		log.Printf("🌐 Initializing stdio mode remote control via CloudShip")
+		remoteControlSvc = lighthouseServices.NewRemoteControlService(
+			lighthouseClient,
+			agentSvc,
+			repos,
+			cfg.CloudShip.RegistrationKey,
+			"default", // TODO: use actual environment name
+		)
+
+		// Start remote control service with long-lived context to keep management channel active
+		if err := remoteControlSvc.Start(longLivedCtx); err != nil {
+			log.Printf("Warning: Failed to start remote control service: %v", err)
+		} else {
+			log.Printf("✅ Stdio mode remote control active - CloudShip can manage this Station")
+		}
+	}
+
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
 
 	// Create MCP server for stdio communication
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
+
+	// Set lighthouse client for surgical telemetry integration
+	if lighthouseClient != nil {
+		mcpServer.SetLighthouseClient(lighthouseClient)
+		log.Printf("✅ Lighthouse client configured for MCP server telemetry")
+	}
 
 	// Try to start API server if port is available (avoid conflicts with other stdio instances)
 	var apiServer *api.Server
@@ -133,23 +176,42 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "Ready for MCP communication via stdin/stdout\n")
 
-	// Start MCP server in stdio mode (this blocks until stdin closes)
-	if err := mcpServer.StartStdio(ctx); err != nil {
-		// Clean shutdown of API server if it was started
-		if apiCancel != nil {
-			fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
-			apiCancel()
-			wg.Wait()
+	// Start MCP server in stdio mode in a separate goroutine to keep management channel alive
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := mcpServer.StartStdio(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  MCP stdio server error: %v (management channel remains active)\n", err)
 		}
-		return fmt.Errorf("failed to start MCP stdio server: %w", err)
-	}
+	}()
 
-	// Clean shutdown of API server when stdio closes
+	// Keep the main process alive to maintain the management channel for CloudShip control
+	// This ensures persistent bidirectional communication even when no MCP client is connected
+	fmt.Fprintf(os.Stderr, "🌐 Management channel active - Station remains available for CloudShip control\n")
+	fmt.Fprintf(os.Stderr, "📡 Station will continue running until terminated (Ctrl+C)\n")
+
+	// Block forever to keep management channel alive - only exit on signal
+	<-ctx.Done()
+	fmt.Fprintf(os.Stderr, "🛑 Received termination signal, shutting down...\n")
+
+	// Clean shutdown of services when terminating
 	if apiCancel != nil {
 		fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
 		apiCancel()
-		wg.Wait()
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Clean shutdown of remote control service for CloudShip management
+	if remoteControlSvc != nil {
+		fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
+		if err := remoteControlSvc.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Error stopping remote control service: %v\n", err)
+		}
+	}
+
+	// Note: Lighthouse client cleanup happens automatically via context cancellation
 
 	return nil
 }

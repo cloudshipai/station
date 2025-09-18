@@ -10,12 +10,12 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/lighthouse"
+	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/mcp"
 	"station/internal/mcp_agents"
 	"station/internal/services"
 	"station/internal/ssh"
-	"station/pkg/cloudshipai"
-	"station/pkg/crypto"
 	"strings"
 	"sync"
 	"syscall"
@@ -30,9 +30,9 @@ import (
 
 // genkitSetup holds the initialized Genkit components
 type genkitSetup struct {
-	app           *genkit.Genkit
-	openaiPlugin  *openai.OpenAI     // Official GenKit v1.0.1 OpenAI plugin
-	geminiPlugin  *googlegenai.GoogleAI
+	app          *genkit.Genkit
+	openaiPlugin *openai.OpenAI // Official GenKit v1.0.1 OpenAI plugin
+	geminiPlugin *googlegenai.GoogleAI
 }
 
 // initializeGenkit initializes Genkit with configured AI provider
@@ -41,20 +41,20 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 	var genkitApp *genkit.Genkit
 	var openaiPlugin *openai.OpenAI
 	var geminiPlugin *googlegenai.GoogleAI
-	
+
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
 		// Validate API key for OpenAI
 		if cfg.AIAPIKey == "" {
 			return nil, fmt.Errorf("STN_AI_API_KEY is required for OpenAI provider")
 		}
-		
+
 		// Build request options for official plugin
 		var opts []option.RequestOption
 		if cfg.AIBaseURL != "" {
 			opts = append(opts, option.WithBaseURL(cfg.AIBaseURL))
 		}
-		
+
 		openaiPlugin = &openai.OpenAI{
 			APIKey: cfg.AIAPIKey,
 			Opts:   opts,
@@ -77,11 +77,11 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini, ollama)", cfg.AIProvider)
 	}
-	
+
 	return &genkitSetup{
-		app:           genkitApp,
-		openaiPlugin:  openaiPlugin,
-		geminiPlugin:  geminiPlugin,
+		app:          genkitApp,
+		openaiPlugin: openaiPlugin,
+		geminiPlugin: geminiPlugin,
 	}, nil
 }
 
@@ -105,72 +105,87 @@ func runMainServer() error {
 	}
 
 	var wg sync.WaitGroup
-	
+
 	// Create repositories and services
 	repos := repositories.New(database)
-	_, err = crypto.NewKeyManagerFromEnv()
-	if err != nil {
-		return fmt.Errorf("failed to initialize key manager: %w", err)
-	}
 
 	// Initialize required services
-	
+
 	// Create default environment if none exists
 	if err := ensureDefaultEnvironment(ctx, repos); err != nil {
 		log.Printf("Warning: Failed to create default environment: %v", err)
 	}
 
-	
 	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize Genkit: %w", err)
 	}
-	
-	// Initialize agent service with AgentExecutionEngine
-	agentSvc := services.NewAgentService(repos)
-	
+
+	// Initialize Lighthouse client for CloudShip integration
+	mode := lighthouse.DetectModeFromCommand()
+	lighthouseClient, err := lighthouse.InitializeLighthouseFromConfig(cfg, mode)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Lighthouse client: %v", err)
+	}
+
+	// Initialize agent service with AgentExecutionEngine and Lighthouse integration
+	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
+
 	// Initialize MCP for the agent service
 	if err := agentSvc.InitializeMCP(ctx); err != nil {
 		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
 	}
-	
+
 	// Initialize scheduler service for cron-based agent execution (using direct execution)
 	schedulerSvc := services.NewSchedulerService(database, agentSvc)
-	
+
 	// Start scheduler service
 	if err := schedulerSvc.Start(); err != nil {
 		return fmt.Errorf("failed to start scheduler service: %w", err)
 	}
 	defer schedulerSvc.Stop()
-	
+
+	// Initialize remote control service for server mode CloudShip integration
+	var remoteControlSvc *lighthouseServices.RemoteControlService
+	if lighthouseClient != nil && lighthouseClient.GetMode() == lighthouse.ModeServe {
+		log.Printf("🌐 Initializing server mode remote control via CloudShip")
+		remoteControlSvc = lighthouseServices.NewRemoteControlService(
+			lighthouseClient,
+			agentSvc,
+			repos,
+			cfg.CloudShip.RegistrationKey,
+			"default", // TODO: use actual environment name
+		)
+
+		// Start remote control service
+		if err := remoteControlSvc.Start(ctx); err != nil {
+			log.Printf("Warning: Failed to start remote control service: %v", err)
+		} else {
+			log.Printf("✅ Server mode remote control active - CloudShip can manage this Station")
+		}
+	}
 
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
-	
+
 	// Get environment name from viper config (defaults to "default")
 	environmentName := viper.GetString("serve_environment")
 	if environmentName == "" {
 		environmentName = "default"
 	}
 	log.Printf("🤖 Serving agents from environment: %s", environmentName)
-	
+
 	sshServer := ssh.New(cfg, database, repos, agentSvc, localMode)
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
-	apiServer := api.New(cfg, database, localMode, telemetryService)
-	
-	// Initialize ToolDiscoveryService for API config uploads
+	apiServer := api.New(cfg, database, localMode, nil)
+
+	// Initialize ToolDiscoveryService for lighthouse and API compatibility
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
 	
-	// Set services for the API server  
+	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService)
-
-	// Initialize CloudShip AI client
-	cloudshipaiClient := cloudshipai.NewClient()
-	if err := cloudshipaiClient.Start(); err != nil {
-		log.Printf("Warning: Failed to start CloudShip AI client: %v", err)
-	}
 
 	wg.Add(5) // SSH, MCP, Dynamic Agent MCP, API, and webhook retry processor
 
@@ -188,14 +203,14 @@ func runMainServer() error {
 		if err := mcpServer.Start(ctx, cfg.MCPPort); err != nil {
 			log.Printf("MCP server error: %v", err)
 		}
-		
+
 		// Wait for context cancellation, then shutdown fast
 		<-ctx.Done()
-		
+
 		// Very aggressive timeout - 1s for MCP shutdown
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer shutdownCancel()
-		
+
 		log.Printf("🔧 Shutting down MCP server...")
 		if err := mcpServer.Shutdown(shutdownCtx); err != nil {
 			log.Printf("MCP server shutdown error: %v", err)
@@ -210,14 +225,14 @@ func runMainServer() error {
 		if err := dynamicAgentServer.Start(ctx, cfg.MCPPort+1); err != nil {
 			log.Printf("Dynamic Agent MCP server error: %v", err)
 		}
-		
+
 		// Wait for context cancellation, then shutdown fast
 		<-ctx.Done()
-		
+
 		// Very aggressive timeout - 1s for dynamic MCP shutdown
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer shutdownCancel()
-		
+
 		log.Printf("🤖 Shutting down Dynamic Agent MCP server...")
 		if err := dynamicAgentServer.Shutdown(shutdownCtx); err != nil {
 			log.Printf("Dynamic Agent MCP server shutdown error: %v", err)
@@ -234,11 +249,8 @@ func runMainServer() error {
 		}
 	}()
 
-	// Track server startup telemetry
-	if telemetryService != nil {
-		telemetryService.TrackServerModeStarted(cfg.APIPort, cfg.MCPPort, cfg.SSHPort)
-	}
-	
+	// Remove telemetry tracking
+
 	fmt.Printf("\n✅ Station is running!\n")
 	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
 	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)
@@ -258,9 +270,22 @@ func runMainServer() error {
 
 	// Signal all goroutines to start shutdown immediately
 	cancel()
-	
-	// Stop CloudShip AI client
-	cloudshipaiClient.Stop()
+
+	// Stop remote control service
+	if remoteControlSvc != nil {
+		if err := remoteControlSvc.Stop(); err != nil {
+			log.Printf("Error stopping remote control service: %v", err)
+		} else {
+			log.Printf("🌐 Remote control service stopped gracefully")
+		}
+	}
+
+	// Stop Lighthouse client
+	if lighthouseClient != nil {
+		if err := lighthouseClient.Close(); err != nil {
+			log.Printf("Error stopping Lighthouse client: %v", err)
+		}
+	}
 
 	// Create done channel with aggressive timeout handling
 	done := make(chan struct{})
@@ -286,22 +311,22 @@ func ensureDefaultEnvironment(_ context.Context, repos *repositories.Repositorie
 	if err != nil {
 		return fmt.Errorf("failed to check existing environments: %w", err)
 	}
-	
+
 	// If environments exist, nothing to do
 	if len(envs) > 0 {
 		log.Printf("✅ Found %d existing environments", len(envs))
 		return nil
 	}
-	
+
 	// Create default environment
 	description := "Default environment for MCP configurations"
-	
+
 	// Get console user for created_by field
 	consoleUser, err := repos.Users.GetByUsername("console")
 	if err != nil {
 		return fmt.Errorf("failed to get console user: %w", err)
 	}
-	
+
 	defaultEnv, err := repos.Environments.Create("default", &description, consoleUser.ID)
 	if err != nil {
 		// Check if it's a unique constraint error (environment already exists)
@@ -311,7 +336,7 @@ func ensureDefaultEnvironment(_ context.Context, repos *repositories.Repositorie
 		}
 		return fmt.Errorf("failed to create default environment: %w", err)
 	}
-	
+
 	log.Printf("✅ Created default environment (ID: %d)", defaultEnv.ID)
 	return nil
 }

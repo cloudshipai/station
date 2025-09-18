@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,7 +19,6 @@ type Config struct {
 	TelemetryEnabled  bool
 	OTELEndpoint      string // OpenTelemetry OTLP endpoint for exporting traces
 	Debug             bool   // Debug mode enables verbose logging
-	EncryptionKey     string // Encryption key (can be loaded from config file or env var)
 	// Workspace Configuration
 	Workspace         string // Custom workspace path (overrides XDG paths)
 	// AI Provider Configuration
@@ -28,7 +26,17 @@ type Config struct {
 	AIAPIKey          string // The API key for the AI provider  
 	AIModel           string // Model name (e.g., gpt-4o, llama3, gemini-pro)
 	AIBaseURL         string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
+	// CloudShip Integration
+	CloudShip         CloudShipConfig
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
+}
+
+// CloudShipConfig holds CloudShip Lighthouse integration settings
+type CloudShipConfig struct {
+	Enabled         bool   `yaml:"enabled"`          // Enable CloudShip integration
+	RegistrationKey string `yaml:"registration_key"` // CloudShip registration key
+	Endpoint        string `yaml:"endpoint"`         // Lighthouse gRPC endpoint
+	StationID       string `yaml:"station_id"`       // Station ID (auto-generated)
 }
 
 func Load() (*Config, error) {
@@ -43,7 +51,6 @@ func Load() (*Config, error) {
 		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true), // Default enabled with opt-out
 		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", ""), // Default empty (no export)
 		Debug:            getEnvBoolOrDefault("STN_DEBUG", false), // Default to info level
-		EncryptionKey:    os.Getenv("ENCRYPTION_KEY"), // Load from environment
 		// Workspace Configuration  
 		Workspace:        getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults
@@ -51,12 +58,16 @@ func Load() (*Config, error) {
 		AIAPIKey:         getAIAPIKey(), // Smart fallback for API keys
 		AIModel:          getAIModelDefault(), // Provider-specific defaults
 		AIBaseURL:        getEnvOrDefault("STN_AI_BASE_URL", ""), // Empty means use provider default
+		// CloudShip Integration (disabled by default)
+		CloudShip: CloudShipConfig{
+			Enabled:         getEnvBoolOrDefault("STN_CLOUDSHIP_ENABLED", false),
+			RegistrationKey: getEnvOrDefault("STN_CLOUDSHIP_KEY", ""),
+			Endpoint:        getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudship.ai:443"),
+			StationID:       getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
+		},
 	}
 
 	// Override with values from config file (if available) using Viper
-	if viper.IsSet("encryption_key") {
-		cfg.EncryptionKey = viper.GetString("encryption_key")
-	}
 	if viper.IsSet("database_url") {
 		cfg.DatabaseURL = viper.GetString("database_url")
 	}
@@ -104,11 +115,21 @@ func Load() (*Config, error) {
 	if viper.IsSet("workspace") {
 		cfg.Workspace = viper.GetString("workspace")
 	}
-
-	// Validate that encryption key exists either in config file or environment
-	if cfg.EncryptionKey == "" {
-		return nil, fmt.Errorf("encryption key is required - either in config file or ENCRYPTION_KEY environment variable")
+	
+	// CloudShip configuration overrides from config file
+	if viper.IsSet("cloudship.enabled") {
+		cfg.CloudShip.Enabled = viper.GetBool("cloudship.enabled")
 	}
+	if viper.IsSet("cloudship.registration_key") {
+		cfg.CloudShip.RegistrationKey = viper.GetString("cloudship.registration_key")
+	}
+	if viper.IsSet("cloudship.endpoint") {
+		cfg.CloudShip.Endpoint = viper.GetString("cloudship.endpoint")
+	}
+	if viper.IsSet("cloudship.station_id") {
+		cfg.CloudShip.StationID = viper.GetString("cloudship.station_id")
+	}
+
 	return cfg, nil
 }
 

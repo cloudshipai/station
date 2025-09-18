@@ -11,22 +11,24 @@ import (
 )
 
 const createAgent = `-- name: CreateAgent :one
-INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, input_schema, cron_schedule, is_scheduled, schedule_enabled)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at
+INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, input_schema, cron_schedule, is_scheduled, schedule_enabled, output_schema, output_schema_preset)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at
 `
 
 type CreateAgentParams struct {
-	Name            string         `json:"name"`
-	Description     string         `json:"description"`
-	Prompt          string         `json:"prompt"`
-	MaxSteps        int64          `json:"max_steps"`
-	EnvironmentID   int64          `json:"environment_id"`
-	CreatedBy       int64          `json:"created_by"`
-	InputSchema     sql.NullString `json:"input_schema"`
-	CronSchedule    sql.NullString `json:"cron_schedule"`
-	IsScheduled     sql.NullBool   `json:"is_scheduled"`
-	ScheduleEnabled sql.NullBool   `json:"schedule_enabled"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	Prompt             string         `json:"prompt"`
+	MaxSteps           int64          `json:"max_steps"`
+	EnvironmentID      int64          `json:"environment_id"`
+	CreatedBy          int64          `json:"created_by"`
+	InputSchema        sql.NullString `json:"input_schema"`
+	CronSchedule       sql.NullString `json:"cron_schedule"`
+	IsScheduled        sql.NullBool   `json:"is_scheduled"`
+	ScheduleEnabled    sql.NullBool   `json:"schedule_enabled"`
+	OutputSchema       sql.NullString `json:"output_schema"`
+	OutputSchemaPreset sql.NullString `json:"output_schema_preset"`
 }
 
 func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
@@ -41,6 +43,8 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		arg.CronSchedule,
 		arg.IsScheduled,
 		arg.ScheduleEnabled,
+		arg.OutputSchema,
+		arg.OutputSchemaPreset,
 	)
 	var i Agent
 	err := row.Scan(
@@ -53,6 +57,8 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.CreatedBy,
 		&i.ModelID,
 		&i.InputSchema,
+		&i.OutputSchema,
+		&i.OutputSchemaPreset,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -74,7 +80,7 @@ func (q *Queries) DeleteAgent(ctx context.Context, id int64) error {
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ?
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ?
 `
 
 func (q *Queries) GetAgent(ctx context.Context, id int64) (Agent, error) {
@@ -90,6 +96,8 @@ func (q *Queries) GetAgent(ctx context.Context, id int64) (Agent, error) {
 		&i.CreatedBy,
 		&i.ModelID,
 		&i.InputSchema,
+		&i.OutputSchema,
+		&i.OutputSchemaPreset,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -102,7 +110,7 @@ func (q *Queries) GetAgent(ctx context.Context, id int64) (Agent, error) {
 }
 
 const getAgentByName = `-- name: GetAgentByName :one
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE name = ?
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE name = ?
 `
 
 func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error) {
@@ -118,6 +126,8 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 		&i.CreatedBy,
 		&i.ModelID,
 		&i.InputSchema,
+		&i.OutputSchema,
+		&i.OutputSchemaPreset,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -130,7 +140,7 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 }
 
 const getAgentBySchedule = `-- name: GetAgentBySchedule :one
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE
 `
 
 func (q *Queries) GetAgentBySchedule(ctx context.Context, id int64) (Agent, error) {
@@ -146,6 +156,8 @@ func (q *Queries) GetAgentBySchedule(ctx context.Context, id int64) (Agent, erro
 		&i.CreatedBy,
 		&i.ModelID,
 		&i.InputSchema,
+		&i.OutputSchema,
+		&i.OutputSchemaPreset,
 		&i.CronSchedule,
 		&i.IsScheduled,
 		&i.LastScheduledRun,
@@ -169,6 +181,8 @@ SELECT
     a.is_scheduled as agent_is_scheduled,
     a.schedule_enabled as agent_schedule_enabled,
     a.input_schema as agent_input_schema,
+    a.output_schema as agent_output_schema,
+    a.output_schema_preset as agent_output_schema_preset,
     a.created_at as agent_created_at,
     a.updated_at as agent_updated_at,
     ms.id as mcp_server_id,
@@ -186,24 +200,26 @@ ORDER BY ms.name, mt.name
 `
 
 type GetAgentWithToolsRow struct {
-	AgentID              int64          `json:"agent_id"`
-	AgentName            string         `json:"agent_name"`
-	AgentDescription     string         `json:"agent_description"`
-	AgentPrompt          string         `json:"agent_prompt"`
-	AgentMaxSteps        int64          `json:"agent_max_steps"`
-	AgentEnvironmentID   int64          `json:"agent_environment_id"`
-	AgentCreatedBy       int64          `json:"agent_created_by"`
-	AgentIsScheduled     sql.NullBool   `json:"agent_is_scheduled"`
-	AgentScheduleEnabled sql.NullBool   `json:"agent_schedule_enabled"`
-	AgentInputSchema     sql.NullString `json:"agent_input_schema"`
-	AgentCreatedAt       sql.NullTime   `json:"agent_created_at"`
-	AgentUpdatedAt       sql.NullTime   `json:"agent_updated_at"`
-	McpServerID          sql.NullInt64  `json:"mcp_server_id"`
-	McpServerName        sql.NullString `json:"mcp_server_name"`
-	ToolID               sql.NullInt64  `json:"tool_id"`
-	ToolName             sql.NullString `json:"tool_name"`
-	ToolDescription      sql.NullString `json:"tool_description"`
-	ToolInputSchema      sql.NullString `json:"tool_input_schema"`
+	AgentID                 int64          `json:"agent_id"`
+	AgentName               string         `json:"agent_name"`
+	AgentDescription        string         `json:"agent_description"`
+	AgentPrompt             string         `json:"agent_prompt"`
+	AgentMaxSteps           int64          `json:"agent_max_steps"`
+	AgentEnvironmentID      int64          `json:"agent_environment_id"`
+	AgentCreatedBy          int64          `json:"agent_created_by"`
+	AgentIsScheduled        sql.NullBool   `json:"agent_is_scheduled"`
+	AgentScheduleEnabled    sql.NullBool   `json:"agent_schedule_enabled"`
+	AgentInputSchema        sql.NullString `json:"agent_input_schema"`
+	AgentOutputSchema       sql.NullString `json:"agent_output_schema"`
+	AgentOutputSchemaPreset sql.NullString `json:"agent_output_schema_preset"`
+	AgentCreatedAt          sql.NullTime   `json:"agent_created_at"`
+	AgentUpdatedAt          sql.NullTime   `json:"agent_updated_at"`
+	McpServerID             sql.NullInt64  `json:"mcp_server_id"`
+	McpServerName           sql.NullString `json:"mcp_server_name"`
+	ToolID                  sql.NullInt64  `json:"tool_id"`
+	ToolName                sql.NullString `json:"tool_name"`
+	ToolDescription         sql.NullString `json:"tool_description"`
+	ToolInputSchema         sql.NullString `json:"tool_input_schema"`
 }
 
 func (q *Queries) GetAgentWithTools(ctx context.Context, id int64) ([]GetAgentWithToolsRow, error) {
@@ -226,6 +242,8 @@ func (q *Queries) GetAgentWithTools(ctx context.Context, id int64) ([]GetAgentWi
 			&i.AgentIsScheduled,
 			&i.AgentScheduleEnabled,
 			&i.AgentInputSchema,
+			&i.AgentOutputSchema,
+			&i.AgentOutputSchemaPreset,
 			&i.AgentCreatedAt,
 			&i.AgentUpdatedAt,
 			&i.McpServerID,
@@ -249,7 +267,7 @@ func (q *Queries) GetAgentWithTools(ctx context.Context, id int64) ([]GetAgentWi
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents ORDER BY name
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents ORDER BY name
 `
 
 func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
@@ -271,6 +289,8 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 			&i.CreatedBy,
 			&i.ModelID,
 			&i.InputSchema,
+			&i.OutputSchema,
+			&i.OutputSchemaPreset,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,
@@ -293,7 +313,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 }
 
 const listAgentsByEnvironment = `-- name: ListAgentsByEnvironment :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE environment_id = ? ORDER BY name
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE environment_id = ? ORDER BY name
 `
 
 func (q *Queries) ListAgentsByEnvironment(ctx context.Context, environmentID int64) ([]Agent, error) {
@@ -315,6 +335,8 @@ func (q *Queries) ListAgentsByEnvironment(ctx context.Context, environmentID int
 			&i.CreatedBy,
 			&i.ModelID,
 			&i.InputSchema,
+			&i.OutputSchema,
+			&i.OutputSchemaPreset,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,
@@ -337,7 +359,7 @@ func (q *Queries) ListAgentsByEnvironment(ctx context.Context, environmentID int
 }
 
 const listAgentsByUser = `-- name: ListAgentsByUser :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE created_by = ? ORDER BY name
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE created_by = ? ORDER BY name
 `
 
 func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agent, error) {
@@ -359,6 +381,8 @@ func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agen
 			&i.CreatedBy,
 			&i.ModelID,
 			&i.InputSchema,
+			&i.OutputSchema,
+			&i.OutputSchemaPreset,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,
@@ -381,7 +405,7 @@ func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agen
 }
 
 const listScheduledAgents = `-- name: ListScheduledAgents :many
-SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE is_scheduled = TRUE AND schedule_enabled = TRUE ORDER BY next_scheduled_run
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE is_scheduled = TRUE AND schedule_enabled = TRUE ORDER BY next_scheduled_run
 `
 
 func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
@@ -403,6 +427,8 @@ func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
 			&i.CreatedBy,
 			&i.ModelID,
 			&i.InputSchema,
+			&i.OutputSchema,
+			&i.OutputSchemaPreset,
 			&i.CronSchedule,
 			&i.IsScheduled,
 			&i.LastScheduledRun,
@@ -425,19 +451,21 @@ func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
 }
 
 const updateAgent = `-- name: UpdateAgent :exec
-UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, input_schema = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?
+UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, input_schema = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ?, output_schema = ?, output_schema_preset = ? WHERE id = ?
 `
 
 type UpdateAgentParams struct {
-	Name            string         `json:"name"`
-	Description     string         `json:"description"`
-	Prompt          string         `json:"prompt"`
-	MaxSteps        int64          `json:"max_steps"`
-	InputSchema     sql.NullString `json:"input_schema"`
-	CronSchedule    sql.NullString `json:"cron_schedule"`
-	IsScheduled     sql.NullBool   `json:"is_scheduled"`
-	ScheduleEnabled sql.NullBool   `json:"schedule_enabled"`
-	ID              int64          `json:"id"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	Prompt             string         `json:"prompt"`
+	MaxSteps           int64          `json:"max_steps"`
+	InputSchema        sql.NullString `json:"input_schema"`
+	CronSchedule       sql.NullString `json:"cron_schedule"`
+	IsScheduled        sql.NullBool   `json:"is_scheduled"`
+	ScheduleEnabled    sql.NullBool   `json:"schedule_enabled"`
+	OutputSchema       sql.NullString `json:"output_schema"`
+	OutputSchemaPreset sql.NullString `json:"output_schema_preset"`
+	ID                 int64          `json:"id"`
 }
 
 func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) error {
@@ -450,6 +478,8 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) error 
 		arg.CronSchedule,
 		arg.IsScheduled,
 		arg.ScheduleEnabled,
+		arg.OutputSchema,
+		arg.OutputSchemaPreset,
 		arg.ID,
 	)
 	return err

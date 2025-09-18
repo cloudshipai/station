@@ -1,0 +1,702 @@
+syntax = "proto3";
+
+package lighthouse.v1;
+option go_package = "./internal/proto";
+
+import "google/protobuf/timestamp.proto";
+import "internal/proto/data_ingestion.proto";
+
+// Lighthouse service for Station-CloudShip integration
+// Handles all three deployment modes: stdio, serve, cli
+service LighthouseService {
+    // Registration & Connection Management
+    rpc RegisterStation(RegisterStationRequest) returns (RegisterStationResponse);
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    
+    // Run Data Collection (All Modes)
+    rpc SendRun(SendRunRequest) returns (SendRunResponse);
+    rpc SendRunStream(stream SendRunRequest) returns (stream SendRunResponse);
+    
+    // CLI Mode Versioned Snapshots
+    rpc SendEphemeralSnapshot(EphemeralSnapshotRequest) returns (EphemeralSnapshotResponse);
+    
+    // Configuration Management (Server Mode Only)
+    rpc Connect(stream ConnectRequest) returns (stream CloudShipCommand);
+    rpc SyncConfiguration(SyncConfigRequest) returns (SyncConfigResponse);
+    
+    // Management Channel (Bidirectional for firewall traversal)
+    rpc ManagementChannel(stream ManagementMessage) returns (stream ManagementMessage);
+
+    // Agent Configuration Management (Unary APIs for external clients like Django)
+    rpc GetAgentDetails(GetAgentDetailsRequest) returns (GetAgentDetailsResponse);
+    rpc UpdateAgentPrompt(UpdateAgentPromptRequest) returns (UpdateAgentPromptResponse);
+
+    // System Health Monitoring (Server Mode Primarily)
+    rpc SendSystemHealth(SystemHealthRequest) returns (SystemHealthResponse);
+    
+    // Flexible Data Ingestion Pipeline (Phase 3)
+    rpc IngestData(IngestDataRequest) returns (IngestDataResponse);
+    
+    // Legacy MCP Proxy (Deprecated - use ManagementChannel)
+    rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+    rpc CallTool(CallToolRequest) returns (CallToolResponse);
+    rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+    rpc ExecuteAgent(ExecuteAgentRequest) returns (ExecuteAgentResponse);
+}
+
+// Deployment mode enumeration
+enum DeploymentMode {
+    DEPLOYMENT_MODE_UNSPECIFIED = 0;
+    DEPLOYMENT_MODE_STDIO = 1;    // Local development, MCP client usage
+    DEPLOYMENT_MODE_SERVE = 2;    // Team/production server
+    DEPLOYMENT_MODE_CLI = 3;      // CI/CD & ephemeral executions
+}
+
+// Run status enumeration (legacy - use data_ingestion.RunStatus for new code)
+enum LighthouseRunStatus {
+    LIGHTHOUSE_RUN_STATUS_UNSPECIFIED = 0;
+    LIGHTHOUSE_RUN_STATUS_QUEUED = 1;       // CloudShip UI initiated
+    LIGHTHOUSE_RUN_STATUS_DISPATCHED = 2;   // Sent to station
+    LIGHTHOUSE_RUN_STATUS_RUNNING = 3;      // Active execution
+    LIGHTHOUSE_RUN_STATUS_COMPLETED = 4;    // Finished successfully
+    LIGHTHOUSE_RUN_STATUS_FAILED = 5;       // Error occurred
+    LIGHTHOUSE_RUN_STATUS_TIMEOUT = 6;      // Execution timeout
+    LIGHTHOUSE_RUN_STATUS_CANCELLED = 7;    // User cancelled
+}
+
+// Run source enumeration
+enum RunSource {
+    RUN_SOURCE_UNSPECIFIED = 0;
+    RUN_SOURCE_ANALYTICS = 1;     // Station completed run data
+    RUN_SOURCE_UI_TRIGGERED = 2;  // CloudShip UI initiated
+    RUN_SOURCE_CLI_SNAPSHOT = 3;  // Ephemeral execution context
+}
+
+// Step type enumeration
+enum StepType {
+    STEP_TYPE_UNSPECIFIED = 0;
+    STEP_TYPE_TOOL_CALL = 1;
+    STEP_TYPE_LLM_CALL = 2;
+    STEP_TYPE_PROCESSING = 3;
+}
+
+// System status enumeration
+enum SystemStatus {
+    SYSTEM_STATUS_UNSPECIFIED = 0;
+    SYSTEM_STATUS_HEALTHY = 1;
+    SYSTEM_STATUS_WARNING = 2;
+    SYSTEM_STATUS_CRITICAL = 3;
+    SYSTEM_STATUS_OFFLINE = 4;
+}
+
+// Registration status enumeration
+enum RegistrationStatus {
+    REGISTRATION_STATUS_UNSPECIFIED = 0;
+    REGISTRATION_STATUS_UNREGISTERED = 1;    // No registration key provided
+    REGISTRATION_STATUS_REGISTERED = 2;      // Successfully registered with CloudShip
+    REGISTRATION_STATUS_INVALID_KEY = 3;     // Invalid registration key
+    REGISTRATION_STATUS_RATE_LIMITED = 4;    // Too many attempts
+}
+
+// ============================================================================
+// REGISTRATION MESSAGES
+// ============================================================================
+
+message RegisterStationRequest {
+    string station_id = 1;           // Generated UUID or provided
+    string registration_key = 2;     // CloudShip registration key (optional)
+    string user_id = 3;             // From registration key
+    string environment_name = 4;    // e.g., "production", "dev"
+    DeploymentMode mode = 5;        // server, local, cicd
+    StationCapabilities capabilities = 6;
+    map<string, string> metadata = 7; // Version, OS, etc.
+}
+
+message RegisterStationResponse {
+    bool success = 1;
+    string station_id = 2;          // Confirmed station ID
+    string error_message = 3;
+    RegistrationStatus status = 4;
+    CloudShipConfig cloudship_config = 5; // Only if registered
+}
+
+message StationCapabilities {
+    bool can_execute_agents = 1;
+    bool has_mcp_servers = 2;
+    bool supports_bidirectional = 3;
+    repeated string environments = 4;
+    int32 agent_count = 5;
+    int32 tool_count = 6;
+}
+
+message CloudShipConfig {
+    string endpoint = 1;
+    int32 heartbeat_interval = 2;
+    bool auto_sync_config = 3;
+    map<string, string> settings = 4;
+}
+
+// ============================================================================
+// RUN DATA COLLECTION MESSAGES
+// ============================================================================
+
+message SendRunRequest {
+    string registration_key = 1;    // Registration key as station identifier
+    string environment = 2;         // Environment name
+    DeploymentMode mode = 3;        // Deployment mode (stdio, serve, cli)
+    RunSource source = 4;           // Run source (analytics, ui_triggered, cli_snapshot)
+    LighthouseAgentRunData run_data = 5;      // Complete run information
+    map<string, string> labels = 6; // Additional labels
+}
+
+message SendRunResponse {
+    bool success = 1;
+    string message = 2;
+    string run_id = 3;              // Confirmed run ID in CloudShip
+}
+
+message LighthouseAgentRunData {
+    string run_id = 1;              // Unique run ID from Station
+    string agent_id = 2;            // Agent identifier
+    string agent_name = 3;          // Agent display name
+    string task = 4;                // User input/task
+    string response = 5;            // Agent output
+    repeated LighthouseToolCall tool_calls = 6;
+    repeated ExecutionStep execution_steps = 7;
+    LighthouseTokenUsage token_usage = 8;
+    int64 duration_ms = 9;
+    string model_name = 10;
+    LighthouseRunStatus status = 11;
+    google.protobuf.Timestamp started_at = 12;
+    google.protobuf.Timestamp completed_at = 13;
+    map<string, string> metadata = 14;
+    string station_version = 15;    // Station version for debugging/compatibility
+}
+
+message LighthouseToolCall {
+    string tool_name = 1;
+    map<string, string> parameters = 2;  // JSON-serialized parameters
+    string result = 3;                    // JSON-serialized result
+    int64 duration_ms = 4;
+    bool success = 5;
+    google.protobuf.Timestamp timestamp = 6;
+}
+
+message ExecutionStep {
+    int32 step_number = 1;
+    string description = 2;
+    StepType type = 3;
+    int64 duration_ms = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+
+message LighthouseTokenUsage {
+    int32 prompt_tokens = 1;
+    int32 completion_tokens = 2;
+    int32 total_tokens = 3;
+    double cost_usd = 4;
+}
+
+// ============================================================================
+// CLI MODE EPHEMERAL SNAPSHOTS
+// ============================================================================
+
+message EphemeralSnapshotRequest {
+    string registration_key = 1;    // Registration key as station ID
+    string environment = 2;         // Environment name
+    RunSource source = 3;           // Source type (should be RUN_SOURCE_CLI_SNAPSHOT)
+    DeploymentContext context = 4;  // Rich execution context
+    LighthouseAgentRunData run_data = 5;      // Complete run information
+    SystemSnapshot system = 6;     // System state at execution time
+}
+
+message EphemeralSnapshotResponse {
+    bool success = 1;
+    string message = 2;
+    string snapshot_id = 3;
+}
+
+message DeploymentContext {
+    string command_line = 1;        // Full stn command executed
+    string working_directory = 2;   // Execution directory
+    map<string, string> env_vars = 3; // Relevant environment variables
+    repeated string arguments = 4;   // Command arguments
+    string git_branch = 5;          // Current git branch if in repo
+    string git_commit = 6;          // Current commit hash
+    string station_version = 7;     // Station version
+}
+
+message SystemSnapshot {
+    repeated AgentConfig agents = 1;     // All agents in environment
+    repeated MCPConfig mcp_servers = 2;  // All MCP server configs
+    map<string, string> variables = 3;   // Template variables
+    repeated ToolInfo available_tools = 4; // Tool inventory
+    SystemMetrics metrics = 5;           // System performance at execution
+}
+
+// ============================================================================
+// CONFIGURATION MANAGEMENT (SERVE MODE)
+// ============================================================================
+
+message SyncConfigRequest {
+    string registration_key = 1;
+    repeated AgentConfig agents = 2;
+    repeated MCPConfig mcp_servers = 3;
+    map<string, string> variables = 4;
+    int64 config_version = 5;
+}
+
+message SyncConfigResponse {
+    bool success = 1;
+    string message = 2;
+    int32 synced_agents = 3;
+    int32 synced_mcp_servers = 4;
+}
+
+message AgentConfig {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string prompt_template = 4;
+    string model_name = 5;
+    int32 max_steps = 6;
+    repeated string tools = 7;
+    map<string, string> variables = 8;
+    repeated string tags = 9;
+    google.protobuf.Timestamp created_at = 10;
+    google.protobuf.Timestamp updated_at = 11;
+}
+
+message MCPConfig {
+    string name = 1;
+    string command = 2;
+    repeated string args = 3;
+    map<string, string> env_vars = 4;
+    map<string, string> variables = 5;
+    bool enabled = 6;
+    google.protobuf.Timestamp created_at = 7;
+    google.protobuf.Timestamp updated_at = 8;
+}
+
+message ToolInfo {
+    string name = 1;
+    string description = 2;
+    string mcp_server = 3;
+    repeated string categories = 4;
+}
+
+// ============================================================================
+// BIDIRECTIONAL STREAMING (SERVE MODE)
+// ============================================================================
+
+message ConnectRequest {
+    string registration_key = 1;
+    string environment = 2;
+    SystemMetrics metrics = 3;
+}
+
+message CloudShipCommand {
+    oneof command {
+        CreateAgentCommand create_agent = 1;
+        UpdateAgentCommand update_agent = 2;
+        DeleteAgentCommand delete_agent = 3;
+        SyncMCPServersCommand sync_mcp = 4;
+        ExecuteAgentCommand execute_agent = 5;
+        GetEnvironmentCommand get_env = 6;
+        ListAgentsCommand list_agents = 7;
+    }
+}
+
+message CreateAgentCommand {
+    string agent_id = 1;
+    AgentConfig config = 2;
+}
+
+message UpdateAgentCommand {
+    string agent_id = 1;
+    AgentConfig config = 2;
+}
+
+message DeleteAgentCommand {
+    string agent_id = 1;
+}
+
+message SyncMCPServersCommand {
+    repeated MCPConfig mcp_servers = 1;
+}
+
+message ExecuteAgentCommand {
+    string agent_id = 1;
+    string task = 2;
+    string run_id = 3;
+    map<string, string> variables = 4;
+}
+
+message GetEnvironmentCommand {
+    string environment = 1;
+}
+
+message ListAgentsCommand {
+    string environment = 1;
+    string run_id = 2;
+}
+
+// ============================================================================
+// SYSTEM HEALTH MONITORING
+// ============================================================================
+
+message SystemHealthRequest {
+    string registration_key = 1;
+    string environment = 2;
+    SystemStatus status = 3;
+    SystemMetrics metrics = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+
+message SystemHealthResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message SystemMetrics {
+    double cpu_usage_percent = 1;
+    double memory_usage_percent = 2;
+    int64 disk_usage_mb = 3;
+    int64 uptime_seconds = 4;
+    int32 active_connections = 5;
+    int32 active_runs = 6;
+    int64 network_in_bytes = 7;
+    int64 network_out_bytes = 8;
+    map<string, string> additional_metrics = 9;
+}
+
+// ============================================================================
+// HEARTBEAT MESSAGES (ALL MODES)
+// ============================================================================
+
+message HeartbeatRequest {
+    string registration_key = 1;
+    string environment = 2;
+    SystemStatus status = 3;
+    SystemMetrics metrics = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+
+message HeartbeatResponse {
+    bool success = 1;
+    string message = 2;
+    repeated string pending_commands = 3;
+    CloudShipConfig updated_config = 4;
+}
+
+// ============================================================================
+// MCP PROXY MESSAGES (SERVE MODE)
+// ============================================================================
+
+message ListToolsRequest {
+    string registration_key = 1;
+    string environment = 2;
+}
+
+message ListToolsResponse {
+    repeated ToolInfo tools = 1;
+}
+
+message CallToolRequest {
+    string registration_key = 1;
+    string environment = 2;
+    string tool_name = 3;
+    map<string, string> parameters = 4;
+}
+
+message CallToolResponse {
+    bool success = 1;
+    string result = 2;
+    string error_message = 3;
+}
+
+message ListAgentsRequest {
+    string registration_key = 1;
+    string environment = 2;
+}
+
+message ListAgentsResponse {
+    repeated AgentConfig agents = 1;
+}
+
+message ExecuteAgentRequest {
+    string registration_key = 1;
+    string environment = 2;
+    string agent_id = 3;
+    string task = 4;
+    map<string, string> variables = 5;
+}
+
+message ExecuteAgentResponse {
+    oneof response {
+        ExecutionStarted started = 1;
+        ExecutionStep step = 2;
+        ExecutionCompleted completed = 3;
+        ExecutionError error = 4;
+    }
+}
+
+message ExecutionStarted {
+    string run_id = 1;
+    google.protobuf.Timestamp started_at = 2;
+}
+
+message ExecutionCompleted {
+    string run_id = 1;
+    string result = 2;
+    LighthouseTokenUsage token_usage = 3;
+    int64 duration_ms = 4;
+    google.protobuf.Timestamp completed_at = 5;
+}
+
+message ExecutionError {
+    string run_id = 1;
+    string error_message = 2;
+    google.protobuf.Timestamp error_at = 3;
+}
+
+// ============================================================================
+// MANAGEMENT CHANNEL MESSAGES (Bidirectional for firewall traversal)
+// ============================================================================
+
+// Unified bidirectional management message
+message ManagementMessage {
+    string request_id = 1;   // For correlating requests and responses
+    string registration_key = 2;   // Station registration key for routing (NOT database station_id)
+    bool is_response = 3;    // true for responses, false for requests
+    bool success = 4;        // Only meaningful for responses
+    
+    oneof message {
+        // Request messages (can be sent by either Lighthouse or Station)
+        ListAgentsManagementRequest list_agents_request = 10;
+        ListToolsManagementRequest list_tools_request = 11;
+        GetEnvironmentsRequest get_environments_request = 12;
+        ExecuteAgentManagementRequest execute_agent_request = 13;
+        SendRunRequest send_run_request = 17;
+
+        // NEW - agent configuration management
+        GetAgentDetailsRequest get_agent_details_request = 18;
+        UpdateAgentPromptRequest update_agent_prompt_request = 19;
+
+        // Response messages (can be sent by either Lighthouse or Station)
+        ListAgentsManagementResponse list_agents_response = 20;
+        ListToolsManagementResponse list_tools_response = 21;
+        GetEnvironmentsResponse get_environments_response = 22;
+        ExecuteAgentManagementResponse execute_agent_response = 23;
+        SendRunResponse send_run_response = 27;
+
+        // NEW - agent configuration management responses
+        GetAgentDetailsResponse get_agent_details_response = 28;
+        UpdateAgentPromptResponse update_agent_prompt_response = 29;
+
+        ManagementError error = 30;
+
+        // Special messages
+        StationRegistrationMessage station_registration = 31;
+    }
+}
+
+// Station registration for management channel
+message StationRegistrationMessage {
+    string registration_key = 1;     // Station registration key (REQUIRED for routing)
+}
+
+// ============================================================================
+// MANAGEMENT REQUEST/RESPONSE MESSAGES
+// ============================================================================
+
+// List Agents
+message ListAgentsManagementRequest {
+    string environment = 1;  // Optional environment filter
+}
+
+message ListAgentsManagementResponse {
+    repeated AgentInfo agents = 1;
+    int32 total_agents = 2;
+}
+
+message AgentInfo {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string prompt = 4;
+    string model_name = 5;
+    int32 max_steps = 6;
+    repeated string assigned_tools = 7;
+    string environment_name = 8;
+    bool schedule_enabled = 9;
+    string cron_schedule = 10;
+    google.protobuf.Timestamp created_at = 11;
+    google.protobuf.Timestamp updated_at = 12;
+    AgentStatus status = 13;
+}
+
+enum AgentStatus {
+    AGENT_STATUS_ACTIVE = 0;
+    AGENT_STATUS_INACTIVE = 1;
+    AGENT_STATUS_RUNNING = 2;
+    AGENT_STATUS_ERROR = 3;
+}
+
+// List Tools
+message ListToolsManagementRequest {
+    string environment = 1;
+}
+
+message ListToolsManagementResponse {
+    repeated ToolInfo tools = 1;
+    string environment_name = 2;
+    int32 total_tools = 3;
+    repeated string mcp_servers = 4;
+}
+
+// Get Environments
+message GetEnvironmentsRequest {
+    // No parameters needed
+}
+
+message GetEnvironmentsResponse {
+    repeated EnvironmentInfo environments = 1;
+}
+
+message EnvironmentInfo {
+    string name = 1;
+    int32 agent_count = 2;
+    int32 tool_count = 3;
+    repeated string mcp_servers = 4;
+    map<string, string> variables = 5;
+    bool is_default = 6;
+}
+
+// Execute Agent (Management)
+message ExecuteAgentManagementRequest {
+    string agent_id = 1;
+    string task = 2;
+    string environment = 3;
+    map<string, string> variables = 4;
+    int32 timeout_seconds = 5;
+    string run_id = 6;  // The run_id from lighthouse that station should use
+}
+
+message ExecuteAgentManagementResponse {
+    string execution_id = 1;
+    ExecutionStatus status = 2;
+    string partial_response = 3;
+    int32 step_number = 4;
+    string step_description = 5;
+    repeated LighthouseToolCall tool_calls = 6;
+    LighthouseTokenUsage token_usage = 7;
+    google.protobuf.Timestamp timestamp = 8;
+}
+
+enum ExecutionStatus {
+    EXECUTION_QUEUED = 0;
+    EXECUTION_RUNNING = 1;
+    EXECUTION_COMPLETED = 2;
+    EXECUTION_FAILED = 3;
+    EXECUTION_CANCELLED = 4;
+}
+
+// System Status
+message GetSystemStatusRequest {
+    // No parameters needed
+}
+
+message GetSystemStatusResponse {
+    LighthouseSystemHealth health = 1;
+    SystemMetrics metrics = 2;
+    repeated ActiveExecution active_executions = 3;
+    string station_version = 4;
+    string uptime = 5;
+    ConnectionStatus lighthouse_connection = 6;
+}
+
+enum LighthouseSystemHealth {
+    LIGHTHOUSE_SYSTEM_HEALTHY = 0;
+    LIGHTHOUSE_SYSTEM_WARNING = 1;
+    LIGHTHOUSE_SYSTEM_ERROR = 2;
+    LIGHTHOUSE_SYSTEM_OFFLINE = 3;
+}
+
+message ActiveExecution {
+    string execution_id = 1;
+    string agent_id = 2;
+    string agent_name = 3;
+    string task = 4;
+    ExecutionStatus status = 5;
+    google.protobuf.Timestamp started_at = 6;
+    int32 current_step = 7;
+}
+
+enum ConnectionStatus {
+    CONNECTION_UNKNOWN = 0;
+    CONNECTION_CONNECTED = 1;
+    CONNECTION_DISCONNECTED = 2;
+    CONNECTION_ERROR = 3;
+}
+
+// Active Runs
+message ListActiveRunsRequest {
+    // No parameters needed
+}
+
+message ListActiveRunsResponse {
+    repeated ActiveExecution active_runs = 1;
+    int32 total_active = 2;
+}
+
+// Cancel Execution
+message CancelExecutionRequest {
+    string execution_id = 1;
+}
+
+message CancelExecutionResponse {
+    bool cancelled = 1;
+    string message = 2;
+}
+
+// NEW - Agent Configuration Management
+message GetAgentDetailsRequest {
+    string registration_key = 1;  // Station registration key for routing
+    string agent_id = 2;
+    string environment = 3;
+}
+
+message GetAgentDetailsResponse {
+    AgentConfig agent = 1;
+}
+
+message UpdateAgentPromptRequest {
+    string registration_key = 1;  // Station registration key for routing
+    string agent_id = 2;
+    string environment = 3;
+    string new_prompt = 4;
+}
+
+message UpdateAgentPromptResponse {
+    bool success = 1;
+    string message = 2;
+    AgentConfig updated_agent = 3;
+}
+
+// Error Handling
+message ManagementError {
+    ErrorCode code = 1;
+    string message = 2;
+    string details = 3;
+}
+
+enum ErrorCode {
+    UNKNOWN_ERROR = 0;
+    AGENT_NOT_FOUND = 1;
+    ENVIRONMENT_NOT_FOUND = 2;
+    EXECUTION_ERROR = 3;
+    TIMEOUT_ERROR = 4;
+    PERMISSION_DENIED = 5;
+}
+

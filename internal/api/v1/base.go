@@ -15,7 +15,7 @@ type APIHandlers struct {
 	repos                *repositories.Repositories
 	agentService         services.AgentServiceInterface
 	// mcpConfigService removed - using file-based configs only
-	toolDiscoveryService *services.ToolDiscoveryService
+	toolDiscoveryService *services.ToolDiscoveryService // restored for lighthouse/API compatibility
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
 	agentExportService   *services.AgentExportService
@@ -139,6 +139,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	bundlesGroup.GET("", h.listBundles)
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
+
+	// CloudShip lighthouse status
+	router.GET("/lighthouse/status", h.LighthouseStatusHandler)
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode

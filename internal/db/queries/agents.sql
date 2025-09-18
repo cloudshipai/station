@@ -1,6 +1,6 @@
 -- name: CreateAgent :one
-INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, input_schema, cron_schedule, is_scheduled, schedule_enabled)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO agents (name, description, prompt, max_steps, environment_id, created_by, input_schema, cron_schedule, is_scheduled, schedule_enabled, output_schema, output_schema_preset)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetAgent :one
@@ -19,7 +19,7 @@ SELECT * FROM agents WHERE environment_id = ? ORDER BY name;
 SELECT * FROM agents WHERE created_by = ? ORDER BY name;
 
 -- name: UpdateAgent :exec
-UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, input_schema = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ? WHERE id = ?;
+UPDATE agents SET name = ?, description = ?, prompt = ?, max_steps = ?, input_schema = ?, cron_schedule = ?, is_scheduled = ?, schedule_enabled = ?, output_schema = ?, output_schema_preset = ? WHERE id = ?;
 
 -- name: UpdateAgentPrompt :exec
 UPDATE agents SET prompt = ? WHERE id = ?;
@@ -48,6 +48,8 @@ SELECT
     a.is_scheduled as agent_is_scheduled,
     a.schedule_enabled as agent_schedule_enabled,
     a.input_schema as agent_input_schema,
+    a.output_schema as agent_output_schema,
+    a.output_schema_preset as agent_output_schema_preset,
     a.created_at as agent_created_at,
     a.updated_at as agent_updated_at,
     ms.id as mcp_server_id,
