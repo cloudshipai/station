@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.12.0] - 2025-09-18
+
+### 🎯 Management Channel Integration & Proto Compatibility
+
+#### **Lighthouse Protocol Synchronization**
+- **Synced Proto Definitions**: Updated `internal/lighthouse/proto/lighthouse.proto` with unary RPC methods from lighthouse
+- **Unary API Support**: Added `GetAgentDetails` and `UpdateAgentPrompt` unary RPC methods for external client integration
+- **Binary Rebuilt**: Station binary updated with latest protobuf definitions to maintain lighthouse compatibility
+- **Dual Interface Support**: Station now supports both streaming management channel AND unary APIs
+
+#### **Management Channel Enhancements**
+- **Full Compatibility**: Both `stn serve` and `stn stdio` modes have identical management channel functionality
+- **Bidirectional Streaming**: Complete support for real-time management operations with lighthouse
+- **External Client Ready**: Django and other external clients can use unary APIs alongside streaming
+
+#### **Architecture Improvements**
+- **Proto Source of Truth**: Lighthouse proto definitions are the authoritative source across all components
+- **Multi-Modal Integration**: Support for both streaming (real-time) and unary (request-response) patterns
+- **Connection Reliability**: Enhanced management channel stream handling and preservation
+
+### 🔧 Technical Details
+
+#### **Breaking Changes**
+- None - fully backward compatible
+
+#### **New Features**
+- Unary RPC methods: `GetAgentDetails(GetAgentDetailsRequest) returns (GetAgentDetailsResponse)`
+- Unary RPC methods: `UpdateAgentPrompt(UpdateAgentPromptRequest) returns (UpdateAgentPromptResponse)`
+- Enhanced management channel compatibility with lighthouse architecture
+
+#### **Dependencies**
+- Requires lighthouse with management channel stream preservation fixes
+- Compatible with existing station configurations and environments
+
+### 🚀 Integration Impact
+
+This release ensures Station maintains full compatibility with the lighthouse management channel architecture while supporting external client integration patterns. The dual interface approach allows for:
+
+- **Real-time operations** via streaming management channel
+- **HTTP-like operations** via unary RPC APIs
+- **External integration** for Django, web applications, and other clients
+- **Production-ready** management operations with complete end-to-end verification
+
 ## [v0.11.0] - 2025-09-11
 
 ### 🚀 Major Performance Improvements
