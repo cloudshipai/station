@@ -194,3 +194,25 @@ func (h *ExportHelper) ValidateInputSchema(schemaJSON string) error {
 	
 	return nil
 }
+
+// ValidateOutputSchema validates that an output schema JSON is valid using proper JSON Schema validation
+func (h *ExportHelper) ValidateOutputSchema(schemaJSON string) error {
+	if schemaJSON == "" {
+		return nil // Empty schema is valid
+	}
+	
+	// Parse as JSON to ensure it's valid JSON first
+	var schemaObj interface{}
+	if err := json.Unmarshal([]byte(schemaJSON), &schemaObj); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	
+	// Validate as JSON Schema using gojsonschema
+	schemaLoader := gojsonschema.NewStringLoader(schemaJSON)
+	_, err := gojsonschema.NewSchema(schemaLoader)
+	if err != nil {
+		return fmt.Errorf("invalid JSON Schema: %w", err)
+	}
+	
+	return nil
+}

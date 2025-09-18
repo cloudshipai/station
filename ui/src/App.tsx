@@ -23,6 +23,7 @@ import '@xyflow/react/dist/style.css';
 import Editor from '@monaco-editor/react';
 import { agentsApi, environmentsApi, syncApi, agentRunsApi, mcpServersApi, bundlesApi, type BundleInfo } from './api/station';
 import { RunsPage } from './components/runs/RunsPage';
+import CloudShipStatus from './components/CloudShipStatus';
 import { SyncModal } from './components/sync/SyncModal';
 import { apiClient } from './api/client';
 import { getLayoutedNodes } from './utils/layoutUtils';
@@ -31,14 +32,19 @@ import { getLayoutedNodes } from './utils/layoutUtils';
 // import { MCPNode } from './components/nodes/MCPNode';
 // import { ToolNode } from './components/nodes/ToolNode';
 
-// Station Banner Component  
+// Station Banner Component
 const StationBanner = () => (
-  <div className="font-mono leading-tight">
-    <div className="text-2xl font-bold bg-gradient-to-r from-tokyo-blue via-tokyo-cyan to-tokyo-blue5 bg-clip-text text-transparent">
-      STATION
+  <div className="flex items-start justify-between">
+    <div className="font-mono leading-tight">
+      <div className="text-2xl font-bold bg-gradient-to-r from-tokyo-blue via-tokyo-cyan to-tokyo-blue5 bg-clip-text text-transparent">
+        STATION
+      </div>
+      <div className="text-tokyo-comment text-xs mt-1 italic">🚂 agents for engineers. Be in control</div>
+      <div className="text-tokyo-dark5 text-xs">by CloudshipAI</div>
     </div>
-    <div className="text-tokyo-comment text-xs mt-1 italic">🚂 agents for engineers. Be in control</div>
-    <div className="text-tokyo-dark5 text-xs">by CloudshipAI</div>
+    <div className="mt-1">
+      <CloudShipStatus />
+    </div>
   </div>
 );
 

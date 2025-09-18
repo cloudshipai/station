@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"station/internal/config"
 	"context"
 	"fmt"
 	"strings"
@@ -61,7 +62,7 @@ func (h *AgentHandler) RunAgentShow(cmd *cobra.Command, args []string) error {
 
 // showAgentLocalByName shows details of an agent by name and environment
 func (h *AgentHandler) showAgentLocalByName(agentName, environment string) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load station config: %v", err)
 	}
@@ -152,7 +153,7 @@ func (h *AgentHandler) RunAgentDelete(cmd *cobra.Command, args []string) error {
 
 // deleteAgentLocalByName deletes an agent by name and environment
 func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) error {
-	cfg, err := loadStationConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load station config: %v", err)
 	}

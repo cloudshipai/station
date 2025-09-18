@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui tag-check release jaeger jaeger-down
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui tag-check release jaeger jaeger-down proto-gen proto-clean
 
 # Build configuration
 BINARY_NAME=stn
@@ -76,6 +76,29 @@ test:
 	@echo "🧪 Running tests..."
 	go test -v -race -coverprofile=coverage.out ./...
 	@echo "✅ Tests completed"
+
+# Lighthouse-specific test targets
+test-lighthouse-unit:
+	@echo "🧪 Running Lighthouse unit tests..."
+	go test -v ./internal/lighthouse -run TestLighthouseUnit
+	@echo "✅ Lighthouse unit tests completed"
+
+test-lighthouse-integration:
+	@echo "🌐 Running Lighthouse integration tests..."
+	@echo "   Endpoint: $${LIGHTHOUSE_TEST_ENDPOINT:-localhost:50051}"
+	@echo "   Registration Key: $${LIGHTHOUSE_TEST_KEY:-[using default test key]}"
+	go test -v ./internal/lighthouse -run TestLighthouseIntegration
+	@echo "✅ Lighthouse integration tests completed"
+
+test-lighthouse:
+	@echo "🔬 Running all Lighthouse tests..."
+	go test -v ./internal/lighthouse
+	@echo "✅ All Lighthouse tests completed"
+
+bench-lighthouse:
+	@echo "⚡ Running Lighthouse benchmarks..."
+	go test -bench=. -benchmem ./internal/lighthouse
+	@echo "✅ Lighthouse benchmarks completed"
 
 # Test with coverage report
 test-coverage:
@@ -187,7 +210,10 @@ help:
 	@echo "  make dev        - Build development binary to ./stn"  
 	@echo "  make install    - Install to $$GOPATH/bin"
 	@echo "  make clean      - Remove build artifacts"
-	@echo "  make test       - Run tests"
+	@echo "  make test       - Run all tests"
+	@echo "  make test-lighthouse - Run all Lighthouse tests"
+	@echo "  make test-lighthouse-unit - Run Lighthouse unit tests only"
+	@echo "  make test-lighthouse-integration - Run Lighthouse integration tests"
 	@echo "  make lint       - Run linter"
 	@echo "  make setup      - Quick setup for development"
 	@echo "  make version    - Show version information"
@@ -201,9 +227,14 @@ help:
 	@echo "  make test-agent-bundle-watch  - Watch agent bundle tests"
 	@echo "  make test-bundles             - Run all bundle system tests"
 	@echo ""
+	@echo ""
 	@echo "OpenTelemetry & Observability:"
 	@echo "  make jaeger      - Start Jaeger with OTLP support for distributed tracing"
 	@echo "  make jaeger-down - Stop and remove Jaeger container"
+	@echo ""
+	@echo "CloudShip Integration:"
+	@echo "  make proto-gen    - Generate Go code from existing proto files"
+	@echo "  make proto-clean  - Clean generated proto files"  
 	@echo ""
 	@echo "Version Control:"
 	@echo "  make build VERSION=v1.2.3 - Build with custom version"
@@ -239,3 +270,33 @@ jaeger-down:
 	@docker stop station-jaeger || true
 	@docker rm station-jaeger || true
 	@echo "✅ Jaeger stopped and removed"
+
+# Proto Generation & CloudShip Integration
+# These commands handle updating proto files and generating Go code for Lighthouse integration
+
+proto-clean:
+	@echo "🧹 Cleaning generated proto files..."
+	@rm -f internal/lighthouse/proto/*.pb.go
+	@rm -f data_ingestion*.pb.go
+	@echo "✅ Proto files cleaned"
+
+# Generate Go code from proto files
+proto-gen:
+	@echo "🔄 Generating Go code from proto files..."
+	@if ! which protoc >/dev/null 2>&1; then \
+		echo "❌ protoc not found. Install with: brew install protobuf (macOS) or apt-get install protobuf-compiler (Ubuntu)"; \
+		exit 1; \
+	fi
+	@if ! which protoc-gen-go >/dev/null 2>&1; then \
+		echo "📦 Installing protoc-gen-go..."; \
+		go install google.golang.org/protobuf/cmd/protoc-gen-go@latest; \
+	fi
+	@if ! which protoc-gen-go-grpc >/dev/null 2>&1; then \
+		echo "📦 Installing protoc-gen-go-grpc..."; \
+		go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest; \
+	fi
+	@protoc --go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+		internal/lighthouse/proto/*.proto
+	@echo "✅ Proto code generated successfully"
+

@@ -148,3 +148,7 @@ stn-test
 # SQLite temporary files
 *.db-shm
 *.db-wal
+
+# Architecture docs (private working documents)
+lighthouse.md
+lighthouse-payloads.md

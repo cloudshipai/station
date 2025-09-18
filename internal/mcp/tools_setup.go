@@ -19,6 +19,8 @@ func (s *Server) setupTools() {
 		mcp.WithBoolean("enabled", mcp.Description("Whether the agent is enabled (default: true)")),
 		mcp.WithArray("tool_names", mcp.Description("List of tool names to assign to the agent"), mcp.WithStringItems()),
 		mcp.WithString("input_schema", mcp.Description("JSON schema for custom input variables (optional)")),
+		mcp.WithString("output_schema", mcp.Description("JSON schema for output format (optional)")),
+		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
@@ -32,6 +34,8 @@ func (s *Server) setupTools() {
 		mcp.WithNumber("max_steps", mcp.Description("New maximum steps for the agent")),
 		mcp.WithBoolean("enabled", mcp.Description("Whether the agent should be enabled")),
 		mcp.WithArray("tool_names", mcp.Description("New list of tool names to assign to the agent"), mcp.WithStringItems()),
+		mcp.WithString("output_schema", mcp.Description("JSON schema for output format (optional)")),
+		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 
@@ -105,9 +109,11 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(listEnvironmentsTool, s.handleListEnvironments)
 
 	listAgentsTool := mcp.NewTool("list_agents",
-		mcp.WithDescription("List all agents"),
+		mcp.WithDescription("List all agents with pagination support"),
 		mcp.WithString("environment_id", mcp.Description("Filter by environment ID")),
 		mcp.WithBoolean("enabled_only", mcp.Description("Show only enabled agents (default: false)")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of agents to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of agents to skip for pagination (default: 0)")),
 	)
 	s.mcpServer.AddTool(listAgentsTool, s.handleListAgents)
 

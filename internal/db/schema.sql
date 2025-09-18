@@ -126,6 +126,8 @@ CREATE TABLE agents (
     created_by INTEGER NOT NULL,
     model_id INTEGER REFERENCES models(id),
     input_schema TEXT DEFAULT NULL, -- JSON schema for custom input variables
+    output_schema TEXT DEFAULT NULL, -- JSON schema for output format
+    output_schema_preset TEXT DEFAULT NULL, -- Predefined schema preset (e.g., finops)
     cron_schedule TEXT DEFAULT NULL, -- Cron expression for scheduling
     is_scheduled BOOLEAN DEFAULT FALSE,
     last_scheduled_run DATETIME DEFAULT NULL,

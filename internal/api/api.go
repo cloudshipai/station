@@ -10,18 +10,13 @@ import (
 	"time"
 	
 	"github.com/gin-gonic/gin"
-	"github.com/spf13/afero"
 	
 	"station/internal/api/v1"
 	internalconfig "station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
-	"station/internal/filesystem"
 	"station/internal/services"
 	"station/internal/telemetry"
-	"station/internal/template"
-	"station/internal/variables"
-	"station/pkg/config"
 	"station/internal/ui"
 	// "station/pkg/crypto" // Removed - no longer needed for file-based configs
 )
@@ -32,9 +27,8 @@ type Server struct {
 	httpServer           *http.Server
 	repos                *repositories.Repositories
 	// mcpConfigService removed - using file-based configs only
-	fileConfigService    *services.FileConfigService
-	// hybridConfigService removed - using file-based configs only
-	toolDiscoveryService *services.ToolDiscoveryService
+	// FileConfigService removed - using DeclarativeSync directly
+	toolDiscoveryService *services.ToolDiscoveryService // restored for lighthouse/API compatibility
 	telemetryService     *telemetry.TelemetryService
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
@@ -47,55 +41,22 @@ func New(cfg *internalconfig.Config, database db.Database, localMode bool, telem
 	
 	// Initialize services (MCPConfigService removed - using file-based configs only)
 	
-	// Initialize file config components
-	fs := afero.NewOsFs()
-	fileSystem := filesystem.NewConfigFileSystem(fs, "./config", "./config/vars")
-	templateEngine := template.NewGoTemplateEngine()
-	variableStore := variables.NewEnvVariableStore(fs)
-	
-	// Create file config options with default paths
-	fileConfigOptions := config.FileConfigOptions{
-		ConfigDir:       "./config",        // Default config directory
-		VariablesDir:    "./config/vars",   // Default variables directory
-		Strategy:        config.StrategyTemplateFirst,
-		AutoCreate:      true,
-		BackupOnChange:  false,
-		ValidateOnLoad:  true,
-	}
-	
-	// Create file config manager
-	fileConfigManager := internalconfig.NewFileConfigManager(
-		fileSystem,
-		templateEngine, 
-		variableStore,
-		fileConfigOptions,
-		repos.Environments,
-	)
-	
-	// Initialize tool discovery service (updated for file-based configs)
+	// Initialize tool discovery service for lighthouse and API compatibility
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
 	
-	// Initialize file config service
-	fileConfigService := services.NewFileConfigService(
-		fileConfigManager,
-		toolDiscoveryService,
-		repos,
-	)
-	
-	// Hybrid config service removed - using file-based configs only
+	// FileConfigService and FileConfigManager removed - using DeclarativeSync directly when needed
 	
 	return &Server{
 		cfg:                  cfg,
 		db:                   database,
 		repos:                repos,
-		fileConfigService:    fileConfigService,
 		toolDiscoveryService: toolDiscoveryService,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 	}
 }
 
-// SetServices allows setting optional services after creation (simplified for file-based configs)
+// SetServices allows setting optional services after creation
 func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService) {
 	s.toolDiscoveryService = toolDiscoveryService
 }
