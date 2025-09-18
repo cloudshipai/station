@@ -172,35 +172,10 @@ func (mcs *ManagementChannelService) establishConnection() error {
 
 // receiveMessages handles incoming messages from CloudShip
 func (mcs *ManagementChannelService) receiveMessages(stream proto.LighthouseService_ManagementChannelClient) error {
-	// Create heartbeat ticker to detect broken connections
-	// Reduced frequency to avoid "too_many_pings" errors from CloudShip
-	heartbeatTicker := time.NewTicker(5 * time.Minute)
-	defer heartbeatTicker.Stop()
-
 	for {
 		select {
 		case <-mcs.connectionCtx.Done():
 			return mcs.connectionCtx.Err()
-
-		case <-heartbeatTicker.C:
-			// Send heartbeat (reuse registration message) to detect broken connections
-			logging.Debug("Sending heartbeat to CloudShip")
-			heartbeat := &proto.ManagementMessage{
-				RequestId:       fmt.Sprintf("heartbeat_%d", time.Now().Unix()),
-				RegistrationKey: mcs.registrationKey,
-				IsResponse:      false,
-				Success:         true,
-				Message: &proto.ManagementMessage_StationRegistration{
-					StationRegistration: &proto.StationRegistrationMessage{
-						RegistrationKey: mcs.registrationKey,
-					},
-				},
-			}
-
-			if err := stream.Send(heartbeat); err != nil {
-				logging.Error("Failed to send heartbeat: %v", err)
-				return fmt.Errorf("heartbeat send error: %w", err)
-			}
 
 		default:
 			// Use non-blocking receive with timeout

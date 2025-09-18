@@ -176,29 +176,40 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "Ready for MCP communication via stdin/stdout\n")
 
-	// Start MCP server in stdio mode (this blocks until stdin closes)
-	if err := mcpServer.StartStdio(ctx); err != nil {
-		// Clean shutdown of services if MCP server fails to start
-		if apiCancel != nil {
-			fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
-			apiCancel()
-			wg.Wait()
+	// Start MCP server in stdio mode in a separate goroutine to keep management channel alive
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := mcpServer.StartStdio(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  MCP stdio server error: %v (management channel remains active)\n", err)
 		}
-		// Note: Keep remote control service running for CloudShip management even on MCP failure
-		// Management channel should remain active for troubleshooting
-		return fmt.Errorf("failed to start MCP stdio server: %w", err)
-	}
+	}()
 
-	// Clean shutdown of services when stdio closes
+	// Keep the main process alive to maintain the management channel for CloudShip control
+	// This ensures persistent bidirectional communication even when no MCP client is connected
+	fmt.Fprintf(os.Stderr, "🌐 Management channel active - Station remains available for CloudShip control\n")
+	fmt.Fprintf(os.Stderr, "📡 Station will continue running until terminated (Ctrl+C)\n")
+
+	// Block forever to keep management channel alive - only exit on signal
+	<-ctx.Done()
+	fmt.Fprintf(os.Stderr, "🛑 Received termination signal, shutting down...\n")
+
+	// Clean shutdown of services when terminating
 	if apiCancel != nil {
 		fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
 		apiCancel()
-		wg.Wait()
 	}
 
-	// Note: Keep remote control service running in stdio mode for CloudShip management
-	// The management channel needs to stay active to receive commands from CloudShip
-	// Remote control service will be cleaned up automatically via context cancellation
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Clean shutdown of remote control service for CloudShip management
+	if remoteControlSvc != nil {
+		fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
+		if err := remoteControlSvc.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Error stopping remote control service: %v\n", err)
+		}
+	}
 
 	// Note: Lighthouse client cleanup happens automatically via context cancellation
 
