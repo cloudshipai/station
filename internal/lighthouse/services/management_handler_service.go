@@ -211,12 +211,12 @@ func (mhs *ManagementHandlerService) ProcessManagementRequest(ctx context.Contex
 		}
 
 	default:
-		logging.Error("Unknown management request type: %T", request)
+		logging.Error("Unknown management request type: %T, request_id: %s", request, req.RequestId)
 		resp.Success = false
 		resp.Message = &proto.ManagementMessage_Error{
 			Error: &proto.ManagementError{
 				Code:    proto.ErrorCode_UNKNOWN_ERROR,
-				Message: "Unknown request type",
+				Message: fmt.Sprintf("Unknown request type: %T", request),
 			},
 		}
 	}
@@ -227,13 +227,12 @@ func (mhs *ManagementHandlerService) ProcessManagementRequest(ctx context.Contex
 
 // handleListAgents processes list agents requests
 func (mhs *ManagementHandlerService) handleListAgents(ctx context.Context, req *proto.ListAgentsManagementRequest) (*proto.ListAgentsManagementResponse, error) {
-	logging.Info("Listing agents for environment: %s", req.Environment)
-
-	// Default to "default" environment if not specified
+	// Always default to "default" environment if not specified or empty
 	environmentName := req.Environment
-	if environmentName == "" {
+	if environmentName == "" || environmentName == "default" {
 		environmentName = "default"
 	}
+	logging.Info("Listing agents for environment: '%s' (requested: '%s')", environmentName, req.Environment)
 
 	// Get environment by name to get environment ID
 	env, err := mhs.repos.Environments.GetByName(environmentName)
@@ -342,12 +341,12 @@ func (mhs *ManagementHandlerService) handleListAgents(ctx context.Context, req *
 
 // handleListTools processes list tools requests
 func (mhs *ManagementHandlerService) handleListTools(ctx context.Context, req *proto.ListToolsManagementRequest) (*proto.ListToolsManagementResponse, error) {
-	logging.Info("Listing tools for environment: %s", req.Environment)
-
+	// Always default to "default" environment if not specified or empty
 	environmentName := req.Environment
-	if environmentName == "" {
+	if environmentName == "" || environmentName == "default" {
 		environmentName = "default"
 	}
+	logging.Info("Listing tools for environment: '%s' (requested: '%s')", environmentName, req.Environment)
 
 	// Get environment by name to get environment ID
 	env, err := mhs.repos.Environments.GetByName(environmentName)
@@ -607,19 +606,18 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 
 // handleGetAgentDetails processes get agent details requests
 func (mhs *ManagementHandlerService) handleGetAgentDetails(ctx context.Context, req *proto.GetAgentDetailsRequest) (*proto.GetAgentDetailsResponse, error) {
-	logging.Info("Getting agent details: agent_id=%s, environment=%s", req.AgentId, req.Environment)
-
 	// Convert agent ID to int64
 	agentID, err := strconv.ParseInt(req.AgentId, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid agent ID: %s", req.AgentId)
 	}
 
-	// Default to "default" environment if not specified
+	// Always default to "default" environment if not specified or empty
 	environmentName := req.Environment
-	if environmentName == "" {
+	if environmentName == "" || environmentName == "default" {
 		environmentName = "default"
 	}
+	logging.Info("Getting agent details: agent_id=%s, environment='%s' (requested: '%s')", req.AgentId, environmentName, req.Environment)
 
 	// Get environment by name
 	env, err := mhs.repos.Environments.GetByName(environmentName)
@@ -736,8 +734,6 @@ func (mhs *ManagementHandlerService) generateDotpromptContent(agent *models.Agen
 
 // handleUpdateAgentPrompt processes update agent prompt requests
 func (mhs *ManagementHandlerService) handleUpdateAgentPrompt(ctx context.Context, req *proto.UpdateAgentPromptRequest) (*proto.UpdateAgentPromptResponse, error) {
-	logging.Info("Updating agent prompt: agent_id=%s, environment=%s", req.AgentId, req.Environment)
-
 	// Convert agent ID to int64
 	agentID, err := strconv.ParseInt(req.AgentId, 10, 64)
 	if err != nil {
@@ -747,11 +743,12 @@ func (mhs *ManagementHandlerService) handleUpdateAgentPrompt(ctx context.Context
 		}, nil
 	}
 
-	// Default to "default" environment if not specified
+	// Always default to "default" environment if not specified or empty
 	environmentName := req.Environment
-	if environmentName == "" {
+	if environmentName == "" || environmentName == "default" {
 		environmentName = "default"
 	}
+	logging.Info("Updating agent prompt: agent_id=%s, environment='%s' (requested: '%s')", req.AgentId, environmentName, req.Environment)
 
 	// Get environment by name
 	env, err := mhs.repos.Environments.GetByName(environmentName)
