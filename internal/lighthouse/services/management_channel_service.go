@@ -316,6 +316,10 @@ func (mcs *ManagementChannelService) getRequestType(msg *proto.ManagementMessage
 		return "StationRegistration"
 	case *proto.ManagementMessage_SendRunRequest:
 		return "SendRun"
+	case *proto.ManagementMessage_GetAgentDetailsRequest:
+		return "GetAgentDetails"
+	case *proto.ManagementMessage_UpdateAgentPromptRequest:
+		return "UpdateAgentPrompt"
 	default:
 		return "Unknown"
 	}
