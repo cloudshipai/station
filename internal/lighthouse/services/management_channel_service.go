@@ -38,8 +38,9 @@ func NewManagementChannelService(
 func (mcs *ManagementChannelService) Start(ctx context.Context) error {
 	logging.Info("Starting ManagementChannel bidirectional streaming")
 
-	// Create cancellable context for connection management
-	mcs.connectionCtx, mcs.connectionCancel = context.WithCancel(ctx)
+	// Create long-lived context for connection management that survives MCP server lifecycle
+	// This ensures the management channel continues retrying even after stdio/server modes complete
+	mcs.connectionCtx, mcs.connectionCancel = context.WithCancel(context.Background())
 
 	// Start connection maintenance loop
 	go mcs.maintainConnection()

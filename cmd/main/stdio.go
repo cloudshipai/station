@@ -86,6 +86,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 
 
 	// Initialize minimal services for API server only
+	// Use separate contexts: one for long-lived services (management channel), one for MCP server
+	longLivedCtx := context.Background()
 	ctx := context.Background()
 	
 	// Initialize Genkit with configured AI provider
@@ -116,8 +118,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 			"default", // TODO: use actual environment name
 		)
 
-		// Start remote control service
-		if err := remoteControlSvc.Start(ctx); err != nil {
+		// Start remote control service with long-lived context to keep management channel active
+		if err := remoteControlSvc.Start(longLivedCtx); err != nil {
 			log.Printf("Warning: Failed to start remote control service: %v", err)
 		} else {
 			log.Printf("✅ Stdio mode remote control active - CloudShip can manage this Station")
