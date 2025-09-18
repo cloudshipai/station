@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"station/internal/lighthouse/proto"
-	"station/internal/version"
 	"station/pkg/types"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// convertAgentRunToProto converts Station AgentRun to proto AgentRunData
-func convertAgentRunToProto(run *types.AgentRun) *proto.AgentRunData {
+// convertAgentRunToProto converts Station AgentRun to proto LighthouseAgentRunData
+func convertAgentRunToProto(run *types.AgentRun) *proto.LighthouseAgentRunData {
 	if run == nil {
 		return nil
 	}
@@ -36,22 +36,30 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.AgentRunData {
 	statusValue := ConvertRunStatusToProto(run.Status)
 	fmt.Printf("DEBUG: AgentRunData - Status string: '%s', Proto value: %d\n", run.Status, statusValue)
 
-	return &proto.AgentRunData{
+	// Add preset information to metadata
+	if run.OutputSchemaPreset != "" {
+		metadata["output_schema_preset"] = run.OutputSchemaPreset
+	}
+	if run.OutputSchema != "" {
+		metadata["has_output_schema"] = "true"
+	}
+
+	return &proto.LighthouseAgentRunData{
 		RunId:          run.ID,
 		AgentId:        run.AgentID,
 		AgentName:      run.AgentName,
 		Task:           run.Task,
 		Response:       run.Response,
-		ToolCalls:      convertToolCallsToProto(run.ToolCalls),
+		ToolCalls:      convertToolCallsToLighthouseProto(run.ToolCalls),
 		ExecutionSteps: convertExecutionStepsToProto(run.ExecutionSteps),
-		TokenUsage:     convertTokenUsageToProto(run.TokenUsage),
+		TokenUsage:     convertTokenUsageToLighthouseProto(run.TokenUsage),
 		DurationMs:     run.DurationMs,
 		ModelName:      run.ModelName,
-		Status:         statusValue,
+		Status:         convertRunStatusToLighthouseProto(run.Status),
 		StartedAt:      timestampFromTime(run.StartedAt),
 		CompletedAt:    timestampFromTime(run.CompletedAt),
 		Metadata:       metadata,
-		StationVersion: version.GetVersion(), // Add Station version for debugging/compatibility
+		StationVersion: "v0.11.0", // Station version for debugging/compatibility
 	}
 }
 
@@ -63,7 +71,31 @@ func convertToolCallsToProto(toolCalls []types.ToolCall) []*proto.ToolCall {
 
 	protoToolCalls := make([]*proto.ToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
+		// Convert parameters and result to protobuf Struct
+		parametersStruct, _ := convertToProtoStruct(tc.Parameters)
+		resultStruct, _ := convertStringToProtoStruct(tc.Result)
+
 		protoToolCalls[i] = &proto.ToolCall{
+			ToolName:   tc.ToolName,
+			Parameters: parametersStruct,
+			Result:     resultStruct,
+			DurationMs: tc.DurationMs,
+			Success:    tc.Success,
+			Timestamp:  timestamppb.New(tc.Timestamp),
+		}
+	}
+	return protoToolCalls
+}
+
+// convertToolCallsToLighthouseProto converts Station tool calls to lighthouse proto format
+func convertToolCallsToLighthouseProto(toolCalls []types.ToolCall) []*proto.LighthouseToolCall {
+	if toolCalls == nil {
+		return nil
+	}
+
+	protoToolCalls := make([]*proto.LighthouseToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		protoToolCalls[i] = &proto.LighthouseToolCall{
 			ToolName:   tc.ToolName,
 			Parameters: convertToStringMap(tc.Parameters),
 			Result:     tc.Result,
@@ -236,12 +268,12 @@ func ConvertRunStatusToProto(status string) proto.RunStatus {
 		fmt.Printf("DEBUG: Converting status 'failed' to RUN_STATUS_FAILED (value: %d)\n", proto.RunStatus_RUN_STATUS_FAILED)
 		return proto.RunStatus_RUN_STATUS_FAILED
 	case "timeout":
-		return proto.RunStatus_RUN_STATUS_TIMEOUT
+		return proto.RunStatus_RUN_STATUS_FAILED
 	case "cancelled":
 		return proto.RunStatus_RUN_STATUS_CANCELLED
 	default:
-		fmt.Printf("DEBUG: Converting unknown status '%s' to RUN_STATUS_UNSPECIFIED (value: %d)\n", status, proto.RunStatus_RUN_STATUS_UNSPECIFIED)
-		return proto.RunStatus_RUN_STATUS_UNSPECIFIED
+		fmt.Printf("DEBUG: Converting unknown status '%s' to RUN_STATUS_UNKNOWN (value: %d)\n", status, proto.RunStatus_RUN_STATUS_UNKNOWN)
+		return proto.RunStatus_RUN_STATUS_UNKNOWN
 	}
 }
 
@@ -309,4 +341,77 @@ func timestampFromTime(t time.Time) *timestamppb.Timestamp {
 // timestampNow returns current timestamp in protobuf format
 func timestampNow() *timestamppb.Timestamp {
 	return timestamppb.New(time.Now())
+}
+
+// convertToProtoStruct converts interface{} to protobuf Struct
+func convertToProtoStruct(data interface{}) (*structpb.Struct, error) {
+	if data == nil {
+		return nil, nil
+	}
+
+	// Convert to JSON and back to map[string]interface{} for structpb compatibility
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	var jsonData map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &jsonData); err != nil {
+		return nil, err
+	}
+
+	return structpb.NewStruct(jsonData)
+}
+
+// convertStringToProtoStruct converts string to protobuf Struct
+func convertStringToProtoStruct(data string) (*structpb.Struct, error) {
+	if data == "" {
+		return nil, nil
+	}
+
+	// Try to parse as JSON first
+	var jsonData interface{}
+	if err := json.Unmarshal([]byte(data), &jsonData); err == nil {
+		// If it's valid JSON, convert it
+		if jsonMap, ok := jsonData.(map[string]interface{}); ok {
+			return structpb.NewStruct(jsonMap)
+		}
+	}
+
+	// If not valid JSON, wrap in a simple struct
+	return structpb.NewStruct(map[string]interface{}{
+		"value": data,
+	})
+}
+
+// convertTokenUsageToLighthouseProto converts Station token usage to lighthouse proto format
+func convertTokenUsageToLighthouseProto(usage *types.TokenUsage) *proto.LighthouseTokenUsage {
+	if usage == nil {
+		return nil
+	}
+
+	return &proto.LighthouseTokenUsage{
+		PromptTokens:     int32(usage.PromptTokens),
+		CompletionTokens: int32(usage.CompletionTokens),
+		TotalTokens:      int32(usage.TotalTokens),
+		CostUsd:          usage.CostUSD,
+	}
+}
+
+// convertRunStatusToLighthouseProto converts Station run status to lighthouse proto format
+func convertRunStatusToLighthouseProto(status string) proto.LighthouseRunStatus {
+	switch status {
+	case "queued":
+		return proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_QUEUED
+	case "running":
+		return proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_RUNNING
+	case "completed":
+		return proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_COMPLETED
+	case "failed":
+		return proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_FAILED
+	case "cancelled":
+		return proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_CANCELLED
+	default:
+		return proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_UNSPECIFIED
+	}
 }

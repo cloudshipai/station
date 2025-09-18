@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"station/internal/db/repositories"
@@ -156,23 +159,6 @@ func (mhs *ManagementHandlerService) ProcessManagementRequest(ctx context.Contex
 			}
 		}
 
-	case *proto.ManagementMessage_GetSystemStatusRequest:
-		response, err := mhs.handleGetSystemStatus(ctx, request.GetSystemStatusRequest)
-		if err != nil {
-			logging.Error("Failed to get system status: %v", err)
-			resp.Success = false
-			resp.Message = &proto.ManagementMessage_Error{
-				Error: &proto.ManagementError{
-					Code:    proto.ErrorCode_UNKNOWN_ERROR,
-					Message: err.Error(),
-				},
-			}
-		} else {
-			resp.Message = &proto.ManagementMessage_GetSystemStatusResponse{
-				GetSystemStatusResponse: response,
-			}
-		}
-
 	case *proto.ManagementMessage_ExecuteAgentRequest:
 		response, err := mhs.handleExecuteAgent(ctx, req.RequestId, request.ExecuteAgentRequest)
 		if err != nil {
@@ -190,10 +176,10 @@ func (mhs *ManagementHandlerService) ProcessManagementRequest(ctx context.Contex
 			}
 		}
 
-	case *proto.ManagementMessage_ListActiveRunsRequest:
-		response, err := mhs.handleListActiveRuns(ctx, request.ListActiveRunsRequest)
+	case *proto.ManagementMessage_GetAgentDetailsRequest:
+		response, err := mhs.handleGetAgentDetails(ctx, request.GetAgentDetailsRequest)
 		if err != nil {
-			logging.Error("Failed to list active runs: %v", err)
+			logging.Error("Failed to get agent details: %v", err)
 			resp.Success = false
 			resp.Message = &proto.ManagementMessage_Error{
 				Error: &proto.ManagementError{
@@ -202,25 +188,25 @@ func (mhs *ManagementHandlerService) ProcessManagementRequest(ctx context.Contex
 				},
 			}
 		} else {
-			resp.Message = &proto.ManagementMessage_ListActiveRunsResponse{
-				ListActiveRunsResponse: response,
+			resp.Message = &proto.ManagementMessage_GetAgentDetailsResponse{
+				GetAgentDetailsResponse: response,
 			}
 		}
 
-	case *proto.ManagementMessage_CancelExecutionRequest:
-		response, err := mhs.handleCancelExecution(ctx, request.CancelExecutionRequest)
+	case *proto.ManagementMessage_UpdateAgentPromptRequest:
+		response, err := mhs.handleUpdateAgentPrompt(ctx, request.UpdateAgentPromptRequest)
 		if err != nil {
-			logging.Error("Failed to cancel execution: %v", err)
+			logging.Error("Failed to update agent prompt: %v", err)
 			resp.Success = false
 			resp.Message = &proto.ManagementMessage_Error{
 				Error: &proto.ManagementError{
-					Code:    proto.ErrorCode_EXECUTION_ERROR,
+					Code:    proto.ErrorCode_UNKNOWN_ERROR,
 					Message: err.Error(),
 				},
 			}
 		} else {
-			resp.Message = &proto.ManagementMessage_CancelExecutionResponse{
-				CancelExecutionResponse: response,
+			resp.Message = &proto.ManagementMessage_UpdateAgentPromptResponse{
+				UpdateAgentPromptResponse: response,
 			}
 		}
 
@@ -297,12 +283,45 @@ func (mhs *ManagementHandlerService) handleListAgents(ctx context.Context, req *
 			scheduleEnabled = agent.ScheduleEnabled
 		}
 
+		// Get recent run statistics for this agent to determine status
+		recentRuns, err := mhs.repos.AgentRuns.ListByAgent(ctx, agent.ID)
+		agentStatus := proto.AgentStatus_AGENT_STATUS_ACTIVE
+
+		if err == nil && len(recentRuns) > 0 {
+			// Check recent runs to determine current status
+			hasRunning := false
+			hasRecentFailures := false
+			recentRunCount := 0
+
+			for _, run := range recentRuns {
+				// Only consider recent runs (limit to last 10)
+				if recentRunCount >= 10 {
+					break
+				}
+				recentRunCount++
+
+				switch run.Status {
+				case "running":
+					hasRunning = true
+				case "failed", "timeout", "cancelled":
+					hasRecentFailures = true
+				}
+			}
+
+			// Determine agent status based on recent activity
+			if hasRunning {
+				agentStatus = proto.AgentStatus_AGENT_STATUS_RUNNING
+			} else if hasRecentFailures {
+				agentStatus = proto.AgentStatus_AGENT_STATUS_ERROR
+			}
+		}
+
 		protoAgent := &proto.AgentInfo{
 			Id:              fmt.Sprintf("%d", agent.ID),
 			Name:            agent.Name,
 			Description:     agent.Description,
 			Prompt:          agent.Prompt,
-			ModelName:       "gpt-4o-mini", // Default model
+			ModelName:       "gpt-4o-mini", // Default model - could be enhanced with dotprompt model info
 			MaxSteps:        int32(agent.MaxSteps),
 			AssignedTools:   toolNames,
 			EnvironmentName: environmentName,
@@ -310,7 +329,7 @@ func (mhs *ManagementHandlerService) handleListAgents(ctx context.Context, req *
 			CronSchedule:    cronSchedule,
 			CreatedAt:       createdAt,
 			UpdatedAt:       updatedAt,
-			Status:          proto.AgentStatus_AGENT_STATUS_ACTIVE, // Default to active
+			Status:          agentStatus,
 		}
 		protoAgents = append(protoAgents, protoAgent)
 	}
@@ -330,13 +349,64 @@ func (mhs *ManagementHandlerService) handleListTools(ctx context.Context, req *p
 		environmentName = "default"
 	}
 
-	// For now, return a placeholder response
-	// TODO: Implement actual tool listing from MCP servers
+	// Get environment by name to get environment ID
+	env, err := mhs.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return nil, fmt.Errorf("environment %s not found: %v", environmentName, err)
+	}
+
+	// Get file-based MCP configs for this environment
+	fileConfigs, err := mhs.repos.FileMCPConfigs.ListByEnvironment(env.ID)
+	if err != nil {
+		logging.Error("Failed to get MCP configs for environment %s: %v", environmentName, err)
+		return &proto.ListToolsManagementResponse{
+			Tools:           []*proto.ToolInfo{},
+			EnvironmentName: environmentName,
+			TotalTools:      0,
+			McpServers:      []string{},
+		}, nil
+	}
+
+	// Get MCP tools with file config info for this environment
+	mcpTools, err := mhs.repos.MCPTools.GetToolsWithFileConfigInfo(env.ID)
+	if err != nil {
+		logging.Error("Failed to get MCP tools for environment %s: %v", environmentName, err)
+		mcpTools = []*models.MCPToolWithFileConfig{} // Continue with empty list
+	}
+
+	// Convert tools to proto format
+	var protoTools []*proto.ToolInfo
+	mcpServerNames := make(map[string]bool)
+
+	for _, tool := range mcpTools {
+		protoTool := &proto.ToolInfo{
+			Name:        tool.Name,
+			Description: tool.Description,
+			McpServer:   tool.ServerName, // Server name from the joined query
+			Categories:  []string{},      // TODO: Add categories support
+		}
+		protoTools = append(protoTools, protoTool)
+		mcpServerNames[tool.ServerName] = true
+	}
+
+	// Add MCP server names from file configs even if no tools discovered yet
+	for _, fileConfig := range fileConfigs {
+		mcpServerNames[fileConfig.ConfigName] = true
+	}
+
+	// Extract unique MCP server names
+	var servers []string
+	for serverName := range mcpServerNames {
+		servers = append(servers, serverName)
+	}
+
+	logging.Info("Found %d tools from %d MCP servers in environment '%s'", len(protoTools), len(servers), environmentName)
+
 	return &proto.ListToolsManagementResponse{
-		Tools:           []*proto.ToolInfo{},
+		Tools:           protoTools,
 		EnvironmentName: environmentName,
-		TotalTools:      0,
-		McpServers:      []string{},
+		TotalTools:      int32(len(protoTools)),
+		McpServers:      servers,
 	}, nil
 }
 
@@ -374,25 +444,6 @@ func (mhs *ManagementHandlerService) handleGetEnvironments(ctx context.Context, 
 	}, nil
 }
 
-// handleGetSystemStatus processes get system status requests
-func (mhs *ManagementHandlerService) handleGetSystemStatus(ctx context.Context, req *proto.GetSystemStatusRequest) (*proto.GetSystemStatusResponse, error) {
-	logging.Info("Getting system status")
-
-	// TODO: Get actual system metrics and active executions
-	return &proto.GetSystemStatusResponse{
-		Health: proto.SystemHealth_SYSTEM_HEALTHY,
-		Metrics: &proto.SystemMetrics{
-			CpuUsagePercent:    25.0,
-			MemoryUsagePercent: 45.0,
-			ActiveConnections:  1,
-			ActiveRuns:         0,
-		},
-		ActiveExecutions:     []*proto.ActiveExecution{},
-		StationVersion:       "v0.11.0",
-		Uptime:               fmt.Sprintf("%.0f minutes", time.Since(time.Now().Add(-30*time.Minute)).Minutes()),
-		LighthouseConnection: proto.ConnectionStatus_CONNECTION_CONNECTED,
-	}, nil
-}
 
 // handleExecuteAgent processes execute agent requests using unified execution flow (same as MCP/CLI)
 func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, originalRequestId string, req *proto.ExecuteAgentManagementRequest) (*proto.ExecuteAgentManagementResponse, error) {
@@ -548,30 +599,328 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		Status:          proto.ExecutionStatus_EXECUTION_COMPLETED,
 		StepNumber:      1,
 		StepDescription: result.Response,
-		ToolCalls:       []*proto.ToolCall{},
+		ToolCalls:       []*proto.LighthouseToolCall{},
 		Timestamp:       timestamppb.Now(),
 	}, nil
 }
 
-// handleListActiveRuns processes list active runs requests
-func (mhs *ManagementHandlerService) handleListActiveRuns(ctx context.Context, req *proto.ListActiveRunsRequest) (*proto.ListActiveRunsResponse, error) {
-	logging.Info("Listing active runs")
 
-	// TODO: Get actual active runs from execution queue or similar service
-	return &proto.ListActiveRunsResponse{
-		ActiveRuns:  []*proto.ActiveExecution{},
-		TotalActive: 0,
+// handleGetAgentDetails processes get agent details requests
+func (mhs *ManagementHandlerService) handleGetAgentDetails(ctx context.Context, req *proto.GetAgentDetailsRequest) (*proto.GetAgentDetailsResponse, error) {
+	logging.Info("Getting agent details: agent_id=%s, environment=%s", req.AgentId, req.Environment)
+
+	// Convert agent ID to int64
+	agentID, err := strconv.ParseInt(req.AgentId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID: %s", req.AgentId)
+	}
+
+	// Default to "default" environment if not specified
+	environmentName := req.Environment
+	if environmentName == "" {
+		environmentName = "default"
+	}
+
+	// Get environment by name
+	env, err := mhs.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return nil, fmt.Errorf("environment %s not found: %v", environmentName, err)
+	}
+
+	// Get agent by ID and verify it belongs to the correct environment
+	agent, err := mhs.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("agent not found: %v", err)
+	}
+
+	if agent.EnvironmentID != env.ID {
+		return nil, fmt.Errorf("agent %s does not exist in environment %s", req.AgentId, environmentName)
+	}
+
+	// Get tools for this agent
+	agentTools, err := mhs.repos.AgentTools.ListAgentTools(agent.ID)
+	if err != nil {
+		logging.Error("Failed to get tools for agent %d: %v", agent.ID, err)
+		agentTools = []*models.AgentToolWithDetails{} // Continue with empty tools
+	}
+
+	// Extract tool names
+	var toolNames []string
+	for _, tool := range agentTools {
+		toolNames = append(toolNames, tool.ToolName)
+	}
+
+	// Generate dotprompt content (similar to export_handlers.go)
+	dotpromptContent := mhs.generateDotpromptContent(agent, agentTools, environmentName)
+
+	// Convert timestamps
+	var createdAt, updatedAt *timestamppb.Timestamp
+	if !agent.CreatedAt.IsZero() {
+		createdAt = timestamppb.New(agent.CreatedAt)
+	}
+	if !agent.UpdatedAt.IsZero() {
+		updatedAt = timestamppb.New(agent.UpdatedAt)
+	}
+
+	// Create AgentConfig proto message
+	agentConfig := &proto.AgentConfig{
+		Id:             fmt.Sprintf("%d", agent.ID),
+		Name:           agent.Name,
+		Description:    agent.Description,
+		PromptTemplate: dotpromptContent,
+		ModelName:      "gemini-2.5-flash", // Default model, could be enhanced
+		MaxSteps:       int32(agent.MaxSteps),
+		Tools:          toolNames,
+		Variables:      map[string]string{}, // TODO: Add actual variables if needed
+		Tags:           []string{},          // TODO: Add tags if available
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
+	}
+
+	return &proto.GetAgentDetailsResponse{
+		Agent: agentConfig,
 	}, nil
 }
 
-// handleCancelExecution processes cancel execution requests
-func (mhs *ManagementHandlerService) handleCancelExecution(ctx context.Context, req *proto.CancelExecutionRequest) (*proto.CancelExecutionResponse, error) {
-	logging.Info("Cancelling execution: %s", req.ExecutionId)
+// generateDotpromptContent generates the complete .prompt file content for an agent
+// (Similar to the method in export_handlers.go but adapted for management service)
+func (mhs *ManagementHandlerService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environment string) string {
+	var content strings.Builder
 
-	// TODO: Implement actual execution cancellation
-	return &proto.CancelExecutionResponse{
-		Cancelled: false,
-		Message:   "Execution cancellation not yet implemented",
+	// Default model name
+	modelName := "gemini-2.5-flash"
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
+
+	// Input schema (basic default)
+	content.WriteString("input:\n")
+	content.WriteString("  userInput:\n")
+	content.WriteString("    type: string\n")
+	content.WriteString("    description: \"The user's input or task description\"\n")
+
+	// Output schema if available
+	if agent.OutputSchema != nil && *agent.OutputSchema != "" {
+		content.WriteString("output:\n")
+		content.WriteString("  schema: |\n")
+		content.WriteString("    " + *agent.OutputSchema + "\n")
+	}
+
+	// Max steps
+	if agent.MaxSteps > 0 {
+		content.WriteString(fmt.Sprintf("max_steps: %d\n", agent.MaxSteps))
+	}
+
+	// Tools list
+	if len(tools) > 0 {
+		content.WriteString("tools:\n")
+		for _, tool := range tools {
+			content.WriteString(fmt.Sprintf("  - \"%s\"\n", tool.ToolName))
+		}
+	}
+
+	content.WriteString("---\n\n")
+
+	// Multi-role prompt content
+	content.WriteString("{{role \"system\"}}\n")
+	content.WriteString(agent.Prompt)
+	content.WriteString("\n\n")
+
+	// User role with variable substitution
+	content.WriteString("{{role \"user\"}}\n")
+	content.WriteString("{{userInput}}")
+
+	return content.String()
+}
+
+// handleUpdateAgentPrompt processes update agent prompt requests
+func (mhs *ManagementHandlerService) handleUpdateAgentPrompt(ctx context.Context, req *proto.UpdateAgentPromptRequest) (*proto.UpdateAgentPromptResponse, error) {
+	logging.Info("Updating agent prompt: agent_id=%s, environment=%s", req.AgentId, req.Environment)
+
+	// Convert agent ID to int64
+	agentID, err := strconv.ParseInt(req.AgentId, 10, 64)
+	if err != nil {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Invalid agent ID: %s", req.AgentId),
+		}, nil
+	}
+
+	// Default to "default" environment if not specified
+	environmentName := req.Environment
+	if environmentName == "" {
+		environmentName = "default"
+	}
+
+	// Get environment by name
+	env, err := mhs.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Environment %s not found: %v", environmentName, err),
+		}, nil
+	}
+
+	// Get agent by ID and verify it belongs to the correct environment
+	agent, err := mhs.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Agent not found: %v", err),
+		}, nil
+	}
+
+	if agent.EnvironmentID != env.ID {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Agent %s does not exist in environment %s", req.AgentId, environmentName),
+		}, nil
+	}
+
+	// Parse and validate the dotprompt content
+	// Basic YAML validation - check if it starts with --- and has valid structure
+	promptContent := strings.TrimSpace(req.NewPrompt)
+	if !strings.HasPrefix(promptContent, "---") {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: "Invalid dotprompt format: must start with YAML frontmatter (---)",
+		}, nil
+	}
+
+	// Find the end of YAML frontmatter
+	lines := strings.Split(promptContent, "\n")
+	frontmatterEndIndex := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			frontmatterEndIndex = i
+			break
+		}
+	}
+
+	if frontmatterEndIndex == -1 {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: "Invalid dotprompt format: missing end of YAML frontmatter (---)",
+		}, nil
+	}
+
+	// Extract system prompt content (everything after the frontmatter)
+	var systemPrompt string
+	if frontmatterEndIndex+1 < len(lines) {
+		promptLines := lines[frontmatterEndIndex+1:]
+		systemPrompt = strings.TrimSpace(strings.Join(promptLines, "\n"))
+
+		// Remove role directives to get the clean system prompt
+		systemPrompt = strings.ReplaceAll(systemPrompt, "{{role \"system\"}}", "")
+		systemPrompt = strings.ReplaceAll(systemPrompt, "{{role \"user\"}}", "")
+		systemPrompt = strings.ReplaceAll(systemPrompt, "{{userInput}}", "")
+		systemPrompt = strings.TrimSpace(systemPrompt)
+	}
+
+	if systemPrompt == "" {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: "Invalid dotprompt format: missing system prompt content",
+		}, nil
+	}
+
+	// Update agent prompt in database
+	err = mhs.repos.Agents.UpdatePrompt(agentID, systemPrompt)
+	if err != nil {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to update agent in database: %v", err),
+		}, nil
+	}
+
+	// Get updated agent details
+	updatedAgent, err := mhs.repos.Agents.GetByID(agentID)
+	if err != nil {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to get updated agent: %v", err),
+		}, nil
+	}
+
+	// Write the complete dotprompt file to filesystem (similar to export_handlers.go)
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		var homeErr error
+		homeDir, homeErr = os.UserHomeDir()
+		if homeErr != nil {
+			return &proto.UpdateAgentPromptResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to get user home directory: %v", homeErr),
+			}, nil
+		}
+	}
+
+	// Construct the .prompt file path
+	promptFilePath := fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt",
+		homeDir, environmentName, agent.Name)
+
+	// Ensure directory exists
+	agentsDir := filepath.Dir(promptFilePath)
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to create agents directory: %v", err),
+		}, nil
+	}
+
+	// Write the complete dotprompt content to file
+	if err := os.WriteFile(promptFilePath, []byte(promptContent), 0644); err != nil {
+		return &proto.UpdateAgentPromptResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to write dotprompt file: %v", err),
+		}, nil
+	}
+
+	// Get updated agent details to return
+	agentTools, err := mhs.repos.AgentTools.ListAgentTools(updatedAgent.ID)
+	if err != nil {
+		logging.Error("Failed to get tools for updated agent %d: %v", updatedAgent.ID, err)
+		agentTools = []*models.AgentToolWithDetails{} // Continue with empty tools
+	}
+
+	// Extract tool names
+	var toolNames []string
+	for _, tool := range agentTools {
+		toolNames = append(toolNames, tool.ToolName)
+	}
+
+	// Convert timestamps
+	var createdAt, updatedAt *timestamppb.Timestamp
+	if !updatedAgent.CreatedAt.IsZero() {
+		createdAt = timestamppb.New(updatedAgent.CreatedAt)
+	}
+	if !updatedAgent.UpdatedAt.IsZero() {
+		updatedAt = timestamppb.New(updatedAgent.UpdatedAt)
+	}
+
+	// Create updated AgentConfig proto message
+	updatedAgentConfig := &proto.AgentConfig{
+		Id:             fmt.Sprintf("%d", updatedAgent.ID),
+		Name:           updatedAgent.Name,
+		Description:    updatedAgent.Description,
+		PromptTemplate: promptContent, // Return the complete dotprompt content
+		ModelName:      "gemini-2.5-flash", // Default model
+		MaxSteps:       int32(updatedAgent.MaxSteps),
+		Tools:          toolNames,
+		Variables:      map[string]string{},
+		Tags:           []string{},
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
+	}
+
+	logging.Info("Successfully updated agent prompt: agent_id=%d, environment=%s, file=%s",
+		agentID, environmentName, promptFilePath)
+
+	return &proto.UpdateAgentPromptResponse{
+		Success:      true,
+		Message:      "Agent prompt updated successfully",
+		UpdatedAgent: updatedAgentConfig,
 	}, nil
 }
 
@@ -698,7 +1047,7 @@ func (mhs *ManagementHandlerService) convertRunDetailsToAgentRun(runDetails *mod
 }
 
 // convertRunDetailsToProtoAgentRun converts database AgentRunWithDetails to proto.AgentRunData for ManagementChannel SendRun
-func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails *models.AgentRunWithDetails) *proto.AgentRunData {
+func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails *models.AgentRunWithDetails) *proto.LighthouseAgentRunData {
 	if runDetails == nil {
 		return nil
 	}
@@ -709,56 +1058,91 @@ func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails
 		durationMs = int64(*runDetails.DurationSeconds * 1000)
 	}
 
-	// Handle optional fields
-	var completedAt *timestamppb.Timestamp
-	if runDetails.CompletedAt != nil {
-		completedAt = timestamppb.New(*runDetails.CompletedAt)
-	}
-
-	startedAt := timestamppb.New(runDetails.StartedAt)
-
-	modelName := ""
-	if runDetails.ModelName != nil {
-		modelName = *runDetails.ModelName
-	}
-
 	// Create token usage data if available
 	var tokenUsage *proto.TokenUsage
 	if runDetails.InputTokens != nil || runDetails.OutputTokens != nil || runDetails.TotalTokens != nil {
-		tokenUsage = &proto.TokenUsage{}
-		
+		tokenUsage = &proto.TokenUsage{
+			PromptTokens:     int32(0),
+			CompletionTokens: int32(0),
+			TotalTokens:      int32(0),
+			CostUsd:          0.0,
+		}
+
 		if runDetails.InputTokens != nil {
 			tokenUsage.PromptTokens = int32(*runDetails.InputTokens)
 		}
-		
+
 		if runDetails.OutputTokens != nil {
 			tokenUsage.CompletionTokens = int32(*runDetails.OutputTokens)
 		}
-		
+
 		if runDetails.TotalTokens != nil {
 			tokenUsage.TotalTokens = int32(*runDetails.TotalTokens)
 		}
 	}
 
-	// Create proto AgentRunData
-	return &proto.AgentRunData{
-		RunId:       fmt.Sprintf("run_%d", runDetails.ID),
-		AgentId:     fmt.Sprintf("agent_%d", runDetails.AgentID),
-		AgentName:   runDetails.AgentName,
-		Task:        runDetails.Task,
-		Response:    runDetails.FinalResponse,
-		Status:      lighthouse.ConvertRunStatusToProto(runDetails.Status),
-		TokenUsage:  tokenUsage,
-		DurationMs:  durationMs,
-		ModelName:   modelName,
-		StartedAt:   startedAt,
-		CompletedAt: completedAt,
-		Metadata: map[string]string{
-			"run_id":      fmt.Sprintf("%d", runDetails.ID),
-			"agent_id":    fmt.Sprintf("%d", runDetails.AgentID),
-			"steps_taken": fmt.Sprintf("%d", runDetails.StepsTaken),
-			"user_id":     fmt.Sprintf("%d", runDetails.UserID),
-			"username":    runDetails.Username,
-		},
+
+	// Create proto LighthouseAgentRunData for management channel
+	metadata := map[string]string{
+		"run_id":      fmt.Sprintf("%d", runDetails.ID),
+		"agent_id":    fmt.Sprintf("%d", runDetails.AgentID),
+		"steps_taken": fmt.Sprintf("%d", runDetails.StepsTaken),
+		"user_id":     fmt.Sprintf("%d", runDetails.UserID),
+		"username":    runDetails.Username,
+	}
+
+	// Convert timestamps
+	var completedAt *timestamppb.Timestamp
+	if runDetails.CompletedAt != nil {
+		completedAt = timestamppb.New(*runDetails.CompletedAt)
+	}
+	startedAt := timestamppb.New(runDetails.StartedAt)
+
+	// Convert to lighthouse token usage format
+	var lighthouseTokenUsage *proto.LighthouseTokenUsage
+	if tokenUsage != nil {
+		lighthouseTokenUsage = &proto.LighthouseTokenUsage{
+			PromptTokens:     tokenUsage.PromptTokens,
+			CompletionTokens: tokenUsage.CompletionTokens,
+			TotalTokens:      tokenUsage.TotalTokens,
+			CostUsd:          tokenUsage.CostUsd,
+		}
+	}
+
+	// Convert tool calls to lighthouse format
+	var lighthouseToolCalls []*proto.LighthouseToolCall
+	// TODO: Convert toolCalls to lighthouse format if needed
+
+	// Convert status to lighthouse format
+	lighthouseStatus := proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_UNSPECIFIED
+	switch runDetails.Status {
+	case "queued":
+		lighthouseStatus = proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_QUEUED
+	case "running":
+		lighthouseStatus = proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_RUNNING
+	case "completed":
+		lighthouseStatus = proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_COMPLETED
+	case "failed":
+		lighthouseStatus = proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_FAILED
+	case "cancelled":
+		lighthouseStatus = proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_CANCELLED
+	}
+
+	return &proto.LighthouseAgentRunData{
+		RunId:          fmt.Sprintf("run_%d", runDetails.ID),
+		AgentId:        fmt.Sprintf("agent_%d", runDetails.AgentID),
+		AgentName:      runDetails.AgentName,
+		Task:           runDetails.Task,
+		Response:       runDetails.FinalResponse,
+		ToolCalls:      lighthouseToolCalls,
+		ExecutionSteps: []*proto.ExecutionStep{}, // TODO: Convert if needed
+		TokenUsage:     lighthouseTokenUsage,
+		DurationMs:     durationMs,
+		ModelName:      *runDetails.ModelName,
+		Status:         lighthouseStatus,
+		StartedAt:      startedAt,
+		CompletedAt:    completedAt,
+		Metadata:       metadata,
+		StationVersion: "v0.11.0",
 	}
 }

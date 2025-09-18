@@ -265,7 +265,7 @@ func (mcs *ManagementChannelService) processRequest(stream proto.LighthouseServi
 }
 
 // SendRun sends a completed agent run via ManagementChannel
-func (mcs *ManagementChannelService) SendRun(agentRunData *proto.AgentRunData, tags map[string]string) error {
+func (mcs *ManagementChannelService) SendRun(agentRunData *proto.LighthouseAgentRunData, tags map[string]string) error {
 	// Create SendRun request message
 	sendRunMsg := &proto.ManagementMessage{
 		RequestId:       fmt.Sprintf("sendrun_%d", time.Now().Unix()),
@@ -321,14 +321,8 @@ func (mcs *ManagementChannelService) getRequestType(msg *proto.ManagementMessage
 		return "ListTools"
 	case *proto.ManagementMessage_GetEnvironmentsRequest:
 		return "GetEnvironments"
-	case *proto.ManagementMessage_GetSystemStatusRequest:
-		return "GetSystemStatus"
 	case *proto.ManagementMessage_ExecuteAgentRequest:
 		return "ExecuteAgent"
-	case *proto.ManagementMessage_ListActiveRunsRequest:
-		return "ListActiveRuns"
-	case *proto.ManagementMessage_CancelExecutionRequest:
-		return "CancelExecution"
 	case *proto.ManagementMessage_StationRegistration:
 		return "StationRegistration"
 	case *proto.ManagementMessage_SendRunRequest:
