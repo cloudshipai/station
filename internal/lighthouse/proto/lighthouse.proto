@@ -4,7 +4,7 @@ package lighthouse.v1;
 option go_package = "./internal/proto";
 
 import "google/protobuf/timestamp.proto";
-import "internal/lighthouse/proto/data_ingestion.proto";
+import "internal/proto/data_ingestion.proto";
 
 // Lighthouse service for Station-CloudShip integration
 // Handles all three deployment modes: stdio, serve, cli
@@ -26,7 +26,11 @@ service LighthouseService {
     
     // Management Channel (Bidirectional for firewall traversal)
     rpc ManagementChannel(stream ManagementMessage) returns (stream ManagementMessage);
-    
+
+    // Agent Configuration Management (Unary APIs for external clients like Django)
+    rpc GetAgentDetails(GetAgentDetailsRequest) returns (GetAgentDetailsResponse);
+    rpc UpdateAgentPrompt(UpdateAgentPromptRequest) returns (UpdateAgentPromptResponse);
+
     // System Health Monitoring (Server Mode Primarily)
     rpc SendSystemHealth(SystemHealthRequest) returns (SystemHealthResponse);
     
