@@ -1,9 +1,10 @@
 syntax = "proto3";
 
 package lighthouse.v1;
-option go_package = "github.com/cloudshipai/lighthouse/internal/proto";
+option go_package = "./internal/proto";
 
 import "google/protobuf/timestamp.proto";
+import "internal/lighthouse/proto/data_ingestion.proto";
 
 // Lighthouse service for Station-CloudShip integration
 // Handles all three deployment modes: stdio, serve, cli
@@ -29,6 +30,9 @@ service LighthouseService {
     // System Health Monitoring (Server Mode Primarily)
     rpc SendSystemHealth(SystemHealthRequest) returns (SystemHealthResponse);
     
+    // Flexible Data Ingestion Pipeline (Phase 3)
+    rpc IngestData(IngestDataRequest) returns (IngestDataResponse);
+    
     // Legacy MCP Proxy (Deprecated - use ManagementChannel)
     rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
     rpc CallTool(CallToolRequest) returns (CallToolResponse);
@@ -44,16 +48,16 @@ enum DeploymentMode {
     DEPLOYMENT_MODE_CLI = 3;      // CI/CD & ephemeral executions
 }
 
-// Run status enumeration
-enum RunStatus {
-    RUN_STATUS_UNSPECIFIED = 0;
-    RUN_STATUS_QUEUED = 1;       // CloudShip UI initiated
-    RUN_STATUS_DISPATCHED = 2;   // Sent to station
-    RUN_STATUS_RUNNING = 3;      // Active execution
-    RUN_STATUS_COMPLETED = 4;    // Finished successfully
-    RUN_STATUS_FAILED = 5;       // Error occurred
-    RUN_STATUS_TIMEOUT = 6;      // Execution timeout
-    RUN_STATUS_CANCELLED = 7;    // User cancelled
+// Run status enumeration (legacy - use data_ingestion.RunStatus for new code)
+enum LighthouseRunStatus {
+    LIGHTHOUSE_RUN_STATUS_UNSPECIFIED = 0;
+    LIGHTHOUSE_RUN_STATUS_QUEUED = 1;       // CloudShip UI initiated
+    LIGHTHOUSE_RUN_STATUS_DISPATCHED = 2;   // Sent to station
+    LIGHTHOUSE_RUN_STATUS_RUNNING = 3;      // Active execution
+    LIGHTHOUSE_RUN_STATUS_COMPLETED = 4;    // Finished successfully
+    LIGHTHOUSE_RUN_STATUS_FAILED = 5;       // Error occurred
+    LIGHTHOUSE_RUN_STATUS_TIMEOUT = 6;      // Execution timeout
+    LIGHTHOUSE_RUN_STATUS_CANCELLED = 7;    // User cancelled
 }
 
 // Run source enumeration
@@ -137,7 +141,7 @@ message SendRunRequest {
     string environment = 2;         // Environment name
     DeploymentMode mode = 3;        // Deployment mode (stdio, serve, cli)
     RunSource source = 4;           // Run source (analytics, ui_triggered, cli_snapshot)
-    AgentRunData run_data = 5;      // Complete run information
+    LighthouseAgentRunData run_data = 5;      // Complete run information
     map<string, string> labels = 6; // Additional labels
 }
 
@@ -147,25 +151,25 @@ message SendRunResponse {
     string run_id = 3;              // Confirmed run ID in CloudShip
 }
 
-message AgentRunData {
+message LighthouseAgentRunData {
     string run_id = 1;              // Unique run ID from Station
     string agent_id = 2;            // Agent identifier
     string agent_name = 3;          // Agent display name
     string task = 4;                // User input/task
     string response = 5;            // Agent output
-    repeated ToolCall tool_calls = 6;
+    repeated LighthouseToolCall tool_calls = 6;
     repeated ExecutionStep execution_steps = 7;
-    TokenUsage token_usage = 8;
+    LighthouseTokenUsage token_usage = 8;
     int64 duration_ms = 9;
     string model_name = 10;
-    RunStatus status = 11;
+    LighthouseRunStatus status = 11;
     google.protobuf.Timestamp started_at = 12;
     google.protobuf.Timestamp completed_at = 13;
     map<string, string> metadata = 14;
     string station_version = 15;    // Station version for debugging/compatibility
 }
 
-message ToolCall {
+message LighthouseToolCall {
     string tool_name = 1;
     map<string, string> parameters = 2;  // JSON-serialized parameters
     string result = 3;                    // JSON-serialized result
@@ -182,7 +186,7 @@ message ExecutionStep {
     google.protobuf.Timestamp timestamp = 5;
 }
 
-message TokenUsage {
+message LighthouseTokenUsage {
     int32 prompt_tokens = 1;
     int32 completion_tokens = 2;
     int32 total_tokens = 3;
@@ -198,7 +202,7 @@ message EphemeralSnapshotRequest {
     string environment = 2;         // Environment name
     RunSource source = 3;           // Source type (should be RUN_SOURCE_CLI_SNAPSHOT)
     DeploymentContext context = 4;  // Rich execution context
-    AgentRunData run_data = 5;      // Complete run information
+    LighthouseAgentRunData run_data = 5;      // Complete run information
     SystemSnapshot system = 6;     // System state at execution time
 }
 
@@ -441,7 +445,7 @@ message ExecutionStarted {
 message ExecutionCompleted {
     string run_id = 1;
     string result = 2;
-    TokenUsage token_usage = 3;
+    LighthouseTokenUsage token_usage = 3;
     int64 duration_ms = 4;
     google.protobuf.Timestamp completed_at = 5;
 }
@@ -469,24 +473,27 @@ message ManagementMessage {
         ListToolsManagementRequest list_tools_request = 11;
         GetEnvironmentsRequest get_environments_request = 12;
         ExecuteAgentManagementRequest execute_agent_request = 13;
-        GetSystemStatusRequest get_system_status_request = 14;
-        ListActiveRunsRequest list_active_runs_request = 15;
-        CancelExecutionRequest cancel_execution_request = 16;
         SendRunRequest send_run_request = 17;
-        
+
+        // NEW - agent configuration management
+        GetAgentDetailsRequest get_agent_details_request = 18;
+        UpdateAgentPromptRequest update_agent_prompt_request = 19;
+
         // Response messages (can be sent by either Lighthouse or Station)
         ListAgentsManagementResponse list_agents_response = 20;
         ListToolsManagementResponse list_tools_response = 21;
         GetEnvironmentsResponse get_environments_response = 22;
         ExecuteAgentManagementResponse execute_agent_response = 23;
-        GetSystemStatusResponse get_system_status_response = 24;
-        ListActiveRunsResponse list_active_runs_response = 25;
-        CancelExecutionResponse cancel_execution_response = 26;
         SendRunResponse send_run_response = 27;
-        ManagementError error = 28;
-        
+
+        // NEW - agent configuration management responses
+        GetAgentDetailsResponse get_agent_details_response = 28;
+        UpdateAgentPromptResponse update_agent_prompt_response = 29;
+
+        ManagementError error = 30;
+
         // Special messages
-        StationRegistrationMessage station_registration = 30;
+        StationRegistrationMessage station_registration = 31;
     }
 }
 
@@ -569,7 +576,7 @@ message ExecuteAgentManagementRequest {
     string environment = 3;
     map<string, string> variables = 4;
     int32 timeout_seconds = 5;
-    string run_id = 6;  // CloudShip's run ID for execution tracking
+    string run_id = 6;  // The run_id from lighthouse that station should use
 }
 
 message ExecuteAgentManagementResponse {
@@ -578,8 +585,8 @@ message ExecuteAgentManagementResponse {
     string partial_response = 3;
     int32 step_number = 4;
     string step_description = 5;
-    repeated ToolCall tool_calls = 6;
-    TokenUsage token_usage = 7;
+    repeated LighthouseToolCall tool_calls = 6;
+    LighthouseTokenUsage token_usage = 7;
     google.protobuf.Timestamp timestamp = 8;
 }
 
@@ -597,7 +604,7 @@ message GetSystemStatusRequest {
 }
 
 message GetSystemStatusResponse {
-    SystemHealth health = 1;
+    LighthouseSystemHealth health = 1;
     SystemMetrics metrics = 2;
     repeated ActiveExecution active_executions = 3;
     string station_version = 4;
@@ -605,11 +612,11 @@ message GetSystemStatusResponse {
     ConnectionStatus lighthouse_connection = 6;
 }
 
-enum SystemHealth {
-    SYSTEM_HEALTHY = 0;
-    SYSTEM_WARNING = 1;
-    SYSTEM_ERROR = 2;
-    SYSTEM_OFFLINE = 3;
+enum LighthouseSystemHealth {
+    LIGHTHOUSE_SYSTEM_HEALTHY = 0;
+    LIGHTHOUSE_SYSTEM_WARNING = 1;
+    LIGHTHOUSE_SYSTEM_ERROR = 2;
+    LIGHTHOUSE_SYSTEM_OFFLINE = 3;
 }
 
 message ActiveExecution {
@@ -649,6 +656,30 @@ message CancelExecutionResponse {
     string message = 2;
 }
 
+// NEW - Agent Configuration Management
+message GetAgentDetailsRequest {
+    string registration_key = 1;  // Station registration key for routing
+    string agent_id = 2;
+    string environment = 3;
+}
+
+message GetAgentDetailsResponse {
+    AgentConfig agent = 1;
+}
+
+message UpdateAgentPromptRequest {
+    string registration_key = 1;  // Station registration key for routing
+    string agent_id = 2;
+    string environment = 3;
+    string new_prompt = 4;
+}
+
+message UpdateAgentPromptResponse {
+    bool success = 1;
+    string message = 2;
+    AgentConfig updated_agent = 3;
+}
+
 // Error Handling
 message ManagementError {
     ErrorCode code = 1;
@@ -664,3 +695,4 @@ enum ErrorCode {
     TIMEOUT_ERROR = 4;
     PERMISSION_DENIED = 5;
 }
+

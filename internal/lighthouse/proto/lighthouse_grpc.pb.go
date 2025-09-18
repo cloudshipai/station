@@ -28,6 +28,7 @@ const (
 	LighthouseService_SyncConfiguration_FullMethodName     = "/lighthouse.v1.LighthouseService/SyncConfiguration"
 	LighthouseService_ManagementChannel_FullMethodName     = "/lighthouse.v1.LighthouseService/ManagementChannel"
 	LighthouseService_SendSystemHealth_FullMethodName      = "/lighthouse.v1.LighthouseService/SendSystemHealth"
+	LighthouseService_IngestData_FullMethodName            = "/lighthouse.v1.LighthouseService/IngestData"
 	LighthouseService_ListTools_FullMethodName             = "/lighthouse.v1.LighthouseService/ListTools"
 	LighthouseService_CallTool_FullMethodName              = "/lighthouse.v1.LighthouseService/CallTool"
 	LighthouseService_ListAgents_FullMethodName            = "/lighthouse.v1.LighthouseService/ListAgents"
@@ -56,6 +57,8 @@ type LighthouseServiceClient interface {
 	ManagementChannel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ManagementMessage, ManagementMessage], error)
 	// System Health Monitoring (Server Mode Primarily)
 	SendSystemHealth(ctx context.Context, in *SystemHealthRequest, opts ...grpc.CallOption) (*SystemHealthResponse, error)
+	// Flexible Data Ingestion Pipeline (Phase 3)
+	IngestData(ctx context.Context, in *IngestDataRequest, opts ...grpc.CallOption) (*IngestDataResponse, error)
 	// Legacy MCP Proxy (Deprecated - use ManagementChannel)
 	ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error)
 	CallTool(ctx context.Context, in *CallToolRequest, opts ...grpc.CallOption) (*CallToolResponse, error)
@@ -170,6 +173,16 @@ func (c *lighthouseServiceClient) SendSystemHealth(ctx context.Context, in *Syst
 	return out, nil
 }
 
+func (c *lighthouseServiceClient) IngestData(ctx context.Context, in *IngestDataRequest, opts ...grpc.CallOption) (*IngestDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IngestDataResponse)
+	err := c.cc.Invoke(ctx, LighthouseService_IngestData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *lighthouseServiceClient) ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListToolsResponse)
@@ -232,6 +245,8 @@ type LighthouseServiceServer interface {
 	ManagementChannel(grpc.BidiStreamingServer[ManagementMessage, ManagementMessage]) error
 	// System Health Monitoring (Server Mode Primarily)
 	SendSystemHealth(context.Context, *SystemHealthRequest) (*SystemHealthResponse, error)
+	// Flexible Data Ingestion Pipeline (Phase 3)
+	IngestData(context.Context, *IngestDataRequest) (*IngestDataResponse, error)
 	// Legacy MCP Proxy (Deprecated - use ManagementChannel)
 	ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error)
 	CallTool(context.Context, *CallToolRequest) (*CallToolResponse, error)
@@ -273,6 +288,9 @@ func (UnimplementedLighthouseServiceServer) ManagementChannel(grpc.BidiStreaming
 }
 func (UnimplementedLighthouseServiceServer) SendSystemHealth(context.Context, *SystemHealthRequest) (*SystemHealthResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendSystemHealth not implemented")
+}
+func (UnimplementedLighthouseServiceServer) IngestData(context.Context, *IngestDataRequest) (*IngestDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IngestData not implemented")
 }
 func (UnimplementedLighthouseServiceServer) ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTools not implemented")
@@ -436,6 +454,24 @@ func _LighthouseService_SendSystemHealth_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LighthouseService_IngestData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IngestDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LighthouseServiceServer).IngestData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LighthouseService_IngestData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LighthouseServiceServer).IngestData(ctx, req.(*IngestDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _LighthouseService_ListTools_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListToolsRequest)
 	if err := dec(in); err != nil {
@@ -538,6 +574,10 @@ var LighthouseService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendSystemHealth",
 			Handler:    _LighthouseService_SendSystemHealth_Handler,
+		},
+		{
+			MethodName: "IngestData",
+			Handler:    _LighthouseService_IngestData_Handler,
 		},
 		{
 			MethodName: "ListTools",
