@@ -58,7 +58,7 @@ Station is purpose-built for **deployable sub-agents** - to bring intelligence i
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-stn bootstrap --openai
+stn bootstrap --openai 
 ```
 
 This single command sets up Station with:
@@ -97,7 +97,7 @@ stn bundle install https://github.com/cloudshipai/registry/releases/latest/downl
 
 ### 3. **Sync and Connect**
 ```bash
-stn sync
+stn sync && stn sync security
 echo '{"mcpServers":{"station":{"command":"stn","args":["stdio"]}}}' > ~/.claude_desktop_config.json
 ```
 
@@ -428,7 +428,7 @@ Deploy agents in containerized environments for maximum isolation and scalabilit
 # Build containerized environment with agents pre-configured
 stn build env security-bundle \
   --provider openai \
-  --model gpt-5-mini \
+  --model gpt-4o-mini \
   --cloudshipai-registration-key $CLOUDSHIP_KEY
 
 # Container includes:

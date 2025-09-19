@@ -52,7 +52,7 @@ func NewEnvironmentBuilder(environmentName, environmentPath string) *Environment
 		environmentPath: environmentPath,
 		buildOptions: &BuildOptions{
 			Provider: "openai",
-			Model:    "gpt-5-mini",
+			Model:    "gpt-4o-mini",
 		},
 	}
 }
