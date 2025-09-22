@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '../api/client';
 
 interface LighthouseStatus {
   connected: boolean;
@@ -26,11 +27,8 @@ const CloudShipStatus: React.FC = () => {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const response = await fetch('/api/v1/lighthouse/status');
-        if (response.ok) {
-          const data = await response.json();
-          setStatus(data);
-        }
+        const response = await apiClient.get('/lighthouse/status');
+        setStatus(response.data);
       } catch (error) {
         console.error('Failed to fetch lighthouse status:', error);
       }
