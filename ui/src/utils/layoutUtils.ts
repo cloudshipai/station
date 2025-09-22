@@ -1,22 +1,25 @@
 import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
 import type { Node, Edge } from '@xyflow/react';
 
-// Node dimensions (using larger sizes like Langflow for better visibility)
-export const NODE_WIDTH = 300;
-export const NODE_HEIGHT = 150;
+// Node dimensions optimized for concise cards
+export const NODE_WIDTH = 280;
+export const NODE_HEIGHT = 130;
 
-// ELK layout configuration based on Langflow's proven approach
+// ELK layout configuration optimized for proper spacing
 const layoutOptions = {
   "elk.algorithm": "layered",
-  "elk.direction": "RIGHT", // Left-to-right like Langflow
-  "elk.components.direction": "DOWN",
-  "elk.layered.spacing.edgeNodeBetweenLayers": "80",
-  "elk.spacing.nodeNode": "60", 
+  "elk.direction": "RIGHT",
+  "elk.layered.spacing.edgeNodeBetweenLayers": "200",
+  "elk.spacing.nodeNode": "150",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "200",
   "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
   "elk.separateConnectedComponents": "true",
   "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
-  "elk.spacing.componentComponent": `${NODE_WIDTH}`,
+  "elk.spacing.componentComponent": "250",
   "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+  "elk.padding": "[top=80,left=80,bottom=80,right=80]",
+  "elk.partitioning.activate": "true",
+  "elk.aspectRatio": "1.5",
 };
 
 const elk = new ELK();
@@ -34,34 +37,30 @@ export const getLayoutedNodes = async (
     id: "root",
     layoutOptions,
     children: nodes.map((node) => {
-      // Create ports for better edge connections (like Langflow)
-      const targetPorts = edges
-        .filter((e) => e.source === node.id)
-        .map((e) => ({
-          id: e.sourceHandle || `${e.id}-source`,
-          properties: {
-            side: "EAST", // Right side for outgoing connections
-          },
-        }));
-
-      const sourcePorts = edges
-        .filter((e) => e.target === node.id)
-        .map((e) => ({
-          id: e.targetHandle || `${e.id}-target`,
-          properties: {
-            side: "WEST", // Left side for incoming connections
-          },
-        }));
-
       return {
         id: node.id,
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
         properties: {
-          "org.eclipse.elk.portConstraints": "FIXED_ORDER",
+          "org.eclipse.elk.portConstraints": "FREE",
+          "org.eclipse.elk.nodeLabels.placement": "INSIDE V_CENTER H_CENTER",
         },
-        // Include node ID and all ports for better edge routing
-        ports: [{ id: node.id }, ...targetPorts, ...sourcePorts],
+        ports: [
+          {
+            id: `${node.id}-west`,
+            properties: {
+              side: "WEST",
+              "org.eclipse.elk.port.anchor": "(0,0.5)",
+            },
+          },
+          {
+            id: `${node.id}-east`,
+            properties: {
+              side: "EAST",
+              "org.eclipse.elk.port.anchor": "(1,0.5)",
+            },
+          },
+        ],
       };
     }) as ElkNode[],
     edges: edges.map((edge) => ({
@@ -99,4 +98,17 @@ export const getLayoutedNodes = async (
     console.error('Layout failed:', error);
     return nodes; // Return original nodes if layout fails
   }
+};
+
+// Layout function for environments page that returns both nodes and edges
+export const layoutElements = async (
+  nodes: Node[],
+  edges: Edge[],
+  direction: string = 'RIGHT'
+): Promise<{ nodes: Node[]; edges: Edge[] }> => {
+  const layoutedNodes = await getLayoutedNodes(nodes, edges);
+  return {
+    nodes: layoutedNodes,
+    edges: edges
+  };
 };

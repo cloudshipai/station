@@ -14,11 +14,8 @@ export const apiClient = axios.create({
 // Request interceptor for adding auth tokens if needed
 apiClient.interceptors.request.use(
   (config) => {
-    // Add auth token from localStorage if available
-    const token = localStorage.getItem('station_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    // No authentication required for local Station instance
+    // Station running with --local flag doesn't require API keys
     return config;
   },
   (error) => {
