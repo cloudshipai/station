@@ -109,12 +109,34 @@ func runMainServer() error {
 	// Create repositories and services
 	repos := repositories.New(database)
 
+	// Get environment name from viper config (defaults to "default")
+	environmentName := viper.GetString("serve_environment")
+	if environmentName == "" {
+		environmentName = "default"
+	}
+
 	// Initialize required services
 
 	// Create default environment if none exists
 	if err := ensureDefaultEnvironment(ctx, repos); err != nil {
 		log.Printf("Warning: Failed to create default environment: %v", err)
 	}
+
+	// Automatic DeclarativeSync on startup for Docker container deployment
+	log.Printf("🔄 Running automatic sync for environment: %s", environmentName)
+	syncer := services.NewDeclarativeSync(repos, cfg)
+	syncResult, err := syncer.SyncEnvironment(ctx, environmentName, services.SyncOptions{
+		DryRun:      false,
+		Validate:    false,
+		Interactive: false, // Non-interactive for Docker containers
+		Verbose:     true,  // Verbose for debugging
+		Confirm:     false,
+	})
+	if err != nil {
+		return fmt.Errorf("CRITICAL: Environment sync failed for '%s' - startup aborted. Docker containers require fully rendered environment. Error: %w", environmentName, err)
+	}
+	log.Printf("✅ Sync completed - Agents: %d processed, %d synced | MCP Servers: %d processed, %d connected",
+		syncResult.AgentsProcessed, syncResult.AgentsSynced, syncResult.MCPServersProcessed, syncResult.MCPServersConnected)
 
 	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)
@@ -155,7 +177,7 @@ func runMainServer() error {
 			agentSvc,
 			repos,
 			cfg.CloudShip.RegistrationKey,
-			"default", // TODO: use actual environment name
+			environmentName, // Use actual environment name
 		)
 
 		// Start remote control service
@@ -169,11 +191,6 @@ func runMainServer() error {
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
 
-	// Get environment name from viper config (defaults to "default")
-	environmentName := viper.GetString("serve_environment")
-	if environmentName == "" {
-		environmentName = "default"
-	}
 	log.Printf("🤖 Serving agents from environment: %s", environmentName)
 
 	sshServer := ssh.New(cfg, database, repos, agentSvc, localMode)
