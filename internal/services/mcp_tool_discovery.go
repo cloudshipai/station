@@ -61,8 +61,8 @@ func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64,
 // discoverToolsPerServer connects to each MCP server individually and returns tools mapped by server name
 func (s *DeclarativeSync) discoverToolsPerServer(ctx context.Context, mcpConnManager *MCPConnectionManager, fileConfig *repositories.FileConfigRecord) (map[string][]ai.Tool, []*mcp.GenkitMCPClient, error) {
 	// Read and process the config file (similar to processFileConfig but with individual server processing)
-	configDir := os.ExpandEnv("$HOME/.config/station")
-	absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
+	// TemplatePath is already an absolute path, don't concatenate it again
+	absolutePath := fileConfig.TemplatePath
 	
 	rawContent, err := os.ReadFile(absolutePath)
 	if err != nil {
@@ -70,6 +70,7 @@ func (s *DeclarativeSync) discoverToolsPerServer(ctx context.Context, mcpConnMan
 	}
 
 	// Process template variables
+	configDir := os.ExpandEnv("$HOME/.config/station")
 	templateService := NewTemplateVariableService(configDir, s.repos)
 	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 	if err != nil {

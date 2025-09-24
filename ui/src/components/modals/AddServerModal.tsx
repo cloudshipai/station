@@ -53,7 +53,9 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
       setShowSuccess(true);
     } catch (error) {
       console.error('Failed to create MCP server:', error);
-      setResponse({ error: 'Failed to create MCP server' });
+      // Extract error message from API response if available
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to create MCP server';
+      setResponse({ error: errorMessage });
     } finally {
       setIsLoading(false);
     }

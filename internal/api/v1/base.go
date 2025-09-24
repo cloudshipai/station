@@ -61,8 +61,8 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Add telemetry middleware
 	router.Use(h.telemetryMiddleware())
 	
-	// Create auth middleware
-	authMiddleware := auth.NewAuthMiddleware(h.repos)
+	// Create auth middleware with local mode setting
+	authMiddleware := auth.NewAuthMiddlewareWithLocalMode(h.repos, h.localMode)
 	
 	// In server mode, all routes require authentication
 	if !h.localMode {
@@ -71,15 +71,14 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	
 	// Environment routes
 	envGroup := router.Group("/environments")
-	// In server mode, only admins can manage environments  
+	// In server mode, only admins can manage environments
 	if !h.localMode {
 		envGroup.Use(h.requireAdminInServerMode())
 	}
 	h.registerEnvironmentRoutes(envGroup)
 
-	// MCP Config routes temporarily disabled during config migration
-	_ = envGroup.Group("/:env_id/mcp-configs") // Unused during migration
-	// h.registerMCPConfigRoutes(mcpGroup) // Temporarily disabled during config migration
+	// MCP server management routes (file-based configuration)
+	h.registerMCPManagementRoutes(envGroup)
 
 	// Tools routes (nested under environments)
 	toolsGroup := envGroup.Group("/:env_id/tools")
@@ -140,6 +139,13 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
 
+	// MCP API bridge route - admin only in server mode
+	mcpGroup := router.Group("/mcp")
+	if !h.localMode {
+		mcpGroup.Use(h.requireAdminInServerMode())
+	}
+	h.registerMCPRoutes(mcpGroup)
+
 	// CloudShip lighthouse status
 	router.GET("/lighthouse/status", h.LighthouseStatusHandler)
 }
@@ -177,8 +183,14 @@ func (h *APIHandlers) syncConfigurations(c *gin.Context) {
 	// Import the os/exec package for running the stn sync command
 	// For now, return a success response - actual implementation would call stn sync
 	c.JSON(http.StatusOK, gin.H{
-		"status": "success", 
+		"status": "success",
 		"message": "Configuration sync triggered successfully",
 		"timestamp": "2025-08-17T22:45:00Z",
 	})
+}
+
+// registerMCPRoutes registers MCP tool bridge routes
+func (h *APIHandlers) registerMCPRoutes(mcpGroup *gin.RouterGroup) {
+	// For now, this can be empty as we're using existing REST endpoints
+	// Future: Could add direct MCP tool bridging if needed
 }

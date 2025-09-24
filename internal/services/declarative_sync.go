@@ -254,7 +254,7 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 // processJSONTemplatesParallel processes multiple JSON templates in parallel
 func (s *DeclarativeSync) processJSONTemplatesParallel(ctx context.Context, jsonFiles []string, environmentName string, templateService *TemplateVariableService, options SyncOptions) (*SyncResult, error) {
 	// Create worker pool with configurable concurrency
-	maxWorkers := getEnvIntOrDefault("STATION_SYNC_TEMPLATE_WORKERS", 3) // Default: 3 workers
+	maxWorkers := getEnvIntOrDefault("STATION_SYNC_TEMPLATE_WORKERS", 1) // Default: 1 worker to avoid SQLite locking
 	if len(jsonFiles) < maxWorkers {
 		maxWorkers = len(jsonFiles)
 	}
@@ -412,8 +412,10 @@ func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, conf
 	if serversCount > 0 && !options.DryRun {
 		toolsDiscovered, err := s.performToolDiscovery(ctx, env.ID, configName)
 		if err != nil {
+			// Show tool discovery failure during verbose output
+			fmt.Printf("   ❌ Tool discovery failed for %s: %v\n", configName, err)
 			// Don't treat tool discovery failure as fatal - servers are still synced
-			result.validationMessages = append(result.validationMessages, 
+			result.validationMessages = append(result.validationMessages,
 				fmt.Sprintf("Template %s: Tool discovery failed - %v", configName, err))
 		} else {
 			fmt.Printf("   🔧 Discovered %d tools from MCP servers\n", toolsDiscovered)
@@ -558,26 +560,9 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 
 // registerOrUpdateFileConfig registers or updates a file config in the database
 func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID int64, configName, jsonFile, envDir string, templateResult *VariableResolutionResult, options SyncOptions) error {
-	// Calculate relative path from workspace
-	var workspaceDir string
-	if s.config.Workspace != "" {
-		workspaceDir = s.config.Workspace
-	} else {
-		configHome := os.Getenv("XDG_CONFIG_HOME")
-		if configHome == "" {
-			homeDir, _ := os.UserHomeDir()
-			configHome = filepath.Join(homeDir, ".config")
-		}
-		workspaceDir = filepath.Join(configHome, "station")
-	}
-	
-	// Make template path relative to workspace
-	relativePath, err := filepath.Rel(workspaceDir, jsonFile)
-	if err != nil {
-		// Fallback to absolute path if relative calculation fails
-		relativePath = jsonFile
-	}
-	
+	// Always use absolute path for template files to ensure consistent access
+	// from different working directories (API vs sync)
+
 	// Check if file config already exists
 	existingConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
 	if err != nil {
@@ -585,7 +570,7 @@ func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID 
 		fileConfig := &repositories.FileConfigRecord{
 			EnvironmentID:            envID,
 			ConfigName:               configName,
-			TemplatePath:             relativePath,
+			TemplatePath:             jsonFile, // Use absolute path instead of relative
 			VariablesPath:            "variables.yml", // Standard variables file
 			TemplateSpecificVarsPath: "",
 			LastLoadedAt:             &time.Time{}, // Set to current time

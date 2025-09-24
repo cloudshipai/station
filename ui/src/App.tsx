@@ -796,24 +796,23 @@ const MCPServersPage = () => {
 
   // Function to delete MCP server
   const handleDeleteMCPServer = async (serverId: number, serverName: string) => {
-    if (!confirm(`Are you sure you want to delete the MCP server "${serverName}"? This will remove it from the environment and clean up associated database records.`)) {
+    if (!confirm(`Are you sure you want to delete the MCP server "${serverName}"? This will remove it from both the database and any template files, and clean up associated records.`)) {
       return;
     }
 
     try {
-      const envId = environmentContext?.selectedEnvironment;
-      if (!envId) {
-        alert('No environment selected');
-        return;
-      }
-
-      // Call the new API endpoint to delete MCP server from environment
-      await apiClient.delete(`/environments/${envId}/mcp-servers/${encodeURIComponent(serverName)}`);
+      // Call the individual server delete endpoint which handles both DB and template cleanup
+      const response = await apiClient.delete(`/mcp-servers/${serverId}`);
 
       // Refresh the servers list
       await fetchMCPServers();
 
-      alert(`MCP server "${serverName}" deleted successfully`);
+      // Show success message with details if available
+      if (response.data?.template_deleted) {
+        alert(`MCP server "${serverName}" deleted successfully from both database and template files.`);
+      } else {
+        alert(`MCP server "${serverName}" deleted successfully from database. ${response.data?.template_cleanup_note || ''}`);
+      }
     } catch (error) {
       console.error('Failed to delete MCP server:', error);
       alert('Failed to delete MCP server. Check console for details.');
@@ -930,19 +929,6 @@ const MCPServersPage = () => {
     <div className="h-full flex flex-col bg-tokyo-bg">
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
         <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              // TODO: Add MCP server modal
-              alert('Add MCP Server functionality coming soon!');
-            }}
-            className="px-3 py-1.5 bg-tokyo-green hover:bg-green-600 text-tokyo-bg rounded font-mono text-sm flex items-center gap-1"
-            title="Add new MCP server"
-          >
-            <Plus className="h-4 w-4" />
-            Add Server
-          </button>
-        </div>
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         {filteredServers.length === 0 ? (

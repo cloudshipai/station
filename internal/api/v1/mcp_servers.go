@@ -10,13 +10,14 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"station/internal/services"
 )
 
-// MCP Server request structure
+// MCP Server request structure - supports both string and object config formats
 type MCPServerRequest struct {
-	Name        string `json:"name" binding:"required"`
-	Config      string `json:"config" binding:"required"`
-	Environment string `json:"environment" binding:"required"`
+	Name        string      `json:"name" binding:"required"`
+	Config      interface{} `json:"config" binding:"required"`
+	Environment string      `json:"environment" binding:"required"`
 }
 
 // MCP Server response structure
@@ -125,9 +126,33 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		return
 	}
 
-	// Validate JSON config
+	// Convert config to string if it's an object, and validate JSON
+	var configString string
+	switch cfg := req.Config.(type) {
+	case string:
+		configString = cfg
+	case map[string]interface{}, []interface{}:
+		// Config was sent as an object - convert to JSON string
+		configBytes, err := json.Marshal(cfg)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, MCPServerResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to marshal config object: %v", err),
+			})
+			return
+		}
+		configString = string(configBytes)
+	default:
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   "Config must be a JSON string or object",
+		})
+		return
+	}
+
+	// Validate that the config string is valid JSON
 	var configData interface{}
-	if err := json.Unmarshal([]byte(req.Config), &configData); err != nil {
+	if err := json.Unmarshal([]byte(configString), &configData); err != nil {
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Invalid JSON configuration: %v", err),
@@ -171,7 +196,7 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	}
 
 	// Write the config to file
-	if err := os.WriteFile(configFilePath, []byte(req.Config), 0644); err != nil {
+	if err := os.WriteFile(configFilePath, []byte(configString), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, MCPServerResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Failed to write config file: %v", err),
@@ -194,10 +219,83 @@ func (h *APIHandlers) updateMCPServer(c *gin.Context) {
 	c.JSON(http.StatusNotImplemented, gin.H{"error": "Update MCP server not implemented"})
 }
 
-// deleteMCPServer deletes an MCP server
+// deleteMCPServer deletes an MCP server from both database and template files
 func (h *APIHandlers) deleteMCPServer(c *gin.Context) {
-	// Implementation would go here
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "Delete MCP server not implemented"})
+	serverID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	// Get the server first to check if it exists
+	server, err := h.repos.MCPServers.GetByID(serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "MCP server not found"})
+		return
+	}
+
+	// Get environment information for template cleanup
+	environment, err := h.repos.Environments.GetByID(server.EnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get environment information"})
+		return
+	}
+
+	// Use MCP management service for comprehensive cleanup (both DB and template)
+	mcpService := services.NewMCPServerManagementService(h.repos)
+
+	// First delete from database (tools, file configs, server record)
+	if err := h.repos.MCPTools.DeleteByServerID(serverID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete MCP server tools"})
+		return
+	}
+
+	// Delete file config records and actual config file if they exist
+	if server.FileConfigID != nil {
+		// Get file config to find the template path
+		fileConfig, err := h.repos.FileMCPConfigs.GetByID(*server.FileConfigID)
+		if err == nil && fileConfig.TemplatePath != "" {
+			// Delete the actual config file from filesystem
+			if err := os.Remove(fileConfig.TemplatePath); err != nil {
+				// Log error but don't fail the entire operation
+				fmt.Printf("Warning: Failed to delete config file %s: %v\n", fileConfig.TemplatePath, err)
+			}
+		}
+
+		// Delete the file config record from database
+		if err := h.repos.FileMCPConfigs.Delete(*server.FileConfigID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file config"})
+			return
+		}
+	}
+
+	// Delete the server from database
+	if err := h.repos.MCPServers.Delete(serverID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete MCP server"})
+		return
+	}
+
+	// Also attempt to delete from template.json (if it exists there)
+	// This is a best-effort cleanup - we don't fail if template cleanup fails
+	templateResult := mcpService.DeleteMCPServerFromEnvironment(environment.Name, server.Name)
+
+	response := gin.H{
+		"message": fmt.Sprintf("MCP server '%s' deleted successfully", server.Name),
+		"server_id": serverID,
+		"server_name": server.Name,
+		"database_deleted": true,
+	}
+
+	// Add template cleanup status if it was attempted
+	if templateResult.Success {
+		response["template_deleted"] = true
+		response["message"] = fmt.Sprintf("MCP server '%s' deleted successfully from both database and template", server.Name)
+	} else {
+		response["template_deleted"] = false
+		response["template_cleanup_note"] = "Template cleanup skipped (server not in template.json)"
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // getMCPServerTools gets all tools for a specific MCP server
