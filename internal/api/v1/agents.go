@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"station/internal/auth"
 	"station/internal/services"
@@ -124,21 +125,49 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 		return
 	}
 
-	// For direct execution (not queued), we'll use a simplified approach
-	// In a production system, this would:
-	// 1. Load agent configuration and tools
-	// 2. Set up MCP connections
-	// 3. Execute the task with the Claude API
-	// 4. Stream results back to client
+	// Execute agent in background goroutine to avoid blocking the API response
+	go func() {
+		ctx := context.Background()
 
-	// For now, return a placeholder response indicating the execution was received
+		// Create run record
+		userID := int64(1) // Console user for local execution
+
+		// Based on working examples in the codebase, use the full signature
+		agentRun, err := h.repos.AgentRuns.Create(ctx, agentID, userID, req.Task, "", 0, nil, nil, "running", nil)
+		if err != nil {
+			log.Printf("❌ Failed to create agent run: %v", err)
+			return
+		}
+
+		log.Printf("🚀 Starting agent execution for run ID: %d", agentRun.ID)
+
+		// Execute the agent using the full agent execution engine with proper signature
+		response, err := h.agentService.ExecuteAgentWithRunID(ctx, agentID, req.Task, agentRun.ID, nil)
+		if err != nil {
+			log.Printf("❌ Agent execution failed: %v", err)
+			// Update run status to failed using string constant
+			h.repos.AgentRuns.UpdateStatus(ctx, agentRun.ID, "failed")
+		} else {
+			log.Printf("✅ Agent execution completed successfully for run ID: %d", agentRun.ID)
+			// Update run with completion response and status
+			finalResponse := ""
+			if response != nil {
+				finalResponse = response.Content
+			}
+			// Mark run as completed with final response
+			completedAt := time.Now()
+			h.repos.AgentRuns.UpdateCompletion(ctx, agentRun.ID, finalResponse, 0, nil, nil, "completed", &completedAt)
+		}
+	}()
+
+	// Return immediate response
 	c.JSON(http.StatusAccepted, gin.H{
-		"message":    "Agent execution initiated (direct mode)",
+		"message":    "Agent execution initiated (async mode)",
 		"agent_id":   agentID,
 		"agent_name": agent.Name,
 		"task":       req.Task,
-		"status":     "executing",
-		"note":       "Direct execution is simplified - use queue endpoint for full execution with streaming",
+		"status":     "running",
+		"note":       "Agent is executing in background - check /runs endpoint for progress",
 	})
 }
 

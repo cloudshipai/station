@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -247,6 +247,7 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/runs')) return 'runs';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
+    if (path.startsWith('/connect')) return 'connect';
     return 'agents'; // default
   };
 
@@ -282,6 +283,7 @@ const Layout = ({ children }: any) => {
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
+    { id: 'connect', label: 'Connect', icon: Link, path: '/connect' },
   ];
 
   return (
@@ -1981,6 +1983,181 @@ const RawConfigEditorModal = ({
   );
 };
 
+// Connect Page Component
+const ConnectPage = () => {
+  const [copied, setCopied] = useState('');
+
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(type);
+    setTimeout(() => setCopied(''), 2000);
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-tokyo-bg">
+      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
+        <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">Connect to Station</h1>
+      </div>
+
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-4xl mx-auto space-y-8">
+          {/* Introduction */}
+          <div className="bg-tokyo-dark1 border border-tokyo-blue7 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Link className="h-6 w-6 text-tokyo-cyan" />
+              <h2 className="text-lg font-mono font-semibold text-tokyo-cyan">Connect Your AI Tools</h2>
+            </div>
+            <p className="text-tokyo-comment font-mono mb-4">
+              Station exposes your agents and tools via MCP (Model Context Protocol) for integration with AI tools like Claude Code and Cursor.
+            </p>
+            <div className="bg-tokyo-bg border border-tokyo-orange7 rounded p-3">
+              <p className="text-tokyo-orange font-mono text-sm">
+                <strong>🚀 Endpoint:</strong> Station's MCP server runs on <code className="bg-tokyo-dark2 px-1 rounded">http://localhost:3000/mcp</code> (Streamable HTTP transport)
+              </p>
+            </div>
+          </div>
+
+          {/* Claude Code Configuration */}
+          <div className="bg-tokyo-dark1 border border-tokyo-blue7 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-mono font-semibold text-tokyo-blue">Claude Code Configuration</h3>
+              <button
+                onClick={() => copyToClipboard('claude mcp add --transport sse station http://localhost:3000/mcp', 'claude')}
+                className="px-3 py-1 bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg rounded font-mono text-sm"
+              >
+                {copied === 'claude' ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+
+            <p className="text-tokyo-comment font-mono mb-4">Add Station as an MCP server in Claude Code:</p>
+
+            <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-4 mb-4">
+              <code className="text-tokyo-fg font-mono text-sm">
+                claude mcp add --transport sse station http://localhost:3000/mcp
+              </code>
+            </div>
+
+            <div className="bg-tokyo-dark2 border border-tokyo-blue7 rounded p-4">
+              <h4 className="text-sm font-mono font-medium text-tokyo-blue mb-2">Alternative: Manual Configuration</h4>
+              <p className="text-tokyo-comment font-mono text-xs mb-3">
+                Add to your Claude Code settings.json (usually in ~/.config/claude-code/):
+              </p>
+              <pre className="text-xs bg-tokyo-bg p-3 rounded border border-tokyo-blue7 overflow-x-auto text-tokyo-fg font-mono">
+{`{
+  "mcpServers": {
+    "station": {
+      "command": "curl",
+      "args": [
+        "-X", "POST",
+        "-H", "Content-Type: application/json",
+        "http://localhost:3000/mcp"
+      ],
+      "transport": "sse"
+    }
+  }
+}`}
+              </pre>
+            </div>
+          </div>
+
+          {/* Cursor Configuration */}
+          <div className="bg-tokyo-dark1 border border-tokyo-purple7 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-mono font-semibold text-tokyo-purple">Cursor Configuration</h3>
+              <button
+                onClick={() => copyToClipboard(`{
+  "mcpServers": {
+    "station": {
+      "command": "node",
+      "args": ["-e", "require('http').request('http://localhost:3000/mcp', {method: 'POST', headers: {'Content-Type': 'application/json'}})"],
+      "transport": "http"
+    }
+  }
+}`, 'cursor')}
+                className="px-3 py-1 bg-tokyo-purple hover:bg-purple-600 text-tokyo-bg rounded font-mono text-sm"
+              >
+                {copied === 'cursor' ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+
+            <p className="text-tokyo-comment font-mono mb-4">Add to your Cursor settings.json:</p>
+
+            <pre className="text-xs bg-tokyo-bg p-4 rounded border border-tokyo-purple7 overflow-x-auto text-tokyo-fg font-mono">
+{`{
+  "mcpServers": {
+    "station": {
+      "command": "node",
+      "args": [
+        "-e",
+        "require('http').request('http://localhost:3000/mcp', {method: 'POST', headers: {'Content-Type': 'application/json'}})"
+      ],
+      "transport": "http"
+    }
+  }
+}`}
+            </pre>
+          </div>
+
+          {/* Connection Testing */}
+          <div className="bg-tokyo-dark1 border border-tokyo-green7 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <CircleCheck className="h-6 w-6 text-tokyo-green" />
+              <h3 className="text-lg font-mono font-semibold text-tokyo-green">Test Your Connection</h3>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-mono font-medium text-tokyo-green mb-2">1. Verify Station is Running</h4>
+                <p className="text-tokyo-comment font-mono text-sm mb-2">Check that Station is running with MCP enabled:</p>
+                <div className="bg-tokyo-bg border border-tokyo-green7 rounded p-3">
+                  <code className="text-tokyo-fg font-mono text-sm">curl http://localhost:3000/mcp</code>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-mono font-medium text-tokyo-green mb-2">2. Test in Claude Code</h4>
+                <p className="text-tokyo-comment font-mono text-sm">After adding the server, you should see Station tools available in Claude Code.</p>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-mono font-medium text-tokyo-green mb-2">3. Available Tools</h4>
+                <p className="text-tokyo-comment font-mono text-sm">
+                  Station will expose all your agent execution tools, environment management, and MCP server tools.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Troubleshooting */}
+          <div className="bg-tokyo-dark1 border border-tokyo-orange7 rounded-lg p-6">
+            <h3 className="text-lg font-mono font-semibold text-tokyo-orange mb-4">Troubleshooting</h3>
+
+            <div className="space-y-4 text-sm font-mono">
+              <div>
+                <h4 className="text-tokyo-orange font-medium mb-1">Connection Refused</h4>
+                <p className="text-tokyo-comment">• Ensure Station is running with <code className="bg-tokyo-dark2 px-1 rounded">stn serve</code></p>
+                <p className="text-tokyo-comment">• Check that MCP port 3000 is not blocked by firewall</p>
+              </div>
+
+              <div>
+                <h4 className="text-tokyo-orange font-medium mb-1">Tools Not Appearing</h4>
+                <p className="text-tokyo-comment">• Run <code className="bg-tokyo-dark2 px-1 rounded">stn sync</code> to refresh your environment</p>
+                <p className="text-tokyo-comment">• Restart your AI tool after adding the MCP server</p>
+              </div>
+
+              <div>
+                <h4 className="text-tokyo-orange font-medium mb-1">SSE Timeout Issues</h4>
+                <p className="text-tokyo-comment">• Consider using the newer HTTP Stream transport if available</p>
+                <p className="text-tokyo-comment">• Check network configuration for persistent connections</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -1998,6 +2175,7 @@ function App() {
                   <Route path="/runs" element={<RunsPage />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />
+                  <Route path="/connect" element={<ConnectPage />} />
                   <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
                   <Route path="*" element={<AgentsCanvas />} />
                 </Routes>
