@@ -116,9 +116,11 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	base := client.Container().From("ubuntu:22.04")
 
 	base = base.WithExec([]string{"apt-get", "update"}).
-		WithExec([]string{"apt-get", "install", "-y", "ca-certificates", "curl", "sqlite3", "git"}).
+		WithExec([]string{"apt-get", "install", "-y", "ca-certificates", "curl", "sqlite3", "git", "python3", "python3-pip", "python3-venv"}).
 		WithExec([]string{"bash", "-c", "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"}).
-		WithExec([]string{"apt-get", "install", "-y", "nodejs"})
+		WithExec([]string{"apt-get", "install", "-y", "nodejs"}).
+		WithExec([]string{"bash", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"}).
+		WithExec([]string{"bash", "-c", "ln -sf /root/.cargo/bin/uv /usr/local/bin/uv && ln -sf /root/.cargo/bin/uvx /usr/local/bin/uvx"})
 
 	// Build the station binary first
 	if err := b.buildStationBinary(); err != nil {
@@ -159,7 +161,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	base = base.WithFile(dbPath, dbFile)
 
 	base = base.WithWorkdir("/root").
-		WithEnvVariable("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
+		WithEnvVariable("PATH", "/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/bin:/bin")
 
 	// Build stn init command with proper flags
 	initArgs := []string{"stn", "init", 
@@ -199,13 +201,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 		base = base.WithEnvVariable("AI_API_KEY", key)
 	}
 	
-	// Create a minimal variables.yml file with actual API key from environment variables
-	apiKeyValue := os.Getenv("OPENAI_API_KEY")
-	if apiKeyValue == "" {
-		apiKeyValue = ""
-	}
-	variablesContent := fmt.Sprintf("OPENAI_API_KEY: \"%s\"", apiKeyValue)
-	base = base.WithExec([]string{"bash", "-c", fmt.Sprintf("mkdir -p /root/.config/station/environments/default && echo '%s' > /root/.config/station/environments/default/variables.yml", variablesContent)})
+	// Station's serve command will handle template variable processing with runtime environment variables
 
 	// Install Ship CLI before running sync to prevent MCP failures
 	log.Printf("🚢 Installing Ship CLI in container for sync process...")
@@ -275,7 +271,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	}
 	
 	// Set environment variables that persist at runtime
-	base = base.WithEnvVariable("PATH", "/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	base = base.WithEnvVariable("PATH", "/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 	
 	// Set working directory to /workspace for CI/CD operations
 	base = base.WithWorkdir("/workspace")
