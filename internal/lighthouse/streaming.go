@@ -73,7 +73,13 @@ func (lc *LighthouseClient) startBackgroundWorkers() {
 			}
 		}()
 
-		// Heartbeat worker (serve mode and stdio mode)
+		// NOTE: Heartbeat worker removed for stdio/serve modes to prevent "too_many_pings" issue
+		// Management channel handles connection health and reconnection automatically
+		// This eliminates dual heartbeat conflict with management channel keepalives
+	}
+
+	// Heartbeat worker (CLI mode only - ephemeral connections)
+	if lc.mode == ModeCLI {
 		lc.wg.Add(1)
 		go func() {
 			defer lc.wg.Done()
@@ -136,7 +142,8 @@ func (lc *LighthouseClient) sendHealthSync(req *proto.SystemHealthRequest) {
 	}
 }
 
-// sendHeartbeat sends periodic heartbeat (serve mode only)
+// sendHeartbeat sends periodic heartbeat (CLI mode only)
+// Note: stdio/serve modes use management channel for connection health
 func (lc *LighthouseClient) sendHeartbeat() {
 	if !lc.IsConnected() {
 		return

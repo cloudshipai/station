@@ -295,10 +295,59 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("configuration not initialized")
 	}
 
-	// Validate encryption key
+	// Validate encryption key - check config first, then environment variables
 	encryptionKey := viper.GetString("encryption_key")
 	if encryptionKey == "" {
-		return fmt.Errorf("encryption key not found in configuration. Please run 'station init' to generate keys")
+		// Check for environment variable as fallback (for Docker containers)
+		encryptionKey = os.Getenv("STATION_ENCRYPTION_KEY")
+		if encryptionKey == "" {
+			return fmt.Errorf("encryption key not found in configuration. Please run 'station init' to generate keys or set STATION_ENCRYPTION_KEY environment variable")
+		}
+		// Set the encryption key in viper for other components to use
+		viper.Set("encryption_key", encryptionKey)
+	}
+
+	// Load other essential configuration from environment variables if not in config
+	if envProvider := os.Getenv("STATION_AI_PROVIDER"); envProvider != "" && viper.GetString("ai_provider") == "" {
+		viper.Set("ai_provider", envProvider)
+	}
+	if envModel := os.Getenv("STATION_AI_MODEL"); envModel != "" && viper.GetString("ai_model") == "" {
+		viper.Set("ai_model", envModel)
+	}
+	if envAPIPort := os.Getenv("STATION_API_PORT"); envAPIPort != "" && viper.GetInt("api_port") == 0 {
+		viper.Set("api_port", envAPIPort)
+	}
+	if envMCPPort := os.Getenv("STATION_MCP_PORT"); envMCPPort != "" && viper.GetInt("mcp_port") == 0 {
+		viper.Set("mcp_port", envMCPPort)
+	}
+	if envSSHPort := os.Getenv("STATION_SSH_PORT"); envSSHPort != "" && viper.GetInt("ssh_port") == 0 {
+		viper.Set("ssh_port", envSSHPort)
+	}
+	if envLocalMode := os.Getenv("STATION_LOCAL_MODE"); envLocalMode != "" && !viper.IsSet("local_mode") {
+		viper.Set("local_mode", envLocalMode == "true")
+	}
+	if envDebug := os.Getenv("STATION_DEBUG"); envDebug != "" && !viper.IsSet("debug") {
+		viper.Set("debug", envDebug == "true")
+	}
+	if envTelemetry := os.Getenv("STATION_TELEMETRY_ENABLED"); envTelemetry != "" && !viper.IsSet("telemetry_enabled") {
+		viper.Set("telemetry_enabled", envTelemetry == "true")
+	}
+	if envAdminUsername := os.Getenv("STATION_ADMIN_USERNAME"); envAdminUsername != "" && viper.GetString("admin_username") == "" {
+		viper.Set("admin_username", envAdminUsername)
+	}
+
+	// CloudShip configuration via environment variables for Docker runtime
+	if envCloudShipEnabled := os.Getenv("STN_CLOUDSHIP_ENABLED"); envCloudShipEnabled != "" && !viper.IsSet("cloudship.enabled") {
+		viper.Set("cloudship.enabled", envCloudShipEnabled == "true")
+	}
+	if envCloudShipKey := os.Getenv("STN_CLOUDSHIP_KEY"); envCloudShipKey != "" && viper.GetString("cloudship.registration_key") == "" {
+		viper.Set("cloudship.registration_key", envCloudShipKey)
+	}
+	if envCloudShipEndpoint := os.Getenv("STN_CLOUDSHIP_ENDPOINT"); envCloudShipEndpoint != "" && viper.GetString("cloudship.endpoint") == "" {
+		viper.Set("cloudship.endpoint", envCloudShipEndpoint)
+	}
+	if envCloudShipStationID := os.Getenv("STN_CLOUDSHIP_STATION_ID"); envCloudShipStationID != "" && viper.GetString("cloudship.station_id") == "" {
+		viper.Set("cloudship.station_id", envCloudShipStationID)
 	}
 
 	fmt.Printf("🚀 Starting Station...\n")

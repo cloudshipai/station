@@ -33,10 +33,13 @@ build-with-ui: build-ui
 local-install: build
 	mv ./bin/stn ~/.local/bin
 
-# Build and install with UI embedded
-local-install-ui: build-with-ui
+# Build and install with UI embedded, kill old processes
+local-install-ui: stop-station build-with-ui
 	mv ./bin/stn ~/.local/bin
 	@echo "✅ Installed Station with embedded UI to ~/.local/bin"
+	@echo "📋 Ready for manual startup:"
+	@echo "   Start: stn stdio --dev"
+	@echo "   Monitor: tail -f /tmp/station-stdio-debug.log"
 
 # Release targets
 tag-check:

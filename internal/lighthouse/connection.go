@@ -29,11 +29,12 @@ func (lc *LighthouseClient) connect() error {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	// Configure keep-alive with 2024 best practices
+	// Configure keep-alive with CloudShip-compatible settings
+	// CloudShip considers frequent pings as spam, so use conservative settings
 	keepaliveParams := keepalive.ClientParameters{
-		Time:                10 * time.Second, // Ping every 10s for quick failure detection
-		Timeout:             5 * time.Second,  // Wait 5s for ping response
-		PermitWithoutStream: true,             // Allow pings even without active streams
+		Time:                60 * time.Second, // Ping every 60s (much more conservative)
+		Timeout:             10 * time.Second, // Wait 10s for ping response
+		PermitWithoutStream: false,            // Only ping when there are active streams
 	}
 	opts = append(opts, grpc.WithKeepaliveParams(keepaliveParams))
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"time"
 
 	"station/internal/lighthouse"
@@ -12,14 +13,24 @@ import (
 	"station/internal/logging"
 )
 
+// RegistrationState represents the current registration status
+type RegistrationState int
+
+const (
+	RegistrationStateUnregistered RegistrationState = iota
+	RegistrationStateRegistered
+	RegistrationStateRejectedLimit // Rejected due to 1:1 limit - should not retry
+)
+
 // ManagementChannelService handles the bidirectional ManagementChannel streaming
 type ManagementChannelService struct {
-	lighthouseClient  *lighthouse.LighthouseClient
-	managementHandler *ManagementHandlerService
-	registrationKey   string
-	connectionCtx     context.Context
-	connectionCancel  context.CancelFunc
-	currentStream     proto.LighthouseService_ManagementChannelClient
+	lighthouseClient   *lighthouse.LighthouseClient
+	managementHandler  *ManagementHandlerService
+	registrationKey    string
+	connectionCtx      context.Context
+	connectionCancel   context.CancelFunc
+	currentStream      proto.LighthouseService_ManagementChannelClient
+	registrationState  RegistrationState
 }
 
 // NewManagementChannelService creates a new management channel service
@@ -29,9 +40,10 @@ func NewManagementChannelService(
 	registrationKey string,
 ) *ManagementChannelService {
 	return &ManagementChannelService{
-		lighthouseClient:  lighthouseClient,
-		managementHandler: managementHandler,
-		registrationKey:   registrationKey,
+		lighthouseClient:   lighthouseClient,
+		managementHandler:  managementHandler,
+		registrationKey:    registrationKey,
+		registrationState:  RegistrationStateUnregistered,
 	}
 }
 
@@ -60,11 +72,12 @@ func (mcs *ManagementChannelService) Stop() error {
 	return nil
 }
 
-// maintainConnection handles connection lifecycle and reconnection with 2024 best practices
+// maintainConnection handles connection lifecycle and reconnection with proper state management
 func (mcs *ManagementChannelService) maintainConnection() {
 	retryDelay := 1 * time.Second
 	maxRetryDelay := 30 * time.Second
 	baseDelay := 1 * time.Second
+	rejectedStateCheckInterval := 30 * time.Second // Check if other station disconnected
 
 	for {
 		select {
@@ -72,26 +85,55 @@ func (mcs *ManagementChannelService) maintainConnection() {
 			logging.Info("Management channel connection context cancelled")
 			return
 		default:
+			// If we're in rejected state, don't try to establish connection - just wait
+			if mcs.registrationState == RegistrationStateRejectedLimit {
+				logging.Debug("Registration state is REJECTED_LIMIT, waiting %v before checking if other station disconnected", rejectedStateCheckInterval)
+				time.Sleep(rejectedStateCheckInterval)
+
+				// Reset state to try again - maybe the other station disconnected
+				mcs.registrationState = RegistrationStateUnregistered
+				logging.Info("Resetting registration state to UNREGISTERED to check if other station disconnected")
+				continue
+			}
+
+			// Check if we already have an active connection
+			if mcs.currentStream != nil {
+				logging.Debug("Management channel stream already active, waiting...")
+				time.Sleep(5 * time.Second) // Check every 5 seconds if connection is still alive
+				continue
+			}
+
 			if err := mcs.establishConnection(); err != nil {
-				// Add jitter to prevent thundering herd
-				jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
-				actualDelay := retryDelay + jitter
+				// Check if this is a registration rejection (1:1 limit reached)
+				isRegistrationRejected := strings.Contains(err.Error(), "already has") &&
+										 strings.Contains(err.Error(), "online stations")
 
-				logging.Error("Management channel connection failed: %v, retrying in %v", err, actualDelay)
+				if isRegistrationRejected {
+					// Set state to rejected and stop trying
+					mcs.registrationState = RegistrationStateRejectedLimit
+					logging.Error("Management channel registration rejected (1:1 limit): %v. Entering REJECTED_LIMIT state - will check again in %v", err, rejectedStateCheckInterval)
+					continue // Will hit the rejected state check above
+				} else {
+					// Normal exponential backoff for connection failures
+					jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
+					actualDelay := retryDelay + jitter
+					logging.Error("Management channel connection failed: %v, retrying in %v", err, actualDelay)
 
-				// Sleep with jitter
-				time.Sleep(actualDelay)
+					time.Sleep(actualDelay)
 
-				// Exponential backoff: multiply by 1.5 with cap at maxRetryDelay
-				retryDelay = time.Duration(float64(retryDelay) * 1.5)
-				if retryDelay > maxRetryDelay {
-					retryDelay = maxRetryDelay
+					// Exponential backoff: multiply by 1.5 with cap at maxRetryDelay
+					retryDelay = time.Duration(float64(retryDelay) * 1.5)
+					if retryDelay > maxRetryDelay {
+						retryDelay = maxRetryDelay
+					}
 				}
 				continue
 			}
 
-			// Reset retry delay on successful connection
+			// Successful connection - reset retry delay and set registered state
 			retryDelay = baseDelay
+			mcs.registrationState = RegistrationStateRegistered
+			logging.Info("Successfully registered with CloudShip management channel")
 		}
 	}
 }
@@ -146,71 +188,63 @@ func (mcs *ManagementChannelService) establishConnection() error {
 
 	logging.Info("Sent station registration to CloudShip")
 
-	// Start goroutines for sending and receiving
-	errChan := make(chan error, 2)
-
-	// Goroutine for receiving messages from CloudShip
+	// Start goroutine for receiving messages from CloudShip
+	// This goroutine will run independently and handle connection errors
 	go func() {
-		errChan <- mcs.receiveMessages(stream)
+		if err := mcs.receiveMessages(stream); err != nil {
+			logging.Error("Management channel receive error: %v", err)
+			// Clear stream reference on error
+			mcs.currentStream = nil
+			// Connection will be retried by maintainConnection loop
+		}
 	}()
 
-	// Wait for error or context cancellation
-	select {
-	case <-mcs.connectionCtx.Done():
-		// Clear stream reference on context cancellation
-		mcs.currentStream = nil
-		return mcs.connectionCtx.Err()
-	case err := <-errChan:
-		// Clear stream reference on error
-		mcs.currentStream = nil
-		if err != nil {
-			return fmt.Errorf("management channel error: %w", err)
-		}
-		return nil
-	}
+	// Connection established successfully - return immediately
+	// receiveMessages goroutine will handle the ongoing connection
+	return nil
 }
 
 // receiveMessages handles incoming messages from CloudShip
 func (mcs *ManagementChannelService) receiveMessages(stream proto.LighthouseService_ManagementChannelClient) error {
 	for {
-		select {
-		case <-mcs.connectionCtx.Done():
-			return mcs.connectionCtx.Err()
+		// Removed connectionCtx monitoring since stream has its own context.Background()
+		// This prevents unnecessary stream restarts due to context cancellation
 
-		default:
-			// Use non-blocking receive with timeout
-			done := make(chan error, 1)
-			go func() {
-				msg, err := stream.Recv()
-				if err != nil {
-					done <- err
-					return
-				}
-
-				logging.Debug("Received management message: request_id=%s, is_response=%v", msg.RequestId, msg.IsResponse)
-
-				// Only process requests (not responses)
-				if !msg.IsResponse {
-					go mcs.processRequest(stream, msg)
-				}
-				done <- nil
-			}()
-
-			select {
-			case err := <-done:
-				if err != nil {
-					// Log different types of errors for better debugging
-					if err == io.EOF {
-						logging.Info("Management channel stream closed by CloudShip")
-					} else {
-						logging.Error("Failed to receive message from CloudShip: %v", err)
-					}
-					return fmt.Errorf("stream receive error: %w", err)
-				}
-			case <-time.After(5 * time.Second):
-				// Continue loop to check heartbeat and context with longer timeout
-				continue
+		// Use non-blocking receive with timeout
+		done := make(chan error, 1)
+		go func() {
+			msg, err := stream.Recv()
+			if err != nil {
+				done <- err
+				return
 			}
+
+			logging.Debug("Received management message: request_id=%s, is_response=%v", msg.RequestId, msg.IsResponse)
+
+			// Only process requests (not responses)
+			if !msg.IsResponse {
+				go mcs.processRequest(stream, msg)
+			}
+			done <- nil
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				// Log different types of errors for better debugging
+				if err == io.EOF {
+					logging.Info("Management channel stream closed by CloudShip")
+				} else {
+					logging.Error("Failed to receive message from CloudShip: %v", err)
+				}
+				return fmt.Errorf("stream receive error: %w", err)
+			}
+		case <-time.After(60 * time.Second):
+			// Management channel connection health check
+			// No separate heartbeat needed - gRPC keepalive handles connection health
+			// Longer timeout prevents "too_many_pings" issue while still detecting disconnections
+			logging.Debug("Management channel receive timeout - connection appears healthy")
+			continue
 		}
 	}
 }

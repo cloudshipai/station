@@ -200,5 +200,70 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(createBundleFromEnvTool, s.handleCreateBundleFromEnvironment)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 23)
+	// MCP Server Management Tools
+	listMCPServersTool := mcp.NewTool("list_mcp_servers_for_environment",
+		mcp.WithDescription("List all MCP servers configured for an environment"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+	)
+	s.mcpServer.AddTool(listMCPServersTool, s.handleListMCPServersForEnvironment)
+
+	addMCPServerTool := mcp.NewTool("add_mcp_server_to_environment",
+		mcp.WithDescription("Add an MCP server to an environment"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+		mcp.WithString("server_name", mcp.Required(), mcp.Description("Name of the MCP server")),
+		mcp.WithString("command", mcp.Required(), mcp.Description("Command to execute the MCP server")),
+		mcp.WithString("description", mcp.Description("Description of the MCP server")),
+		mcp.WithArray("args", mcp.Description("Command line arguments for the MCP server"), mcp.WithStringItems()),
+		mcp.WithObject("env", mcp.Description("Environment variables for the MCP server")),
+	)
+	s.mcpServer.AddTool(addMCPServerTool, s.handleAddMCPServerToEnvironment)
+
+	updateMCPServerTool := mcp.NewTool("update_mcp_server_in_environment",
+		mcp.WithDescription("Update an MCP server configuration in an environment"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+		mcp.WithString("server_name", mcp.Required(), mcp.Description("Name of the MCP server to update")),
+		mcp.WithString("command", mcp.Required(), mcp.Description("Command to execute the MCP server")),
+		mcp.WithString("description", mcp.Description("Description of the MCP server")),
+		mcp.WithArray("args", mcp.Description("Command line arguments for the MCP server"), mcp.WithStringItems()),
+		mcp.WithObject("env", mcp.Description("Environment variables for the MCP server")),
+	)
+	s.mcpServer.AddTool(updateMCPServerTool, s.handleUpdateMCPServerInEnvironment)
+
+	deleteMCPServerTool := mcp.NewTool("delete_mcp_server_from_environment",
+		mcp.WithDescription("Delete an MCP server from an environment"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+		mcp.WithString("server_name", mcp.Required(), mcp.Description("Name of the MCP server to delete")),
+	)
+	s.mcpServer.AddTool(deleteMCPServerTool, s.handleDeleteMCPServerFromEnvironment)
+
+	// Raw MCP Config Management Tools
+	getRawMCPConfigTool := mcp.NewTool("get_raw_mcp_config",
+		mcp.WithDescription("Get the raw template.json content for an environment"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+	)
+	s.mcpServer.AddTool(getRawMCPConfigTool, s.handleGetRawMCPConfig)
+
+	updateRawMCPConfigTool := mcp.NewTool("update_raw_mcp_config",
+		mcp.WithDescription("Update the raw template.json content for an environment"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+		mcp.WithString("content", mcp.Required(), mcp.Description("Raw JSON content for template.json")),
+	)
+	s.mcpServer.AddTool(updateRawMCPConfigTool, s.handleUpdateRawMCPConfig)
+
+	// Environment File Config Management Tools
+	getEnvFileConfigTool := mcp.NewTool("get_environment_file_config",
+		mcp.WithDescription("Get all file-based configuration for an environment"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+	)
+	s.mcpServer.AddTool(getEnvFileConfigTool, s.handleGetEnvironmentFileConfig)
+
+	updateEnvFileConfigTool := mcp.NewTool("update_environment_file_config",
+		mcp.WithDescription("Update a specific file in environment configuration"),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+		mcp.WithString("filename", mcp.Required(), mcp.Description("Name of the file to update (variables.yml or template.json)")),
+		mcp.WithString("content", mcp.Required(), mcp.Description("Content to write to the file")),
+	)
+	s.mcpServer.AddTool(updateEnvFileConfigTool, s.handleUpdateEnvironmentFileConfig)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 31)
 }

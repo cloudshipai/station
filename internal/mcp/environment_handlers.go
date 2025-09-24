@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"station/internal/services"
 )
 
 // Environment Management Handlers
@@ -49,44 +48,17 @@ func (s *Server) handleCreateEnvironment(ctx context.Context, request mcp.CallTo
 		desc = &description
 	}
 
-	env, err := s.repos.Environments.Create(name, desc, consoleUser.ID)
+	// Use unified environment management service
+	envService := services.NewEnvironmentManagementService(s.repos)
+	env, result, err := envService.CreateEnvironment(name, desc, consoleUser.ID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create environment: %v", err)), nil
 	}
 
-	// Create file-based environment directory structure
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get user home directory: %v", err)), nil
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", name)
-	agentsDir := filepath.Join(envDir, "agents")
-
-	// Create environment directory structure
-	if err := os.MkdirAll(agentsDir, 0755); err != nil {
-		// Try to cleanup database entry if directory creation fails
-		s.repos.Environments.Delete(env.ID)
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to create environment directory: %v", err)), nil
-	}
-
-	// Create default variables.yml file
-	variablesPath := filepath.Join(envDir, "variables.yml")
-	defaultVariables := fmt.Sprintf("# Environment variables for %s\n# Add your template variables here\n# Example:\n# DATABASE_URL: \"your-database-url\"\n# API_KEY: \"your-api-key\"\n", name)
-
-	if err := os.WriteFile(variablesPath, []byte(defaultVariables), 0644); err != nil {
-		// Try to cleanup if variables file creation fails
-		os.RemoveAll(envDir)
-		s.repos.Environments.Delete(env.ID)
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to create variables.yml: %v", err)), nil
-	}
-
 	response := map[string]interface{}{
-		"success":        true,
-		"environment":    env,
-		"directory_path": envDir,
-		"variables_path": variablesPath,
-		"message":        fmt.Sprintf("Environment '%s' created successfully", name),
+		"success":     result.Success,
+		"environment": env,
+		"result":      result,
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
@@ -108,59 +80,11 @@ func (s *Server) handleDeleteEnvironment(ctx context.Context, request mcp.CallTo
 		return mcp.NewToolResultError("Confirmation required: set 'confirm' to true to proceed"), nil
 	}
 
-	// Get environment by name
-	env, err := s.repos.Environments.GetByName(name)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Environment '%s' not found: %v", name, err)), nil
-	}
+	// Use unified environment management service
+	envService := services.NewEnvironmentManagementService(s.repos)
+	result := envService.DeleteEnvironment(name)
 
-	// Prevent deletion of default environment
-	if env.Name == "default" {
-		return mcp.NewToolResultError("Cannot delete the default environment"), nil
-	}
-
-	// Delete file-based configuration first
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get user home directory: %v", err)), nil
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", name)
-
-	// Remove environment directory and all contents
-	var fileCleanupError error
-	if _, err := os.Stat(envDir); err == nil {
-		fileCleanupError = os.RemoveAll(envDir)
-	}
-
-	// Delete database entries (this also deletes associated agents, runs, etc. via foreign key constraints)
-	dbDeleteError := s.repos.Environments.Delete(env.ID)
-
-	// Prepare response with cleanup status
-	response := map[string]interface{}{
-		"success":          dbDeleteError == nil,
-		"environment":      env.Name,
-		"database_deleted": dbDeleteError == nil,
-		"files_deleted":    fileCleanupError == nil,
-	}
-
-	if dbDeleteError != nil {
-		response["database_error"] = dbDeleteError.Error()
-	}
-
-	if fileCleanupError != nil {
-		response["file_cleanup_error"] = fileCleanupError.Error()
-	}
-
-	if dbDeleteError == nil && fileCleanupError == nil {
-		response["message"] = fmt.Sprintf("Environment '%s' deleted successfully", name)
-	} else if dbDeleteError == nil {
-		response["message"] = fmt.Sprintf("Environment '%s' deleted from database, but file cleanup failed", name)
-	} else {
-		response["message"] = fmt.Sprintf("Failed to delete environment '%s'", name)
-	}
-
-	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	resultJSON, _ := json.MarshalIndent(result, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
 

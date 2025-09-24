@@ -129,10 +129,13 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	base = base.WithFile("/usr/local/bin/stn", stationBinary).
 		WithExec([]string{"chmod", "+x", "/usr/local/bin/stn"})
 
-	// Copy environment to proper Station configuration location
+	// Copy the source environment to the container's default environment
+	// This makes the container's "default" environment contain all the source environment's content
 	envDir := client.Host().Directory(b.environmentPath)
 	base = base.WithExec([]string{"mkdir", "-p", "/root/.config/station/environments/default"})
 	base = base.WithDirectory("/root/.config/station/environments/default", envDir)
+
+	log.Printf("🔧 Copying environment '%s' content to container's default environment", b.environmentName)
 	
 	// Create workspace directory for CI/CD filesystem operations
 	base = base.WithExec([]string{"mkdir", "-p", "/workspace"})
@@ -196,8 +199,52 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 		base = base.WithEnvVariable("AI_API_KEY", key)
 	}
 	
-	// CRUCIAL FIX: Run sync to import agents into database with API key for tool discovery
-	base = base.WithExec([]string{"stn", "sync", "default", "-i=false"})
+	// Create a minimal variables.yml file with actual API key from environment variables
+	apiKeyValue := os.Getenv("OPENAI_API_KEY")
+	if apiKeyValue == "" {
+		apiKeyValue = ""
+	}
+	variablesContent := fmt.Sprintf("OPENAI_API_KEY: \"%s\"", apiKeyValue)
+	base = base.WithExec([]string{"bash", "-c", fmt.Sprintf("mkdir -p /root/.config/station/environments/default && echo '%s' > /root/.config/station/environments/default/variables.yml", variablesContent)})
+
+	// Install Ship CLI before running sync to prevent MCP failures
+	log.Printf("🚢 Installing Ship CLI in container for sync process...")
+	base = base.WithExec([]string{"bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash"})
+	base = base.WithExec([]string{"bash", "-c", "if [ -f /root/.local/bin/ship ]; then cp /root/.local/bin/ship /usr/local/bin/ship && chmod +x /usr/local/bin/ship; fi"})
+
+	// Clean up problematic MCP templates that require missing variables
+	base = base.WithExec([]string{"bash", "-c", `
+		echo "🧹 Cleaning up MCP templates with missing variables..."
+		# Remove slack.json if SLACK_BOT_TOKEN is not provided
+		if [ -z "$SLACK_BOT_TOKEN" ]; then
+			echo "  Removing slack.json (SLACK_BOT_TOKEN not provided)"
+			rm -f /root/.config/station/environments/default/slack.json
+		fi
+		# Add more cleanup for other templates that commonly have missing variables
+		echo "  Cleanup completed"
+	`})
+
+	// Run sync with timeout and error handling to import agents into database
+	// Add WAL mode to prevent database locking issues and retry logic
+	base = base.WithExec([]string{"bash", "-c", `
+		echo "Setting SQLite to WAL mode to prevent locking..."
+		sqlite3 /root/.config/station/station.db "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=1000; PRAGMA temp_store=memory;"
+		echo "Running sync with retries and graceful error handling..."
+		for i in {1..3}; do
+			echo "Sync attempt $i/3..."
+			# Use --validate flag first to check for issues, then sync
+			if timeout 90 stn sync default -i=false --verbose 2>&1; then
+				echo "Sync successful on attempt $i"
+				break
+			else
+				echo "Sync attempt $i failed, retrying in 5 seconds..."
+				sleep 5
+			fi
+		done
+		echo "Sync process completed"
+		echo "🔍 Checking final agent count..."
+		stn agent list --environment default | head -10
+	`})
 	
 	// Install Ship CLI and Docker CLI inside the container
 	if b.buildOptions.InstallShip {

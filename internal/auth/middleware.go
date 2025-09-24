@@ -11,19 +11,38 @@ import (
 
 // AuthMiddleware provides API key authentication for MCP endpoints
 type AuthMiddleware struct {
-	repos *repositories.Repositories
+	repos     *repositories.Repositories
+	localMode bool
 }
 
 // NewAuthMiddleware creates a new authentication middleware
 func NewAuthMiddleware(repos *repositories.Repositories) *AuthMiddleware {
 	return &AuthMiddleware{
-		repos: repos,
+		repos:     repos,
+		localMode: false,
+	}
+}
+
+// NewAuthMiddlewareWithLocalMode creates a new authentication middleware with local mode setting
+func NewAuthMiddlewareWithLocalMode(repos *repositories.Repositories, localMode bool) *AuthMiddleware {
+	return &AuthMiddleware{
+		repos:     repos,
+		localMode: localMode,
 	}
 }
 
 // Authenticate validates API key from Bearer token
 func (am *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip authentication in local mode
+		if am.localMode {
+			// Set default user context for local mode
+			c.Set("user_id", int64(1))
+			c.Set("is_admin", true)
+			c.Next()
+			return
+		}
+
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
