@@ -34,6 +34,8 @@ func (h *APIHandlers) registerMCPServerRoutes(group *gin.RouterGroup) {
 	group.GET("", h.listMCPServers)
 	group.GET("/:id", h.getMCPServer)
 	group.GET("/:id/tools", h.getMCPServerTools)
+	group.GET("/:id/config", h.getMCPServerRawConfig)
+	group.PUT("/:id/config", h.updateMCPServerRawConfig)
 	group.POST("", h.createMCPServer)
 	group.PUT("/:id", h.updateMCPServer)
 	group.DELETE("/:id", h.deleteMCPServer)
@@ -205,12 +207,116 @@ func (h *APIHandlers) getMCPServerTools(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
 		return
 	}
-	
+
 	tools, err := h.repos.MCPTools.GetByServerID(serverID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tools"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, tools)
+}
+
+// getMCPServerRawConfig gets the raw configuration for a specific MCP server
+func (h *APIHandlers) getMCPServerRawConfig(c *gin.Context) {
+	serverID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	// Get the MCP server from database
+	server, err := h.repos.MCPServers.GetByID(serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "MCP server not found"})
+		return
+	}
+
+	// Get the file config to find the source template file
+	if server.FileConfigID == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "No file configuration associated with this server"})
+		return
+	}
+
+	fileConfig, err := h.repos.FileMCPConfigs.GetByID(*server.FileConfigID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get file configuration"})
+		return
+	}
+
+	// Read the template file content
+	if _, err := os.Stat(fileConfig.TemplatePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Configuration file not found"})
+		return
+	}
+
+	content, err := os.ReadFile(fileConfig.TemplatePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read configuration file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"server_id": serverID,
+		"server_name": server.Name,
+		"config": string(content),
+		"file_path": fileConfig.TemplatePath,
+	})
+}
+
+// updateMCPServerRawConfig updates the raw configuration for a specific MCP server
+func (h *APIHandlers) updateMCPServerRawConfig(c *gin.Context) {
+	serverID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	var req struct {
+		Config string `json:"config" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate JSON
+	var configData interface{}
+	if err := json.Unmarshal([]byte(req.Config), &configData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON configuration"})
+		return
+	}
+
+	// Get the MCP server from database
+	server, err := h.repos.MCPServers.GetByID(serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "MCP server not found"})
+		return
+	}
+
+	// Get the file config to find the source template file
+	if server.FileConfigID == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "No file configuration associated with this server"})
+		return
+	}
+
+	fileConfig, err := h.repos.FileMCPConfigs.GetByID(*server.FileConfigID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get file configuration"})
+		return
+	}
+
+	// Write the updated configuration to file
+	if err := os.WriteFile(fileConfig.TemplatePath, []byte(req.Config), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write configuration file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Configuration updated successfully",
+		"server_id": serverID,
+		"server_name": server.Name,
+		"file_path": fileConfig.TemplatePath,
+	})
 }
