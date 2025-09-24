@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -28,6 +28,7 @@ import { RunsPage as RunsPageComponent } from './components/runs/RunsPage';
 import { SyncModal } from './components/sync/SyncModal';
 import { AddServerModal } from './components/modals/AddServerModal';
 import { BundleEnvironmentModal } from './components/modals/BundleEnvironmentModal';
+import BuildImageModal from './components/modals/BuildImageModal';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -776,6 +777,10 @@ const MCPServersPage = () => {
   const [modalMCPServerId, setModalMCPServerId] = useState<number | null>(null);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
   const [environments, setEnvironments] = useState<any[]>([]);
+  const [isRawConfigModalOpen, setIsRawConfigModalOpen] = useState(false);
+  const [rawConfig, setRawConfig] = useState('');
+  const [rawConfigEnvironment, setRawConfigEnvironment] = useState('');
+  const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const environmentContext = React.useContext(EnvironmentContext);
 
   // Function to open MCP server details modal
@@ -787,6 +792,96 @@ const MCPServersPage = () => {
   const closeMCPServerModal = () => {
     setIsMCPModalOpen(false);
     setModalMCPServerId(null);
+  };
+
+  // Function to delete MCP server
+  const handleDeleteMCPServer = async (serverId: number, serverName: string) => {
+    if (!confirm(`Are you sure you want to delete the MCP server "${serverName}"? This will remove it from the environment and clean up associated database records.`)) {
+      return;
+    }
+
+    try {
+      const envId = environmentContext?.selectedEnvironment;
+      if (!envId) {
+        alert('No environment selected');
+        return;
+      }
+
+      // Call the new API endpoint to delete MCP server from environment
+      await apiClient.delete(`/environments/${envId}/mcp-servers/${encodeURIComponent(serverName)}`);
+
+      // Refresh the servers list
+      await fetchMCPServers();
+
+      alert(`MCP server "${serverName}" deleted successfully`);
+    } catch (error) {
+      console.error('Failed to delete MCP server:', error);
+      alert('Failed to delete MCP server. Check console for details.');
+    }
+  };
+
+  // Function to view and edit raw config for a specific server
+  const handleViewRawServerConfig = async (serverId: number, serverName: string) => {
+    try {
+      // Fetch the server config using the MCP servers endpoint
+      const response = await apiClient.get(`/mcp-servers/${serverId}/config`);
+
+      if (response.data && response.data.config) {
+        // Parse and pretty-format the JSON config for display
+        try {
+          const configObj = JSON.parse(response.data.config);
+          const formattedConfig = JSON.stringify(configObj, null, 2);
+          setRawConfig(formattedConfig);
+        } catch (parseError) {
+          // If parsing fails, use the raw config as-is
+          console.warn('Failed to parse config JSON:', parseError);
+          setRawConfig(response.data.config);
+        }
+        setRawConfigEnvironment(`${serverName} (ID: ${serverId})`);
+        setSelectedServerId(serverId); // Store server ID for saving
+        setIsRawConfigModalOpen(true);
+      } else {
+        alert('Failed to fetch raw config');
+      }
+    } catch (error) {
+      console.error('Failed to fetch raw config:', error);
+      alert('Failed to fetch raw config. Check console for details.');
+    }
+  };
+
+  // Function to save raw config
+  const handleSaveRawConfig = async () => {
+    try {
+      if (!selectedServerId) {
+        alert('No server selected');
+        return;
+      }
+
+      // Validate JSON before saving
+      try {
+        JSON.parse(rawConfig);
+      } catch (jsonError) {
+        alert('Invalid JSON format. Please check your configuration.');
+        return;
+      }
+
+      // Update the server config using the MCP servers endpoint
+      const response = await apiClient.put(`/mcp-servers/${selectedServerId}/config`, {
+        config: rawConfig
+      });
+
+      if (response.data && response.data.message) {
+        // Refresh the servers list
+        await fetchMCPServers();
+        setIsRawConfigModalOpen(false);
+        alert(response.data.message);
+      } else {
+        alert('Failed to save server config');
+      }
+    } catch (error) {
+      console.error('Failed to save server config:', error);
+      alert('Failed to save server config. Check console for details.');
+    }
   };
 
   // Fetch environments data
@@ -835,6 +930,19 @@ const MCPServersPage = () => {
     <div className="h-full flex flex-col bg-tokyo-bg">
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
         <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              // TODO: Add MCP server modal
+              alert('Add MCP Server functionality coming soon!');
+            }}
+            className="px-3 py-1.5 bg-tokyo-green hover:bg-green-600 text-tokyo-bg rounded font-mono text-sm flex items-center gap-1"
+            title="Add new MCP server"
+          >
+            <Plus className="h-4 w-4" />
+            Add Server
+          </button>
+        </div>
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         {filteredServers.length === 0 ? (
@@ -854,14 +962,30 @@ const MCPServersPage = () => {
           <div className="grid gap-4 max-h-full overflow-y-auto">
             {filteredServers.map((server) => (
               <div key={server.id} className="p-4 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-tokyo relative group">
-                {/* Info button - appears on hover */}
-                <button
-                  onClick={() => openMCPServerModal(server.id)}
-                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-cyan hover:bg-tokyo-blue text-tokyo-bg"
-                  title="View server details"
-                >
-                  <Eye className="h-4 w-4" />
-                </button>
+                {/* Action buttons - appear on hover */}
+                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
+                  <button
+                    onClick={() => openMCPServerModal(server.id)}
+                    className="p-1 rounded bg-tokyo-cyan hover:bg-tokyo-blue text-tokyo-bg"
+                    title="View server details"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleViewRawServerConfig(server.id, server.name)}
+                    className="p-1 rounded bg-tokyo-orange hover:bg-orange-600 text-tokyo-bg"
+                    title="Edit server config"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteMCPServer(server.id, server.name)}
+                    className="p-1 rounded bg-tokyo-red hover:bg-red-600 text-tokyo-bg"
+                    title="Delete MCP server"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
 
                 <h3 className="font-mono font-medium text-tokyo-cyan">{server.name}</h3>
                 <p className="text-sm text-tokyo-comment mt-1 font-mono">
@@ -896,6 +1020,16 @@ const MCPServersPage = () => {
         serverId={modalMCPServerId}
         isOpen={isMCPModalOpen}
         onClose={closeMCPServerModal}
+      />
+
+      {/* Raw Config Editor Modal */}
+      <RawConfigEditorModal
+        isOpen={isRawConfigModalOpen}
+        onClose={() => setIsRawConfigModalOpen(false)}
+        config={rawConfig}
+        onConfigChange={setRawConfig}
+        onSave={handleSaveRawConfig}
+        environmentName={rawConfigEnvironment}
       />
     </div>
   );
@@ -1106,10 +1240,28 @@ const RunsPage = () => {
 
 // Environment-specific Node Components
 const EnvironmentNode = ({ data }: NodeProps) => {
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.onDeleteEnvironment && data.environmentId) {
+      data.onDeleteEnvironment(data.environmentId, data.label);
+    }
+  };
+
   return (
-    <div className="w-[320px] h-[160px] px-4 py-3 shadow-lg border border-tokyo-orange rounded-lg relative bg-tokyo-dark2">
+    <div className="w-[320px] h-[160px] px-4 py-3 shadow-lg border border-tokyo-orange rounded-lg relative bg-tokyo-dark2 group">
       <Handle type="source" position={Position.Right} style={{ background: '#ff9e64', width: 12, height: 12 }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#7dcfff', width: 12, height: 12 }} />
+
+      {/* Delete button - appears on hover */}
+      {data.label !== 'default' && (
+        <button
+          onClick={handleDeleteClick}
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-red hover:bg-red-600 text-tokyo-bg"
+          title={`Delete environment "${data.label}"`}
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      )}
 
       <div className="flex items-center gap-2 mb-3">
         <Globe className="h-6 w-6 text-tokyo-orange" />
@@ -1171,6 +1323,7 @@ const EnvironmentsPage = () => {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
   const [isBundleModalOpen, setIsBundleModalOpen] = useState(false);
+  const [isBuildImageModalOpen, setIsBuildImageModalOpen] = useState(false);
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1185,10 +1338,43 @@ const EnvironmentsPage = () => {
     setIsBundleModalOpen(true);
   };
 
+  const handleBuildImage = () => {
+    setIsBuildImageModalOpen(true);
+  };
+
   const handleRefreshGraph = () => {
     if (selectedEnvironment) {
       setRebuildingGraph(true);
       // This will trigger the useEffect that rebuilds the graph
+    }
+  };
+
+  // Function to delete environment
+  const handleDeleteEnvironment = async (environmentId: number, environmentName: string) => {
+    if (!confirm(`Are you sure you want to delete the environment "${environmentName}"? This will remove all associated agents, MCP servers, and file-based configurations. This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Call the new unified API endpoint
+      await apiClient.delete(`/environments/${environmentId}`);
+
+      // Refresh environments list
+      const response = await environmentsApi.getAll();
+      const envs = response.data.environments || [];
+      setEnvironments(envs);
+
+      // Select the first available environment or clear selection
+      if (envs.length > 0) {
+        setSelectedEnvironment(envs[0].id);
+      } else {
+        setSelectedEnvironment(null);
+      }
+
+      alert(`Environment "${environmentName}" deleted successfully`);
+    } catch (error) {
+      console.error('Failed to delete environment:', error);
+      alert('Failed to delete environment. Check console for details.');
     }
   };
 
@@ -1255,6 +1441,8 @@ const EnvironmentsPage = () => {
             description: selectedEnv?.description || 'Environment Hub',
             agentCount: agents.length,
             serverCount: mcpServers.length,
+            environmentId: selectedEnvironment,
+            onDeleteEnvironment: handleDeleteEnvironment,
           },
         });
 
@@ -1372,6 +1560,21 @@ const EnvironmentsPage = () => {
                 <Archive className="h-4 w-4" />
                 <span>Bundle</span>
               </button>
+              <button
+                onClick={handleBuildImage}
+                className="flex items-center space-x-2 px-4 py-2 rounded font-mono text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: '#ff9e64',
+                  color: '#ffffff',
+                  border: '1px solid #ff9e64',
+                  fontWeight: '700',
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+                }}
+                title="Build Docker Image"
+              >
+                <Package className="h-4 w-4" />
+                <span>Build Image</span>
+              </button>
             </div>
           )}
 
@@ -1380,7 +1583,7 @@ const EnvironmentsPage = () => {
             <select
               value={selectedEnvironment || ''}
               onChange={(e) => setSelectedEnvironment(Number(e.target.value))}
-              className="bg-tokyo-dark2 border border-tokyo-dark4 text-tokyo-fg font-mono px-3 py-1 rounded focus:outline-none focus:border-tokyo-orange"
+              className="bg-tokyo-dark1 border border-tokyo-dark4 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-orange hover:border-tokyo-blue5 transition-colors min-w-[120px]"
             >
               {environments.map((env) => (
                 <option key={env.id} value={env.id}>
@@ -1449,6 +1652,13 @@ const EnvironmentsPage = () => {
       <BundleEnvironmentModal
         isOpen={isBundleModalOpen}
         onClose={() => setIsBundleModalOpen(false)}
+        environmentName={selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default'}
+      />
+
+      {/* Build Image Modal */}
+      <BuildImageModal
+        isOpen={isBuildImageModalOpen}
+        onClose={() => setIsBuildImageModalOpen(false)}
         environmentName={selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default'}
       />
     </div>
@@ -1687,6 +1897,97 @@ const AgentEditor = () => {
                 padding: { top: 16, bottom: 16 }
               }}
             />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Raw Config Editor Modal Component
+const RawConfigEditorModal = ({
+  isOpen,
+  onClose,
+  config,
+  onConfigChange,
+  onSave,
+  environmentName
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  config: string;
+  onConfigChange: (config: string) => void;
+  onSave: () => void;
+  environmentName: string;
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
+            Server Config Editor - {environmentName}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
+          >
+            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="mb-4">
+            <p className="text-tokyo-comment text-sm font-mono">
+              Edit the configuration for this specific MCP server.
+              Changes will be merged back into the environment's template.json file.
+            </p>
+          </div>
+
+          {/* Monaco Editor */}
+          <div className="flex-1 border border-tokyo-blue7 rounded overflow-hidden min-h-[500px]">
+            <Editor
+              height="500px"
+              defaultLanguage="json"
+              value={config}
+              onChange={(value) => onConfigChange(value || '')}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
+                lineNumbers: 'on',
+                rulers: [80],
+                wordWrap: 'on',
+                automaticLayout: true,
+                scrollBeyondLastLine: false,
+                padding: { top: 16, bottom: 16 },
+                formatOnPaste: true,
+                formatOnType: true
+              }}
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-between items-center mt-6 pt-4 border-t border-tokyo-blue7">
+            <div className="text-tokyo-comment text-sm font-mono">
+              💡 Tip: Use Ctrl+Shift+F to format JSON
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-tokyo-comment hover:bg-gray-600 text-tokyo-bg rounded font-mono text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onSave}
+                className="px-4 py-2 bg-tokyo-green hover:bg-green-600 text-tokyo-bg rounded font-mono text-sm transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       </div>
