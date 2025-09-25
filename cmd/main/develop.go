@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
@@ -98,11 +99,30 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔧 Loaded %d MCP tools from %d servers\n", len(mcpTools), len(mcpClients))
 	fmt.Printf("🤖 Agent prompts automatically loaded from: %s\n", agentsDir)
 
-	// List loaded MCP tools
-	for _, tool := range mcpTools {
-		// MCP tools are already registered in GenKit by the MCP plugin
-		fmt.Printf("   ✅ MCP Tool: %s\n", tool.Name())
+	// Register MCP tools as GenKit actions so they appear in Developer UI
+	fmt.Println("🔧 Registering MCP tools as GenKit actions...")
+	registeredCount := 0
+	skippedDuplicates := 0
+	seenTools := make(map[string]bool)
+
+	for _, toolRef := range mcpTools {
+		if tool, ok := toolRef.(ai.Tool); ok {
+			toolName := tool.Name()
+			if seenTools[toolName] {
+				skippedDuplicates++
+				fmt.Printf("   🔄 Skipped duplicate: %s\n", toolName)
+				continue
+			}
+
+			seenTools[toolName] = true
+			genkit.RegisterAction(genkitApp, tool)
+			registeredCount++
+			fmt.Printf("   ✅ Registered: %s\n", toolName)
+		} else {
+			fmt.Printf("   ⚠️  Skipped: %s (not ai.Tool)\n", toolRef.Name())
+		}
 	}
+	fmt.Printf("🎯 Successfully registered %d/%d tools as GenKit actions (%d duplicates skipped)\n", registeredCount, len(mcpTools), skippedDuplicates)
 
 	fmt.Println()
 	fmt.Println("🎉 Station Development Playground is ready!")
