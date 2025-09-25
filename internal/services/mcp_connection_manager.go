@@ -168,9 +168,8 @@ func (mcm *MCPConnectionManager) extractServerDefinitions(environmentID int64, f
 
 // parseFileConfig extracts server configurations from a file config
 func (mcm *MCPConnectionManager) parseFileConfig(fileConfig *repositories.FileConfigRecord) map[string]interface{} {
-	// Make template path absolute
-	configDir := os.ExpandEnv("$HOME/.config/station")
-	absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
+	// TemplatePath is already an absolute path, don't concatenate it again
+	absolutePath := fileConfig.TemplatePath
 	
 	// Read and process the config file
 	rawContent, err := os.ReadFile(absolutePath)
@@ -178,8 +177,9 @@ func (mcm *MCPConnectionManager) parseFileConfig(fileConfig *repositories.FileCo
 		logging.Debug("Failed to read file config %s: %v", fileConfig.ConfigName, err)
 		return nil
 	}
-	
+
 	// Process template variables
+	configDir := os.ExpandEnv("$HOME/.config/station")
 	templateService := NewTemplateVariableService(configDir, mcm.repos)
 	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 	if err != nil {
@@ -193,14 +193,14 @@ func (mcm *MCPConnectionManager) parseFileConfig(fileConfig *repositories.FileCo
 		logging.Debug("Failed to parse file config %s: %v", fileConfig.ConfigName, err)
 		return nil
 	}
-	
+
 	// Extract servers
 	if mcpServers, ok := rawConfig["mcpServers"].(map[string]interface{}); ok {
 		return mcpServers
 	} else if servers, ok := rawConfig["servers"].(map[string]interface{}); ok {
 		return servers
 	}
-	
+
 	return nil
 }
 
