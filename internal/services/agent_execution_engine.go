@@ -36,6 +36,9 @@ type AgentExecutionResult struct {
 	StepsTaken     int64                  `json:"steps_taken"` // For database storage
 	ToolsUsed      int                    `json:"tools_used"`
 	Error          string                 `json:"error,omitempty"`
+	// Metadata from dotprompt for data ingestion classification
+	App     string `json:"app,omitempty"`      // CloudShip data ingestion app classification
+	AppType string `json:"app_type,omitempty"` // CloudShip data ingestion app_type classification
 }
 
 // AgentExecutionEngine handles the execution of agents using GenKit and MCP
@@ -334,11 +337,13 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 		TokenUsage:     response.TokenUsage,     // ✅ Pass through token usage from dotprompt
 		ToolCalls:      response.ToolCalls,      // ✅ Pass through tool calls
 		ExecutionSteps: response.ExecutionSteps, // ✅ Pass through execution steps
+		App:            response.App,            // ✅ Pass through app classification for CloudShip data ingestion
+		AppType:        response.AppType,        // ✅ Pass through app_type classification for CloudShip data ingestion
 	}
 
 	// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
-	// Temporarily commented out to prevent blocking run completion
-	// aee.sendToLighthouse(agent, task, runID, startTime, result)
+	// Send to CloudShip Lighthouse (dual flow: SendRun always + IngestData conditionally)
+	aee.sendToLighthouse(agent, task, runID, startTime, result)
 
 	return result, nil
 }
@@ -366,16 +371,22 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 		// stdio mode: Local development context
 		context := aee.deploymentContextService.GatherContextForMode("stdio")
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		// Dual flow: Send structured data if conditions are met
+		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
 
 	case lighthouse.ModeServe:
 		// serve mode: Server deployment context
 		context := aee.deploymentContextService.GatherContextForMode("serve")
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		// Dual flow: Send structured data if conditions are met
+		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
 
 	case lighthouse.ModeCLI:
 		// CLI mode: Rich execution context (may include CI/CD)
 		context := aee.deploymentContextService.GatherContextForMode("cli")
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		// Dual flow: Send structured data if conditions are met
+		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
 		logging.Info("Successfully sent CLI run data with deployment context for run_id: %d", runID)
 
 	default:
@@ -383,9 +394,78 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 		aee.lighthouseClient.SendRun(agentRun, "unknown", map[string]string{
 			"mode": "unknown",
 		})
+		// Dual flow: Send structured data if conditions are met
+		aee.sendStructuredDataIfEligible(agent, result, runID, map[string]string{"mode": "unknown"})
 	}
 
 	logging.Debug("Completed CloudShip Lighthouse integration (run_id: %d, mode: %s)", runID, mode)
+}
+
+// sendStructuredDataIfEligible checks if agent qualifies for structured data ingestion and sends it
+func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agent, result *AgentExecutionResult, runID int64, contextLabels map[string]string) {
+	// Check if agent has app/app_type metadata (from dotprompt or database)
+	app := result.App
+	appType := result.AppType
+
+	// Fallback: Check if agent has preset-based app/app_type
+	if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
+		switch *agent.OutputSchemaPreset {
+		case "finops":
+			app = "finops"
+			appType = "cost-analysis"
+		}
+	}
+
+	// Skip if no app/app_type identified
+	if app == "" || appType == "" {
+		logging.Debug("No app/app_type metadata found for agent %d, skipping structured data ingestion", agent.ID)
+		return
+	}
+
+	// Skip if no output schema (no structured output to parse)
+	if agent.OutputSchema == nil || *agent.OutputSchema == "" {
+		logging.Debug("No output schema defined for agent %d, skipping structured data ingestion", agent.ID)
+		return
+	}
+
+	// Skip if agent execution failed (no meaningful structured data)
+	if !result.Success {
+		logging.Debug("Agent execution failed for agent %d, skipping structured data ingestion", agent.ID)
+		return
+	}
+
+	// Attempt to parse the response as structured JSON
+	var structuredData map[string]interface{}
+	if err := json.Unmarshal([]byte(result.Response), &structuredData); err != nil {
+		logging.Debug("Agent response is not valid JSON for agent %d, skipping structured data ingestion: %v", agent.ID, err)
+		return
+	}
+
+	// Prepare metadata for ingestion
+	metadata := make(map[string]string)
+	for k, v := range contextLabels {
+		metadata[k] = v
+	}
+	metadata["agent_id"] = fmt.Sprintf("%d", agent.ID)
+	metadata["agent_name"] = agent.Name
+	metadata["run_id"] = fmt.Sprintf("%d", runID)
+	metadata["output_schema_preset"] = func() string {
+		if agent.OutputSchemaPreset != nil {
+			return *agent.OutputSchemaPreset
+		}
+		return ""
+	}()
+	metadata["execution_success"] = fmt.Sprintf("%t", result.Success)
+	metadata["duration_ms"] = fmt.Sprintf("%d", result.Duration.Milliseconds())
+
+	// Send structured data to CloudShip Data Ingestion service
+	correlationID := fmt.Sprintf("run_%d", runID)
+	if err := aee.lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID); err != nil {
+		logging.Debug("Failed to send structured data to CloudShip: %v", err)
+		// Don't fail the execution - this is supplementary data
+	} else {
+		logging.Debug("Successfully sent structured data to CloudShip (app: %s, app_type: %s, run_id: %d)", app, appType, runID)
+	}
 }
 
 // convertToAgentRun converts Station models to Lighthouse types

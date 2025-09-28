@@ -6,6 +6,8 @@ import (
 	"station/internal/lighthouse/proto"
 	"station/internal/logging"
 	"station/pkg/types"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // SendRun sends agent run data to CloudShip (async, buffered)
@@ -133,6 +135,78 @@ func (lc *LighthouseClient) SendSystemHealth(status proto.SystemStatus, metrics 
 	default:
 		logging.Info("Lighthouse health buffer full, dropping health data")
 	}
+}
+
+// getOrganizationID returns the organization ID for the registration key
+func (lc *LighthouseClient) getOrganizationID() (string, error) {
+	lc.mu.RLock()
+	// Check if we already have the organization ID cached
+	if lc.organizationID != "" {
+		orgID := lc.organizationID
+		lc.mu.RUnlock()
+		return orgID, nil
+	}
+	lc.mu.RUnlock()
+
+	// TODO: Implement proper organization ID resolution from CloudShip
+	// The registration key contains organization information, so Lighthouse should
+	// be able to resolve the organization ID automatically. For now, let Lighthouse
+	// service derive the organization ID from the registration key server-side.
+
+	// Return empty string to let Lighthouse auto-resolve from registration key
+	return "", nil
+}
+
+// IngestData sends structured data to CloudShip Data Ingestion service (sync)
+func (lc *LighthouseClient) IngestData(app, appType string, data map[string]interface{}, metadata map[string]string, correlationID string) error {
+	if !lc.IsRegistered() {
+		logging.Debug("CloudShip not registered, skipping structured data ingestion")
+		return nil // Graceful degradation - no cloud integration
+	}
+
+	// Let Lighthouse service auto-resolve organization ID from registration key
+	organizationID := ""
+
+	// Convert the data map to a protobuf Struct
+	dataStruct, err := structpb.NewStruct(data)
+	if err != nil {
+		return fmt.Errorf("failed to convert data to protobuf struct: %w", err)
+	}
+
+	// Create IngestDataRequest
+	req := &proto.IngestDataRequest{
+		RegistrationKey: lc.config.RegistrationKey,
+		OrganizationId:  organizationID,
+		App:             app,
+		AppType:         appType,
+		SourceId:        lc.stationID,
+		Data:            dataStruct,
+		Metadata:        metadata,
+		Timestamp:       timestamppb.Now(),
+		CorrelationId:   correlationID,
+	}
+
+	// Use DataIngestionServiceClient to send the data
+	ctx, cancel := context.WithTimeout(lc.ctx, lc.config.RequestTimeout)
+	defer cancel()
+
+	// Create DataIngestionServiceClient from the same connection
+	dataClient := proto.NewDataIngestionServiceClient(lc.conn)
+
+	resp, err := dataClient.IngestData(ctx, req)
+	if err != nil {
+		logging.Info("Failed to send structured data to CloudShip: %v (continuing)", err)
+		return nil // Graceful degradation - don't fail the agent execution
+	}
+
+	if !resp.Success {
+		logging.Info("CloudShip rejected structured data: %s (continuing)", resp.Message)
+		return nil // Graceful degradation
+	}
+
+	logging.Debug("Successfully sent structured data to CloudShip (app: %s, app_type: %s, record_id: %s)",
+		app, appType, resp.RecordId)
+	return nil
 }
 
 // convertDeploymentModeToProto converts Station deployment mode to proto enum
