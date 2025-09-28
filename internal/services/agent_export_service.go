@@ -31,10 +31,25 @@ func NewAgentExportService(repos *repositories.Repositories) *AgentExportService
 
 // ExportAgentAfterSave automatically exports an agent to file-based config after DB save
 func (s *AgentExportService) ExportAgentAfterSave(agentID int64) error {
+	return s.ExportAgentAfterSaveWithMetadata(agentID, "", "")
+}
+
+// ExportAgentAfterSaveWithMetadata exports an agent with CloudShip metadata fields
+func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app, appType string) error {
 	// Get agent details
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %v", err)
+	}
+
+	// Auto-populate app/app_type for known presets if not explicitly provided
+	if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
+		switch *agent.OutputSchemaPreset {
+		case "finops":
+			app = "finops"
+			appType = "cost-analysis"
+		// Add more presets as they're created
+		}
 	}
 
 	// Get environment info
@@ -50,7 +65,7 @@ func (s *AgentExportService) ExportAgentAfterSave(agentID int64) error {
 	}
 
 	// Generate dotprompt content using the same logic as MCP handler
-	dotpromptContent := s.generateDotpromptContent(agent, toolsWithDetails, environment.Name)
+	dotpromptContent := s.generateDotpromptContent(agent, toolsWithDetails, environment.Name, app, appType)
 
 	// Determine output file path
 	homeDir := os.Getenv("HOME")
@@ -78,7 +93,7 @@ func (s *AgentExportService) ExportAgentAfterSave(agentID int64) error {
 }
 
 // generateDotpromptContent generates the dotprompt file content with proper role structure
-func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environmentName string) string {
+func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environmentName, app, appType string) string {
 	// Build tools list
 	var toolNames []string
 	for _, tool := range tools {
@@ -90,9 +105,20 @@ func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools
 metadata:
   name: "%s"
   description: "%s"
-  tags: ["station", "agent"]
-model: gpt-4o-mini
-max_steps: %d`, agent.Name, agent.Description, agent.MaxSteps)
+  tags: ["station", "agent"]`, agent.Name, agent.Description)
+
+	// Add app/app_type for CloudShip data ingestion classification if provided
+	if app != "" || appType != "" {
+		content += "\n  # Data ingestion classification for CloudShip"
+		if app != "" {
+			content += fmt.Sprintf("\n  app: \"%s\"", app)
+		}
+		if appType != "" {
+			content += fmt.Sprintf("\n  app_type: \"%s\"", appType)
+		}
+	}
+
+	content += fmt.Sprintf("\nmodel: gpt-4o-mini\nmax_steps: %d", agent.MaxSteps)
 
 	// Add tools if any
 	if len(toolNames) > 0 {

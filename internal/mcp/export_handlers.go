@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"station/internal/services"
 	"station/pkg/models"
 	"station/pkg/schema"
 
@@ -50,9 +51,6 @@ func (s *Server) handleExportAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to get agent tools: %v", err)), nil
 	}
 
-	// Generate dotprompt content
-	dotpromptContent := s.generateDotpromptContent(agent, tools, environment.Name)
-
 	// Determine output file path like CLI does
 	if outputPath == "" {
 		homeDir := os.Getenv("HOME")
@@ -66,15 +64,11 @@ func (s *Server) handleExportAgent(ctx context.Context, request mcp.CallToolRequ
 		outputPath = fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment.Name, agent.Name)
 	}
 
-	// Ensure directory exists
-	agentsDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(agentsDir, 0755); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to create agents directory: %v", err)), nil
-	}
-
-	// Write .prompt file to filesystem like CLI does
-	if err := os.WriteFile(outputPath, []byte(dotpromptContent), 0644); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to write .prompt file: %v", err)), nil
+	// Use the proper agent export service to generate dotprompt content with full metadata support
+	exportService := services.NewAgentExportService(s.repos)
+	// Re-export the agent to get properly formatted content with metadata and schemas
+	if err := exportService.ExportAgentAfterSave(agentID); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to export agent: %v", err)), nil
 	}
 
 	response := map[string]interface{}{

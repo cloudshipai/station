@@ -42,4 +42,6 @@ type AgentConfig struct {
 	ModelID             string   `json:"model_id,omitempty"`              // Specific model ID (e.g., "gpt-4o", "claude-3-5-sonnet-20241022")
 	CronSchedule        *string  `json:"cron_schedule,omitempty"`         // Cron schedule for automated runs
 	ScheduleEnabled     bool     `json:"schedule_enabled"`                // Whether scheduled runs are enabled
+	App                 string   `json:"app,omitempty"`                   // CloudShip data ingestion app classification
+	AppType             string   `json:"app_type,omitempty"`              // CloudShip data ingestion app_type classification
 }

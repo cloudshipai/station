@@ -21,6 +21,8 @@ func (s *Server) setupTools() {
 		mcp.WithString("input_schema", mcp.Description("JSON schema for custom input variables (optional)")),
 		mcp.WithString("output_schema", mcp.Description("JSON schema for output format (optional)")),
 		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
+		mcp.WithString("app", mcp.Description("CloudShip data ingestion app classification (optional, must be provided with app_type)")),
+		mcp.WithString("app_type", mcp.Description("CloudShip data ingestion app_type classification (optional, must be provided with app)")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 

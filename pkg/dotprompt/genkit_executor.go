@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"station/internal/config"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
+	"gopkg.in/yaml.v2"
 )
 
 // ToolCallTracker monitors tool usage to prevent obsessive calling loops
@@ -25,6 +27,25 @@ type ToolCallTracker struct {
 	HasToolFailures     bool // Track if any tool failures occurred
 }
 
+// DotPromptMetadata represents the metadata section in dotprompt frontmatter
+type DotPromptMetadata struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Tags        []string `yaml:"tags"`
+	App         string   `yaml:"app"`         // CloudShip data ingestion app classification (optional)
+	AppType     string   `yaml:"app_type"`   // CloudShip data ingestion app_type classification (optional)
+}
+
+// DotPromptConfig represents the YAML frontmatter in a .prompt file
+type DotPromptConfig struct {
+	Metadata map[string]interface{} `yaml:"metadata"`
+	Model    string                 `yaml:"model"`
+	MaxSteps int                    `yaml:"max_steps"`
+	Tools    []string               `yaml:"tools"`
+	Input    map[string]interface{} `yaml:"input"`
+	Output   map[string]interface{} `yaml:"output"`
+}
+
 // GenKitExecutor handles agent execution using GenKit's dotprompt.Execute()
 type GenKitExecutor struct {
 	logCallback func(map[string]interface{})
@@ -33,6 +54,47 @@ type GenKitExecutor struct {
 // NewGenKitExecutor creates a new GenKit-based dotprompt executor
 func NewGenKitExecutor() *GenKitExecutor {
 	return &GenKitExecutor{}
+}
+
+// extractDotPromptMetadata extracts app/app_type metadata from dotprompt file if it exists
+func (e *GenKitExecutor) extractDotPromptMetadata(promptPath string) (app, appType string) {
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		return "", "" // Gracefully handle file read errors
+	}
+
+	// Parse the frontmatter (similar to existing dotprompt parsers)
+	parts := strings.Split(string(content), "---")
+	if len(parts) < 3 {
+		return "", "" // No frontmatter found
+	}
+
+	// Extract YAML frontmatter (parts[1])
+	yamlContent := strings.TrimSpace(parts[1])
+	if yamlContent == "" {
+		return "", ""
+	}
+
+	var config DotPromptConfig
+	if err := yaml.Unmarshal([]byte(yamlContent), &config); err != nil {
+		return "", "" // Gracefully handle YAML parse errors
+	}
+
+	// Extract app and app_type from metadata if they exist
+	if config.Metadata != nil {
+		if appVal, exists := config.Metadata["app"]; exists {
+			if appStr, ok := appVal.(string); ok {
+				app = appStr
+			}
+		}
+		if appTypeVal, exists := config.Metadata["app_type"]; exists {
+			if appTypeStr, ok := appTypeVal.(string); ok {
+				appType = appTypeStr
+			}
+		}
+	}
+
+	return app, appType
 }
 
 
@@ -50,6 +112,18 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 			Duration: time.Since(startTime),
 			Error:    fmt.Sprintf("failed to get agent prompt path: %v", err),
 		}, nil
+	}
+
+	// Extract metadata from dotprompt file (app/app_type for data ingestion)
+	app, appType := e.extractDotPromptMetadata(promptPath)
+	if app != "" || appType != "" {
+		if e.logCallback != nil {
+			e.logCallback(map[string]interface{}{
+				"event":    "metadata_extracted",
+				"app":      app,
+				"app_type": appType,
+			})
+		}
 	}
 
 	// Load dotprompt file
@@ -134,6 +208,8 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 		StepsUsed:  len(resp.ToolRequests()),
 		ToolsUsed:  len(resp.ToolRequests()),
 		TokenUsage: tokenUsage,
+		App:        app,     // CloudShip data ingestion app classification
+		AppType:    appType, // CloudShip data ingestion app_type classification
 	}, nil
 }
 
