@@ -73,6 +73,9 @@ type ExecutionResponse struct {
 	TokenUsage     map[string]interface{} `json:"token_usage,omitempty"`
 	Error          string                 `json:"error,omitempty"`
 	RawResponse    *ai.ModelResponse      `json:"-"` // Don't serialize raw response
+	// Metadata from dotprompt for data ingestion classification
+	App     string `json:"app,omitempty"`      // CloudShip data ingestion app classification
+	AppType string `json:"app_type,omitempty"` // CloudShip data ingestion app_type classification
 }
 
 // ToolMapping represents the mapping between agent tools and MCP configs

@@ -73,6 +73,30 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		outputSchemaPreset = &outputPresetParam
 	}
 
+	// Extract optional app and app_type parameters for CloudShip data ingestion classification
+	app := request.GetString("app", "")
+	appType := request.GetString("app_type", "")
+
+	// Auto-populate app/app_type for known presets if not explicitly provided
+	if app == "" && appType == "" && outputSchemaPreset != nil && *outputSchemaPreset != "" {
+		switch *outputSchemaPreset {
+		case "finops":
+			app = "finops"
+			appType = "cost-analysis"
+		// Add more presets as they're created
+		}
+	}
+
+	// Validate app and app_type: both must be provided together or both empty
+	if (app == "" && appType != "") || (app != "" && appType == "") {
+		return mcp.NewToolResultError("app and app_type must both be provided together or both omitted"), nil
+	}
+
+	// If app and app_type are provided, require output_schema or preset
+	if app != "" && appType != "" && (outputSchema == nil || *outputSchema == "") && (outputSchemaPreset == nil || *outputSchemaPreset == "") {
+		return mcp.NewToolResultError("app and app_type parameters require output_schema or output_schema_preset to be provided (structured output needed for data ingestion)"), nil
+	}
+
 	// Extract tool_names array if provided
 	var toolNames []string
 	if request.Params.Arguments != nil {
@@ -101,6 +125,8 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		InputSchema:        inputSchema,
 		OutputSchema:       outputSchema,
 		OutputSchemaPreset: outputSchemaPreset,
+		App:                app,
+		AppType:            appType,
 	}
 
 	createdAgent, err := s.agentService.CreateAgent(ctx, config)
@@ -122,7 +148,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 
 	// Automatically export agent to file-based config after successful DB save and tool assignment
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentAfterSave(createdAgent.ID); err != nil {
+		if err := s.agentExportService.ExportAgentAfterSaveWithMetadata(createdAgent.ID, app, appType); err != nil {
 			// Log the error but don't fail the request - the agent was successfully created in DB
 			// Add export error info to response for user awareness
 			response["export_warning"] = fmt.Sprintf("Agent created but export failed: %v. Use 'stn agent export %s' to export manually.", err, name)
