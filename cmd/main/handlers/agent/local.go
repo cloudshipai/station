@@ -712,6 +712,76 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 
 			lighthouse.RecordSuccess()
 			debugLog(fmt.Sprintf("Lighthouse telemetry sent successfully for CLI run %d", agentRun.ID))
+
+			// 🚀 Dual Flow: Send structured data if conditions are met (same logic as AgentExecutionEngine)
+			sendStructuredDataIfEligible := func() {
+				// Extract app/app_type metadata from dotprompt file (same as AgentExecutionEngine)
+				app := result.App
+				appType := result.AppType
+
+				// Fallback: Check if agent has preset-based app/app_type
+				if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
+					switch *agent.OutputSchemaPreset {
+					case "finops":
+						app = "finops"
+						appType = "cost-analysis"
+					}
+				}
+
+				// Skip if no app/app_type identified
+				if app == "" || appType == "" {
+					debugLog(fmt.Sprintf("No app/app_type metadata found for agent %d, skipping structured data ingestion", agent.ID))
+					return
+				}
+
+				// Skip if no output schema (no structured output to parse)
+				if agent.OutputSchema == nil || *agent.OutputSchema == "" {
+					debugLog(fmt.Sprintf("No output schema defined for agent %d, skipping structured data ingestion", agent.ID))
+					return
+				}
+
+				// Skip if agent execution failed (no meaningful structured data)
+				if !result.Success {
+					debugLog(fmt.Sprintf("Agent execution failed for agent %d, skipping structured data ingestion", agent.ID))
+					return
+				}
+
+				// Attempt to parse the response as structured JSON
+				var structuredData map[string]interface{}
+				if err := json.Unmarshal([]byte(result.Response), &structuredData); err != nil {
+					debugLog(fmt.Sprintf("Agent response is not valid JSON for agent %d, skipping structured data ingestion: %v", agent.ID, err))
+					return
+				}
+
+				// Prepare metadata for ingestion
+				metadata := map[string]string{
+					"source":               "cli",
+					"mode":                 "cli",
+					"agent_id":             fmt.Sprintf("%d", agent.ID),
+					"agent_name":           agent.Name,
+					"run_id":               fmt.Sprintf("%d", agentRun.ID),
+					"execution_success":    fmt.Sprintf("%t", result.Success),
+					"duration_ms":          fmt.Sprintf("%d", result.Duration.Milliseconds()),
+				}
+
+				if agent.OutputSchemaPreset != nil {
+					metadata["output_schema_preset"] = *agent.OutputSchemaPreset
+				}
+
+				// Send structured data to CloudShip Data Ingestion service
+				correlationID := fmt.Sprintf("run_%d", agentRun.ID)
+				if err := lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID); err != nil {
+					debugLog(fmt.Sprintf("Failed to send structured data to CloudShip: %v", err))
+					// Don't fail the execution - this is supplementary data
+				} else {
+					debugLog(fmt.Sprintf("Successfully sent structured data to CloudShip (app: %s, app_type: %s, run_id: %d)", app, appType, agentRun.ID))
+					fmt.Printf("✅ Structured data sent to CloudShip (app: %s, app_type: %s)\n", app, appType)
+				}
+			}
+
+			// Execute dual flow structured data ingestion
+			sendStructuredDataIfEligible()
+
 			fmt.Printf("✅ Lighthouse telemetry sent for CLI run %d\n", agentRun.ID)
 		}()
 	} else if lighthouseClient != nil {
