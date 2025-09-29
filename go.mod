@@ -139,7 +139,7 @@ require (
 	github.com/firebase/genkit/go v1.0.3
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang/protobuf v1.5.4
-	github.com/mark3labs/mcp-go v0.36.0
+	github.com/mark3labs/mcp-go v0.41.0
 	github.com/openai/openai-go v1.8.2
 	github.com/posthog/posthog-go v1.6.1
 	github.com/pressly/goose/v3 v3.24.3
