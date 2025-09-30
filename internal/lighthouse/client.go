@@ -23,9 +23,10 @@ type LighthouseClient struct {
 	client proto.LighthouseServiceClient
 
 	// State management
-	registered bool
-	stationID  string
-	mu         sync.RWMutex
+	registered     bool
+	stationID      string
+	organizationID string // Cached organization ID from registration key
+	mu             sync.RWMutex
 
 	// Background tasks
 	ctx    context.Context
@@ -144,11 +145,13 @@ func InitializeLighthouseFromConfig(cfg *config.Config, mode DeploymentMode) (*L
 
 	// Apply defaults
 	if lighthouseConfig.Endpoint == "" {
-		lighthouseConfig.Endpoint = "lighthouse.cloudship.ai:443"
+		lighthouseConfig.Endpoint = "lighthouse.cloudshipai.com:443"
 	}
 
-	// Disable TLS for localhost testing
-	if strings.Contains(lighthouseConfig.Endpoint, "localhost:") || strings.Contains(lighthouseConfig.Endpoint, "127.0.0.1:") {
+	// Disable TLS for localhost testing and port 50051 (standard insecure gRPC port)
+	if strings.Contains(lighthouseConfig.Endpoint, "localhost:") ||
+	   strings.Contains(lighthouseConfig.Endpoint, "127.0.0.1:") ||
+	   strings.Contains(lighthouseConfig.Endpoint, ":50051") {
 		lighthouseConfig.TLS = false
 	}
 
