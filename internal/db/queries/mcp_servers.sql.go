@@ -135,6 +135,45 @@ func (q *Queries) GetMCPServerByNameAndEnvironment(ctx context.Context, arg GetM
 	return i, err
 }
 
+const listAllMCPServers = `-- name: ListAllMCPServers :many
+SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id, created_at FROM mcp_servers ORDER BY name
+`
+
+func (q *Queries) ListAllMCPServers(ctx context.Context) ([]McpServer, error) {
+	rows, err := q.db.QueryContext(ctx, listAllMCPServers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Command,
+			&i.Args,
+			&i.Env,
+			&i.WorkingDir,
+			&i.TimeoutSeconds,
+			&i.AutoRestart,
+			&i.EnvironmentID,
+			&i.FileConfigID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServersByEnvironment = `-- name: ListMCPServersByEnvironment :many
 SELECT id, name, command, args, env, working_dir, timeout_seconds, auto_restart, environment_id, file_config_id, created_at FROM mcp_servers WHERE environment_id = ? ORDER BY name
 `

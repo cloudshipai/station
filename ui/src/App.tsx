@@ -1412,9 +1412,15 @@ const EnvironmentsPage = () => {
         const agents = (agentsRes.data.agents || []).filter((agent: any) =>
           agent.environment_id === selectedEnvironment
         );
-        const mcpServers = (mcpRes.data.servers || []).filter((server: any) =>
+        // Debug logging
+        console.log('MCP API Response:', mcpRes.data);
+        console.log('Raw MCP data:', mcpRes.data.servers || mcpRes.data || []);
+        console.log('Selected environment:', selectedEnvironment);
+
+        const mcpServers = (mcpRes.data.servers || mcpRes.data || []).filter((server: any) =>
           server.environment_id === selectedEnvironment
         );
+        console.log('Filtered MCP servers:', mcpServers);
 
         const newNodes: any[] = [];
         const newEdges: any[] = [];
@@ -2012,7 +2018,10 @@ const ConnectPage = () => {
             </p>
             <div className="bg-tokyo-bg border border-tokyo-orange7 rounded p-3">
               <p className="text-tokyo-orange font-mono text-sm">
-                <strong>🚀 Endpoint:</strong> Station's MCP server runs on <code className="bg-tokyo-dark2 px-1 rounded">http://localhost:3000/mcp</code> (Streamable HTTP transport)
+                <strong>🚀 Endpoint:</strong> Station's MCP server runs on <code className="bg-tokyo-dark2 px-1 rounded">http://localhost:3000/mcp</code>
+              </p>
+              <p className="text-tokyo-comment font-mono text-xs mt-1">
+                Supports both SSE and Streamable HTTP transports for Claude Code integration
               </p>
             </div>
           </div>

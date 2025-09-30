@@ -216,3 +216,18 @@ func (r *MCPServerRepo) Update(server *models.MCPServer) error {
 	_, err := r.queries.UpdateMCPServer(context.Background(), params)
 	return err
 }
+
+// GetAll retrieves all MCP servers across all environments
+func (r *MCPServerRepo) GetAll() ([]*models.MCPServer, error) {
+	servers, err := r.queries.ListAllMCPServers(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*models.MCPServer
+	for _, server := range servers {
+		result = append(result, convertMCPServerFromSQLc(server))
+	}
+
+	return result, nil
+}
