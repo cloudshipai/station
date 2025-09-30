@@ -52,33 +52,34 @@ type TemplateConfig struct {
 	Metadata    map[string]interface{}        `json:"metadata,omitempty"`
 }
 
-// GetMCPServersForEnvironment gets all MCP servers for an environment from template.json
+// GetMCPServersForEnvironment gets all MCP servers for an environment from database
 func (s *MCPServerManagementService) GetMCPServersForEnvironment(environmentName string) (map[string]MCPServerConfig, error) {
-	homeDir, err := os.UserHomeDir()
+	// Get environment by name to get the ID
+	env, err := s.repos.Environments.GetByName(environmentName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user home directory: %v", err)
+		return nil, fmt.Errorf("failed to get environment: %v", err)
 	}
 
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
-	templatePath := filepath.Join(envDir, "template.json")
-
-	// Check if template.json exists
-	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		return make(map[string]MCPServerConfig), nil // Return empty map if no template.json
-	}
-
-	// Read and parse template.json
-	templateData, err := os.ReadFile(templatePath)
+	// Get MCP servers from database
+	servers, err := s.repos.MCPServers.GetByEnvironmentID(env.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read template.json: %v", err)
+		return nil, fmt.Errorf("failed to get MCP servers from database: %v", err)
 	}
 
-	var templateConfig TemplateConfig
-	if err := json.Unmarshal(templateData, &templateConfig); err != nil {
-		return nil, fmt.Errorf("failed to parse template.json: %v", err)
+	// Convert to map format expected by the API
+	result := make(map[string]MCPServerConfig)
+	for _, server := range servers {
+		config := MCPServerConfig{
+			Name:        server.Name,
+			Description: "", // database model doesn't have description field
+			Command:     server.Command,
+			Args:        server.Args,
+			Env:         server.Env,
+		}
+		result[server.Name] = config
 	}
 
-	return templateConfig.MCPServers, nil
+	return result, nil
 }
 
 // AddMCPServerToEnvironment adds an MCP server to an environment's template.json

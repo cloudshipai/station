@@ -9,6 +9,9 @@ SELECT * FROM mcp_servers WHERE id = ?;
 -- name: ListMCPServersByEnvironment :many
 SELECT * FROM mcp_servers WHERE environment_id = ? ORDER BY name;
 
+-- name: ListAllMCPServers :many
+SELECT * FROM mcp_servers ORDER BY name;
+
 -- name: UpdateMCPServer :one
 UPDATE mcp_servers 
 SET name = ?, command = ?, args = ?, env = ?, working_dir = ?, timeout_seconds = ?, auto_restart = ?, file_config_id = ?
