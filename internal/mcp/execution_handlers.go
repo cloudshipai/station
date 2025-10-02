@@ -118,8 +118,8 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 			return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
 		}
 
-		// Create agent service to access execution engine (same as CLI - working version)
-		agentService := services.NewAgentService(s.repos)
+		// Create agent service to access execution engine with lighthouse client for dual flow
+		agentService := services.NewAgentService(s.repos, s.lighthouseClient)
 
 		// Use the same unified execution flow as CLI (working version)
 		result, execErr := agentService.GetExecutionEngine().Execute(ctx, agent, task, runID, userVariables)

@@ -478,7 +478,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	}
 	
 	// Create agent service with Lighthouse integration
-	agentService := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
+	agentService := services.NewAgentService(repos, lighthouseClient)
 	
 	// Get console user for execution tracking  
 	consoleUser, err := repos.Users.GetByUsername("console")
@@ -721,22 +721,18 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 
 				// Fallback: Check if agent has preset-based app/app_type
 				if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
+					debugLog(fmt.Sprintf("No app/app_type from frontmatter for agent %d, trying preset fallback: %s", agent.ID, *agent.OutputSchemaPreset))
 					switch *agent.OutputSchemaPreset {
 					case "finops":
 						app = "finops"
 						appType = "cost-analysis"
+						debugLog(fmt.Sprintf("✅ Applied finops preset for agent %d: app='%s', app_type='%s'", agent.ID, app, appType))
 					}
 				}
 
-				// Skip if no app/app_type identified
+				// Skip if no app/app_type identified (either from frontmatter or preset fallback)
 				if app == "" || appType == "" {
-					debugLog(fmt.Sprintf("No app/app_type metadata found for agent %d, skipping structured data ingestion", agent.ID))
-					return
-				}
-
-				// Skip if no output schema (no structured output to parse)
-				if agent.OutputSchema == nil || *agent.OutputSchema == "" {
-					debugLog(fmt.Sprintf("No output schema defined for agent %d, skipping structured data ingestion", agent.ID))
+					debugLog(fmt.Sprintf("No app/app_type metadata found for agent %d (app='%s', app_type='%s'), skipping structured data ingestion", agent.ID, app, appType))
 					return
 				}
 

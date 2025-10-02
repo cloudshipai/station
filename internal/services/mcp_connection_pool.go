@@ -189,7 +189,7 @@ func (mcm *MCPConnectionManager) deduplicateServers(servers []serverDefinition) 
 // getPooledEnvironmentMCPTools uses the server pool for fast tool access
 func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Context, environmentID int64) ([]ai.Tool, []*mcp.GenkitMCPClient, error) {
 	logging.Info("Using pooled MCP connections for environment %d", environmentID)
-	
+
 	// Get file configs for this environment
 	fileConfigs, err := mcm.repos.FileMCPConfigs.ListByEnvironment(environmentID)
 	if err != nil {
@@ -202,9 +202,10 @@ func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Contex
 	// Find matching servers in the pool
 	mcm.serverPool.mutex.RLock()
 	defer mcm.serverPool.mutex.RUnlock()
-	
+
 	for _, fileConfig := range fileConfigs {
 		serverConfigs := mcm.parseFileConfig(fileConfig)
+
 		for serverName, serverConfig := range serverConfigs {
 			serverKey := mcm.generateServerKey(serverName, serverConfig)
 			

@@ -90,7 +90,7 @@ const CloudShipStatus: React.FC = () => {
 
       {/* Tooltip */}
       {showTooltip && (
-        <div className="absolute top-full left-0 mt-2 p-3 bg-tokyo-dark2 border border-tokyo-dark4 rounded-lg shadow-lg z-50 min-w-64">
+        <div className="absolute bottom-full left-0 mb-2 p-3 bg-tokyo-dark2 border border-tokyo-dark4 rounded-lg shadow-lg z-50 min-w-64">
           <div className="text-xs text-tokyo-fg space-y-1">
             <div className="font-semibold text-tokyo-blue">{status.summary_message}</div>
 

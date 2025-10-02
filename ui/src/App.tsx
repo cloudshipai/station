@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link } from 'lucide-react';
+import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -244,6 +245,7 @@ const Layout = ({ children }: any) => {
     const path = location.pathname;
     if (path.startsWith('/agents')) return 'agents';
     if (path.startsWith('/mcps')) return 'mcps';
+    if (path.startsWith('/mcp-directory')) return 'mcp-directory';
     if (path.startsWith('/runs')) return 'runs';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
@@ -280,6 +282,7 @@ const Layout = ({ children }: any) => {
   const sidebarItems = [
     { id: 'agents', label: 'Agents', icon: Bot, path: currentEnvironmentName ? `/agents/${currentEnvironmentName}` : '/agents' },
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
+    { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
@@ -907,11 +910,11 @@ const MCPServersPage = () => {
 
       if (!selectedEnvId) {
         const response = await mcpServersApi.getAll();
-        setMcpServers(Array.isArray(response.data) ? response.data : []);
+        setMcpServers(response.data.servers || []);
       } else {
         // Use the environment ID directly since that's what the context stores
         const response = await mcpServersApi.getByEnvironment(selectedEnvId);
-        setMcpServers(Array.isArray(response.data) ? response.data : []);
+        setMcpServers(response.data.servers || []);
       }
     } catch (error) {
       console.error('Failed to fetch MCP servers:', error);
@@ -2181,6 +2184,7 @@ function App() {
                   <Route path="/agents/:env" element={<AgentsCanvas />} />
                   <Route path="/mcps" element={<MCPServersPage />} />
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
+                  <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
                   <Route path="/runs" element={<RunsPage />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />

@@ -52,37 +52,65 @@ type TemplateConfig struct {
 	Metadata    map[string]interface{}        `json:"metadata,omitempty"`
 }
 
-// GetMCPServersForEnvironment gets all MCP servers for an environment from database
+// SingleServerTemplate represents a single server template file
+type SingleServerTemplate struct {
+	Name        string                        `json:"name"`
+	Description string                        `json:"description,omitempty"`
+	MCPServers  map[string]MCPServerConfig    `json:"mcpServers"`
+	Metadata    map[string]interface{}        `json:"metadata,omitempty"`
+}
+
+// GetMCPServersForEnvironment gets all MCP servers for an environment from individual files
 func (s *MCPServerManagementService) GetMCPServersForEnvironment(environmentName string) (map[string]MCPServerConfig, error) {
-	// Get environment by name to get the ID
-	env, err := s.repos.Environments.GetByName(environmentName)
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get environment: %v", err)
+		return nil, fmt.Errorf("failed to get user home directory: %v", err)
 	}
 
-	// Get MCP servers from database
-	servers, err := s.repos.MCPServers.GetByEnvironmentID(env.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get MCP servers from database: %v", err)
+	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+
+	// Check if environment directory exists
+	if _, err := os.Stat(envDir); os.IsNotExist(err) {
+		return make(map[string]MCPServerConfig), nil // Return empty map if directory doesn't exist
 	}
 
-	// Convert to map format expected by the API
+	// Read all JSON files in the environment directory
+	files, err := filepath.Glob(filepath.Join(envDir, "*.json"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read environment directory: %v", err)
+	}
+
 	result := make(map[string]MCPServerConfig)
-	for _, server := range servers {
-		config := MCPServerConfig{
-			Name:        server.Name,
-			Description: "", // database model doesn't have description field
-			Command:     server.Command,
-			Args:        server.Args,
-			Env:         server.Env,
+
+	for _, filePath := range files {
+		// Skip template.json if it exists (legacy file)
+		fileName := filepath.Base(filePath)
+		if fileName == "template.json" {
+			continue
 		}
-		result[server.Name] = config
+
+		// Read the server file
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			continue // Skip files that can't be read
+		}
+
+		var singleServerTemplate SingleServerTemplate
+		if err := json.Unmarshal(fileData, &singleServerTemplate); err != nil {
+			continue // Skip files that can't be parsed
+		}
+
+		// Add all servers from this file to the result
+		for serverName, serverConfig := range singleServerTemplate.MCPServers {
+			result[serverName] = serverConfig
+		}
 	}
 
 	return result, nil
 }
 
-// AddMCPServerToEnvironment adds an MCP server to an environment's template.json
+
+// AddMCPServerToEnvironment adds an MCP server to an environment as a separate file
 func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, serverName string, serverConfig MCPServerConfig) *MCPServerOperationResult {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -93,7 +121,6 @@ func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, 
 	}
 
 	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
-	templatePath := filepath.Join(envDir, "template.json")
 
 	// Check if environment directory exists
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
@@ -103,51 +130,31 @@ func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, 
 		}
 	}
 
-	// Read existing template.json or create new one
-	var templateConfig TemplateConfig
-	if _, err := os.Stat(templatePath); err == nil {
-		templateData, err := os.ReadFile(templatePath)
-		if err != nil {
-			return &MCPServerOperationResult{
-				Success: false,
-				Message: fmt.Sprintf("Failed to read template.json: %v", err),
-			}
-		}
+	// Use the server config as-is (UI will provide Go template format directly)
+	templateServerConfig := serverConfig
 
-		if err := json.Unmarshal(templateData, &templateConfig); err != nil {
-			return &MCPServerOperationResult{
-				Success: false,
-				Message: fmt.Sprintf("Failed to parse template.json: %v", err),
-			}
-		}
-	} else {
-		// Create new template config
-		templateConfig = TemplateConfig{
-			Name:        environmentName,
-			Description: fmt.Sprintf("Environment configuration for %s", environmentName),
-			MCPServers:  make(map[string]MCPServerConfig),
-		}
+	// Create single server template
+	singleServerTemplate := SingleServerTemplate{
+		Name:        serverName,
+		Description: fmt.Sprintf("MCP server configuration for %s", serverName),
+		MCPServers:  map[string]MCPServerConfig{serverName: templateServerConfig},
 	}
 
-	// Add or update the MCP server
-	if templateConfig.MCPServers == nil {
-		templateConfig.MCPServers = make(map[string]MCPServerConfig)
-	}
-	templateConfig.MCPServers[serverName] = serverConfig
-
-	// Write updated template.json
-	templateData, err := json.MarshalIndent(templateConfig, "", "  ")
+	// Write individual server file
+	serverFilePath := filepath.Join(envDir, fmt.Sprintf("%s.json", serverName))
+	fmt.Printf("DEBUG: Creating server file at: %s (serverName=%s, environmentName=%s)\n", serverFilePath, serverName, environmentName)
+	templateData, err := json.MarshalIndent(singleServerTemplate, "", "  ")
 	if err != nil {
 		return &MCPServerOperationResult{
 			Success: false,
-			Message: fmt.Sprintf("Failed to marshal template.json: %v", err),
+			Message: fmt.Sprintf("Failed to marshal server config: %v", err),
 		}
 	}
 
-	if err := os.WriteFile(templatePath, templateData, 0644); err != nil {
+	if err := os.WriteFile(serverFilePath, templateData, 0644); err != nil {
 		return &MCPServerOperationResult{
 			Success: false,
-			Message: fmt.Sprintf("Failed to write template.json: %v", err),
+			Message: fmt.Sprintf("Failed to write server file: %v", err),
 		}
 	}
 
@@ -155,7 +162,7 @@ func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, 
 		Success:     true,
 		ServerName:  serverName,
 		Environment: environmentName,
-		Message:     fmt.Sprintf("MCP server '%s' added to environment '%s'", serverName, environmentName),
+		Message:     fmt.Sprintf("MCP server '%s' added to environment '%s' as %s.json", serverName, environmentName, serverName),
 	}
 }
 
@@ -197,43 +204,15 @@ func (s *MCPServerManagementService) DeleteMCPServerFromEnvironment(environmentN
 	}
 
 	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
-	templatePath := filepath.Join(envDir, "template.json")
+	serverFilePath := filepath.Join(envDir, fmt.Sprintf("%s.json", serverName))
 
-	// Check if template.json exists
-	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		return &MCPServerOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("No template.json found for environment '%s'", environmentName),
-		}
-	}
-
-	// Read existing template.json
-	templateData, err := os.ReadFile(templatePath)
-	if err != nil {
-		return &MCPServerOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to read template.json: %v", err),
-		}
-	}
-
-	var templateConfig TemplateConfig
-	if err := json.Unmarshal(templateData, &templateConfig); err != nil {
-		return &MCPServerOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to parse template.json: %v", err),
-		}
-	}
-
-	// Check if server exists
-	if _, exists := templateConfig.MCPServers[serverName]; !exists {
+	// Check if server file exists
+	if _, err := os.Stat(serverFilePath); os.IsNotExist(err) {
 		return &MCPServerOperationResult{
 			Success: false,
 			Message: fmt.Sprintf("MCP server '%s' not found in environment '%s'", serverName, environmentName),
 		}
 	}
-
-	// Remove the server
-	delete(templateConfig.MCPServers, serverName)
 
 	// Also clean up associated database records
 	var dbDeleteError error
@@ -264,16 +243,8 @@ func (s *MCPServerManagementService) DeleteMCPServerFromEnvironment(environmentN
 		}
 	}
 
-	// Write updated template.json
-	templateData, err = json.MarshalIndent(templateConfig, "", "  ")
-	if err != nil {
-		return &MCPServerOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to marshal template.json: %v", err),
-		}
-	}
-
-	if err := os.WriteFile(templatePath, templateData, 0644); err != nil {
+	// Delete the individual server file
+	if err := os.Remove(serverFilePath); err != nil {
 		fileCleanupError = err
 	}
 
@@ -297,7 +268,7 @@ func (s *MCPServerManagementService) DeleteMCPServerFromEnvironment(environmentN
 	if fileCleanupError == nil && dbDeleteError == nil {
 		result.Message = fmt.Sprintf("MCP server '%s' deleted successfully from environment '%s'", serverName, environmentName)
 	} else if fileCleanupError == nil {
-		result.Message = fmt.Sprintf("MCP server '%s' removed from template.json, but database cleanup failed", serverName)
+		result.Message = fmt.Sprintf("MCP server '%s' removed from file, but database cleanup failed", serverName)
 	} else {
 		result.Message = fmt.Sprintf("Failed to delete MCP server '%s' from environment '%s'", serverName, environmentName)
 	}

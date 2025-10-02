@@ -75,10 +75,12 @@ func (h *BuildHandler) RunBuildEnvironment(cmd *cobra.Command, args []string) er
 	if strings.HasSuffix(containerImage, ".tar") {
 		fmt.Printf("Successfully exported container: %s\n", containerImage)
 		fmt.Printf("Load with: docker load < %s\n", containerImage)
-		fmt.Printf("Run with: docker run -it station-%s:latest\n", environmentName)
+		fmt.Printf("Run with: docker run -it --privileged -v /var/run/docker.sock:/var/run/docker.sock station-%s:latest\n", environmentName)
+		fmt.Printf("Note: --privileged and docker.sock mount enable Docker-in-Docker for MCP tools like Dagger\n")
 	} else {
 		fmt.Printf("Successfully built Docker image: %s\n", containerImage)
-		fmt.Printf("Run with: docker run -it %s\n", containerImage)
+		fmt.Printf("Run with: docker run -it --privileged -v /var/run/docker.sock:/var/run/docker.sock %s\n", containerImage)
+		fmt.Printf("Note: --privileged and docker.sock mount enable Docker-in-Docker for MCP tools like Dagger\n")
 	}
 
 	return nil

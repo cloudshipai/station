@@ -62,9 +62,12 @@ func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environment
 		operation, err := s.syncSingleAgent(ctx, promptFile, agentName, environmentName, options)
 		if err != nil {
 			result.ValidationErrors++
-			result.ValidationMessages = append(result.ValidationMessages, 
-				fmt.Sprintf("Agent '%s': %v", agentName, err))
-			
+			errorMsg := fmt.Sprintf("Agent '%s': %v", agentName, err)
+			result.ValidationMessages = append(result.ValidationMessages, errorMsg)
+
+			// TEMP DEBUG: Print validation error immediately
+			fmt.Printf("❌ VALIDATION ERROR: %s\n", errorMsg)
+
 			result.Operations = append(result.Operations, SyncOperation{
 				Type:        OpTypeError,
 				Target:      agentName,
@@ -264,19 +267,31 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 
 	// Assign tools if specified
 	if len(config.Tools) > 0 {
+		fmt.Printf("🔧 DEBUG: Agent %s has %d tools to assign: %v\n", agentName, len(config.Tools), config.Tools)
 		for _, toolName := range config.Tools {
+			fmt.Printf("🔍 DEBUG: Looking for tool '%s' in environment %d\n", toolName, env.ID)
+
 			// Find tool by name in environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(env.ID, toolName)
 			if err != nil {
+				fmt.Printf("❌ DEBUG: Tool '%s' not found: %v\n", toolName, err)
 				return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
 			}
+
+			fmt.Printf("✅ DEBUG: Found tool '%s' with ID %d\n", toolName, tool.ID)
 
 			// Assign tool to agent
 			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
 			if err != nil {
+				fmt.Printf("❌ DEBUG: Failed to assign tool '%s': %v\n", toolName, err)
 				return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
 			}
+
+			fmt.Printf("🎯 DEBUG: Successfully assigned tool '%s' to agent %d\n", toolName, createdAgent.ID)
 		}
+		fmt.Printf("🎉 DEBUG: Assigned %d tools to agent '%s'\n", len(config.Tools), agentName)
+	} else {
+		fmt.Printf("⚠️  DEBUG: Agent %s has no tools specified in config\n", agentName)
 	}
 
 	logging.Info("✅ Created agent: %s", agentName)

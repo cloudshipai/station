@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -149,7 +148,7 @@ func (h *APIHandlers) getMCPServer(c *gin.Context) {
 	c.JSON(http.StatusOK, server)
 }
 
-// createMCPServer creates a new MCP server configuration file
+// createMCPServer creates a new MCP server configuration file using the management service
 func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	var req MCPServerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -160,22 +159,19 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		return
 	}
 
-	// Convert config to string if it's an object, and validate JSON
-	var configString string
+	// Parse the config to extract MCP server configuration
+	var configData map[string]interface{}
 	switch cfg := req.Config.(type) {
 	case string:
-		configString = cfg
-	case map[string]interface{}, []interface{}:
-		// Config was sent as an object - convert to JSON string
-		configBytes, err := json.Marshal(cfg)
-		if err != nil {
+		if err := json.Unmarshal([]byte(cfg), &configData); err != nil {
 			c.JSON(http.StatusBadRequest, MCPServerResponse{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to marshal config object: %v", err),
+				Error:   fmt.Sprintf("Invalid JSON configuration: %v", err),
 			})
 			return
 		}
-		configString = string(configBytes)
+	case map[string]interface{}:
+		configData = cfg
 	default:
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
@@ -184,66 +180,105 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		return
 	}
 
-	// Validate that the config string is valid JSON
-	var configData interface{}
-	if err := json.Unmarshal([]byte(configString), &configData); err != nil {
+	// Extract the MCP server configuration from the config
+	mcpServersData, exists := configData["mcpServers"]
+	if !exists {
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
-			Error:   fmt.Sprintf("Invalid JSON configuration: %v", err),
+			Error:   "Config must contain 'mcpServers' field",
 		})
 		return
 	}
 
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
+	mcpServersMap, ok := mcpServersData.(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   "mcpServers must be an object",
+		})
+		return
+	}
+
+	// Get the server config for the specified server name
+	serverConfigData, exists := mcpServersMap[req.Name]
+	if !exists {
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("No configuration found for server '%s' in mcpServers", req.Name),
+		})
+		return
+	}
+
+	serverConfigMap, ok := serverConfigData.(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Configuration for server '%s' must be an object", req.Name),
+		})
+		return
+	}
+
+	// Convert to our MCPServerConfig format
+	serverConfig := services.MCPServerConfig{
+		Name:        req.Name,
+		Description: "",
+		Command:     "",
+		Args:        []string{},
+		Env:         make(map[string]string),
+	}
+
+	// Extract description if present
+	if desc, ok := serverConfigMap["description"].(string); ok {
+		serverConfig.Description = desc
+	}
+
+	// Extract command
+	if cmd, ok := serverConfigMap["command"].(string); ok {
+		serverConfig.Command = cmd
+	} else {
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   "Server configuration must contain 'command' field",
+		})
+		return
+	}
+
+	// Extract args
+	if argsData, ok := serverConfigMap["args"].([]interface{}); ok {
+		for _, arg := range argsData {
+			if argStr, ok := arg.(string); ok {
+				serverConfig.Args = append(serverConfig.Args, argStr)
+			}
+		}
+	}
+
+	// Extract env
+	if envData, ok := serverConfigMap["env"].(map[string]interface{}); ok {
+		for key, value := range envData {
+			if valueStr, ok := value.(string); ok {
+				serverConfig.Env[key] = valueStr
+			}
+		}
+	}
+
+	// Use the management service to create the server file with template variable conversion
+	mcpService := services.NewMCPServerManagementService(h.repos)
+	result := mcpService.AddMCPServerToEnvironment(req.Environment, req.Name, serverConfig)
+
+	if !result.Success {
 		c.JSON(http.StatusInternalServerError, MCPServerResponse{
 			Success: false,
-			Error:   "Failed to get home directory",
-		})
-		return
-	}
-
-	// Environment directory path
-	envPath := filepath.Join(homeDir, ".config", "station", "environments", req.Environment)
-	
-	// Check if environment directory exists
-	if _, err := os.Stat(envPath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, MCPServerResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Environment '%s' not found", req.Environment),
-		})
-		return
-	}
-
-	// Create the config file path
-	configFileName := fmt.Sprintf("%s.json", req.Name)
-	configFilePath := filepath.Join(envPath, configFileName)
-
-	// Check if file already exists
-	if _, err := os.Stat(configFilePath); err == nil {
-		c.JSON(http.StatusConflict, MCPServerResponse{
-			Success: false,
-			Error:   fmt.Sprintf("MCP server config '%s' already exists in environment '%s'", req.Name, req.Environment),
-		})
-		return
-	}
-
-	// Write the config to file
-	if err := os.WriteFile(configFilePath, []byte(configString), 0644); err != nil {
-		c.JSON(http.StatusInternalServerError, MCPServerResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to write config file: %v", err),
+			Error:   result.Message,
 		})
 		return
 	}
 
 	c.JSON(http.StatusCreated, MCPServerResponse{
 		Success:     true,
-		Message:     fmt.Sprintf("MCP server '%s' created successfully in environment '%s'", req.Name, req.Environment),
+		Message:     result.Message,
 		ServerName:  req.Name,
 		Environment: req.Environment,
-		FilePath:    configFilePath,
+		FilePath:    fmt.Sprintf("~/.config/station/environments/%s/%s.json", req.Environment, req.Name),
 	})
 }
 
