@@ -26,8 +26,8 @@ type AgentService struct {
 	exportService   *AgentExportService
 }
 
-// NewAgentService creates a new agent service
-func NewAgentService(repos *repositories.Repositories) *AgentService {
+// NewAgentService creates a new agent service with optional lighthouse client
+func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*lighthouse.LighthouseClient) *AgentService {
 	service := &AgentService{
 		repos:         repos,
 		exportService: NewAgentExportService(repos),
@@ -54,12 +54,20 @@ func NewAgentService(repos *repositories.Repositories) *AgentService {
 		// Continue without telemetry rather than failing
 	}
 	
-	// Create execution engine with self-reference
-	service.executionEngine = NewAgentExecutionEngine(repos, service)
-	
+	// Create execution engine with self-reference and optional lighthouse client
+	var client *lighthouse.LighthouseClient
+	if len(lighthouseClient) > 0 && lighthouseClient[0] != nil {
+		client = lighthouseClient[0]
+		service.executionEngine = NewAgentExecutionEngineWithLighthouse(repos, service, client)
+		log.Printf("🚀 DEBUG: NewAgentService created execution engine WITH lighthouse client")
+	} else {
+		service.executionEngine = NewAgentExecutionEngine(repos, service)
+		log.Printf("🚀 DEBUG: NewAgentService created execution engine WITHOUT lighthouse client")
+	}
+
 	// Pass telemetry service to execution engine for span creation
 	service.executionEngine.telemetryService = service.telemetry
-	
+
 	return service
 }
 

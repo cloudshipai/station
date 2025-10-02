@@ -47,10 +47,10 @@ export const agentsApi = {
 
 // MCP Servers API
 export const mcpServersApi = {
-  getAll: () => apiClient.get<MCPServer[]>('/mcp-servers'),
+  getAll: () => apiClient.get<{servers: MCPServer[]}>('/mcp-servers'),
   getById: (id: number) => apiClient.get<MCPServer>(`/mcp-servers/${id}`),
-  getByEnvironment: (environmentId: number) => 
-    apiClient.get<MCPServer[]>(`/mcp-servers?environment_id=${environmentId}`),
+  getByEnvironment: (environmentId: number) =>
+    apiClient.get<{servers: MCPServer[]}>(`/mcp-servers?environment_id=${environmentId}`),
 };
 
 // Tools API

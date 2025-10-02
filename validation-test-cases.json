@@ -1,0 +1,96 @@
+{
+  "test_cases": [
+    {
+      "name": "Test 1: Both app and app_type with output_schema (should succeed)",
+      "mcp_call": {
+        "method": "tools/call",
+        "params": {
+          "name": "create_agent",
+          "arguments": {
+            "name": "Validation Test Success",
+            "description": "Test agent with both app and app_type parameters",
+            "prompt": "You are a test agent for data ingestion validation.",
+            "environment_id": "1",
+            "max_steps": 5,
+            "app": "analytics",
+            "app_type": "data-processing",
+            "output_schema": "{\"type\": \"object\", \"properties\": {\"response\": {\"type\": \"string\"}, \"processed\": {\"type\": \"boolean\"}, \"ingestion_metadata\": {\"type\": \"object\", \"properties\": {\"app\": {\"type\": \"string\"}, \"app_type\": {\"type\": \"string\"}}, \"required\": [\"app\", \"app_type\"]}}, \"required\": [\"response\", \"processed\", \"ingestion_metadata\"]}"
+          }
+        }
+      },
+      "expected": "Success - agent created with app/app_type metadata"
+    },
+    {
+      "name": "Test 2: Only app parameter (should fail)",
+      "mcp_call": {
+        "method": "tools/call",
+        "params": {
+          "name": "create_agent",
+          "arguments": {
+            "name": "Validation Test Fail 1",
+            "description": "Test agent with only app parameter",
+            "prompt": "You are a test agent.",
+            "environment_id": "1",
+            "max_steps": 5,
+            "app": "analytics"
+          }
+        }
+      },
+      "expected": "Error: app and app_type must both be provided together or both omitted"
+    },
+    {
+      "name": "Test 3: Only app_type parameter (should fail)",
+      "mcp_call": {
+        "method": "tools/call",
+        "params": {
+          "name": "create_agent",
+          "arguments": {
+            "name": "Validation Test Fail 2",
+            "description": "Test agent with only app_type parameter",
+            "prompt": "You are a test agent.",
+            "environment_id": "1",
+            "max_steps": 5,
+            "app_type": "data-processing"
+          }
+        }
+      },
+      "expected": "Error: app and app_type must both be provided together or both omitted"
+    },
+    {
+      "name": "Test 4: Neither app nor app_type (should succeed)",
+      "mcp_call": {
+        "method": "tools/call",
+        "params": {
+          "name": "create_agent",
+          "arguments": {
+            "name": "Validation Test Success 2",
+            "description": "Test agent without app/app_type parameters",
+            "prompt": "You are a regular test agent.",
+            "environment_id": "1",
+            "max_steps": 5
+          }
+        }
+      },
+      "expected": "Success - agent created without app/app_type metadata"
+    },
+    {
+      "name": "Test 5: Both app and app_type WITHOUT output_schema (should fail)",
+      "mcp_call": {
+        "method": "tools/call",
+        "params": {
+          "name": "create_agent",
+          "arguments": {
+            "name": "Validation Test Fail 3",
+            "description": "Test agent with app/app_type but no output_schema",
+            "prompt": "You are a test agent.",
+            "environment_id": "1",
+            "max_steps": 5,
+            "app": "analytics",
+            "app_type": "data-processing"
+          }
+        }
+      },
+      "expected": "Error: app and app_type parameters require output_schema to be provided (structured output needed for data ingestion)"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Data Ingestion Test Agent",
+  "description": "Test agent for validating app/app_type data ingestion functionality",
+  "prompt": "You are a data ingestion test agent. You must respond with structured JSON output that includes both your response and classification metadata.",
+  "environment_id": "1",
+  "max_steps": 5,
+  "output_schema": "{\"type\": \"object\", \"properties\": {\"response\": {\"type\": \"string\", \"description\": \"Agent response\"}, \"processed\": {\"type\": \"boolean\", \"description\": \"Whether data was processed\"}, \"ingestion_metadata\": {\"type\": \"object\", \"properties\": {\"app\": {\"type\": \"string\"}, \"app_type\": {\"type\": \"string\"}}, \"required\": [\"app\", \"app_type\"]}}, \"required\": [\"response\", \"processed\", \"ingestion_metadata\"]}",
+  "app": "analytics",
+  "app_type": "data-processing",
+  "tool_names": ["__read_text_file", "__list_directory"]
+}

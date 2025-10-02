@@ -1,7 +1,9 @@
 package v1
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -65,8 +67,8 @@ func (h *APIHandlers) addMCPServerToEnvironment(c *gin.Context) {
 	}
 
 	var req struct {
-		ServerName string                            `json:"server_name" binding:"required"`
-		Config     services.MCPServerConfig          `json:"config" binding:"required"`
+		ServerName string                 `json:"server_name" binding:"required"`
+		Config     map[string]interface{} `json:"config" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -81,8 +83,50 @@ func (h *APIHandlers) addMCPServerToEnvironment(c *gin.Context) {
 		return
 	}
 
+	// Convert config map to MCPServerConfig
+	serverConfig := services.MCPServerConfig{
+		Name:        req.ServerName,
+		Description: "",
+		Command:     "",
+		Args:        []string{},
+		Env:         make(map[string]string),
+	}
+
+	// Extract command
+	if cmd, ok := req.Config["command"].(string); ok {
+		serverConfig.Command = cmd
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Config must contain 'command' field"})
+		return
+	}
+
+	// Extract description if present
+	if desc, ok := req.Config["description"].(string); ok {
+		serverConfig.Description = desc
+	}
+
+	// Extract args
+	if argsData, ok := req.Config["args"].([]interface{}); ok {
+		for _, arg := range argsData {
+			if argStr, ok := arg.(string); ok {
+				serverConfig.Args = append(serverConfig.Args, argStr)
+			}
+		}
+	}
+
+	// Extract env
+	if envData, ok := req.Config["env"].(map[string]interface{}); ok {
+		for key, value := range envData {
+			if valueStr, ok := value.(string); ok {
+				serverConfig.Env[key] = valueStr
+			}
+		}
+	}
+
 	mcpService := services.NewMCPServerManagementService(h.repos)
-	result := mcpService.AddMCPServerToEnvironment(env.Name, req.ServerName, req.Config)
+	fmt.Fprintf(os.Stdout, "DEBUG API: env.Name=%s, req.ServerName=%s, serverConfig.Name=%s\n", env.Name, req.ServerName, serverConfig.Name)
+	os.Stdout.Sync()
+	result := mcpService.AddMCPServerToEnvironment(env.Name, req.ServerName, serverConfig)
 
 	if !result.Success {
 		c.JSON(http.StatusInternalServerError, gin.H{

@@ -205,7 +205,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 
 	// Install Ship CLI before running sync to prevent MCP failures
 	log.Printf("🚢 Installing Ship CLI in container for sync process...")
-	base = base.WithExec([]string{"bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash"})
+	base = base.WithExec([]string{"bash", "-c", "timeout 300 bash -c 'curl -fsSL --max-time 60 https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash' || echo 'Ship CLI installation failed or timed out'"})
 	base = base.WithExec([]string{"bash", "-c", "if [ -f /root/.local/bin/ship ]; then cp /root/.local/bin/ship /usr/local/bin/ship && chmod +x /usr/local/bin/ship; fi"})
 
 	// Clean up problematic MCP templates that require missing variables

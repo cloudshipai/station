@@ -372,6 +372,7 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 		context := aee.deploymentContextService.GatherContextForMode("stdio")
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
 		// Dual flow: Send structured data if conditions are met
+		logging.Debug("🚀 [LIGHTHOUSE DEBUG] About to call sendStructuredDataIfEligible for stdio mode (run_id: %d)", runID)
 		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
 
 	case lighthouse.ModeServe:
@@ -403,9 +404,35 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 
 // sendStructuredDataIfEligible checks if agent qualifies for structured data ingestion and sends it
 func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agent, result *AgentExecutionResult, runID int64, contextLabels map[string]string) {
+	logging.Debug("🔍 [LIGHTHOUSE DEBUG] sendStructuredDataIfEligible called for agent %d (name: %s, run_id: %d)", agent.ID, agent.Name, runID)
+
+	// Log lighthouse client state
+	if aee.lighthouseClient == nil {
+		logging.Debug("❌ [LIGHTHOUSE DEBUG] Lighthouse client is nil - cannot send structured data")
+		return
+	} else {
+		logging.Debug("✅ [LIGHTHOUSE DEBUG] Lighthouse client exists and is connected")
+	}
+
 	// Check if agent has app/app_type metadata (from dotprompt or database)
 	app := result.App
 	appType := result.AppType
+
+	logging.Debug("📊 [LIGHTHOUSE DEBUG] Agent %d initial metadata - result.App: '%s', result.AppType: '%s', agent.OutputSchemaPreset: %v",
+		agent.ID, app, appType, func() string {
+			if agent.OutputSchemaPreset != nil {
+				return *agent.OutputSchemaPreset
+			}
+			return "nil"
+		}())
+	hasUserDefinedSchema := false
+	hasPreset := false
+
+	// Check for user-defined output schema + app/app_type
+	if (app != "" && appType != "") && (agent.OutputSchema != nil && *agent.OutputSchema != "") {
+		hasUserDefinedSchema = true
+		logging.Debug("✅ User-defined schema agent %d for data ingestion (app: %s, app_type: %s)", agent.ID, app, appType)
+	}
 
 	// Fallback: Check if agent has preset-based app/app_type
 	if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
@@ -413,19 +440,28 @@ func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agen
 		case "finops":
 			app = "finops"
 			appType = "cost-analysis"
+			hasPreset = true
+			logging.Debug("🔄 Identified finops preset agent %d for data ingestion (app: %s, app_type: %s)", agent.ID, app, appType)
 		}
 	}
 
 	// Skip if no app/app_type identified
 	if app == "" || appType == "" {
-		logging.Debug("No app/app_type metadata found for agent %d, skipping structured data ingestion", agent.ID)
+		logging.Debug("❌ No app/app_type metadata found for agent %d, skipping structured data ingestion", agent.ID)
 		return
 	}
 
-	// Skip if no output schema (no structured output to parse)
-	if agent.OutputSchema == nil || *agent.OutputSchema == "" {
-		logging.Debug("No output schema defined for agent %d, skipping structured data ingestion", agent.ID)
+	// Validation: Require either user-defined schema OR preset
+	if !hasUserDefinedSchema && !hasPreset {
+		logging.Debug("❌ Agent %d has app/app_type but no valid schema source (needs output_schema OR preset), skipping data ingestion", agent.ID)
 		return
+	}
+
+	// Log what type of agent we're processing
+	if hasUserDefinedSchema {
+		logging.Debug("📋 Processing user-defined schema agent %d with explicit output schema", agent.ID)
+	} else if hasPreset {
+		logging.Debug("🎯 Processing preset-based agent %d (preset: %s)", agent.ID, *agent.OutputSchemaPreset)
 	}
 
 	// Skip if agent execution failed (no meaningful structured data)
@@ -460,11 +496,12 @@ func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agen
 
 	// Send structured data to CloudShip Data Ingestion service
 	correlationID := fmt.Sprintf("run_%d", runID)
+	logging.Debug("🚀 Attempting IngestData call to CloudShip (app: %s, app_type: %s, run_id: %d, correlation_id: %s)", app, appType, runID, correlationID)
 	if err := aee.lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID); err != nil {
-		logging.Debug("Failed to send structured data to CloudShip: %v", err)
+		logging.Debug("❌ Failed to send structured data to CloudShip: %v", err)
 		// Don't fail the execution - this is supplementary data
 	} else {
-		logging.Debug("Successfully sent structured data to CloudShip (app: %s, app_type: %s, run_id: %d)", app, appType, runID)
+		logging.Debug("✅ Successfully sent structured data to CloudShip (app: %s, app_type: %s, run_id: %d)", app, appType, runID)
 	}
 }
 

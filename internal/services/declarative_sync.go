@@ -425,6 +425,7 @@ func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, conf
 		result.mcpServersCount = serversCount
 	}
 
+
 	result.operations = append(result.operations, SyncOperation{
 		Type:        OpTypeValidate,
 		Target:      configName,
@@ -557,6 +558,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 	fmt.Printf("   ✅ Successfully synced %d/%d MCP servers from template\n", successCount, len(serversData))
 	return successCount, nil
 }
+
 
 // registerOrUpdateFileConfig registers or updates a file config in the database
 func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID int64, configName, jsonFile, envDir string, templateResult *VariableResolutionResult, options SyncOptions) error {

@@ -67,11 +67,76 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
   };
 
   const generateDockerRunCommand = (fullImageName: string, envVars: Record<string, string>) => {
-    const envFlags = Object.entries(envVars)
-      .map(([key, value]) => `-e ${key}="${value}"`)
-      .join(' ');
+    // Base docker run options with Docker-in-Docker support
+    const baseOptions = [
+      'docker run -it',
+      '--privileged',  // Enable privileged mode for Docker-in-Docker
+      '-v /var/run/docker.sock:/var/run/docker.sock',  // Mount docker socket for Ship tools
+    ];
 
-    const command = `docker run -d ${envFlags} --name station-${environmentName.toLowerCase()} ${fullImageName}`;
+    // Port mapping for Station API and SSH
+    const portOptions = [
+      '-p 8585:8585',  // Station API port
+      '-p 2222:2222',  // Station SSH port
+      '-p 3000:3000',  // Station MCP port
+    ];
+
+    // Essential environment variables for Station
+    const essentialEnvVars = [];
+
+    // Use actual encryption key from environment variables or fallback
+    const encryptionKey = envVars.STATION_ENCRYPTION_KEY || '1b6ee7dab74f6303396cd5fd5a10a449a9e7ba14e0dc646b61c8e7879b5fd9f4';
+    essentialEnvVars.push(`STATION_ENCRYPTION_KEY="${encryptionKey}"`);
+
+    // Provider-based environment variables - only include if they exist in envVars
+    const providerEnvVars = [];
+    const providerKeys = {
+      'OPENAI_API_KEY': 'OpenAI API Key',
+      'ANTHROPIC_API_KEY': 'Anthropic API Key',
+      'GEMINI_API_KEY': 'Gemini API Key',
+      'CLOUDSHIPAI_REGISTRATION_KEY': 'CloudShip Registration Key'
+    };
+
+    Object.entries(providerKeys).forEach(([key, description]) => {
+      if (envVars[key] && envVars[key].trim() !== '') {
+        // Mask sensitive keys for display but use actual values
+        const value = envVars[key];
+        if (key.includes('API_KEY') && value.length > 8) {
+          // Show first 4 and last 4 characters for API keys
+          const maskedValue = `${value.substring(0, 4)}...${value.substring(value.length - 4)}`;
+          providerEnvVars.push(`${key}="${value}"`); // Use actual value in command
+        } else {
+          providerEnvVars.push(`${key}="${value}"`);
+        }
+      }
+    });
+
+    // Environment variables from variables.yml and other config
+    const userEnvVars = Object.entries(envVars)
+      .filter(([key]) =>
+        !key.startsWith('STATION_') &&
+        !Object.keys(providerKeys).includes(key)
+      )
+      .map(([key, value]) => `${key}="${value}"`);
+
+    // Container name and command
+    const containerOptions = [
+      `--name station-${environmentName.toLowerCase()}`,
+      `${fullImageName}`,
+      'stn serve --api-port 8585 --local'
+    ];
+
+    // Build the complete command
+    const allOptions = [
+      ...baseOptions,
+      ...portOptions,
+      ...essentialEnvVars.map(env => `-e ${env}`),
+      ...providerEnvVars.map(env => `-e ${env}`),
+      ...userEnvVars.map(env => `-e ${env}`),
+      ...containerOptions
+    ];
+
+    const command = allOptions.join(' \\\n  ');
     setDockerRunCommand(command);
   };
 
@@ -186,7 +251,7 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
                     <textarea
                       value={dockerRunCommand}
                       readOnly
-                      rows={3}
+                      rows={8}
                       className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white font-mono text-xs focus:outline-none resize-none"
                     />
                     <button
