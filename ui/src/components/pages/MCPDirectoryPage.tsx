@@ -277,13 +277,134 @@ const mcpServers: MCPServer[] = [
     },
     icon: Cloud
   },
+  // Ship Security Tools
   {
-    id: 'gitleaks-2',
-    name: 'GitLeaks (Ship)',
+    id: 'ship-security',
+    name: 'Ship Security (All)',
+    description: 'All 31 security tools: Trivy, GitLeaks, Semgrep, Grype, TruffleHog, and more',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'security'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-terraform',
+    name: 'Ship Terraform',
+    description: 'All 11 Terraform tools: TFLint, Checkov, terraform-docs, TFSec, and more',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'terraform'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-kubernetes',
+    name: 'Ship Kubernetes',
+    description: 'All Kubernetes tools: Kubescape, Kube-bench, Velero, Falco, Kyverno',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'kubernetes'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-cloud',
+    name: 'Ship Cloud',
+    description: 'Cloud security tools: Prowler, Scout-suite, CloudQuery, Custodian',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'cloud'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-aws-iam',
+    name: 'Ship AWS IAM',
+    description: 'AWS IAM security: Cloudsplaining, Parliament, PMMapper, Policy Sentry',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'aws-iam'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-gitleaks',
+    name: 'GitLeaks',
     description: 'Detect secrets and sensitive information in code repositories',
     category: 'Ship Security Tools',
     command: 'ship',
-    args: ['mcp', 'gitleaks', '--stdio'],
+    args: ['mcp', 'gitleaks'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-trivy',
+    name: 'Trivy',
+    description: 'Comprehensive security scanner for containers and filesystems',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'trivy'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-semgrep',
+    name: 'Semgrep',
+    description: 'Static analysis security scanning for code',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'semgrep'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-checkov',
+    name: 'Checkov',
+    description: 'Infrastructure as Code security scanning',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'checkov'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-tflint',
+    name: 'TFLint',
+    description: 'Terraform linting for syntax and best practices',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'tflint'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-grype',
+    name: 'Grype',
+    description: 'Vulnerability scanning with Anchore Grype',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'grype'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-kubescape',
+    name: 'Kubescape',
+    description: 'Kubernetes security scanning and compliance',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'kubescape'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-all',
+    name: 'Ship All Tools',
+    description: 'All 86 Ship tools across security, infrastructure, cloud, and development',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'all'],
     icon: Shield,
     requiresShip: true
   }
@@ -474,7 +595,12 @@ export const MCPDirectoryPage: React.FC = () => {
   const [shipInstalled, setShipInstalled] = useState(false);
   const [checkingShip, setCheckingShip] = useState(true);
 
-  const categories = ['All', ...Array.from(new Set(mcpServers.map(s => s.category)))];
+  // Build categories from servers, ensuring Ship Security Tools is always included
+  const serverCategories = Array.from(new Set(mcpServers.map(s => s.category)));
+  if (!serverCategories.includes('Ship Security Tools')) {
+    serverCategories.push('Ship Security Tools');
+  }
+  const categories = ['All', ...serverCategories];
 
   useEffect(() => {
     fetchEnvironments();
@@ -556,11 +682,10 @@ export const MCPDirectoryPage: React.FC = () => {
     const matchesSearch = server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          server.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || server.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    // Filter out Ship servers if Ship is not installed
+    const isShipAvailable = server.requiresShip ? shipInstalled : true;
+    return matchesSearch && matchesCategory && isShipAvailable;
   });
-
-  const shipServers = filteredServers.filter(s => s.requiresShip);
-  const regularServers = filteredServers.filter(s => !s.requiresShip);
 
   if (loading) {
     return (
@@ -579,27 +704,31 @@ export const MCPDirectoryPage: React.FC = () => {
           <p className="text-gray-400">Discover and install MCP servers to extend your Station capabilities</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search servers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Search servers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* Category Tabs */}
+        <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-700 pb-4">
+          {categories.map(category => (
+            <button
+              key={category}
+              onClick={() => setSelectedCategory(category)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedCategory === category
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+              }`}
             >
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
+              {category}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -613,68 +742,36 @@ export const MCPDirectoryPage: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Regular MCP Servers */}
-            {regularServers.length > 0 && (
-              <div>
-                <h2 className="text-xl font-bold text-gray-100 mb-4">MCP Servers</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {regularServers.map(server => (
-                    <MCPServerCard
-                      key={server.id}
-                      server={server}
-                      onAddServer={handleAddServer}
-                    />
-                  ))}
+            {/* Show Ship installation prompt if Ship category selected and Ship not installed */}
+            {selectedCategory === 'Ship Security Tools' && !shipInstalled && !checkingShip ? (
+              <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center max-w-2xl mx-auto">
+                <Shield size={64} className="mx-auto text-purple-500 mb-4" />
+                <h3 className="text-2xl font-bold text-gray-100 mb-3">Ship CLI Required</h3>
+                <p className="text-gray-300 mb-6 text-lg">
+                  Install Ship to access 300+ security tools including GitLeaks, Semgrep, Checkov, TFLint, Trivy, and more.
+                </p>
+                <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 mb-6 font-mono text-left overflow-x-auto">
+                  <code className="text-sm text-green-400">curl -fsSL https://ship.cloudship.ai/install.sh | sh</code>
                 </div>
+                <a
+                  href="https://github.com/cloudshipai/ship"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  <span>Learn More About Ship</span>
+                  <ExternalLink size={18} />
+                </a>
               </div>
-            )}
-
-            {/* Ship Security Tools */}
-            {(shipServers.length > 0 || selectedCategory === 'All' || selectedCategory === 'Ship Security Tools') && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <Shield className="text-purple-400" size={24} />
-                    <h2 className="text-xl font-bold text-gray-100">Ship Security Tools</h2>
-                  </div>
-                  {!shipInstalled && !checkingShip && (
-                    <span className="text-sm text-amber-400">Ship not installed</span>
-                  )}
-                </div>
-
-                {!shipInstalled && !checkingShip ? (
-                  <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center">
-                    <Shield size={48} className="mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-100 mb-2">Ship CLI Required</h3>
-                    <p className="text-gray-400 mb-4">
-                      Install Ship to access 300+ security tools including GitLeaks, Semgrep, Checkov, TFLint, and more.
-                    </p>
-                    <div className="bg-gray-900 border border-gray-700 rounded p-4 mb-4">
-                      <code className="text-sm text-purple-400">
-                        curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash
-                      </code>
-                    </div>
-                    <a
-                      href="https://github.com/cloudshipai/ship"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center space-x-2 text-purple-400 hover:text-purple-300"
-                    >
-                      <span>Learn more about Ship</span>
-                      <ExternalLink size={16} />
-                    </a>
-                  </div>
-                ) : shipServers.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {shipServers.map(server => (
-                      <MCPServerCard
-                        key={server.id}
-                        server={server}
-                        onAddServer={handleAddServer}
-                      />
-                    ))}
-                  </div>
-                ) : null}
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredServers.map(server => (
+                  <MCPServerCard
+                    key={server.id}
+                    server={server}
+                    onAddServer={handleAddServer}
+                  />
+                ))}
               </div>
             )}
           </>

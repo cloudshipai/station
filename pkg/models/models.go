@@ -1,7 +1,6 @@
 package models
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"time"
@@ -141,7 +140,7 @@ type AgentRun struct {
 	ModelName       *string         `json:"model_name,omitempty" db:"model_name"`
 	ToolsUsed       *int64          `json:"tools_used,omitempty" db:"tools_used"`
 	DebugLogs       *JSONArray      `json:"debug_logs,omitempty" db:"debug_logs"`
-	Error           sql.NullString  `json:"error,omitempty" db:"error"`
+	Error           *string         `json:"error,omitempty" db:"error"`
 }
 
 type AgentRunWithDetails struct {

@@ -390,41 +390,43 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 	if currentOutputPresetStr != newOutputPresetStr {
 		needsUpdate = true
 	}
-	
-	// Check if tool assignments changed
+
+	// ALWAYS sync tool assignments to ensure they match .prompt file
+	// This is critical for declarative sync - filesystem is source of truth
+	toolsNeedSync := false
 	if len(config.Tools) > 0 {
 		// Get current tool assignments from database
 		currentTools, err := s.repos.AgentTools.ListAgentTools(existingAgent.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current tool assignments: %w", err)
 		}
-		
+
 		// Create maps for comparison
 		currentToolNames := make(map[string]bool)
 		for _, tool := range currentTools {
 			currentToolNames[tool.ToolName] = true
 		}
-		
+
 		configToolNames := make(map[string]bool)
 		for _, toolName := range config.Tools {
 			configToolNames[toolName] = true
 		}
-		
+
 		// Check if tool sets are different
 		if len(currentToolNames) != len(configToolNames) {
-			needsUpdate = true
+			toolsNeedSync = true
 		} else {
 			// Check if all tools match
 			for toolName := range currentToolNames {
 				if !configToolNames[toolName] {
-					needsUpdate = true
+					toolsNeedSync = true
 					break
 				}
 			}
-			if !needsUpdate {
+			if !toolsNeedSync {
 				for toolName := range configToolNames {
 					if !currentToolNames[toolName] {
-						needsUpdate = true
+						toolsNeedSync = true
 						break
 					}
 				}
@@ -437,11 +439,12 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			return nil, fmt.Errorf("failed to get current tool assignments: %w", err)
 		}
 		if len(currentTools) > 0 {
-			needsUpdate = true // Need to clear existing tools
+			toolsNeedSync = true // Need to clear existing tools
 		}
 	}
 
-	if !needsUpdate {
+	// If nothing needs updating (not even tools), skip
+	if !needsUpdate && !toolsNeedSync {
 		return &SyncOperation{
 			Type:        OpTypeSkip,
 			Target:      existingAgent.Name,
@@ -449,52 +452,63 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		}, nil
 	}
 
-	// Update agent using individual parameters
-	err = s.repos.Agents.Update(
-		existingAgent.ID,
-		existingAgent.Name,
-		description,
-		promptContent,
-		maxSteps,
-		inputSchema, // input_schema - extracted from frontmatter
-		nil, // cronSchedule
-		true, // scheduleEnabled
-		outputSchema, // outputSchema - extracted from dotprompt frontmatter
-		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update agent: %w", err)
+	// Update agent metadata if needed
+	if needsUpdate {
+		err = s.repos.Agents.Update(
+			existingAgent.ID,
+			existingAgent.Name,
+			description,
+			promptContent,
+			maxSteps,
+			inputSchema, // input_schema - extracted from frontmatter
+			nil, // cronSchedule
+			true, // scheduleEnabled
+			outputSchema, // outputSchema - extracted from dotprompt frontmatter
+			outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update agent: %w", err)
+		}
 	}
 
-	// Update tool assignments if specified
-	if len(config.Tools) > 0 {
+	// Sync tool assignments if needed (independent of other updates)
+	if toolsNeedSync {
 		// Clear existing assignments
 		err = s.repos.AgentTools.Clear(existingAgent.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to clear existing tool assignments: %w", err)
 		}
 
-		// Assign new tools
-		for _, toolName := range config.Tools {
-			// Find tool by name in environment
-			tool, err := s.repos.MCPTools.FindByNameInEnvironment(existingAgent.EnvironmentID, toolName)
-			if err != nil {
-				return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
+		// Assign new tools from config
+		if len(config.Tools) > 0 {
+			for _, toolName := range config.Tools {
+				// Find tool by name in environment
+				tool, err := s.repos.MCPTools.FindByNameInEnvironment(existingAgent.EnvironmentID, toolName)
+				if err != nil {
+					return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
+				}
+
+				// Assign tool to agent
+				_, err = s.repos.AgentTools.AddAgentTool(existingAgent.ID, tool.ID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
+				}
 			}
 
-			// Assign tool to agent
-			_, err = s.repos.AgentTools.AddAgentTool(existingAgent.ID, tool.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
-			}
+			fmt.Printf("   🔧 Synced %d tools to agent\n", len(config.Tools))
+		} else {
+			fmt.Printf("   🔧 Cleared all tools from agent (none in .prompt file)\n")
 		}
-		
-		fmt.Printf("   🔧 Assigned %d tools to agent\n", len(config.Tools))
+	}
+
+	updateType := OpTypeUpdate
+	if !needsUpdate && toolsNeedSync {
+		updateType = OpTypeUpdate // Still an update even if only tools changed
 	}
 
 	logging.Info("🔄 Updated agent: %s", existingAgent.Name)
 	return &SyncOperation{
-		Type:        OpTypeUpdate,
+		Type:        updateType,
 		Target:      existingAgent.Name,
 		Description: "Updated agent from .prompt file",
 	}, nil
