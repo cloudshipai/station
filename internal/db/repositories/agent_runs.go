@@ -185,7 +185,12 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 				result.DebugLogs = &debugLogs
 			}
 		}
-		
+
+		if r.Error.Valid {
+			errorMsg := r.Error.String
+			result.Error = &errorMsg
+		}
+
 	case queries.GetAgentRunWithDetailsRow:
 		result = &models.AgentRunWithDetails{
 			AgentRun: models.AgentRun{

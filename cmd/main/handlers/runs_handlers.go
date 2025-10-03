@@ -126,8 +126,8 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 	fmt.Printf("Run: %d %s\n", run.ID, statusIcon)
 	fmt.Printf("Agent: %s (ID: %d)\n", styles.Success.Render(run.AgentName), run.AgentID)
 	fmt.Printf("Status: %s\n", h.colorizeStatus(run.Status))
-	if run.Error.Valid && run.Error.String != "" {
-		fmt.Printf("Error: %s\n", styles.Error.Render(run.Error.String))
+	if run.Error != nil && *run.Error != "" {
+		fmt.Printf("Error: %s\n", styles.Error.Render(*run.Error))
 	}
 	fmt.Printf("Task: %s\n", run.Task)
 	fmt.Printf("Started: %s\n", run.StartedAt.Format("Jan 2, 2006 15:04:05"))

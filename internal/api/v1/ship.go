@@ -9,8 +9,8 @@ import (
 
 // checkShipInstalled checks if Ship CLI is installed
 func (h *APIHandlers) checkShipInstalled(c *gin.Context) {
-	// Try to run 'ship --version' to check if Ship is installed
-	cmd := exec.Command("ship", "--version")
+	// Try to run 'ship help' to check if Ship is installed (Ship doesn't support --version)
+	cmd := exec.Command("ship", "help")
 	err := cmd.Run()
 
 	installed := err == nil
