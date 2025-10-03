@@ -129,7 +129,7 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 			errorMsg := fmt.Sprintf("MCP execution failed: %v", execErr)
 			updateErr := s.repos.AgentRuns.UpdateCompletionWithMetadata(
 				ctx, runID, errorMsg, 0, nil, nil, "failed", &completedAt,
-				nil, nil, nil, nil, nil, nil,
+				nil, nil, nil, nil, nil, nil, &errorMsg,
 			)
 			if updateErr != nil {
 				logging.Info("Warning: Failed to update failed run %d: %v", runID, updateErr)
@@ -165,8 +165,12 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 
 		// Determine status based on execution result success (same as CLI)
 		status := "completed"
+		var errorMsg *string
 		if !result.Success {
 			status = "failed"
+			if result.Error != "" {
+				errorMsg = &result.Error
+			}
 		}
 
 		// Update database with complete metadata (same as CLI)
@@ -185,6 +189,7 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 			&durationSeconds,      // duration_seconds
 			&result.ModelName,     // model_name
 			toolsUsed,             // tools_used
+			errorMsg,              // error
 		)
 		if err != nil {
 			logging.Info("Warning: Failed to update run %d completion metadata: %v", runID, err)

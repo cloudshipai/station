@@ -13,8 +13,7 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
   onClose,
   environmentName
 }) => {
-  const [endpoint, setEndpoint] = useState('https://share.cloudshipai.com/upload');
-  const [isLocal, setIsLocal] = useState(false);
+  const [bundleType, setBundleType] = useState<'cloudship' | 'local'>('cloudship');
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<any>(null);
 
@@ -23,8 +22,8 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
     setResponse(null);
 
     try {
-      // Call the bundles API using the correct method
-      const result = await bundlesApi.create(environmentName, isLocal, isLocal ? undefined : endpoint);
+      // Call the bundles API - local=true for local bundles, local=false for CloudShip
+      const result = await bundlesApi.create(environmentName, bundleType === 'local', undefined);
       setResponse(result.data);
     } catch (error) {
       console.error('Failed to create bundle:', error);
@@ -58,46 +57,49 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
             </p>
           </div>
 
-          {/* Local Toggle */}
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="local-toggle"
-              checked={isLocal}
-              onChange={(e) => setIsLocal(e.target.checked)}
-              className="w-4 h-4 text-tokyo-orange bg-tokyo-bg border-tokyo-blue7 rounded focus:ring-tokyo-orange focus:ring-2"
-            />
-            <label htmlFor="local-toggle" className="text-sm font-mono text-tokyo-fg">
-              Save locally (skip upload)
-            </label>
-          </div>
-
-          {/* Endpoint Input - Hidden when local is selected */}
-          {!isLocal && (
+          {/* Bundle Type Selection */}
+          <div className="space-y-3">
+            <label className="text-sm font-mono text-tokyo-comment">Bundle Destination:</label>
             <div className="space-y-2">
-              <label className="text-sm font-mono text-tokyo-comment">Upload Endpoint:</label>
-              <input
-                type="text"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-orange"
-                placeholder="https://share.cloudshipai.com/upload"
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="cloudship-bundle"
+                  checked={bundleType === 'cloudship'}
+                  onChange={() => setBundleType('cloudship')}
+                  className="w-4 h-4 text-tokyo-orange bg-tokyo-bg border-tokyo-blue7 focus:ring-tokyo-orange focus:ring-2"
+                />
+                <label htmlFor="cloudship-bundle" className="text-sm font-mono text-tokyo-fg">
+                  Upload to CloudShip (Organization Bundle)
+                </label>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="local-bundle"
+                  checked={bundleType === 'local'}
+                  onChange={() => setBundleType('local')}
+                  className="w-4 h-4 text-tokyo-orange bg-tokyo-bg border-tokyo-blue7 focus:ring-tokyo-orange focus:ring-2"
+                />
+                <label htmlFor="local-bundle" className="text-sm font-mono text-tokyo-fg">
+                  Save Locally
+                </label>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Response Display */}
           {response && (
             <div className="space-y-3">
-              {/* Success Response for share.cloudshipai.com */}
-              {response.success && endpoint.includes('share.cloudshipai.com') && response.share_url && (
+              {/* CloudShip upload success */}
+              {response.success && response.cloudship_info && (
                 <div className="bg-green-900 bg-opacity-30 border border-green-500 border-opacity-50 rounded p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-mono text-white font-medium">Bundle Shared Successfully</h4>
+                    <h4 className="text-sm font-mono text-white font-medium">Uploaded to CloudShip</h4>
                     <button
                       onClick={() => navigator.clipboard.writeText(response.share_url)}
                       className="p-1 text-green-400 hover:text-green-300 transition-colors"
-                      title="Copy share URL"
+                      title="Copy download URL"
                     >
                       <Copy className="h-4 w-4" />
                     </button>
@@ -105,26 +107,31 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
 
                   <div className="space-y-3">
                     <div>
-                      <div className="text-xs text-green-400 font-mono mb-1 font-medium">Share URL:</div>
+                      <div className="text-xs text-green-400 font-mono mb-1 font-medium">Organization:</div>
+                      <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
+                        {response.cloudship_info.organization}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-green-400 font-mono mb-1 font-medium">Bundle ID:</div>
+                      <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
+                        {response.cloudship_info.bundle_id}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-green-400 font-mono mb-1 font-medium">Download URL:</div>
                       <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200 break-all">
                         {response.share_url}
                       </div>
                     </div>
 
-                    {response.share_id && (
+                    {response.cloudship_info.uploaded_at && (
                       <div>
-                        <div className="text-xs text-green-400 font-mono mb-1 font-medium">Share ID:</div>
+                        <div className="text-xs text-green-400 font-mono mb-1 font-medium">Uploaded:</div>
                         <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
-                          {response.share_id}
-                        </div>
-                      </div>
-                    )}
-
-                    {response.expires && (
-                      <div>
-                        <div className="text-xs text-green-400 font-mono mb-1 font-medium">Expires:</div>
-                        <div className="p-2 bg-gray-900 border border-gray-600 rounded font-mono text-xs text-gray-200">
-                          {response.expires}
+                          {response.cloudship_info.uploaded_at}
                         </div>
                       </div>
                     )}

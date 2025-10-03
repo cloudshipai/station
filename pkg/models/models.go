@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"time"
@@ -133,13 +134,14 @@ type AgentRun struct {
 	StartedAt       time.Time  `json:"started_at" db:"started_at"`
 	CompletedAt     *time.Time `json:"completed_at" db:"completed_at"`
 	// Response object metadata from Station's OpenAI plugin
-	InputTokens     *int64     `json:"input_tokens,omitempty" db:"input_tokens"`
-	OutputTokens    *int64     `json:"output_tokens,omitempty" db:"output_tokens"`
-	TotalTokens     *int64     `json:"total_tokens,omitempty" db:"total_tokens"`
-	DurationSeconds *float64   `json:"duration_seconds,omitempty" db:"duration_seconds"`
-	ModelName       *string    `json:"model_name,omitempty" db:"model_name"`
-	ToolsUsed       *int64     `json:"tools_used,omitempty" db:"tools_used"`
-	DebugLogs       *JSONArray `json:"debug_logs,omitempty" db:"debug_logs"`
+	InputTokens     *int64          `json:"input_tokens,omitempty" db:"input_tokens"`
+	OutputTokens    *int64          `json:"output_tokens,omitempty" db:"output_tokens"`
+	TotalTokens     *int64          `json:"total_tokens,omitempty" db:"total_tokens"`
+	DurationSeconds *float64        `json:"duration_seconds,omitempty" db:"duration_seconds"`
+	ModelName       *string         `json:"model_name,omitempty" db:"model_name"`
+	ToolsUsed       *int64          `json:"tools_used,omitempty" db:"tools_used"`
+	DebugLogs       *JSONArray      `json:"debug_logs,omitempty" db:"debug_logs"`
+	Error           sql.NullString  `json:"error,omitempty" db:"error"`
 }
 
 type AgentRunWithDetails struct {

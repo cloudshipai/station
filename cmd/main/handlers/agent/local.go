@@ -521,14 +521,14 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		// Update run as failed
 		completedAt := time.Now()
 		errorMsg := fmt.Sprintf("Stdio MCP execution failed: %v", originalErr)
-		
+
 		updateErr := repos.AgentRuns.UpdateCompletionWithMetadata(
 			ctx,
 			agentRun.ID,
 			errorMsg,
 			0, // steps_taken
 			nil, // tool_calls
-			nil, // execution_steps  
+			nil, // execution_steps
 			"failed",
 			&completedAt,
 			nil, // inputTokens
@@ -537,6 +537,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			nil, // durationSeconds
 			nil, // modelName
 			nil, // toolsUsed
+			&errorMsg, // error
 		)
 		if updateErr != nil {
 			return fmt.Errorf("failed to update failed agent run: %w", updateErr)
@@ -591,10 +592,14 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	
 	// Determine status based on execution result success
 	status := "completed"
+	var errorMsg *string
 	if !result.Success {
 		status = "failed"
+		if result.Error != "" {
+			errorMsg = &result.Error
+		}
 	}
-	
+
 	err = repos.AgentRuns.UpdateCompletionWithMetadata(
 		ctx,
 		agentRun.ID,
@@ -610,6 +615,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		&durationSeconds,
 		&result.ModelName,
 		toolsUsed,
+		errorMsg,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update agent run: %w", err)

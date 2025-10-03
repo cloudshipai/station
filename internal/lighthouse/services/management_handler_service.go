@@ -505,12 +505,12 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		errorMsg := fmt.Sprintf("CloudShip execution failed: %v", execErr)
 		updateErr := mhs.repos.AgentRuns.UpdateCompletionWithMetadata(
 			ctx, runID, errorMsg, 0, nil, nil, "failed", &completedAt,
-			nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, &errorMsg,
 		)
 		if updateErr != nil {
 			logging.Info("Warning: Failed to update failed run %d: %v", runID, updateErr)
 		}
-		
+
 		// Send FAILED status update on error
 		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Agent execution failed: %v", execErr), 1)
 		return nil, fmt.Errorf("failed to execute agent: %v", execErr)
@@ -534,11 +534,21 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		durationSeconds = &dur
 	}
 	
+	// Determine status based on execution result success
+	status := "completed"
+	var errorMsg *string
+	if !result.Success {
+		status = "failed"
+		if result.Error != "" {
+			errorMsg = &result.Error
+		}
+	}
+
 	// Update completion with metadata (same as CLI)
 	updateErr := mhs.repos.AgentRuns.UpdateCompletionWithMetadata(
-		ctx, runID, result.Response, result.StepsTaken, result.ToolCalls, result.ExecutionSteps, 
-		"completed", &completedAt, inputTokens, outputTokens, totalTokens, durationSeconds, 
-		&result.ModelName, nil,
+		ctx, runID, result.Response, result.StepsTaken, result.ToolCalls, result.ExecutionSteps,
+		status, &completedAt, inputTokens, outputTokens, totalTokens, durationSeconds,
+		&result.ModelName, nil, errorMsg,
 	)
 	if updateErr != nil {
 		logging.Info("Warning: Failed to update completed run %d: %v", runID, updateErr)

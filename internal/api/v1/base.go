@@ -136,6 +136,7 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 		bundlesGroup.Use(h.requireAdminInServerMode())
 	}
 	bundlesGroup.GET("", h.listBundles)
+	bundlesGroup.GET("/cloudship", h.listCloudShipBundles)
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
 
@@ -145,6 +146,10 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 		mcpGroup.Use(h.requireAdminInServerMode())
 	}
 	h.registerMCPRoutes(mcpGroup)
+
+	// Ship CLI routes
+	shipGroup := router.Group("/ship")
+	h.registerShipRoutes(shipGroup)
 
 	// CloudShip lighthouse status
 	router.GET("/lighthouse/status", h.LighthouseStatusHandler)

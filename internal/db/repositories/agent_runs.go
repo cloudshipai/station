@@ -473,7 +473,7 @@ func (r *AgentRunRepo) ListRecent(ctx context.Context, limit int64) ([]*models.A
 }
 
 // UpdateCompletionWithMetadata updates an existing run record with completion data and response metadata
-func (r *AgentRunRepo) UpdateCompletionWithMetadata(ctx context.Context, id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) error {
+func (r *AgentRunRepo) UpdateCompletionWithMetadata(ctx context.Context, id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64, errorMsg *string) error {
 	ctx, span := r.tracer.Start(ctx, "db.agent_runs.update_completion",
 		trace.WithAttributes(
 			attribute.Int64("run.id", id),
@@ -546,7 +546,11 @@ func (r *AgentRunRepo) UpdateCompletionWithMetadata(ctx context.Context, id int6
 	if toolsUsed != nil {
 		params.ToolsUsed = sql.NullInt64{Int64: *toolsUsed, Valid: true}
 	}
-	
+
+	if errorMsg != nil {
+		params.Error = sql.NullString{String: *errorMsg, Valid: true}
+	}
+
 	err := r.queries.UpdateAgentRunCompletion(ctx, params)
 	if err != nil {
 		span.RecordError(err)
@@ -562,7 +566,7 @@ func (r *AgentRunRepo) UpdateCompletionWithMetadata(ctx context.Context, id int6
 
 // UpdateCompletion updates an existing run record (backwards compatibility)
 func (r *AgentRunRepo) UpdateCompletion(ctx context.Context, id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) error {
-	return r.UpdateCompletionWithMetadata(ctx, id, finalResponse, stepsTaken, toolCalls, executionSteps, status, completedAt, nil, nil, nil, nil, nil, nil)
+	return r.UpdateCompletionWithMetadata(ctx, id, finalResponse, stepsTaken, toolCalls, executionSteps, status, completedAt, nil, nil, nil, nil, nil, nil, nil)
 }
 
 // UpdateStatus updates only the status of an agent run using SQLC

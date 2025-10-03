@@ -48,6 +48,7 @@ type AgentRun struct {
 	ModelName       sql.NullString  `json:"model_name"`
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
 	DebugLogs       sql.NullString  `json:"debug_logs"`
+	Error           sql.NullString  `json:"error"`
 }
 
 type AgentTool struct {
