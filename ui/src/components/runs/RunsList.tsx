@@ -7,6 +7,7 @@ interface Run {
   status: 'completed' | 'running' | 'failed';
   duration_seconds?: number;
   started_at: string;
+  error?: string;
 }
 
 interface RunsListProps {
@@ -42,6 +43,11 @@ export const RunsList: React.FC<RunsListProps> = ({ runs, onRunClick }) => {
             <span>Duration: {run.duration_seconds ? `${run.duration_seconds.toFixed(1)}s` : 'N/A'}</span>
             <span>Time: {new Date(run.started_at).toLocaleTimeString()}</span>
           </div>
+          {run.error && (
+            <div className="mt-2 p-2 bg-tokyo-red/10 border border-tokyo-red/30 rounded text-sm text-tokyo-red font-mono">
+              Error: {run.error}
+            </div>
+          )}
         </div>
       ))}
     </div>

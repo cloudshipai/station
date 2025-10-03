@@ -1,24 +1,32 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/common"
+	"station/internal/config"
 	"station/internal/services"
 )
 
-// Unified bundle command with create and install subcommands
+// Unified bundle command with create, install, and share subcommands
 var bundleCmd = &cobra.Command{
 	Use:   "bundle",
 	Short: "Bundle management commands",
-	Long: `Create and install Station bundles.
-	
+	Long: `Create, install, and share Station bundles.
+
 Subcommands:
   create   Create a bundle from an environment
-  install  Install a bundle from URL or file path`,
+  install  Install a bundle from URL or file path
+  share    Upload a bundle to CloudShip`,
 }
 
 // Bundle create subcommand
@@ -52,14 +60,40 @@ Examples:
 	RunE: runBundleInstall,
 }
 
+// Bundle share subcommand
+var bundleShareCmd = &cobra.Command{
+	Use:   "share <bundle-path-or-environment>",
+	Short: "Upload a bundle to CloudShip",
+	Long: `Upload a bundle (.tar.gz) to your CloudShip account.
+
+This command uploads bundles to CloudShip's public bundle API, making them
+accessible to your organization. Requires CloudShip to be configured with
+a valid registration key.
+
+If you provide an environment name, it will first create the bundle and then upload it.
+If you provide a .tar.gz file path, it will upload that file directly.
+
+Examples:
+  stn bundle share default                    # Create and upload default environment
+  stn bundle share ./my-bundle.tar.gz         # Upload existing bundle file
+  stn bundle share production --api-url https://api.cloudshipai.com`,
+	Args: cobra.ExactArgs(1),
+	RunE: runBundleShare,
+}
+
 func init() {
 	// Add flags to create subcommand
 	bundleCreateCmd.Flags().String("output", "", "Output path for bundle (defaults to <environment>.tar.gz)")
 	bundleCreateCmd.Flags().Bool("local", true, "Save bundle locally (always true for CLI)")
-	
+
+	// Add flags to share subcommand
+	bundleShareCmd.Flags().String("api-url", "https://api.cloudshipai.com", "CloudShip API URL")
+	bundleShareCmd.Flags().Bool("keep-local", false, "Keep the local bundle file after upload (only for environment uploads)")
+
 	// Add subcommands to main bundle command
 	bundleCmd.AddCommand(bundleCreateCmd)
 	bundleCmd.AddCommand(bundleInstallCmd)
+	bundleCmd.AddCommand(bundleShareCmd)
 }
 
 func runBundleCreate(cmd *cobra.Command, args []string) error {
@@ -156,4 +190,164 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   open http://localhost:8585   # View in Station UI\n")
 
 	return nil
+}
+
+// CloudShip upload response
+type CloudShipUploadResponse struct {
+	BundleID     string `json:"bundle_id"`
+	Filename     string `json:"filename"`
+	Size         int64  `json:"size"`
+	Organization string `json:"organization"`
+	UploadedAt   string `json:"uploaded_at"`
+	DownloadURL  string `json:"download_url"`
+}
+
+func runBundleShare(cmd *cobra.Command, args []string) error {
+	source := args[0]
+	apiURL, _ := cmd.Flags().GetString("api-url")
+	keepLocal, _ := cmd.Flags().GetBool("keep-local")
+
+	// Load Station config to get CloudShip registration key
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Check if CloudShip is configured
+	if !cfg.CloudShip.Enabled || cfg.CloudShip.RegistrationKey == "" {
+		return fmt.Errorf("CloudShip is not configured. Please set cloudship.enabled=true and cloudship.registration_key in your config")
+	}
+
+	registrationKey := cfg.CloudShip.RegistrationKey
+
+	// Determine if source is a file or environment
+	var bundlePath string
+	var isTemporary bool
+
+	if strings.HasSuffix(source, ".tar.gz") {
+		// Source is already a bundle file
+		if _, err := os.Stat(source); os.IsNotExist(err) {
+			return fmt.Errorf("bundle file not found: %s", source)
+		}
+		bundlePath = source
+		isTemporary = false
+		fmt.Printf("📦 Using existing bundle: %s\n", bundlePath)
+	} else {
+		// Source is an environment name - create bundle first
+		configRoot, err := common.GetStationConfigRoot()
+		if err != nil {
+			return fmt.Errorf("failed to get station config root: %w", err)
+		}
+
+		envPath := filepath.Join(configRoot, "environments", source)
+		if _, err := os.Stat(envPath); os.IsNotExist(err) {
+			return fmt.Errorf("environment '%s' not found at %s", source, envPath)
+		}
+
+		fmt.Printf("🗂️  Creating bundle from environment: %s\n", source)
+
+		bundleService := services.NewBundleService()
+		tarData, err := bundleService.CreateBundle(envPath)
+		if err != nil {
+			return fmt.Errorf("failed to create bundle: %w", err)
+		}
+
+		// Save to temporary file
+		bundlePath = filepath.Join(os.TempDir(), fmt.Sprintf("%s.tar.gz", source))
+		if err := os.WriteFile(bundlePath, tarData, 0644); err != nil {
+			return fmt.Errorf("failed to save bundle: %w", err)
+		}
+
+		isTemporary = !keepLocal
+		fmt.Printf("✅ Bundle created: %s (%d bytes)\n", bundlePath, len(tarData))
+	}
+
+	// Clean up temporary file if needed
+	if isTemporary {
+		defer func() {
+			if err := os.Remove(bundlePath); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to remove temporary bundle: %v\n", err)
+			}
+		}()
+	}
+
+	// Upload to CloudShip
+	fmt.Printf("☁️  Uploading to CloudShip...\n")
+
+	response, err := uploadBundleToCloudShip(apiURL, registrationKey, bundlePath)
+	if err != nil {
+		return fmt.Errorf("upload failed: %w", err)
+	}
+
+	fmt.Printf("✅ Bundle uploaded successfully!\n")
+	fmt.Printf("📦 Bundle ID: %s\n", response.BundleID)
+	fmt.Printf("🏢 Organization: %s\n", response.Organization)
+	fmt.Printf("📊 Size: %d bytes\n", response.Size)
+	fmt.Printf("📅 Uploaded: %s\n", response.UploadedAt)
+	fmt.Printf("\n🔗 Download URL: %s%s\n", apiURL, response.DownloadURL)
+	fmt.Printf("\n🚀 Install on another station:\n")
+	fmt.Printf("   stn bundle install %s%s <environment-name>\n", apiURL, response.DownloadURL)
+
+	return nil
+}
+
+func uploadBundleToCloudShip(apiURL, registrationKey, bundlePath string) (*CloudShipUploadResponse, error) {
+	// Open the bundle file
+	file, err := os.Open(bundlePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open bundle: %w", err)
+	}
+	defer file.Close()
+
+	// Create multipart form
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("bundle", filepath.Base(bundlePath))
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, err
+	}
+
+	writer.Close()
+
+	// Create HTTP request
+	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload", strings.TrimSuffix(apiURL, "/"))
+	req, err := http.NewRequest("POST", uploadURL, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-Registration-Key", registrationKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check status code
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("upload failed (HTTP %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse response
+	var uploadResp CloudShipUploadResponse
+	if err := json.Unmarshal(bodyBytes, &uploadResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &uploadResp, nil
 }

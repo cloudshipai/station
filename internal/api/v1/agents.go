@@ -145,8 +145,13 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 		response, err := h.agentService.ExecuteAgentWithRunID(ctx, agentID, req.Task, agentRun.ID, nil)
 		if err != nil {
 			log.Printf("❌ Agent execution failed: %v", err)
-			// Update run status to failed using string constant
-			h.repos.AgentRuns.UpdateStatus(ctx, agentRun.ID, "failed")
+			// Update run status to failed with error message
+			completedAt := time.Now()
+			errorMsg := fmt.Sprintf("API execution failed: %v", err)
+			h.repos.AgentRuns.UpdateCompletionWithMetadata(
+				ctx, agentRun.ID, errorMsg, 0, nil, nil, "failed", &completedAt,
+				nil, nil, nil, nil, nil, nil, &errorMsg,
+			)
 		} else {
 			log.Printf("✅ Agent execution completed successfully for run ID: %d", agentRun.ID)
 			// Update run with completion response and status

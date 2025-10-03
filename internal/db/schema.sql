@@ -171,6 +171,7 @@ CREATE TABLE agent_runs (
     model_name TEXT DEFAULT NULL,
     tools_used INTEGER DEFAULT NULL,
     debug_logs TEXT, -- JSON array of debug log entries for real-time progress tracking
+    error TEXT DEFAULT NULL, -- Error message when execution fails
     FOREIGN KEY (agent_id) REFERENCES agents (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );

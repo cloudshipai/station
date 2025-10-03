@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download } from 'lucide-react';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import Editor from '@monaco-editor/react';
 
@@ -30,6 +30,7 @@ import { SyncModal } from './components/sync/SyncModal';
 import { AddServerModal } from './components/modals/AddServerModal';
 import { BundleEnvironmentModal } from './components/modals/BundleEnvironmentModal';
 import BuildImageModal from './components/modals/BuildImageModal';
+import { InstallBundleModal } from './components/modals/InstallBundleModal';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -1315,6 +1316,7 @@ const EnvironmentsPage = () => {
   const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
   const [isBundleModalOpen, setIsBundleModalOpen] = useState(false);
   const [isBuildImageModalOpen, setIsBuildImageModalOpen] = useState(false);
+  const [isInstallBundleModalOpen, setIsInstallBundleModalOpen] = useState(false);
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1331,6 +1333,10 @@ const EnvironmentsPage = () => {
 
   const handleBuildImage = () => {
     setIsBuildImageModalOpen(true);
+  };
+
+  const handleInstallBundle = () => {
+    setIsInstallBundleModalOpen(true);
   };
 
   const handleRefreshGraph = () => {
@@ -1529,51 +1535,62 @@ const EnvironmentsPage = () => {
 
         <div className="flex items-center space-x-4">
           {/* Action buttons */}
-          {selectedEnvironment && (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={handleSyncEnvironment}
-                className="flex items-center space-x-2 px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-blue"
-                title="Sync Environment"
-              >
-                <Play className="h-4 w-4" />
-                <span>Sync</span>
-              </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleInstallBundle}
+              className="flex items-center space-x-2 px-4 py-2 bg-tokyo-magenta text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-magenta"
+              title="Install Bundle"
+            >
+              <Download className="h-4 w-4" />
+              <span>Install Bundle</span>
+            </button>
 
-              <button
-                onClick={handleAddServer}
-                className="flex items-center space-x-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-green"
-                title="Add MCP Server"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add Server</span>
-              </button>
+            {selectedEnvironment && (
+              <>
+                <button
+                  onClick={handleSyncEnvironment}
+                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-blue"
+                  title="Sync Environment"
+                >
+                  <Play className="h-4 w-4" />
+                  <span>Sync</span>
+                </button>
 
-              <button
-                onClick={handleBundleEnvironment}
-                className="flex items-center space-x-2 px-4 py-2 bg-tokyo-yellow text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-yellow"
-                title="Bundle Environment"
-              >
-                <Archive className="h-4 w-4" />
-                <span>Bundle</span>
-              </button>
-              <button
-                onClick={handleBuildImage}
-                className="flex items-center space-x-2 px-4 py-2 rounded font-mono text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: '#ff9e64',
-                  color: '#ffffff',
-                  border: '1px solid #ff9e64',
-                  fontWeight: '700',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
-                }}
-                title="Build Docker Image"
-              >
-                <Package className="h-4 w-4" />
-                <span>Build Image</span>
-              </button>
-            </div>
-          )}
+                <button
+                  onClick={handleAddServer}
+                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-green"
+                  title="Add MCP Server"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Server</span>
+                </button>
+
+                <button
+                  onClick={handleBundleEnvironment}
+                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-yellow text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-yellow"
+                  title="Bundle Environment"
+                >
+                  <Archive className="h-4 w-4" />
+                  <span>Bundle</span>
+                </button>
+                <button
+                  onClick={handleBuildImage}
+                  className="flex items-center space-x-2 px-4 py-2 rounded font-mono text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: '#ff9e64',
+                    color: '#ffffff',
+                    border: '1px solid #ff9e64',
+                    fontWeight: '700',
+                    textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+                  }}
+                  title="Build Docker Image"
+                >
+                  <Package className="h-4 w-4" />
+                  <span>Build Image</span>
+                </button>
+              </>
+            )}
+          </div>
 
           {/* Environment selector */}
           {environments.length > 0 && (
@@ -1657,6 +1674,18 @@ const EnvironmentsPage = () => {
         isOpen={isBuildImageModalOpen}
         onClose={() => setIsBuildImageModalOpen(false)}
         environmentName={selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default'}
+      />
+
+      {/* Install Bundle Modal */}
+      <InstallBundleModal
+        isOpen={isInstallBundleModalOpen}
+        onClose={() => setIsInstallBundleModalOpen(false)}
+        onSuccess={async () => {
+          // Refresh environments list after successful installation
+          const response = await environmentsApi.getAll();
+          const envs = response.data.environments || [];
+          setEnvironments(envs);
+        }}
       />
     </div>
   );

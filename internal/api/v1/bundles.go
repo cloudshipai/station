@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"station/internal/config"
 )
 
 // Bundle request structure
@@ -27,13 +28,14 @@ type BundleRequest struct {
 
 // Bundle response structure
 type BundleResponse struct {
-	Success   bool   `json:"success"`
-	Message   string `json:"message"`
-	LocalPath string `json:"local_path,omitempty"`
-	ShareID   string `json:"share_id,omitempty"`
-	ShareURL  string `json:"share_url,omitempty"`
-	Expires   string `json:"expires,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Success       bool                    `json:"success"`
+	Message       string                  `json:"message"`
+	LocalPath     string                  `json:"local_path,omitempty"`
+	ShareID       string                  `json:"share_id,omitempty"`
+	ShareURL      string                  `json:"share_url,omitempty"`
+	Expires       string                  `json:"expires,omitempty"`
+	CloudShipInfo *map[string]interface{} `json:"cloudship_info,omitempty"`
+	Error         string                  `json:"error,omitempty"`
 }
 
 // Share server response structure
@@ -112,30 +114,43 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			LocalPath: localPath,
 		})
 	} else {
-		// Upload to endpoint
-		if req.Endpoint == "" {
-			req.Endpoint = "https://share.cloudshipai.com/upload"
-		}
-
-		shareResp, err := uploadBundle(tarData, fmt.Sprintf("%s.tar.gz", req.Environment), req.Endpoint)
+		// Upload to CloudShip
+		cfg, err := config.Load()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, BundleResponse{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to upload bundle: %v", err),
+				Error:   "Failed to load Station config: " + err.Error(),
 			})
 			return
 		}
 
-		// Calculate share URL
-		baseURL := strings.Replace(req.Endpoint, "/upload", "", 1)
-		shareURL := fmt.Sprintf("%s%s", baseURL, shareResp.URL)
+		// Check if CloudShip is configured
+		if !cfg.CloudShip.Enabled || cfg.CloudShip.RegistrationKey == "" {
+			c.JSON(http.StatusBadRequest, BundleResponse{
+				Success: false,
+				Error:   "CloudShip is not configured. Please enable CloudShip and set registration key in config",
+			})
+			return
+		}
+
+		// Use default CloudShip API URL
+		apiURL := "https://api.cloudshipai.com"
+
+		// Upload to CloudShip
+		cloudShipResp, err := uploadToCloudShip(tarData, fmt.Sprintf("%s.tar.gz", req.Environment), apiURL, cfg.CloudShip.RegistrationKey)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, BundleResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to upload to CloudShip: %v", err),
+			})
+			return
+		}
 
 		c.JSON(http.StatusOK, BundleResponse{
-			Success:  true,
-			Message:  "Bundle uploaded successfully",
-			ShareID:  shareResp.ShareID,
-			ShareURL: shareURL,
-			Expires:  shareResp.Expires,
+			Success:       true,
+			Message:       fmt.Sprintf("Bundle uploaded to CloudShip (Org: %s)", cloudShipResp["organization"]),
+			ShareURL:      fmt.Sprintf("%s%s", apiURL, cloudShipResp["download_url"]),
+			CloudShipInfo: &cloudShipResp,
 		})
 	}
 }
@@ -204,8 +219,8 @@ func createTarGz(sourceDir string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// uploadBundle uploads the bundle to a remote endpoint using multipart/form-data
-func uploadBundle(tarData []byte, filename, endpoint string) (*ShareServerResponse, error) {
+// uploadToCloudShip uploads the bundle to CloudShip's authenticated API
+func uploadToCloudShip(tarData []byte, filename, apiURL, registrationKey string) (map[string]interface{}, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
@@ -226,14 +241,16 @@ func uploadBundle(tarData []byte, filename, endpoint string) (*ShareServerRespon
 	}
 
 	// Create the request
-	req, err := http.NewRequest("POST", endpoint, &buf)
+	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload", strings.TrimSuffix(apiURL, "/"))
+	req, err := http.NewRequest("POST", uploadURL, &buf)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Registration-Key", registrationKey)
 
 	// Send the request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -246,17 +263,17 @@ func uploadBundle(tarData []byte, filename, endpoint string) (*ShareServerRespon
 		return nil, err
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(respBody))
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("CloudShip upload failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	// Parse response
-	var shareResp ShareServerResponse
-	if err := json.Unmarshal(respBody, &shareResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %v", err)
+	var cloudShipResp map[string]interface{}
+	if err := json.Unmarshal(respBody, &cloudShipResp); err != nil {
+		return nil, fmt.Errorf("failed to parse CloudShip response: %v", err)
 	}
 
-	return &shareResp, nil
+	return cloudShipResp, nil
 }
 
 // Bundle install request structure
@@ -613,6 +630,87 @@ func (h *APIHandlers) listBundles(c *gin.Context) {
 		Success: true,
 		Bundles: bundles,
 		Count:   len(bundles),
+	})
+}
+
+// CloudShip bundle list response structure
+type CloudShipBundleListResponse struct {
+	Success bool                     `json:"success"`
+	Bundles []map[string]interface{} `json:"bundles"`
+	Error   string                   `json:"error,omitempty"`
+}
+
+// listCloudShipBundles handles the GET /bundles/cloudship endpoint
+func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
+	// Load Station config to get CloudShip registration key
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, CloudShipBundleListResponse{
+			Success: false,
+			Error:   "Failed to load Station config: " + err.Error(),
+		})
+		return
+	}
+
+	// Check if CloudShip is configured
+	if !cfg.CloudShip.Enabled || cfg.CloudShip.RegistrationKey == "" {
+		c.JSON(http.StatusBadRequest, CloudShipBundleListResponse{
+			Success: false,
+			Error:   "CloudShip is not configured. Please enable CloudShip and set registration key in config",
+		})
+		return
+	}
+
+	// Use default CloudShip API URL
+	apiURL := "https://api.cloudshipai.com"
+
+	// Fetch bundles from CloudShip
+	listURL := fmt.Sprintf("%s/api/public/bundles", strings.TrimSuffix(apiURL, "/"))
+	req, err := http.NewRequest("GET", listURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, CloudShipBundleListResponse{
+			Success: false,
+			Error:   "Failed to create request: " + err.Error(),
+		})
+		return
+	}
+	req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, CloudShipBundleListResponse{
+			Success: false,
+			Error:   "Failed to fetch bundles from CloudShip: " + err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusInternalServerError, CloudShipBundleListResponse{
+			Success: false,
+			Error:   fmt.Sprintf("CloudShip list failed (HTTP %d): %s", resp.StatusCode, string(bodyBytes)),
+		})
+		return
+	}
+
+	// Parse CloudShip response
+	var cloudShipResp struct {
+		Bundles []map[string]interface{} `json:"bundles"`
+	}
+	if err := json.Unmarshal(bodyBytes, &cloudShipResp); err != nil {
+		c.JSON(http.StatusInternalServerError, CloudShipBundleListResponse{
+			Success: false,
+			Error:   "Failed to parse CloudShip response: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, CloudShipBundleListResponse{
+		Success: true,
+		Bundles: cloudShipResp.Bundles,
 	})
 }
 

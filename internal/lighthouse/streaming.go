@@ -78,24 +78,23 @@ func (lc *LighthouseClient) startBackgroundWorkers() {
 		// This eliminates dual heartbeat conflict with management channel keepalives
 	}
 
-	// Heartbeat worker (CLI mode only - ephemeral connections)
-	if lc.mode == ModeCLI {
-		lc.wg.Add(1)
-		go func() {
-			defer lc.wg.Done()
-			ticker := time.NewTicker(lc.config.HeartbeatInterval)
-			defer ticker.Stop()
+	// Heartbeat worker (all modes - required for Lighthouse status tracking)
+	// Heartbeat is separate from management channel and required to keep station marked as online
+	lc.wg.Add(1)
+	go func() {
+		defer lc.wg.Done()
+		ticker := time.NewTicker(lc.config.HeartbeatInterval)
+		defer ticker.Stop()
 
-			for {
-				select {
-				case <-lc.ctx.Done():
-					return
-				case <-ticker.C:
-					lc.sendHeartbeat()
-				}
+		for {
+			select {
+			case <-lc.ctx.Done():
+				return
+			case <-ticker.C:
+				lc.sendHeartbeat()
 			}
-		}()
-	}
+		}
+	}()
 }
 
 // sendRunSync sends run data synchronously (internal)
@@ -142,8 +141,9 @@ func (lc *LighthouseClient) sendHealthSync(req *proto.SystemHealthRequest) {
 	}
 }
 
-// sendHeartbeat sends periodic heartbeat (CLI mode only)
-// Note: stdio/serve modes use management channel for connection health
+// sendHeartbeat sends periodic heartbeat to Lighthouse
+// Required for all modes to keep station marked as online in CloudShip UI
+// Separate from management channel which handles bidirectional communication
 func (lc *LighthouseClient) sendHeartbeat() {
 	if !lc.IsConnected() {
 		return
@@ -167,6 +167,8 @@ func (lc *LighthouseClient) sendHeartbeat() {
 
 	if !resp.Success {
 		logging.Info("CloudShip heartbeat rejected: %s", resp.Message)
+	} else {
+		logging.Debug("Heartbeat sent successfully to CloudShip")
 	}
 }
 

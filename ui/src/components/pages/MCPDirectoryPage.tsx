@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package } from 'lucide-react';
+import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink } from 'lucide-react';
 
 interface MCPServer {
   id: string;
@@ -12,6 +12,7 @@ interface MCPServer {
   transport?: string;
   icon: React.ComponentType<any>;
   isInstalled?: boolean;
+  requiresShip?: boolean;
 }
 
 interface Environment {
@@ -116,17 +117,8 @@ const mcpServers: MCPServer[] = [
   },
   {
     id: 'supabase',
-    name: 'Supabase (Postgres)',
-    description: 'Interact with Supabase Postgres database',
-    category: 'Database',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-postgres', '{{ .SUPABASE_DATABASE_URL }}'],
-    icon: Database
-  },
-  {
-    id: 'supabase-staging',
-    name: 'Supabase Staging',
-    description: 'Supabase staging environment with access token',
+    name: 'Supabase',
+    description: 'Interact with Supabase projects and databases',
     category: 'Database',
     command: 'npx',
     args: ['-y', '@supabase/mcp-server-supabase@latest', '--access-token', '{{ .SUPABASE_ACCESS_TOKEN }}'],
@@ -166,8 +158,8 @@ const mcpServers: MCPServer[] = [
     name: 'Docling',
     description: 'Convert various document formats to text and structured formats',
     category: 'Document Processing',
-    command: 'npx',
-    args: ['-y', '@docling/mcp-server'],
+    command: 'uvx',
+    args: ['--from=docling-mcp', 'docling-mcp-server'],
     icon: FileText
   },
   {
@@ -176,11 +168,7 @@ const mcpServers: MCPServer[] = [
     description: 'Query Sentry for error tracking and performance monitoring',
     category: 'Monitoring',
     command: 'npx',
-    args: ['-y', '@sentry/mcp-server'],
-    env: {
-      SENTRY_AUTH_TOKEN: '{{ .SENTRY_AUTH_TOKEN }}',
-      SENTRY_ORG_SLUG: '{{ .SENTRY_ORG_SLUG }}'
-    },
+    args: ['-y', '@sentry/mcp-server@latest', '--access-token={{ .SENTRY_AUTH_TOKEN }}'],
     icon: AlertCircle
   },
   {
@@ -189,7 +177,7 @@ const mcpServers: MCPServer[] = [
     description: 'Search and ask questions using Perplexity AI',
     category: 'Search & Research',
     command: 'npx',
-    args: ['-y', '@perplexity/mcp-ask'],
+    args: ['-y', 'server-perplexity-ask'],
     env: { PERPLEXITY_API_KEY: '{{ .PERPLEXITY_API_KEY }}' },
     icon: Search
   },
@@ -199,11 +187,8 @@ const mcpServers: MCPServer[] = [
     description: 'Query PostHog for analytics insights and user behavior data',
     category: 'Analytics',
     command: 'npx',
-    args: ['-y', '@posthog/mcp-server'],
-    env: {
-      POSTHOG_API_KEY: '{{ .POSTHOG_API_KEY }}',
-      POSTHOG_PROJECT_ID: '{{ .POSTHOG_PROJECT_ID }}'
-    },
+    args: ['-y', 'mcp-remote@latest', 'https://mcp.posthog.com/mcp', '--header', 'Authorization:{{ .POSTHOG_AUTH_HEADER }}'],
+    env: { POSTHOG_AUTH_HEADER: '{{ .POSTHOG_AUTH_HEADER }}' },
     icon: Settings
   },
   {
@@ -211,8 +196,8 @@ const mcpServers: MCPServer[] = [
     name: 'Fetch',
     description: 'Fetch and extract content from web pages',
     category: 'Web Scraping',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-fetch'],
+    command: 'uvx',
+    args: ['mcp-server-fetch'],
     icon: Globe
   },
   {
@@ -221,8 +206,7 @@ const mcpServers: MCPServer[] = [
     description: 'Access Stripe API for payment processing and financial data',
     category: 'Financial',
     command: 'npx',
-    args: ['-y', '@stripe/mcp-server'],
-    env: { STRIPE_SECRET_KEY: '{{ .STRIPE_SECRET_KEY }}' },
+    args: ['-y', '@stripe/mcp', '--tools=all', '--api-key={{ .STRIPE_SECRET_KEY }}'],
     icon: Settings
   },
   {
@@ -231,8 +215,7 @@ const mcpServers: MCPServer[] = [
     description: 'Read and search through Notion pages and databases',
     category: 'Productivity',
     command: 'npx',
-    args: ['-y', '@notion/mcp-server'],
-    env: { NOTION_API_KEY: '{{ .NOTION_API_KEY }}' },
+    args: ['-y', 'mcp-remote', 'https://mcp.notion.com/sse'],
     icon: FileText
   },
   {
@@ -241,7 +224,8 @@ const mcpServers: MCPServer[] = [
     description: 'Search AWS documentation and get answers about AWS services',
     category: 'Cloud Platform',
     command: 'npx',
-    args: ['-y', '@aws/knowledge-mcp-server'],
+    args: ['-y', 'mcp-remote', 'https://knowledge-mcp.global.api.aws'],
+    transport: 'http',
     icon: Cloud
   },
   {
@@ -250,7 +234,7 @@ const mcpServers: MCPServer[] = [
     description: 'Control your desktop environment and applications',
     category: 'System Control',
     command: 'npx',
-    args: ['-y', '@desktop/commander-mcp'],
+    args: ['-y', '@wonderwhy-er/desktop-commander@latest'],
     icon: Terminal
   },
   {
@@ -258,9 +242,8 @@ const mcpServers: MCPServer[] = [
     name: 'Resend',
     description: 'Send emails using the Resend API',
     category: 'Communication',
-    command: 'npx',
-    args: ['-y', '@resend/mcp-server'],
-    env: { RESEND_API_KEY: '{{ .RESEND_API_KEY }}' },
+    command: 'node',
+    args: ['{{ .RESEND_MCP_PATH }}/build/index.js', '--key={{ .RESEND_API_KEY }}'],
     icon: MessageSquare
   },
   {
@@ -269,12 +252,40 @@ const mcpServers: MCPServer[] = [
     description: 'Interact with Upstash Redis and Kafka services',
     category: 'Database',
     command: 'npx',
-    args: ['-y', '@upstash/mcp-server'],
-    env: {
-      UPSTASH_REDIS_REST_URL: '{{ .UPSTASH_REDIS_REST_URL }}',
-      UPSTASH_REDIS_REST_TOKEN: '{{ .UPSTASH_REDIS_REST_TOKEN }}'
-    },
+    args: ['-y', '@upstash/mcp-server', 'run', '{{ .UPSTASH_EMAIL }}', '{{ .UPSTASH_API_KEY }}'],
     icon: Database
+  },
+  {
+    id: 'playwright',
+    name: 'Playwright',
+    description: 'Browser automation and web testing framework',
+    category: 'Development Tools',
+    command: 'npx',
+    args: ['@playwright/mcp@latest'],
+    icon: Code
+  },
+  {
+    id: 'awslabs.cost-explorer-mcp-server',
+    name: 'AWS Cost Explorer',
+    description: 'Analyze AWS costs and usage with Cost Explorer API',
+    category: 'Cloud Platform',
+    command: 'uvx',
+    args: ['awslabs.cost-explorer-mcp-server@latest'],
+    env: {
+      FASTMCP_LOG_LEVEL: '{{ .FASTMCP_LOG_LEVEL }}',
+      AWS_PROFILE: '{{ .AWS_PROFILE }}'
+    },
+    icon: Cloud
+  },
+  {
+    id: 'gitleaks-2',
+    name: 'GitLeaks (Ship)',
+    description: 'Detect secrets and sensitive information in code repositories',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'gitleaks', '--stdio'],
+    icon: Shield,
+    requiresShip: true
   }
 ];
 
@@ -460,12 +471,15 @@ export const MCPDirectoryPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [shipInstalled, setShipInstalled] = useState(false);
+  const [checkingShip, setCheckingShip] = useState(true);
 
   const categories = ['All', ...Array.from(new Set(mcpServers.map(s => s.category)))];
 
   useEffect(() => {
     fetchEnvironments();
     fetchInstalledServers();
+    checkShipInstallation();
   }, []);
 
   const fetchEnvironments = async () => {
@@ -489,6 +503,19 @@ export const MCPDirectoryPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to fetch installed servers:', error);
       setLoading(false);
+    }
+  };
+
+  const checkShipInstallation = async () => {
+    try {
+      const response = await fetch('/api/v1/ship/installed');
+      const data = await response.json();
+      setShipInstalled(data.installed || false);
+    } catch (error) {
+      console.error('Failed to check Ship installation:', error);
+      setShipInstalled(false);
+    } finally {
+      setCheckingShip(false);
     }
   };
 
@@ -532,6 +559,9 @@ export const MCPDirectoryPage: React.FC = () => {
     return matchesSearch && matchesCategory;
   });
 
+  const shipServers = filteredServers.filter(s => s.requiresShip);
+  const regularServers = filteredServers.filter(s => !s.requiresShip);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -574,23 +604,80 @@ export const MCPDirectoryPage: React.FC = () => {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8">
         {filteredServers.length === 0 ? (
           <div className="text-center py-12">
             <Server size={48} className="mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No servers found</h3>
-            <p className="text-gray-500">Try adjusting your search or category filter</p>
+            <h3 className="text-lg font-medium text-gray-100 mb-2">No servers found</h3>
+            <p className="text-gray-400">Try adjusting your search or category filter</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredServers.map(server => (
-              <MCPServerCard
-                key={server.id}
-                server={server}
-                onAddServer={handleAddServer}
-              />
-            ))}
-          </div>
+          <>
+            {/* Regular MCP Servers */}
+            {regularServers.length > 0 && (
+              <div>
+                <h2 className="text-xl font-bold text-gray-100 mb-4">MCP Servers</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {regularServers.map(server => (
+                    <MCPServerCard
+                      key={server.id}
+                      server={server}
+                      onAddServer={handleAddServer}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Ship Security Tools */}
+            {(shipServers.length > 0 || selectedCategory === 'All' || selectedCategory === 'Ship Security Tools') && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <Shield className="text-purple-400" size={24} />
+                    <h2 className="text-xl font-bold text-gray-100">Ship Security Tools</h2>
+                  </div>
+                  {!shipInstalled && !checkingShip && (
+                    <span className="text-sm text-amber-400">Ship not installed</span>
+                  )}
+                </div>
+
+                {!shipInstalled && !checkingShip ? (
+                  <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center">
+                    <Shield size={48} className="mx-auto text-gray-400 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-100 mb-2">Ship CLI Required</h3>
+                    <p className="text-gray-400 mb-4">
+                      Install Ship to access 300+ security tools including GitLeaks, Semgrep, Checkov, TFLint, and more.
+                    </p>
+                    <div className="bg-gray-900 border border-gray-700 rounded p-4 mb-4">
+                      <code className="text-sm text-purple-400">
+                        curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash
+                      </code>
+                    </div>
+                    <a
+                      href="https://github.com/cloudshipai/ship"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-2 text-purple-400 hover:text-purple-300"
+                    >
+                      <span>Learn more about Ship</span>
+                      <ExternalLink size={16} />
+                    </a>
+                  </div>
+                ) : shipServers.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {shipServers.map(server => (
+                      <MCPServerCard
+                        key={server.id}
+                        server={server}
+                        onAddServer={handleAddServer}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </>
         )}
       </div>
 

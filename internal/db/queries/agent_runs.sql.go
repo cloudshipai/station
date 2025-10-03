@@ -11,9 +11,9 @@ import (
 )
 
 const createAgentRun = `-- name: CreateAgentRun :one
-INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs
+INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error
 `
 
 type CreateAgentRunParams struct {
@@ -33,6 +33,7 @@ type CreateAgentRunParams struct {
 	ModelName       sql.NullString  `json:"model_name"`
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
 	DebugLogs       sql.NullString  `json:"debug_logs"`
+	Error           sql.NullString  `json:"error"`
 }
 
 func (q *Queries) CreateAgentRun(ctx context.Context, arg CreateAgentRunParams) (AgentRun, error) {
@@ -53,6 +54,7 @@ func (q *Queries) CreateAgentRun(ctx context.Context, arg CreateAgentRunParams) 
 		arg.ModelName,
 		arg.ToolsUsed,
 		arg.DebugLogs,
+		arg.Error,
 	)
 	var i AgentRun
 	err := row.Scan(
@@ -74,6 +76,7 @@ func (q *Queries) CreateAgentRun(ctx context.Context, arg CreateAgentRunParams) 
 		&i.ModelName,
 		&i.ToolsUsed,
 		&i.DebugLogs,
+		&i.Error,
 	)
 	return i, err
 }
@@ -81,7 +84,7 @@ func (q *Queries) CreateAgentRun(ctx context.Context, arg CreateAgentRunParams) 
 const createAgentRunBasic = `-- name: CreateAgentRunBasic :one
 INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs
+RETURNING id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error
 `
 
 type CreateAgentRunBasicParams struct {
@@ -128,12 +131,13 @@ func (q *Queries) CreateAgentRunBasic(ctx context.Context, arg CreateAgentRunBas
 		&i.ModelName,
 		&i.ToolsUsed,
 		&i.DebugLogs,
+		&i.Error,
 	)
 	return i, err
 }
 
 const getAgentRun = `-- name: GetAgentRun :one
-SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs FROM agent_runs WHERE id = ?
+SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error FROM agent_runs WHERE id = ?
 `
 
 func (q *Queries) GetAgentRun(ctx context.Context, id int64) (AgentRun, error) {
@@ -158,14 +162,15 @@ func (q *Queries) GetAgentRun(ctx context.Context, id int64) (AgentRun, error) {
 		&i.ModelName,
 		&i.ToolsUsed,
 		&i.DebugLogs,
+		&i.Error,
 	)
 	return i, err
 }
 
 const getAgentRunWithDetails = `-- name: GetAgentRunWithDetails :one
-SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken, 
+SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken,
        ar.tool_calls, ar.execution_steps, ar.status, ar.started_at, ar.completed_at,
-       ar.input_tokens, ar.output_tokens, ar.total_tokens, ar.duration_seconds, ar.model_name, ar.tools_used, ar.debug_logs,
+       ar.input_tokens, ar.output_tokens, ar.total_tokens, ar.duration_seconds, ar.model_name, ar.tools_used, ar.debug_logs, ar.error,
        a.name as agent_name, u.username
 FROM agent_runs ar
 JOIN agents a ON ar.agent_id = a.id
@@ -192,6 +197,7 @@ type GetAgentRunWithDetailsRow struct {
 	ModelName       sql.NullString  `json:"model_name"`
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
 	DebugLogs       sql.NullString  `json:"debug_logs"`
+	Error           sql.NullString  `json:"error"`
 	AgentName       string          `json:"agent_name"`
 	Username        string          `json:"username"`
 }
@@ -218,6 +224,7 @@ func (q *Queries) GetAgentRunWithDetails(ctx context.Context, id int64) (GetAgen
 		&i.ModelName,
 		&i.ToolsUsed,
 		&i.DebugLogs,
+		&i.Error,
 		&i.AgentName,
 		&i.Username,
 	)
@@ -225,7 +232,7 @@ func (q *Queries) GetAgentRunWithDetails(ctx context.Context, id int64) (GetAgen
 }
 
 const listAgentRuns = `-- name: ListAgentRuns :many
-SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs FROM agent_runs ORDER BY started_at DESC
+SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error FROM agent_runs ORDER BY started_at DESC
 `
 
 func (q *Queries) ListAgentRuns(ctx context.Context) ([]AgentRun, error) {
@@ -256,6 +263,7 @@ func (q *Queries) ListAgentRuns(ctx context.Context) ([]AgentRun, error) {
 			&i.ModelName,
 			&i.ToolsUsed,
 			&i.DebugLogs,
+			&i.Error,
 		); err != nil {
 			return nil, err
 		}
@@ -271,7 +279,7 @@ func (q *Queries) ListAgentRuns(ctx context.Context) ([]AgentRun, error) {
 }
 
 const listAgentRunsByAgent = `-- name: ListAgentRunsByAgent :many
-SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC
+SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC
 `
 
 func (q *Queries) ListAgentRunsByAgent(ctx context.Context, agentID int64) ([]AgentRun, error) {
@@ -302,6 +310,7 @@ func (q *Queries) ListAgentRunsByAgent(ctx context.Context, agentID int64) ([]Ag
 			&i.ModelName,
 			&i.ToolsUsed,
 			&i.DebugLogs,
+			&i.Error,
 		); err != nil {
 			return nil, err
 		}
@@ -317,7 +326,7 @@ func (q *Queries) ListAgentRunsByAgent(ctx context.Context, agentID int64) ([]Ag
 }
 
 const listAgentRunsByUser = `-- name: ListAgentRunsByUser :many
-SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs FROM agent_runs WHERE user_id = ? ORDER BY started_at DESC
+SELECT id, agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, started_at, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error FROM agent_runs WHERE user_id = ? ORDER BY started_at DESC
 `
 
 func (q *Queries) ListAgentRunsByUser(ctx context.Context, userID int64) ([]AgentRun, error) {
@@ -348,6 +357,7 @@ func (q *Queries) ListAgentRunsByUser(ctx context.Context, userID int64) ([]Agen
 			&i.ModelName,
 			&i.ToolsUsed,
 			&i.DebugLogs,
+			&i.Error,
 		); err != nil {
 			return nil, err
 		}
@@ -363,7 +373,7 @@ func (q *Queries) ListAgentRunsByUser(ctx context.Context, userID int64) ([]Agen
 }
 
 const listRecentAgentRuns = `-- name: ListRecentAgentRuns :many
-SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken, ar.tool_calls, ar.execution_steps, ar.status, ar.started_at, ar.completed_at, ar.input_tokens, ar.output_tokens, ar.total_tokens, ar.duration_seconds, ar.model_name, ar.tools_used, ar.debug_logs, a.name as agent_name, u.username
+SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken, ar.tool_calls, ar.execution_steps, ar.status, ar.started_at, ar.completed_at, ar.input_tokens, ar.output_tokens, ar.total_tokens, ar.duration_seconds, ar.model_name, ar.tools_used, ar.debug_logs, ar.error, a.name as agent_name, u.username
 FROM agent_runs ar
 JOIN agents a ON ar.agent_id = a.id
 JOIN users u ON ar.user_id = u.id
@@ -390,6 +400,7 @@ type ListRecentAgentRunsRow struct {
 	ModelName       sql.NullString  `json:"model_name"`
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
 	DebugLogs       sql.NullString  `json:"debug_logs"`
+	Error           sql.NullString  `json:"error"`
 	AgentName       string          `json:"agent_name"`
 	Username        string          `json:"username"`
 }
@@ -422,6 +433,7 @@ func (q *Queries) ListRecentAgentRuns(ctx context.Context, limit int64) ([]ListR
 			&i.ModelName,
 			&i.ToolsUsed,
 			&i.DebugLogs,
+			&i.Error,
 			&i.AgentName,
 			&i.Username,
 		); err != nil {
@@ -439,8 +451,8 @@ func (q *Queries) ListRecentAgentRuns(ctx context.Context, limit int64) ([]ListR
 }
 
 const updateAgentRunCompletion = `-- name: UpdateAgentRunCompletion :exec
-UPDATE agent_runs 
-SET final_response = ?, steps_taken = ?, tool_calls = ?, execution_steps = ?, status = ?, completed_at = ?, input_tokens = ?, output_tokens = ?, total_tokens = ?, duration_seconds = ?, model_name = ?, tools_used = ?
+UPDATE agent_runs
+SET final_response = ?, steps_taken = ?, tool_calls = ?, execution_steps = ?, status = ?, completed_at = ?, input_tokens = ?, output_tokens = ?, total_tokens = ?, duration_seconds = ?, model_name = ?, tools_used = ?, error = ?
 WHERE id = ?
 `
 
@@ -457,6 +469,7 @@ type UpdateAgentRunCompletionParams struct {
 	DurationSeconds sql.NullFloat64 `json:"duration_seconds"`
 	ModelName       sql.NullString  `json:"model_name"`
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
+	Error           sql.NullString  `json:"error"`
 	ID              int64           `json:"id"`
 }
 
@@ -474,6 +487,7 @@ func (q *Queries) UpdateAgentRunCompletion(ctx context.Context, arg UpdateAgentR
 		arg.DurationSeconds,
 		arg.ModelName,
 		arg.ToolsUsed,
+		arg.Error,
 		arg.ID,
 	)
 	return err
