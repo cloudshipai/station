@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/build"
 )
@@ -13,7 +15,7 @@ var (
 		Long: `Build Docker containers for Station environments with all dependencies packaged.
 Creates portable, deployable containers with:
 - Station binary and configuration
-- Environment-specific MCP servers and tools  
+- Environment-specific MCP servers and tools
 - Agent configurations and prompts
 - Database with proper schema and data`,
 	}
@@ -46,22 +48,39 @@ For staging/production deployments, consider using 'stn build base' and injectin
 		Args: cobra.RangeArgs(0, 1),
 		RunE: runBuildEnvironment,
 	}
+
+	buildRuntimeCmd = &cobra.Command{
+		Use:   "runtime",
+		Short: "Build runtime container for stn up/down",
+		Long: `Build a minimal runtime container for use with 'stn up' and 'stn down'.
+This container is designed to mount existing local configuration and database,
+rather than initializing new ones.
+
+Examples:
+  stn build runtime              # Build runtime container
+  stn build runtime --no-ship    # Build without Ship CLI`,
+		RunE: runBuildRuntime,
+	}
 )
 
 func init() {
 	buildCmd.AddCommand(buildBaseCmd)
 	buildCmd.AddCommand(buildEnvironmentCmd)
-	
+	buildCmd.AddCommand(buildRuntimeCmd)
+
 	// Add flags for environment build command
 	buildEnvironmentCmd.Flags().String("provider", "", "AI provider to configure (openai, gemini, anthropic)")
 	buildEnvironmentCmd.Flags().String("model", "", "AI model to use")
 	buildEnvironmentCmd.Flags().String("cloudshipai-registration-key", "", "CloudShip AI registration key for telemetry")
 	buildEnvironmentCmd.Flags().String("cloudshipai-endpoint", "127.0.0.1:50051", "CloudShip AI endpoint")
 	buildEnvironmentCmd.Flags().Bool("ship", false, "Install Ship CLI for security tools")
-	
+
 	// Make provider and model required
 	buildEnvironmentCmd.MarkFlagRequired("provider")
 	buildEnvironmentCmd.MarkFlagRequired("model")
+
+	// Add flags for runtime build command
+	buildRuntimeCmd.Flags().Bool("no-ship", false, "Do not install Ship CLI")
 }
 
 // runBuildBase builds a base Station container
@@ -74,4 +93,21 @@ func runBuildBase(cmd *cobra.Command, args []string) error {
 func runBuildEnvironment(cmd *cobra.Command, args []string) error {
 	buildHandler := build.NewBuildHandler(nil)
 	return buildHandler.RunBuildEnvironment(cmd, args)
+}
+
+// runBuildRuntime builds a runtime container for stn up/down
+func runBuildRuntime(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	noShip, _ := cmd.Flags().GetBool("no-ship")
+
+	builder := build.NewRuntimeBuilder(&build.RuntimeBuildOptions{
+		ImageName:   "station-runtime:latest",
+		InstallShip: !noShip,
+	})
+
+	return builder.Build(ctx)
 }
