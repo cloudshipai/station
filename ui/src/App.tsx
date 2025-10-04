@@ -986,8 +986,8 @@ const MCPServersPage = () => {
 
                 {/* Error message */}
                 {server.error && (
-                  <div className="mt-2 p-2 bg-tokyo-red bg-opacity-20 border border-tokyo-red border-opacity-50 rounded">
-                    <p className="text-sm text-tokyo-red font-mono">{server.error}</p>
+                  <div className="mt-2 p-3 border-l-4 border-tokyo-red bg-tokyo-bg-highlight rounded">
+                    <p className="text-sm text-tokyo-fg font-mono">{server.error}</p>
                   </div>
                 )}
 
