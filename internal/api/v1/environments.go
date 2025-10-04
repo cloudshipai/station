@@ -292,14 +292,14 @@ func (h *APIHandlers) getEnvironmentVariables(c *gin.Context) {
 		return
 	}
 
-	// Read variables.yml file
-	cfg, err := config.Load()
+	// Get station config root
+	configRoot, err := common.GetStationConfigRoot()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load config"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get station config root"})
 		return
 	}
 
-	envPath := filepath.Join(cfg.EnvironmentsPath, env.Name)
+	envPath := filepath.Join(configRoot, "environments", env.Name)
 	variablesPath := filepath.Join(envPath, "variables.yml")
 
 	// Read file content as string
@@ -354,14 +354,14 @@ func (h *APIHandlers) updateEnvironmentVariables(c *gin.Context) {
 		return
 	}
 
-	// Write variables.yml file
-	cfg, err := config.Load()
+	// Get station config root
+	configRoot, err := common.GetStationConfigRoot()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load config"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get station config root"})
 		return
 	}
 
-	envPath := filepath.Join(cfg.EnvironmentsPath, env.Name)
+	envPath := filepath.Join(configRoot, "environments", env.Name)
 	variablesPath := filepath.Join(envPath, "variables.yml")
 
 	if err := os.WriteFile(variablesPath, []byte(req.Content), 0644); err != nil {
