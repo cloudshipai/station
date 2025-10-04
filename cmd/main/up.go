@@ -25,7 +25,7 @@ This command:
 - Mounts your current or specified workspace directory
 - Preserves file permissions using your user ID
 - Automatically configures .mcp.json for Claude integration
-- Exposes ports for API (3000), SSH (2222), and MCP (3001)
+- Exposes ports for API (3000), SSH (2222), MCP (3001), and UI (8585)
 
 Examples:
   stn up                     # Start with current directory as workspace
@@ -135,6 +135,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		"-p", "2222:2222",  // SSH
 		"-p", "3001:3001",  // MCP
 		"-p", "3002:3002",  // MCP Agents
+		"-p", "8585:8585",  // UI
 	)
 
 	// Environment variables
@@ -172,7 +173,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔗 API: http://localhost:3000\n")
 	fmt.Printf("🔗 SSH: ssh admin@localhost -p 2222\n")
 	fmt.Printf("🔗 MCP: http://localhost:3001/mcp\n")
-	fmt.Printf("🔗 UI:  http://localhost:3000\n")
+	fmt.Printf("🔗 UI:  http://localhost:8585\n")
 
 	if detach {
 		fmt.Printf("\n💡 Run 'stn logs' to see container output\n")
