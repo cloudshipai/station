@@ -15,7 +15,6 @@ import (
 	"station/internal/mcp"
 	"station/internal/mcp_agents"
 	"station/internal/services"
-	"station/internal/ssh"
 	"strings"
 	"sync"
 	"syscall"
@@ -193,26 +192,19 @@ func runMainServer() error {
 
 	log.Printf("🤖 Serving agents from environment: %s", environmentName)
 
-	sshServer := ssh.New(cfg, database, repos, agentSvc, localMode)
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
 	apiServer := api.New(cfg, database, localMode, nil)
 
 	// Initialize ToolDiscoveryService for lighthouse and API compatibility
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
-	
+
 	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService)
 
-	wg.Add(5) // SSH, MCP, Dynamic Agent MCP, API, and webhook retry processor
+	wg.Add(4) // MCP, Dynamic Agent MCP, API, and webhook retry processor
 
-	go func() {
-		defer wg.Done()
-		log.Printf("🌐 Starting SSH server on port %d", cfg.SSHPort)
-		if err := sshServer.Start(ctx); err != nil {
-			log.Printf("SSH server error: %v", err)
-		}
-	}()
+	// SSH server removed - not needed
 
 	go func() {
 		defer wg.Done()

@@ -56,9 +56,13 @@ For staging/production deployments, consider using 'stn build base' and injectin
 This container is designed to mount existing local configuration and database,
 rather than initializing new ones.
 
+By default, pulls the latest image from GitHub Container Registry.
+Use --local to build from source instead.
+
 Examples:
-  stn build runtime              # Build runtime container
-  stn build runtime --no-ship    # Build without Ship CLI`,
+  stn build runtime              # Pull from GHCR
+  stn build runtime --local      # Build from source locally
+  stn build runtime --no-ship    # Pull without Ship CLI`,
 		RunE: runBuildRuntime,
 	}
 )
@@ -81,6 +85,7 @@ func init() {
 
 	// Add flags for runtime build command
 	buildRuntimeCmd.Flags().Bool("no-ship", false, "Do not install Ship CLI")
+	buildRuntimeCmd.Flags().Bool("local", false, "Build locally instead of pulling from GHCR")
 }
 
 // runBuildBase builds a base Station container
@@ -103,10 +108,12 @@ func runBuildRuntime(cmd *cobra.Command, args []string) error {
 	}
 
 	noShip, _ := cmd.Flags().GetBool("no-ship")
+	buildLocal, _ := cmd.Flags().GetBool("local")
 
 	builder := build.NewRuntimeBuilder(&build.RuntimeBuildOptions{
 		ImageName:   "station-runtime:latest",
 		InstallShip: !noShip,
+		BuildLocal:  buildLocal,
 	})
 
 	return builder.Build(ctx)

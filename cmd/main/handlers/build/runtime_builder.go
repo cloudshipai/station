@@ -6,11 +6,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
-
-	"dagger.io/dagger"
 )
 
 // RuntimeBuilder creates a minimal Station runtime container for stn up/down
@@ -23,6 +18,7 @@ type RuntimeBuilder struct {
 type RuntimeBuildOptions struct {
 	ImageName   string // Name for the built image
 	InstallShip bool   // Whether to install Ship CLI
+	BuildLocal  bool   // Build locally instead of pulling from GHCR
 }
 
 func NewRuntimeBuilder(options *RuntimeBuildOptions) *RuntimeBuilder {
@@ -37,248 +33,109 @@ func NewRuntimeBuilder(options *RuntimeBuildOptions) *RuntimeBuilder {
 	}
 }
 
-// Build creates a runtime container for Station server
+// Build creates or pulls the Station runtime container
 func (b *RuntimeBuilder) Build(ctx context.Context) error {
-	log.Printf("🔨 Building Station runtime container...")
-
-	client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stdout))
-	if err != nil {
-		return fmt.Errorf("failed to connect to Dagger: %w", err)
+	if b.options.BuildLocal {
+		return b.buildLocalImage(ctx)
 	}
-	defer client.Close()
-
-	container, err := b.buildRuntimeContainer(ctx, client)
-	if err != nil {
-		return fmt.Errorf("failed to build runtime container: %w", err)
-	}
-
-	// Clean up temp binary after building
-	defer os.Remove("stn")
-
-	// Export to tar file
-	tarPath := "station-runtime.tar"
-	_, err = container.Export(ctx, tarPath)
-	if err != nil {
-		return fmt.Errorf("failed to export container: %w", err)
-	}
-
-	// Load into Docker daemon
-	if err := b.loadImageToDocker(tarPath); err != nil {
-		log.Printf("Warning: Failed to load into Docker daemon: %v", err)
-		log.Printf("Container exported to: %s", tarPath)
-		log.Printf("Load manually with: docker load < %s", tarPath)
-		return nil
-	}
-
-	// Clean up tar file since we loaded it
-	os.Remove(tarPath)
-
-	log.Printf("✅ Successfully built Station runtime container: %s", b.options.ImageName)
-	return nil
+	return b.pullFromRegistry(ctx)
 }
 
-func (b *RuntimeBuilder) buildRuntimeContainer(ctx context.Context, client *dagger.Client) (*dagger.Container, error) {
-	// Start with Ubuntu base
-	base := client.Container().From("ubuntu:22.04")
+// pullFromRegistry pulls the Station runtime container from GitHub Container Registry
+func (b *RuntimeBuilder) pullFromRegistry(ctx context.Context) error {
+	log.Printf("🔨 Pulling Station runtime container from GitHub Container Registry...")
 
-	// Install essential packages
-	base = base.WithExec([]string{"apt-get", "update"}).
-		WithExec([]string{"apt-get", "install", "-y",
-			"ca-certificates",
-			"curl",
-			"git",
-			"sqlite3",           // For database operations
-			"python3",           // For Python-based MCP servers
-			"python3-pip",
-			"python3-venv",
-			"build-essential",   // For compiling native modules
-			"openssh-client",    // For git operations
-		})
-
-	// Install Node.js for JavaScript MCP servers
-	base = base.WithExec([]string{"bash", "-c",
-		"curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"}).
-		WithExec([]string{"apt-get", "install", "-y", "nodejs"})
-
-	// Install uv for Python package management
-	base = base.WithExec([]string{"bash", "-c",
-		"curl -LsSf https://astral.sh/uv/install.sh | sh"}).
-		WithExec([]string{"bash", "-c",
-			"ln -sf /root/.cargo/bin/uv /usr/local/bin/uv && " +
-			"ln -sf /root/.cargo/bin/uvx /usr/local/bin/uvx"})
-
-	// Build or copy Station binary
-	if err := b.getStationBinary(); err != nil {
-		return nil, fmt.Errorf("failed to get Station binary: %w", err)
+	// Determine which image to pull
+	imageRef := "ghcr.io/cloudshipai/station:latest"
+	if b.options.ImageName != "" && b.options.ImageName != "station-runtime:latest" {
+		// If user specified a custom image name, use it as-is
+		imageRef = b.options.ImageName
 	}
 
-	stationBinary := client.Host().Directory(".").File("stn")
-	base = base.WithFile("/usr/local/bin/stn", stationBinary).
-		WithExec([]string{"chmod", "+x", "/usr/local/bin/stn"})
+	log.Printf("📦 Pulling image: %s", imageRef)
 
-	// Install Ship CLI if requested
-	if b.options.InstallShip {
-		log.Printf("🚢 Installing Ship CLI in container...")
-		base = base.WithExec([]string{"bash", "-c",
-			"timeout 300 bash -c 'curl -fsSL --max-time 60 https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash' || " +
-			"echo 'Ship CLI installation failed or timed out'"})
-		base = base.WithExec([]string{"bash", "-c",
-			"if [ -f /root/.local/bin/ship ]; then " +
-			"cp /root/.local/bin/ship /usr/local/bin/ship && " +
-			"chmod +x /usr/local/bin/ship; fi"})
+	// Pull the image using Docker CLI
+	cmd := exec.Command("docker", "pull", imageRef)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", imageRef, err)
 	}
 
-	// Install Docker CLI for Docker-in-Docker support
-	base = base.WithExec([]string{"bash", "-c", `
-		curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz | tar -xz &&
-		mv docker/docker /usr/local/bin/docker &&
-		rm -rf docker &&
-		chmod +x /usr/local/bin/docker
-	`})
-
-	// Create necessary directories
-	base = base.WithExec([]string{"mkdir", "-p",
-		"/workspace",                    // User workspace mount point
-		"/root/.config/station",         // Config mount point
-		"/root/.local/bin",              // Local binaries
-		"/var/log/station",              // Logs
-	})
-
-	// Set environment variables
-	base = base.
-		WithEnvVariable("PATH", "/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
-		WithEnvVariable("HOME", "/root").
-		WithEnvVariable("STATION_RUNTIME", "docker").
-		WithWorkdir("/workspace")
-
-	// Add health check
-	base = base.WithExec([]string{"bash", "-c",
-		`echo '#!/bin/bash
-curl -f http://localhost:3000/health || exit 1' > /usr/local/bin/health-check &&
-chmod +x /usr/local/bin/health-check`})
-
-	// Set default command to run Station server
-	base = base.WithDefaultArgs([]string{"stn", "serve"})
-
-	return base, nil
-}
-
-func (b *RuntimeBuilder) getStationBinary() error {
-	// Try to use existing binary from PATH (Linux only)
-	if runtime.GOOS == "linux" {
-		if stnPath, err := exec.LookPath("stn"); err == nil {
-			log.Printf("Using local Station binary from: %s", stnPath)
-			return b.copyFile(stnPath, "stn")
-		}
-	}
-
-	// Try to build from source if available
-	if _, err := os.Stat("go.mod"); err == nil {
-		log.Printf("Building Station binary from source...")
-		cmd := exec.Command("go", "build", "-o", "stn", "./cmd/main")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		if err := cmd.Run(); err == nil {
-			log.Printf("Successfully built Station binary")
-			return nil
-		}
-		log.Printf("Failed to build from source: %v", err)
-	}
-
-	// Download latest binary as last resort
-	return b.downloadStationBinary()
-}
-
-func (b *RuntimeBuilder) downloadStationBinary() error {
-	log.Printf("Downloading latest Station binary...")
-
-	tempDir, err := os.MkdirTemp("", "station-download-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Download using install script
-	installURL := "https://raw.githubusercontent.com/cloudshipai/station/main/install.sh"
-	cmd := exec.Command("bash", "-c", fmt.Sprintf("curl -fsSL %s | bash", installURL))
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("HOME=%s", tempDir),
-		"STATION_NO_PATH_UPDATE=1",
-	)
-	cmd.Dir = tempDir
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to download Station: %w\nOutput: %s", err, string(output))
-	}
-
-	// Find the downloaded binary
-	possiblePaths := []string{
-		filepath.Join(tempDir, ".local", "bin", "stn"),
-		filepath.Join(tempDir, "stn"),
-		filepath.Join(tempDir, "bin", "stn"),
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			return b.copyFile(path, "stn")
-		}
-	}
-
-	return fmt.Errorf("Station binary not found after download")
-}
-
-func (b *RuntimeBuilder) copyFile(src, dst string) error {
-	input, err := os.ReadFile(src)
-	if err != nil {
-		return fmt.Errorf("failed to read source file: %w", err)
-	}
-
-	if err := os.WriteFile(dst, input, 0755); err != nil {
-		return fmt.Errorf("failed to write destination file: %w", err)
-	}
-
-	return nil
-}
-
-func (b *RuntimeBuilder) loadImageToDocker(tarPath string) error {
-	log.Printf("Loading image into Docker daemon...")
-
-	// Load the tar file
-	cmd := exec.Command("docker", "load", "-i", tarPath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("docker load failed: %w, output: %s", err, output)
-	}
-
-	log.Printf("Docker load output: %s", string(output))
-
-	// Extract image ID from output and tag it
-	imageID := b.extractImageID(string(output))
-	if imageID != "" && b.options.ImageName != "" {
-		tagCmd := exec.Command("docker", "tag", imageID, b.options.ImageName)
+	// Tag as local runtime image if needed
+	if imageRef != "station-runtime:latest" {
+		tagCmd := exec.Command("docker", "tag", imageRef, "station-runtime:latest")
 		if err := tagCmd.Run(); err != nil {
 			log.Printf("Warning: Failed to tag image: %v", err)
 		}
 	}
 
+	log.Printf("✅ Successfully pulled Station runtime container: %s", imageRef)
 	return nil
 }
 
-func (b *RuntimeBuilder) extractImageID(output string) string {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "Loaded image ID:") {
-			parts := strings.Split(line, ":")
-			if len(parts) >= 3 {
-				return strings.TrimSpace(strings.Join(parts[2:], ":"))
-			}
-		} else if strings.Contains(line, "Loaded image:") {
-			parts := strings.Split(line, ":")
-			if len(parts) >= 3 {
-				return strings.TrimSpace(strings.Join(parts[2:], ":"))
-			}
-		}
+// buildLocalImage builds the container locally using Dockerfile
+func (b *RuntimeBuilder) buildLocalImage(ctx context.Context) error {
+	log.Printf("🔨 Building Station runtime container locally...")
+
+	// Build Station binary for Linux
+	if err := b.buildStationBinary(); err != nil {
+		return fmt.Errorf("failed to build Station binary: %w", err)
 	}
-	return ""
+	defer os.Remove("stn")
+
+	// Build Docker image
+	imageName := b.options.ImageName
+	if imageName == "" {
+		imageName = "station-runtime:latest"
+	}
+
+	buildArgs := []string{
+		"build",
+		"-t", imageName,
+		"-t", "station-runtime:latest",
+		"-f", "Dockerfile",
+	}
+
+	if b.options.InstallShip {
+		buildArgs = append(buildArgs, "--build-arg", "INSTALL_SHIP=true")
+	} else {
+		buildArgs = append(buildArgs, "--build-arg", "INSTALL_SHIP=false")
+	}
+
+	buildArgs = append(buildArgs, ".")
+
+	cmd := exec.Command("docker", buildArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to build Docker image: %w", err)
+	}
+
+	log.Printf("✅ Successfully built Station runtime container: %s", imageName)
+	return nil
 }
+
+// buildStationBinary builds the Station binary for Linux with UI embedded
+func (b *RuntimeBuilder) buildStationBinary() error {
+	log.Printf("Building Station binary for Linux container...")
+
+	cmd := exec.Command("go", "build", "-tags", "ui", "-o", "stn", "./cmd/main")
+	cmd.Env = append(os.Environ(),
+		"GOOS=linux",
+		"GOARCH=amd64",
+		"CGO_ENABLED=0",
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go build failed: %w", err)
+	}
+
+	log.Printf("✅ Successfully built Linux binary for container")
+	return nil
+}
+

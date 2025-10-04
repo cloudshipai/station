@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,7 @@ Examples:
 func init() {
 	upCmd.Flags().StringP("workspace", "w", "", "Workspace directory to mount (default: current directory)")
 	upCmd.Flags().BoolP("detach", "d", true, "Run container in background")
-	upCmd.Flags().Bool("build", false, "Force rebuild of container image")
+	upCmd.Flags().Bool("upgrade", false, "Rebuild container image before starting")
 	upCmd.Flags().StringSlice("env", []string{}, "Additional environment variables to pass through")
 	rootCmd.AddCommand(upCmd)
 }
@@ -83,10 +84,14 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	// Build or check for image
 	imageName := "station-runtime:latest"
-	forceBuild, _ := cmd.Flags().GetBool("build")
+	upgrade, _ := cmd.Flags().GetBool("upgrade")
 
-	if forceBuild || !dockerImageExists(imageName) {
-		fmt.Printf("🔨 Building Station runtime container...\n")
+	if upgrade || !dockerImageExists(imageName) {
+		if upgrade {
+			fmt.Printf("🔨 Upgrading Station runtime container...\n")
+		} else {
+			fmt.Printf("🔨 Building Station runtime container (first run)...\n")
+		}
 		if err := buildRuntimeContainer(); err != nil {
 			return fmt.Errorf("failed to build container: %w", err)
 		}
@@ -129,13 +134,15 @@ func runUp(cmd *cobra.Command, args []string) error {
 		dockerArgs = append(dockerArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock")
 	}
 
+	// Named volume for Dagger cache (persists across container restarts)
+	dockerArgs = append(dockerArgs, "-v", "station-dagger-cache:/root/.cache")
+
 	// Port mappings
 	dockerArgs = append(dockerArgs,
-		"-p", "3000:3000",  // API
-		"-p", "2222:2222",  // SSH
-		"-p", "3001:3001",  // MCP
+		"-p", "3000:3000",  // MCP
+		"-p", "3001:3001",  // Dynamic Agent MCP
 		"-p", "3002:3002",  // MCP Agents
-		"-p", "8585:8585",  // UI
+		"-p", "8585:8585",  // UI/API
 	)
 
 	// Environment variables
@@ -146,8 +153,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Set working directory
 	dockerArgs = append(dockerArgs, "-w", "/workspace")
 
-	// Add image and command
-	dockerArgs = append(dockerArgs, imageName, "stn", "serve")
+	// Add image and command with database path override
+	dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/root/.config/station/station.db")
 
 	// Run the container
 	fmt.Printf("🐳 Starting container...\n")
@@ -170,9 +177,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("\n✅ Station server started successfully!\n")
-	fmt.Printf("🔗 API: http://localhost:3000\n")
-	fmt.Printf("🔗 SSH: ssh admin@localhost -p 2222\n")
-	fmt.Printf("🔗 MCP: http://localhost:3001/mcp\n")
+	fmt.Printf("🔗 MCP: http://localhost:3000/mcp\n")
+	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3001/mcp\n")
 	fmt.Printf("🔗 UI:  http://localhost:8585\n")
 
 	if detach {
@@ -229,10 +235,20 @@ func addUserMapping(dockerArgs *[]string) error {
 	// Cross-platform user mapping strategy
 	switch runtime.GOOS {
 	case "linux":
-		// On Linux, use actual UID/GID
+		// On Linux, use actual UID/GID plus docker group for socket access
 		uid := os.Getuid()
 		gid := os.Getgid()
-		*dockerArgs = append(*dockerArgs, "--user", fmt.Sprintf("%d:%d", uid, gid))
+
+		// Get docker socket group ID for Docker-in-Docker support
+		dockerGID := gid
+		if stat, err := os.Stat("/var/run/docker.sock"); err == nil {
+			if sysStat, ok := stat.Sys().(*syscall.Stat_t); ok {
+				dockerGID = int(sysStat.Gid)
+			}
+		}
+
+		// Set user with supplementary docker group
+		*dockerArgs = append(*dockerArgs, "--user", fmt.Sprintf("%d:%d", uid, dockerGID))
 
 		// Mount passwd and group for user resolution (if they exist)
 		if _, err := os.Stat("/etc/passwd"); err == nil {
@@ -261,6 +277,23 @@ func addUserMapping(dockerArgs *[]string) error {
 }
 
 func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
+	// Read encryption key from local config file
+	configPath := filepath.Join(os.Getenv("HOME"), ".config", "station", "config.yaml")
+	if data, err := ioutil.ReadFile(configPath); err == nil {
+		// Simple key extraction from YAML (encryption_key: value)
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "encryption_key:") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					encryptionKey := strings.TrimSpace(parts[1])
+					*dockerArgs = append(*dockerArgs, "-e", fmt.Sprintf("STATION_ENCRYPTION_KEY=%s", encryptionKey))
+					break
+				}
+			}
+		}
+	}
+
 	// Essential AI provider keys to pass through
 	aiKeys := []string{
 		"OPENAI_API_KEY",
@@ -323,6 +356,9 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 	// Set PATH to include common tool locations
 	*dockerArgs = append(*dockerArgs, "-e", "PATH=/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
 
+	// Override config path to use container-local path (not host-specific)
+	*dockerArgs = append(*dockerArgs, "-e", "STATION_CONFIG=/root/.config/station/config.yaml")
+
 	return nil
 }
 
@@ -351,10 +387,10 @@ func updateMCPConfig(workspace string) error {
 		return fmt.Errorf(".mcp.json has invalid format for mcpServers")
 	}
 
-	// Add or update Station server configuration
+	// Add or update Station server configuration (HTTP transport)
 	mcpServers["station"] = map[string]interface{}{
-		"url":       "http://localhost:3000/sse",
-		"transport": "sse",
+		"type": "http",
+		"url":  "http://localhost:3000/mcp",
 	}
 
 	// Write back the updated config

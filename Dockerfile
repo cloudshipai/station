@@ -1,74 +1,91 @@
-# Station Docker Image
-# Multi-stage build for minimal production image
+# Station Runtime Container
+# Published to ghcr.io/cloudshipai/station and used by `stn up`
+# This expects a pre-built Linux binary with UI embedded
 
-# Build stage
-FROM golang:1.24-alpine AS builder
+FROM ubuntu:22.04
 
-# Install build dependencies and Ship CLI
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev curl bash && \
-    curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash || true && \
-    export PATH="/root/.local/bin:$PATH" && \
-    echo 'export PATH="/root/.local/bin:$PATH"' >> ~/.bashrc
+# Install essential packages
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    git \
+    sqlite3 \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
+# Install Node.js 20
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Install uv (Python package manager)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && ln -sf /root/.cargo/bin/uv /usr/local/bin/uv \
+    && ln -sf /root/.cargo/bin/uvx /usr/local/bin/uvx
 
-# Download dependencies
-RUN go mod download
+# Install Docker CLI (for Docker-in-Docker via socket mount)
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz | tar -xz \
+    && mv docker/docker /usr/local/bin/docker \
+    && rm -rf docker \
+    && chmod +x /usr/local/bin/docker
 
-# Copy source code
-COPY . .
+# Install Ship CLI for security tools
+ARG INSTALL_SHIP=true
+RUN if [ "$INSTALL_SHIP" = "true" ]; then \
+        timeout 300 bash -c 'curl -fsSL --max-time 60 https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash' || \
+        echo 'Ship CLI installation failed or timed out'; \
+        if [ -f /root/.local/bin/ship ]; then \
+            cp /root/.local/bin/ship /usr/local/bin/ship && \
+            chmod +x /usr/local/bin/ship; \
+        fi \
+    fi
 
-# Build the binary
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o stn ./cmd/main
-
-# Production stage
-FROM alpine:latest
-
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates sqlite tzdata curl bash
-
-# Install Ship CLI as root
-RUN curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash || true
-
-# Create non-root user
-RUN addgroup -g 1001 -S station && \
-    adduser -u 1001 -S station -G station
-
-# Copy Ship CLI to station user's local bin and set permissions
-RUN mkdir -p /home/station/.local/bin && \
-    cp /root/.local/bin/ship /home/station/.local/bin/ship 2>/dev/null || true && \
-    chown -R station:station /home/station/.local && \
-    echo 'export PATH="/home/station/.local/bin:$PATH"' >> /home/station/.bashrc
-
-# Set working directory
-WORKDIR /home/station
-
-# Copy binary from builder stage
-COPY --from=builder /app/stn /usr/local/bin/stn
+# Copy Station binary (built with UI embedded via GoReleaser)
+COPY stn /usr/local/bin/stn
+RUN chmod +x /usr/local/bin/stn
 
 # Create necessary directories
-RUN mkdir -p /home/station/.config/station /home/station/data && \
-    chown -R station:station /home/station
+RUN mkdir -p /workspace /root/.config/station /root/.local/bin /root/.cache /var/log/station
 
-# Switch to non-root user
-USER station
+# Make /root writable for Dagger and other tools when running as mapped user
+RUN chmod 777 /root /root/.cache
 
-# Set environment variables
-ENV STATION_CONFIG_DIR=/home/station/.config/station
-ENV STATION_DATA_DIR=/home/station/data
-ENV STATION_DATABASE_URL=/home/station/data/station.db
-ENV PATH="/home/station/.local/bin:$PATH"
+# Health check script
+RUN echo '#!/bin/bash\ncurl -f http://localhost:3000/health || exit 1' > /usr/local/bin/health-check && \
+    chmod +x /usr/local/bin/health-check
 
-# Expose ports
-EXPOSE 8080 2222 3000
+# Entrypoint script to fix permissions on mounted volumes
+RUN echo '#!/bin/bash\n\
+# Fix permissions for Dagger cache if it exists and is not writable\n\
+if [ -d /root/.cache ] && [ ! -w /root/.cache ]; then\n\
+    chmod 777 /root/.cache 2>/dev/null || true\n\
+fi\n\
+# Execute the actual command\n\
+exec "$@"' > /usr/local/bin/docker-entrypoint.sh && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD stn --version || exit 1
+# Environment variables
+ENV PATH="/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV HOME="/root"
+ENV STATION_RUNTIME="docker"
 
-# Default command
-CMD ["stn", "serve", "--host", "0.0.0.0"]
+# Set working directory
+WORKDIR /workspace
+
+# Expose ports for MCP, Dynamic Agent MCP, and UI/API
+EXPOSE 3000 3001 3002 8585
+
+# Use entrypoint to handle permission fixes
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# Default command runs Station server
+CMD ["stn", "serve"]
+
+# OCI labels
+LABEL org.opencontainers.image.source="https://github.com/cloudshipai/station"
+LABEL org.opencontainers.image.description="Station - AI Infrastructure Platform for MCP agents"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
