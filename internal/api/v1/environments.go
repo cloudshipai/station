@@ -25,6 +25,8 @@ func (h *APIHandlers) registerEnvironmentRoutes(group *gin.RouterGroup) {
 	group.PUT("/:env_id", h.updateEnvironment)
 	group.DELETE("/:env_id", h.deleteEnvironment)
 	group.POST("/build-image", h.buildEnvironmentImage)
+	group.GET("/:env_id/variables", h.getEnvironmentVariables)
+	group.PUT("/:env_id/variables", h.updateEnvironmentVariables)
 }
 
 // Environment handlers
@@ -272,5 +274,104 @@ func (h *APIHandlers) buildEnvironmentImage(c *gin.Context) {
 		"image_name":           req.ImageName,
 		"tag":                  req.Tag,
 		"environment_variables": environmentVariables,
+	})
+}
+
+// getEnvironmentVariables returns the variables.yml content for an environment
+func (h *APIHandlers) getEnvironmentVariables(c *gin.Context) {
+	envID, err := strconv.ParseInt(c.Param("env_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid environment ID"})
+		return
+	}
+
+	// Get environment name
+	env, err := h.repos.Environments.GetByID(envID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Environment not found"})
+		return
+	}
+
+	// Read variables.yml file
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load config"})
+		return
+	}
+
+	envPath := filepath.Join(cfg.EnvironmentsPath, env.Name)
+	variablesPath := filepath.Join(envPath, "variables.yml")
+
+	// Read file content as string
+	content, err := os.ReadFile(variablesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Return empty content if file doesn't exist
+			c.JSON(http.StatusOK, gin.H{
+				"content": "",
+				"path":    variablesPath,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read variables file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"content": string(content),
+		"path":    variablesPath,
+	})
+}
+
+// updateEnvironmentVariables updates the variables.yml content for an environment
+func (h *APIHandlers) updateEnvironmentVariables(c *gin.Context) {
+	envID, err := strconv.ParseInt(c.Param("env_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid environment ID"})
+		return
+	}
+
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Get environment name
+	env, err := h.repos.Environments.GetByID(envID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Environment not found"})
+		return
+	}
+
+	// Validate YAML syntax
+	var test map[string]interface{}
+	if err := yaml.Unmarshal([]byte(req.Content), &test); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid YAML syntax: %v", err)})
+		return
+	}
+
+	// Write variables.yml file
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load config"})
+		return
+	}
+
+	envPath := filepath.Join(cfg.EnvironmentsPath, env.Name)
+	variablesPath := filepath.Join(envPath, "variables.yml")
+
+	if err := os.WriteFile(variablesPath, []byte(req.Content), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write variables file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Variables updated successfully. Run 'stn sync' to apply changes.",
+		"path":    variablesPath,
 	})
 }
