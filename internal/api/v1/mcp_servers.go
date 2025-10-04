@@ -62,6 +62,13 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 		// Enhance servers with status information
 		serverResponses := make([]map[string]interface{}, len(servers))
 		for i, server := range servers {
+			// Get tools count for this server
+			tools, err := h.repos.MCPTools.GetByServerID(server.ID)
+			toolsCount := 0
+			if err == nil {
+				toolsCount = len(tools)
+			}
+
 			serverData := map[string]interface{}{
 				"id":             server.ID,
 				"name":           server.Name,
@@ -74,17 +81,26 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 				"environment_id": server.EnvironmentID,
 				"created_at":     server.CreatedAt,
 				"file_config_id": server.FileConfigID,
+				"tools_count":    toolsCount,
 				"status":         "active",
 				"error":          nil,
 			}
-			
+
 			// Check for template variable issues
 			argsStr := fmt.Sprintf("%v", server.Args)
 			if strings.Contains(argsStr, "<no value>") {
 				serverData["status"] = "error"
 				serverData["error"] = "Template variables not configured. Run 'stn sync' to configure missing variables."
 			}
-			
+
+			// Check if server has 0 tools - indicates sync failure or connection error
+			if toolsCount == 0 {
+				serverData["status"] = "error"
+				if serverData["error"] == nil {
+					serverData["error"] = "MCP server failed to load tools. Sync may have failed or server connection error."
+				}
+			}
+
 			serverResponses[i] = serverData
 		}
 		
@@ -102,6 +118,13 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 	// Enhance servers with status information
 	serverResponses := make([]map[string]interface{}, len(servers))
 	for i, server := range servers {
+		// Get tools count for this server
+		tools, err := h.repos.MCPTools.GetByServerID(server.ID)
+		toolsCount := 0
+		if err == nil {
+			toolsCount = len(tools)
+		}
+
 		serverData := map[string]interface{}{
 			"id":             server.ID,
 			"name":           server.Name,
@@ -114,6 +137,7 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 			"environment_id": server.EnvironmentID,
 			"created_at":     server.CreatedAt,
 			"file_config_id": server.FileConfigID,
+			"tools_count":    toolsCount,
 			"status":         "active",
 			"error":          nil,
 		}
@@ -123,6 +147,14 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 		if strings.Contains(argsStr, "<no value>") {
 			serverData["status"] = "error"
 			serverData["error"] = "Template variables not configured. Run 'stn sync' to configure missing variables."
+		}
+
+		// Check if server has 0 tools - indicates sync failure or connection error
+		if toolsCount == 0 {
+			serverData["status"] = "error"
+			if serverData["error"] == nil {
+				serverData["error"] = "MCP server failed to load tools. Sync may have failed or server connection error."
+			}
 		}
 
 		serverResponses[i] = serverData
