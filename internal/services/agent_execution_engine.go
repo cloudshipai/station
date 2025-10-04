@@ -343,7 +343,9 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 
 	// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
 	// Send to CloudShip Lighthouse (dual flow: SendRun always + IngestData conditionally)
+	logging.Debug("🔍 DEBUG: About to call sendToLighthouse for agent %d, run %d", agent.ID, runID)
 	aee.sendToLighthouse(agent, task, runID, startTime, result)
+	logging.Debug("🔍 DEBUG: Returned from sendToLighthouse for agent %d, run %d", agent.ID, runID)
 
 	return result, nil
 }
@@ -355,10 +357,19 @@ func (aee *AgentExecutionEngine) GetGenkitProvider() *GenKitProvider {
 
 // sendToLighthouse sends agent run data to CloudShip Lighthouse (async, non-blocking)
 func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult) {
+	logging.Debug("🔍 DEBUG: sendToLighthouse called for agent %d, run %d", agent.ID, runID)
+	logging.Debug("🔍 DEBUG: lighthouseClient nil? %v", aee.lighthouseClient == nil)
+	if aee.lighthouseClient != nil {
+		logging.Debug("🔍 DEBUG: lighthouseClient.IsRegistered()? %v", aee.lighthouseClient.IsRegistered())
+	}
+
 	// Skip if no Lighthouse client configured
 	if aee.lighthouseClient == nil || !aee.lighthouseClient.IsRegistered() {
+		logging.Debug("🔍 DEBUG: Skipping Lighthouse - client nil or not registered")
 		return // Graceful degradation - no cloud integration
 	}
+
+	logging.Debug("🔍 DEBUG: Proceeding with Lighthouse integration")
 
 	// Convert AgentExecutionResult to types.AgentRun for Lighthouse
 	agentRun := aee.convertToAgentRun(agent, task, runID, startTime, result)
