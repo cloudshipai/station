@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText } from 'lucide-react';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import Editor from '@monaco-editor/react';
 
@@ -1317,6 +1317,7 @@ const EnvironmentsPage = () => {
   const [isBundleModalOpen, setIsBundleModalOpen] = useState(false);
   const [isBuildImageModalOpen, setIsBuildImageModalOpen] = useState(false);
   const [isInstallBundleModalOpen, setIsInstallBundleModalOpen] = useState(false);
+  const [isVariablesModalOpen, setIsVariablesModalOpen] = useState(false);
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1337,6 +1338,10 @@ const EnvironmentsPage = () => {
 
   const handleInstallBundle = () => {
     setIsInstallBundleModalOpen(true);
+  };
+
+  const handleVariables = () => {
+    setIsVariablesModalOpen(true);
   };
 
   const handleRefreshGraph = () => {
@@ -1557,6 +1562,15 @@ const EnvironmentsPage = () => {
                 </button>
 
                 <button
+                  onClick={handleVariables}
+                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-cyan text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-cyan"
+                  title="Edit Environment Variables"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Variables</span>
+                </button>
+
+                <button
                   onClick={handleAddServer}
                   className="flex items-center space-x-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-green"
                   title="Add MCP Server"
@@ -1687,6 +1701,16 @@ const EnvironmentsPage = () => {
           setEnvironments(envs);
         }}
       />
+
+      {/* Variables Editor Modal */}
+      {selectedEnvironment && (
+        <VariablesEditorModal
+          isOpen={isVariablesModalOpen}
+          onClose={() => setIsVariablesModalOpen(false)}
+          environmentId={selectedEnvironment}
+          environmentName={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
+        />
+      )}
     </div>
   );
 };
@@ -2015,6 +2039,148 @@ const RawConfigEditorModal = ({
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Variables Editor Modal Component
+const VariablesEditorModal = ({
+  isOpen,
+  onClose,
+  environmentId,
+  environmentName
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  environmentId: number;
+  environmentName: string;
+}) => {
+  const [variables, setVariables] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && environmentId) {
+      const fetchVariables = async () => {
+        setLoading(true);
+        try {
+          const response = await apiClient.get(`/environments/${environmentId}/variables`);
+          setVariables(response.data.content || '');
+        } catch (error) {
+          console.error('Failed to fetch variables:', error);
+          setVariables('');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchVariables();
+    }
+  }, [isOpen, environmentId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await apiClient.put(`/environments/${environmentId}/variables`, {
+        content: variables
+      });
+      alert(response.data.message);
+      onClose();
+    } catch (error: any) {
+      console.error('Failed to save variables:', error);
+      alert(error.response?.data?.error || 'Failed to save variables');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
+            Environment Variables - {environmentName}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
+          >
+            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Warning Banner */}
+          <div className="mb-4 p-4 bg-tokyo-orange bg-opacity-20 border border-tokyo-orange rounded">
+            <p className="text-tokyo-orange text-sm font-mono">
+              ⚠️ Important: These variables are local to your machine and will NOT be included in bundles or Docker images.
+              They are for local development only.
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <p className="text-tokyo-comment text-sm font-mono">
+              Edit the variables.yml file for this environment.
+              After saving, run 'stn sync' to apply changes to your MCP servers.
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-tokyo-comment font-mono">Loading variables...</p>
+            </div>
+          ) : (
+            <>
+              {/* Monaco Editor */}
+              <div className="flex-1 border border-tokyo-blue7 rounded overflow-hidden min-h-[500px]">
+                <Editor
+                  height="500px"
+                  defaultLanguage="yaml"
+                  value={variables}
+                  onChange={(value) => setVariables(value || '')}
+                  theme="vs-dark"
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
+                    lineNumbers: 'on',
+                    rulers: [80],
+                    wordWrap: 'on',
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    padding: { top: 16, bottom: 16 },
+                    formatOnPaste: true,
+                    formatOnType: true
+                  }}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-tokyo-blue7">
+                <div className="text-tokyo-comment text-sm font-mono">
+                  💡 After saving, run 'stn sync' to apply variable changes
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 bg-tokyo-comment hover:bg-gray-600 text-tokyo-bg rounded font-mono text-sm transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-4 py-2 bg-tokyo-green hover:bg-green-600 text-tokyo-bg rounded font-mono text-sm transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Variables'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
