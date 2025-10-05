@@ -34,6 +34,7 @@ import { BundleEnvironmentModal } from './components/modals/BundleEnvironmentMod
 import BuildImageModal from './components/modals/BuildImageModal';
 import { InstallBundleModal } from './components/modals/InstallBundleModal';
 import DeployModal from './components/modals/DeployModal';
+import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -1835,10 +1836,12 @@ const AgentEditor = () => {
   const navigate = useNavigate();
   const [agentData, setAgentData] = useState<any>(null);
   const [promptContent, setPromptContent] = useState<string>('');
+  const [outputSchema, setOutputSchema] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [schemaValid, setSchemaValid] = useState(true);
 
   useEffect(() => {
     const fetchAgentData = async () => {
@@ -1853,7 +1856,21 @@ const AgentEditor = () => {
 
         // Fetch prompt file content via API
         const promptResponse = await agentsApi.getPrompt(parseInt(agentId));
-        setPromptContent(promptResponse.data.content || '');
+        const content = promptResponse.data.content || '';
+        setPromptContent(content);
+
+        // Extract output schema from YAML frontmatter
+        try {
+          const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
+          if (yamlMatch) {
+            const frontmatter: any = yaml.load(yamlMatch[1]);
+            if (frontmatter.output?.schema) {
+              setOutputSchema(JSON.stringify(frontmatter.output.schema, null, 2));
+            }
+          }
+        } catch (err) {
+          console.error('Failed to parse YAML frontmatter:', err);
+        }
       } catch (err: any) {
         setError(err.response?.data?.error || 'Failed to load agent data');
       } finally {
@@ -1864,8 +1881,45 @@ const AgentEditor = () => {
     fetchAgentData();
   }, [agentId]);
 
+  const handleSchemaChange = (newSchema: string) => {
+    setOutputSchema(newSchema);
+
+    // Update the YAML content with new schema
+    try {
+      const yamlMatch = promptContent.match(/^---\n([\s\S]*?)\n---/);
+      if (yamlMatch) {
+        const frontmatter: any = yaml.load(yamlMatch[1]);
+
+        if (newSchema.trim()) {
+          const schemaObject = JSON.parse(newSchema);
+          if (!frontmatter.output) frontmatter.output = {};
+          frontmatter.output.schema = schemaObject;
+        } else {
+          // Remove schema if empty
+          if (frontmatter.output) {
+            delete frontmatter.output.schema;
+            if (Object.keys(frontmatter.output).length === 0) {
+              delete frontmatter.output;
+            }
+          }
+        }
+
+        const newFrontmatter = yaml.dump(frontmatter, { indent: 2, lineWidth: -1 });
+        const restOfContent = promptContent.substring(yamlMatch[0].length);
+        setPromptContent(`---\n${newFrontmatter}---${restOfContent}`);
+      }
+    } catch (err) {
+      console.error('Failed to update YAML with schema:', err);
+    }
+  };
+
   const handleSave = async () => {
     if (!agentId) return;
+
+    if (!schemaValid) {
+      setError('Cannot save: Output schema contains errors');
+      return;
+    }
 
     try {
       setSaving(true);
@@ -1931,7 +1985,7 @@ const AgentEditor = () => {
             )}
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || !schemaValid}
               className="flex items-center gap-2 px-4 py-2 bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg rounded-lg font-medium transition-colors disabled:opacity-50"
             >
               <Save className="h-4 w-4" />
@@ -1948,34 +2002,46 @@ const AgentEditor = () => {
         )}
       </div>
 
-      {/* Editor content */}
+      {/* Two-column editor layout */}
       <div className="flex-1 p-6">
-        <div className="bg-tokyo-dark1 rounded-lg border border-tokyo-dark3 h-[calc(100vh-200px)]">
-          <div className="p-4 border-b border-tokyo-dark3">
-            <h2 className="text-lg font-mono text-tokyo-blue">Agent Configuration</h2>
-            <p className="text-sm text-tokyo-comment mt-1">
-              Edit the agent's prompt file configuration. After saving, run <code className="bg-tokyo-bg px-1 rounded text-tokyo-orange">stn sync {agentData?.environment_name || 'environment'}</code> to apply changes.
-            </p>
+        <div className="grid grid-cols-2 gap-4 h-[calc(100vh-200px)]">
+          {/* Left column: YAML Editor */}
+          <div className="bg-tokyo-dark1 rounded-lg border border-tokyo-dark3 flex flex-col">
+            <div className="p-4 border-b border-tokyo-dark3">
+              <h2 className="text-lg font-mono text-tokyo-blue">Agent Configuration</h2>
+              <p className="text-sm text-tokyo-comment mt-1">
+                Edit the agent's prompt file. After saving, run <code className="bg-tokyo-bg px-1 rounded text-tokyo-orange">stn sync {agentData?.environment_name || 'environment'}</code> to apply.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-hidden">
+              <Editor
+                height="100%"
+                defaultLanguage="yaml"
+                value={promptContent}
+                onChange={(value) => setPromptContent(value || '')}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
+                  lineNumbers: 'on',
+                  rulers: [80],
+                  wordWrap: 'on',
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  padding: { top: 16, bottom: 16 }
+                }}
+              />
+            </div>
           </div>
 
-          <div className="h-[calc(100%-80px)]">
-            <Editor
-              height="100%"
-              defaultLanguage="yaml"
-              value={promptContent}
-              onChange={(value) => setPromptContent(value || '')}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
-                lineNumbers: 'on',
-                rulers: [80],
-                wordWrap: 'on',
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                padding: { top: 16, bottom: 16 }
-              }}
+          {/* Right column: JSON Schema Editor */}
+          <div className="bg-tokyo-dark1 rounded-lg border border-tokyo-dark3">
+            <JsonSchemaEditor
+              schema={outputSchema}
+              onChange={handleSchemaChange}
+              onValidation={(isValid) => setSchemaValid(isValid)}
             />
           </div>
         </div>
