@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket } from 'lucide-react';
 import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import Editor from '@monaco-editor/react';
@@ -32,6 +32,7 @@ import { AddServerModal } from './components/modals/AddServerModal';
 import { BundleEnvironmentModal } from './components/modals/BundleEnvironmentModal';
 import BuildImageModal from './components/modals/BuildImageModal';
 import { InstallBundleModal } from './components/modals/InstallBundleModal';
+import DeployModal from './components/modals/DeployModal';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -1319,6 +1320,7 @@ const EnvironmentsPage = () => {
   const [isBuildImageModalOpen, setIsBuildImageModalOpen] = useState(false);
   const [isInstallBundleModalOpen, setIsInstallBundleModalOpen] = useState(false);
   const [isVariablesModalOpen, setIsVariablesModalOpen] = useState(false);
+  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1343,6 +1345,10 @@ const EnvironmentsPage = () => {
 
   const handleVariables = () => {
     setIsVariablesModalOpen(true);
+  };
+
+  const handleDeploy = () => {
+    setIsDeployModalOpen(true);
   };
 
   const handleRefreshGraph = () => {
@@ -1589,6 +1595,14 @@ const EnvironmentsPage = () => {
                   <span>Bundle</span>
                 </button>
                 <button
+                  onClick={handleDeploy}
+                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-purple"
+                  title="Deploy Environment"
+                >
+                  <Rocket className="h-4 w-4" />
+                  <span>Deploy</span>
+                </button>
+                <button
                   onClick={handleBuildImage}
                   className="flex items-center space-x-2 px-4 py-2 rounded font-mono text-sm font-medium transition-colors"
                   style={{
@@ -1708,6 +1722,16 @@ const EnvironmentsPage = () => {
         <VariablesEditorModal
           isOpen={isVariablesModalOpen}
           onClose={() => setIsVariablesModalOpen(false)}
+          environmentId={selectedEnvironment}
+          environmentName={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
+        />
+      )}
+
+      {/* Deploy Modal */}
+      {selectedEnvironment && (
+        <DeployModal
+          isOpen={isDeployModalOpen}
+          onClose={() => setIsDeployModalOpen(false)}
           environmentId={selectedEnvironment}
           environmentName={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
         />
