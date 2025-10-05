@@ -17,7 +17,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import Editor from '@monaco-editor/react';
 
@@ -2195,9 +2196,15 @@ const SettingsPage = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [configObj, setConfigObj] = useState<any>({});
+  const [expandedSections, setExpandedSections] = useState({
+    ai: true,
+    cloudship: false,
+    ports: false,
+    other: false,
+  });
 
   useEffect(() => {
-    // Load config file on mount
     const loadConfig = async () => {
       try {
         const response = await fetch('/api/v1/settings/config/file');
@@ -2207,6 +2214,12 @@ const SettingsPage = () => {
         const data = await response.json();
         setConfig(data.content);
         setConfigPath(data.path);
+        try {
+          const parsed = yaml.load(data.content) as any;
+          setConfigObj(parsed || {});
+        } catch (e) {
+          console.error('YAML parse error:', e);
+        }
         setLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load config');
@@ -2215,6 +2228,32 @@ const SettingsPage = () => {
     };
     loadConfig();
   }, []);
+
+  const updateConfig = (updates: any) => {
+    const newObj = { ...configObj, ...updates };
+    setConfigObj(newObj);
+    try {
+      const newYaml = yaml.dump(newObj, { lineWidth: -1 });
+      setConfig(newYaml);
+    } catch (e) {
+      console.error('YAML dump error:', e);
+    }
+  };
+
+  const updateCloudShipConfig = (updates: any) => {
+    const newCloudShip = { ...configObj.cloudship, ...updates };
+    updateConfig({ cloudship: newCloudShip });
+  };
+
+  const handleYamlChange = (value: string | undefined) => {
+    setConfig(value || '');
+    try {
+      const parsed = yaml.load(value || '') as any;
+      setConfigObj(parsed || {});
+    } catch (e) {
+      // Invalid YAML, keep config string but don't update object
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -2242,6 +2281,10 @@ const SettingsPage = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
   return (
@@ -2289,30 +2332,235 @@ const SettingsPage = () => {
         </div>
       )}
 
-      <div className="flex-1 p-6 overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
         {loading ? (
-          <div className="h-full flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center">
             <div className="text-tokyo-comment font-mono">Loading config...</div>
           </div>
         ) : (
-          <div className="h-full">
-            <Editor
-              height="100%"
-              defaultLanguage="yaml"
-              value={config}
-              onChange={(value) => setConfig(value || '')}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                automaticLayout: true,
-              }}
-            />
-          </div>
+          <>
+            {/* Left: YAML Editor */}
+            <div className="flex-1 border-r border-tokyo-blue7 p-4">
+              <h2 className="text-sm font-mono font-semibold text-tokyo-cyan mb-2">Raw Configuration</h2>
+              <div className="h-[calc(100%-32px)]">
+                <Editor
+                  height="100%"
+                  defaultLanguage="yaml"
+                  value={config}
+                  onChange={handleYamlChange}
+                  theme="vs-dark"
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 13,
+                    fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
+                    lineNumbers: 'on',
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                    automaticLayout: true,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Right: Form Sections */}
+            <div className="w-96 overflow-y-auto p-4 bg-tokyo-bg-dark">
+              <h2 className="text-sm font-mono font-semibold text-tokyo-cyan mb-4">Quick Settings</h2>
+
+              {/* AI Provider Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('ai')}
+                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-blue7 rounded font-mono text-sm text-tokyo-blue hover:bg-tokyo-dark2"
+                >
+                  <span>AI Provider</span>
+                  {expandedSections.ai ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.ai && (
+                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-blue7 rounded">
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Provider</label>
+                      <select
+                        value={configObj.ai_provider || 'openai'}
+                        onChange={(e) => updateConfig({ ai_provider: e.target.value })}
+                        className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      >
+                        <option value="openai">OpenAI</option>
+                        <option value="gemini">Google Gemini</option>
+                        <option value="cloudflare">Cloudflare</option>
+                        <option value="ollama">Ollama</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Model</label>
+                      <input
+                        type="text"
+                        value={configObj.ai_model || ''}
+                        onChange={(e) => updateConfig({ ai_model: e.target.value })}
+                        placeholder="gpt-4o-mini"
+                        className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Base URL (optional)</label>
+                      <input
+                        type="text"
+                        value={configObj.ai_base_url || ''}
+                        onChange={(e) => updateConfig({ ai_base_url: e.target.value })}
+                        placeholder="https://api.openai.com/v1"
+                        className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* CloudShip Integration Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('cloudship')}
+                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-purple7 rounded font-mono text-sm text-tokyo-purple hover:bg-tokyo-dark2"
+                >
+                  <span>CloudShip Integration</span>
+                  {expandedSections.cloudship ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.cloudship && (
+                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-purple7 rounded">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-tokyo-comment font-mono">Enabled</label>
+                      <input
+                        type="checkbox"
+                        checked={configObj.cloudship?.enabled || false}
+                        onChange={(e) => updateCloudShipConfig({ enabled: e.target.checked })}
+                        className="bg-tokyo-bg border border-tokyo-purple7"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Registration Key</label>
+                      <input
+                        type="password"
+                        value={configObj.cloudship?.registration_key || ''}
+                        onChange={(e) => updateCloudShipConfig({ registration_key: e.target.value })}
+                        placeholder="Enter CloudShip key"
+                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Endpoint</label>
+                      <input
+                        type="text"
+                        value={configObj.cloudship?.endpoint || ''}
+                        onChange={(e) => updateCloudShipConfig({ endpoint: e.target.value })}
+                        placeholder="lighthouse.cloudshipai.com:443"
+                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Station ID (auto-generated)</label>
+                      <input
+                        type="text"
+                        value={configObj.cloudship?.station_id || ''}
+                        disabled
+                        className="w-full bg-tokyo-dark2 border border-tokyo-purple7 text-tokyo-comment font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Server Ports Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('ports')}
+                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-green7 rounded font-mono text-sm text-tokyo-green hover:bg-tokyo-dark2"
+                >
+                  <span>Server Ports</span>
+                  {expandedSections.ports ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.ports && (
+                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-green7 rounded">
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">API Port</label>
+                      <input
+                        type="number"
+                        value={configObj.api_port || 8585}
+                        onChange={(e) => updateConfig({ api_port: parseInt(e.target.value) })}
+                        className="w-full bg-tokyo-bg border border-tokyo-green7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">MCP Port</label>
+                      <input
+                        type="number"
+                        value={configObj.mcp_port || 3000}
+                        onChange={(e) => updateConfig({ mcp_port: parseInt(e.target.value) })}
+                        className="w-full bg-tokyo-bg border border-tokyo-green7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">SSH Port</label>
+                      <input
+                        type="number"
+                        value={configObj.ssh_port || 2222}
+                        onChange={(e) => updateConfig({ ssh_port: parseInt(e.target.value) })}
+                        className="w-full bg-tokyo-bg border border-tokyo-green7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Other Settings Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('other')}
+                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-orange7 rounded font-mono text-sm text-tokyo-orange hover:bg-tokyo-dark2"
+                >
+                  <span>Other Settings</span>
+                  {expandedSections.other ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.other && (
+                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-orange7 rounded">
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Admin Username</label>
+                      <input
+                        type="text"
+                        value={configObj.admin_username || 'admin'}
+                        onChange={(e) => updateConfig({ admin_username: e.target.value })}
+                        className="w-full bg-tokyo-bg border border-tokyo-orange7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-tokyo-comment font-mono">Debug Mode</label>
+                      <input
+                        type="checkbox"
+                        checked={configObj.debug || false}
+                        onChange={(e) => updateConfig({ debug: e.target.checked })}
+                        className="bg-tokyo-bg border border-tokyo-orange7"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-tokyo-comment font-mono">Telemetry</label>
+                      <input
+                        type="checkbox"
+                        checked={configObj.telemetry_enabled !== false}
+                        onChange={(e) => updateConfig({ telemetry_enabled: e.target.checked })}
+                        className="bg-tokyo-bg border border-tokyo-orange7"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Database URL</label>
+                      <input
+                        type="text"
+                        value={configObj.database_url || ''}
+                        onChange={(e) => updateConfig({ database_url: e.target.value })}
+                        className="w-full bg-tokyo-bg border border-tokyo-orange7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>
