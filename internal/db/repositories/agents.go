@@ -44,7 +44,15 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 	if agent.OutputSchemaPreset.Valid {
 		result.OutputSchemaPreset = &agent.OutputSchemaPreset.String
 	}
-	
+
+	if agent.App.Valid {
+		result.App = agent.App.String
+	}
+
+	if agent.AppSubtype.Valid {
+		result.AppType = agent.AppSubtype.String
+	}
+
 	if agent.CronSchedule.Valid {
 		result.CronSchedule = &agent.CronSchedule.String
 	}
@@ -68,9 +76,9 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 	return result
 }
 
-func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string) (*models.Agent, error) {
+func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string) (*models.Agent, error) {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
-	
+
 	params := queries.CreateAgentParams{
 		Name:            name,
 		Description:     description,
@@ -81,21 +89,29 @@ func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environme
 		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
 		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
 	}
-	
+
 	if inputSchema != nil {
 		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
 	}
-	
+
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
 	}
-	
+
 	if outputSchema != nil {
 		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
 	}
-	
+
 	if outputSchemaPreset != nil {
 		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
+	}
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
 	}
 	
 	created, err := r.queries.CreateAgent(context.Background(), params)
@@ -169,9 +185,9 @@ func (r *AgentRepo) ListByUser(userID int64) ([]*models.Agent, error) {
 	return result, nil
 }
 
-func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string) error {
+func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string) error {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
-	
+
 	params := queries.UpdateAgentParams{
 		Name:            name,
 		Description:     description,
@@ -181,23 +197,31 @@ func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps 
 		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
 		ID:              id,
 	}
-	
+
 	if inputSchema != nil {
 		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
 	}
-	
+
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
 	}
-	
+
 	if outputSchema != nil {
 		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
 	}
-	
+
 	if outputSchemaPreset != nil {
 		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
 	}
-	
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
 	return r.queries.UpdateAgent(context.Background(), params)
 }
 

@@ -43,13 +43,19 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 		return fmt.Errorf("failed to get agent: %v", err)
 	}
 
-	// Auto-populate app/app_type for known presets if not explicitly provided
+	// Auto-populate app/app_type from agent model if available
+	if app == "" && agent.App != "" {
+		app = agent.App
+	}
+	if appType == "" && agent.AppType != "" {
+		appType = agent.AppType
+	}
+
+	// Auto-populate app/app_type for known presets if still not set
 	if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
-		switch *agent.OutputSchemaPreset {
-		case "finops":
-			app = "finops"
-			appType = "cost-analysis"
-		// Add more presets as they're created
+		if presetInfo, exists := s.schemaRegistry.GetPresetInfo(*agent.OutputSchemaPreset); exists {
+			app = presetInfo.App
+			appType = presetInfo.AppType
 		}
 	}
 

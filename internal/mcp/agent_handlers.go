@@ -79,11 +79,9 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 
 	// Auto-populate app/app_type for known presets if not explicitly provided
 	if app == "" && appType == "" && outputSchemaPreset != nil && *outputSchemaPreset != "" {
-		switch *outputSchemaPreset {
-		case "finops":
-			app = "finops"
-			appType = "cost-analysis"
-		// Add more presets as they're created
+		if presetInfo, exists := s.schemaRegistry.GetPresetInfo(*outputSchemaPreset); exists {
+			app = presetInfo.App
+			appType = presetInfo.AppType
 		}
 	}
 
@@ -295,6 +293,10 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		outputSchemaPreset = existingAgent.OutputSchemaPreset
 	}
 
+	// Extract optional app and app_type parameters for CloudShip data ingestion classification
+	app := request.GetString("app", existingAgent.App)
+	appType := request.GetString("app_type", existingAgent.AppType)
+
 	// Update the agent
 	err = s.repos.Agents.Update(
 		agentID,
@@ -307,6 +309,8 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		existingAgent.ScheduleEnabled, // Keep existing schedule setting
 		outputSchema,
 		outputSchemaPreset,
+		app,        // CloudShip app classification
+		appType,    // CloudShip app_type classification
 	)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent: %v", err)), nil

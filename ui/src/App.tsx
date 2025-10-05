@@ -20,6 +20,7 @@ import '@xyflow/react/dist/style.css';
 import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket } from 'lucide-react';
 import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
+import { CloudShipPage } from './components/pages/CloudShipPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -2613,6 +2614,7 @@ function App() {
                   <Route path="/runs" element={<RunsPage />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />
+                  <Route path="/cloudship" element={<CloudShipPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
                   <Route path="*" element={<AgentsCanvas />} />

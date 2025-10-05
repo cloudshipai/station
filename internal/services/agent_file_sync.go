@@ -260,6 +260,8 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		true, // scheduleEnabled
 		outputSchema, // outputSchema - extracted from dotprompt frontmatter
 		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
+		"", // app - will be populated from metadata if present
+		"", // appType - will be populated from metadata if present
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -463,6 +465,8 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			true, // scheduleEnabled
 			outputSchema, // outputSchema - extracted from dotprompt frontmatter
 			outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
+			"", // app - will be populated from metadata if present
+			"", // appType - will be populated from metadata if present
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update agent: %w", err)

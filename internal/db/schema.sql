@@ -128,6 +128,8 @@ CREATE TABLE agents (
     input_schema TEXT DEFAULT NULL, -- JSON schema for custom input variables
     output_schema TEXT DEFAULT NULL, -- JSON schema for output format
     output_schema_preset TEXT DEFAULT NULL, -- Predefined schema preset (e.g., finops)
+    app TEXT, -- CloudShip app classification (e.g., finops, security, deployments)
+    app_subtype TEXT CHECK (app_subtype IS NULL OR app_subtype IN ('investigations', 'opportunities', 'projections', 'inventory', 'events')), -- CloudShip app_subtype classification
     cron_schedule TEXT DEFAULT NULL, -- Cron expression for scheduling
     is_scheduled BOOLEAN DEFAULT FALSE,
     last_scheduled_run DATETIME DEFAULT NULL,

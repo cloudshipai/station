@@ -20,6 +20,8 @@ type Agent struct {
 	InputSchema        sql.NullString `json:"input_schema"`
 	OutputSchema       sql.NullString `json:"output_schema"`
 	OutputSchemaPreset sql.NullString `json:"output_schema_preset"`
+	App                sql.NullString `json:"app"`
+	AppSubtype         sql.NullString `json:"app_subtype"`
 	CronSchedule       sql.NullString `json:"cron_schedule"`
 	IsScheduled        sql.NullBool   `json:"is_scheduled"`
 	LastScheduledRun   sql.NullTime   `json:"last_scheduled_run"`

@@ -13,6 +13,7 @@ import (
 	"station/internal/logging"
 	dotprompt "station/pkg/dotprompt"
 	"station/pkg/models"
+	"station/pkg/schema"
 	"station/pkg/types"
 
 	"github.com/firebase/genkit/go/ai"
@@ -448,12 +449,13 @@ func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agen
 
 	// Fallback: Check if agent has preset-based app/app_type
 	if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
-		switch *agent.OutputSchemaPreset {
-		case "finops":
-			app = "finops"
-			appType = "cost-analysis"
+		if presetInfo, exists := schema.GetPresetInfo(*agent.OutputSchemaPreset); exists {
+			app = presetInfo.App
+			appType = presetInfo.AppType
 			hasPreset = true
-			logging.Debug("🔄 Identified finops preset agent %d for data ingestion (app: %s, app_type: %s)", agent.ID, app, appType)
+			logging.Debug("🔄 Identified preset '%s' for agent %d (app: %s, app_type: %s)", *agent.OutputSchemaPreset, agent.ID, app, appType)
+		} else {
+			logging.Debug("⚠️ Unknown preset '%s' for agent %d", *agent.OutputSchemaPreset, agent.ID)
 		}
 	}
 
