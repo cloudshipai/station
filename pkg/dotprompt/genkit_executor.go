@@ -94,6 +94,22 @@ func (e *GenKitExecutor) extractDotPromptMetadata(promptPath string) (app, appTy
 		}
 	}
 
+	// Validate app_type against the 5 standard CloudShip types
+	if appType != "" {
+		validAppTypes := map[string]bool{
+			"investigations": true,
+			"opportunities":  true,
+			"projections":    true,
+			"inventory":      true,
+			"events":         true,
+		}
+
+		if !validAppTypes[appType] {
+			// Invalid app_type - return empty to skip data ingestion
+			return "", ""
+		}
+	}
+
 	return app, appType
 }
 

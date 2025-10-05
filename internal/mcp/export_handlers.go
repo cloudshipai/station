@@ -238,6 +238,24 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 
 	// YAML frontmatter with multi-role support
 	content.WriteString("---\n")
+
+	// Add metadata section with app/app_type for CloudShip integration
+	if agent.App != "" || agent.AppType != "" {
+		content.WriteString("metadata:\n")
+		content.WriteString(fmt.Sprintf("  name: \"%s\"\n", agent.Name))
+		content.WriteString(fmt.Sprintf("  description: \"%s\"\n", agent.Description))
+		content.WriteString("  tags: [\"station\", \"agent\"]\n")
+		if agent.App != "" || agent.AppType != "" {
+			content.WriteString("  # Data ingestion classification for CloudShip\n")
+			if agent.App != "" {
+				content.WriteString(fmt.Sprintf("  app: \"%s\"\n", agent.App))
+			}
+			if agent.AppType != "" {
+				content.WriteString(fmt.Sprintf("  app_type: \"%s\"\n", agent.AppType))
+			}
+		}
+	}
+
 	content.WriteString(fmt.Sprintf("model: \"%s\"\n", modelName))
 
 	// Input schema with merged custom and default variables
@@ -253,11 +271,26 @@ func (s *Server) generateDotpromptContent(agent *models.Agent, tools []*models.A
 		content.WriteString(inputSchemaSection)
 	}
 
-	// Output schema section
-	if agent.OutputSchema != nil && *agent.OutputSchema != "" {
+	// Output schema section - resolve preset if specified
+	var outputSchemaJSON string
+	if agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
+		// Resolve preset schema
+		presetSchema, err := s.schemaRegistry.GetPresetSchema(*agent.OutputSchemaPreset)
+		if err == nil {
+			outputSchemaJSON = presetSchema
+		}
+	} else if agent.OutputSchema != nil && *agent.OutputSchema != "" {
+		outputSchemaJSON = *agent.OutputSchema
+	}
+
+	if outputSchemaJSON != "" {
 		content.WriteString("output:\n")
 		content.WriteString("  schema: |\n")
-		content.WriteString("    " + *agent.OutputSchema + "\n")
+		// Indent each line of the JSON schema
+		lines := strings.Split(outputSchemaJSON, "\n")
+		for _, line := range lines {
+			content.WriteString("    " + line + "\n")
+		}
 	}
 
 	// Max steps

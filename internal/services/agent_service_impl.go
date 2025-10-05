@@ -360,6 +360,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		config.ScheduleEnabled,
 		config.OutputSchema,
 		config.OutputSchemaPreset,
+		config.App,
+		config.AppType,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -410,6 +412,8 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *A
 		config.ScheduleEnabled,
 		nil, // outputSchema - not supported in basic config yet
 		nil, // outputSchemaPreset - not supported in basic config yet
+		config.App,
+		config.AppType,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)

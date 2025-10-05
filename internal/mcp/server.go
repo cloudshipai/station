@@ -11,6 +11,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
+	"station/internal/schemas"
 	"station/internal/services"
 	"station/internal/telemetry"
 
@@ -31,6 +32,7 @@ type Server struct {
 	bundleHandler      *UnifiedBundleHandler
 	telemetryService   *telemetry.TelemetryService
 	lighthouseClient   *lighthouse.LighthouseClient // For surgical telemetry integration
+	schemaRegistry     *schemas.SchemaRegistry
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -63,6 +65,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		localMode:          localMode,
 		agentExportService: services.NewAgentExportService(repos),
 		bundleHandler:      NewUnifiedBundleHandler(),
+		schemaRegistry:     schemas.NewSchemaRegistry(),
 	}
 
 	// Setup the server capabilities

@@ -71,6 +71,8 @@ type Agent struct {
 	InputSchema         *string    `json:"input_schema,omitempty" db:"input_schema"`
 	OutputSchema        *string    `json:"output_schema,omitempty" db:"output_schema"`
 	OutputSchemaPreset  *string    `json:"output_schema_preset,omitempty" db:"output_schema_preset"`
+	App                 string     `json:"app,omitempty" db:"app"`
+	AppType             string     `json:"app_type,omitempty" db:"app_subtype"` // Note: DB column is app_subtype but we use app_type in code
 	CronSchedule        *string    `json:"cron_schedule,omitempty" db:"cron_schedule"`
 	IsScheduled       bool       `json:"is_scheduled" db:"is_scheduled"`
 	LastScheduledRun  *time.Time `json:"last_scheduled_run,omitempty" db:"last_scheduled_run"`
