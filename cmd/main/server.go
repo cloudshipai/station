@@ -252,7 +252,6 @@ func runMainServer() error {
 
 	go func() {
 		defer wg.Done()
-		log.Printf("🚀 Starting API server on port %d", cfg.APIPort)
 		if err := apiServer.Start(ctx); err != nil {
 			log.Printf("API server error: %v", err)
 		}

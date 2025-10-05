@@ -20,14 +20,21 @@ var downCmd = &cobra.Command{
 
 This command:
 - Stops the running Station container gracefully
-- Removes the container (data persists in local config)
-- Optionally removes Station from .mcp.json
-- Optionally removes the Docker image
+- Removes the container
+- Data (config, environments, agents) persists in Docker volume
+- Workspace files are unchanged
+
+Options:
+- --remove-volume: Delete ALL Station data (config, environments, agents, bundles)
+- --clean-mcp: Remove Station from .mcp.json
+- --remove-image: Remove Docker image
+- --force: Force kill if graceful stop fails
 
 Examples:
-  stn down                  # Stop Station server
-  stn down --clean-mcp      # Also remove from .mcp.json
-  stn down --remove-image   # Also remove Docker image
+  stn down                        # Stop server (data preserved)
+  stn down --remove-volume        # Stop and delete all data
+  stn down --clean-mcp            # Stop and remove from .mcp.json
+  stn down --remove-image         # Stop and remove Docker image
 `,
 	RunE: runDown,
 }
@@ -35,6 +42,7 @@ Examples:
 func init() {
 	downCmd.Flags().Bool("clean-mcp", false, "Remove Station from .mcp.json")
 	downCmd.Flags().Bool("remove-image", false, "Remove Docker image after stopping")
+	downCmd.Flags().Bool("remove-volume", false, "Remove Station data volume (WARNING: deletes container's environments/agents/bundles)")
 	downCmd.Flags().Bool("force", false, "Force stop (kill) if graceful stop fails")
 	rootCmd.AddCommand(downCmd)
 }
@@ -87,7 +95,7 @@ func runDown(cmd *cobra.Command, args []string) error {
 	removeImage, _ := cmd.Flags().GetBool("remove-image")
 	if removeImage {
 		fmt.Printf("🗑️  Removing Docker image...\n")
-		rmiCmd := exec.Command("docker", "rmi", "station-runtime:latest")
+		rmiCmd := exec.Command("docker", "rmi", "station-server:latest")
 		if err := rmiCmd.Run(); err != nil {
 			log.Printf("Warning: Failed to remove image: %v", err)
 		} else {
@@ -95,8 +103,27 @@ func runDown(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Remove volume if requested
+	removeVolume, _ := cmd.Flags().GetBool("remove-volume")
+	if removeVolume {
+		fmt.Printf("🗑️  Removing Station data volume...\n")
+		volRmCmd := exec.Command("docker", "volume", "rm", "station-config")
+		if err := volRmCmd.Run(); err != nil {
+			log.Printf("Warning: Failed to remove volume: %v", err)
+		} else {
+			fmt.Printf("✅ Removed Station data volume (environments/agents/bundles)\n")
+		}
+	}
+
 	fmt.Printf("\n✅ Station server stopped successfully\n")
-	fmt.Printf("💡 Your configuration and data are preserved in ~/.config/station\n")
+	if !removeVolume {
+		fmt.Printf("💡 All data preserved in Docker volume:\n")
+		fmt.Printf("   - Configuration (config.yaml)\n")
+		fmt.Printf("   - Environments and agents\n")
+		fmt.Printf("   - Bundles and database\n")
+	} else {
+		fmt.Printf("🗑️  All Station data has been deleted\n")
+	}
 	fmt.Printf("💡 Run 'stn up' to start Station again\n")
 
 	return nil

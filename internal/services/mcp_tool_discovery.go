@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/pkg/models"
-	
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
@@ -60,17 +61,16 @@ func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64,
 
 // discoverToolsPerServer connects to each MCP server individually and returns tools mapped by server name
 func (s *DeclarativeSync) discoverToolsPerServer(ctx context.Context, mcpConnManager *MCPConnectionManager, fileConfig *repositories.FileConfigRecord) (map[string][]ai.Tool, []*mcp.GenkitMCPClient, error) {
-	// Read and process the config file (similar to processFileConfig but with individual server processing)
-	// TemplatePath is already an absolute path, don't concatenate it again
-	absolutePath := fileConfig.TemplatePath
-	
+	// Resolve the template path (handles both relative and absolute paths)
+	absolutePath := s.resolveConfigPath(fileConfig.TemplatePath)
+
 	rawContent, err := os.ReadFile(absolutePath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Process template variables
-	configDir := os.ExpandEnv("$HOME/.config/station")
+	// Process template variables using centralized path resolution
+	configDir := config.GetConfigRoot()
 	templateService := NewTemplateVariableService(configDir, s.repos)
 	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 	if err != nil {
@@ -126,7 +126,7 @@ func (s *DeclarativeSync) discoverToolsPerServer(ctx context.Context, mcpConnMan
 	return serverToolMappings, allClients, nil
 }
 
-// saveToolsForServer saves tools for a specific server, ensuring they're assigned to the correct server ID
+// saveToolsForServer saves tools for a specific server (idempotent - preserves IDs when possible)
 func (s *DeclarativeSync) saveToolsForServer(ctx context.Context, envID int64, serverName string, tools []ai.Tool) (int, error) {
 	// Get the server from database
 	server, err := s.repos.MCPServers.GetByNameAndEnvironment(serverName, envID)
@@ -134,36 +134,94 @@ func (s *DeclarativeSync) saveToolsForServer(ctx context.Context, envID int64, s
 		return 0, fmt.Errorf("server '%s' not found in database: %w", serverName, err)
 	}
 
-	// Clear existing tools for this server (declarative sync approach)
-	err = s.repos.MCPTools.DeleteByServerID(server.ID)
+	// Get existing tools for this server
+	existingTools, err := s.repos.MCPTools.GetByServerID(server.ID)
 	if err != nil {
-		logging.Info("       ⚠️  Warning: Failed to clear existing tools for server %s: %v", serverName, err)
-	} else {
-		logging.Info("       🧹 Cleared existing tools for server '%s' (ID: %d)", serverName, server.ID)
+		logging.Info("       ⚠️  Warning: Failed to get existing tools for server %s: %v", serverName, err)
+		existingTools = []*models.MCPTool{}
 	}
 
-	// Save each tool to the correct server
-	toolsSaved := 0
+	// Create lookup maps
+	existingByName := make(map[string]*models.MCPTool)
+	for _, tool := range existingTools {
+		existingByName[tool.Name] = tool
+	}
+
+	discoveredNames := make(map[string]bool)
 	for _, tool := range tools {
-		toolName := tool.Name()
-		
-		// Create tool model
+		discoveredNames[tool.Name()] = true
+	}
+
+	// Track what we'll do
+	var toDelete []int64
+	var toAdd []ai.Tool
+	preserved := 0
+
+	// Find tools to delete (exist in DB but not in MCP server)
+	for name, existing := range existingByName {
+		if !discoveredNames[name] {
+			toDelete = append(toDelete, existing.ID)
+		} else {
+			preserved++
+		}
+	}
+
+	// Find tools to add (exist in MCP server but not in DB)
+	for _, tool := range tools {
+		if _, exists := existingByName[tool.Name()]; !exists {
+			toAdd = append(toAdd, tool)
+		}
+	}
+
+	// Only make changes if needed (idempotent)
+	if len(toDelete) == 0 && len(toAdd) == 0 {
+		logging.Info("       ✅ Tools already in sync for server '%s' (%d tools)", serverName, preserved)
+		return preserved, nil
+	}
+
+	// Delete tools that no longer exist
+	if len(toDelete) > 0 {
+		// Since we don't have individual delete, we need to recreate
+		// But only if there are actual deletions needed
+		err = s.repos.MCPTools.DeleteByServerID(server.ID)
+		if err != nil {
+			return 0, fmt.Errorf("failed to clear tools for server %s: %w", serverName, err)
+		}
+
+		// Recreate tools we want to keep
+		for _, tool := range tools {
+			toolModel := &models.MCPTool{
+				MCPServerID: server.ID,
+				Name:        tool.Name(),
+				Description: "",
+			}
+			_, err = s.repos.MCPTools.Create(toolModel)
+			if err != nil {
+				logging.Info("         ❌ Failed to save tool '%s': %v", tool.Name(), err)
+			}
+		}
+
+		logging.Info("       🔧 Tool sync for '%s': recreated %d tools (removed %d obsolete)",
+			serverName, len(tools), len(toDelete))
+		return len(tools), nil
+	}
+
+	// Just add new tools (no deletions needed)
+	for _, tool := range toAdd {
 		toolModel := &models.MCPTool{
 			MCPServerID: server.ID,
-			Name:        toolName,
-			Description: "", // Genkit AI tools don't expose description directly
+			Name:        tool.Name(),
+			Description: "",
 		}
-		
-		// Save tool to database
 		_, err = s.repos.MCPTools.Create(toolModel)
 		if err != nil {
-			logging.Info("         ❌ Failed to save tool '%s' to server '%s': %v", toolName, serverName, err)
-			continue
+			logging.Info("         ❌ Failed to save tool '%s': %v", tool.Name(), err)
 		}
-		toolsSaved++
 	}
-	
-	return toolsSaved, nil
+
+	logging.Info("       🔧 Tool sync for '%s': added %d new tools, preserved %d existing",
+		serverName, len(toAdd), preserved)
+	return preserved + len(toAdd), nil
 }
 
 // initializeGenkitForSync creates a minimal Genkit app for tool discovery during sync

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 )
 
@@ -62,12 +63,8 @@ type SingleServerTemplate struct {
 
 // GetMCPServersForEnvironment gets all MCP servers for an environment from individual files
 func (s *MCPServerManagementService) GetMCPServersForEnvironment(environmentName string) (map[string]MCPServerConfig, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user home directory: %v", err)
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+	// Use centralized path resolution for container/host compatibility
+	envDir := config.GetEnvironmentDir(environmentName)
 
 	// Check if environment directory exists
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
@@ -112,15 +109,8 @@ func (s *MCPServerManagementService) GetMCPServersForEnvironment(environmentName
 
 // AddMCPServerToEnvironment adds an MCP server to an environment as a separate file
 func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, serverName string, serverConfig MCPServerConfig) *MCPServerOperationResult {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return &MCPServerOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to get user home directory: %v", err),
-		}
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+	// Use centralized path resolution for container/host compatibility
+	envDir := config.GetEnvironmentDir(environmentName)
 
 	// Check if environment directory exists
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
@@ -142,7 +132,6 @@ func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, 
 
 	// Write individual server file
 	serverFilePath := filepath.Join(envDir, fmt.Sprintf("%s.json", serverName))
-	fmt.Printf("DEBUG: Creating server file at: %s (serverName=%s, environmentName=%s)\n", serverFilePath, serverName, environmentName)
 	templateData, err := json.MarshalIndent(singleServerTemplate, "", "  ")
 	if err != nil {
 		return &MCPServerOperationResult{
@@ -195,15 +184,8 @@ func (s *MCPServerManagementService) UpdateMCPServerInEnvironment(environmentNam
 
 // DeleteMCPServerFromEnvironment removes an MCP server from an environment
 func (s *MCPServerManagementService) DeleteMCPServerFromEnvironment(environmentName, serverName string) *MCPServerOperationResult {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return &MCPServerOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to get user home directory: %v", err),
-		}
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+	// Use centralized path resolution for container/host compatibility
+	envDir := config.GetEnvironmentDir(environmentName)
 	serverFilePath := filepath.Join(envDir, fmt.Sprintf("%s.json", serverName))
 
 	// Check if server file exists
@@ -278,12 +260,8 @@ func (s *MCPServerManagementService) DeleteMCPServerFromEnvironment(environmentN
 
 // GetRawMCPConfig returns the raw template.json content for an environment
 func (s *MCPServerManagementService) GetRawMCPConfig(environmentName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %v", err)
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+	// Use centralized path resolution for container/host compatibility
+	envDir := config.GetEnvironmentDir(environmentName)
 	templatePath := filepath.Join(envDir, "template.json")
 
 	// Check if template.json exists
@@ -309,12 +287,8 @@ func (s *MCPServerManagementService) GetRawMCPConfig(environmentName string) (st
 
 // UpdateRawMCPConfig updates the raw template.json content for an environment
 func (s *MCPServerManagementService) UpdateRawMCPConfig(environmentName, content string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %v", err)
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+	// Use centralized path resolution for container/host compatibility
+	envDir := config.GetEnvironmentDir(environmentName)
 
 	// Check if environment directory exists
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {

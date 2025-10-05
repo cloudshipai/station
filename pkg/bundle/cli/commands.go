@@ -196,7 +196,6 @@ func (c *BundleCLI) PrintPackageSummary(summary *PackageSummary) {
 		fmt.Printf("✅ Bundle packaging: %s\n", colorGreen("SUCCESS"))
 		fmt.Printf("📦 Package created: %s\n", summary.OutputPath)
 		fmt.Printf("📊 Package size: %s\n", formatBytes(summary.Size))
-		fmt.Printf("\n🚀 Your bundle is ready for distribution!\n")
 		fmt.Printf("📤 You can now upload it to a registry or share directly\n")
 	} else {
 		fmt.Printf("❌ Bundle packaging: %s\n", colorRed("FAILED"))
@@ -205,7 +204,6 @@ func (c *BundleCLI) PrintPackageSummary(summary *PackageSummary) {
 		}
 		
 		if summary.ValidationSummary != nil {
-			fmt.Printf("\n🔍 Validation results:\n")
 			c.PrintValidationSummary(summary.ValidationSummary)
 		}
 	}
@@ -245,7 +243,6 @@ func (c *BundleCLI) printVariableAnalysis(analysis *VariableAnalysis) {
 	fmt.Printf("\n📋 Variable Analysis:\n")
 
 	if len(analysis.TemplateVariables) > 0 {
-		fmt.Printf("   🎯 Template variables: %s\n", strings.Join(analysis.TemplateVariables, ", "))
 	}
 
 	if len(analysis.MissingInSchema) > 0 {

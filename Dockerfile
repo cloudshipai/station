@@ -72,6 +72,8 @@ exec "$@"' > /usr/local/bin/docker-entrypoint.sh && \
 ENV PATH="/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ENV HOME="/root"
 ENV STATION_RUNTIME="docker"
+# Disable MCP connection pooling in container to prevent hanging
+ENV STATION_MCP_POOLING="false"
 
 # Set working directory
 WORKDIR /workspace

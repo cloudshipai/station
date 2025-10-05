@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/pkg/models"
@@ -103,7 +104,7 @@ func (mcm *MCPConnectionManager) InitializeServerPool(ctx context.Context) error
 	if !mcm.poolingEnabled {
 		return nil // Skip if pooling disabled
 	}
-	
+
 	// Check if already initialized
 	mcm.serverPool.mutex.Lock()
 	if mcm.serverPool.initialized {
@@ -168,9 +169,9 @@ func (mcm *MCPConnectionManager) extractServerDefinitions(environmentID int64, f
 
 // parseFileConfig extracts server configurations from a file config
 func (mcm *MCPConnectionManager) parseFileConfig(fileConfig *repositories.FileConfigRecord) map[string]interface{} {
-	// TemplatePath is already an absolute path, don't concatenate it again
-	absolutePath := fileConfig.TemplatePath
-	
+	// Resolve the template path (handles relative paths like "environments/default/coding.json")
+	absolutePath := config.ResolvePath(fileConfig.TemplatePath)
+
 	// Read and process the config file
 	rawContent, err := os.ReadFile(absolutePath)
 	if err != nil {
@@ -178,8 +179,8 @@ func (mcm *MCPConnectionManager) parseFileConfig(fileConfig *repositories.FileCo
 		return nil
 	}
 
-	// Process template variables
-	configDir := os.ExpandEnv("$HOME/.config/station")
+	// Process template variables using centralized path resolution
+	configDir := config.GetConfigRoot()
 	templateService := NewTemplateVariableService(configDir, mcm.repos)
 	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 	if err != nil {
@@ -297,62 +298,28 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 	if mcm.poolingEnabled {
 		return mcm.getPooledEnvironmentMCPTools(ctx, environmentID)
 	}
-	
+
 	// Using legacy connection model (deprecated)
 	logging.Info("Warning:  Using legacy MCP connection model (deprecated). Enable pooling with STATION_MCP_POOLING=true for better performance.")
 	
 	// PERFORMANCE: Track legacy MCP connection time
 	mcpConnStartTime := time.Now()
-	
+
 	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
 	// Always create fresh connections for each execution
-	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: CACHE COMPLETELY DISABLED - creating fresh connections")
-
-	// Get file-based MCP configurations for this environment
-	environment, err := mcm.repos.Environments.GetByID(environmentID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get environment %d: %w", environmentID, err)
-	}
-
-	msg := fmt.Sprintf("Getting MCP tools for environment: %s (ID: %d)", environment.Name, environmentID)
-	logging.Info("MCPCONNMGR: %s", msg)
-	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg)
 
 	// Get file configs for this environment
 	fileConfigs, err := mcm.repos.FileMCPConfigs.ListByEnvironment(environmentID)
 	if err != nil {
-		msg := fmt.Sprintf("FAILED to get file configs for environment %d: %v", environmentID, err)
-		logging.Info("MCPCONNMGR: %s", msg)
-		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg)
 		return nil, nil, fmt.Errorf("failed to get file configs for environment %d: %w", environmentID, err)
 	}
 
-	msg2 := fmt.Sprintf("Database query returned %d file configs for environment %d", len(fileConfigs), environmentID)
-	logging.Info("MCPCONNMGR: %s", msg2)
-	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + msg2)
-	
-	for i, fc := range fileConfigs {
-		fcMsg := fmt.Sprintf("File config %d: name='%s', path='%s', env_id=%d", i, fc.ConfigName, fc.TemplatePath, fc.EnvironmentID)
-		logging.Info("MCPCONNMGR: %s", fcMsg)
-		debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + fcMsg)
-	}
-
 	// Connect to each MCP server from file configs and get their tools in parallel
-	processMsg := fmt.Sprintf("Processing %d file configs for tool discovery (parallel)", len(fileConfigs))
-	logging.Info("MCPCONNMGR: %s", processMsg)
-	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + processMsg)
 	
 	allTools, allClients := mcm.processFileConfigsParallel(ctx, fileConfigs)
 
-	totalToolsMsg := fmt.Sprintf("Total tools discovered from all file config servers: %d", len(allTools))
-	totalClientsMsg := fmt.Sprintf("Total clients created: %d", len(allClients))
-	logging.Info("MCPCONNMGR: %s", totalToolsMsg)
-	logging.Info("MCPCONNMGR: %s", totalClientsMsg)
-	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + totalToolsMsg)
-	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: " + totalClientsMsg)
 	
 	// TEMPORARY FIX: Completely disable caching to fix stdio MCP connection issues
-	debugLogToFile("MCPCONNMGR GetEnvironmentMCPTools: NOT CACHING - fresh connections every time")
 	
 	mcpConnDuration := time.Since(mcpConnStartTime)
 	logging.Info("MCP_CONN_PERF: Legacy connections completed in %v", mcpConnDuration)
@@ -364,9 +331,8 @@ func (mcm *MCPConnectionManager) GetEnvironmentMCPTools(ctx context.Context, env
 func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConfig *repositories.FileConfigRecord) ([]ai.Tool, []*mcp.GenkitMCPClient) {
 	logging.Info("MCPCONNMGR processFileConfig: Processing file config: %s", fileConfig.ConfigName)
 	
-	// Make template path absolute
-	configDir := os.ExpandEnv("$HOME/.config/station")
-	absolutePath := fmt.Sprintf("%s/%s", configDir, fileConfig.TemplatePath)
+	// Resolve the template path (handles relative paths like "environments/default/coding.json")
+	absolutePath := config.ResolvePath(fileConfig.TemplatePath)
 	logging.Info("MCPCONNMGR processFileConfig: Reading config file: %s", absolutePath)
 	
 	// Read and process the config file
@@ -379,7 +345,7 @@ func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConf
 
 	// Process template variables
 	logging.Info("MCPCONNMGR processFileConfig: Processing template variables for config: %s", fileConfig.ConfigName)
-	templateService := NewTemplateVariableService(configDir, mcm.repos)
+	templateService := NewTemplateVariableService(config.GetConfigRoot(), mcm.repos)
 	result, err := templateService.ProcessTemplateWithVariables(fileConfig.EnvironmentID, fileConfig.ConfigName, string(rawContent), false)
 	if err != nil {
 		logging.Info("MCPCONNMGR processFileConfig: FAILED to process template variables for %s: %v", fileConfig.ConfigName, err)
@@ -417,6 +383,7 @@ func (mcm *MCPConnectionManager) processFileConfig(ctx context.Context, fileConf
 // connectToMCPServer connects to a single MCP server and gets its tools
 // Returns tools and client - client context should NOT be canceled until after execution
 func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverName string, serverConfigRaw interface{}) ([]ai.Tool, *mcp.GenkitMCPClient) {
+
 	// Convert server config
 	serverConfigBytes, err := json.Marshal(serverConfigRaw)
 	if err != nil {
@@ -432,7 +399,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	
 	// Create MCP client with timeout protection
 	var mcpClient *mcp.GenkitMCPClient
-	
+
 	// Add timeout for MCP client creation to prevent freezing
 	clientCtx, clientCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer clientCancel()
@@ -443,12 +410,12 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		err    error
 	}
 	clientChan := make(chan clientResult, 1)
-	
+
 	// Run client creation in goroutine with timeout
 	go func() {
 		var client *mcp.GenkitMCPClient
 		var err error
-		
+
 		if serverConfig.URL != "" {
 			// HTTP-based MCP server
 			client, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
@@ -465,7 +432,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 			for key, value := range serverConfig.Env {
 				envSlice = append(envSlice, key+"="+value)
 			}
-			
+
 			client, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
 				Name:    "_",
 				Version: "1.0.0",

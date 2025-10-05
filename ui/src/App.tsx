@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle } from 'lucide-react';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import Editor from '@monaco-editor/react';
 
@@ -250,7 +250,7 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/runs')) return 'runs';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
-    if (path.startsWith('/connect')) return 'connect';
+    if (path.startsWith('/settings')) return 'settings';
     return 'agents'; // default
   };
 
@@ -287,7 +287,7 @@ const Layout = ({ children }: any) => {
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
-    { id: 'connect', label: 'Connect', icon: Link, path: '/connect' },
+    { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
 
   return (
@@ -2187,179 +2187,133 @@ const VariablesEditorModal = ({
   );
 };
 
-// Connect Page Component
-const ConnectPage = () => {
-  const [copied, setCopied] = useState('');
+// Settings Page Component
+const SettingsPage = () => {
+  const [config, setConfig] = useState('');
+  const [configPath, setConfigPath] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  const copyToClipboard = (text: string, type: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(type);
-    setTimeout(() => setCopied(''), 2000);
+  useEffect(() => {
+    // Load config file on mount
+    const loadConfig = async () => {
+      try {
+        const response = await fetch('/api/v1/settings/config/file');
+        if (!response.ok) {
+          throw new Error('Failed to load config file');
+        }
+        const data = await response.json();
+        setConfig(data.content);
+        setConfigPath(data.path);
+        setLoading(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load config');
+        setLoading(false);
+      }
+    };
+    loadConfig();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+
+    try {
+      const response = await fetch('/api/v1/settings/config/file', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content: config }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save config');
+      }
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save config');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="h-full flex flex-col bg-tokyo-bg">
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-        <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">Connect to Station</h1>
+        <div>
+          <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">Settings</h1>
+          {configPath && (
+            <p className="text-xs text-tokyo-comment font-mono mt-1">{configPath}</p>
+          )}
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-tokyo-blue hover:bg-tokyo-blue5 disabled:bg-tokyo-blue7 text-tokyo-bg rounded font-mono text-sm transition-colors"
+        >
+          {saving ? 'Saving...' : 'Save Config'}
+        </button>
       </div>
 
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="max-w-4xl mx-auto space-y-8">
-          {/* Introduction */}
-          <div className="bg-tokyo-dark1 border border-tokyo-blue7 rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Link className="h-6 w-6 text-tokyo-cyan" />
-              <h2 className="text-lg font-mono font-semibold text-tokyo-cyan">Connect Your AI Tools</h2>
-            </div>
-            <p className="text-tokyo-comment font-mono mb-4">
-              Station exposes your agents and tools via MCP (Model Context Protocol) for integration with AI tools like Claude Code and Cursor.
-            </p>
-            <div className="bg-tokyo-bg border border-tokyo-orange7 rounded p-3">
-              <p className="text-tokyo-orange font-mono text-sm">
-                <strong>🚀 Endpoint:</strong> Station's MCP server runs on <code className="bg-tokyo-dark2 px-1 rounded">http://localhost:3000/mcp</code>
-              </p>
-              <p className="text-tokyo-comment font-mono text-xs mt-1">
-                Supports both SSE and Streamable HTTP transports for Claude Code integration
-              </p>
-            </div>
-          </div>
+      {/* Warning Banner */}
+      <div className="bg-tokyo-orange7 border-b border-tokyo-orange p-3">
+        <div className="flex items-center gap-2 text-tokyo-orange font-mono text-sm">
+          <AlertTriangle className="h-4 w-4" />
+          <span>Station needs to be restarted to apply configuration changes</span>
+        </div>
+      </div>
 
-          {/* Claude Code Configuration */}
-          <div className="bg-tokyo-dark1 border border-tokyo-blue7 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-mono font-semibold text-tokyo-blue">Claude Code Configuration</h3>
-              <button
-                onClick={() => copyToClipboard('claude mcp add --transport sse station http://localhost:3000/mcp', 'claude')}
-                className="px-3 py-1 bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg rounded font-mono text-sm"
-              >
-                {copied === 'claude' ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-
-            <p className="text-tokyo-comment font-mono mb-4">Add Station as an MCP server in Claude Code:</p>
-
-            <div className="bg-tokyo-bg border border-tokyo-blue7 rounded p-4 mb-4">
-              <code className="text-tokyo-fg font-mono text-sm">
-                claude mcp add --transport sse station http://localhost:3000/mcp
-              </code>
-            </div>
-
-            <div className="bg-tokyo-dark2 border border-tokyo-blue7 rounded p-4">
-              <h4 className="text-sm font-mono font-medium text-tokyo-blue mb-2">Alternative: Manual Configuration</h4>
-              <p className="text-tokyo-comment font-mono text-xs mb-3">
-                Add to your Claude Code settings.json (usually in ~/.config/claude-code/):
-              </p>
-              <pre className="text-xs bg-tokyo-bg p-3 rounded border border-tokyo-blue7 overflow-x-auto text-tokyo-fg font-mono">
-{`{
-  "mcpServers": {
-    "station": {
-      "command": "curl",
-      "args": [
-        "-X", "POST",
-        "-H", "Content-Type: application/json",
-        "http://localhost:3000/mcp"
-      ],
-      "transport": "sse"
-    }
-  }
-}`}
-              </pre>
-            </div>
-          </div>
-
-          {/* Cursor Configuration */}
-          <div className="bg-tokyo-dark1 border border-tokyo-purple7 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-mono font-semibold text-tokyo-purple">Cursor Configuration</h3>
-              <button
-                onClick={() => copyToClipboard(`{
-  "mcpServers": {
-    "station": {
-      "command": "node",
-      "args": ["-e", "require('http').request('http://localhost:3000/mcp', {method: 'POST', headers: {'Content-Type': 'application/json'}})"],
-      "transport": "http"
-    }
-  }
-}`, 'cursor')}
-                className="px-3 py-1 bg-tokyo-purple hover:bg-purple-600 text-tokyo-bg rounded font-mono text-sm"
-              >
-                {copied === 'cursor' ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-
-            <p className="text-tokyo-comment font-mono mb-4">Add to your Cursor settings.json:</p>
-
-            <pre className="text-xs bg-tokyo-bg p-4 rounded border border-tokyo-purple7 overflow-x-auto text-tokyo-fg font-mono">
-{`{
-  "mcpServers": {
-    "station": {
-      "command": "node",
-      "args": [
-        "-e",
-        "require('http').request('http://localhost:3000/mcp', {method: 'POST', headers: {'Content-Type': 'application/json'}})"
-      ],
-      "transport": "http"
-    }
-  }
-}`}
-            </pre>
-          </div>
-
-          {/* Connection Testing */}
-          <div className="bg-tokyo-dark1 border border-tokyo-green7 rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <CircleCheck className="h-6 w-6 text-tokyo-green" />
-              <h3 className="text-lg font-mono font-semibold text-tokyo-green">Test Your Connection</h3>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-mono font-medium text-tokyo-green mb-2">1. Verify Station is Running</h4>
-                <p className="text-tokyo-comment font-mono text-sm mb-2">Check that Station is running with MCP enabled:</p>
-                <div className="bg-tokyo-bg border border-tokyo-green7 rounded p-3">
-                  <code className="text-tokyo-fg font-mono text-sm">curl http://localhost:3000/mcp</code>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-mono font-medium text-tokyo-green mb-2">2. Test in Claude Code</h4>
-                <p className="text-tokyo-comment font-mono text-sm">After adding the server, you should see Station tools available in Claude Code.</p>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-mono font-medium text-tokyo-green mb-2">3. Available Tools</h4>
-                <p className="text-tokyo-comment font-mono text-sm">
-                  Station will expose all your agent execution tools, environment management, and MCP server tools.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Troubleshooting */}
-          <div className="bg-tokyo-dark1 border border-tokyo-orange7 rounded-lg p-6">
-            <h3 className="text-lg font-mono font-semibold text-tokyo-orange mb-4">Troubleshooting</h3>
-
-            <div className="space-y-4 text-sm font-mono">
-              <div>
-                <h4 className="text-tokyo-orange font-medium mb-1">Connection Refused</h4>
-                <p className="text-tokyo-comment">• Ensure Station is running with <code className="bg-tokyo-dark2 px-1 rounded">stn serve</code></p>
-                <p className="text-tokyo-comment">• Check that MCP port 3000 is not blocked by firewall</p>
-              </div>
-
-              <div>
-                <h4 className="text-tokyo-orange font-medium mb-1">Tools Not Appearing</h4>
-                <p className="text-tokyo-comment">• Run <code className="bg-tokyo-dark2 px-1 rounded">stn sync</code> to refresh your environment</p>
-                <p className="text-tokyo-comment">• Restart your AI tool after adding the MCP server</p>
-              </div>
-
-              <div>
-                <h4 className="text-tokyo-orange font-medium mb-1">SSE Timeout Issues</h4>
-                <p className="text-tokyo-comment">• Consider using the newer HTTP Stream transport if available</p>
-                <p className="text-tokyo-comment">• Check network configuration for persistent connections</p>
-              </div>
-            </div>
+      {/* Success/Error Messages */}
+      {success && (
+        <div className="bg-tokyo-green7 border-b border-tokyo-green p-3">
+          <div className="flex items-center gap-2 text-tokyo-green font-mono text-sm">
+            <CircleCheck className="h-4 w-4" />
+            <span>Config file saved successfully. Restart Station to apply changes.</span>
           </div>
         </div>
+      )}
+
+      {error && (
+        <div className="bg-tokyo-red7 border-b border-tokyo-red p-3">
+          <div className="flex items-center gap-2 text-tokyo-red font-mono text-sm">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 p-6 overflow-hidden">
+        {loading ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-tokyo-comment font-mono">Loading config...</div>
+          </div>
+        ) : (
+          <div className="h-full">
+            <Editor
+              height="100%"
+              defaultLanguage="yaml"
+              value={config}
+              onChange={(value) => setConfig(value || '')}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                fontFamily: 'JetBrains Mono, Fira Code, Monaco, monospace',
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                automaticLayout: true,
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2383,7 +2337,7 @@ function App() {
                   <Route path="/runs" element={<RunsPage />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />
-                  <Route path="/connect" element={<ConnectPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
                   <Route path="*" element={<AgentsCanvas />} />
                 </Routes>

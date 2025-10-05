@@ -2,7 +2,6 @@ package lighthouse
 
 import (
 	"encoding/json"
-	"fmt"
 	"station/internal/lighthouse/proto"
 	"station/pkg/types"
 	"time"
@@ -29,12 +28,6 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.LighthouseAgentRunData {
 	if run.OutputSchema != "" {
 		metadata["has_output_schema"] = "true"
 	}
-
-	// TEMPORARY FIX: Manually set the correct status value for CloudShip compatibility
-	// CloudShip expects LighthouseRunStatus enum values (COMPLETED = 4) but we're sending RunStatus (COMPLETED = 4)
-	// The values should be the same, but there might be a marshaling issue
-	statusValue := ConvertRunStatusToProto(run.Status)
-	fmt.Printf("DEBUG: AgentRunData - Status string: '%s', Proto value: %d\n", run.Status, statusValue)
 
 	// Add preset information to metadata
 	if run.OutputSchemaPreset != "" {
@@ -262,17 +255,14 @@ func ConvertRunStatusToProto(status string) proto.RunStatus {
 	switch status {
 	case "completed":
 		// TODO: Remove debug logging after fixing status issue
-		fmt.Printf("DEBUG: Converting status 'completed' to RUN_STATUS_COMPLETED (value: %d)\n", proto.RunStatus_RUN_STATUS_COMPLETED)
 		return proto.RunStatus_RUN_STATUS_COMPLETED
 	case "failed":
-		fmt.Printf("DEBUG: Converting status 'failed' to RUN_STATUS_FAILED (value: %d)\n", proto.RunStatus_RUN_STATUS_FAILED)
 		return proto.RunStatus_RUN_STATUS_FAILED
 	case "timeout":
 		return proto.RunStatus_RUN_STATUS_FAILED
 	case "cancelled":
 		return proto.RunStatus_RUN_STATUS_CANCELLED
 	default:
-		fmt.Printf("DEBUG: Converting unknown status '%s' to RUN_STATUS_UNKNOWN (value: %d)\n", status, proto.RunStatus_RUN_STATUS_UNKNOWN)
 		return proto.RunStatus_RUN_STATUS_UNKNOWN
 	}
 }

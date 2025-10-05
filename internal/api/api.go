@@ -71,7 +71,6 @@ func (s *Server) Start(ctx context.Context) error {
 	
 	// Debug middleware to log all requests
 	router.Use(func(c *gin.Context) {
-		log.Printf("🔍 Request: %s %s\n", c.Request.Method, c.Request.URL.Path)
 		c.Next()
 	})
 	
@@ -121,7 +120,6 @@ func (s *Server) Start(ctx context.Context) error {
 	
 	// Start server in goroutine
 	go func() {
-		fmt.Printf("🚀 API server starting on port %d\n", s.cfg.APIPort)
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("API server error: %v\n", err)
 		}
@@ -148,7 +146,6 @@ func (s *Server) healthCheck(c *gin.Context) {
 
 // setupUIRoutes configures routes for serving the embedded UI from root
 func (s *Server) setupUIRoutes(router *gin.Engine) {
-	log.Printf("🔍 Setting up UI routes from root - IsEmbedded: %v\n", ui.IsEmbedded())
 	
 	if !ui.IsEmbedded() {
 		log.Println("🔍 UI not embedded, skipping UI routes")
@@ -158,7 +155,6 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 	// Get embedded UI filesystem
 	uiFS, err := ui.GetFileSystem()
 	if err != nil {
-		log.Printf("🔍 Failed to get UI filesystem: %v\n", err)
 		return
 	}
 
@@ -224,7 +220,6 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			return
 		}
 		
-		log.Printf("🔍 Serving SPA fallback for: %s\n", c.Request.URL.Path)
 		
 		// Read index.html manually to prevent redirect loops
 		file, err := uiFS.Open("index.html")

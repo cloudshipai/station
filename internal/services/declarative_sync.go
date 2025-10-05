@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -562,8 +563,10 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 
 // registerOrUpdateFileConfig registers or updates a file config in the database
 func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID int64, configName, jsonFile, envDir string, templateResult *VariableResolutionResult, options SyncOptions) error {
-	// Always use absolute path for template files to ensure consistent access
-	// from different working directories (API vs sync)
+	// Normalize path for container vs host environment
+	// In container: use /root/.config/station
+	// On host: use actual home directory path
+	normalizedPath := s.normalizeConfigPath(jsonFile)
 
 	// Check if file config already exists
 	existingConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
@@ -572,7 +575,7 @@ func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID 
 		fileConfig := &repositories.FileConfigRecord{
 			EnvironmentID:            envID,
 			ConfigName:               configName,
-			TemplatePath:             jsonFile, // Use absolute path instead of relative
+			TemplatePath:             normalizedPath, // Use normalized path for container compatibility
 			VariablesPath:            "variables.yml", // Standard variables file
 			TemplateSpecificVarsPath: "",
 			LastLoadedAt:             &time.Time{}, // Set to current time
@@ -599,6 +602,55 @@ func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID 
 	}
 	
 	return nil
+}
+
+// normalizeConfigPath stores paths relative to the environments directory
+// This makes paths portable between host and container environments
+func (s *DeclarativeSync) normalizeConfigPath(path string) string {
+	// Extract just the relative path from environments/ onward
+	// This works for paths like:
+	// - /home/epuerta/.config/station/environments/default/cost-explorer.json
+	// - /root/.config/station/environments/default/cost-explorer.json
+
+	idx := strings.Index(path, "environments/")
+	if idx >= 0 {
+		// Return relative path from environments/ onward
+		return path[idx:]
+	}
+
+	// If no environments/ found, return as-is (shouldn't happen)
+	return path
+}
+
+// resolveConfigPath resolves a stored path to the actual filesystem path
+// Handles both relative paths (from environments/) and absolute paths
+func (s *DeclarativeSync) resolveConfigPath(path string) string {
+	// If path starts with "environments/", it's relative and needs resolution
+	if strings.HasPrefix(path, "environments/") {
+		// Determine the base config directory based on runtime
+		var baseDir string
+		if s.config != nil && s.config.Workspace != "" {
+			// Use configured workspace
+			baseDir = s.config.Workspace
+		} else if os.Getenv("STATION_RUNTIME") == "docker" {
+			// In container, use /root/.config/station
+			baseDir = "/root/.config/station"
+		} else {
+			// On host, use actual home directory
+			homeDir, _ := os.UserHomeDir()
+			baseDir = filepath.Join(homeDir, ".config", "station")
+		}
+		return filepath.Join(baseDir, path)
+	}
+
+	// Handle old absolute paths by converting them to relative
+	if idx := strings.Index(path, "environments/"); idx >= 0 {
+		// Recursively resolve with the relative path
+		return s.resolveConfigPath(path[idx:])
+	}
+
+	// If it's already an absolute path without environments/, return as-is
+	return path
 }
 
 // Helper type for database operations (until SQLC is working)

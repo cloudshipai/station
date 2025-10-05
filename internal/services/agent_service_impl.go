@@ -59,10 +59,8 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 	if len(lighthouseClient) > 0 && lighthouseClient[0] != nil {
 		client = lighthouseClient[0]
 		service.executionEngine = NewAgentExecutionEngineWithLighthouse(repos, service, client)
-		log.Printf("🚀 DEBUG: NewAgentService created execution engine WITH lighthouse client")
 	} else {
 		service.executionEngine = NewAgentExecutionEngine(repos, service)
-		log.Printf("🚀 DEBUG: NewAgentService created execution engine WITHOUT lighthouse client")
 	}
 
 	// Pass telemetry service to execution engine for span creation

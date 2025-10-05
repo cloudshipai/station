@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/schemas"
 	"station/pkg/models"
@@ -67,15 +68,8 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 	// Generate dotprompt content using the same logic as MCP handler
 	dotpromptContent := s.generateDotpromptContent(agent, toolsWithDetails, environment.Name, app, appType)
 
-	// Determine output file path
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		homeDir, err = os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get user home directory: %v", err)
-		}
-	}
-	outputPath := fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment.Name, agent.Name)
+	// Determine output file path using centralized path resolution
+	outputPath := config.GetAgentPromptPath(environment.Name, agent.Name)
 
 	// Ensure directory exists
 	agentsDir := filepath.Dir(outputPath)

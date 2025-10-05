@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"station/internal/auth"
+	"station/internal/config"
 	"station/internal/services"
 	"station/pkg/models"
 
@@ -139,7 +140,6 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 			return
 		}
 
-		log.Printf("🚀 Starting agent execution for run ID: %d", agentRun.ID)
 
 		// Execute the agent using the full agent execution engine with proper signature
 		response, err := h.agentService.ExecuteAgentWithRunID(ctx, agentID, req.Task, agentRun.ID, nil)
@@ -177,7 +177,6 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 }
 
 func (h *APIHandlers) queueAgent(c *gin.Context) {
-	log.Printf("🔍 queueAgent: Handler called!")
 	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid agent ID"})
@@ -447,8 +446,7 @@ func (h *APIHandlers) getAgentAssignedTools(agent *models.Agent, environmentName
 
 // getAgentToolsFromPrompt extracts the tools list from the agent's prompt file
 func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentName string) ([]string, error) {
-	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "station", "environments", environmentName, "agents")
-	promptFile := filepath.Join(agentsDir, fmt.Sprintf("%s.prompt", agent.Name))
+	promptFile := config.GetAgentPromptPath(environmentName, agent.Name)
 
 	content, err := ioutil.ReadFile(promptFile)
 	if err != nil {
@@ -689,18 +687,14 @@ func (h *APIHandlers) updateAgentPrompt(c *gin.Context) {
 
 	// Extract the system prompt from the file content and update the database
 	systemPrompt := extractSystemPromptFromContent(req.Content)
-	log.Printf("DEBUG: Extracted system prompt length: %d", len(systemPrompt))
 	if systemPrompt != "" {
-		log.Printf("DEBUG: Updating agent %d prompt in database", agentID)
 		err = h.agentService.UpdateAgentPrompt(c.Request.Context(), agentID, systemPrompt)
 		if err != nil {
 			log.Printf("Failed to update agent prompt in database: %v", err)
 			// Don't fail the request since file was saved successfully
 		} else {
-			log.Printf("DEBUG: Successfully updated agent %d prompt in database", agentID)
 		}
 	} else {
-		log.Printf("DEBUG: System prompt is empty, not updating database")
 	}
 
 	c.JSON(http.StatusOK, gin.H{

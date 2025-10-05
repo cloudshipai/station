@@ -215,19 +215,14 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 
 // getAgentPromptPath returns dotprompt file path for an agent using provided environment name
 func (e *GenKitExecutor) getAgentPromptPath(agent models.Agent, environmentName string) (string, error) {
-	// Build dotprompt file path using provided environment name
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	
-	promptPath := fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environmentName, agent.Name)
-	
+	// Use centralized path resolution for container compatibility
+	promptPath := config.GetAgentPromptPath(environmentName, agent.Name)
+
 	// Check if file exists
 	if _, err := os.Stat(promptPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("dotprompt file not found: %s", promptPath)
 	}
-	
+
 	return promptPath, nil
 }
 
