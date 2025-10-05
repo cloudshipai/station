@@ -13,6 +13,7 @@ import (
 	"station/cmd/main/handlers/build"
 	"station/cmd/main/handlers/common"
 	"station/internal/config"
+	"station/internal/deployment"
 	"station/internal/services"
 	"gopkg.in/yaml.v2"
 )
@@ -27,6 +28,7 @@ func (h *APIHandlers) registerEnvironmentRoutes(group *gin.RouterGroup) {
 	group.POST("/build-image", h.buildEnvironmentImage)
 	group.GET("/:env_id/variables", h.getEnvironmentVariables)
 	group.PUT("/:env_id/variables", h.updateEnvironmentVariables)
+	group.POST("/:env_id/deploy", h.generateDeploymentTemplate)
 }
 
 // Environment handlers
@@ -373,5 +375,93 @@ func (h *APIHandlers) updateEnvironmentVariables(c *gin.Context) {
 		"success": true,
 		"message": "Variables updated successfully. Run 'stn sync' to apply changes.",
 		"path":    variablesPath,
+	})
+}
+
+// generateDeploymentTemplate generates deployment template for the specified provider
+func (h *APIHandlers) generateDeploymentTemplate(c *gin.Context) {
+	envID, err := strconv.ParseInt(c.Param("env_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid environment ID"})
+		return
+	}
+
+	var req struct {
+		Provider    string `json:"provider" binding:"required"` // aws-ecs, gcp-cloudrun, fly, docker-compose
+		DockerImage string `json:"docker_image" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Get environment name
+	env, err := h.repos.Environments.GetByID(envID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Environment not found"})
+		return
+	}
+
+	// Get station config root
+	configRoot, err := common.GetStationConfigRoot()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get station config root"})
+		return
+	}
+
+	// Read config.yaml
+	configPath := filepath.Join(configRoot, "config.yaml")
+	configContent, err := os.ReadFile(configPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read config.yaml"})
+		return
+	}
+
+	// Read environment variables.yml
+	envPath := filepath.Join(configRoot, "environments", env.Name)
+	variablesPath := filepath.Join(envPath, "variables.yml")
+	variablesContent := ""
+	if data, err := os.ReadFile(variablesPath); err == nil {
+		variablesContent = string(data)
+	}
+
+	// Load deployment config from Station config
+	deployConfig, err := deployment.LoadConfigFromYAML(
+		string(configContent),
+		variablesContent,
+		env.Name,
+		req.DockerImage,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to parse config: %v", err)})
+		return
+	}
+
+	// Generate deployment template
+	template, err := deployment.GenerateDeploymentTemplate(req.Provider, *deployConfig)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate template: %v", err)})
+		return
+	}
+
+	// Determine filename
+	filename := ""
+	switch req.Provider {
+	case "aws-ecs":
+		filename = fmt.Sprintf("station-%s-ecs.yml", env.Name)
+	case "gcp-cloudrun":
+		filename = fmt.Sprintf("station-%s-cloudrun.yml", env.Name)
+	case "fly":
+		filename = "fly.toml"
+	case "docker-compose":
+		filename = "docker-compose.yml"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"template": template,
+		"filename": filename,
+		"provider": req.Provider,
 	})
 }
