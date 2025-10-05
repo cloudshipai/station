@@ -9,6 +9,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+//go:embed templates/cli.sh
+var cliTemplate string
+
+//go:embed templates/github-actions.yml
+var githubActionsTemplate string
+
 //go:embed templates/aws-ecs.yml
 var awsECSTemplate string
 
@@ -41,6 +47,10 @@ type DeploymentConfig struct {
 func GenerateDeploymentTemplate(provider string, config DeploymentConfig) (string, error) {
 	var tmplStr string
 	switch provider {
+	case "cli":
+		tmplStr = cliTemplate
+	case "github-actions":
+		tmplStr = githubActionsTemplate
 	case "aws-ecs":
 		tmplStr = awsECSTemplate
 	case "gcp-cloudrun":
