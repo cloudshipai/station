@@ -1,0 +1,97 @@
+# Google Cloud Run deployment configuration for Station {{.EnvironmentName}}
+# Deploy with: gcloud run services replace gcp-cloudrun.yml
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: station-{{.EnvironmentName}}
+  labels:
+    cloud.googleapis.com/location: us-central1
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '1'
+        autoscaling.knative.dev/maxScale: '3'
+        run.googleapis.com/cpu-throttling: 'false'
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - name: station
+          image: {{.DockerImage}}
+          ports:
+            - name: http1
+              containerPort: {{.APIPort}}
+          env:
+            - name: STATION_AI_PROVIDER
+              value: "{{.AIProvider}}"
+            - name: STATION_AI_MODEL
+              value: "{{.AIModel}}"
+            - name: STATION_API_PORT
+              value: "{{.APIPort}}"
+            - name: STATION_MCP_PORT
+              value: "{{.MCPPort}}"
+            - name: STATION_SSH_PORT
+              value: "{{.SSHPort}}"
+            - name: STATION_DEBUG
+              value: "{{.Debug}}"
+            - name: STATION_TELEMETRY_ENABLED
+              value: "{{.TelemetryEnabled}}"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: station-secrets
+                  key: openai_api_key
+{{range $key, $value := .EnvironmentVariables}}
+            - name: {{$key}}
+              value: "{{$value}}"
+{{end}}
+          resources:
+            limits:
+              cpu: '1000m'
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{.APIPort}}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /
+              port: {{.APIPort}}
+            initialDelaySeconds: 0
+            periodSeconds: 1
+            failureThreshold: 30
+
+---
+# Deployment instructions:
+#
+# 1. Create Secret for API Keys:
+#    gcloud secrets create station-secrets \
+#      --data-file=- <<EOF
+#    {"openai_api_key":"{{.OpenAIAPIKey}}"}
+#    EOF
+#
+# 2. Grant Cloud Run access to the secret:
+#    gcloud secrets add-iam-policy-binding station-secrets \
+#      --member=serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+#      --role=roles/secretmanager.secretAccessor
+#
+# 3. Deploy the service:
+#    gcloud run services replace gcp-cloudrun.yml --region=us-central1
+#
+# 4. Make the service publicly accessible (if needed):
+#    gcloud run services add-iam-policy-binding station-{{.EnvironmentName}} \
+#      --region=us-central1 \
+#      --member=allUsers \
+#      --role=roles/run.invoker
+#
+# Get service URL:
+#    gcloud run services describe station-{{.EnvironmentName}} \
+#      --region=us-central1 --format='value(status.url)'

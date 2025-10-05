@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  station:
+    image: {{.DockerImage}}
+    container_name: station-{{.EnvironmentName}}
+    restart: unless-stopped
+    ports:
+      - "{{.APIPort}}:{{.APIPort}}"
+      - "{{.MCPPort}}:{{.MCPPort}}"
+      - "{{.SSHPort}}:{{.SSHPort}}"
+    environment:
+      - STATION_AI_PROVIDER={{.AIProvider}}
+      - STATION_AI_MODEL={{.AIModel}}
+      - STATION_API_PORT={{.APIPort}}
+      - STATION_MCP_PORT={{.MCPPort}}
+      - STATION_SSH_PORT={{.SSHPort}}
+      - STATION_DEBUG={{.Debug}}
+      - STATION_TELEMETRY_ENABLED={{.TelemetryEnabled}}
+      - OPENAI_API_KEY={{.OpenAIAPIKey}}
+{{range $key, $value := .EnvironmentVariables}}
+      - {{$key}}={{$value}}
+{{end}}
+    volumes:
+      - station_data:/root/.config/station
+    networks:
+      - station_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{.APIPort}}/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  station_data:
+    driver: local
+
+networks:
+  station_network:
+    driver: bridge
+
+# Deployment instructions:
+#
+# 1. Save this file as docker-compose.yml
+#
+# 2. Update the OPENAI_API_KEY and other secrets in the environment section
+#
+# 3. Start the service:
+#    docker-compose up -d
+#
+# 4. View logs:
+#    docker-compose logs -f station
+#
+# 5. Stop the service:
+#    docker-compose down
+#
+# 6. Stop and remove volumes:
+#    docker-compose down -v
+#
+# Access Station at: http://localhost:{{.APIPort}}
