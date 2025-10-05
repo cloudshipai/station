@@ -1540,113 +1540,24 @@ const EnvironmentsPage = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-tokyo-bg">
-      {/* Header with environment selector and action buttons */}
-      <div className="flex items-center justify-between p-4 border-b border-tokyo-dark4">
-        <h1 className="text-xl font-mono font-semibold text-tokyo-orange">Environments</h1>
-
-        <div className="flex items-center space-x-4">
-          {/* Action buttons */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleInstallBundle}
-              className="flex items-center space-x-2 px-4 py-2 bg-tokyo-magenta text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-magenta"
-              title="Install Bundle"
-            >
-              <Download className="h-4 w-4" />
-              <span>Install Bundle</span>
-            </button>
-
-            {selectedEnvironment && (
-              <>
-                <button
-                  onClick={handleSyncEnvironment}
-                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-blue"
-                  title="Sync Environment"
-                >
-                  <Play className="h-4 w-4" />
-                  <span>Sync</span>
-                </button>
-
-                <button
-                  onClick={handleVariables}
-                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-cyan text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-cyan"
-                  title="Edit Environment Variables"
-                >
-                  <FileText className="h-4 w-4" />
-                  <span>Variables</span>
-                </button>
-
-                <button
-                  onClick={handleAddServer}
-                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-green"
-                  title="Add MCP Server"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Server</span>
-                </button>
-
-                <button
-                  onClick={handleBundleEnvironment}
-                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-yellow text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-yellow"
-                  title="Bundle Environment"
-                >
-                  <Archive className="h-4 w-4" />
-                  <span>Bundle</span>
-                </button>
-                <button
-                  onClick={handleDeploy}
-                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors border border-tokyo-purple"
-                  title="Deploy Environment"
-                >
-                  <Rocket className="h-4 w-4" />
-                  <span>Deploy</span>
-                </button>
-                <button
-                  onClick={handleBuildImage}
-                  className="flex items-center space-x-2 px-4 py-2 rounded font-mono text-sm font-medium transition-colors"
-                  style={{
-                    backgroundColor: '#ff9e64',
-                    color: '#ffffff',
-                    border: '1px solid #ff9e64',
-                    fontWeight: '700',
-                    textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
-                  }}
-                  title="Build Docker Image"
-                >
-                  <Package className="h-4 w-4" />
-                  <span>Build Image</span>
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Environment selector */}
-          {environments.length > 0 && (
-            <select
-              value={selectedEnvironment || ''}
-              onChange={(e) => setSelectedEnvironment(Number(e.target.value))}
-              className="bg-tokyo-dark1 border border-tokyo-dark4 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-orange hover:border-tokyo-blue5 transition-colors min-w-[120px]"
-            >
-              {environments.map((env) => (
-                <option key={env.id} value={env.id}>
-                  {env.name}
-                </option>
-              ))}
-            </select>
-          )}
+    <div className="h-full flex bg-tokyo-bg">
+      {/* Left Column - Canvas */}
+      <div className="flex-1 flex flex-col border-r border-tokyo-dark4">
+        {/* Canvas Header */}
+        <div className="px-6 py-4 border-b border-tokyo-dark4">
+          <h2 className="text-lg font-mono font-semibold text-tokyo-fg">Environment Graph</h2>
+          <p className="text-sm text-tokyo-comment mt-1">Visual representation of agents, MCP servers, and tools</p>
         </div>
-      </div>
 
-      {/* Main content */}
-      {environments.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <Globe className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-            <div className="text-tokyo-fg font-mono text-lg mb-2">No environments found</div>
-            <div className="text-tokyo-comment font-mono text-sm">Create your first environment to get started</div>
+        {/* Canvas Content */}
+        {environments.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <Globe className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
+              <div className="text-tokyo-fg font-mono text-lg mb-2">No environments found</div>
+              <div className="text-tokyo-comment font-mono text-sm">Create your first environment to get started</div>
+            </div>
           </div>
-        </div>
       ) : rebuildingGraph ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-tokyo-fg font-mono">Rebuilding environment graph...</div>
@@ -1676,6 +1587,99 @@ const EnvironmentsPage = () => {
           </ReactFlowProvider>
         </div>
       )}
+      </div>
+
+      {/* Right Column - Controls */}
+      <div className="w-96 flex flex-col bg-tokyo-dark2 overflow-y-auto">
+        {/* Environment Selector */}
+        <div className="p-6 border-b border-tokyo-fg-gutter">
+          <label className="block text-sm font-mono font-bold text-tokyo-orange mb-2">Environment</label>
+          {environments.length > 0 && (
+            <select
+              value={selectedEnvironment || ''}
+              onChange={(e) => setSelectedEnvironment(Number(e.target.value))}
+              className="w-full bg-[#292e42] border-[3px] border-[#7dcfff] text-[#7dcfff] font-mono font-semibold px-4 py-3 rounded-lg focus:outline-none focus:border-[#ff9e64] focus:text-[#ff9e64] text-lg shadow-tokyo-glow"
+              style={{ backgroundColor: '#292e42', color: '#7dcfff', borderColor: '#7dcfff' }}
+            >
+              {environments.map((env) => (
+                <option key={env.id} value={env.id} className="bg-[#1a1b26] text-[#c0caf5]" style={{ backgroundColor: '#1a1b26', color: '#c0caf5' }}>
+                  {env.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        {selectedEnvironment && (
+          <div className="p-6 space-y-3">
+            <h3 className="text-sm font-mono text-tokyo-comment mb-4">Actions</h3>
+
+            <button
+              onClick={handleSyncEnvironment}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+            >
+              <Play className="h-4 w-4" />
+              <span>Sync Environment</span>
+            </button>
+
+            <button
+              onClick={handleVariables}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-cyan text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+            >
+              <FileText className="h-4 w-4" />
+              <span>Edit Variables</span>
+            </button>
+
+            <button
+              onClick={handleAddServer}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add MCP Server</span>
+            </button>
+
+            <div className="border-t border-tokyo-dark4 pt-3 mt-3">
+              <h3 className="text-sm font-mono text-tokyo-comment mb-3">Deployment</h3>
+
+              <button
+                onClick={handleDeploy}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+              >
+                <Rocket className="h-4 w-4" />
+                <span>Deploy Template</span>
+              </button>
+
+              <button
+                onClick={handleBuildImage}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-orange text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors mt-2"
+              >
+                <Package className="h-4 w-4" />
+                <span>Build Docker Image</span>
+              </button>
+
+              <button
+                onClick={handleBundleEnvironment}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-yellow text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors mt-2"
+              >
+                <Archive className="h-4 w-4" />
+                <span>Create Bundle</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Install Bundle (always visible) */}
+        <div className="p-6 border-t border-tokyo-dark4 mt-auto">
+          <button
+            onClick={handleInstallBundle}
+            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-magenta text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            <span>Install Bundle</span>
+          </button>
+        </div>
+      </div>
 
       {/* Modals */}
       <SyncModal
@@ -2139,7 +2143,7 @@ const VariablesEditorModal = ({
 
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Warning Banner */}
-          <div className="mb-4 p-4 bg-tokyo-orange bg-opacity-20 border border-tokyo-orange rounded">
+          <div className="mb-4 p-4 border-2 border-tokyo-orange rounded">
             <p className="text-tokyo-orange text-sm font-mono">
               ⚠️ Important: These variables are local to your machine and will NOT be included in bundles or Docker images.
               They are for local development only.

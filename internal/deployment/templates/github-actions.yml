@@ -1,0 +1,224 @@
+name: Station Agent Execution
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      agent_name:
+        description: 'Agent name to execute'
+        required: false
+        default: ''
+      task:
+        description: 'Task for the agent'
+        required: false
+        default: ''
+      deployment_mode:
+        description: 'Deployment mode: cli (docker exec) or cicd (container runner)'
+        required: false
+        default: 'cli'
+
+jobs:
+  # ============================================================================
+  # CLI Mode: Station runs in a separate container, agents executed via docker exec
+  # ============================================================================
+  cli-mode:
+    name: CLI Mode (docker exec)
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deployment_mode == 'cli' || github.event.inputs.deployment_mode == ''
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Pull Station Docker Image
+        run: docker pull {{.DockerImage}}
+
+      - name: Run Station Container
+        run: |
+          docker run -d \
+            --name station \
+            -p 8585:8585 \
+            -e OPENAI_API_KEY=${{"{{"}} secrets.OPENAI_API_KEY {{"}}"}} \
+            -e ANTHROPIC_API_KEY=${{"{{"}} secrets.ANTHROPIC_API_KEY {{"}}"}} \
+            -v ${{"{{"}} github.workspace {{"}}"}}:/workspace \
+            {{.DockerImage}}
+
+          # Wait for Station to be ready
+          echo "Waiting for Station to start..."
+          timeout 30 sh -c 'until docker exec station stn status > /dev/null 2>&1; do sleep 1; done'
+          echo "✅ Station is ready"
+
+      - name: List Available Agents
+        run: |
+          docker exec station stn agent list --env {{.EnvironmentName}}
+
+      - name: Execute Agent (Manual Trigger)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent_name != ''
+        run: |
+          docker exec station stn agent run \
+            "${{"{{"}} github.event.inputs.agent_name{{"}}"}} " \
+            "${{"{{"}} github.event.inputs.task{{"}}"}} " \
+            --env {{.EnvironmentName}} \
+            --tail
+
+      - name: Execute Default Agent (Automated)
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          # Example: Run a code review agent on push/PR
+          docker exec station stn agent run \
+            "Code Reviewer" \
+            "Review the code changes in this pull request and provide security, performance, and best practice feedback." \
+            --env {{.EnvironmentName}} \
+            --tail
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f station || true
+
+  # ============================================================================
+  # CI/CD Mode: GitHub Actions runner IS the Station container
+  # ============================================================================
+  cicd-mode:
+    name: CI/CD Mode (container runner)
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deployment_mode == 'cicd'
+    container:
+      image: {{.DockerImage}}
+      env:
+        OPENAI_API_KEY: ${{"{{"}} secrets.OPENAI_API_KEY{{"}}"}} 
+        ANTHROPIC_API_KEY: ${{"{{"}} secrets.ANTHROPIC_API_KEY{{"}}"}} 
+      volumes:
+        - ${{"{{"}} github.workspace{{"}}"}} :/workspace
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: List Available Agents
+        run: stn agent list --env {{.EnvironmentName}}
+
+      - name: Execute Agent (Manual Trigger)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent_name != ''
+        run: |
+          stn agent run \
+            "${{"{{"}} github.event.inputs.agent_name{{"}}"}} " \
+            "${{"{{"}} github.event.inputs.task{{"}}"}} " \
+            --env {{.EnvironmentName}} \
+            --tail
+
+      - name: Execute Default Agent (Automated)
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          # Example: Run a code review agent on push/PR
+          stn agent run \
+            "Code Reviewer" \
+            "Review the code changes in this pull request and provide security, performance, and best practice feedback." \
+            --env {{.EnvironmentName}} \
+            --tail
+
+  # ============================================================================
+  # Post Results (runs after either mode)
+  # ============================================================================
+  post-results:
+    name: Post PR Comment
+    runs-on: ubuntu-latest
+    needs: [cli-mode, cicd-mode]
+    if: always() && github.event_name == 'pull_request'
+
+    steps:
+      - name: Post Results as Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🤖 Station Agent Results
+
+              Station agents have completed their analysis.
+
+              **Environment:** {{.EnvironmentName}}
+              **Workflow:** ${{"{{"}} github.workflow{{"}}"}} 
+              **Run:** https://github.com/${{"{{"}} github.repository{{"}}"}} /actions/runs/${{"{{"}} github.run_id{{"}}"}} 
+
+              _Powered by [Station](https://github.com/stationsh/station)_`
+            })
+
+# ============================================================================
+# Usage Examples
+# ============================================================================
+#
+# CLI Mode (docker exec):
+# ----------------------
+# Station runs as a separate container, agents executed via docker exec
+#
+#   - Pros: Isolated Station process, easier debugging, full API access
+#   - Cons: Extra container overhead
+#   - Use when: You need Station API/UI or want container isolation
+#
+#   Manual trigger:
+#     gh workflow run station.yml \
+#       -f deployment_mode=cli \
+#       -f agent_name="Security Scanner" \
+#       -f task="Scan for vulnerabilities"
+#
+#   Example step:
+#     - name: Run Security Scan
+#       run: |
+#         docker exec station stn agent run \
+#           "Security Scanner" \
+#           "Analyze code for security issues" \
+#           --env {{.EnvironmentName}} \
+#           --tail
+#
+# ============================================================================
+#
+# CI/CD Mode (container runner):
+# ------------------------------
+# GitHub Actions runner IS the Station container, direct CLI access
+#
+#   - Pros: No container overhead, direct stn CLI access, faster
+#   - Cons: No Station API/UI, shared runner environment
+#   - Use when: Pure agent execution in CI/CD pipelines
+#
+#   Manual trigger:
+#     gh workflow run station.yml \
+#       -f deployment_mode=cicd \
+#       -f agent_name="Code Reviewer" \
+#       -f task="Review this PR"
+#
+#   Example step:
+#     - name: Run Code Review
+#       run: |
+#         stn agent run \
+#           "Code Reviewer" \
+#           "Review code changes" \
+#           --env {{.EnvironmentName}} \
+#           --tail
+#
+# ============================================================================
+#
+# Required GitHub Secrets:
+# -----------------------
+#   - OPENAI_API_KEY: Your OpenAI API key
+#   - ANTHROPIC_API_KEY: Your Anthropic API key (if using Claude)
+#
+# ============================================================================
+#
+# Agent Run Command Reference:
+# ---------------------------
+#   stn agent run <name> <task> [flags]
+#
+#   Flags:
+#     --env string        Environment name (default "default")
+#     --endpoint string   Station API endpoint (for remote mode)
+#     --tail              Follow execution with real-time output
+#
+#   Examples:
+#     stn agent run "Code Reviewer" "Review this PR" --env production --tail
+#     stn agent run "Security Scanner" "Scan for CVEs" --env default
+#     stn agent run "Test Generator" "Generate unit tests for auth.go" --tail

@@ -1,106 +1,29 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Station {{.EnvironmentName}} environment deployment on AWS ECS Fargate
+Description: Simple Station {{.EnvironmentName}} deployment on AWS ECS Fargate
 
 Parameters:
   OpenAIAPIKey:
     Type: String
     NoEcho: true
-    Description: OpenAI API Key for AI provider
+    Description: OpenAI API Key
     Default: "{{.OpenAIAPIKey}}"
 
 Resources:
-  # VPC and Networking
-  StationVPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.0.0.0/16
-      EnableDnsHostnames: true
-      EnableDnsSupport: true
-      Tags:
-        - Key: Name
-          Value: !Sub station-{{.EnvironmentName}}-vpc
-
-  PublicSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref StationVPC
-      CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: !Sub station-{{.EnvironmentName}}-public-subnet-1
-
-  PublicSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref StationVPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: !Sub station-{{.EnvironmentName}}-public-subnet-2
-
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: !Sub station-{{.EnvironmentName}}-igw
-
-  VPCGatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref StationVPC
-      InternetGatewayId: !Ref InternetGateway
-
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref StationVPC
-      Tags:
-        - Key: Name
-          Value: !Sub station-{{.EnvironmentName}}-public-rt
-
-  PublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: VPCGatewayAttachment
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-
-  SubnetRouteTableAssociation1:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnet1
-      RouteTableId: !Ref PublicRouteTable
-
-  SubnetRouteTableAssociation2:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnet2
-      RouteTableId: !Ref PublicRouteTable
-
   # ECS Cluster
-  StationCluster:
+  Cluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Sub station-{{.EnvironmentName}}
-      ClusterSettings:
-        - Name: containerInsights
-          Value: enabled
+      ClusterName: station-{{.EnvironmentName}}
 
   # CloudWatch Logs
-  StationLogGroup:
+  LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /ecs/station-{{.EnvironmentName}}
+      LogGroupName: /ecs/station-{{.EnvironmentName}}
       RetentionInDays: 7
 
-  # ECS Task Execution Role
-  TaskExecutionRole:
+  # Task Execution Role
+  TaskRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -113,148 +36,69 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 
-  # ECS Task Definition
-  StationTaskDefinition:
+  # Task Definition
+  TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Sub station-{{.EnvironmentName}}
+      Family: station-{{.EnvironmentName}}
       NetworkMode: awsvpc
-      RequiresCompatibilities:
-        - FARGATE
+      RequiresCompatibilities: [FARGATE]
       Cpu: '512'
       Memory: '1024'
-      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      ExecutionRoleArn: !GetAtt TaskRole.Arn
       ContainerDefinitions:
         - Name: station
           Image: {{.DockerImage}}
           Essential: true
           PortMappings:
             - ContainerPort: {{.APIPort}}
-              Protocol: tcp
-            - ContainerPort: {{.MCPPort}}
-              Protocol: tcp
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: !Ref StationLogGroup
+              awslogs-group: !Ref LogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
           Environment:
-            - Name: STATION_AI_PROVIDER
-              Value: "{{.AIProvider}}"
-            - Name: STATION_AI_MODEL
-              Value: "{{.AIModel}}"
-            - Name: STATION_API_PORT
-              Value: "{{.APIPort}}"
-            - Name: STATION_MCP_PORT
-              Value: "{{.MCPPort}}"
-            - Name: STATION_SSH_PORT
-              Value: "{{.SSHPort}}"
-            - Name: STATION_DEBUG
-              Value: "{{.Debug}}"
-            - Name: STATION_TELEMETRY_ENABLED
-              Value: "{{.TelemetryEnabled}}"
             - Name: OPENAI_API_KEY
               Value: !Ref OpenAIAPIKey
+            - Name: STATION_AI_PROVIDER
+              Value: {{.AIProvider}}
+            - Name: STATION_AI_MODEL
+              Value: {{.AIModel}}
 {{range $key, $value := .EnvironmentVariables}}
             - Name: {{$key}}
               Value: "{{$value}}"
 {{end}}
 
   # Security Group
-  StationSecurityGroup:
+  SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for Station service
-      VpcId: !Ref StationVPC
+      GroupDescription: Station {{.EnvironmentName}}
+      VpcId: !Ref AWS::AccountId  # Use default VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: {{.APIPort}}
           ToPort: {{.APIPort}}
           CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: {{.MCPPort}}
-          ToPort: {{.MCPPort}}
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: Name
-          Value: !Sub station-{{.EnvironmentName}}-sg
 
-  # Application Load Balancer
-  StationALB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Name: !Sub station-{{.EnvironmentName}}-alb
-      Subnets:
-        - !Ref PublicSubnet1
-        - !Ref PublicSubnet2
-      SecurityGroups:
-        - !Ref StationSecurityGroup
-      Scheme: internet-facing
-      Type: application
-
-  StationTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: !Sub station-{{.EnvironmentName}}-tg
-      Port: {{.APIPort}}
-      Protocol: HTTP
-      VpcId: !Ref StationVPC
-      TargetType: ip
-      HealthCheckPath: /
-      HealthCheckIntervalSeconds: 30
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 3
-
-  StationListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref StationALB
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref StationTargetGroup
-
-  # ECS Service
-  StationService:
+  # ECS Service (uses default VPC)
+  Service:
     Type: AWS::ECS::Service
-    DependsOn: StationListener
     Properties:
-      ServiceName: !Sub station-{{.EnvironmentName}}
-      Cluster: !Ref StationCluster
-      TaskDefinition: !Ref StationTaskDefinition
+      ServiceName: station-{{.EnvironmentName}}
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
       DesiredCount: 1
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
-          Subnets:
-            - !Ref PublicSubnet1
-            - !Ref PublicSubnet2
-          SecurityGroups:
-            - !Ref StationSecurityGroup
-      LoadBalancers:
-        - ContainerName: station
-          ContainerPort: {{.APIPort}}
-          TargetGroupArn: !Ref StationTargetGroup
+          Subnets: !GetAZs
+          SecurityGroups: [!Ref SecurityGroup]
 
 Outputs:
-  LoadBalancerDNS:
-    Description: DNS name of the load balancer
-    Value: !GetAtt StationALB.DNSName
-    Export:
-      Name: !Sub station-{{.EnvironmentName}}-lb-dns
-
   ClusterName:
-    Description: ECS Cluster Name
-    Value: !Ref StationCluster
-    Export:
-      Name: !Sub station-{{.EnvironmentName}}-cluster
-
+    Value: !Ref Cluster
   ServiceName:
-    Description: ECS Service Name
-    Value: !GetAtt StationService.Name
-    Export:
-      Name: !Sub station-{{.EnvironmentName}}-service
+    Value: !GetAtt Service.Name

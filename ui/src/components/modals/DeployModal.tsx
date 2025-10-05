@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Rocket, Download, Cloud, Server, Package, CheckCircle, AlertCircle, Copy } from 'lucide-react';
+import { X, Rocket, Download, Cloud, Server, Package, CheckCircle, AlertCircle, Copy, GitBranch, Terminal } from 'lucide-react';
 
 interface DeployModalProps {
   isOpen: boolean;
@@ -26,6 +26,20 @@ const DeployModal: React.FC<DeployModalProps> = ({
   if (!isOpen) return null;
 
   const providers = [
+    {
+      id: 'cli',
+      name: 'CLI (docker exec)',
+      icon: Terminal,
+      description: 'Bash script for local Docker deployment with agent CLI usage',
+      color: 'text-tokyo-yellow',
+    },
+    {
+      id: 'github-actions',
+      name: 'GitHub Actions',
+      icon: GitBranch,
+      description: 'CI/CD workflow with Docker container and agent execution',
+      color: 'text-tokyo-green',
+    },
     {
       id: 'aws-ecs',
       name: 'AWS ECS (Fargate)',
@@ -128,8 +142,8 @@ const DeployModal: React.FC<DeployModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-tokyo-dark2 rounded-lg border border-tokyo-dark4 w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-tokyo-bg rounded-lg border border-tokyo-dark4 w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-tokyo-dark4">
           <div className="flex items-center space-x-3">
@@ -152,15 +166,16 @@ const DeployModal: React.FC<DeployModalProps> = ({
             <>
               {/* Docker Image Input */}
               <div className="space-y-2">
-                <label className="text-sm font-mono text-tokyo-comment">Docker Image</label>
+                <label className="text-sm font-mono font-bold text-tokyo-orange">Docker Image</label>
                 <input
                   type="text"
                   value={dockerImage}
                   onChange={(e) => setDockerImage(e.target.value)}
-                  className="w-full px-3 py-2 bg-tokyo-dark1 border border-tokyo-dark4 rounded text-tokyo-fg font-mono text-sm focus:outline-none focus:border-tokyo-blue"
+                  className="w-full px-4 py-3 bg-[#292e42] border-[3px] border-[#7dcfff] rounded-lg text-[#7dcfff] font-mono font-semibold text-lg focus:outline-none focus:border-[#ff9e64] focus:text-[#ff9e64] shadow-tokyo-glow"
+                  style={{ backgroundColor: '#292e42', color: '#7dcfff', borderColor: '#7dcfff' }}
                   placeholder="station-default:latest"
                 />
-                <p className="text-xs text-tokyo-comment">
+                <p className="text-xs text-tokyo-fg-dark">
                   The Docker image to deploy (e.g., ghcr.io/yourusername/station-{environmentName}:latest)
                 </p>
               </div>
@@ -177,8 +192,8 @@ const DeployModal: React.FC<DeployModalProps> = ({
                         onClick={() => setSelectedProvider(provider.id)}
                         className={`p-4 rounded-lg border-2 transition-all text-left ${
                           selectedProvider === provider.id
-                            ? 'border-tokyo-orange bg-tokyo-orange/10'
-                            : 'border-tokyo-dark4 bg-tokyo-dark1 hover:border-tokyo-dark4 hover:bg-tokyo-dark3'
+                            ? 'border-tokyo-orange bg-tokyo-dark1'
+                            : 'border-tokyo-dark4 bg-tokyo-dark1 hover:border-tokyo-orange/50'
                         }`}
                       >
                         <div className="flex items-start space-x-3">
