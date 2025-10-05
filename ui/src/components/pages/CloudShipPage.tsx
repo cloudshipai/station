@@ -1,213 +1,180 @@
 import React from 'react';
-import { Cloud, Database, Search, TrendingUp, Shield, Rocket, FileCode, AlertTriangle } from 'lucide-react';
+import { DollarSign, Database, Search, TrendingUp, TrendingDown, Calendar, Lightbulb, Target, BarChart } from 'lucide-react';
 
 interface PresetInfo {
   name: string;
   app: string;
   appType: string;
   description: string;
-  useCases: string[];
+  whatItDoes: string;
+  exampleQuestions: string[];
+  typicalData: string[];
   icon: React.ComponentType<any>;
 }
 
-const presets: PresetInfo[] = [
+const finopsPresets: PresetInfo[] = [
   {
-    name: 'finops',
+    name: 'finops-inventory',
     app: 'finops',
     appType: 'inventory',
-    description: 'Track current infrastructure resources and costs',
-    useCases: ['Resource inventory', 'Cost tracking', 'Infrastructure snapshots'],
+    description: 'Track current infrastructure resources and their costs across cloud providers',
+    whatItDoes: 'Creates snapshots of all cloud resources with current cost allocation, tags, and metadata',
+    exampleQuestions: [
+      'What are all my AWS resources and their monthly costs?',
+      'Show me all EC2 instances tagged with "production"',
+      'List all resources in us-east-1 with their costs'
+    ],
+    typicalData: ['resource_id', 'resource_type', 'cost', 'region', 'tags', 'metadata'],
     icon: Database,
   },
   {
     name: 'finops-investigations',
     app: 'finops',
     appType: 'investigations',
-    description: 'Investigate cost spikes and anomalies',
-    useCases: ['Cost spike analysis', 'Budget overrun investigation', 'Unexpected charges'],
+    description: 'Investigate cost spikes, anomalies, and unexpected charges',
+    whatItDoes: 'Analyzes cost data to identify root causes of cost increases, budget overruns, or billing surprises',
+    exampleQuestions: [
+      'Why did my AWS bill spike 300% last week?',
+      'What caused the unexpected $5k charge on Tuesday?',
+      'Which service is driving our cost increase?'
+    ],
+    typicalData: ['finding', 'root_cause', 'cost_impact', 'time_range', 'affected_resources', 'evidence'],
     icon: Search,
   },
   {
     name: 'finops-opportunities',
     app: 'finops',
     appType: 'opportunities',
-    description: 'Identify cost optimization opportunities',
-    useCases: ['Cost savings', 'Resource rightsizing', 'Waste elimination'],
-    icon: TrendingUp,
+    description: 'Identify cost optimization opportunities and savings recommendations',
+    whatItDoes: 'Finds waste, overprovisioned resources, and cost-saving opportunities with actionable recommendations',
+    exampleQuestions: [
+      'What cost optimizations can I make right now?',
+      'Which resources are underutilized and costing money?',
+      'Show me all savings opportunities over $100/month'
+    ],
+    typicalData: ['opportunity_type', 'potential_savings', 'affected_resources', 'recommendation', 'effort', 'risk'],
+    icon: TrendingDown,
   },
   {
     name: 'finops-projections',
     app: 'finops',
     appType: 'projections',
-    description: 'Forecast future costs and resource needs',
-    useCases: ['Cost forecasting', 'Capacity planning', 'Burn rate projection'],
+    description: 'Forecast future costs, burn rates, and capacity needs',
+    whatItDoes: 'Predicts future costs based on historical trends, planned changes, and growth patterns',
+    exampleQuestions: [
+      'What will my AWS costs be next quarter?',
+      'When will we hit our $50k monthly budget?',
+      'Project costs if we double our infrastructure'
+    ],
+    typicalData: ['projection_period', 'forecasted_cost', 'confidence_interval', 'assumptions', 'trend_data'],
     icon: TrendingUp,
   },
   {
-    name: 'security-inventory',
-    app: 'security',
-    appType: 'inventory',
-    description: 'Catalog current security vulnerabilities and exposure',
-    useCases: ['CVE tracking', 'Vulnerability inventory', 'Security posture snapshots'],
-    icon: Shield,
-  },
-  {
-    name: 'security-investigations',
-    app: 'security',
-    appType: 'investigations',
-    description: 'Investigate security incidents and breaches',
-    useCases: ['Incident response', 'Breach analysis', 'Attack vector investigation'],
-    icon: AlertTriangle,
-  },
-  {
-    name: 'deployments-events',
-    app: 'deployments',
+    name: 'finops-events',
+    app: 'finops',
     appType: 'events',
-    description: 'Track deployment events and changes',
-    useCases: ['Deployment tracking', 'Change history', 'Release timeline'],
-    icon: Rocket,
-  },
-  {
-    name: 'deployments-investigations',
-    app: 'deployments',
-    appType: 'investigations',
-    description: 'Investigate deployment failures and issues',
-    useCases: ['Deployment failures', 'Rollback analysis', 'CI/CD troubleshooting'],
-    icon: FileCode,
-  },
-];
-
-const appTypeInfo = [
-  {
-    name: 'investigations',
-    purpose: 'Root cause analysis',
-    question: '"Why did X happen?"',
-    examples: ['Cost spikes', 'Security breaches', 'Deployment failures'],
-  },
-  {
-    name: 'opportunities',
-    purpose: 'Improvement recommendations',
-    question: '"What can we optimize?"',
-    examples: ['Cost savings', 'Security hardening', 'Performance gains'],
-  },
-  {
-    name: 'projections',
-    purpose: 'Future predictions',
-    question: '"What will happen?"',
-    examples: ['Cost forecasts', 'Capacity planning', 'Trend analysis'],
-  },
-  {
-    name: 'inventory',
-    purpose: 'Current state snapshots',
-    question: '"What exists now?"',
-    examples: ['Resource lists', 'Vulnerability scans', 'Service catalog'],
-  },
-  {
-    name: 'events',
-    purpose: 'Change tracking',
-    question: '"What changed?"',
-    examples: ['Deployments', 'Incidents', 'Config changes'],
+    description: 'Track cost-related events like resource changes, budget alerts, and billing milestones',
+    whatItDoes: 'Captures significant cost events and changes that impact your cloud spend',
+    exampleQuestions: [
+      'What cost events happened this week?',
+      'Show me all resources created in the last 24 hours',
+      'When did we cross the $10k monthly threshold?'
+    ],
+    typicalData: ['event_type', 'timestamp', 'cost_impact', 'resource', 'change_description'],
+    icon: Calendar,
   },
 ];
 
 export const CloudShipPage: React.FC = () => {
   return (
-    <div className="h-full overflow-auto bg-gray-50 dark:bg-gray-950">
+    <div className="h-full overflow-auto bg-tokyo-bg">
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-            <Cloud size={32} className="text-blue-600" />
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">CloudShip Data Ingestion</h1>
+            <DollarSign size={36} className="text-tokyo-green" />
+            <h1 className="text-3xl font-bold font-mono text-tokyo-blue">FinOps Agents for CloudShip</h1>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
-            Learn how to create agents that send structured intelligence to CloudShip for cross-domain correlation and analysis.
+          <p className="text-tokyo-comment text-lg">
+            Learn how to create FinOps agents that send cost intelligence findings to CloudShip/Lighthouse for analysis and correlation.
           </p>
         </div>
 
-        {/* Overview */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Overview</h2>
-          <p className="text-gray-700 dark:text-gray-300 mb-4">
-            CloudShip's agent data standardization enables your agents to send <strong>intelligence findings</strong> not raw data.
-            Each finding goes to a standardized subtype table based on <strong>intent</strong>, enabling cross-domain correlation
-            while maintaining complete flexibility in data structure.
+        {/* What is FinOps Intelligence? */}
+        <div className="bg-tokyo-dark1 border border-tokyo-dark3 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Lightbulb className="h-6 w-6 text-tokyo-yellow" />
+            <h2 className="text-xl font-bold font-mono text-tokyo-blue">What is FinOps Intelligence?</h2>
+          </div>
+          <p className="text-tokyo-fg mb-4">
+            FinOps agents send <strong className="text-tokyo-orange">findings</strong>, not raw data. Each agent answers a specific question about your cloud costs and sends structured intelligence to CloudShip.
           </p>
-          <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded p-4">
-            <p className="text-sm text-blue-900 dark:text-blue-100">
-              <strong>Key Principle:</strong> 5 standard subtypes work across ALL domains (FinOps, Security, Deployments, etc.)
+          <div className="bg-tokyo-bg border-l-4 border-tokyo-green rounded p-4">
+            <p className="text-sm text-tokyo-green font-mono">
+              <strong>Key Principle:</strong> Agents provide intelligence (insights, recommendations, root causes) rather than dumping raw billing data.
             </p>
           </div>
         </div>
 
-        {/* Standard App Types */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">5 Standard App Types</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            These subtypes work across ALL domains and enable CloudShip to correlate findings across agents.
-          </p>
-          <div className="space-y-4">
-            {appTypeInfo.map((appType) => (
-              <div key={appType.name} className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{appType.name}</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{appType.purpose}</p>
-                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-1 italic">{appType.question}</p>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">Examples:</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {appType.examples.map((example) => (
-                      <span
-                        key={example}
-                        className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded"
-                      >
-                        {example}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* 5 Types of FinOps Agents */}
+        <div className="bg-tokyo-dark1 border border-tokyo-dark3 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Target className="h-6 w-6 text-tokyo-purple" />
+            <h2 className="text-xl font-bold font-mono text-tokyo-blue">5 Types of FinOps Agents</h2>
           </div>
-        </div>
-
-        {/* Preset Schemas */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Available Preset Schemas</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Station provides preset output schemas to help you quickly create agents with standardized data structures.
+          <p className="text-tokyo-comment mb-6 text-sm">
+            All FinOps agents follow one of these 5 standard patterns. This enables CloudShip to correlate findings across different agents and domains.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {presets.map((preset) => {
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {finopsPresets.map((preset) => {
               const Icon = preset.icon;
               return (
-                <div key={preset.name} className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded">
-                      <Icon size={20} className="text-blue-600 dark:text-blue-400" />
+                <div key={preset.name} className="bg-tokyo-bg border border-tokyo-dark3 rounded-lg p-5 hover:border-tokyo-blue transition-colors">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="p-2 bg-tokyo-dark1 rounded">
+                      <Icon size={24} className="text-tokyo-blue" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{preset.name}</h3>
-                      <div className="flex gap-2 mt-1">
-                        <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 rounded">
-                          {preset.app}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 rounded">
+                      <h3 className="font-semibold font-mono text-tokyo-cyan text-lg">{preset.name}</h3>
+                      <div className="flex gap-2 mt-2">
+                        <span className="text-xs px-2 py-0.5 border border-tokyo-purple text-tokyo-purple rounded font-mono">
                           {preset.appType}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">{preset.description}</p>
-                      <div className="mt-2">
-                        <p className="text-xs text-gray-500 dark:text-gray-500 mb-1">Use cases:</p>
-                        <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
-                          {preset.useCases.map((useCase) => (
-                            <li key={useCase}>• {useCase}</li>
-                          ))}
-                        </ul>
-                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-tokyo-fg text-sm mb-4">{preset.description}</p>
+
+                  <div className="mb-4">
+                    <div className="text-xs text-tokyo-comment font-mono mb-2">WHAT IT DOES:</div>
+                    <p className="text-sm text-tokyo-comment italic">{preset.whatItDoes}</p>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="text-xs text-tokyo-comment font-mono mb-2">EXAMPLE QUESTIONS:</div>
+                    <ul className="text-sm text-tokyo-green space-y-1">
+                      {preset.exampleQuestions.map((q, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="text-tokyo-green">•</span>
+                          <span className="italic">"{q}"</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-tokyo-comment font-mono mb-2">TYPICAL DATA FIELDS:</div>
+                    <div className="flex gap-2 flex-wrap">
+                      {preset.typicalData.map((field) => (
+                        <span
+                          key={field}
+                          className="text-xs px-2 py-1 bg-tokyo-dark1 text-tokyo-orange rounded font-mono"
+                        >
+                          {field}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -216,77 +183,104 @@ export const CloudShipPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Agent Configuration */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Agent Configuration</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Add CloudShip metadata to your agent's frontmatter to enable data ingestion:
-          </p>
-          <div className="bg-gray-900 rounded p-4 overflow-x-auto">
-            <pre className="text-sm text-green-400">
-              {`---
-metadata:
-  name: "AWS Cost Analyzer"
-  description: "Analyzes AWS cost spikes"
-  app: finops                    # Domain (user-defined)
-  app_type: investigations       # MUST be one of 5 standard types
-model: gpt-4o-mini
-max_steps: 8
-tools:
-  - "__read_text_file"
-  - "__list_directory"
-output:
-  schema:
-    type: object
-    properties:
-      finding:
-        type: string
-      evidence:
-        type: object
-      confidence:
-        type: number
----`}
-            </pre>
+        {/* How to Create FinOps Agents */}
+        <div className="bg-tokyo-dark1 border border-tokyo-dark3 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart className="h-6 w-6 text-tokyo-cyan" />
+            <h2 className="text-xl font-bold font-mono text-tokyo-blue">Creating FinOps Agents</h2>
+          </div>
+
+          <div className="space-y-6">
+            {/* Step 1 */}
+            <div>
+              <div className="text-lg font-mono text-tokyo-green mb-2">Step 1: Choose Agent Type</div>
+              <p className="text-tokyo-comment mb-3">
+                Pick one of the 5 agent types based on what question you want to answer. Each type has a standard output schema preset.
+              </p>
+              <div className="bg-tokyo-bg rounded p-3 border border-tokyo-dark3">
+                <div className="text-xs text-tokyo-comment font-mono mb-2">Example:</div>
+                <p className="text-sm text-tokyo-fg">
+                  "I want to investigate why costs spiked" → Use <span className="text-tokyo-orange font-mono">finops-investigations</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div>
+              <div className="text-lg font-mono text-tokyo-green mb-2">Step 2: Use MCP to Create Agent</div>
+              <p className="text-tokyo-comment mb-3">
+                Create your agent via MCP tools and specify the output_schema_preset:
+              </p>
+              <div className="bg-tokyo-dark2 rounded p-4 overflow-x-auto border border-tokyo-dark3">
+                <pre className="text-sm text-tokyo-green font-mono">
+{`create_agent({
+  name: "AWS Cost Spike Investigator",
+  description: "Analyzes AWS cost spikes and identifies root causes",
+  prompt: "You are a FinOps cost investigator...",
+  environment_id: "default",
+  output_schema_preset: "finops-investigations"  # Auto-sets schema + app metadata
+})`}
+                </pre>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div>
+              <div className="text-lg font-mono text-tokyo-green mb-2">Step 3: Agent Runs & Data Ingestion</div>
+              <p className="text-tokyo-comment mb-3">
+                When your agent runs, its output is validated against the schema and sent to CloudShip/Lighthouse:
+              </p>
+              <ul className="space-y-2 text-sm text-tokyo-fg">
+                <li className="flex items-start gap-2">
+                  <span className="text-tokyo-blue">→</span>
+                  <span>Agent executes and returns structured JSON matching the schema</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-tokyo-blue">→</span>
+                  <span>Station validates output against the finops-investigations schema</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-tokyo-blue">→</span>
+                  <span>Validated finding is sent to CloudShip with app="finops" and app_type="investigations"</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-tokyo-blue">→</span>
+                  <span>CloudShip stores it in the investigations table for correlation with other findings</span>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
 
-        {/* Using Presets */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Using Presets</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            When creating or updating an agent via the MCP API, specify an output_schema_preset instead of manually defining the schema:
+        {/* Schema Builder */}
+        <div className="bg-tokyo-dark1 border border-tokyo-dark3 rounded-lg p-6">
+          <h2 className="text-xl font-bold font-mono text-tokyo-blue mb-4">Using the Schema Builder</h2>
+          <p className="text-tokyo-comment mb-4">
+            When editing an agent, the right-hand panel shows a visual schema builder where you can:
           </p>
-          <div className="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded p-4">
-            <code className="text-sm text-gray-700 dark:text-gray-300">
-              output_schema_preset: "finops-investigations"
-            </code>
-          </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
-            The preset automatically sets the app and app_type fields and provides a standardized output schema.
-          </p>
-        </div>
-
-        {/* Validation Rules */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Validation Rules</h2>
-          <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+          <ul className="space-y-2 text-sm text-tokyo-fg mb-4">
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 dark:text-blue-400">•</span>
-              <span><strong>app:</strong> Can be anything (user-defined domains allowed - finops, security, deployments, custom, etc.)</span>
+              <span className="text-tokyo-green">✓</span>
+              <span>View the preset schema structure in 3 modes: Form Builder, Visual Preview, or Code Editor</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 dark:text-blue-400">•</span>
-              <span><strong>app_type:</strong> MUST be one of: investigations, opportunities, projections, inventory, events</span>
+              <span className="text-tokyo-green">✓</span>
+              <span>Add custom fields to the preset schema (e.g., add "vendor" or "team" fields)</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 dark:text-blue-400">•</span>
-              <span><strong>output_schema:</strong> Completely flexible - agent defines structure or uses preset</span>
+              <span className="text-tokyo-green">✓</span>
+              <span>Build nested objects and arrays with expand/collapse controls</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 dark:text-blue-400">•</span>
-              <span><strong>Data ingestion:</strong> Only happens when agent has both app AND app_type plus a schema or preset</span>
+              <span className="text-tokyo-green">✓</span>
+              <span>Toggle required fields and add descriptions</span>
             </li>
           </ul>
+          <div className="bg-tokyo-bg border-l-4 border-tokyo-cyan rounded p-4">
+            <p className="text-sm text-tokyo-cyan font-mono">
+              💡 Tip: Start with a preset schema, then customize it for your specific needs. The YAML editor and schema builder stay in sync!
+            </p>
+          </div>
         </div>
       </div>
     </div>
