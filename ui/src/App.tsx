@@ -291,6 +291,7 @@ const Layout = ({ children }: any) => {
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
+    { id: 'cloudship', label: 'CloudShip', icon: Ship, path: '/cloudship' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
 
@@ -2037,7 +2038,7 @@ const AgentEditor = () => {
           </div>
 
           {/* Right column: JSON Schema Editor */}
-          <div className="bg-tokyo-dark1 rounded-lg border border-tokyo-dark3">
+          <div className="bg-tokyo-dark1 rounded-lg border border-tokyo-dark3 flex flex-col overflow-hidden">
             <JsonSchemaEditor
               schema={outputSchema}
               onChange={handleSchemaChange}
