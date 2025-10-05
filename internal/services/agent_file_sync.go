@@ -267,31 +267,23 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 
 	// Assign tools if specified
 	if len(config.Tools) > 0 {
-		fmt.Printf("🔧 DEBUG: Agent %s has %d tools to assign: %v\n", agentName, len(config.Tools), config.Tools)
 		for _, toolName := range config.Tools {
-			fmt.Printf("🔍 DEBUG: Looking for tool '%s' in environment %d\n", toolName, env.ID)
 
 			// Find tool by name in environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(env.ID, toolName)
 			if err != nil {
-				fmt.Printf("❌ DEBUG: Tool '%s' not found: %v\n", toolName, err)
 				return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
 			}
 
-			fmt.Printf("✅ DEBUG: Found tool '%s' with ID %d\n", toolName, tool.ID)
 
 			// Assign tool to agent
 			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
 			if err != nil {
-				fmt.Printf("❌ DEBUG: Failed to assign tool '%s': %v\n", toolName, err)
 				return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
 			}
 
-			fmt.Printf("🎯 DEBUG: Successfully assigned tool '%s' to agent %d\n", toolName, createdAgent.ID)
 		}
-		fmt.Printf("🎉 DEBUG: Assigned %d tools to agent '%s'\n", len(config.Tools), agentName)
 	} else {
-		fmt.Printf("⚠️  DEBUG: Agent %s has no tools specified in config\n", agentName)
 	}
 
 	logging.Info("✅ Created agent: %s", agentName)
@@ -401,6 +393,12 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			return nil, fmt.Errorf("failed to get current tool assignments: %w", err)
 		}
 
+		// Debug first query
+		// Also query directly to verify database state
+		for _, tool := range currentTools {
+			fmt.Printf("     Tool: %s (ID: %d)\n", tool.ToolName, tool.ToolID)
+		}
+
 		// Create maps for comparison
 		currentToolNames := make(map[string]bool)
 		for _, tool := range currentTools {
@@ -473,19 +471,57 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 
 	// Sync tool assignments if needed (independent of other updates)
 	if toolsNeedSync {
-		// Clear existing assignments
-		err = s.repos.AgentTools.Clear(existingAgent.ID)
+		// Get current tool assignments
+		currentTools, err := s.repos.AgentTools.ListAgentTools(existingAgent.ID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to clear existing tool assignments: %w", err)
+			return nil, fmt.Errorf("failed to get current tool assignments: %w", err)
 		}
 
-		// Assign new tools from config
-		if len(config.Tools) > 0 {
-			for _, toolName := range config.Tools {
+		// Debug: Log current tools
+		fmt.Printf("   📊 Agent ID: %d, Current tools in DB for %s: %d tools (err: %v)\n", existingAgent.ID, existingAgent.Name, len(currentTools), err)
+		for _, t := range currentTools {
+			fmt.Printf("     - %s (ID: %d)\n", t.ToolName, t.ToolID)
+		}
+		fmt.Printf("   📊 Target tools from config: %d tools\n", len(config.Tools))
+		for _, t := range config.Tools {
+			fmt.Printf("     - %s\n", t)
+		}
+
+		// Create maps for efficient lookup
+		currentToolMap := make(map[string]int64) // toolName -> toolID
+		for _, tool := range currentTools {
+			currentToolMap[tool.ToolName] = tool.ToolID
+		}
+
+		configToolSet := make(map[string]bool)
+		for _, toolName := range config.Tools {
+			configToolSet[toolName] = true
+		}
+
+		// Track changes for logging
+		toolsAdded := 0
+		toolsRemoved := 0
+
+		// Remove tools that are no longer in config
+		for toolName, toolID := range currentToolMap {
+			if !configToolSet[toolName] {
+				err = s.repos.AgentTools.RemoveAgentTool(existingAgent.ID, toolID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to remove tool %s from agent: %w", toolName, err)
+				}
+				toolsRemoved++
+			}
+		}
+
+		// Add tools that are in config but not currently assigned
+		for _, toolName := range config.Tools {
+			if _, exists := currentToolMap[toolName]; !exists {
 				// Find tool by name in environment
 				tool, err := s.repos.MCPTools.FindByNameInEnvironment(existingAgent.EnvironmentID, toolName)
 				if err != nil {
-					return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
+					// Log warning but continue - tool might be added later when MCP server connects
+					fmt.Printf("   ⚠️  Tool %s not found in environment (will retry on next sync)\n", toolName)
+					continue
 				}
 
 				// Assign tool to agent
@@ -493,11 +529,18 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 				if err != nil {
 					return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
 				}
+				toolsAdded++
 			}
+		}
 
-			fmt.Printf("   🔧 Synced %d tools to agent\n", len(config.Tools))
+		// Log what changed
+		if toolsAdded > 0 || toolsRemoved > 0 {
+			fmt.Printf("   🔧 Tool sync: +%d added, -%d removed (total: %d)\n",
+				toolsAdded, toolsRemoved, len(config.Tools))
+		} else if len(config.Tools) > 0 {
+			fmt.Printf("   ✅ Tools already in sync (%d tools)\n", len(config.Tools))
 		} else {
-			fmt.Printf("   🔧 Cleared all tools from agent (none in .prompt file)\n")
+			fmt.Printf("   🔧 No tools configured for agent\n")
 		}
 	}
 

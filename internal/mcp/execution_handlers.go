@@ -48,8 +48,11 @@ func extractInt64FromTokenUsage(value interface{}) *int64 {
 }
 
 func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	fmt.Printf("🔥🔥🔥 [MCP] handleCallAgent STARTED\n")
+
 	// Validate required dependencies
 	if s.repos == nil {
+		fmt.Printf("❌ [MCP] Server repositories not initialized\n")
 		return mcp.NewToolResultError("Server repositories not initialized"), nil
 	}
 
@@ -59,16 +62,19 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 	// Extract required parameters
 	agentIDStr, err := request.RequireString("agent_id")
 	if err != nil {
+		fmt.Printf("❌ [MCP] Missing agent_id parameter: %v\n", err)
 		return mcp.NewToolResultError(fmt.Sprintf("Missing 'agent_id' parameter: %v", err)), nil
 	}
 
 	task, err := request.RequireString("task")
 	if err != nil {
+		fmt.Printf("❌ [MCP] Missing task parameter: %v\n", err)
 		return mcp.NewToolResultError(fmt.Sprintf("Missing 'task' parameter: %v", err)), nil
 	}
 
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
+		fmt.Printf("❌ [MCP] Invalid agent_id format: %v\n", err)
 		return mcp.NewToolResultError("Invalid agent_id format"), nil
 	}
 
@@ -108,21 +114,26 @@ func (s *Server) handleCallAgent(ctx context.Context, request mcp.CallToolReques
 		// Create agent run first to get a proper run ID
 		run, err := s.repos.AgentRuns.Create(ctx, agentID, userID, task, "", 0, nil, nil, "running", nil)
 		if err != nil {
+			fmt.Printf("❌ [MCP] Failed to create agent run: %v\n", err)
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to create agent run: %v", err)), nil
 		}
 		runID = run.ID
+		fmt.Printf("✅ [MCP] Created run ID: %d\n", runID)
 
 		// Get agent details for unified execution flow
 		agent, err := s.repos.Agents.GetByID(agentID)
 		if err != nil {
+			fmt.Printf("❌ [MCP] Agent not found: %v\n", err)
 			return mcp.NewToolResultError(fmt.Sprintf("Agent not found: %v", err)), nil
 		}
+		fmt.Printf("✅ [MCP] Agent found: %s\n", agent.Name)
 
 		// Create agent service to access execution engine with lighthouse client for dual flow
 		agentService := services.NewAgentService(s.repos, s.lighthouseClient)
 
 		// Use the same unified execution flow as CLI (working version)
-		result, execErr := agentService.GetExecutionEngine().Execute(ctx, agent, task, runID, userVariables)
+		engine := agentService.GetExecutionEngine()
+		result, execErr := engine.Execute(ctx, agent, task, runID, userVariables)
 		if execErr != nil {
 			// Update run as failed (same as CLI)
 			completedAt := time.Now()

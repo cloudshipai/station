@@ -156,7 +156,6 @@ func runBundleCreate(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✅ Bundle created: %s\n", outputPath)
 	fmt.Printf("📊 Size: %d bytes\n", len(tarData))
-	fmt.Printf("\n🚀 Install with:\n")
 	fmt.Printf("   stn bundle install %s <environment-name>\n", outputPath)
 	fmt.Printf("   Or use the Station UI Bundle installation\n")
 
@@ -168,7 +167,6 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 	environmentName := args[1]
 
 	fmt.Printf("📦 Installing bundle from: %s\n", bundleSource)
-	fmt.Printf("🎯 Target environment: %s\n", environmentName)
 
 	// Use BundleService to install bundle directly (no server dependency)
 	bundleService := services.NewBundleService()
@@ -182,7 +180,6 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✅ Bundle installed successfully!\n")
-	fmt.Printf("🎯 Environment '%s' is ready to use\n", result.EnvironmentName)
 	fmt.Printf("📊 Installed: %d agents, %d MCP configs\n", result.InstalledAgents, result.InstalledMCPs)
 	fmt.Printf("\n🔧 Next steps:\n")
 	fmt.Printf("   stn sync %s                  # Sync MCP tools\n", result.EnvironmentName)
@@ -285,7 +282,6 @@ func runBundleShare(cmd *cobra.Command, args []string) error {
 	fmt.Printf("📊 Size: %d bytes\n", response.Size)
 	fmt.Printf("📅 Uploaded: %s\n", response.UploadedAt)
 	fmt.Printf("\n🔗 Download URL: %s%s\n", apiURL, response.DownloadURL)
-	fmt.Printf("\n🚀 Install on another station:\n")
 	fmt.Printf("   stn bundle install %s%s <environment-name>\n", apiURL, response.DownloadURL)
 
 	return nil

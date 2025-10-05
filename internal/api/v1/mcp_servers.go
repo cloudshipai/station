@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"station/internal/config"
 	"station/internal/services"
 )
 
@@ -357,9 +358,10 @@ func (h *APIHandlers) deleteMCPServer(c *gin.Context) {
 		fileConfig, err := h.repos.FileMCPConfigs.GetByID(*server.FileConfigID)
 		if err == nil && fileConfig.TemplatePath != "" {
 			// Delete the actual config file from filesystem
-			if err := os.Remove(fileConfig.TemplatePath); err != nil {
+			absolutePath := config.ResolvePath(fileConfig.TemplatePath)
+			if err := os.Remove(absolutePath); err != nil {
 				// Log error but don't fail the entire operation
-				fmt.Printf("Warning: Failed to delete config file %s: %v\n", fileConfig.TemplatePath, err)
+				fmt.Printf("Warning: Failed to delete config file %s: %v\n", absolutePath, err)
 			}
 		}
 
@@ -443,13 +445,14 @@ func (h *APIHandlers) getMCPServerRawConfig(c *gin.Context) {
 		return
 	}
 
-	// Read the template file content
-	if _, err := os.Stat(fileConfig.TemplatePath); os.IsNotExist(err) {
+	// Read the template file content using centralized path resolution
+	absolutePath := config.ResolvePath(fileConfig.TemplatePath)
+	if _, err := os.Stat(absolutePath); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Configuration file not found"})
 		return
 	}
 
-	content, err := os.ReadFile(fileConfig.TemplatePath)
+	content, err := os.ReadFile(absolutePath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read configuration file"})
 		return
@@ -506,8 +509,9 @@ func (h *APIHandlers) updateMCPServerRawConfig(c *gin.Context) {
 		return
 	}
 
-	// Write the updated configuration to file
-	if err := os.WriteFile(fileConfig.TemplatePath, []byte(req.Config), 0644); err != nil {
+	// Write the updated configuration to file using centralized path resolution
+	absolutePath := config.ResolvePath(fileConfig.TemplatePath)
+	if err := os.WriteFile(absolutePath, []byte(req.Config), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write configuration file"})
 		return
 	}

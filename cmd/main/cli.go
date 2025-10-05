@@ -111,7 +111,6 @@ func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir, 
 		
 		// Log the model from frontmatter for debugging
 		if promptConfig.Model != "" {
-			fmt.Printf("   🎯 Prompt specifies model: %s\n", promptConfig.Model)
 		}
 		
 		// Add input schema matching the prompt template variables
@@ -631,7 +630,6 @@ func runTemplatePublish(cmd *cobra.Command, args []string) error {
 	}
 	
 	fmt.Printf("✅ Bundle packaged successfully: %s\n", summary.OutputPath)
-	fmt.Printf("🚀 Publishing to registry '%s' (feature coming soon)\n", registry)
 	
 	return nil
 }
@@ -652,7 +650,6 @@ func runTemplateInstall(cmd *cobra.Command, args []string) error {
 	banner := styles.Banner.Render("📥 Install Template Bundle")
 	fmt.Println(banner)
 	
-	fmt.Printf("🎯 Installing '%s' into environment '%s'\n", bundleRef, environmentName)
 	if registry != "" {
 		fmt.Printf("📡 Registry: %s\n", registry)
 	}
@@ -907,7 +904,6 @@ func runTemplateList(cmd *cobra.Command, args []string) error {
 	}
 	
 	// TODO: Implement registry listing
-	fmt.Printf("🚀 Registry discovery (feature coming soon)\n")
 	
 	return nil
 }
@@ -925,7 +921,6 @@ func runTemplateRegistryAdd(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Adding registry '%s' at %s\n", name, url)
 	
 	// TODO: Implement registry configuration
-	fmt.Printf("🚀 Registry management (feature coming soon)\n")
 	
 	return nil
 }
@@ -938,7 +933,6 @@ func runTemplateRegistryList(cmd *cobra.Command, args []string) error {
 	fmt.Println(banner)
 	
 	// TODO: Implement registry listing
-	fmt.Printf("🚀 Registry management (feature coming soon)\n")
 	
 	return nil
 }

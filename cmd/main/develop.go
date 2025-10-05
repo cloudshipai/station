@@ -41,7 +41,6 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	fmt.Println(banner)
 
 	fmt.Printf("🌍 Environment: %s\n", environment)
-	fmt.Printf("🚀 Starting development server on port %d...\n", port)
 	fmt.Printf("🤖 AI Provider: %s, Model: %s\n", aiProvider, aiModel)
 	fmt.Printf("🔧 Verbose: %v\n", verbose)
 
@@ -122,7 +121,6 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 			fmt.Printf("   ⚠️  Skipped: %s (not ai.Tool)\n", toolRef.Name())
 		}
 	}
-	fmt.Printf("🎯 Successfully registered %d/%d tools as GenKit actions (%d duplicates skipped)\n", registeredCount, len(mcpTools), skippedDuplicates)
 
 	fmt.Println()
 	fmt.Println("🎉 Station Development Playground is ready!")

@@ -51,7 +51,6 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 	// Check for environment variables first
 	detectedProvider := ""
 	if provider, _ := detectProviderFromEnv(); provider != "" {
-		log.Printf("🔍 Detected %s from environment variables\n", provider)
 		fmt.Print("Use this provider? [Y/n]: ")
 		
 		var response string

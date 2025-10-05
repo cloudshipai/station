@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Server, Library, Play, Layers, Package, Zap } from 'lucide-react';
+import { Bot, Server, Library, Play, Layers, Package, Settings } from 'lucide-react';
 
 interface SidebarItem {
   id: string;
@@ -20,7 +20,7 @@ const sidebarItems: SidebarItem[] = [
   { id: 'runs', label: 'Runs', icon: Play, path: '/runs' },
   { id: 'environments', label: 'Environments', icon: Layers, path: '/environments' },
   { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
-  { id: 'connect', label: 'Connect', icon: Zap, path: '/connect' },
+  { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {

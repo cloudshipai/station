@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"gopkg.in/yaml.v3"
+	"station/internal/config"
 	"station/internal/db/repositories"
 )
 
@@ -198,7 +199,7 @@ func (tvs *TemplateVariableService) renderTemplate(templateContent string, varia
 
 // loadEnvironmentVariables loads variables from environment's variables.yml
 func (tvs *TemplateVariableService) loadEnvironmentVariables(envName string) (map[string]string, error) {
-	variablesPath := filepath.Join(tvs.configDir, "environments", envName, "variables.yml")
+	variablesPath := config.GetVariablesPath(envName)
 	
 	data, err := os.ReadFile(variablesPath)
 	if err != nil {
@@ -221,7 +222,7 @@ func (tvs *TemplateVariableService) loadEnvironmentVariables(envName string) (ma
 
 // saveVariablesToEnvironment saves new variables to environment's variables.yml
 func (tvs *TemplateVariableService) saveVariablesToEnvironment(envName string, newVars map[string]string) error {
-	variablesPath := filepath.Join(tvs.configDir, "environments", envName, "variables.yml")
+	variablesPath := config.GetVariablesPath(envName)
 	
 	// Load existing variables
 	existingVars := make(map[string]interface{})

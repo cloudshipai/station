@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"station/internal/auth"
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -350,7 +351,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 		viper.Set("cloudship.station_id", envCloudShipStationID)
 	}
 
-	fmt.Printf("🚀 Starting Station...\n")
 	fmt.Printf("SSH Port: %d\n", viper.GetInt("ssh_port"))
 	fmt.Printf("MCP Port: %d\n", viper.GetInt("mcp_port"))
 	fmt.Printf("API Port: %d\n", viper.GetInt("api_port"))
@@ -535,8 +535,21 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   OTLP Endpoint: %s\n", otelEndpoint)
 	}
 
+	// Generate encryption key if not already present
+	if viper.GetString("encryption_key") == "" {
+		encryptionKey, err := auth.GenerateAPIKey()
+		if err != nil {
+			return fmt.Errorf("failed to generate encryption key: %w", err)
+		}
+		// Remove the "sk-" prefix as this is an encryption key, not an API key
+		encryptionKey = encryptionKey[3:] // Remove "sk-" prefix
+		viper.Set("encryption_key", encryptionKey)
+		fmt.Printf("🔑 Encryption key generated and saved securely\n")
+	}
+
 	// Write configuration file
 	viper.SetConfigFile(configFile)
+	viper.SetConfigType("yaml")
 	if err := viper.WriteConfig(); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
@@ -584,7 +597,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\n🎉 Station initialized successfully!\n\n")
 	fmt.Printf("📁 Config file: %s\n", configFile)
 	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
-	fmt.Printf("🔑 Encryption key generated and saved securely\n")
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(workspaceDir, "environments", "default"))
 
 	if !configExists {
@@ -612,7 +624,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   • Set LITESTREAM_S3_BUCKET and credentials in deployment environment\n")
 		fmt.Printf("   • See docs/GITOPS-DEPLOYMENT.md for complete guide\n")
 	} else {
-		fmt.Printf("\n🚀 You can now run 'station serve' to launch the server\n")
 		fmt.Printf("🔗 Connect via SSH: ssh admin@localhost -p 2222\n")
 		fmt.Printf("\n📖 Next steps:\n")
 		if !shipSetup {
@@ -897,7 +908,6 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 
 	workspaceDir := getWorkspacePath()
 
-	fmt.Printf("🚀 Starting Station bootstrap with OpenAI integration...\n\n")
 
 	// Step 1: Run stn init --ship --provider openai --model gpt-5
 	fmt.Printf("📦 Step 1/6: Initializing Station with OpenAI and Ship CLI...\n")
@@ -967,7 +977,6 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   • Hello World agent (default env - basic tasks)\n")
 	fmt.Printf("   • Playwright agent (default env - web automation)\n")
 	fmt.Printf("   • DevOps Security Bundle (security env - comprehensive security tools)\n\n")
-	fmt.Printf("🚀 Next steps:\n")
 	fmt.Printf("   • Run 'stn serve' to start Station\n")
 	fmt.Printf("   • Connect via SSH: ssh admin@localhost -p 2222\n")
 	fmt.Printf("   • Or run 'stn stdio' for MCP integration\n")

@@ -73,9 +73,6 @@ func (mcm *MCPConnectionManager) processFileConfigsParallel(ctx context.Context,
 	successCount := 0
 	
 	for result := range resultChan {
-		fcResultMsg := fmt.Sprintf("File config %s returned %d tools and %d clients", result.configName, len(result.tools), len(result.clients))
-		logging.Info("MCPCONNMGR: %s", fcResultMsg)
-		debugLogToFile("MCPCONNMGR processFileConfigsParallel: " + fcResultMsg)
 		
 		if result.tools != nil {
 			allTools = append(allTools, result.tools...)

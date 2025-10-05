@@ -354,7 +354,6 @@ func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool) erro
 		return fmt.Errorf("agent with ID %d not found: %w", agentID, err)
 	}
 	
-	fmt.Printf("🚀 Executing agent '%s' (ID: %d)\n", styles.Success.Render(agent.Name), agentID)
 	fmt.Printf("📋 Task: %s\n", styles.Info.Render(task))
 	
 	// Close database connection before trying server execution to avoid locks
@@ -503,13 +502,11 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		return fmt.Errorf("failed to create agent run record: %w", err)
 	}
 	
-	fmt.Printf("🚀 Agent execution started via stdio MCP (Run ID: %d)\n", agentRun.ID)
 	fmt.Printf("🔗 Connecting to Station's stdio MCP server...\n")
 	
 	// Use the intelligent agent creator's stdio MCP connection to execute
 	ctx = context.Background()
 	
-	fmt.Printf("🔍 Initializing agent execution with stdio MCP...\n")
 	fmt.Printf("🤖 Executing agent using self-bootstrapping architecture...\n")
 	
 	// Execute the agent using our stdio MCP approach

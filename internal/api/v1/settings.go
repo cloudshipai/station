@@ -1,9 +1,13 @@
 package v1
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 )
 
 // registerSettingsRoutes registers settings routes
@@ -12,6 +16,10 @@ func (h *APIHandlers) registerSettingsRoutes(group *gin.RouterGroup) {
 	group.GET("/:key", h.getSetting)
 	group.PUT("/:key", h.updateSetting)
 	group.DELETE("/:key", h.deleteSetting)
+
+	// Config file routes
+	group.GET("/config/file", h.getConfigFile)
+	group.PUT("/config/file", h.updateConfigFile)
 }
 
 // UpdateSettingRequest represents the request body for updating a setting
@@ -74,7 +82,7 @@ func (h *APIHandlers) updateSetting(c *gin.Context) {
 
 func (h *APIHandlers) deleteSetting(c *gin.Context) {
 	key := c.Param("key")
-	
+
 	err := h.repos.Settings.Delete(key)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete setting"})
@@ -82,4 +90,64 @@ func (h *APIHandlers) deleteSetting(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Setting deleted successfully"})
+}
+
+// getConfigFile returns the config.yaml file content
+func (h *APIHandlers) getConfigFile(c *gin.Context) {
+	// Get config file path from viper
+	configPath := viper.ConfigFileUsed()
+	if configPath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Config file not found"})
+		return
+	}
+
+	// Read file content
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read config file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"content": string(content),
+		"path":    configPath,
+	})
+}
+
+// updateConfigFile updates the config.yaml file content
+func (h *APIHandlers) updateConfigFile(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Validate YAML syntax
+	var test map[string]interface{}
+	if err := yaml.Unmarshal([]byte(req.Content), &test); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid YAML syntax: %v", err)})
+		return
+	}
+
+	// Get config file path from viper
+	configPath := viper.ConfigFileUsed()
+	if configPath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Config file not found"})
+		return
+	}
+
+	// Write config file
+	if err := os.WriteFile(configPath, []byte(req.Content), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write config file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Config file updated successfully. Restart Station to apply changes.",
+		"path":    configPath,
+	})
 }

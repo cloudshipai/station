@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/pkg/models"
 )
@@ -178,12 +179,8 @@ func (s *EnvironmentManagementService) DeleteEnvironmentByID(id int64) *Environm
 
 // GetEnvironmentFileConfig reads the raw file-based config for an environment
 func (s *EnvironmentManagementService) GetEnvironmentFileConfig(name string) (map[string]interface{}, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user home directory: %v", err)
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", name)
+	// Use centralized path resolution for container/host compatibility
+	envDir := config.GetEnvironmentDir(name)
 
 	// Check if environment directory exists
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
@@ -229,12 +226,8 @@ func (s *EnvironmentManagementService) GetEnvironmentFileConfig(name string) (ma
 
 // UpdateEnvironmentFileConfig updates file-based config for an environment
 func (s *EnvironmentManagementService) UpdateEnvironmentFileConfig(name, filename, content string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %v", err)
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", name)
+	// Use centralized path resolution for container/host compatibility
+	envDir := config.GetEnvironmentDir(name)
 
 	// Check if environment directory exists
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {

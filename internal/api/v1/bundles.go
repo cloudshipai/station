@@ -718,7 +718,6 @@ func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
 func generateBundleNameFromURL(url string) string {
 	// Parse URL to extract meaningful parts
 	parts := strings.Split(url, "/")
-	fmt.Printf("DEBUG: URL parts: %v\n", parts) // Debug logging
 	
 	// Look for repository name in common URL patterns
 	var name string
@@ -728,7 +727,6 @@ func generateBundleNameFromURL(url string) string {
 		for i, part := range parts {
 			if part == "github.com" && i+2 < len(parts) {
 				name = parts[i+2] // repo name
-				fmt.Printf("DEBUG: GitHub repo name: %s\n", name)
 				break
 			}
 		}
@@ -736,13 +734,10 @@ func generateBundleNameFromURL(url string) string {
 	
 	// If no specific pattern matched, use last meaningful part
 	if name == "" {
-		fmt.Printf("DEBUG: Looking for meaningful parts...\n")
 		for i := len(parts) - 1; i >= 0; i-- {
-			fmt.Printf("DEBUG: Checking part[%d]: '%s'\n", i, parts[i])
 			if parts[i] != "" && parts[i] != "download" && parts[i] != "releases" && 
 			   !strings.Contains(parts[i], ".") {
 				name = parts[i]
-				fmt.Printf("DEBUG: Selected name: %s\n", name)
 				break
 			}
 		}
@@ -751,15 +746,12 @@ func generateBundleNameFromURL(url string) string {
 	// Fallback to generic name with timestamp
 	if name == "" {
 		name = fmt.Sprintf("bundle-%d", time.Now().Unix())
-		fmt.Printf("DEBUG: Using timestamp fallback: %s\n", name)
 	}
-	
+
 	// Clean up the name
-	originalName := name
 	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "-")
 	name = regexp.MustCompile(`[^a-z0-9\-]`).ReplaceAllString(name, "")
-	fmt.Printf("DEBUG: Final name: '%s' (from '%s')\n", name, originalName)
 	
 	return name
 }

@@ -13,26 +13,39 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var upCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Start Station server in a Docker container",
-	Long: `Start a containerized Station server that mounts your local configuration and workspace.
+	Long: `Start a containerized Station server with isolated configuration and workspace access.
 
 This command:
 - Builds or uses existing Station runtime container
-- Mounts your local Station configuration (~/.config/station)
-- Mounts your current or specified workspace directory
-- Preserves file permissions using your user ID
+- Stores all configuration in Docker volume (isolated from host)
+- Mounts your workspace directory with correct file permissions
 - Automatically configures .mcp.json for Claude integration
-- Exposes ports for API (3000), SSH (2222), MCP (3001), and UI (8585)
+- Exposes ports for MCP (3000), Dynamic MCP (3001), UI (8585)
+
+Key Features:
+- Config management via UI (restart container to apply changes)
+- Workspace files maintain your user ownership (no root permission issues)
+- Data persists across container restarts in Docker volume
 
 Examples:
-  stn up                     # Start with current directory as workspace
-  stn up --workspace ~/      # Use home directory as workspace
-  stn up --workspace /project # Use specific directory as workspace
-  stn up --detach           # Run in background
+  # Basic usage
+  stn up                                    # Start with current directory as workspace
+  stn up --workspace ~/code                 # Use specific directory as workspace
+
+  # First-time setup with configuration
+  stn up --provider openai --ship           # Init with OpenAI and ship CLI
+  stn up --provider gemini --model gemini-2.0-flash-exp --yes
+  stn up --provider custom --base-url http://localhost:11434/v1 --model llama2
+
+  # Advanced options
+  stn up --upgrade                          # Rebuild container image first
+  stn up --env CUSTOM_VAR=value            # Pass additional env vars
 `,
 	RunE: runUp,
 }
@@ -42,6 +55,14 @@ func init() {
 	upCmd.Flags().BoolP("detach", "d", true, "Run container in background")
 	upCmd.Flags().Bool("upgrade", false, "Rebuild container image before starting")
 	upCmd.Flags().StringSlice("env", []string{}, "Additional environment variables to pass through")
+
+	// Init flags for first-time setup
+	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, custom)")
+	upCmd.Flags().String("model", "", "AI model to use (e.g., gpt-4o-mini, gemini-2.0-flash-exp)")
+	upCmd.Flags().String("base-url", "", "Custom base URL for OpenAI-compatible endpoints")
+	upCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
+	upCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
+
 	rootCmd.AddCommand(upCmd)
 }
 
@@ -79,11 +100,54 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("workspace directory does not exist: %s", absWorkspace)
 	}
 
-	fmt.Printf("🚀 Starting Station server...\n")
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
 
+	// Get config path early for initialization
+	configPath := filepath.Join(os.Getenv("HOME"), ".config", "station")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return fmt.Errorf("Station config not found at %s. Run 'stn init' first", configPath)
+	}
+
+	// Image name for all operations
+	imageName := "station-server:latest"
+
+	// Check if station-config volume exists
+	checkVolumeCmd := exec.Command("docker", "volume", "inspect", "station-config")
+	checkVolumeCmd.Stdout = nil
+	checkVolumeCmd.Stderr = nil
+	volumeExists := checkVolumeCmd.Run() == nil
+
+	needsInit := false
+	if !volumeExists {
+		fmt.Printf("📦 Creating Station data volume (first run)...\n")
+		createVolumeCmd := exec.Command("docker", "volume", "create", "station-config")
+		if err := createVolumeCmd.Run(); err != nil {
+			return fmt.Errorf("failed to create station-config volume: %w", err)
+		}
+		fmt.Printf("✅ Created Station data volume\n")
+		needsInit = true
+	} else {
+		// Volume exists, check if it contains config
+		checkConfigCmd := exec.Command("docker", "run", "--rm",
+			"-v", "station-config:/root/.config/station",
+			imageName,
+			"test", "-f", "/root/.config/station/config.yaml")
+		checkConfigCmd.Stdout = nil
+		checkConfigCmd.Stderr = nil
+		configExists := checkConfigCmd.Run() == nil
+
+		if !configExists {
+			fmt.Printf("📦 Station volume exists but is empty, initializing...\n")
+			needsInit = true
+		}
+	}
+
+	if needsInit {
+		fmt.Printf("💡 Note: All configuration stored in Docker volume (isolated from host)\n")
+		fmt.Printf("💡 Manage settings via UI at http://localhost:8585/settings\n")
+	}
+
 	// Build or check for image
-	imageName := "station-runtime:latest"
 	upgrade, _ := cmd.Flags().GetBool("upgrade")
 
 	if upgrade || !dockerImageExists(imageName) {
@@ -95,6 +159,84 @@ func runUp(cmd *cobra.Command, args []string) error {
 		if err := buildRuntimeContainer(); err != nil {
 			return fmt.Errorf("failed to build container: %w", err)
 		}
+	}
+
+	// Get current user info for proper file permissions
+	uid := os.Getuid()
+	gid := os.Getgid()
+
+	// Initialize the container volume if needed
+	if needsInit {
+		fmt.Printf("🔧 Initializing Station in container volume...\n")
+
+		// Get init parameters from flags or defaults
+		provider, _ := cmd.Flags().GetString("provider")
+		model, _ := cmd.Flags().GetString("model")
+		baseURL, _ := cmd.Flags().GetString("base-url")
+		ship, _ := cmd.Flags().GetBool("ship")
+		useDefaults, _ := cmd.Flags().GetBool("yes")
+
+		// Default to openai if not specified
+		if provider == "" {
+			provider = "openai"
+			// Try to read from host config if it exists
+			if cfg, err := readConfigFile(configPath + "/config.yaml"); err == nil {
+				if p, ok := cfg["ai_provider"].(string); ok {
+					provider = p
+				}
+			}
+		}
+
+		// Run init in a temporary container
+		// Note: Running as root for volume initialization simplicity
+		initArgs := []string{
+			"run", "--rm",
+		}
+
+		// Pass through AI provider env vars for init
+		aiEnvVars := []string{
+			"OPENAI_API_KEY",
+			"ANTHROPIC_API_KEY",
+			"GOOGLE_API_KEY",
+			"GEMINI_API_KEY",
+		}
+		for _, envVar := range aiEnvVars {
+			if value := os.Getenv(envVar); value != "" {
+				initArgs = append(initArgs, "-e", fmt.Sprintf("%s=%s", envVar, value))
+			}
+		}
+
+		initArgs = append(initArgs,
+			"-v", "station-config:/root/.config/station",
+			"-e", "HOME=/root",
+			imageName,
+			"stn", "init",
+			"--provider", provider,
+		)
+
+		// Add optional init flags
+		if model != "" {
+			initArgs = append(initArgs, "--model", model)
+		}
+		if baseURL != "" {
+			initArgs = append(initArgs, "--base-url", baseURL)
+		}
+		if ship {
+			initArgs = append(initArgs, "--ship")
+		}
+		if useDefaults {
+			initArgs = append(initArgs, "--yes")
+		}
+
+		initCmd := exec.Command("docker", initArgs...)
+		initCmd.Stdout = os.Stdout
+		initCmd.Stderr = os.Stderr
+
+		if err := initCmd.Run(); err != nil {
+			return fmt.Errorf("failed to initialize Station in container: %w", err)
+		}
+
+		fmt.Printf("✅ Station initialized in container volume\n")
 	}
 
 	// Prepare Docker run command
@@ -111,22 +253,45 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Add restart policy
 	dockerArgs = append(dockerArgs, "--restart", "unless-stopped")
 
-	// User mapping for file permissions (cross-platform)
-	if err := addUserMapping(&dockerArgs); err != nil {
-		log.Printf("Warning: Could not set user mapping: %v", err)
-		// Continue anyway - some platforms don't support this
+	// User mapping to prevent root-owned files in workspace
+	if runtime.GOOS == "linux" {
+		// On Linux, map to host user so workspace files maintain correct ownership
+		dockerArgs = append(dockerArgs, "--user", fmt.Sprintf("%d:%d", uid, gid))
+
+		// Get docker group GID for Docker-in-Docker support
+		if stat, err := os.Stat("/var/run/docker.sock"); err == nil {
+			if sysStat, ok := stat.Sys().(*syscall.Stat_t); ok {
+				dockerGID := int(sysStat.Gid)
+				// Add supplementary docker group
+				dockerArgs = append(dockerArgs, "--group-add", fmt.Sprintf("%d", dockerGID))
+			}
+		}
+
+		// Fix volume permissions: chown the volume to match host user
+		// This is necessary because init runs as root but serve runs as user
+		fmt.Printf("🔧 Fixing volume permissions for user %d:%d...\n", uid, gid)
+		chownArgs := []string{
+			"run", "--rm",
+			"-v", "station-config:/root/.config/station",
+			imageName,
+			"sh", "-c", fmt.Sprintf("chown -R %d:%d /root/.config/station", uid, gid),
+		}
+		chownCmd := exec.Command("docker", chownArgs...)
+		if err := chownCmd.Run(); err != nil {
+			log.Printf("Warning: Could not fix volume permissions: %v", err)
+		}
 	}
+	// macOS and Windows: Docker Desktop handles permissions automatically
 
 	// Volume mounts
-	configPath := filepath.Join(os.Getenv("HOME"), ".config", "station")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return fmt.Errorf("Station config not found at %s. Run 'stn init' first", configPath)
-	}
-
-	// Core volume mounts
 	dockerArgs = append(dockerArgs,
 		"-v", fmt.Sprintf("%s:/workspace:rw", absWorkspace),
-		"-v", fmt.Sprintf("%s:/root/.config/station:rw", configPath),
+		"-v", "station-config:/root/.config/station:rw",  // All Station data in volume (including config.yaml)
+	)
+
+	// Pass the host workspace path so container knows the mapping
+	dockerArgs = append(dockerArgs,
+		"-e", fmt.Sprintf("HOST_WORKSPACE=%s", absWorkspace),
 	)
 
 	// Docker socket mount for Dagger (if exists)
@@ -180,10 +345,13 @@ func runUp(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔗 MCP: http://localhost:3000/mcp\n")
 	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3001/mcp\n")
 	fmt.Printf("🔗 UI:  http://localhost:8585\n")
+	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
 
 	if detach {
-		fmt.Printf("\n💡 Run 'stn logs' to see container output\n")
-		fmt.Printf("💡 Run 'stn down' to stop the server\n")
+		fmt.Printf("\n💡 Configuration: Managed via UI at http://localhost:8585/settings\n")
+		fmt.Printf("💡 Run 'stn logs' to see container output\n")
+		fmt.Printf("💡 Run 'stn down' to stop (data preserved in volume)\n")
+		fmt.Printf("💡 Run 'stn down --remove-volume' to delete all data\n")
 	}
 
 	return nil
@@ -198,6 +366,20 @@ func getRunningStationContainer() string {
 	return strings.TrimSpace(string(output))
 }
 
+func readConfigFile(path string) (map[string]interface{}, error) {
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
 func dockerImageExists(imageName string) bool {
 	cmd := exec.Command("docker", "images", "-q", imageName)
 	output, err := cmd.Output()
@@ -208,23 +390,26 @@ func dockerImageExists(imageName string) bool {
 }
 
 func buildRuntimeContainer() error {
-	fmt.Printf("Building runtime container (this may take a few minutes)...\n")
+	fmt.Printf("Building Station container (this may take a few minutes)...\n")
 
-	// Use the new runtime build command
-	buildCmd := exec.Command("stn", "build", "runtime")
+	// Build the Docker image
+	buildCmd := exec.Command("docker", "build",
+		"--build-arg", "INSTALL_SHIP=true",
+		"-t", "station-server:latest",
+		".")
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
 
 	if err := buildCmd.Run(); err != nil {
 		// Fallback to pulling pre-built image if available
 		fmt.Printf("Build failed, attempting to pull pre-built image...\n")
-		pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station-runtime:latest")
+		pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station:latest")
 		if pullErr := pullCmd.Run(); pullErr != nil {
 			return fmt.Errorf("failed to build or pull image: build error: %w, pull error: %v", err, pullErr)
 		}
 
 		// Tag the pulled image for local use
-		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station-runtime:latest", "station-runtime:latest")
+		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
 		return tagCmd.Run()
 	}
 
@@ -277,22 +462,8 @@ func addUserMapping(dockerArgs *[]string) error {
 }
 
 func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
-	// Read encryption key from local config file
-	configPath := filepath.Join(os.Getenv("HOME"), ".config", "station", "config.yaml")
-	if data, err := ioutil.ReadFile(configPath); err == nil {
-		// Simple key extraction from YAML (encryption_key: value)
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(strings.TrimSpace(line), "encryption_key:") {
-				parts := strings.SplitN(line, ":", 2)
-				if len(parts) == 2 {
-					encryptionKey := strings.TrimSpace(parts[1])
-					*dockerArgs = append(*dockerArgs, "-e", fmt.Sprintf("STATION_ENCRYPTION_KEY=%s", encryptionKey))
-					break
-				}
-			}
-		}
-	}
+	// Note: config.yaml is now in Docker volume, not mounted from host
+	// All configuration is managed through the volume
 
 	// Essential AI provider keys to pass through
 	aiKeys := []string{
@@ -356,9 +527,6 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 	// Set PATH to include common tool locations
 	*dockerArgs = append(*dockerArgs, "-e", "PATH=/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
 
-	// Override config path to use container-local path (not host-specific)
-	*dockerArgs = append(*dockerArgs, "-e", "STATION_CONFIG=/root/.config/station/config.yaml")
-
 	return nil
 }
 
@@ -406,3 +574,4 @@ func updateMCPConfig(workspace string) error {
 	fmt.Printf("✅ Updated .mcp.json with Station server configuration\n")
 	return nil
 }
+

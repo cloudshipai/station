@@ -168,6 +168,7 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 
 	logging.Debug("About to call GetEnvironmentMCPTools for env %d", agent.EnvironmentID)
 	allMCPTools, mcpClients, err := aee.mcpConnManager.GetEnvironmentMCPTools(ctx, agent.EnvironmentID)
+	fmt.Printf("✅ [ENGINE] GetEnvironmentMCPTools returned %d tools, %d clients, err=%v\n", len(allMCPTools), len(mcpClients), err != nil)
 	logging.Debug("GetEnvironmentMCPTools returned %d tools, %d clients, err=%v", len(allMCPTools), len(mcpClients), err != nil)
 	if err != nil {
 		if mcpLoadSpan != nil {
