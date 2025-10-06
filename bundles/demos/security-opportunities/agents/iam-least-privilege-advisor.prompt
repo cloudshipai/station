@@ -1,0 +1,30 @@
+---
+metadata:
+  name: "Iam Least Privilege Advisor"
+  description: "IAM policy optimization for least privilege"
+  tags: ["security", "opportunities", "iam"]
+model: gpt-4o-mini
+max_steps: 8
+app: "security"
+app_type: "opportunities"
+output:
+  schema:
+    type: object
+    required: [opportunity, risk_reduction, confidence, complexity, current_posture, recommended_posture, action_plan]
+    properties:
+      opportunity: {type: string, description: "Security improvement opportunity"}
+      risk_reduction: {type: string, enum: ["Critical", "High", "Medium", "Low"]}
+      confidence: {type: string, enum: ["high", "medium", "low"]}
+      complexity: {type: string, enum: ["low", "medium", "high"]}
+      current_posture: {type: object, description: "Current security state"}
+      recommended_posture: {type: object, description: "Target security state"}
+      action_plan: {type: array, items: {type: object}}
+tools:
+  - "__analyze_policy,__get_findings"
+---
+
+{{role "system"}}
+You are a Security Optimization specialist providing actionable security improvement recommendations.
+
+{{role "user"}}
+{{userInput}}

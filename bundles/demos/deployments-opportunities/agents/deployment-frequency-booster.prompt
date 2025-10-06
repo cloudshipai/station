@@ -1,0 +1,30 @@
+---
+metadata:
+  name: "Deployment Frequency Booster"
+  description: "Deployment frequency and velocity improvements"
+  tags: ["deployments", "opportunities", "cicd", "deployment"]
+model: gpt-4o-mini
+max_steps: 8
+app: "deployments"
+app_type: "opportunities"
+output:
+  schema:
+    type: object
+    required: [opportunity, improvement_potential, confidence, complexity, current_state, recommended_state, action_plan]
+    properties:
+      opportunity: {type: string}
+      improvement_potential: {type: object, properties: {time_saved: {type: string}, cost_reduction: {type: number}}}
+      confidence: {type: string, enum: ["high", "medium", "low"]}
+      complexity: {type: string, enum: ["low", "medium", "high"]}
+      current_state: {type: object}
+      recommended_state: {type: object}
+      action_plan: {type: array, items: {type: object}}
+tools:
+  - "__list_deployments"
+---
+
+{{role "system"}}
+You are a CI/CD Optimization specialist providing deployment pipeline improvement recommendations.
+
+{{role "user"}}
+{{userInput}}

@@ -25,6 +25,13 @@ Available mock tools:
   github                     - Mock GitHub (PRs, deployments, commits)
   pagerduty                  - Mock PagerDuty (incidents)
   stripe                     - Mock Stripe (revenue, subscriptions)
+  guardduty                  - Mock AWS GuardDuty (threat detection)
+  iam-access-analyzer        - Mock AWS IAM Access Analyzer (policy analysis)
+  trivy                      - Mock Trivy (container/IaC scanning)
+  semgrep                    - Mock Semgrep (SAST code scanning)
+  macie                      - Mock AWS Macie (sensitive data discovery)
+  cloudtrail                 - Mock AWS CloudTrail (API audit logs)
+  falco                      - Mock Falco (runtime security alerts)
 
 Mock servers are designed for the Live Demo feature and return realistic but fake data.`,
 	Args: cobra.ExactArgs(1),
@@ -59,6 +66,20 @@ func runMock(cmd *cobra.Command, args []string) {
 		server = mocks.NewPagerDutyMock()
 	case "stripe":
 		server = mocks.NewStripeMock()
+	case "guardduty":
+		server = mocks.NewGuardDutyMock()
+	case "iam-access-analyzer":
+		server = mocks.NewIAMAccessAnalyzerMock()
+	case "trivy":
+		server = mocks.NewTrivyMock()
+	case "semgrep":
+		server = mocks.NewSemgrepMock()
+	case "macie":
+		server = mocks.NewMacieMock()
+	case "cloudtrail":
+		server = mocks.NewCloudTrailMock()
+	case "falco":
+		server = mocks.NewFalcoMock()
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown mock tool '%s'\n\n", toolName)
 		fmt.Fprintln(os.Stderr, "Available mock tools:")
@@ -72,6 +93,13 @@ func runMock(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, "  github                     - Mock GitHub")
 		fmt.Fprintln(os.Stderr, "  pagerduty                  - Mock PagerDuty")
 		fmt.Fprintln(os.Stderr, "  stripe                     - Mock Stripe")
+		fmt.Fprintln(os.Stderr, "  guardduty                  - Mock AWS GuardDuty")
+		fmt.Fprintln(os.Stderr, "  iam-access-analyzer        - Mock IAM Access Analyzer")
+		fmt.Fprintln(os.Stderr, "  trivy                      - Mock Trivy")
+		fmt.Fprintln(os.Stderr, "  semgrep                    - Mock Semgrep")
+		fmt.Fprintln(os.Stderr, "  macie                      - Mock AWS Macie")
+		fmt.Fprintln(os.Stderr, "  cloudtrail                 - Mock AWS CloudTrail")
+		fmt.Fprintln(os.Stderr, "  falco                      - Mock Falco")
 		os.Exit(1)
 	}
 

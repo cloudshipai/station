@@ -1,0 +1,8 @@
+{
+  "name": "reliability-investigations",
+  "description": "SRE incident investigation and root cause analysis demo bundle",
+  "mcpServers": {
+    "pagerduty": {"command": "stn", "args": ["mock", "pagerduty"]},
+    "grafana": {"command": "stn", "args": ["mock", "grafana"]}
+  }
+}

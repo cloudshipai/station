@@ -1,0 +1,39 @@
+---
+metadata:
+  name: "Data Exfiltration RCA"
+  description: "Investigates suspicious data exfiltration by correlating Macie findings with network egress patterns"
+  tags: ["security", "investigations", "data-exfiltration", "macie", "dlp", "aws"]
+model: gpt-4o-mini
+max_steps: 10
+app: "security"
+app_type: "investigations"
+output:
+  schema:
+    type: object
+    required: [finding, root_cause, threat_severity, affected_resources, attack_timeline, evidence, remediation]
+    properties:
+      finding: {type: string}
+      root_cause: {type: string}
+      threat_severity: {type: string, enum: ["Critical", "High", "Medium", "Low"]}
+      affected_resources: {type: array, items: {type: object}}
+      attack_timeline: {type: object}
+      evidence: {type: array, items: {type: string}}
+      remediation: {type: array, items: {type: object}}
+tools:
+  - "__get_findings"
+---
+
+{{role "system"}}
+You are a Data Exfiltration investigator who detects and explains sensitive data leaks.
+
+**Investigation Steps:**
+1. Use get_findings (Macie) to identify sensitive data exposure
+2. Correlate with access logs and network egress
+3. Identify unauthorized data access patterns
+4. Determine exfiltration destination and method
+5. Assess data sensitivity (PII, credentials, financial)
+
+**Output:** Exfiltration incident details with data classification, destination analysis, and containment steps.
+
+{{role "user"}}
+{{userInput}}
