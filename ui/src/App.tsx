@@ -21,6 +21,7 @@ import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, 
 import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import { CloudShipPage } from './components/pages/CloudShipPage';
+import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -292,6 +293,7 @@ const Layout = ({ children }: any) => {
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
     { id: 'cloudship', label: 'CloudShip', icon: Ship, path: '/cloudship' },
+    { id: 'live-demo', label: 'Live Demo', icon: Play, path: '/live-demo' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
 
@@ -2682,6 +2684,7 @@ function App() {
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />
                   <Route path="/cloudship" element={<CloudShipPage />} />
+                  <Route path="/live-demo" element={<LiveDemoPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
                   <Route path="*" element={<AgentsCanvas />} />

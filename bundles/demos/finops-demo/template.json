@@ -1,0 +1,11 @@
+{
+  "name": "finops-demo",
+  "description": "FinOps Demo Bundle - Cost investigation agents with mock AWS Cost Explorer",
+  "version": "1.0.0",
+  "mcpServers": {
+    "aws-cost-explorer-mock": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    }
+  }
+}

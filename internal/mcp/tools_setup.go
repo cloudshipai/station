@@ -267,5 +267,18 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(updateEnvFileConfigTool, s.handleUpdateEnvironmentFileConfig)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 31)
+	// Demo Bundle Tools
+	listDemoBundlesTool := mcp.NewTool("list_demo_bundles",
+		mcp.WithDescription("List all available embedded demo bundles for trying Station features"),
+	)
+	s.mcpServer.AddTool(listDemoBundlesTool, s.handleListDemoBundles)
+
+	installDemoBundleTool := mcp.NewTool("install_demo_bundle",
+		mcp.WithDescription("Install an embedded demo bundle to a new environment"),
+		mcp.WithString("bundle_id", mcp.Required(), mcp.Description("ID of the demo bundle to install (e.g., 'finops-demo')")),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name for the new environment where demo will be installed")),
+	)
+	s.mcpServer.AddTool(installDemoBundleTool, s.handleInstallDemoBundle)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 33)
 }
