@@ -37,7 +37,7 @@ const APP_CATEGORIES: AppCategoryInfo[] = [
     icon: <Shield size={24} />,
     description: 'Vulnerability management, compliance, and threat detection',
     color: 'tokyo-red',
-    available: false,
+    available: true,
   },
   {
     id: 'reliability',
@@ -45,7 +45,7 @@ const APP_CATEGORIES: AppCategoryInfo[] = [
     icon: <Server size={24} />,
     description: 'SRE, observability, SLO tracking, and incident management',
     color: 'tokyo-blue',
-    available: false,
+    available: true,
   },
   {
     id: 'deployments',
@@ -53,7 +53,7 @@ const APP_CATEGORIES: AppCategoryInfo[] = [
     icon: <GitBranch size={24} />,
     description: 'CI/CD pipeline optimization and release management',
     color: 'tokyo-purple',
-    available: false,
+    available: true,
   },
   {
     id: 'data-platform',
