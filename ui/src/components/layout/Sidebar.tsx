@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Server, Library, Play, Layers, Package, Settings, Cloud } from 'lucide-react';
+import { Bot, Server, Library, Play, Layers, Package, Settings, Cloud, Sparkles } from 'lucide-react';
 
 interface SidebarItem {
   id: string;
@@ -21,6 +21,7 @@ const sidebarItems: SidebarItem[] = [
   { id: 'environments', label: 'Environments', icon: Layers, path: '/environments' },
   { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
   { id: 'cloudship', label: 'CloudShip', icon: Cloud, path: '/cloudship' },
+  { id: 'live-demo', label: 'Live Demo', icon: Sparkles, path: '/live-demo' },
   { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
 ];
 
