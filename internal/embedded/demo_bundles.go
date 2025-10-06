@@ -31,6 +31,18 @@ var finopsInventoryData []byte
 //go:embed finops-events.tar.gz
 var finopsEventsData []byte
 
+//go:embed security-investigations.tar.gz
+var securityInvestigationsData []byte
+
+//go:embed security-opportunities.tar.gz
+var securityOpportunitiesData []byte
+
+//go:embed reliability-investigations.tar.gz
+var reliabilityInvestigationsData []byte
+
+//go:embed deployments-opportunities.tar.gz
+var deploymentsOpportunitiesData []byte
+
 // GetDemoBundles returns all available embedded demo bundles
 func GetDemoBundles() []DemoBundle {
 	return []DemoBundle{
@@ -75,6 +87,34 @@ func GetDemoBundles() []DemoBundle {
 			Description: "Cost-impacting event tracking agents. Correlates deployments with costs, tracks incident costs, logs infrastructure changes, analyzes scaling events, predicts PR cost impacts, and logs anomaly events.",
 			Category:    "FinOps",
 			Data:        finopsEventsData,
+		},
+		{
+			ID:          "security-investigations",
+			Name:        "Security Threat Investigations",
+			Description: "Security incident root cause analysis agents. Investigates GuardDuty threats, public exposure, vulnerability exploitability, secrets leaks, data exfiltration, privilege escalation, and runtime incidents.",
+			Category:    "Security",
+			Data:        securityInvestigationsData,
+		},
+		{
+			ID:          "security-opportunities",
+			Name:        "Security Hardening",
+			Description: "Security posture improvement agents. Provides CIS hardening recommendations, IAM least privilege advice, patch prioritization, secret hygiene coaching, network security optimization, and runtime policy advice.",
+			Category:    "Security",
+			Data:        securityOpportunitiesData,
+		},
+		{
+			ID:          "reliability-investigations",
+			Name:        "Reliability Incident Analysis",
+			Description: "SRE root cause analysis agents. Investigates latency spikes, error bursts, saturation issues, SLO breaches, cascade failures, and capacity exhaustion.",
+			Category:    "Reliability",
+			Data:        reliabilityInvestigationsData,
+		},
+		{
+			ID:          "deployments-opportunities",
+			Name:        "Deployment Optimization",
+			Description: "CI/CD pipeline improvement agents. Optimizes build caches, test parallelization, deployment frequency, rollback safety, artifact sizes, and DORA metrics.",
+			Category:    "Deployments",
+			Data:        deploymentsOpportunitiesData,
 		},
 	}
 }
