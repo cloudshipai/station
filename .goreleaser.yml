@@ -50,6 +50,7 @@ archives:
       - README.md
       - LICENSE
       - CONTRIBUTING.md
+      - bundles/**/*
 
 checksum:
   name_template: "checksums.txt"
