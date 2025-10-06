@@ -25,6 +25,10 @@
     "cloudtrail": {
       "command": "stn",
       "args": ["mock", "cloudtrail"]
+    },
+    "falco": {
+      "command": "stn",
+      "args": ["mock", "falco"]
     }
   }
 }
