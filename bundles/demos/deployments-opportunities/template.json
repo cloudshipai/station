@@ -1,0 +1,7 @@
+{
+  "name": "deployments-opportunities",
+  "description": "CI/CD pipeline optimization and deployment improvement recommendations demo bundle",
+  "mcpServers": {
+    "github": {"command": "stn", "args": ["mock", "github"]}
+  }
+}

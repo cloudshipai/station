@@ -493,6 +493,97 @@ func NewMacieMock() *MockServer {
 	return server
 }
 
+// NewCloudTrailMock creates a mock AWS CloudTrail MCP server for audit log analysis
+func NewCloudTrailMock() *MockServer {
+	server := NewMockServer(
+		"cloudtrail",
+		"1.0.0",
+		"Mock AWS CloudTrail for API audit log analysis and event tracking",
+	)
+
+	// lookup_events - Query CloudTrail audit logs
+	server.RegisterTool(mcp.Tool{
+		Name:        "lookup_events",
+		Description: "Query CloudTrail API call logs to investigate security events",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"event_name": map[string]interface{}{
+					"type":        "string",
+					"description": "API event to filter by (e.g., AssumeRole, CreateUser)",
+				},
+				"max_results": map[string]interface{}{
+					"type":        "number",
+					"description": "Maximum events to return",
+				},
+			},
+		},
+	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		data := map[string]interface{}{
+			"events": []map[string]interface{}{
+				{
+					"event_id":     "abc123-def456-ghi789",
+					"event_name":   "AssumeRole",
+					"event_time":   time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+					"event_source": "sts.amazonaws.com",
+					"username":     "unauthorized-user",
+					"user_identity": map[string]interface{}{
+						"type":        "IAMUser",
+						"principal_id": "AIDAI23HXF2T4EXAMPLE",
+						"arn":         "arn:aws:iam::123456789012:user/unauthorized-user",
+					},
+					"source_ip_address": "198.51.100.42",
+					"user_agent":        "aws-cli/2.13.0",
+					"request_parameters": map[string]interface{}{
+						"roleArn":         "arn:aws:iam::123456789012:role/AdminRole",
+						"roleSessionName": "admin-session",
+					},
+					"resources": []map[string]interface{}{
+						{
+							"arn":  "arn:aws:iam::123456789012:role/AdminRole",
+							"type": "AWS::IAM::Role",
+						},
+					},
+					"error_code":    "AccessDenied",
+					"error_message": "User is not authorized to perform sts:AssumeRole",
+				},
+				{
+					"event_id":     "jkl012-mno345-pqr678",
+					"event_name":   "PutBucketPublicAccessBlock",
+					"event_time":   time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+					"event_source": "s3.amazonaws.com",
+					"username":     "automated-script",
+					"user_identity": map[string]interface{}{
+						"type":        "AssumedRole",
+						"principal_id": "AROAI23HXF2T4EXAMPLE",
+						"arn":         "arn:aws:sts::123456789012:assumed-role/AdminRole/automation",
+					},
+					"source_ip_address": "10.0.1.50",
+					"user_agent":        "Boto3/1.28.0",
+					"request_parameters": map[string]interface{}{
+						"bucketName":                  "company-data-backup",
+						"PublicAccessBlockConfiguration": map[string]bool{
+							"BlockPublicAcls":       false,
+							"IgnorePublicAcls":      false,
+							"BlockPublicPolicy":     false,
+							"RestrictPublicBuckets": false,
+						},
+					},
+					"resources": []map[string]interface{}{
+						{
+							"arn":  "arn:aws:s3:::company-data-backup",
+							"type": "AWS::S3::Bucket",
+						},
+					},
+				},
+			},
+		}
+		return SuccessResult(data)
+	})
+
+	return server
+}
+
 // NewFalcoMock creates a mock Falco runtime security MCP server
 func NewFalcoMock() *MockServer {
 	server := NewMockServer(

@@ -1,0 +1,11 @@
+{
+  "name": "security-opportunities",
+  "description": "Security hardening and optimization recommendations demo bundle",
+  "mcpServers": {
+    "iam-access-analyzer": {"command": "stn", "args": ["mock", "iam-access-analyzer"]},
+    "trivy": {"command": "stn", "args": ["mock", "trivy"]},
+    "semgrep": {"command": "stn", "args": ["mock", "semgrep"]},
+    "guardduty": {"command": "stn", "args": ["mock", "guardduty"]},
+    "cloudquery": {"command": "stn", "args": ["mock", "cloudquery"]}
+  }
+}

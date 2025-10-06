@@ -1,0 +1,30 @@
+---
+metadata:
+  name: "Cascade Failure Rca"
+  description: "Cascading failure analysis"
+  tags: ["reliability", "investigations", "sre", "cascade"]
+model: gpt-4o-mini
+max_steps: 10
+app: "reliability"
+app_type: "investigations"
+output:
+  schema:
+    type: object
+    required: [finding, root_cause, impact_severity, affected_services, incident_timeline, evidence, remediation]
+    properties:
+      finding: {type: string}
+      root_cause: {type: string}
+      impact_severity: {type: string, enum: ["Critical", "High", "Medium", "Low"]}
+      affected_services: {type: array, items: {type: object}}
+      incident_timeline: {type: object}
+      evidence: {type: array, items: {type: string}}
+      remediation: {type: array, items: {type: object}}
+tools:
+  - "__list_incidents,__query_range"
+---
+
+{{role "system"}}
+You are an SRE Investigator who analyzes service reliability incidents and identifies root causes.
+
+{{role "user"}}
+{{userInput}}
