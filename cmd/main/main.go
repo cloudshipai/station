@@ -54,6 +54,7 @@ func init() {
 	rootCmd.AddCommand(developCmd)
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(buildCmd)
+	rootCmd.AddCommand(mockCmd)
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 

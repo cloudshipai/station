@@ -1,0 +1,26 @@
+{
+  "name": "finops-opportunities",
+  "description": "FinOps cost optimization opportunities and savings recommendations demo bundle",
+  "mcpServers": {
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "aws-compute-optimizer": {
+      "command": "stn",
+      "args": ["mock", "aws-compute-optimizer"]
+    },
+    "aws-billing": {
+      "command": "stn",
+      "args": ["mock", "aws-billing"]
+    },
+    "opencost": {
+      "command": "stn",
+      "args": ["mock", "opencost"]
+    },
+    "cloudquery": {
+      "command": "stn",
+      "args": ["mock", "cloudquery"]
+    }
+  }
+}

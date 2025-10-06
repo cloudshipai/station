@@ -1,0 +1,26 @@
+{
+  "name": "finops-events",
+  "description": "FinOps cost-impacting event tracking and change correlation demo bundle",
+  "mcpServers": {
+    "github": {
+      "command": "stn",
+      "args": ["mock", "github"]
+    },
+    "pagerduty": {
+      "command": "stn",
+      "args": ["mock", "pagerduty"]
+    },
+    "cloudquery": {
+      "command": "stn",
+      "args": ["mock", "cloudquery"]
+    },
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "opencost": {
+      "command": "stn",
+      "args": ["mock", "opencost"]
+    }
+  }
+}

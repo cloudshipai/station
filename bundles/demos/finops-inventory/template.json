@@ -1,0 +1,22 @@
+{
+  "name": "finops-inventory",
+  "description": "FinOps resource inventory and cost tracking demo bundle",
+  "mcpServers": {
+    "cloudquery": {
+      "command": "stn",
+      "args": ["mock", "cloudquery"]
+    },
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "opencost": {
+      "command": "stn",
+      "args": ["mock", "opencost"]
+    },
+    "aws-billing": {
+      "command": "stn",
+      "args": ["mock", "aws-billing"]
+    }
+  }
+}

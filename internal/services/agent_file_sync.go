@@ -20,13 +20,17 @@ import (
 
 // DotPromptConfig represents the YAML frontmatter in a .prompt file
 type DotPromptConfig struct {
-	Model       string                 `yaml:"model"`
-	Config      map[string]interface{} `yaml:"config"`
-	Tools       []string               `yaml:"tools"`
-	Metadata    map[string]interface{} `yaml:"metadata"`
-	Station     map[string]interface{} `yaml:"station"`
-	Input       map[string]interface{} `yaml:"input"`
-	Output      map[string]interface{} `yaml:"output"`
+	Model        string                 `yaml:"model"`
+	Config       map[string]interface{} `yaml:"config"`
+	Tools        []string               `yaml:"tools"`
+	Metadata     map[string]interface{} `yaml:"metadata"`
+	Station      map[string]interface{} `yaml:"station"`
+	Input        map[string]interface{} `yaml:"input"`
+	Output       map[string]interface{} `yaml:"output"`
+	OutputSchema string                 `yaml:"output_schema"` // JSON string format for output schema
+	MaxSteps     int64                  `yaml:"max_steps"`     // Top-level max_steps field
+	App          string                 `yaml:"app"`           // CloudShip app classification
+	AppType      string                 `yaml:"app_type"`      // CloudShip app_type (maps to app_subtype in DB)
 }
 
 // syncAgents handles synchronization of agent .prompt files
@@ -183,7 +187,8 @@ func (s *DeclarativeSync) parseDotPrompt(content string) (*DotPromptConfig, stri
 		if err := yaml.Unmarshal([]byte(yamlContent), &config); err != nil {
 			return nil, "", fmt.Errorf("failed to parse YAML frontmatter: %w", err)
 		}
-	}
+
+		}
 
 	return &config, promptContent, nil
 }
@@ -213,7 +218,12 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 
 	// Extract configuration values with defaults
 	maxSteps := int64(5) // default
-	if config.Metadata != nil {
+
+	// First check top-level max_steps field
+	if config.MaxSteps > 0 {
+		maxSteps = config.MaxSteps
+	} else if config.Metadata != nil {
+		// Fall back to metadata.max_steps
 		if steps, ok := config.Metadata["max_steps"]; ok {
 			switch v := steps.(type) {
 			case int:
@@ -234,6 +244,10 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 			description = desc
 		}
 	}
+
+	// Extract app and app_type from top-level fields
+	app := config.App
+	appType := config.AppType
 
 	// Extract input schema from frontmatter
 	inputSchema, err := s.extractInputSchema(config)
@@ -260,8 +274,8 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		true, // scheduleEnabled
 		outputSchema, // outputSchema - extracted from dotprompt frontmatter
 		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
-		"", // app - will be populated from metadata if present
-		"", // appType - will be populated from metadata if present
+		app, // app - CloudShip app classification
+		appType, // appType - CloudShip app_type classification
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -300,7 +314,12 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent *models.Agent, config *DotPromptConfig, promptContent, checksum string) (*SyncOperation, error) {
 	// Extract configuration values with defaults
 	maxSteps := existingAgent.MaxSteps // keep existing
-	if config.Metadata != nil {
+
+	// First check top-level max_steps field
+	if config.MaxSteps > 0 {
+		maxSteps = config.MaxSteps
+	} else if config.Metadata != nil {
+		// Fall back to metadata.max_steps
 		if steps, ok := config.Metadata["max_steps"]; ok {
 			switch v := steps.(type) {
 			case int:
@@ -321,6 +340,10 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			description = desc
 		}
 	}
+
+	// Extract app and app_type from top-level fields
+	app := config.App
+	appType := config.AppType
 
 	// Extract input schema from frontmatter
 	inputSchema, err := s.extractInputSchema(config)
@@ -465,8 +488,8 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			true, // scheduleEnabled
 			outputSchema, // outputSchema - extracted from dotprompt frontmatter
 			outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
-			"", // app - will be populated from metadata if present
-			"", // appType - will be populated from metadata if present
+			app, // app - CloudShip app classification
+			appType, // appType - CloudShip app_type classification
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update agent: %w", err)
@@ -638,38 +661,57 @@ func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, 
 
 // extractOutputSchema extracts output schema and preset information from dotprompt config
 func (s *DeclarativeSync) extractOutputSchema(config *DotPromptConfig) (*string, *string, error) {
-	if config.Output == nil {
-		return nil, nil, nil
-	}
-	
 	var outputSchema *string
 	var outputSchemaPreset *string
-	
-	// Check for schema field (custom output schema in Picoschema YAML format)
-	if schemaData, exists := config.Output["schema"]; exists {
-		// Convert the YAML schema to JSON string for database storage
-		schemaBytes, err := json.Marshal(schemaData)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to marshal output schema to JSON: %w", err)
-		}
-		schemaJSON := string(schemaBytes)
-		
+
+	// First check for top-level output_schema field (JSON string format)
+	if config.OutputSchema != "" {
+		// Trim whitespace and validate JSON
+		schemaJSON := strings.TrimSpace(config.OutputSchema)
+
 		// Validate the output schema JSON before storing
 		helper := schema.NewExportHelper()
 		if err := helper.ValidateOutputSchema(schemaJSON); err != nil {
 			return nil, nil, fmt.Errorf("invalid output schema in agent file: %w", err)
 		}
-		
+
+		outputSchema = &schemaJSON
+		return outputSchema, outputSchemaPreset, nil
+	}
+
+	// Fall back to output.schema field (Picoschema YAML format)
+	if config.Output == nil {
+		return nil, nil, nil
+	}
+
+	// Check for schema field (custom output schema in Picoschema YAML format)
+	if schemaData, exists := config.Output["schema"]; exists {
+		// Convert map[interface{}]interface{} to map[string]interface{} for JSON marshaling
+		convertedSchema := convertYAMLMapToJSONMap(schemaData)
+
+		// Convert the YAML schema to JSON string for database storage
+		schemaBytes, err := json.Marshal(convertedSchema)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to marshal output schema to JSON: %w", err)
+		}
+		schemaJSON := string(schemaBytes)
+
+		// Validate the output schema JSON before storing
+		helper := schema.NewExportHelper()
+		if err := helper.ValidateOutputSchema(schemaJSON); err != nil {
+			return nil, nil, fmt.Errorf("invalid output schema in agent file: %w", err)
+		}
+
 		outputSchema = &schemaJSON
 	}
-	
+
 	// Check for preset field (predefined schema shortcut like "finops")
 	if presetData, exists := config.Output["preset"]; exists {
 		if presetStr, ok := presetData.(string); ok {
 			outputSchemaPreset = &presetStr
 		}
 	}
-	
+
 	return outputSchema, outputSchemaPreset, nil
 }
 
@@ -738,4 +780,38 @@ func (s *DeclarativeSync) parsePicoschemaString(fieldName string, definition str
 	// Handle simple case: "type"
 	variable.Type = schema.InputSchemaType(strings.TrimSpace(definition))
 	return variable
+}
+// convertYAMLMapToJSONMap recursively converts map[interface{}]interface{} to map[string]interface{}
+// This is needed because YAML unmarshaling creates interface{} keys, but JSON requires string keys
+func convertYAMLMapToJSONMap(data interface{}) interface{} {
+	switch v := data.(type) {
+	case map[interface{}]interface{}:
+		result := make(map[string]interface{})
+		for key, value := range v {
+			// Convert key to string
+			keyStr, ok := key.(string)
+			if !ok {
+				keyStr = fmt.Sprintf("%v", key)
+			}
+			result[keyStr] = convertYAMLMapToJSONMap(value)
+		}
+		return result
+	case map[string]interface{}:
+		// Already in correct format, but recursively convert values
+		result := make(map[string]interface{})
+		for key, value := range v {
+			result[key] = convertYAMLMapToJSONMap(value)
+		}
+		return result
+	case []interface{}:
+		// Recursively convert array elements
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = convertYAMLMapToJSONMap(item)
+		}
+		return result
+	default:
+		// Primitive types (string, int, bool, etc.) pass through unchanged
+		return v
+	}
 }

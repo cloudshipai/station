@@ -140,6 +140,11 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
 
+	// Demo Bundles routes
+	demoBundlesGroup := router.Group("/demo-bundles")
+	demoBundlesGroup.GET("", h.listDemoBundles)
+	demoBundlesGroup.POST("/install", h.installDemoBundle)
+
 	// MCP API bridge route - admin only in server mode
 	mcpGroup := router.Group("/mcp")
 	if !h.localMode {
