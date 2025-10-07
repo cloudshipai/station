@@ -260,8 +260,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 		// Get docker group GID for Docker-in-Docker support
 		if stat, err := os.Stat("/var/run/docker.sock"); err == nil {
-			if sysStat, ok := stat.Sys().(*syscall.Stat_t); ok {
-				dockerGID := int(sysStat.Gid)
+			dockerGID := getDockerGroupID(stat)
+			if dockerGID > 0 {
 				// Add supplementary docker group
 				dockerArgs = append(dockerArgs, "--group-add", fmt.Sprintf("%d", dockerGID))
 			}
@@ -427,8 +427,8 @@ func addUserMapping(dockerArgs *[]string) error {
 		// Get docker socket group ID for Docker-in-Docker support
 		dockerGID := gid
 		if stat, err := os.Stat("/var/run/docker.sock"); err == nil {
-			if sysStat, ok := stat.Sys().(*syscall.Stat_t); ok {
-				dockerGID = int(sysStat.Gid)
+			if dgid := getDockerGroupID(stat); dgid > 0 {
+				dockerGID = dgid
 			}
 		}
 
