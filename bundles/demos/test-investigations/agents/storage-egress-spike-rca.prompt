@@ -1,0 +1,266 @@
+---
+metadata:
+  name: "Storage & Egress Spike RCA"
+  description: "Investigates unexpected increases in storage costs and data transfer (egress) charges by analyzing usage patterns and network metrics"
+  tags: ["finops", "investigations", "storage", "egress", "data-transfer", "s3"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "investigations"
+output:
+  schema:
+    type: object
+    required: ["investigation_id", "investigation_type", "finding", "root_cause", "impact", "timeline", "affected_resources", "evidence", "remediation", "confidence"]
+    properties:
+      investigation_id:
+        type: string
+        description: Unique identifier for this storage/egress spike investigation
+      investigation_type:
+        type: string
+        enum: ["storage_cost_spike", "egress_cost_spike", "data_transfer_anomaly"]
+        description: Type of storage/egress investigation
+      finding:
+        type: string
+        description: Summary of the storage/egress cost spike
+      root_cause:
+        type: object
+        properties:
+          primary_cause:
+            type: string
+          contributing_factors:
+            type: array
+            items:
+              type: string
+          technical_details:
+            type: string
+          cause_category:
+            type: string
+            enum: ["data_lifecycle_issue", "replication_misconfiguration", "cdn_bypass", "log_explosion", "backup_surge", "sync_loop", "api_inefficiency"]
+        required: ["primary_cause", "technical_details", "cause_category"]
+      impact:
+        type: object
+        properties:
+          cost_increase:
+            type: number
+          percentage_increase:
+            type: number
+          baseline_cost:
+            type: number
+          spike_cost:
+            type: number
+          cost_breakdown:
+            type: object
+            properties:
+              storage_cost_increase:
+                type: number
+              egress_cost_increase:
+                type: number
+              requests_cost_increase:
+                type: number
+          data_volume:
+            type: object
+            properties:
+              storage_increase_gb:
+                type: number
+              egress_increase_gb:
+                type: number
+              request_count_increase:
+                type: number
+          severity:
+            type: string
+            enum: ["critical", "high", "medium", "low"]
+        required: ["cost_increase", "percentage_increase", "severity"]
+      timeline:
+        type: object
+        properties:
+          spike_start:
+            type: string
+          spike_detected:
+            type: string
+          spike_duration:
+            type: string
+          still_ongoing:
+            type: boolean
+          baseline_period:
+            type: string
+        required: ["spike_start", "spike_duration", "still_ongoing"]
+      affected_resources:
+        type: array
+        items:
+          type: object
+          properties:
+            resource_id:
+              type: string
+              description: Bucket name, volume ID, etc.
+            resource_type:
+              type: string
+              enum: ["s3_bucket", "ebs_volume", "efs_filesystem", "glacier_vault", "snapshot"]
+            region:
+              type: string
+            storage_metrics:
+              type: object
+              properties:
+                storage_size_gb:
+                  type: number
+                storage_growth_gb:
+                  type: number
+                object_count:
+                  type: integer
+                object_count_change:
+                  type: integer
+            egress_metrics:
+              type: object
+              properties:
+                egress_volume_gb:
+                  type: number
+                egress_increase_gb:
+                  type: number
+                egress_destination:
+                  type: string
+                  description: Internet, CloudFront, inter-region, etc.
+            request_metrics:
+              type: object
+              properties:
+                get_requests:
+                  type: integer
+                put_requests:
+                  type: integer
+                list_requests:
+                  type: integer
+            cost_contribution:
+              type: number
+          required: ["resource_id", "resource_type", "cost_contribution"]
+        description: Storage/egress resources responsible for spike
+      usage_pattern_analysis:
+        type: object
+        properties:
+          storage_growth_pattern:
+            type: string
+            enum: ["steady_growth", "sudden_spike", "cyclical"]
+          egress_pattern:
+            type: object
+            properties:
+              destination_breakdown:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    destination:
+                      type: string
+                    percentage:
+                      type: number
+              top_consumers:
+                type: array
+                items:
+                  type: string
+          unusual_patterns:
+            type: array
+            items:
+              type: string
+            description: Unusual usage patterns detected
+        description: Analysis of storage and egress patterns
+      evidence:
+        type: array
+        items:
+          type: object
+          properties:
+            evidence_type:
+              type: string
+              enum: ["cost_anomaly", "usage_metrics", "deployment_correlation", "log_analysis", "replication_config"]
+            description:
+              type: string
+            data_points:
+              type: array
+              items:
+                type: object
+            timestamp:
+              type: string
+        description: Evidence supporting root cause
+      remediation:
+        type: object
+        properties:
+          immediate_actions:
+            type: array
+            items:
+              type: object
+              properties:
+                action:
+                  type: string
+                expected_savings:
+                  type: number
+                urgency:
+                  type: string
+                  enum: ["immediate", "high", "medium", "low"]
+          lifecycle_policy_recommendations:
+            type: array
+            items:
+              type: object
+              properties:
+                resource:
+                  type: string
+                policy:
+                  type: string
+                potential_savings:
+                  type: number
+          architectural_recommendations:
+            type: array
+            items:
+              type: string
+          preventative_measures:
+            type: array
+            items:
+              type: string
+          estimated_time_to_resolve:
+            type: string
+        required: ["immediate_actions", "preventative_measures"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in storage/egress root cause analysis
+tools:
+  - "__get_cost_and_usage"
+  - "__get_cost_anomalies"
+  - "__query_egress_metrics"
+  - "__list_deployments"
+  - "__query_resources"
+---
+
+{{role "system"}}
+You are a Storage & Egress Cost Spike Investigator specializing in analyzing unexpected increases in storage costs (S3, EBS, RDS storage) and data transfer egress charges.
+
+**Investigation Process:**
+
+1. **Identify Spike**: Use anomaly detection and cost data to confirm storage/egress spike
+2. **Analyze Egress Patterns**: Use query_egress_metrics to identify which services have increased data transfer
+3. **Check Storage Growth**: Analyze storage usage trends and identify rapid growth
+4. **Correlate Deployments**: Check if recent deployments changed data transfer patterns
+5. **Investigate Resources**: Use query_resources to find large storage volumes or high-egress services
+6. **Determine Root Cause**: Identify why storage/egress increased (logging, backups, new feature, misconfiguration)
+
+**What You Investigate:**
+- S3 storage growth (bucket sizes, object counts, storage class distribution)
+- Data transfer egress spikes (inter-region, internet, CloudFront)
+- EBS volume growth (snapshot growth, unused volumes)
+- RDS storage increases (database growth, backup retention)
+- Network traffic patterns (API gateway, CDN, load balancers)
+
+**Common Root Causes:**
+- Verbose logging or metrics collection
+- New feature increasing data transfer
+- Backup/snapshot retention misconfiguration
+- Cross-region replication issues
+- CDN cache-miss ratio increase
+- Large file uploads/downloads
+
+**Output Requirements:**
+- Finding describing storage/egress cost increase
+- Root cause with specific service and configuration details
+- Cost impact separated by storage vs egress
+- Time range of the spike
+- Affected resources (buckets, volumes, databases)
+- Evidence from metrics, usage data, and deployment history
+- Recommendations to reduce storage/egress costs
+
+{{role "user"}}
+{{userInput}}

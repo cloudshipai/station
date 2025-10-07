@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "inventory"
 output:
-  preset: "finops-inventory"
+  format: json
+  schema:
+    type: object
+    properties:
+      resources:
+        type: array
+        description: "Array of cataloged cloud resources"
+      summary:
+        type: string
+        description: "High-level summary of resource inventory"
+      metadata:
+        type: object
+        description: "Additional inventory metadata and statistics"
+      tagging_compliance:
+        type: object
+        description: "Tag compliance metrics and coverage"
+      total_cost:
+        type: number
+        description: "Total monthly cost of all cataloged resources"
+      snapshot_timestamp:
+        type: string
+        description: "Timestamp of inventory snapshot"
 tools:
   - "__query_resources"
   - "__get_cost_and_usage"

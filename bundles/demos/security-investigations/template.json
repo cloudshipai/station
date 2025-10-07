@@ -1,34 +1,55 @@
 {
   "name": "security-investigations",
-  "description": "Security threat investigation and root cause analysis demo bundle",
+  "description": "Security threat investigation and incident analysis demo bundle",
   "mcpServers": {
-    "guardduty": {
+    "aws-guardduty": {
       "command": "stn",
-      "args": ["mock", "guardduty"]
+      "args": [
+        "mock",
+        "aws-guardduty"
+      ]
+    },
+    "aws-inspector": {
+      "command": "stn",
+      "args": [
+        "mock",
+        "aws-inspector"
+      ]
     },
     "iam-access-analyzer": {
       "command": "stn",
-      "args": ["mock", "iam-access-analyzer"]
+      "args": [
+        "mock",
+        "iam-access-analyzer"
+      ]
     },
     "trivy": {
       "command": "stn",
-      "args": ["mock", "trivy"]
+      "args": [
+        "mock",
+        "trivy"
+      ]
     },
     "semgrep": {
       "command": "stn",
-      "args": ["mock", "semgrep"]
+      "args": [
+        "mock",
+        "semgrep"
+      ]
     },
     "macie": {
       "command": "stn",
-      "args": ["mock", "macie"]
-    },
-    "cloudtrail": {
-      "command": "stn",
-      "args": ["mock", "cloudtrail"]
+      "args": [
+        "mock",
+        "macie"
+      ]
     },
     "falco": {
       "command": "stn",
-      "args": ["mock", "falco"]
+      "args": [
+        "mock",
+        "falco"
+      ]
     }
   }
 }

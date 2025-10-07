@@ -1,0 +1,348 @@
+---
+metadata:
+  name: "K8s Capacity Forecaster"
+  description: "Forecasts Kubernetes infrastructure capacity needs and costs based on workload growth patterns and namespace trends"
+  tags: ["finops", "projections", "kubernetes", "k8s", "capacity-planning", "opencost"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "projections"
+output:
+  schema:
+    type: object
+    required: ["projection_id", "projection_type", "finding", "forecast_period", "current_capacity", "projected_capacity", "projected_costs", "assumptions", "recommendations", "confidence"]
+    properties:
+      projection_id:
+        type: string
+        description: Unique identifier for this K8s capacity projection
+      projection_type:
+        type: string
+        enum: ["cluster_capacity_forecast", "namespace_growth_forecast", "node_pool_planning", "multi_cluster_scaling"]
+        description: Type of K8s capacity projection
+      finding:
+        type: string
+        description: Summary of K8s capacity forecast
+      forecast_period:
+        type: object
+        properties:
+          start_date:
+            type: string
+          end_date:
+            type: string
+          forecast_horizon_months:
+            type: integer
+          granularity:
+            type: string
+            enum: ["weekly", "monthly", "quarterly"]
+        required: ["start_date", "end_date", "forecast_horizon_months"]
+      current_capacity:
+        type: object
+        properties:
+          cluster_name:
+            type: string
+          total_nodes:
+            type: integer
+          total_cpu_cores:
+            type: number
+          total_memory_gb:
+            type: number
+          current_utilization:
+            type: object
+            properties:
+              cpu_utilization_percentage:
+                type: number
+              memory_utilization_percentage:
+                type: number
+              storage_utilization_percentage:
+                type: number
+          current_monthly_cost:
+            type: number
+          namespace_breakdown:
+            type: array
+            items:
+              type: object
+              properties:
+                namespace:
+                  type: string
+                cpu_usage:
+                  type: number
+                memory_usage_gb:
+                  type: number
+                pod_count:
+                  type: integer
+                monthly_cost:
+                  type: number
+                growth_rate_percentage:
+                  type: number
+        required: ["total_nodes", "total_cpu_cores", "total_memory_gb", "current_utilization"]
+      growth_analysis:
+        type: object
+        properties:
+          historical_growth_rates:
+            type: object
+            properties:
+              cpu_growth_rate_monthly:
+                type: number
+              memory_growth_rate_monthly:
+                type: number
+              workload_growth_rate_monthly:
+                type: number
+          growth_drivers:
+            type: array
+            items:
+              type: object
+              properties:
+                namespace:
+                  type: string
+                growth_reason:
+                  type: string
+                contribution_percentage:
+                  type: number
+          capacity_exhaustion:
+            type: object
+            properties:
+              cpu_exhaustion_date:
+                type: string
+              memory_exhaustion_date:
+                type: string
+              critical_threshold_date:
+                type: string
+                description: Date when 80% capacity reached
+        description: Analysis of K8s growth patterns
+      projected_capacity:
+        type: object
+        properties:
+          monthly_projections:
+            type: array
+            items:
+              type: object
+              properties:
+                month:
+                  type: string
+                projected_cpu_demand:
+                  type: number
+                projected_memory_demand_gb:
+                  type: number
+                projected_pod_count:
+                  type: integer
+                required_nodes:
+                  type: integer
+                capacity_headroom_percentage:
+                  type: number
+          scaling_milestones:
+            type: array
+            items:
+              type: object
+              properties:
+                milestone:
+                  type: string
+                date:
+                  type: string
+                action_required:
+                  type: string
+                  enum: ["add_node_pool", "expand_cluster", "create_new_cluster", "optimize_resources"]
+          recommended_target_capacity:
+            type: object
+            properties:
+              target_nodes:
+                type: integer
+              target_cpu_cores:
+                type: number
+              target_memory_gb:
+                type: number
+              node_pool_configuration:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    pool_name:
+                      type: string
+                    instance_type:
+                      type: string
+                    node_count:
+                      type: integer
+                    purpose:
+                      type: string
+        required: ["monthly_projections", "recommended_target_capacity"]
+      projected_costs:
+        type: object
+        properties:
+          monthly_cost_projections:
+            type: array
+            items:
+              type: object
+              properties:
+                month:
+                  type: string
+                node_costs:
+                  type: number
+                control_plane_costs:
+                  type: number
+                storage_costs:
+                  type: number
+                network_costs:
+                  type: number
+                total_cost:
+                  type: number
+                cost_increase_from_baseline:
+                  type: number
+          cumulative_cost_increase:
+            type: object
+            properties:
+              three_months:
+                type: number
+              six_months:
+                type: number
+              twelve_months:
+                type: number
+        required: ["monthly_cost_projections"]
+      assumptions:
+        type: array
+        items:
+          type: object
+          properties:
+            assumption:
+              type: string
+            rationale:
+              type: string
+            impact:
+              type: string
+              enum: ["high", "medium", "low"]
+        description: Key assumptions for capacity forecasting
+      scenarios:
+        type: object
+        properties:
+          conservative_scenario:
+            type: object
+            properties:
+              growth_assumption:
+                type: string
+              required_capacity:
+                type: string
+              projected_cost:
+                type: number
+          expected_scenario:
+            type: object
+            properties:
+              growth_assumption:
+                type: string
+              required_capacity:
+                type: string
+              projected_cost:
+                type: number
+          aggressive_scenario:
+            type: object
+            properties:
+              growth_assumption:
+                type: string
+              required_capacity:
+                type: string
+              projected_cost:
+                type: number
+        description: Different growth scenarios
+      recommendations:
+        type: object
+        properties:
+          capacity_actions:
+            type: array
+            items:
+              type: object
+              properties:
+                action:
+                  type: string
+                timing:
+                  type: string
+                priority:
+                  type: string
+                  enum: ["urgent", "high", "medium", "low"]
+          optimization_opportunities:
+            type: array
+            items:
+              type: string
+          architecture_recommendations:
+            type: array
+            items:
+              type: string
+        required: ["capacity_actions"]
+      risk_assessment:
+        type: object
+        properties:
+          projection_risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          capacity_constraints:
+            type: array
+            items:
+              type: string
+        required: ["projection_risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in K8s capacity projection (0-1)
+tools:
+  - "__get_allocation"
+  - "__get_cost_forecast"
+---
+
+{{role "system"}}
+You are a Kubernetes Capacity Forecaster that projects K8s infrastructure needs and costs based on workload growth patterns, namespace trends, and resource utilization.
+
+**Forecasting Process:**
+
+1. **Current State**: Use get_allocation to analyze current K8s resource usage and costs
+2. **Trend Analysis**: Identify growth patterns by namespace, workload, and resource type
+3. **Capacity Modeling**: Project when current cluster capacity will be exhausted
+4. **Cost Projection**: Use get_cost_forecast to estimate future K8s infrastructure costs
+5. **Scaling Planning**: Recommend node pool additions and cluster expansion timing
+
+**What You Forecast:**
+- Kubernetes cluster capacity exhaustion timeline
+- Node pool sizing requirements for next 3-6 months
+- Namespace cost projections based on growth trends
+- Resource type demands (CPU, memory, storage)
+- Multi-cluster scaling needs
+
+**Capacity Analysis:**
+- **Current Utilization**: Cluster capacity vs actual usage
+- **Growth Rate**: Week-over-week or month-over-month increases
+- **Namespace Trends**: Which teams/projects driving growth
+- **Resource Mix**: CPU vs memory vs storage growth rates
+- **Peak vs Average**: Capacity for peak load vs steady-state
+
+**Scaling Triggers:**
+- Capacity exhaustion date (when cluster hits limits)
+- Performance degradation risk (utilization > 80%)
+- Cost efficiency threshold (underutilized nodes)
+- Workload isolation needs (new namespaces/clusters)
+
+**Cost Projection Components:**
+- **Node Costs**: Additional EC2 instances for cluster expansion
+- **Control Plane**: Managed K8s control plane costs (EKS/GKE/AKS)
+- **Storage**: PVC and EBS/PD growth
+- **Network**: Inter-pod and egress traffic costs
+- **Add-ons**: Monitoring, service mesh, ingress controllers
+
+**Output Requirements:**
+- Projection summary for K8s capacity needs
+- Forecasted monthly cost for target capacity
+- Confidence level based on growth stability
+- Time period when capacity expansion needed
+- Key assumptions (workload growth, namespace additions, resource efficiency)
+- Variance range for different growth scenarios
+- Recommendations for node pool sizing and cluster scaling strategy
+
+{{role "user"}}
+{{userInput}}

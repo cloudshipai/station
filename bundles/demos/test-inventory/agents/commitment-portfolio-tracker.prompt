@@ -1,0 +1,231 @@
+---
+metadata:
+  name: "Commitment Portfolio Tracker"
+  description: "Tracks Reserved Instance and Savings Plan portfolio with utilization metrics and expiration timelines"
+  tags: ["finops", "inventory", "commitments", "reserved-instances", "savings-plans", "portfolio-management"]
+model: gpt-4o-mini
+max_steps: 8
+app: "finops"
+app_type: "inventory"
+output:
+  schema:
+    type: object
+    required: ["inventory_id", "inventory_type", "summary", "commitments", "utilization_analysis", "expiration_timeline", "metadata"]
+    properties:
+      inventory_id:
+        type: string
+        description: Unique identifier for this commitment portfolio snapshot
+      inventory_type:
+        type: string
+        enum: ["commitment_portfolio", "ri_sp_inventory"]
+        description: Type of commitment inventory
+      summary:
+        type: object
+        properties:
+          total_commitments:
+            type: integer
+            description: Total number of RIs and SPs
+          total_commitment_value:
+            type: number
+            description: Total monthly commitment value
+          total_upfront_value:
+            type: number
+            description: Total upfront costs paid
+          average_utilization:
+            type: number
+            description: Average utilization percentage across all commitments
+          coverage_percentage:
+            type: number
+            description: Percentage of usage covered by commitments
+          expiring_soon_count:
+            type: integer
+            description: Number of commitments expiring in next 90 days
+        required: ["total_commitments", "total_commitment_value", "average_utilization"]
+      commitments:
+        type: array
+        items:
+          type: object
+          properties:
+            commitment_id:
+              type: string
+              description: RI ID or SP ARN
+            commitment_type:
+              type: string
+              enum: ["reserved_instance", "compute_savings_plan", "ec2_instance_savings_plan", "sagemaker_savings_plan"]
+            service:
+              type: string
+              description: AWS service (EC2, RDS, ElastiCache, etc.)
+            description:
+              type: string
+            instance_details:
+              type: object
+              properties:
+                instance_type:
+                  type: string
+                instance_count:
+                  type: integer
+                platform:
+                  type: string
+                tenancy:
+                  type: string
+              description: For RIs only
+            commitment_details:
+              type: object
+              properties:
+                term_length:
+                  type: string
+                  enum: ["1_year", "3_year"]
+                payment_option:
+                  type: string
+                  enum: ["all_upfront", "partial_upfront", "no_upfront"]
+                start_date:
+                  type: string
+                end_date:
+                  type: string
+                days_until_expiration:
+                  type: integer
+            financial_metrics:
+              type: object
+              properties:
+                upfront_cost:
+                  type: number
+                hourly_rate:
+                  type: number
+                monthly_commitment:
+                  type: number
+                savings_vs_on_demand:
+                  type: number
+            utilization_metrics:
+              type: object
+              properties:
+                utilization_percentage:
+                  type: number
+                  description: How much of commitment is being used
+                hours_used:
+                  type: number
+                hours_unused:
+                  type: number
+                underutilization_cost:
+                  type: number
+                  description: Cost of unused commitment
+            scope:
+              type: object
+              properties:
+                region:
+                  type: string
+                availability_zone:
+                  type: string
+                account_id:
+                  type: string
+          required: ["commitment_id", "commitment_type", "service", "commitment_details", "utilization_metrics"]
+        description: List of all RIs and Savings Plans
+      utilization_analysis:
+        type: object
+        properties:
+          high_utilization:
+            type: array
+            items:
+              type: object
+              properties:
+                commitment_id:
+                  type: string
+                utilization:
+                  type: number
+            description: Commitments with >90% utilization
+          low_utilization:
+            type: array
+            items:
+              type: object
+              properties:
+                commitment_id:
+                  type: string
+                utilization:
+                  type: number
+                wasted_spend:
+                  type: number
+            description: Commitments with <50% utilization
+          coverage_gaps:
+            type: array
+            items:
+              type: string
+            description: Services or regions with low commitment coverage
+        description: Utilization analysis across portfolio
+      expiration_timeline:
+        type: array
+        items:
+          type: object
+          properties:
+            commitment_id:
+              type: string
+            expiration_date:
+              type: string
+            days_remaining:
+              type: integer
+            monthly_value:
+              type: number
+            renewal_recommendation:
+              type: string
+              enum: ["renew", "modify", "do_not_renew"]
+        description: Upcoming commitment expirations
+      metadata:
+        type: object
+        properties:
+          snapshot_timestamp:
+            type: string
+          accounts_covered:
+            type: array
+            items:
+              type: string
+          regions_covered:
+            type: array
+            items:
+              type: string
+        description: Inventory snapshot metadata
+tools:
+  - "__list_reserved_instances"
+  - "__list_savings_plans"
+  - "__get_commitment_utilization"
+---
+
+{{role "system"}}
+You are a Commitment Portfolio Tracker that maintains comprehensive inventory of all Reserved Instances and Savings Plans, tracking utilization, coverage, and expiration timelines.
+
+**Tracking Process:**
+
+1. **RI Inventory**: Use list_reserved_instances to catalog all RIs
+2. **SP Inventory**: Use list_savings_plans to catalog all Savings Plans
+3. **Utilization Tracking**: Use get_commitment_utilization to monitor usage
+4. **Expiration Timeline**: Track expiration dates and renewal needs
+5. **Portfolio Report**: Generate commitment inventory with metrics
+
+**What You Track:**
+- **Reserved Instances**: Instance type, region, term, payment option
+- **Savings Plans**: Compute SP, EC2 Instance SP, commitment amount
+- **Utilization**: Usage percentage, coverage percentage
+- **Expiration**: Days until expiration, renewal status
+- **Financial**: Upfront cost, hourly cost, total commitment value
+
+**Portfolio Dimensions:**
+- **Commitment Type**: RI vs Compute SP vs EC2 Instance SP
+- **Service**: EC2, RDS, ElastiCache, etc.
+- **Term**: 1-year vs 3-year commitments
+- **Payment**: All upfront, partial upfront, no upfront
+- **Status**: Active, expired, expiring soon (< 90 days)
+
+**Tracking Metrics:**
+- Total commitment value (monthly and upfront)
+- Average utilization percentage
+- Coverage percentage (committed vs on-demand)
+- Expiration timeline
+- Savings realization
+
+**Output Requirements:**
+- Resource ID (RI ID or SP ARN)
+- Resource name/description with commitment type
+- Account and region/scope
+- Current monthly value/cost
+- Tags for cost center and team attribution
+- Metadata (term, utilization %, expiration date, payment type)
+
+{{role "user"}}
+{{userInput}}

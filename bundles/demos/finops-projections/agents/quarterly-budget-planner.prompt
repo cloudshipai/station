@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "projections"
 output:
-  preset: "finops-projections"
+  format: json
+  schema:
+    type: object
+    properties:
+      forecast_period:
+        type: string
+        description: "Quarterly time period being planned"
+      projected_cost:
+        type: number
+        description: "Projected quarterly budget amount"
+      confidence_interval:
+        type: object
+        description: "Budget variance range with confidence levels"
+      trend_analysis:
+        type: string
+        description: "Business and cost trend analysis"
+      assumptions:
+        type: array
+        description: "Key assumptions including revenue and growth"
+      recommendations:
+        type: array
+        description: "Budget allocation and planning recommendations"
 tools:
   - "__get_cost_forecast"
   - "__get_cost_and_usage"

@@ -1,0 +1,238 @@
+---
+metadata:
+  name: "K8s Workload Tracker"
+  description: "Tracks Kubernetes workloads and their associated costs using OpenCost allocation data"
+  tags: ["finops", "inventory", "kubernetes", "k8s", "opencost", "workload-tracking"]
+model: gpt-4o-mini
+max_steps: 8
+app: "finops"
+app_type: "inventory"
+output:
+  schema:
+    type: object
+    required: ["inventory_id", "inventory_type", "summary", "workloads", "namespace_analysis", "cost_allocation", "metadata"]
+    properties:
+      inventory_id:
+        type: string
+        description: Unique identifier for this K8s workload inventory snapshot
+      inventory_type:
+        type: string
+        enum: ["kubernetes_workloads", "k8s_cost_allocation"]
+        description: Type of K8s inventory
+      summary:
+        type: object
+        properties:
+          total_namespaces:
+            type: integer
+          total_workloads:
+            type: integer
+          total_pods:
+            type: integer
+          total_monthly_cost:
+            type: number
+          average_cost_per_pod:
+            type: number
+          highest_cost_namespace:
+            type: string
+        required: ["total_namespaces", "total_workloads", "total_pods", "total_monthly_cost"]
+      workloads:
+        type: array
+        items:
+          type: object
+          properties:
+            workload_id:
+              type: string
+            workload_name:
+              type: string
+            workload_type:
+              type: string
+              enum: ["deployment", "statefulset", "daemonset", "job", "cronjob", "pod"]
+            namespace:
+              type: string
+            cluster:
+              type: string
+            pod_details:
+              type: object
+              properties:
+                pod_count:
+                  type: integer
+                running_pods:
+                  type: integer
+                pending_pods:
+                  type: integer
+                failed_pods:
+                  type: integer
+            resource_requests:
+              type: object
+              properties:
+                cpu_millicores:
+                  type: number
+                memory_bytes:
+                  type: number
+                storage_bytes:
+                  type: number
+            resource_usage:
+              type: object
+              properties:
+                cpu_usage_millicores:
+                  type: number
+                memory_usage_bytes:
+                  type: number
+                utilization_percentage:
+                  type: number
+            cost_allocation:
+              type: object
+              properties:
+                monthly_cost:
+                  type: number
+                cpu_cost:
+                  type: number
+                memory_cost:
+                  type: number
+                storage_cost:
+                  type: number
+                network_cost:
+                  type: number
+                cost_per_pod:
+                  type: number
+            labels:
+              type: object
+              description: K8s labels for attribution
+            annotations:
+              type: object
+              description: K8s annotations
+          required: ["workload_id", "workload_name", "workload_type", "namespace", "cost_allocation"]
+        description: List of all K8s workloads with cost data
+      namespace_analysis:
+        type: array
+        items:
+          type: object
+          properties:
+            namespace:
+              type: string
+            workload_count:
+              type: integer
+            pod_count:
+              type: integer
+            total_cost:
+              type: number
+            cost_breakdown:
+              type: object
+              properties:
+                compute_cost:
+                  type: number
+                memory_cost:
+                  type: number
+                storage_cost:
+                  type: number
+            resource_efficiency:
+              type: object
+              properties:
+                cpu_utilization:
+                  type: number
+                memory_utilization:
+                  type: number
+                overprovisioned:
+                  type: boolean
+            labels:
+              type: object
+              description: Namespace labels (team, environment, etc.)
+        description: Namespace-level cost aggregation
+      cost_allocation:
+        type: object
+        properties:
+          by_namespace:
+            type: array
+            items:
+              type: object
+              properties:
+                namespace:
+                  type: string
+                cost:
+                  type: number
+          by_workload_type:
+            type: array
+            items:
+              type: object
+              properties:
+                type:
+                  type: string
+                cost:
+                  type: number
+          by_team:
+            type: array
+            items:
+              type: object
+              properties:
+                team:
+                  type: string
+                cost:
+                  type: number
+          by_environment:
+            type: array
+            items:
+              type: object
+              properties:
+                environment:
+                  type: string
+                cost:
+                  type: number
+        description: Cost allocation across different dimensions
+      metadata:
+        type: object
+        properties:
+          snapshot_timestamp:
+            type: string
+          clusters_monitored:
+            type: array
+            items:
+              type: string
+          opencost_version:
+            type: string
+        description: Inventory snapshot metadata
+tools:
+  - "__get_allocation"
+---
+
+{{role "system"}}
+You are a Kubernetes Workload Tracker that maintains inventory of all K8s workloads and their cost allocations using OpenCost data.
+
+**Tracking Process:**
+
+1. **Workload Discovery**: Use get_allocation to identify all namespaces and controllers
+2. **Cost Allocation**: Extract CPU, memory, network, and storage costs per workload
+3. **Label Analysis**: Track team, environment, and application attribution
+4. **Resource Usage**: Monitor resource requests, limits, and actual utilization
+5. **Inventory Report**: Generate workload catalog with cost data
+
+**What You Track:**
+- **Namespaces**: Cost and resource usage by namespace
+- **Controllers**: Deployments, StatefulSets, DaemonSets, Jobs
+- **Pods**: Individual pod costs and resource consumption
+- **Resource Types**: CPU, memory, network, storage costs
+- **Labels**: Team, environment, application, version tags
+
+**Workload Dimensions:**
+- **Namespace**: Organizational unit (team, project, environment)
+- **Controller Type**: Deployment, StatefulSet, DaemonSet, Job
+- **Labels**: Attribution tags for chargeback/showback
+- **Resource Mix**: CPU-intensive vs memory-intensive workloads
+- **Cost Efficiency**: Cost per CPU hour, cost per GB-hour
+
+**Tracking Metrics:**
+- Total workload count by namespace/type
+- Cost breakdown by resource type (CPU/memory/network/storage)
+- Resource utilization vs requests
+- Cost trends over time
+- Team/project cost attribution
+
+**Output Requirements:**
+- Resource ID (namespace/controller/pod identifier)
+- Resource name and workload type
+- Account/cluster and namespace location
+- Current monthly cost with breakdown
+- Tags for team/environment/application attribution
+- Metadata (replica count, resource requests/limits, utilization)
+
+{{role "user"}}
+{{userInput}}

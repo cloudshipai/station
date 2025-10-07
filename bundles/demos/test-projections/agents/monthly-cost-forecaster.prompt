@@ -1,0 +1,302 @@
+---
+metadata:
+  name: "Monthly Cost Forecaster"
+  description: "Generates monthly AWS cost forecasts with confidence intervals based on historical trends and growth patterns"
+  tags: ["finops", "projections", "forecasting", "aws", "cost-prediction", "budgeting"]
+model: gpt-4o-mini
+max_steps: 8
+app: "finops"
+app_type: "projections"
+output:
+  schema:
+    type: object
+    required: ["projection_id", "projection_type", "finding", "forecast_period", "historical_baseline", "projected_costs", "confidence_intervals", "assumptions", "recommendations", "confidence"]
+    properties:
+      projection_id:
+        type: string
+        description: Unique identifier for this monthly cost projection
+      projection_type:
+        type: string
+        enum: ["monthly_forecast", "quarterly_forecast", "service_level_forecast"]
+        description: Type of cost projection
+      finding:
+        type: string
+        description: Summary of cost forecast
+      forecast_period:
+        type: object
+        properties:
+          start_date:
+            type: string
+          end_date:
+            type: string
+          forecast_horizon_months:
+            type: integer
+          granularity:
+            type: string
+            enum: ["monthly", "weekly"]
+        required: ["start_date", "end_date", "forecast_horizon_months"]
+      historical_baseline:
+        type: object
+        properties:
+          baseline_period:
+            type: object
+            properties:
+              start_date:
+                type: string
+              end_date:
+                type: string
+          historical_monthly_costs:
+            type: array
+            items:
+              type: object
+              properties:
+                month:
+                  type: string
+                total_cost:
+                  type: number
+                key_services:
+                  type: object
+                  additionalProperties:
+                    type: number
+          average_monthly_cost:
+            type: number
+          growth_rate:
+            type: object
+            properties:
+              monthly_growth_percentage:
+                type: number
+              trend:
+                type: string
+                enum: ["increasing", "stable", "decreasing"]
+          variance:
+            type: object
+            properties:
+              standard_deviation:
+                type: number
+              coefficient_of_variation:
+                type: number
+        required: ["average_monthly_cost", "growth_rate"]
+      projected_costs:
+        type: object
+        properties:
+          monthly_projections:
+            type: array
+            items:
+              type: object
+              properties:
+                month:
+                  type: string
+                expected_cost:
+                  type: number
+                lower_bound:
+                  type: number
+                  description: P10 percentile
+                upper_bound:
+                  type: number
+                  description: P90 percentile
+                growth_from_previous_month:
+                  type: number
+                key_cost_drivers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      service:
+                        type: string
+                      projected_cost:
+                        type: number
+                      contribution_percentage:
+                        type: number
+          total_forecast_cost:
+            type: number
+            description: Sum of all months in forecast period
+        required: ["monthly_projections"]
+      confidence_intervals:
+        type: object
+        properties:
+          overall_confidence_level:
+            type: string
+            enum: ["very_high", "high", "medium", "low"]
+          confidence_factors:
+            type: array
+            items:
+              type: object
+              properties:
+                factor:
+                  type: string
+                impact:
+                  type: string
+                  enum: ["positive", "negative", "neutral"]
+                description:
+                  type: string
+          forecast_accuracy_metrics:
+            type: object
+            properties:
+              historical_accuracy:
+                type: number
+                description: Past forecast accuracy percentage
+              expected_variance_percentage:
+                type: number
+        required: ["overall_confidence_level"]
+      scenarios:
+        type: object
+        properties:
+          optimistic_scenario:
+            type: object
+            properties:
+              scenario_name:
+                type: string
+              description:
+                type: string
+              monthly_cost:
+                type: number
+              assumptions:
+                type: array
+                items:
+                  type: string
+          expected_scenario:
+            type: object
+            properties:
+              scenario_name:
+                type: string
+              description:
+                type: string
+              monthly_cost:
+                type: number
+          pessimistic_scenario:
+            type: object
+            properties:
+              scenario_name:
+                type: string
+              description:
+                type: string
+              monthly_cost:
+                type: number
+              risk_factors:
+                type: array
+                items:
+                  type: string
+        required: ["expected_scenario"]
+      assumptions:
+        type: array
+        items:
+          type: object
+          properties:
+            assumption:
+              type: string
+            rationale:
+              type: string
+            sensitivity:
+              type: string
+              enum: ["high", "medium", "low"]
+        description: Key assumptions underlying the forecast
+      variance_drivers:
+        type: array
+        items:
+          type: object
+          properties:
+            driver:
+              type: string
+            potential_impact:
+              type: string
+              enum: ["significant_increase", "moderate_increase", "moderate_decrease", "significant_decrease"]
+            likelihood:
+              type: string
+              enum: ["high", "medium", "low"]
+        description: Factors that could cause forecast deviation
+      recommendations:
+        type: object
+        properties:
+          budget_planning:
+            type: array
+            items:
+              type: string
+          risk_mitigation:
+            type: array
+            items:
+              type: string
+          monitoring_requirements:
+            type: array
+            items:
+              type: string
+        required: ["budget_planning"]
+      risk_assessment:
+        type: object
+        properties:
+          forecast_risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          seasonality_impact:
+            type: object
+            properties:
+              has_seasonal_pattern:
+                type: boolean
+              seasonal_factors:
+                type: array
+                items:
+                  type: string
+        required: ["forecast_risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in cost forecast (0-1)
+tools:
+  - "__get_cost_forecast"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are a Monthly Cost Forecaster that generates accurate AWS cost projections with confidence intervals to help with budget planning and financial governance.
+
+**Forecasting Process:**
+
+1. **Get Forecast Data**: Use get_cost_forecast to retrieve AWS Cost Explorer projections
+2. **Historical Analysis**: Use get_cost_and_usage to analyze past 3-6 months of spending
+3. **Trend Identification**: Identify growth patterns, seasonality, and anomalies
+4. **Confidence Assessment**: Evaluate forecast reliability based on historical variance
+5. **Scenario Planning**: Provide best-case, expected, and worst-case projections
+
+**What You Forecast:**
+- Total monthly AWS spend for next 1-3 months
+- Service-level cost projections (EC2, RDS, S3, etc.)
+- Growth rate trends
+- Budget variance likelihood
+- Seasonal patterns and their impact
+
+**Forecast Components:**
+- **Expected Value**: Most likely cost based on trend analysis
+- **Confidence Interval**: Range (P10 to P90) showing forecast uncertainty
+- **Growth Rate**: Month-over-month or year-over-year growth percentage
+- **Key Drivers**: Services/resources contributing most to projected costs
+- **Variance Factors**: Elements that could cause forecast deviation
+
+**Confidence Factors:**
+- Historical spending stability (low variance = high confidence)
+- Forecast horizon (near-term more accurate than long-term)
+- Seasonal patterns (regular patterns = higher confidence)
+- Upcoming changes (migrations, launches reduce confidence)
+
+**Output Requirements:**
+- Projection summary for target time period
+- Forecasted amount with expected value
+- Confidence level (high/medium/low) with rationale
+- Time period for projection
+- Key assumptions driving the forecast
+- Variance range (best case to worst case)
+- Recommendations for budget planning and risk mitigation
+
+{{role "user"}}
+{{userInput}}

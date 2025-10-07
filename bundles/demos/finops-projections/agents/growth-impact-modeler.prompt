@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "projections"
 output:
-  preset: "finops-projections"
+  format: json
+  schema:
+    type: object
+    properties:
+      forecast_period:
+        type: string
+        description: "Time period for growth modeling"
+      projected_cost:
+        type: number
+        description: "Projected infrastructure cost at growth level"
+      confidence_interval:
+        type: object
+        description: "Cost range for different growth scenarios"
+      trend_analysis:
+        type: string
+        description: "Growth impact and scaling analysis"
+      assumptions:
+        type: array
+        description: "Key assumptions including growth rate and customer acquisition"
+      recommendations:
+        type: array
+        description: "Capacity planning and scaling recommendations"
 tools:
   - "__get_revenue_metrics"
   - "__get_cost_and_usage"

@@ -1,0 +1,8 @@
+# Template variables for security-investigations bundle
+# These variables can be customized when installing the bundle
+
+# AWS region for GuardDuty and Inspector queries
+AWS_REGION: "us-east-1"
+
+# Default time window for security investigations (in hours)
+INVESTIGATION_WINDOW_HOURS: "24"

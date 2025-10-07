@@ -1,0 +1,200 @@
+---
+metadata:
+  name: "Budget vs Actual Tracker"
+  description: "Tracks budget performance and variance across all budgets, providing real-time spend tracking against allocations"
+  tags: ["finops", "inventory", "budgets", "variance-tracking", "spend-monitoring", "governance"]
+model: gpt-4o-mini
+max_steps: 8
+app: "finops"
+app_type: "inventory"
+output:
+  schema:
+    type: object
+    required: ["inventory_id", "inventory_type", "summary", "budgets", "variance_analysis", "alerts", "metadata"]
+    properties:
+      inventory_id:
+        type: string
+        description: Unique identifier for this budget inventory snapshot
+      inventory_type:
+        type: string
+        enum: ["budget_performance", "budget_tracking"]
+        description: Type of budget inventory
+      summary:
+        type: object
+        properties:
+          total_budgets:
+            type: integer
+            description: Total number of budgets tracked
+          total_budget_amount:
+            type: number
+            description: Sum of all budget allocations
+          total_actual_spend:
+            type: number
+            description: Sum of actual spend across all budgets
+          overall_variance_percentage:
+            type: number
+            description: Overall variance percentage
+          budgets_over_threshold:
+            type: integer
+            description: Number of budgets exceeding alert thresholds
+        required: ["total_budgets", "total_budget_amount", "total_actual_spend"]
+      budgets:
+        type: array
+        items:
+          type: object
+          properties:
+            budget_id:
+              type: string
+            budget_name:
+              type: string
+            budget_amount:
+              type: number
+            actual_spend:
+              type: number
+            utilization_percentage:
+              type: number
+              description: Percentage of budget consumed
+            variance:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  description: Dollar amount over/under budget
+                percentage:
+                  type: number
+                  description: Percentage over/under budget
+                status:
+                  type: string
+                  enum: ["under_budget", "on_track", "at_risk", "over_budget"]
+            budget_scope:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: ["account", "service", "tag_based", "cost_center"]
+                filters:
+                  type: object
+                time_period:
+                  type: string
+                  enum: ["monthly", "quarterly", "annual"]
+            forecast:
+              type: object
+              properties:
+                projected_spend:
+                  type: number
+                projected_utilization:
+                  type: number
+                will_exceed:
+                  type: boolean
+            alert_configuration:
+              type: object
+              properties:
+                thresholds:
+                  type: array
+                  items:
+                    type: number
+                current_threshold_breached:
+                  type: number
+                alerts_triggered:
+                  type: integer
+          required: ["budget_id", "budget_name", "budget_amount", "actual_spend", "utilization_percentage"]
+        description: List of all budgets with performance metrics
+      variance_analysis:
+        type: object
+        properties:
+          largest_variances:
+            type: array
+            items:
+              type: object
+              properties:
+                budget_name:
+                  type: string
+                variance_amount:
+                  type: number
+                variance_percentage:
+                  type: number
+          trend_analysis:
+            type: string
+            description: Overall budget performance trend
+        description: Analysis of budget variances
+      alerts:
+        type: array
+        items:
+          type: object
+          properties:
+            budget_name:
+              type: string
+            alert_type:
+              type: string
+              enum: ["threshold_breach", "forecast_exceed", "underspend"]
+            severity:
+              type: string
+              enum: ["critical", "warning", "info"]
+            message:
+              type: string
+        description: Active budget alerts
+      metadata:
+        type: object
+        properties:
+          snapshot_timestamp:
+            type: string
+          reporting_period:
+            type: string
+          accounts_covered:
+            type: array
+            items:
+              type: string
+        description: Inventory snapshot metadata
+tools:
+  - "__list_budgets"
+  - "__get_budget_performance"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are a Budget vs Actual Tracker that monitors budget performance across all organizational budgets, tracking variance and providing real-time spend visibility against allocations.
+
+**Tracking Process:**
+
+1. **Budget Inventory**: Use list_budgets to catalog all active budgets
+2. **Performance Metrics**: Use get_budget_performance to get utilization and variance
+3. **Actual Costs**: Use get_cost_and_usage to confirm actual spend
+4. **Variance Analysis**: Calculate budget variance (over/under budget)
+5. **Tracking Report**: Generate budget inventory with performance metrics
+
+**What You Track:**
+- **Budget Definitions**: Name, amount, scope, time period
+- **Actual Spend**: Current spend vs budget amount
+- **Utilization**: Percentage of budget consumed
+- **Variance**: Absolute and percentage over/under budget
+- **Alerts**: Threshold breaches and notification status
+
+**Budget Dimensions:**
+- **Scope**: Account-level, service-level, tag-based budgets
+- **Time Period**: Monthly, quarterly, annual budgets
+- **Type**: Cost budget, usage budget, RI/SP coverage budget
+- **Status**: On track, at risk, over budget, under budget
+
+**Performance Metrics:**
+- Budget utilization percentage
+- Variance amount (over/under)
+- Forecast vs budget (projected to exceed?)
+- Alert history (threshold breaches)
+- Trend (improving, worsening, stable)
+
+**Tracking Use Cases:**
+- **Chargeback**: Team budget tracking for cost accountability
+- **Governance**: Company-wide spending controls
+- **Planning**: Budget adequacy assessment
+- **Alerts**: Proactive overspend prevention
+
+**Output Requirements:**
+- Resource ID (budget identifier or name)
+- Resource name (budget name with scope)
+- Account/region or budget scope
+- Current cost (actual spend vs budget amount)
+- Tags (budget owner, cost center, purpose)
+- Metadata (utilization %, variance amount, alert status, forecast)
+
+{{role "user"}}
+{{userInput}}

@@ -1,0 +1,5 @@
+# Environment variables for test-inventory
+# Add your template variables here
+# Example:
+# DATABASE_URL: "your-database-url"
+# API_KEY: "your-api-key"

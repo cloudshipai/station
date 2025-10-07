@@ -1,0 +1,275 @@
+---
+metadata:
+  name: "Multi-Cloud Resource Cataloger"
+  description: "Catalogs and tracks cloud resources across AWS accounts and regions using CloudQuery inventory data"
+  tags: ["finops", "inventory", "multi-cloud", "resource-tracking", "cloudquery", "asset-management"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "inventory"
+output:
+  schema:
+    type: object
+    required: ["inventory_id", "inventory_type", "summary", "resources", "resource_analysis", "tagging_compliance", "metadata"]
+    properties:
+      inventory_id:
+        type: string
+        description: Unique identifier for this multi-cloud resource catalog snapshot
+      inventory_type:
+        type: string
+        enum: ["multi_cloud_resources", "asset_catalog", "resource_inventory"]
+        description: Type of resource inventory
+      summary:
+        type: object
+        properties:
+          total_resources:
+            type: integer
+            description: Total number of resources cataloged
+          total_accounts:
+            type: integer
+          total_regions:
+            type: integer
+          total_monthly_cost:
+            type: number
+          resource_types_count:
+            type: integer
+            description: Number of distinct resource types
+          tagged_resources_percentage:
+            type: number
+        required: ["total_resources", "total_accounts", "total_monthly_cost"]
+      resources:
+        type: array
+        items:
+          type: object
+          properties:
+            resource_id:
+              type: string
+              description: Cloud-specific resource identifier
+            resource_name:
+              type: string
+            resource_type:
+              type: string
+              description: Type of resource (EC2, RDS, S3, VPC, Lambda, etc.)
+            service_category:
+              type: string
+              enum: ["compute", "storage", "database", "networking", "security", "analytics", "other"]
+            location:
+              type: object
+              properties:
+                cloud_provider:
+                  type: string
+                  enum: ["aws", "gcp", "azure"]
+                account_id:
+                  type: string
+                region:
+                  type: string
+                availability_zone:
+                  type: string
+            state:
+              type: string
+              enum: ["running", "stopped", "terminated", "available", "pending", "unknown"]
+            creation_timestamp:
+              type: string
+            cost_metrics:
+              type: object
+              properties:
+                monthly_cost:
+                  type: number
+                daily_cost:
+                  type: number
+                cost_trend:
+                  type: string
+                  enum: ["increasing", "decreasing", "stable"]
+            resource_configuration:
+              type: object
+              properties:
+                instance_type:
+                  type: string
+                size:
+                  type: string
+                capacity:
+                  type: string
+                specifications:
+                  type: object
+            tags:
+              type: object
+              description: Resource tags/labels
+            compliance:
+              type: object
+              properties:
+                is_compliant:
+                  type: boolean
+                violations:
+                  type: array
+                  items:
+                    type: string
+            owner_info:
+              type: object
+              properties:
+                team:
+                  type: string
+                cost_center:
+                  type: string
+                environment:
+                  type: string
+                  enum: ["production", "staging", "development", "test"]
+          required: ["resource_id", "resource_type", "location", "cost_metrics"]
+        description: List of all cataloged cloud resources
+      resource_analysis:
+        type: object
+        properties:
+          by_resource_type:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_type:
+                  type: string
+                count:
+                  type: integer
+                total_cost:
+                  type: number
+          by_service_category:
+            type: array
+            items:
+              type: object
+              properties:
+                category:
+                  type: string
+                count:
+                  type: integer
+                total_cost:
+                  type: number
+          by_account:
+            type: array
+            items:
+              type: object
+              properties:
+                account_id:
+                  type: string
+                count:
+                  type: integer
+                total_cost:
+                  type: number
+          by_region:
+            type: array
+            items:
+              type: object
+              properties:
+                region:
+                  type: string
+                count:
+                  type: integer
+                total_cost:
+                  type: number
+          by_environment:
+            type: array
+            items:
+              type: object
+              properties:
+                environment:
+                  type: string
+                count:
+                  type: integer
+                total_cost:
+                  type: number
+          high_value_resources:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_id:
+                  type: string
+                resource_type:
+                  type: string
+                monthly_cost:
+                  type: number
+            description: Top 10 most expensive resources
+        description: Resource analysis across multiple dimensions
+      tagging_compliance:
+        type: object
+        properties:
+          tagged_resources:
+            type: integer
+          untagged_resources:
+            type: integer
+          compliance_percentage:
+            type: number
+          required_tags:
+            type: array
+            items:
+              type: string
+          missing_tags_analysis:
+            type: array
+            items:
+              type: object
+              properties:
+                tag_name:
+                  type: string
+                resources_missing:
+                  type: integer
+        description: Tagging compliance analysis
+      metadata:
+        type: object
+        properties:
+          snapshot_timestamp:
+            type: string
+          data_source:
+            type: string
+            description: CloudQuery or other inventory tool
+          accounts_cataloged:
+            type: array
+            items:
+              type: string
+          regions_cataloged:
+            type: array
+            items:
+              type: string
+        description: Inventory snapshot metadata
+tools:
+  - "__query_resources"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are a Multi-Cloud Resource Cataloger that maintains comprehensive inventory of cloud infrastructure using CloudQuery, providing visibility into all resources across accounts and regions.
+
+**Cataloging Process:**
+
+1. **Resource Discovery**: Use query_resources to scan all AWS accounts and regions
+2. **Cost Attribution**: Use get_cost_and_usage to associate costs with resources
+3. **Categorization**: Organize resources by type, account, region, tags
+4. **Cost Tracking**: Track monthly costs per resource
+5. **Inventory Report**: Generate comprehensive resource catalog
+
+**What You Catalog:**
+- **Compute**: EC2 instances, Lambda functions, ECS tasks, K8s pods
+- **Storage**: S3 buckets, EBS volumes, EFS file systems, snapshots
+- **Database**: RDS instances, DynamoDB tables, ElastiCache clusters
+- **Network**: VPCs, Load Balancers, NAT Gateways, Elastic IPs
+- **Other**: Any AWS resource with associated costs
+
+**Inventory Dimensions:**
+- **Account**: Multi-account resource distribution
+- **Region**: Geographic resource distribution
+- **Resource Type**: Categorization by AWS service
+- **Tags**: Team, environment, cost center, project attribution
+- **State**: Running, stopped, available, unused
+
+**Tracking Metrics:**
+- Total resource count by type
+- Total monthly cost by category
+- Resource age and lifecycle
+- Tag compliance and coverage
+- Cost per resource
+
+**Output Requirements:**
+- Resource ID identifying the cataloged item
+- Resource name and type classification
+- Account and region location
+- Current cost (monthly estimate)
+- Tags for attribution and compliance
+- Metadata (age, state, size, configuration)
+
+{{role "user"}}
+{{userInput}}

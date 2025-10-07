@@ -8,7 +8,28 @@ max_steps: 8
 app: "finops"
 app_type: "projections"
 output:
-  preset: "finops-projections"
+  format: json
+  schema:
+    type: object
+    properties:
+      forecast_period:
+        type: string
+        description: "Time period being forecasted"
+      projected_cost:
+        type: number
+        description: "Projected cost amount in dollars"
+      confidence_interval:
+        type: object
+        description: "Range of possible cost outcomes with probability"
+      trend_analysis:
+        type: string
+        description: "Analysis of cost trends and patterns"
+      assumptions:
+        type: array
+        description: "Key assumptions underlying the forecast"
+      recommendations:
+        type: array
+        description: "Actionable recommendations based on forecast"
 tools:
   - "__get_cost_forecast"
   - "__get_cost_and_usage"

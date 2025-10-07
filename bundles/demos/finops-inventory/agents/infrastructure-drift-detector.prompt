@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "inventory"
 output:
-  preset: "finops-inventory"
+  format: json
+  schema:
+    type: object
+    properties:
+      resources:
+        type: array
+        description: "Array of drift events and changed resources"
+      summary:
+        type: string
+        description: "Summary of infrastructure drift"
+      metadata:
+        type: object
+        description: "Drift statistics and change metrics"
+      tagging_compliance:
+        type: object
+        description: "Tag changes and compliance impact"
+      total_cost:
+        type: number
+        description: "Total cost impact of drift"
+      snapshot_timestamp:
+        type: string
+        description: "Timestamp of drift detection"
 tools:
   - "__detect_drift"
   - "__query_resources"

@@ -8,17 +8,37 @@ max_steps: 10
 app: "security"
 app_type: "investigations"
 output:
+  format: json
   schema:
     type: object
-    required: [finding, root_cause, threat_severity, affected_resources, attack_timeline, evidence, remediation]
     properties:
-      finding: {type: string}
-      root_cause: {type: string}
-      threat_severity: {type: string, enum: ["Critical", "High", "Medium", "Low"]}
-      affected_resources: {type: array, items: {type: object}}
-      attack_timeline: {type: object}
-      evidence: {type: array, items: {type: string}}
-      remediation: {type: array, items: {type: object}}
+      finding_id:
+        type: string
+        description: Privilege escalation finding identifier
+      severity:
+        type: string
+        description: "Severity: CRITICAL, HIGH, MEDIUM, LOW"
+      summary:
+        type: string
+        description: Executive summary of privilege escalation incident
+      affected_resources:
+        type: array
+        items:
+          type: string
+        description: IAM users, roles, and principals with elevated permissions
+      threat_indicators:
+        type: array
+        items:
+          type: string
+        description: Policy chains, role assumptions, permission escalation paths
+      remediation_steps:
+        type: array
+        items:
+          type: string
+        description: Prioritized least-privilege enforcement actions
+      confidence:
+        type: string
+        description: "Analysis confidence: HIGH, MEDIUM, LOW"
 tools:
   - "__get_findings"
   - "__analyze_policy"

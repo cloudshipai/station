@@ -1,8 +1,34 @@
 {
   "name": "reliability-investigations",
-  "description": "SRE incident investigation and root cause analysis demo bundle",
+  "description": "System reliability investigation and incident analysis demo bundle",
   "mcpServers": {
-    "pagerduty": {"command": "stn", "args": ["mock", "pagerduty"]},
-    "grafana": {"command": "stn", "args": ["mock", "grafana"]}
+    "aws-cloudwatch": {
+      "command": "stn",
+      "args": [
+        "mock",
+        "aws-cloudwatch"
+      ]
+    },
+    "aws-xray": {
+      "command": "stn",
+      "args": [
+        "mock",
+        "aws-xray"
+      ]
+    },
+    "grafana": {
+      "command": "stn",
+      "args": [
+        "mock",
+        "grafana"
+      ]
+    },
+    "pagerduty": {
+      "command": "stn",
+      "args": [
+        "mock",
+        "pagerduty"
+      ]
+    }
   }
 }

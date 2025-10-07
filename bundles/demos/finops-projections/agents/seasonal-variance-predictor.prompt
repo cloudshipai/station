@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "projections"
 output:
-  preset: "finops-projections"
+  format: json
+  schema:
+    type: object
+    properties:
+      forecast_period:
+        type: string
+        description: "Seasonal period being predicted"
+      projected_cost:
+        type: number
+        description: "Projected cost during seasonal period"
+      confidence_interval:
+        type: object
+        description: "Variance range for seasonal cost fluctuations"
+      trend_analysis:
+        type: string
+        description: "Seasonal pattern and variance analysis"
+      assumptions:
+        type: array
+        description: "Key assumptions including pattern recurrence and growth"
+      recommendations:
+        type: array
+        description: "Seasonal budget and capacity planning recommendations"
 tools:
   - "__get_cost_and_usage"
   - "__get_cost_forecast"

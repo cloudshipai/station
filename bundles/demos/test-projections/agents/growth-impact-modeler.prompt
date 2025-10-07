@@ -1,0 +1,339 @@
+---
+metadata:
+  name: "Growth Impact Modeler"
+  description: "Models infrastructure cost impact of business growth scenarios based on revenue projections and customer acquisition plans"
+  tags: ["finops", "projections", "growth-modeling", "capacity-planning", "revenue-correlation"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "projections"
+output:
+  schema:
+    type: object
+    required: ["projection_id", "projection_type", "finding", "forecast_period", "baseline", "growth_scenarios", "projected_costs", "unit_economics", "assumptions", "recommendations", "confidence"]
+    properties:
+      projection_id:
+        type: string
+        description: Unique identifier for this growth impact projection
+      projection_type:
+        type: string
+        enum: ["customer_growth_impact", "revenue_growth_impact", "traffic_growth_impact", "multi_scenario_growth"]
+        description: Type of growth impact projection
+      finding:
+        type: string
+        description: Summary of growth cost impact
+      forecast_period:
+        type: object
+        properties:
+          start_date:
+            type: string
+          end_date:
+            type: string
+          forecast_horizon_months:
+            type: integer
+          granularity:
+            type: string
+            enum: ["monthly", "quarterly", "annual"]
+        required: ["start_date", "end_date", "forecast_horizon_months"]
+      baseline:
+        type: object
+        properties:
+          current_monthly_cost:
+            type: number
+          current_customer_count:
+            type: number
+          current_arr:
+            type: number
+          current_monthly_traffic:
+            type: number
+          unit_economics:
+            type: object
+            properties:
+              cost_per_customer:
+                type: number
+              cost_per_arr_dollar:
+                type: number
+              cost_as_percentage_of_revenue:
+                type: number
+        required: ["current_monthly_cost"]
+      growth_scenarios:
+        type: array
+        items:
+          type: object
+          properties:
+            scenario_name:
+              type: string
+            growth_rate_percentage:
+              type: number
+            time_to_target:
+              type: string
+            target_metrics:
+              type: object
+              properties:
+                target_customer_count:
+                  type: number
+                target_arr:
+                  type: number
+                target_traffic_multiplier:
+                  type: number
+            projected_infrastructure_cost:
+              type: number
+            cost_increase_from_baseline:
+              type: number
+            cost_increase_percentage:
+              type: number
+        description: Different growth scenarios modeled
+      projected_costs:
+        type: object
+        properties:
+          by_scenario:
+            type: array
+            items:
+              type: object
+              properties:
+                scenario_name:
+                  type: string
+                monthly_projections:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      month:
+                        type: string
+                      customers:
+                        type: number
+                      arr:
+                        type: number
+                      projected_cost:
+                        type: number
+                      cost_per_customer:
+                        type: number
+                annual_cost:
+                  type: number
+          scaling_milestones:
+            type: array
+            items:
+              type: object
+              properties:
+                milestone:
+                  type: string
+                  description: e.g., "10K customers", "Reach 100M ARR"
+                date:
+                  type: string
+                projected_monthly_cost:
+                  type: number
+                infrastructure_changes_needed:
+                  type: array
+                  items:
+                    type: string
+        required: ["by_scenario"]
+      unit_economics:
+        type: object
+        properties:
+          cost_per_customer_trend:
+            type: array
+            items:
+              type: object
+              properties:
+                scenario:
+                  type: string
+                current_cost_per_customer:
+                  type: number
+                projected_cost_per_customer:
+                  type: number
+                trend:
+                  type: string
+                  enum: ["improving", "stable", "degrading"]
+          gross_margin_impact:
+            type: object
+            properties:
+              current_gross_margin_percentage:
+                type: number
+              projected_gross_margin:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    scenario:
+                      type: string
+                    gross_margin_percentage:
+                      type: number
+          economies_of_scale:
+            type: object
+            properties:
+              scaling_benefits:
+                type: array
+                items:
+                  type: string
+              estimated_cost_reduction_percentage:
+                type: number
+        description: Unit economics at different scale levels
+      cost_components:
+        type: object
+        properties:
+          linear_scaling_costs:
+            type: object
+            properties:
+              components:
+                type: array
+                items:
+                  type: string
+              percentage_of_total:
+                type: number
+          step_function_costs:
+            type: array
+            items:
+              type: object
+              properties:
+                component:
+                  type: string
+                trigger_threshold:
+                  type: string
+                  description: Customer count or metric that triggers cost jump
+                cost_impact:
+                  type: number
+          fixed_costs:
+            type: object
+            properties:
+              monthly_fixed_cost:
+                type: number
+              percentage_of_total_at_scale:
+                type: number
+        description: Breakdown of cost scaling patterns
+      assumptions:
+        type: array
+        items:
+          type: object
+          properties:
+            assumption:
+              type: string
+            rationale:
+              type: string
+            sensitivity:
+              type: string
+              enum: ["high", "medium", "low"]
+        description: Key assumptions for growth modeling
+      sensitivity_analysis:
+        type: object
+        properties:
+          growth_rate_impact:
+            type: object
+            properties:
+              optimistic_growth:
+                type: number
+                description: Cost impact with higher growth
+              pessimistic_growth:
+                type: number
+                description: Cost impact with lower growth
+          efficiency_improvement_impact:
+            type: object
+            properties:
+              with_10_percent_efficiency_gain:
+                type: number
+              with_20_percent_efficiency_gain:
+                type: number
+        description: Sensitivity to key variables
+      recommendations:
+        type: object
+        properties:
+          capacity_planning:
+            type: array
+            items:
+              type: string
+          commitment_strategy:
+            type: array
+            items:
+              type: string
+          architecture_recommendations:
+            type: array
+            items:
+              type: string
+          cost_optimization_priorities:
+            type: array
+            items:
+              type: object
+              properties:
+                priority:
+                  type: string
+                timing:
+                  type: string
+        required: ["capacity_planning", "commitment_strategy"]
+      risk_assessment:
+        type: object
+        properties:
+          projection_risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          growth_volatility:
+            type: string
+            enum: ["low", "medium", "high"]
+        required: ["projection_risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in growth impact projection (0-1)
+tools:
+  - "__get_revenue_metrics"
+  - "__get_cost_and_usage"
+  - "__get_cost_forecast"
+---
+
+{{role "system"}}
+You are a Growth Impact Modeler that projects infrastructure cost requirements based on business growth scenarios, helping leadership understand the cost implications of scaling.
+
+**Modeling Process:**
+
+1. **Revenue Baseline**: Use get_revenue_metrics to understand current customer/revenue levels
+2. **Cost Baseline**: Use get_cost_and_usage to establish current infrastructure costs
+3. **Unit Economics**: Calculate cost per customer/transaction/request
+4. **Growth Scenarios**: Model cost impact at different growth rates (conservative, expected, aggressive)
+5. **Forecast Validation**: Use get_cost_forecast to validate model against AWS projections
+
+**What You Model:**
+- Infrastructure cost at different customer growth rates (2x, 5x, 10x)
+- Cost per customer/ARR as business scales
+- Breakpoints where infrastructure changes needed (architecture, commitment strategy)
+- Gross margin impact at different scale levels
+
+**Growth Scenarios:**
+1. **Conservative Growth**: 20-30% growth → infrastructure cost impact
+2. **Expected Growth**: 50-100% growth → infrastructure cost impact
+3. **Aggressive Growth**: 2-5x growth → infrastructure cost impact
+4. **Viral/Hypergrowth**: 10x+ growth → infrastructure cost impact
+
+**Cost Components:**
+- **Linear Scaling**: Costs that grow proportionally with customers (compute, database)
+- **Step Functions**: Costs that jump at certain scale (new regions, larger instance classes)
+- **Fixed Costs**: Baseline infrastructure regardless of growth
+- **Economies of Scale**: Cost reductions from volume (commitment discounts, better pricing tiers)
+
+**Key Metrics:**
+- Current cost per customer/ARR
+- Projected cost per customer at scale
+- Gross margin at different growth levels
+- Infrastructure efficiency trends
+
+**Output Requirements:**
+- Projection summary describing growth scenario
+- Forecasted cost at target growth level
+- Confidence level based on unit economics stability
+- Time period to reach growth target
+- Key assumptions (growth rate, customer acquisition, scaling patterns)
+- Variance range for different scaling scenarios
+- Recommendations for capacity planning and commitment strategy
+
+{{role "user"}}
+{{userInput}}

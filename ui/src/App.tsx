@@ -255,6 +255,8 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/runs')) return 'runs';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
+    if (path.startsWith('/cloudship')) return 'cloudship';
+    if (path.startsWith('/live-demo')) return 'live-demo';
     if (path.startsWith('/settings')) return 'settings';
     return 'agents'; // default
   };

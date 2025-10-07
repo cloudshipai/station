@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "inventory"
 output:
-  preset: "finops-inventory"
+  format: json
+  schema:
+    type: object
+    properties:
+      resources:
+        type: array
+        description: "Array of cost centers with attributed costs"
+      summary:
+        type: string
+        description: "Summary of cost center attribution"
+      metadata:
+        type: object
+        description: "Attribution statistics and hierarchy information"
+      tagging_compliance:
+        type: object
+        description: "Tag compliance metrics by cost center"
+      total_cost:
+        type: number
+        description: "Total monthly cost across all cost centers"
+      snapshot_timestamp:
+        type: string
+        description: "Timestamp of cost center snapshot"
 tools:
   - "__query_resources"
   - "__get_cost_and_usage"

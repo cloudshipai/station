@@ -1,0 +1,296 @@
+---
+metadata:
+  name: "Orphaned Resource Cleaner"
+  description: "Identifies orphaned and unused cloud resources like unattached EBS volumes, unassociated Elastic IPs, and idle load balancers for cleanup"
+  tags: ["finops", "opportunities", "cleanup", "orphaned-resources", "waste-elimination", "aws"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "opportunities"
+output:
+  schema:
+    type: object
+    required: ["opportunity_id", "opportunity_type", "finding", "current_state", "recommended_state", "savings_potential", "implementation", "priority", "confidence"]
+    properties:
+      opportunity_id:
+        type: string
+        description: Unique identifier for this orphaned resource cleanup opportunity
+      opportunity_type:
+        type: string
+        enum: ["unattached_ebs_volumes", "unassociated_elastic_ips", "idle_load_balancers", "unused_nat_gateways", "old_snapshots", "stopped_instances", "unused_amis"]
+        description: Type of orphaned resource cleanup opportunity
+      finding:
+        type: string
+        description: Summary of orphaned resources discovered
+      current_state:
+        type: object
+        properties:
+          orphaned_resources:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_id:
+                  type: string
+                resource_type:
+                  type: string
+                  enum: ["ebs_volume", "elastic_ip", "load_balancer", "nat_gateway", "snapshot", "ec2_instance", "ami"]
+                region:
+                  type: string
+                state:
+                  type: string
+                  description: available, unassociated, stopped, etc.
+                age_days:
+                  type: integer
+                monthly_cost:
+                  type: number
+                size_gb:
+                  type: number
+                last_attached_date:
+                  type: string
+                last_activity_date:
+                  type: string
+                tags:
+                  type: object
+                  additionalProperties:
+                    type: string
+                has_snapshots:
+                  type: boolean
+                deletion_safety:
+                  type: string
+                  enum: ["safe", "review_required", "high_risk"]
+            description: List of orphaned resources discovered
+          total_orphaned_count:
+            type: integer
+          total_monthly_waste:
+            type: number
+          resource_breakdown:
+            type: object
+            properties:
+              ebs_volumes_count:
+                type: integer
+              elastic_ips_count:
+                type: integer
+              load_balancers_count:
+                type: integer
+              nat_gateways_count:
+                type: integer
+              snapshots_count:
+                type: integer
+              stopped_instances_count:
+                type: integer
+          oldest_orphan_days:
+            type: integer
+          newest_orphan_days:
+            type: integer
+        required: ["orphaned_resources", "total_orphaned_count", "total_monthly_waste"]
+      recommended_state:
+        type: object
+        properties:
+          cleanup_actions:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_id:
+                  type: string
+                resource_type:
+                  type: string
+                recommended_action:
+                  type: string
+                  enum: ["delete_immediately", "snapshot_then_delete", "review_with_owner", "keep_with_tag", "stop_and_monitor"]
+                action_reasoning:
+                  type: string
+                safety_level:
+                  type: string
+                  enum: ["safe", "caution", "high_risk"]
+                requires_backup:
+                  type: boolean
+                monthly_savings:
+                  type: number
+          cleanup_categories:
+            type: object
+            properties:
+              immediate_cleanup:
+                type: array
+                items:
+                  type: string
+                description: Resource IDs safe for immediate deletion
+              review_required:
+                type: array
+                items:
+                  type: string
+                description: Resources requiring owner review
+              keep_resources:
+                type: array
+                items:
+                  type: string
+                description: Resources to keep based on tags or purpose
+          retention_policies:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_type:
+                  type: string
+                policy:
+                  type: string
+                rationale:
+                  type: string
+        required: ["cleanup_actions"]
+      savings_potential:
+        type: object
+        properties:
+          monthly_savings:
+            type: number
+          annual_savings:
+            type: number
+          percentage_savings:
+            type: number
+            description: Percentage of total cloud spend
+          savings_by_resource_type:
+            type: object
+            properties:
+              ebs_volumes_savings:
+                type: number
+              elastic_ips_savings:
+                type: number
+              load_balancers_savings:
+                type: number
+              nat_gateways_savings:
+                type: number
+              snapshots_savings:
+                type: number
+        required: ["monthly_savings", "annual_savings"]
+      implementation:
+        type: object
+        properties:
+          steps:
+            type: array
+            items:
+              type: object
+              properties:
+                step_number:
+                  type: integer
+                description:
+                  type: string
+                resource_ids:
+                  type: array
+                  items:
+                    type: string
+                commands:
+                  type: array
+                  items:
+                    type: string
+                estimated_duration:
+                  type: string
+                requires_approval:
+                  type: boolean
+                backup_required:
+                  type: boolean
+                validation:
+                  type: string
+          safety_checklist:
+            type: array
+            items:
+              type: string
+            description: Pre-deletion safety checks
+          backup_strategy:
+            type: string
+            description: How to backup resources before deletion
+          rollback_plan:
+            type: string
+          notification_requirements:
+            type: array
+            items:
+              type: string
+            description: Teams to notify before cleanup
+          estimated_implementation_time:
+            type: string
+        required: ["steps", "safety_checklist", "estimated_implementation_time"]
+      priority:
+        type: string
+        enum: ["critical", "high", "medium", "low"]
+        description: Priority based on waste amount and resource age
+      risk_assessment:
+        type: object
+        properties:
+          overall_risk:
+            type: string
+            enum: ["low", "medium", "high"]
+          risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          data_loss_potential:
+            type: string
+            enum: ["none", "low", "medium", "high"]
+          service_disruption_potential:
+            type: string
+            enum: ["none", "low", "medium", "high"]
+          requires_stakeholder_approval:
+            type: boolean
+        required: ["overall_risk", "risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence that resources are truly orphaned (0-1)
+tools:
+  - "__query_resources"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are an Orphaned Resource Cleaner that uses CloudQuery resource inventory to identify unused, unattached, and orphaned cloud resources that are generating costs without providing value.
+
+**Analysis Process:**
+
+1. **Resource Discovery**: Use query_resources to scan for potentially orphaned resources
+2. **Orphan Detection**: Identify resources in "available", "unassociated", or "stopped" states
+3. **Cost Calculation**: Use get_cost_and_usage to quantify waste from orphaned resources
+4. **Age Analysis**: Prioritize older orphaned resources
+5. **Safety Checks**: Verify resources are truly unused before recommending deletion
+
+**What You Detect:**
+- **EBS Volumes**: Unattached volumes in "available" state
+- **Elastic IPs**: Unassociated EIPs incurring hourly charges
+- **Load Balancers**: Idle ALB/NLB with no traffic
+- **NAT Gateways**: Unused NAT gateways
+- **Snapshots**: Old snapshots no longer needed
+- **EC2 Instances**: Stopped instances (still incurring EBS costs)
+
+**Orphan Categories:**
+1. **Immediate Cleanup**: Clear orphans (unattached volumes > 30 days old)
+2. **Review Required**: Recent orphans (may be temporary)
+3. **Keep with Tags**: Tagged resources indicating intentional retention
+4. **High-Risk Deletions**: Resources without clear ownership
+
+**Safety Analysis:**
+- Check resource tags for retention policies
+- Verify age (older orphans are safer to clean)
+- Look for naming patterns indicating purpose
+- Consider backup/snapshot before deletion
+
+**Output Requirements:**
+- Opportunity title describing orphaned resource cleanup
+- Savings potential (monthly waste elimination)
+- Confidence level for safe deletion
+- Implementation complexity (deletion process)
+- List of orphaned resources with details (ID, type, age, cost)
+- Detailed action plan with safety checks
+- Risk assessment and backup recommendations
+
+{{role "user"}}
+{{userInput}}

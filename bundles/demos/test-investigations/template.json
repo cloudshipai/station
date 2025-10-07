@@ -1,0 +1,34 @@
+{
+  "name": "finops-investigations",
+  "description": "FinOps cost spike investigation and root cause analysis demo bundle",
+  "mcpServers": {
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "aws-cost-explorer-extended": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer-extended"]
+    },
+    "grafana": {
+      "command": "stn",
+      "args": ["mock", "grafana"]
+    },
+    "github": {
+      "command": "stn",
+      "args": ["mock", "github"]
+    },
+    "pagerduty": {
+      "command": "stn",
+      "args": ["mock", "pagerduty"]
+    },
+    "opencost": {
+      "command": "stn",
+      "args": ["mock", "opencost"]
+    },
+    "stripe": {
+      "command": "stn",
+      "args": ["mock", "stripe"]
+    }
+  }
+}

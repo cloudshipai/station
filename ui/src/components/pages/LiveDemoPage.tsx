@@ -7,8 +7,6 @@ interface DemoBundle {
   description: string;
   category: string;
   size: number;
-  app: string;
-  app_type: string;
 }
 
 type AppCategory = 'finops' | 'security' | 'reliability' | 'deployments' | 'data-platform' | 'mlops';
@@ -146,7 +144,9 @@ export const LiveDemoPage: React.FC = () => {
   };
 
   const activeCategory = APP_CATEGORIES.find(cat => cat.id === activeTab);
-  const filteredBundles = demoBundles.filter(bundle => bundle.app === activeTab);
+  const filteredBundles = demoBundles.filter(bundle =>
+    bundle.category.toLowerCase() === activeTab.toLowerCase()
+  );
 
   if (loading) {
     return (

@@ -1,0 +1,309 @@
+---
+metadata:
+  name: "K8s Resource Optimizer"
+  description: "Identifies Kubernetes resource optimization opportunities by analyzing OpenCost allocation data to find overprovisioned namespaces and workloads"
+  tags: ["finops", "opportunities", "kubernetes", "k8s", "opencost", "resource-optimization"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "opportunities"
+output:
+  schema:
+    type: object
+    required: ["opportunity_id", "opportunity_type", "finding", "current_state", "recommended_state", "savings_potential", "implementation", "priority", "confidence"]
+    properties:
+      opportunity_id:
+        type: string
+        description: Unique identifier for this K8s resource optimization opportunity
+      opportunity_type:
+        type: string
+        enum: ["cpu_overprovisioning", "memory_overprovisioning", "idle_workload_removal", "hpa_optimization", "vpa_implementation", "resource_limit_tuning", "namespace_consolidation"]
+        description: Type of K8s resource optimization opportunity
+      finding:
+        type: string
+        description: Summary of the K8s resource optimization opportunity
+      current_state:
+        type: object
+        properties:
+          namespace:
+            type: string
+          cluster:
+            type: string
+          workload_name:
+            type: string
+          workload_type:
+            type: string
+            enum: ["deployment", "statefulset", "daemonset", "job", "cronjob"]
+          replica_count:
+            type: integer
+          resource_requests:
+            type: object
+            properties:
+              cpu_millicores:
+                type: number
+              memory_bytes:
+                type: number
+          resource_limits:
+            type: object
+            properties:
+              cpu_millicores:
+                type: number
+              memory_bytes:
+                type: number
+          actual_usage:
+            type: object
+            properties:
+              cpu_utilization:
+                type: object
+                properties:
+                  average_millicores:
+                    type: number
+                  max_millicores:
+                    type: number
+                  p99_millicores:
+                    type: number
+              memory_utilization:
+                type: object
+                properties:
+                  average_bytes:
+                    type: number
+                  max_bytes:
+                    type: number
+                  p99_bytes:
+                    type: number
+              observation_period_days:
+                type: integer
+          cost_allocation:
+            type: object
+            properties:
+              monthly_cost:
+                type: number
+              cpu_cost:
+                type: number
+              memory_cost:
+                type: number
+              cost_per_pod:
+                type: number
+          efficiency_metrics:
+            type: object
+            properties:
+              cpu_efficiency_percentage:
+                type: number
+                description: Actual usage / requested
+              memory_efficiency_percentage:
+                type: number
+          autoscaling_config:
+            type: object
+            properties:
+              has_hpa:
+                type: boolean
+              hpa_min_replicas:
+                type: integer
+              hpa_max_replicas:
+                type: integer
+              has_vpa:
+                type: boolean
+        required: ["namespace", "workload_name", "resource_requests", "actual_usage", "cost_allocation"]
+      recommended_state:
+        type: object
+        properties:
+          recommended_action:
+            type: string
+            enum: ["reduce_cpu_request", "reduce_memory_request", "delete_workload", "implement_hpa", "implement_vpa", "adjust_limits", "consolidate_namespace"]
+          recommended_resources:
+            type: object
+            properties:
+              cpu_millicores:
+                type: number
+              memory_bytes:
+                type: number
+          recommended_limits:
+            type: object
+            properties:
+              cpu_millicores:
+                type: number
+              memory_bytes:
+                type: number
+          recommended_replicas:
+            type: object
+            properties:
+              min_replicas:
+                type: integer
+              max_replicas:
+                type: integer
+          autoscaling_recommendations:
+            type: object
+            properties:
+              enable_hpa:
+                type: boolean
+              hpa_target_cpu_percentage:
+                type: number
+              enable_vpa:
+                type: boolean
+              vpa_mode:
+                type: string
+                enum: ["Off", "Auto", "Recreate", "Initial"]
+          estimated_cost:
+            type: object
+            properties:
+              monthly_cost:
+                type: number
+              cpu_cost:
+                type: number
+              memory_cost:
+                type: number
+          efficiency_improvement:
+            type: object
+            properties:
+              cpu_efficiency_after:
+                type: number
+              memory_efficiency_after:
+                type: number
+        required: ["recommended_action", "estimated_cost"]
+      savings_potential:
+        type: object
+        properties:
+          monthly_savings:
+            type: number
+          annual_savings:
+            type: number
+          percentage_savings:
+            type: number
+          cpu_savings:
+            type: number
+          memory_savings:
+            type: number
+        required: ["monthly_savings", "annual_savings", "percentage_savings"]
+      implementation:
+        type: object
+        properties:
+          steps:
+            type: array
+            items:
+              type: object
+              properties:
+                step_number:
+                  type: integer
+                description:
+                  type: string
+                commands:
+                  type: array
+                  items:
+                    type: string
+                yaml_manifests:
+                  type: array
+                  items:
+                    type: string
+                estimated_duration:
+                  type: string
+                requires_pod_restart:
+                  type: boolean
+                validation:
+                  type: string
+          testing_strategy:
+            type: string
+            description: How to validate resource changes
+          rollback_plan:
+            type: string
+          monitoring_recommendations:
+            type: array
+            items:
+              type: string
+          automation_options:
+            type: object
+            properties:
+              can_use_vpa:
+                type: boolean
+              can_automate_with_gitops:
+                type: boolean
+              requires_manual_approval:
+                type: boolean
+          estimated_implementation_time:
+            type: string
+        required: ["steps", "estimated_implementation_time"]
+      priority:
+        type: string
+        enum: ["critical", "high", "medium", "low"]
+        description: Priority based on savings potential and resource waste
+      risk_assessment:
+        type: object
+        properties:
+          risk_level:
+            type: string
+            enum: ["low", "medium", "high"]
+          risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          performance_impact:
+            type: string
+            enum: ["none", "minimal", "moderate", "significant"]
+          availability_impact:
+            type: string
+            enum: ["none", "minimal", "moderate", "significant"]
+        required: ["risk_level", "risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in K8s optimization recommendation (0-1)
+tools:
+  - "__get_allocation"
+---
+
+{{role "system"}}
+You are a Kubernetes Resource Optimizer that analyzes OpenCost allocation data to identify cost savings opportunities from rightsizing workloads, optimizing resource requests/limits, and eliminating waste.
+
+**Analysis Process:**
+
+1. **Get Allocations**: Use get_allocation to retrieve cost and usage data by namespace/workload
+2. **Identify Waste**: Find overprovisioned resources (low utilization, excessive requests)
+3. **Calculate Savings**: Quantify potential savings from optimization
+4. **Prioritize**: Rank opportunities by savings and implementation effort
+5. **Create Recommendations**: Provide specific resource request/limit adjustments
+
+**What You Analyze:**
+- CPU overprovisioning (requested > utilized)
+- Memory overprovisioning (requested > utilized)
+- Idle pods and zombie deployments
+- Namespace cost efficiency
+- Resource request/limit tuning
+- Horizontal Pod Autoscaler (HPA) configuration
+- Vertical Pod Autoscaler (VPA) opportunities
+
+**Optimization Strategies:**
+- **Request Reduction**: Lower CPU/memory requests based on actual usage
+- **Limit Adjustment**: Set appropriate limits to prevent resource hoarding
+- **HPA Tuning**: Optimize autoscaling parameters for cost efficiency
+- **VPA Implementation**: Use VPA for automatic resource rightsizing
+- **Pod Deletion**: Remove idle or zombie workloads
+- **Namespace Consolidation**: Merge low-traffic namespaces
+
+**Cost Allocation Analysis:**
+- Cost per namespace (identify expensive teams/projects)
+- Cost per workload (find high-cost deployments)
+- Resource efficiency metrics (cost per CPU hour, cost per GB-hour)
+- Label-based attribution (environment, team, application)
+
+**Output Requirements:**
+- Opportunity title describing K8s optimization
+- Savings potential (monthly reduction in allocation costs)
+- Confidence level based on utilization patterns
+- Implementation complexity (kubectl commands, manifest changes)
+- Current vs recommended resource configuration
+- Detailed action plan with YAML snippets
+- Risk assessment (performance impact, rollback plan)
+
+{{role "user"}}
+{{userInput}}
