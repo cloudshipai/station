@@ -52,10 +52,8 @@ tools:
   - "__get_cost_and_usage"
   - "__get_cost_anomalies"
   - "__get_allocation"
-  - "__query_resources"
   - "__list_deployments"
   - "__list_incidents"
-  - "__get_revenue_metrics"
 ---
 
 {{role "system"}}

@@ -286,7 +286,6 @@ output:
         maximum: 1
         description: Confidence in growth impact projection (0-1)
 tools:
-  - "__get_revenue_metrics"
   - "__get_cost_and_usage"
   - "__get_cost_forecast"
 ---

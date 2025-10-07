@@ -227,7 +227,6 @@ output:
               type: string
         description: Inventory snapshot metadata
 tools:
-  - "__query_resources"
   - "__get_cost_and_usage"
 ---
 

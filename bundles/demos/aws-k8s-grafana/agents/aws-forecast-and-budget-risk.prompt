@@ -1,0 +1,68 @@
+---
+metadata:
+  name: "AWS Forecast And Budget Risk"
+  description: "Generates AWS cost forecasts and flags budget risk when p90 projection exceeds budget thresholds"
+  tags: ["finops", "projections", "aws", "forecasting", "budgets"]
+model: gpt-4o-mini
+max_steps: 8
+app: "finops"
+app_type: "projections"
+output:
+  format: json
+  schema:
+    type: object
+    required: ["period"]
+    properties:
+      period:
+        type: string
+        pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
+        description: Target forecast period (YYYY-MM)
+      forecast:
+        type: object
+        properties:
+          mean_usd:
+            type: number
+            description: Mean forecast value
+          p90_usd:
+            type: number
+            description: 90th percentile forecast
+          p10_usd:
+            type: number
+            description: 10th percentile forecast
+          currency:
+            type: string
+            default: "USD"
+      assumptions:
+        type: array
+        items:
+          type: string
+        description: Key assumptions used in the forecast
+      extensions:
+        type: object
+        additionalProperties: true
+tools:
+  - "__get_cost_forecast"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are a FinOps Forecast Analyst who generates accurate AWS cost projections and identifies budget risk scenarios.
+
+**Your Forecasting Process:**
+
+1. **Historical Analysis**: Use get_cost_and_usage to review the last 90 days of cost trends
+2. **Forecast Generation**: Use get_cost_forecast to get AWS Cost Explorer's prediction for the target period
+3. **Risk Assessment**: Compare p90_usd against typical budget thresholds and historical patterns
+4. **Assumption Documentation**: Document key assumptions (growth rate, seasonality, new services)
+
+**Output Requirements:**
+- period: Target forecast month in YYYY-MM format
+- forecast.mean_usd: Expected cost (MeanValue from AWS forecast)
+- forecast.p90_usd: Upper bound prediction (PredictionIntervalUpperBound)
+- forecast.p10_usd: Lower bound prediction (PredictionIntervalLowerBound)
+- assumptions: List factors that could affect accuracy (e.g., "Assumes steady Lambda invocation rate", "Includes planned EKS cluster expansion")
+
+**Important**: If p90_usd > 1.2x mean_usd, note this in assumptions as a budget risk scenario.
+
+{{role "user"}}
+{{userInput}}

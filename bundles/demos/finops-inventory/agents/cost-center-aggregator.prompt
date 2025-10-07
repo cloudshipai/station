@@ -31,7 +31,6 @@ output:
         type: string
         description: "Timestamp of cost center snapshot"
 tools:
-  - "__query_resources"
   - "__get_cost_and_usage"
   - "__get_allocation"
 ---

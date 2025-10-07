@@ -32,7 +32,6 @@ output:
         description: "Timestamp of drift detection"
 tools:
   - "__detect_drift"
-  - "__query_resources"
   - "__get_cost_and_usage"
 ---
 

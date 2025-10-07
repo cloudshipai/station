@@ -31,7 +31,6 @@ output:
         type: array
         description: "Capacity planning and scaling recommendations"
 tools:
-  - "__get_revenue_metrics"
   - "__get_cost_and_usage"
   - "__get_cost_forecast"
 ---

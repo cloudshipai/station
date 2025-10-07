@@ -64,9 +64,6 @@ output:
         minimum: 0
         maximum: 1
 tools:
-  - "__list_payment_intents"
-  - "__list_disputes"
-  - "__retrieve_balance"
   - "__get_cost_and_usage"
 ---
 

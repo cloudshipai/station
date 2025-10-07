@@ -20,7 +20,6 @@ output:
       recommended_posture: {type: object, description: "Target security state"}
       action_plan: {type: array, items: {type: object}}
 tools:
-  - "__query_resources"
 ---
 
 {{role "system"}}

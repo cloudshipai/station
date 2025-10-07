@@ -38,9 +38,6 @@ output:
         type: object
         additionalProperties: true
 tools:
-  - "__list_payment_intents"
-  - "__list_customers"
-  - "__list_subscriptions"
   - "__get_cost_and_usage"
 ---
 

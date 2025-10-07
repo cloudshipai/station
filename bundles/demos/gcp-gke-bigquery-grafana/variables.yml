@@ -1,0 +1,4 @@
+# GCP + GKE + BigQuery FinOps Bundle Variables
+GCP_PROJECT_ID: "my-gcp-project"
+GCP_BILLING_DATASET: "billing.gcp_billing_export_v1"
+GRAFANA_URL: "http://grafana:3000"

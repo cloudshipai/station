@@ -45,11 +45,6 @@ output:
           monthly_cost_usd:
             type: number
 tools:
-  - "__get_stripe_account_info"
-  - "__list_products"
-  - "__list_prices"
-  - "__list_customers"
-  - "__list_subscriptions"
 ---
 
 {{role "system"}}

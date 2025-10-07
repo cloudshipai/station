@@ -223,7 +223,6 @@ tools:
   - "__get_cost_anomalies"
   - "__query_egress_metrics"
   - "__list_deployments"
-  - "__query_resources"
 ---
 
 {{role "system"}}
