@@ -97,68 +97,9 @@ Station makes it easy to **create custom AI agents** that combine MCP tools for 
 
 ## Creating Your First Agent
 
-### 1. Create an Agent with MCP Tools
+Use your preferred LLM via MCP to create agents. Station provides an MCP server that lets you create, manage, and execute agents directly from Claude Code, Cursor, or any MCP-compatible client.
 
-```bash
-# Example: Security scanner agent
-cat > ~/.config/station/environments/default/agents/security-scanner.prompt << 'EOF'
----
-metadata:
-  name: "Security Scanner"
-  description: "Scans projects for security vulnerabilities"
-model: gpt-4o-mini
-max_steps: 10
-tools:
-  - "__checkov_scan_directory"
-  - "__trivy_scan_filesystem"
-  - "__read_text_file"
----
-
-{{role "system"}}
-You are a security expert who scans projects for vulnerabilities.
-
-{{role "user"}}
-{{userInput}}
-EOF
-```
-
-### 2. Configure MCP Servers (template.json)
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "{{ .PROJECT_ROOT }}"]
-    },
-    "ship-security": {
-      "command": "ship",
-      "args": ["mcp", "security", "--stdio"]
-    }
-  }
-}
-```
-
-### 3. Set Variables (variables.yml)
-
-```yaml
-PROJECT_ROOT: "/home/user/projects"
-```
-
-### 4. Sync Environment
-
-```bash
-# After any changes to agents, MCPs, or variables
-stn sync
-```
-
-**Important**: Always run `stn sync` after modifying:
-- Agent `.prompt` files
-- MCP server configurations (`template.json`)
-- Environment variables (`variables.yml`)
-- Installing new bundles
-
-This processes all changes and updates the Station database.
+After creating agents through MCP or editing `.prompt` files directly, sync your environment via the web UI at `http://localhost:8585` in the Environments section.
 
 ---
 
@@ -215,11 +156,9 @@ Station uses **template variables** to keep sensitive data secure:
 ```json
 {
   "mcpServers": {
-    "aws": {
-      "env": {
-        "AWS_ACCESS_KEY_ID": "{{ .AWS_KEY }}",
-        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET }}"
-      }
+    "ship-semgrep": {
+      "command": "ship",
+      "args": ["mcp", "semgrep", "--stdio"]
     }
   }
 }
