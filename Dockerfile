@@ -1,8 +1,11 @@
 # Station Runtime Container
 # Published to ghcr.io/cloudshipai/station and used by `stn up`
-# This expects a pre-built Linux binary with UI embedded
+# Multi-platform support: linux/amd64 and linux/arm64
 
 FROM ubuntu:22.04
+
+ARG TARGETARCH
+ARG TARGETOS
 
 # Install essential packages
 RUN apt-get update && apt-get install -y \
@@ -28,7 +31,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && ln -sf /root/.cargo/bin/uvx /usr/local/bin/uvx
 
 # Install Docker CLI (for Docker-in-Docker via socket mount)
-RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz | tar -xz \
+ARG TARGETARCH
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") && \
+    curl -fsSL https://download.docker.com/linux/static/stable/${ARCH}/docker-27.1.1.tgz | tar -xz \
     && mv docker/docker /usr/local/bin/docker \
     && rm -rf docker \
     && chmod +x /usr/local/bin/docker
@@ -44,8 +49,9 @@ RUN if [ "$INSTALL_SHIP" = "true" ]; then \
         fi \
     fi
 
-# Copy Station binary (built with UI embedded via GoReleaser)
-COPY stn /usr/local/bin/stn
+# Copy Station binary for the target architecture
+# GoReleaser builds binaries in dist/station_${GOOS}_${GOARCH}/stn
+COPY dist/station_${TARGETOS}_${TARGETARCH}*/stn /usr/local/bin/stn
 RUN chmod +x /usr/local/bin/stn
 
 # Create necessary directories

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
