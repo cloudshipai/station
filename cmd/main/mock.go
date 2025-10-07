@@ -19,16 +19,19 @@ Available mock tools:
   aws-cost-explorer-extended - Extended AWS CE (comparisons, drivers)
   aws-compute-optimizer      - Mock AWS Compute Optimizer (rightsizing)
   aws-billing                - Mock AWS Billing (budgets, SPs, RIs)
+  aws-pricing                - Mock AWS Pricing API (instance pricing, cost calculations)
+  aws-cloudwatch             - Mock AWS CloudWatch (metrics, logs, alarms)
+  aws-xray                   - Mock AWS X-Ray (distributed tracing)
+  aws-guardduty              - Mock AWS GuardDuty (threat detection)
+  aws-inspector              - Mock AWS Inspector (vulnerability assessment)
   opencost                   - Mock OpenCost (Kubernetes cost allocation)
   cloudquery                 - Mock CloudQuery (resource inventory, CUR data)
+  bigquery                   - Mock BigQuery (GCP billing export queries)
   grafana                    - Mock Grafana/Prometheus (metrics, usage)
+  datadog                    - Mock Datadog (metrics, logs, monitors, APM)
   github                     - Mock GitHub (PRs, deployments, commits)
   pagerduty                  - Mock PagerDuty (incidents)
   stripe                     - Mock Stripe (revenue, subscriptions)
-  aws-guardduty              - Mock AWS GuardDuty (threat detection)
-  aws-inspector              - Mock AWS Inspector (vulnerability assessment)
-  aws-cloudwatch             - Mock AWS CloudWatch (metrics, logs, alarms)
-  aws-xray                   - Mock AWS X-Ray (distributed tracing)
   iam-access-analyzer        - Mock AWS IAM Access Analyzer (policy analysis)
   trivy                      - Mock Trivy (container/IaC scanning)
   semgrep                    - Mock Semgrep (SAST code scanning)
@@ -91,6 +94,12 @@ func runMock(cmd *cobra.Command, args []string) {
 		server = mocks.NewCloudWatchMock()
 	case "aws-xray":
 		server = mocks.NewXRayMock()
+	case "aws-pricing":
+		server = mocks.NewAWSPricingMock()
+	case "bigquery":
+		server = mocks.NewBigQueryMock()
+	case "datadog":
+		server = mocks.NewDatadogMock()
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown mock tool '%s'\n\n", toolName)
 		fmt.Fprintln(os.Stderr, "Available mock tools:")
