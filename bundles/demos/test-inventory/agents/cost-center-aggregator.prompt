@@ -189,7 +189,6 @@ output:
             enum: ["tag_based", "label_based", "account_based", "hybrid"]
         description: Inventory snapshot metadata
 tools:
-  - "__query_resources"
   - "__get_cost_and_usage"
   - "__get_allocation"
 ---

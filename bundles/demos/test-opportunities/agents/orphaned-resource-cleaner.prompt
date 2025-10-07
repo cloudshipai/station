@@ -248,7 +248,6 @@ output:
         maximum: 1
         description: Confidence that resources are truly orphaned (0-1)
 tools:
-  - "__query_resources"
   - "__get_cost_and_usage"
 ---
 

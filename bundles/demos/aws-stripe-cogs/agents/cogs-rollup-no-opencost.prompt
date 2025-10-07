@@ -40,7 +40,8 @@ output:
             description: Other SaaS vendors (Datadog, etc.)
           allocated_cloud_by_service:
             type: object
-            additionalProperties: true
+            additionalProperties:
+              type: number
             description: Cloud cost allocated to product services
           cogs_total_usd:
             type: number
@@ -66,10 +67,6 @@ output:
 tools:
   - "__get_cost_and_usage"
   - "__get_cost_forecast"
-  - "__retrieve_balance"
-  - "__list_invoices"
-  - "__list_customers"
-  - "__list_payment_intents"
   - "__query_range"
 ---
 
@@ -111,12 +108,11 @@ You are a FinOps COGS Analyst who assembles complete Cost of Goods Sold reportin
    - cost_per_txn_usd = cogs_total_usd / transactions
 
 **Output Requirements:**
-Return a valid JSON object with NO comments or explanatory text. The response must be pure JSON matching the schema:
 - period: Target month (YYYY-MM)
 - cogs.cloud_infra_usd: AWS production costs
 - cogs.payment_fees_usd: Stripe fees
 - cogs.third_party_usd: Other vendor costs
-- cogs.allocated_cloud_by_service: Map of service_name -> allocated_cost_usd (must be valid JSON with no comments)
+- cogs.allocated_cloud_by_service: Map of service_name -> allocated_cost_usd
 - cogs.cogs_total_usd: Sum of all COGS components
 - cogs.gross_margin_pct: Margin percentage
 - unit_economics: Per-customer and per-transaction costs

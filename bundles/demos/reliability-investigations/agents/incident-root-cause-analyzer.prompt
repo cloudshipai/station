@@ -8,14 +8,15 @@ metadata:
 model: gpt-4o-mini
 max_steps: 8
 tools:
-  - "__query_cloudwatch_metrics"
-  - "__get_cloudwatch_logs"
+  - "__get_metric_data"
+  - "__analyze_log_group"
   - "__get_xray_traces"
   - "__analyze_xray_service_graph"
 output:
   format: json
   schema:
     type: object
+    required: ["incident_id", "root_cause", "affected_services"]
     properties:
       incident_id:
         type: string
@@ -33,10 +34,13 @@ output:
         properties:
           start:
             type: string
+            description: Incident start time (ISO 8601 format)
           end:
             type: string
+            description: Incident end time (ISO 8601 format)
       key_metrics:
         type: object
+        additionalProperties: true
         description: Critical metrics during incident (error rates, latency, throughput)
       remediation:
         type: array
@@ -68,11 +72,13 @@ You are an expert SRE specializing in production incident analysis and root caus
 
 **Output Format:**
 
+Return a valid JSON object with NO comments or explanatory text. The response must be pure JSON matching the schema.
+
 Always provide structured JSON output with:
 - Clear root cause explanation backed by evidence from metrics/logs/traces
-- Timeline showing when incident started, peaked, and resolved
+- Timeline showing when incident started, peaked, and resolved (use ISO 8601 format: "2024-10-07T15:30:00Z")
 - Affected services with specific resource identifiers
-- Key metrics showing degradation (before/during/after)
+- Key metrics showing degradation (before/during/after) - must be valid JSON with no comments
 - Prioritized remediation steps with immediate and preventive actions
 
 **Example Use Cases:**

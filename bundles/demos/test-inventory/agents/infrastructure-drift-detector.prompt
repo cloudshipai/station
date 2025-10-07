@@ -213,7 +213,6 @@ output:
         description: Inventory snapshot metadata
 tools:
   - "__detect_drift"
-  - "__query_resources"
   - "__get_cost_and_usage"
 ---
 

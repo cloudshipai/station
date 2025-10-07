@@ -1,0 +1,18 @@
+{
+  "name": "aws-k8s-grafana-finops",
+  "description": "FinOps bundle for AWS + Kubernetes + Grafana stacks - cost spike analysis, forecasting, rightsizing, and inventory tracking",
+  "mcpServers": {
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "aws-cloudwatch": {
+      "command": "stn",
+      "args": ["mock", "aws-cloudwatch"]
+    },
+    "grafana": {
+      "command": "stn",
+      "args": ["mock", "grafana"]
+    }
+  }
+}

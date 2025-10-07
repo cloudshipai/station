@@ -31,6 +31,18 @@ var securityInvestigationsData []byte
 //go:embed reliability-investigations.tar.gz
 var reliabilityInvestigationsData []byte
 
+//go:embed aws-k8s-grafana.tar.gz
+var awsK8sGrafanaData []byte
+
+//go:embed aws-stripe-cogs.tar.gz
+var awsStripeCogsData []byte
+
+//go:embed gcp-gke-bigquery-grafana.tar.gz
+var gcpGkeBigqueryGrafanaData []byte
+
+//go:embed aws-serverless-datadog.tar.gz
+var awsServerlessDatadogData []byte
+
 // GetDemoBundles returns all available embedded demo bundles
 func GetDemoBundles() []DemoBundle {
 	return []DemoBundle{
@@ -75,6 +87,34 @@ func GetDemoBundles() []DemoBundle {
 			Description: "SRE incident response and performance regression detection agents. Performs root cause analysis using CloudWatch metrics and X-Ray traces, correlates with deployments, and provides data-driven remediation guidance.",
 			Category:    "Reliability",
 			Data:        reliabilityInvestigationsData,
+		},
+		{
+			ID:          "aws-k8s-grafana",
+			Name:        "AWS + K8s + Grafana FinOps",
+			Description: "Complete FinOps suite for AWS EKS with Grafana observability. Includes cost spike RCA, EC2/container rightsizing, monthly forecasting, resource inventory tracking, and billing event correlation.",
+			Category:    "FinOps",
+			Data:        awsK8sGrafanaData,
+		},
+		{
+			ID:          "aws-stripe-cogs",
+			Name:        "AWS + Stripe COGS Analytics",
+			Description: "Financial operations agents for AWS + Stripe SaaS platforms. Analyzes payment processing fees, calculates COGS by customer cohort, optimizes payment routing, and tracks infrastructure cost attribution.",
+			Category:    "FinOps",
+			Data:        awsStripeCogsData,
+		},
+		{
+			ID:          "gcp-gke-bigquery-grafana",
+			Name:        "GCP + BigQuery + Grafana FinOps",
+			Description: "GCP cost analysis using BigQuery billing exports and GKE metrics. Performs MoM billing delta RCA, correlates with GKE scaling events, and provides monthly cost forecasting with confidence intervals.",
+			Category:    "FinOps",
+			Data:        gcpGkeBigqueryGrafanaData,
+		},
+		{
+			ID:          "aws-serverless-datadog",
+			Name:        "AWS Serverless + Datadog FinOps",
+			Description: "Serverless cost optimization using Datadog telemetry. Analyzes Lambda spend patterns, identifies memory/concurrency rightsizing opportunities, detects cold start cost drivers, and forecasts based on invocation trends.",
+			Category:    "FinOps",
+			Data:        awsServerlessDatadogData,
 		},
 	}
 }

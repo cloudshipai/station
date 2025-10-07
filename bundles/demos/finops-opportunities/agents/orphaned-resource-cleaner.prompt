@@ -54,7 +54,6 @@ output:
             risk:
               type: string
 tools:
-  - "__query_resources"
   - "__get_cost_and_usage"
 ---
 

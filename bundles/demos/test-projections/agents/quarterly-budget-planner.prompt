@@ -299,7 +299,6 @@ output:
 tools:
   - "__get_cost_forecast"
   - "__get_cost_and_usage"
-  - "__get_revenue_metrics"
   - "__list_budgets"
 ---
 

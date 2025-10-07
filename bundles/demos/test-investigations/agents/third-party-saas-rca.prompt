@@ -229,7 +229,6 @@ output:
         description: Confidence in third-party cost root cause analysis
 tools:
   - "__get_cost_and_usage"
-  - "__get_revenue_metrics"
   - "__list_incidents"
   - "__list_deployments"
 ---

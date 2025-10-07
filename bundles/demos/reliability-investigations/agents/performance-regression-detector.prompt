@@ -8,8 +8,8 @@ metadata:
 model: gpt-4o-mini
 max_steps: 8
 tools:
-  - "__query_cloudwatch_metrics"
-  - "__get_cloudwatch_logs"
+  - "__get_metric_data"
+  - "__analyze_log_group"
   - "__get_xray_traces"
   - "__analyze_xray_service_graph"
 output:
