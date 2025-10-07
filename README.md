@@ -105,18 +105,9 @@ After creating agents through MCP or editing `.prompt` files directly, sync your
 
 ## Installing Pre-Built Bundles
 
-Install production-ready agent bundles from the [Station Registry](https://cloudshipai.github.io/registry):
+Install production-ready agent bundles from the [Station Registry](https://cloudshipai.github.io/registry) via the web UI at `http://localhost:8585`.
 
-```bash
-# Install via CLI
-stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security
-
-# Sync the environment to activate agents
-stn sync security
-
-# Run agents from the bundle
-stn agent run "Security Scanner" "Scan /workspace for vulnerabilities"
-```
+After installing a bundle, **sync the environment** in the Environments section to activate the agents.
 
 ---
 
