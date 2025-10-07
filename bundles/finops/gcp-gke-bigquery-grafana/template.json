@@ -1,0 +1,14 @@
+{
+  "name": "gcp-gke-bigquery-grafana-finops",
+  "description": "FinOps bundle for GCP + GKE + BigQuery stacks - billing analysis, GKE rightsizing, cost forecasting via BigQuery billing exports",
+  "mcpServers": {
+    "bigquery": {
+      "command": "stn",
+      "args": ["mock", "bigquery"]
+    },
+    "grafana": {
+      "command": "stn",
+      "args": ["mock", "grafana"]
+    }
+  }
+}
