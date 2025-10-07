@@ -1,0 +1,45 @@
+{
+  "$id": "https://cloudship.ai/schema/finops.projection@1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinOps Projection",
+  "type": "object",
+  "required": ["period"],
+  "properties": {
+    "period": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$" },
+    "forecast": {
+      "type": "object",
+      "properties": {
+        "mean_usd": { "type": "number" },
+        "p90_usd": { "type": "number" },
+        "p10_usd": { "type": "number" },
+        "currency": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "cogs": {
+      "type": "object",
+      "properties": {
+        "cloud_infra_usd": { "type": "number" },
+        "payment_fees_usd": { "type": "number" },
+        "third_party_usd": { "type": "number" },
+        "allocated_cloud_by_service": { "type": "object", "additionalProperties": { "type": "number" } },
+        "cogs_total_usd": { "type": "number" },
+        "gross_margin_pct": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "unit_economics": {
+      "type": "object",
+      "properties": {
+        "active_customers": { "type": "integer" },
+        "transactions": { "type": "integer" },
+        "cost_per_user_usd": { "type": "number" },
+        "cost_per_txn_usd": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "extensions": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

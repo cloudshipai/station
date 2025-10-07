@@ -1,0 +1,18 @@
+{
+  "$id": "https://cloudship.ai/schema/finops.opportunity@1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinOps Opportunity",
+  "type": "object",
+  "required": ["rec_type", "target_ref", "est_savings_usd"],
+  "properties": {
+    "rec_type": { "type": "string" },
+    "target_ref": { "type": "string" },
+    "est_savings_usd": { "type": "number" },
+    "rationale": { "type": "string" },
+    "steps": { "type": "array", "items": { "type": "string" } },
+    "status": { "type": "string", "enum": ["new","accepted","in_progress","done","dismissed"] },
+    "evidence": { "type": "object", "additionalProperties": true },
+    "extensions": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}
