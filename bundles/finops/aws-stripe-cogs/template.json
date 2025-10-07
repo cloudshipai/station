@@ -1,0 +1,18 @@
+{
+  "name": "aws-stripe-cogs-finops",
+  "description": "FinOps bundle for SaaS companies using AWS infrastructure + Stripe payments - COGS analysis, unit economics, payment fee optimization, and billing inventory",
+  "mcpServers": {
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "stripe": {
+      "command": "stn",
+      "args": ["mock", "stripe"]
+    },
+    "grafana": {
+      "command": "stn",
+      "args": ["mock", "grafana"]
+    }
+  }
+}

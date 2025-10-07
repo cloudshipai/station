@@ -1,0 +1,5 @@
+# AWS + Stripe COGS FinOps Bundle Variables
+AWS_ACCOUNT_ID: "123456789012"
+AWS_REGION: "us-east-1"
+STRIPE_ACCOUNT_ID: "acct_1234567890"
+GRAFANA_URL: "http://grafana:3000"
