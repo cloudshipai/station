@@ -389,9 +389,32 @@ func dockerImageExists(imageName string) bool {
 }
 
 func buildRuntimeContainer() error {
-	fmt.Printf("Building Station container (this may take a few minutes)...\n")
+	// Check if Dockerfile exists (development mode)
+	_, dockerfileErr := os.Stat("Dockerfile")
+	hasDockerfile := dockerfileErr == nil
 
-	// Build the Docker image
+	// Try pulling pre-built image first (production/normal use)
+	fmt.Printf("📥 Pulling Station container from registry...\n")
+	pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station:latest")
+	pullCmd.Stdout = os.Stdout
+	pullCmd.Stderr = os.Stderr
+
+	if err := pullCmd.Run(); err == nil {
+		// Successfully pulled, tag for local use
+		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
+		if tagErr := tagCmd.Run(); tagErr != nil {
+			return fmt.Errorf("failed to tag pulled image: %w", tagErr)
+		}
+		fmt.Printf("✅ Successfully pulled Station container\n")
+		return nil
+	}
+
+	// Pull failed, try building if Dockerfile exists (development mode)
+	if !hasDockerfile {
+		return fmt.Errorf("failed to pull image and no Dockerfile found for local build: %w", err)
+	}
+
+	fmt.Printf("⚠️  Pull failed, building from Dockerfile (development mode)...\n")
 	buildCmd := exec.Command("docker", "build",
 		"--build-arg", "INSTALL_SHIP=true",
 		"-t", "station-server:latest",
@@ -400,18 +423,10 @@ func buildRuntimeContainer() error {
 	buildCmd.Stderr = os.Stderr
 
 	if err := buildCmd.Run(); err != nil {
-		// Fallback to pulling pre-built image if available
-		fmt.Printf("Build failed, attempting to pull pre-built image...\n")
-		pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station:latest")
-		if pullErr := pullCmd.Run(); pullErr != nil {
-			return fmt.Errorf("failed to build or pull image: build error: %w, pull error: %v", err, pullErr)
-		}
-
-		// Tag the pulled image for local use
-		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
-		return tagCmd.Run()
+		return fmt.Errorf("failed to build image: %w", err)
 	}
 
+	fmt.Printf("✅ Successfully built Station container\n")
 	return nil
 }
 
