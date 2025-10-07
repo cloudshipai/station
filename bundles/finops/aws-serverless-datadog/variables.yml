@@ -1,0 +1,5 @@
+# AWS Serverless + Datadog FinOps Bundle Variables
+AWS_ACCOUNT_ID: "123456789012"
+AWS_REGION: "us-east-1"
+DATADOG_API_KEY: "mock_datadog_key"
+DATADOG_APP_KEY: "mock_datadog_app_key"

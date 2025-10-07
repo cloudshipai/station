@@ -1,0 +1,14 @@
+{
+  "name": "aws-serverless-datadog-finops",
+  "description": "FinOps bundle for AWS Serverless (Lambda, API Gateway, DynamoDB) + Datadog - Lambda cost optimization, cold start analysis, serverless tuning",
+  "mcpServers": {
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "datadog": {
+      "command": "stn",
+      "args": ["mock", "datadog"]
+    }
+  }
+}
