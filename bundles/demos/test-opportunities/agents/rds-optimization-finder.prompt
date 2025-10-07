@@ -1,0 +1,314 @@
+---
+metadata:
+  name: "RDS Optimization Finder"
+  description: "Identifies RDS database optimization opportunities including instance rightsizing, storage optimization, and Reserved Instance recommendations"
+  tags: ["finops", "opportunities", "rds", "database", "optimization", "aws"]
+model: gpt-4o-mini
+max_steps: 8
+app: "finops"
+app_type: "opportunities"
+output:
+  schema:
+    type: object
+    required: ["opportunity_id", "opportunity_type", "finding", "current_state", "recommended_state", "savings_potential", "implementation", "priority", "confidence"]
+    properties:
+      opportunity_id:
+        type: string
+        description: Unique identifier for this RDS optimization opportunity
+      opportunity_type:
+        type: string
+        enum: ["rds_rightsizing", "reserved_instance_purchase", "storage_optimization", "multi_az_downgrade", "aurora_migration", "snapshot_retention_optimization", "storage_type_change"]
+        description: Type of RDS optimization opportunity
+      finding:
+        type: string
+        description: Summary of the RDS optimization opportunity
+      current_state:
+        type: object
+        properties:
+          db_instance_identifier:
+            type: string
+          db_instance_class:
+            type: string
+          engine:
+            type: string
+            description: postgres, mysql, aurora-postgresql, etc.
+          engine_version:
+            type: string
+          region:
+            type: string
+          multi_az:
+            type: boolean
+          pricing_model:
+            type: string
+            enum: ["on_demand", "reserved_instance"]
+          storage_configuration:
+            type: object
+            properties:
+              allocated_storage_gb:
+                type: number
+              storage_type:
+                type: string
+                enum: ["gp2", "gp3", "io1", "io2", "magnetic"]
+              provisioned_iops:
+                type: number
+              storage_encrypted:
+                type: boolean
+          current_cost:
+            type: object
+            properties:
+              monthly_instance_cost:
+                type: number
+              monthly_storage_cost:
+                type: number
+              monthly_backup_cost:
+                type: number
+              total_monthly_cost:
+                type: number
+          utilization_metrics:
+            type: object
+            properties:
+              cpu_utilization:
+                type: object
+                properties:
+                  average:
+                    type: number
+                  maximum:
+                    type: number
+                  p99:
+                    type: number
+              memory_utilization:
+                type: object
+                properties:
+                  average:
+                    type: number
+                  maximum:
+                    type: number
+              iops_utilization:
+                type: object
+                properties:
+                  average_read_iops:
+                    type: number
+                  average_write_iops:
+                    type: number
+                  max_iops:
+                    type: number
+              storage_utilization:
+                type: object
+                properties:
+                  used_storage_gb:
+                    type: number
+                  free_storage_gb:
+                    type: number
+                  utilization_percentage:
+                    type: number
+              connection_count:
+                type: object
+                properties:
+                  average:
+                    type: number
+                  maximum:
+                    type: number
+              observation_period_days:
+                type: integer
+          environment:
+            type: string
+            enum: ["production", "staging", "development", "testing"]
+          tags:
+            type: object
+            additionalProperties:
+              type: string
+        required: ["db_instance_identifier", "db_instance_class", "engine", "current_cost", "utilization_metrics"]
+      recommended_state:
+        type: object
+        properties:
+          recommended_action:
+            type: string
+            enum: ["rightsize_instance", "purchase_reserved_instance", "optimize_storage", "downgrade_multi_az", "migrate_to_aurora", "reduce_backup_retention", "change_storage_type"]
+          recommended_instance_class:
+            type: string
+          recommended_pricing:
+            type: object
+            properties:
+              pricing_model:
+                type: string
+                enum: ["on_demand", "reserved_instance_1year", "reserved_instance_3year"]
+              payment_option:
+                type: string
+                enum: ["no_upfront", "partial_upfront", "all_upfront"]
+          recommended_storage:
+            type: object
+            properties:
+              storage_type:
+                type: string
+              allocated_storage_gb:
+                type: number
+              provisioned_iops:
+                type: number
+          recommended_multi_az:
+            type: boolean
+          estimated_cost:
+            type: object
+            properties:
+              monthly_instance_cost:
+                type: number
+              monthly_storage_cost:
+                type: number
+              monthly_backup_cost:
+                type: number
+              total_monthly_cost:
+                type: number
+              upfront_cost:
+                type: number
+          performance_comparison:
+            type: object
+            properties:
+              vcpu_change:
+                type: string
+              memory_change:
+                type: string
+              iops_change:
+                type: string
+              expected_performance_impact:
+                type: string
+                enum: ["none", "minimal", "moderate"]
+        required: ["recommended_action", "estimated_cost"]
+      savings_potential:
+        type: object
+        properties:
+          monthly_savings:
+            type: number
+          annual_savings:
+            type: number
+          percentage_savings:
+            type: number
+          three_year_savings:
+            type: number
+            description: For RI purchases
+          payback_period_months:
+            type: number
+            description: For upfront RI costs
+        required: ["monthly_savings", "annual_savings", "percentage_savings"]
+      implementation:
+        type: object
+        properties:
+          steps:
+            type: array
+            items:
+              type: object
+              properties:
+                step_number:
+                  type: integer
+                description:
+                  type: string
+                commands:
+                  type: array
+                  items:
+                    type: string
+                estimated_duration:
+                  type: string
+                requires_downtime:
+                  type: boolean
+                downtime_minutes:
+                  type: number
+                validation:
+                  type: string
+          testing_strategy:
+            type: string
+            description: How to validate the change in lower environments
+          rollback_plan:
+            type: string
+          maintenance_window_required:
+            type: boolean
+          backup_recommendations:
+            type: array
+            items:
+              type: string
+          monitoring_requirements:
+            type: array
+            items:
+              type: string
+          estimated_implementation_time:
+            type: string
+        required: ["steps", "rollback_plan", "estimated_implementation_time"]
+      priority:
+        type: string
+        enum: ["critical", "high", "medium", "low"]
+        description: Priority based on savings and database criticality
+      risk_assessment:
+        type: object
+        properties:
+          risk_level:
+            type: string
+            enum: ["low", "medium", "high"]
+          risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          performance_impact:
+            type: string
+            enum: ["none", "minimal", "moderate", "significant"]
+          availability_impact:
+            type: string
+            enum: ["none", "planned_downtime", "unplanned_risk"]
+          data_safety:
+            type: string
+            description: Data loss risk assessment
+        required: ["risk_level", "risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in RDS optimization recommendation (0-1)
+tools:
+  - "__get_rds_rightsizing_recommendations"
+  - "__get_reserved_instance_recommendations"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are an RDS Optimization Finder that analyzes database infrastructure to identify cost savings opportunities through rightsizing, Reserved Instances, and storage optimization.
+
+**Analysis Process:**
+
+1. **Rightsizing Analysis**: Use get_rds_rightsizing_recommendations to find oversized databases
+2. **RI Opportunities**: Use get_reserved_instance_recommendations for commitment savings
+3. **Cost Validation**: Use get_cost_and_usage to confirm RDS spending patterns
+4. **Calculate Savings**: Quantify potential savings from each optimization
+5. **Prioritize**: Rank by savings potential and implementation ease
+
+**What You Analyze:**
+- RDS instance rightsizing (CPU, memory, IOPS utilization)
+- Reserved Instance purchase opportunities
+- Storage optimization (over-provisioned IOPS, unused storage)
+- Multi-AZ to Single-AZ conversion (for non-prod)
+- Aurora vs RDS cost comparison
+- Snapshot retention optimization
+
+**Optimization Types:**
+- **Rightsizing**: Downsize overprovisioned database instances
+- **Commitment**: Purchase RIs for stable workloads (1-year or 3-year)
+- **Storage**: Reduce provisioned IOPS or switch storage types
+- **Architecture**: Suggest Aurora Serverless for variable workloads
+
+**Output Requirements:**
+- Opportunity title describing RDS optimization
+- Savings potential with monthly/annual breakdown
+- Confidence level based on utilization and stability
+- Implementation complexity and risk assessment
+- Current vs recommended configuration
+- Detailed action plan with rollback strategy
+- Business impact considerations (performance, availability)
+
+{{role "user"}}
+{{userInput}}

@@ -1,0 +1,11 @@
+# Template variables for reliability-investigations bundle
+# These variables can be customized when installing the bundle
+
+# AWS region for CloudWatch and X-Ray queries
+AWS_REGION: "us-east-1"
+
+# Default baseline time window for performance comparison (in days)
+BASELINE_WINDOW_DAYS: "7"
+
+# Default investigation time window (in hours)
+INVESTIGATION_WINDOW_HOURS: "24"

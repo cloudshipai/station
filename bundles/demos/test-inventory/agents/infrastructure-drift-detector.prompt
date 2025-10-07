@@ -1,0 +1,268 @@
+---
+metadata:
+  name: "Infrastructure Drift Detector"
+  description: "Detects and tracks infrastructure changes and drift using CloudQuery, identifying unauthorized or unexpected resource modifications"
+  tags: ["finops", "inventory", "drift-detection", "compliance", "change-tracking", "cloudquery"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "inventory"
+output:
+  schema:
+    type: object
+    required: ["inventory_id", "inventory_type", "summary", "drift_events", "change_analysis", "cost_impact", "metadata"]
+    properties:
+      inventory_id:
+        type: string
+        description: Unique identifier for this drift detection snapshot
+      inventory_type:
+        type: string
+        enum: ["infrastructure_drift", "change_tracking", "compliance_drift"]
+        description: Type of drift inventory
+      summary:
+        type: object
+        properties:
+          total_drift_events:
+            type: integer
+            description: Total number of drift events detected
+          resources_added:
+            type: integer
+          resources_modified:
+            type: integer
+          resources_deleted:
+            type: integer
+          unauthorized_changes:
+            type: integer
+            description: Changes made outside IaC/approval process
+          cost_increasing_changes:
+            type: integer
+          total_cost_impact:
+            type: number
+            description: Total cost impact from drift
+        required: ["total_drift_events", "resources_added", "resources_modified", "resources_deleted"]
+      drift_events:
+        type: array
+        items:
+          type: object
+          properties:
+            drift_id:
+              type: string
+            resource_id:
+              type: string
+            resource_name:
+              type: string
+            resource_type:
+              type: string
+              description: EC2, RDS, S3, VPC, etc.
+            change_type:
+              type: string
+              enum: ["added", "modified", "deleted"]
+            change_details:
+              type: object
+              properties:
+                timestamp:
+                  type: string
+                change_source:
+                  type: string
+                  enum: ["iac_managed", "console", "api", "cli", "unknown"]
+                before_state:
+                  type: object
+                  description: Resource state before change
+                after_state:
+                  type: object
+                  description: Resource state after change
+                fields_changed:
+                  type: array
+                  items:
+                    type: string
+                  description: Specific fields that changed
+            authorization_status:
+              type: string
+              enum: ["authorized", "unauthorized", "unknown"]
+            approval_status:
+              type: string
+              enum: ["approved", "pending_approval", "unapproved"]
+            cost_impact:
+              type: object
+              properties:
+                previous_monthly_cost:
+                  type: number
+                current_monthly_cost:
+                  type: number
+                cost_delta:
+                  type: number
+                cost_trend:
+                  type: string
+                  enum: ["increased", "decreased", "neutral"]
+            compliance_impact:
+              type: object
+              properties:
+                violates_policy:
+                  type: boolean
+                policies_violated:
+                  type: array
+                  items:
+                    type: string
+                severity:
+                  type: string
+                  enum: ["critical", "high", "medium", "low", "info"]
+            location:
+              type: object
+              properties:
+                account_id:
+                  type: string
+                region:
+                  type: string
+            tags:
+              type: object
+              properties:
+                before:
+                  type: object
+                after:
+                  type: object
+          required: ["drift_id", "resource_id", "resource_type", "change_type", "change_details"]
+        description: List of all detected drift events
+      change_analysis:
+        type: object
+        properties:
+          by_change_type:
+            type: object
+            properties:
+              additions:
+                type: integer
+              modifications:
+                type: integer
+              deletions:
+                type: integer
+          by_resource_type:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_type:
+                  type: string
+                count:
+                  type: integer
+          by_authorization:
+            type: object
+            properties:
+              authorized:
+                type: integer
+              unauthorized:
+                type: integer
+              unknown:
+                type: integer
+          by_source:
+            type: object
+            properties:
+              iac_managed:
+                type: integer
+              manual_console:
+                type: integer
+              api_cli:
+                type: integer
+          high_risk_changes:
+            type: array
+            items:
+              type: object
+              properties:
+                drift_id:
+                  type: string
+                risk_reason:
+                  type: string
+                cost_impact:
+                  type: number
+        description: Analysis of drift patterns
+      cost_impact:
+        type: object
+        properties:
+          total_cost_increase:
+            type: number
+          total_cost_decrease:
+            type: number
+          net_cost_impact:
+            type: number
+          highest_cost_changes:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_id:
+                  type: string
+                cost_delta:
+                  type: number
+                change_description:
+                  type: string
+        description: Cost impact of infrastructure drift
+      metadata:
+        type: object
+        properties:
+          snapshot_timestamp:
+            type: string
+          detection_period:
+            type: string
+            description: Time period analyzed (e.g., "last_24h", "last_7d")
+          accounts_monitored:
+            type: array
+            items:
+              type: string
+          regions_monitored:
+            type: array
+            items:
+              type: string
+        description: Inventory snapshot metadata
+tools:
+  - "__detect_drift"
+  - "__query_resources"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are an Infrastructure Drift Detector that monitors cloud infrastructure for changes, identifying resource additions, modifications, and deletions that may impact costs or compliance.
+
+**Detection Process:**
+
+1. **Drift Analysis**: Use detect_drift to identify infrastructure changes
+2. **Change Categorization**: Classify as additions, modifications, or deletions
+3. **Resource Details**: Use query_resources to get full details of changed resources
+4. **Cost Impact**: Use get_cost_and_usage to quantify cost impact of changes
+5. **Drift Report**: Generate inventory of infrastructure changes
+
+**What You Detect:**
+- **New Resources**: Recently created infrastructure (instances, volumes, LBs)
+- **Deleted Resources**: Recently terminated or removed resources
+- **Modified Resources**: Configuration changes (size, type, tags)
+- **Unauthorized Changes**: Resources created outside IaC/approval process
+- **Compliance Drift**: Changes violating security or cost policies
+
+**Change Categories:**
+- **Expected Changes**: Planned deployments, approved infrastructure
+- **Unexpected Changes**: Unplanned resource creation or modification
+- **Cost-Impacting**: Changes increasing monthly spend
+- **Security-Impacting**: Changes affecting security posture
+- **Compliance Violations**: Changes violating governance policies
+
+**Drift Dimensions:**
+- **Change Type**: Added, removed, modified
+- **Resource Type**: EC2, RDS, S3, networking, etc.
+- **Cost Impact**: Increased spend, decreased spend, neutral
+- **Change Source**: IaC managed vs manual/console changes
+- **Approval Status**: Authorized vs unauthorized
+
+**Tracking Metrics:**
+- Total drift events (24h, 7d, 30d)
+- Cost impact of drift (daily, monthly)
+- Unauthorized change percentage
+- Drift by resource type
+- Drift by account/team
+
+**Output Requirements:**
+- Resource ID (changed resource identifier)
+- Resource name and type
+- Account and region location
+- Current cost impact (monthly estimate)
+- Tags (before and after change)
+- Metadata (change type, timestamp, before/after state, approval status)
+
+{{role "user"}}
+{{userInput}}

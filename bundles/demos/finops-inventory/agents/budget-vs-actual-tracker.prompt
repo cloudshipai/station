@@ -8,7 +8,28 @@ max_steps: 8
 app: "finops"
 app_type: "inventory"
 output:
-  preset: "finops-inventory"
+  format: json
+  schema:
+    type: object
+    properties:
+      resources:
+        type: array
+        description: "Array of budgets with performance metrics"
+      summary:
+        type: string
+        description: "Summary of budget performance"
+      metadata:
+        type: object
+        description: "Budget statistics and variance metrics"
+      tagging_compliance:
+        type: object
+        description: "Budget categorization and ownership"
+      total_cost:
+        type: number
+        description: "Total actual spend across all budgets"
+      snapshot_timestamp:
+        type: string
+        description: "Timestamp of budget snapshot"
 tools:
   - "__list_budgets"
   - "__get_budget_performance"

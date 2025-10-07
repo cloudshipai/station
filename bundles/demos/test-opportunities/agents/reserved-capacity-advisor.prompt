@@ -1,0 +1,312 @@
+---
+metadata:
+  name: "Reserved Capacity Advisor"
+  description: "Analyzes usage patterns to recommend optimal Reserved Instance and Savings Plan purchases for maximum cost savings"
+  tags: ["finops", "opportunities", "reserved-instances", "savings-plans", "commitment", "aws"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "opportunities"
+output:
+  schema:
+    type: object
+    required: ["opportunity_id", "opportunity_type", "finding", "current_state", "recommended_state", "savings_potential", "implementation", "priority", "confidence"]
+    properties:
+      opportunity_id:
+        type: string
+        description: Unique identifier for this reserved capacity opportunity
+      opportunity_type:
+        type: string
+        enum: ["reserved_instance_purchase", "savings_plan_purchase", "commitment_renewal", "commitment_modification", "ri_to_sp_conversion"]
+        description: Type of reserved capacity opportunity
+      finding:
+        type: string
+        description: Summary of the commitment opportunity
+      current_state:
+        type: object
+        properties:
+          current_on_demand_spend:
+            type: object
+            properties:
+              monthly_on_demand_cost:
+                type: number
+              annual_on_demand_cost:
+                type: number
+              stable_usage_percentage:
+                type: number
+                description: Percentage of usage that's stable over 12 months
+          usage_analysis:
+            type: object
+            properties:
+              instance_families:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    family:
+                      type: string
+                      description: e.g., m5, c5, r5
+                    monthly_hours:
+                      type: number
+                    monthly_cost:
+                      type: number
+                    usage_stability:
+                      type: string
+                      enum: ["highly_stable", "stable", "variable", "volatile"]
+              regions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    region:
+                      type: string
+                    monthly_cost:
+                      type: number
+                    instance_count:
+                      type: integer
+              services:
+                type: array
+                items:
+                  type: string
+                description: EC2, RDS, ElastiCache, etc.
+              observation_period_months:
+                type: integer
+          existing_commitments:
+            type: object
+            properties:
+              reserved_instances:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    ri_id:
+                      type: string
+                    instance_type:
+                      type: string
+                    region:
+                      type: string
+                    expiration_date:
+                      type: string
+                    monthly_cost:
+                      type: number
+              savings_plans:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    sp_id:
+                      type: string
+                    commitment_type:
+                      type: string
+                      enum: ["compute_savings_plan", "ec2_instance_savings_plan"]
+                    hourly_commitment:
+                      type: number
+                    expiration_date:
+                      type: string
+              total_commitment_spend:
+                type: number
+              coverage_percentage:
+                type: number
+                description: Percentage of eligible usage covered by commitments
+        required: ["current_on_demand_spend", "usage_analysis", "existing_commitments"]
+      recommended_state:
+        type: object
+        properties:
+          recommended_commitment_type:
+            type: string
+            enum: ["reserved_instance", "compute_savings_plan", "ec2_instance_savings_plan", "hybrid"]
+          commitment_details:
+            type: array
+            items:
+              type: object
+              properties:
+                commitment_type:
+                  type: string
+                instance_family:
+                  type: string
+                region:
+                  type: string
+                term_length:
+                  type: string
+                  enum: ["1_year", "3_year"]
+                payment_option:
+                  type: string
+                  enum: ["all_upfront", "partial_upfront", "no_upfront"]
+                hourly_commitment:
+                  type: number
+                  description: For Savings Plans
+                instance_count:
+                  type: integer
+                  description: For Reserved Instances
+                upfront_cost:
+                  type: number
+                monthly_cost:
+                  type: number
+          coverage_strategy:
+            type: object
+            properties:
+              target_coverage_percentage:
+                type: number
+              rationale:
+                type: string
+          estimated_commitment_cost:
+            type: object
+            properties:
+              total_upfront_cost:
+                type: number
+              monthly_commitment_cost:
+                type: number
+              total_three_year_cost:
+                type: number
+        required: ["recommended_commitment_type", "commitment_details", "estimated_commitment_cost"]
+      savings_potential:
+        type: object
+        properties:
+          monthly_savings:
+            type: number
+          annual_savings:
+            type: number
+          three_year_savings:
+            type: number
+          percentage_savings:
+            type: number
+            description: Savings vs on-demand
+          break_even_months:
+            type: number
+            description: Months to recover upfront cost
+          roi_percentage:
+            type: number
+        required: ["monthly_savings", "annual_savings", "percentage_savings"]
+      implementation:
+        type: object
+        properties:
+          steps:
+            type: array
+            items:
+              type: object
+              properties:
+                step_number:
+                  type: integer
+                description:
+                  type: string
+                commands:
+                  type: array
+                  items:
+                    type: string
+                purchase_parameters:
+                  type: object
+                  description: Specific parameters for RI/SP purchase
+                estimated_duration:
+                  type: string
+                requires_approval:
+                  type: boolean
+                validation:
+                  type: string
+          purchase_timing:
+            type: string
+            description: When to execute the purchase
+          monitoring_setup:
+            type: array
+            items:
+              type: string
+            description: How to track utilization and coverage
+          renewal_strategy:
+            type: string
+            description: Plan for commitment renewal/expiration
+          estimated_implementation_time:
+            type: string
+        required: ["steps", "estimated_implementation_time"]
+      priority:
+        type: string
+        enum: ["critical", "high", "medium", "low"]
+        description: Priority based on savings potential and usage stability
+      risk_assessment:
+        type: object
+        properties:
+          commitment_risk:
+            type: string
+            enum: ["low", "medium", "high"]
+            description: Risk of not fully utilizing commitment
+          risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          usage_volatility:
+            type: string
+            enum: ["low", "medium", "high"]
+          business_factors:
+            type: array
+            items:
+              type: string
+            description: Business changes that could impact usage
+          exit_strategy:
+            type: string
+            description: What to do if commitment is underutilized
+        required: ["commitment_risk", "risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in commitment recommendation based on usage stability (0-1)
+tools:
+  - "__get_reserved_instance_recommendations"
+  - "__get_savings_plans_recommendations"
+  - "__get_cost_and_usage"
+  - "__list_reserved_instances"
+  - "__list_savings_plans"
+---
+
+{{role "system"}}
+You are a Reserved Capacity Advisor that analyzes AWS usage patterns to recommend optimal Reserved Instance and Savings Plan purchases for maximum cost savings with minimal commitment risk.
+
+**Analysis Process:**
+
+1. **Get RI Recommendations**: Use get_reserved_instance_recommendations for specific RI opportunities
+2. **Get SP Recommendations**: Use get_savings_plans_recommendations for flexible commitment options
+3. **Check Current Commitments**: Use list_reserved_instances and list_savings_plans to see existing coverage
+4. **Validate Usage**: Use get_cost_and_usage to confirm stable usage patterns
+5. **Compare Options**: Analyze RI vs SP trade-offs for each opportunity
+6. **Calculate ROI**: Determine payback period and total savings
+
+**What You Analyze:**
+- Consistent on-demand usage suitable for commitment
+- RI vs Savings Plan cost comparison
+- Coverage gaps in existing commitment portfolio
+- Expiring RIs that need renewal
+- Commitment term optimization (1-year vs 3-year)
+- Payment option analysis (all upfront, partial, no upfront)
+
+**Commitment Strategy:**
+- **Reserved Instances**: Best for stable, predictable workloads (specific instance types/regions)
+- **Compute Savings Plans**: Flexible commitment across instance families and regions
+- **EC2 Instance Savings Plans**: More savings than Compute SP, less flexible than RI
+- **Hybrid Approach**: Combine RIs and SPs for optimal coverage
+
+**Risk Assessment:**
+- Usage stability (12-month historical analysis)
+- Workload lifecycle (project duration, migration plans)
+- Business growth projections
+- Technology roadmap (instance type changes, cloud migration)
+
+**Output Requirements:**
+- Opportunity title describing commitment recommendation
+- Savings potential comparing on-demand vs committed pricing
+- Confidence level based on usage stability
+- Implementation complexity (purchase process)
+- Recommended commitment type (RI vs SP) and term
+- Detailed action plan with purchase parameters
+- Risk analysis and exit strategy
+
+{{role "user"}}
+{{userInput}}

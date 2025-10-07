@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "projections"
 output:
-  preset: "finops-projections"
+  format: json
+  schema:
+    type: object
+    properties:
+      forecast_period:
+        type: string
+        description: "Time period for K8s capacity forecast"
+      projected_cost:
+        type: number
+        description: "Projected Kubernetes infrastructure cost"
+      confidence_interval:
+        type: object
+        description: "Capacity and cost variance range"
+      trend_analysis:
+        type: string
+        description: "Workload growth and capacity trend analysis"
+      assumptions:
+        type: array
+        description: "Key assumptions including namespace growth and resource efficiency"
+      recommendations:
+        type: array
+        description: "Cluster scaling and node pool recommendations"
 tools:
   - "__get_allocation"
   - "__get_cost_forecast"

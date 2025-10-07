@@ -25,7 +25,10 @@ Available mock tools:
   github                     - Mock GitHub (PRs, deployments, commits)
   pagerduty                  - Mock PagerDuty (incidents)
   stripe                     - Mock Stripe (revenue, subscriptions)
-  guardduty                  - Mock AWS GuardDuty (threat detection)
+  aws-guardduty              - Mock AWS GuardDuty (threat detection)
+  aws-inspector              - Mock AWS Inspector (vulnerability assessment)
+  aws-cloudwatch             - Mock AWS CloudWatch (metrics, logs, alarms)
+  aws-xray                   - Mock AWS X-Ray (distributed tracing)
   iam-access-analyzer        - Mock AWS IAM Access Analyzer (policy analysis)
   trivy                      - Mock Trivy (container/IaC scanning)
   semgrep                    - Mock Semgrep (SAST code scanning)
@@ -68,6 +71,10 @@ func runMock(cmd *cobra.Command, args []string) {
 		server = mocks.NewStripeMock()
 	case "guardduty":
 		server = mocks.NewGuardDutyMock()
+	case "aws-guardduty":
+		server = mocks.NewGuardDutyMock()
+	case "aws-inspector":
+		server = mocks.NewAWSInspectorMock()
 	case "iam-access-analyzer":
 		server = mocks.NewIAMAccessAnalyzerMock()
 	case "trivy":
@@ -80,6 +87,10 @@ func runMock(cmd *cobra.Command, args []string) {
 		server = mocks.NewCloudTrailMock()
 	case "falco":
 		server = mocks.NewFalcoMock()
+	case "aws-cloudwatch":
+		server = mocks.NewCloudWatchMock()
+	case "aws-xray":
+		server = mocks.NewXRayMock()
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown mock tool '%s'\n\n", toolName)
 		fmt.Fprintln(os.Stderr, "Available mock tools:")

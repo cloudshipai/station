@@ -8,7 +8,28 @@ max_steps: 10
 app: "finops"
 app_type: "projections"
 output:
-  preset: "finops-projections"
+  format: json
+  schema:
+    type: object
+    properties:
+      forecast_period:
+        type: string
+        description: "Time period of commitment expirations"
+      projected_cost:
+        type: number
+        description: "Projected cost impact from expirations"
+      confidence_interval:
+        type: object
+        description: "Cost range for different renewal scenarios"
+      trend_analysis:
+        type: string
+        description: "Commitment expiration timeline and impact analysis"
+      assumptions:
+        type: array
+        description: "Key assumptions including usage continuation and renewal decisions"
+      recommendations:
+        type: array
+        description: "Renewal strategy and timing recommendations"
 tools:
   - "__list_reserved_instances"
   - "__list_savings_plans"

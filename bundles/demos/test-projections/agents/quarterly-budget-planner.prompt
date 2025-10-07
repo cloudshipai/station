@@ -1,0 +1,354 @@
+---
+metadata:
+  name: "Quarterly Budget Planner"
+  description: "Creates quarterly budget projections aligned with business growth and revenue forecasts for financial planning"
+  tags: ["finops", "projections", "budgeting", "quarterly-planning", "revenue-alignment"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "projections"
+output:
+  schema:
+    type: object
+    required: ["projection_id", "projection_type", "finding", "forecast_period", "quarterly_projections", "budget_allocation", "revenue_alignment", "assumptions", "recommendations", "confidence"]
+    properties:
+      projection_id:
+        type: string
+        description: Unique identifier for this quarterly budget projection
+      projection_type:
+        type: string
+        enum: ["quarterly_budget", "annual_budget_quarterly_breakdown", "revenue_aligned_budget"]
+        description: Type of quarterly budget projection
+      finding:
+        type: string
+        description: Summary of quarterly budget forecast
+      forecast_period:
+        type: object
+        properties:
+          fiscal_year:
+            type: string
+          quarters:
+            type: array
+            items:
+              type: string
+              description: Q1, Q2, Q3, Q4
+          start_date:
+            type: string
+          end_date:
+            type: string
+        required: ["fiscal_year", "quarters"]
+      current_quarter_baseline:
+        type: object
+        properties:
+          quarter:
+            type: string
+          actual_spend:
+            type: number
+          budgeted_amount:
+            type: number
+          variance:
+            type: number
+          run_rate:
+            type: number
+            description: Current monthly run rate
+        description: Baseline from current quarter
+      quarterly_projections:
+        type: array
+        items:
+          type: object
+          properties:
+            quarter:
+              type: string
+            projected_total_cost:
+              type: number
+            projected_revenue:
+              type: number
+            cost_as_percentage_of_revenue:
+              type: number
+            growth_from_previous_quarter:
+              type: number
+            service_breakdown:
+              type: object
+              properties:
+                compute_cost:
+                  type: number
+                storage_cost:
+                  type: number
+                database_cost:
+                  type: number
+                networking_cost:
+                  type: number
+                other_services_cost:
+                  type: number
+            variance_range:
+              type: object
+              properties:
+                conservative:
+                  type: number
+                expected:
+                  type: number
+                aggressive:
+                  type: number
+        description: Budget projections for each quarter
+      budget_allocation:
+        type: object
+        properties:
+          by_service:
+            type: array
+            items:
+              type: object
+              properties:
+                service:
+                  type: string
+                quarterly_budget:
+                  type: number
+                percentage_of_total:
+                  type: number
+          by_environment:
+            type: array
+            items:
+              type: object
+              properties:
+                environment:
+                  type: string
+                  enum: ["production", "staging", "development", "testing"]
+                quarterly_budget:
+                  type: number
+                percentage_of_total:
+                  type: number
+          by_team:
+            type: array
+            items:
+              type: object
+              properties:
+                team:
+                  type: string
+                quarterly_budget:
+                  type: number
+                chargeback_enabled:
+                  type: boolean
+          contingency_budget:
+            type: object
+            properties:
+              amount:
+                type: number
+              percentage:
+                type: number
+              rationale:
+                type: string
+        required: ["by_service", "contingency_budget"]
+      revenue_alignment:
+        type: object
+        properties:
+          target_gross_margin:
+            type: number
+            description: Target gross margin percentage
+          cost_per_customer_target:
+            type: number
+          unit_economics_goals:
+            type: array
+            items:
+              type: object
+              properties:
+                metric:
+                  type: string
+                target:
+                  type: number
+                current:
+                  type: number
+          revenue_growth_assumptions:
+            type: object
+            properties:
+              expected_customer_growth:
+                type: number
+              expected_arr_growth:
+                type: number
+        required: ["target_gross_margin"]
+      budget_components:
+        type: object
+        properties:
+          base_costs:
+            type: object
+            properties:
+              amount:
+                type: number
+              description:
+                type: string
+          growth_investment:
+            type: object
+            properties:
+              amount:
+                type: number
+              initiatives:
+                type: array
+                items:
+                  type: string
+          innovation_buffer:
+            type: object
+            properties:
+              amount:
+                type: number
+              percentage:
+                type: number
+          efficiency_savings:
+            type: object
+            properties:
+              expected_savings:
+                type: number
+              optimization_initiatives:
+                type: array
+                items:
+                  type: string
+        description: Breakdown of budget components
+      assumptions:
+        type: array
+        items:
+          type: object
+          properties:
+            assumption:
+              type: string
+            category:
+              type: string
+              enum: ["business_growth", "pricing", "efficiency", "market_conditions"]
+            impact:
+              type: string
+              enum: ["high", "medium", "low"]
+        description: Key assumptions for quarterly planning
+      strategic_initiatives:
+        type: array
+        items:
+          type: object
+          properties:
+            initiative:
+              type: string
+            quarter:
+              type: string
+            estimated_cost:
+              type: number
+            expected_benefit:
+              type: string
+        description: Major initiatives affecting budget
+      recommendations:
+        type: object
+        properties:
+          budget_adjustments:
+            type: array
+            items:
+              type: string
+          approval_requirements:
+            type: array
+            items:
+              type: string
+          monitoring_requirements:
+            type: array
+            items:
+              type: string
+          optimization_priorities:
+            type: array
+            items:
+              type: object
+              properties:
+                priority:
+                  type: string
+                quarter:
+                  type: string
+                expected_savings:
+                  type: number
+        required: ["budget_adjustments"]
+      risk_assessment:
+        type: object
+        properties:
+          budget_risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          variance_scenarios:
+            type: object
+            properties:
+              best_case:
+                type: object
+                properties:
+                  description:
+                    type: string
+                  budget_impact:
+                    type: number
+              worst_case:
+                type: object
+                properties:
+                  description:
+                    type: string
+                  budget_impact:
+                    type: number
+        required: ["budget_risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in quarterly budget projection (0-1)
+tools:
+  - "__get_cost_forecast"
+  - "__get_cost_and_usage"
+  - "__get_revenue_metrics"
+  - "__list_budgets"
+---
+
+{{role "system"}}
+You are a Quarterly Budget Planner that creates comprehensive quarterly budget projections aligned with business growth, revenue forecasts, and operational plans.
+
+**Planning Process:**
+
+1. **Revenue Analysis**: Use get_revenue_metrics to understand business growth trajectory
+2. **Cost Baseline**: Use get_cost_and_usage to establish current quarterly spend
+3. **Forecast Generation**: Use get_cost_forecast for next quarter projections
+4. **Budget Review**: Use list_budgets to check current budget allocations
+5. **Alignment**: Create budget recommendations that balance cost efficiency with growth
+
+**What You Plan:**
+- Quarterly total budget by service/account/team
+- Cost-to-revenue ratio targets
+- Department/team budget allocations
+- Growth investment areas vs efficiency targets
+- Contingency buffers for uncertainty
+
+**Budget Components:**
+- **Base Costs**: Steady-state infrastructure and operations
+- **Growth Investment**: Capacity for business expansion
+- **Innovation Buffer**: R&D and experimentation budget
+- **Efficiency Savings**: Expected reductions from optimization
+- **Contingency**: Buffer for unexpected costs (typically 10-15%)
+
+**Revenue Alignment:**
+- Cost per customer/unit economics targets
+- Gross margin preservation during growth
+- Investment in revenue-generating infrastructure
+- Balance between growth and profitability
+
+**Strategic Considerations:**
+- Planned product launches or feature releases
+- Expected customer growth rate
+- Seasonal business patterns
+- Infrastructure modernization projects
+- Commitment strategy (RI/SP purchases)
+
+**Output Requirements:**
+- Projection summary for target quarter
+- Forecasted quarterly budget amount
+- Confidence level with business context
+- Time period (Q1/Q2/Q3/Q4)
+- Key assumptions (revenue growth, customer acquisition, projects)
+- Variance range accounting for business uncertainty
+- Recommendations for budget allocation and approval process
+
+{{role "user"}}
+{{userInput}}

@@ -8,6 +8,7 @@ max_steps: 10
 app: "finops"
 app_type: "investigations"
 output:
+  format: json
   schema:
     type: object
     required:

@@ -1,0 +1,281 @@
+---
+metadata:
+  name: "Budget Optimization Planner"
+  description: "Analyzes budget utilization and variance to recommend budget adjustments and cost control strategies for optimal financial governance"
+  tags: ["finops", "opportunities", "budgets", "governance", "cost-control", "planning"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "opportunities"
+output:
+  schema:
+    type: object
+    required: ["opportunity_id", "opportunity_type", "finding", "current_state", "recommended_state", "impact", "implementation", "priority", "confidence"]
+    properties:
+      opportunity_id:
+        type: string
+        description: Unique identifier for this budget optimization opportunity
+      opportunity_type:
+        type: string
+        enum: ["budget_rightsizing", "new_budget_creation", "alert_threshold_tuning", "budget_granularity_improvement", "cost_control_implementation", "budget_coverage_gap"]
+        description: Type of budget optimization opportunity
+      finding:
+        type: string
+        description: Summary of the budget performance issue or opportunity
+      current_state:
+        type: object
+        properties:
+          budget_configuration:
+            type: object
+            properties:
+              budget_name:
+                type: string
+              budget_amount:
+                type: number
+              budget_period:
+                type: string
+                enum: ["monthly", "quarterly", "annual"]
+              budget_scope:
+                type: string
+                description: Account, service, cost center, etc.
+          performance_metrics:
+            type: object
+            properties:
+              actual_spend:
+                type: number
+              budgeted_amount:
+                type: number
+              variance_amount:
+                type: number
+              variance_percentage:
+                type: number
+              utilization_rate:
+                type: number
+                description: Percentage of budget used
+              months_analyzed:
+                type: integer
+          variance_pattern:
+            type: string
+            enum: ["consistent_overspend", "consistent_underspend", "highly_variable", "seasonal", "growing_trend", "declining_trend"]
+          alert_configuration:
+            type: object
+            properties:
+              has_alerts:
+                type: boolean
+              threshold_percentages:
+                type: array
+                items:
+                  type: number
+              alert_effectiveness:
+                type: string
+                enum: ["effective", "alert_fatigue", "too_late", "not_configured"]
+          coverage_gaps:
+            type: array
+            items:
+              type: object
+              properties:
+                unbudgeted_area:
+                  type: string
+                monthly_spend:
+                  type: number
+        required: ["budget_configuration", "performance_metrics"]
+      recommended_state:
+        type: object
+        properties:
+          budget_adjustments:
+            type: array
+            items:
+              type: object
+              properties:
+                budget_name:
+                  type: string
+                current_amount:
+                  type: number
+                recommended_amount:
+                  type: number
+                adjustment_reasoning:
+                  type: string
+                adjustment_type:
+                  type: string
+                  enum: ["increase", "decrease", "split", "consolidate", "create_new"]
+          alert_recommendations:
+            type: array
+            items:
+              type: object
+              properties:
+                threshold_percentage:
+                  type: number
+                action_type:
+                  type: string
+                  enum: ["notification", "approval_required", "auto_stop", "escalation"]
+                notification_channels:
+                  type: array
+                  items:
+                    type: string
+          cost_controls:
+            type: array
+            items:
+              type: object
+              properties:
+                control_type:
+                  type: string
+                  enum: ["spending_limit", "approval_workflow", "auto_shutdown", "resource_tagging_enforcement", "budget_policy"]
+                scope:
+                  type: string
+                enforcement_mechanism:
+                  type: string
+          governance_improvements:
+            type: array
+            items:
+              type: string
+        required: ["budget_adjustments"]
+      impact:
+        type: object
+        properties:
+          cost_control_improvement:
+            type: number
+            description: Estimated annual savings from better cost control
+          governance_benefits:
+            type: array
+            items:
+              type: string
+          forecast_accuracy_improvement:
+            type: number
+            description: Expected improvement in forecast accuracy percentage
+          alert_fatigue_reduction:
+            type: boolean
+          budget_visibility_improvement:
+            type: string
+            enum: ["significant", "moderate", "minor"]
+        required: ["cost_control_improvement"]
+      implementation:
+        type: object
+        properties:
+          steps:
+            type: array
+            items:
+              type: object
+              properties:
+                step_number:
+                  type: integer
+                description:
+                  type: string
+                responsible_party:
+                  type: string
+                  enum: ["finops_team", "engineering", "finance", "management", "automation"]
+                estimated_duration:
+                  type: string
+                dependencies:
+                  type: array
+                  items:
+                    type: string
+                validation:
+                  type: string
+          testing_approach:
+            type: string
+            description: How to validate budget changes before full rollout
+          rollback_plan:
+            type: string
+          change_management:
+            type: object
+            properties:
+              stakeholder_communication:
+                type: array
+                items:
+                  type: string
+              approval_required_from:
+                type: array
+                items:
+                  type: string
+              documentation_updates:
+                type: array
+                items:
+                  type: string
+          estimated_implementation_time:
+            type: string
+        required: ["steps", "estimated_implementation_time"]
+      priority:
+        type: string
+        enum: ["critical", "high", "medium", "low"]
+        description: Implementation priority based on budget variance severity
+      risk_assessment:
+        type: object
+        properties:
+          implementation_risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          business_impact:
+            type: string
+            enum: ["high", "medium", "low"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in budget optimization recommendations (0-1)
+tools:
+  - "__list_budgets"
+  - "__get_budget_performance"
+  - "__get_cost_and_usage"
+  - "__get_cost_forecast"
+---
+
+{{role "system"}}
+You are a Budget Optimization Planner that analyzes budget performance and cost trends to recommend budget adjustments and implement cost controls for optimal financial governance.
+
+**Analysis Process:**
+
+1. **Budget Review**: Use list_budgets and get_budget_performance to analyze current budgets
+2. **Variance Analysis**: Identify budgets with significant over/under spending
+3. **Trend Analysis**: Use get_cost_and_usage to understand spending patterns
+4. **Forecast Check**: Use get_cost_forecast to predict future budget performance
+5. **Optimization**: Recommend budget adjustments and new controls
+
+**What You Analyze:**
+- Budget utilization rates (over-budget, under-budget, on-track)
+- Budget variance trends (consistent overspend vs one-time spike)
+- Forecast accuracy (are budgets realistic?)
+- Alert configuration effectiveness
+- Budget coverage gaps (unbudgeted services/accounts)
+
+**Optimization Opportunities:**
+1. **Budget Rightsizing**: Adjust unrealistic budgets based on actuals and forecasts
+2. **New Budgets**: Create budgets for unmonitored cost centers
+3. **Alert Tuning**: Optimize threshold percentages to reduce alert fatigue
+4. **Granularity**: Break down broad budgets into service/team-specific budgets
+5. **Cost Controls**: Implement proactive controls (e.g., auto-stop, approval workflows)
+
+**Budget Strategy:**
+- **Overbudget**: Investigate root cause (growth, waste, or forecast error)
+- **Underbudget**: Reallocate capacity or reduce budget for efficiency
+- **Highly Variable**: Implement dynamic budgets or anomaly detection
+- **No Budget**: Create baseline budget for governance
+
+**Governance Recommendations:**
+- Budget approval workflows
+- Automated actions on threshold breach
+- Chargeback/showback implementation
+- FinOps maturity progression
+
+**Output Requirements:**
+- Opportunity title describing budget optimization
+- Savings potential from better cost control
+- Confidence level based on budget performance data
+- Implementation complexity (budget changes, automation setup)
+- Current budget status with variance analysis
+- Detailed action plan for budget adjustments
+- Risk assessment and change management approach
+
+{{role "user"}}
+{{userInput}}

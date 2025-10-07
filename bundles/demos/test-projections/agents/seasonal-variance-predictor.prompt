@@ -1,0 +1,371 @@
+---
+metadata:
+  name: "Seasonal Variance Predictor"
+  description: "Predicts seasonal cost patterns and variance based on historical trends to improve budget accuracy during peak periods"
+  tags: ["finops", "projections", "seasonality", "variance", "peak-planning", "trend-analysis"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "projections"
+output:
+  schema:
+    type: object
+    required: ["projection_id", "projection_type", "finding", "forecast_period", "historical_patterns", "seasonal_forecast", "variance_analysis", "assumptions", "recommendations", "confidence"]
+    properties:
+      projection_id:
+        type: string
+        description: Unique identifier for this seasonal variance projection
+      projection_type:
+        type: string
+        enum: ["seasonal_variance", "peak_period_forecast", "cyclical_pattern_analysis"]
+        description: Type of seasonal variance projection
+      finding:
+        type: string
+        description: Summary of seasonal variance forecast
+      forecast_period:
+        type: object
+        properties:
+          start_date:
+            type: string
+          end_date:
+            type: string
+          forecast_horizon_months:
+            type: integer
+          target_seasons:
+            type: array
+            items:
+              type: string
+              description: Specific seasons or periods being forecasted
+        required: ["start_date", "end_date", "forecast_horizon_months"]
+      historical_patterns:
+        type: object
+        properties:
+          analysis_period:
+            type: object
+            properties:
+              start_date:
+                type: string
+              end_date:
+                type: string
+              months_analyzed:
+                type: integer
+          baseline_cost:
+            type: object
+            properties:
+              average_monthly_cost:
+                type: number
+              median_monthly_cost:
+                type: number
+              standard_deviation:
+                type: number
+          seasonal_patterns_detected:
+            type: array
+            items:
+              type: object
+              properties:
+                pattern_name:
+                  type: string
+                  description: e.g., "Q4 Holiday Spike", "End-of-Quarter Surge"
+                frequency:
+                  type: string
+                  enum: ["monthly", "quarterly", "annual", "event_driven"]
+                typical_months:
+                  type: array
+                  items:
+                    type: string
+                average_variance_percentage:
+                  type: number
+                consistency_score:
+                  type: number
+                  description: 0-1 score indicating pattern reliability
+          peak_periods:
+            type: array
+            items:
+              type: object
+              properties:
+                period:
+                  type: string
+                peak_cost:
+                  type: number
+                variance_from_baseline:
+                  type: number
+                variance_percentage:
+                  type: number
+                contributing_services:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      service:
+                        type: string
+                      cost_increase:
+                        type: number
+          low_periods:
+            type: array
+            items:
+              type: object
+              properties:
+                period:
+                  type: string
+                low_cost:
+                  type: number
+                variance_from_baseline:
+                  type: number
+        required: ["baseline_cost", "seasonal_patterns_detected"]
+      seasonal_forecast:
+        type: object
+        properties:
+          monthly_projections:
+            type: array
+            items:
+              type: object
+              properties:
+                month:
+                  type: string
+                baseline_projection:
+                  type: number
+                seasonal_adjustment:
+                  type: number
+                total_projected_cost:
+                  type: number
+                variance_from_baseline_percentage:
+                  type: number
+                confidence_interval:
+                  type: object
+                  properties:
+                    lower_bound:
+                      type: number
+                    upper_bound:
+                      type: number
+                seasonal_factor:
+                  type: string
+                  enum: ["peak", "above_average", "baseline", "below_average", "low"]
+          peak_periods_forecast:
+            type: array
+            items:
+              type: object
+              properties:
+                period_name:
+                  type: string
+                start_date:
+                  type: string
+                end_date:
+                  type: string
+                projected_peak_cost:
+                  type: number
+                expected_variance_percentage:
+                  type: number
+                duration_days:
+                  type: integer
+                preparation_required:
+                  type: array
+                  items:
+                    type: string
+        required: ["monthly_projections"]
+      variance_analysis:
+        type: object
+        properties:
+          variance_drivers:
+            type: array
+            items:
+              type: object
+              properties:
+                driver:
+                  type: string
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                seasonality_type:
+                  type: string
+                  enum: ["predictable", "variable", "event_driven"]
+          service_specific_patterns:
+            type: array
+            items:
+              type: object
+              properties:
+                service:
+                  type: string
+                seasonal_behavior:
+                  type: string
+                variance_percentage:
+                  type: number
+          growth_adjusted_forecast:
+            type: object
+            properties:
+              baseline_growth_rate:
+                type: number
+              seasonal_pattern_with_growth:
+                type: string
+              projected_peak_with_growth:
+                type: number
+        description: Analysis of variance components
+      business_patterns:
+        type: object
+        properties:
+          business_type:
+            type: string
+            enum: ["retail_ecommerce", "b2b_saas", "education", "entertainment_media", "financial_services", "other"]
+          known_events:
+            type: array
+            items:
+              type: object
+              properties:
+                event_name:
+                  type: string
+                typical_timing:
+                  type: string
+                expected_impact:
+                  type: string
+                  enum: ["major", "moderate", "minor"]
+          recurring_patterns:
+            type: array
+            items:
+              type: string
+        description: Business-specific seasonal patterns
+      assumptions:
+        type: array
+        items:
+          type: object
+          properties:
+            assumption:
+              type: string
+            rationale:
+              type: string
+            sensitivity:
+              type: string
+              enum: ["high", "medium", "low"]
+        description: Key assumptions for seasonal forecasting
+      scenarios:
+        type: object
+        properties:
+          typical_season:
+            type: object
+            properties:
+              description:
+                type: string
+              projected_variance:
+                type: number
+          extreme_season:
+            type: object
+            properties:
+              description:
+                type: string
+              projected_variance:
+                type: number
+              probability:
+                type: string
+                enum: ["high", "medium", "low"]
+        description: Different seasonal scenarios
+      recommendations:
+        type: object
+        properties:
+          budget_adjustments:
+            type: array
+            items:
+              type: object
+              properties:
+                month:
+                  type: string
+                recommended_budget:
+                  type: number
+                adjustment_rationale:
+                  type: string
+          capacity_planning:
+            type: array
+            items:
+              type: string
+          commitment_strategy:
+            type: array
+            items:
+              type: string
+          monitoring_requirements:
+            type: array
+            items:
+              type: string
+        required: ["budget_adjustments"]
+      risk_assessment:
+        type: object
+        properties:
+          forecast_risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          pattern_reliability:
+            type: object
+            properties:
+              historical_accuracy:
+                type: number
+                description: Past forecast accuracy percentage
+              pattern_consistency:
+                type: string
+                enum: ["very_consistent", "consistent", "variable", "unpredictable"]
+        required: ["forecast_risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in seasonal variance projection (0-1)
+tools:
+  - "__get_cost_and_usage"
+  - "__get_cost_forecast"
+---
+
+{{role "system"}}
+You are a Seasonal Variance Predictor that analyzes historical cost patterns to forecast seasonal variations, helping teams budget accurately for peak periods and low seasons.
+
+**Analysis Process:**
+
+1. **Historical Patterns**: Use get_cost_and_usage to analyze 12+ months of cost data
+2. **Seasonality Detection**: Identify recurring patterns (monthly, quarterly, annual)
+3. **Peak Periods**: Quantify cost increases during high-season periods
+4. **Baseline Establishment**: Determine steady-state costs vs seasonal variance
+5. **Future Projection**: Use get_cost_forecast and seasonal patterns to predict upcoming peaks
+
+**What You Predict:**
+- Seasonal cost peaks (holiday season, end-of-quarter, fiscal year-end)
+- Low-season cost baselines
+- Variance percentage from baseline during peaks
+- Duration and timing of seasonal patterns
+- Service-specific seasonality (e.g., compute vs storage)
+
+**Seasonal Pattern Types:**
+1. **Retail/E-commerce**: Q4 holiday spike, post-holiday drop
+2. **B2B SaaS**: End-of-quarter usage spikes
+3. **Education**: Academic year patterns
+4. **Entertainment/Media**: Event-driven or release-driven spikes
+5. **Financial Services**: Month-end, quarter-end processing peaks
+
+**Variance Components:**
+- **Predictable Peaks**: Known events (Black Friday, tax season)
+- **Growth-Adjusted**: Seasonal pattern + business growth
+- **One-Time Events**: Differentiate recurring vs unique spikes
+- **Service Mix**: Which services drive seasonal costs
+
+**Budget Impact:**
+- Monthly budget adjustments for seasonal variance
+- Contingency planning for peak periods
+- Right-sizing commitments vs on-demand for peaks
+- Team communication about expected cost changes
+
+**Output Requirements:**
+- Projection summary describing seasonal pattern
+- Forecasted cost variance for target season
+- Confidence level based on historical pattern consistency
+- Time period of seasonal impact
+- Key assumptions (pattern recurrence, growth normalization)
+- Variance range (typical vs extreme seasonal spikes)
+- Recommendations for seasonal budget planning and capacity provisioning
+
+{{role "user"}}
+{{userInput}}

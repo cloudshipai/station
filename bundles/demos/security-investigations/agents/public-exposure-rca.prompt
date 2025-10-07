@@ -8,38 +8,37 @@ max_steps: 10
 app: "security"
 app_type: "investigations"
 output:
+  format: json
   schema:
     type: object
-    required:
-      - finding
-      - root_cause
-      - threat_severity
-      - affected_resources
-      - attack_timeline
-      - evidence
-      - remediation
     properties:
-      finding:
+      finding_id:
         type: string
-      root_cause:
+        description: IAM Access Analyzer finding identifier
+      severity:
         type: string
-      threat_severity:
+        description: "Severity: CRITICAL, HIGH, MEDIUM, LOW"
+      summary:
         type: string
-        enum: ["Critical", "High", "Medium", "Low"]
+        description: Executive summary of the public exposure and root cause
       affected_resources:
         type: array
         items:
-          type: object
-      attack_timeline:
-        type: object
-      evidence:
+          type: string
+        description: Exposed AWS resources (S3 buckets, IAM roles, Lambda, databases)
+      threat_indicators:
         type: array
         items:
           type: string
-      remediation:
+        description: Exposure vectors - public policies, security groups, external access
+      remediation_steps:
         type: array
         items:
-          type: object
+          type: string
+        description: Prioritized remediation actions to lock down access
+      confidence:
+        type: string
+        description: "Analysis confidence: HIGH, MEDIUM, LOW"
 tools:
   - "__get_findings"
   - "__analyze_policy"

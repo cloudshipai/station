@@ -1,0 +1,243 @@
+---
+metadata:
+  name: "Cost Center Aggregator"
+  description: "Aggregates costs by cost centers, teams, and projects using tag-based attribution for chargeback and showback"
+  tags: ["finops", "inventory", "cost-centers", "chargeback", "showback", "team-attribution"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "inventory"
+output:
+  schema:
+    type: object
+    required: ["inventory_id", "inventory_type", "summary", "cost_centers", "tagging_compliance", "unattributed_costs", "metadata"]
+    properties:
+      inventory_id:
+        type: string
+        description: Unique identifier for this cost center aggregation snapshot
+      inventory_type:
+        type: string
+        enum: ["cost_center_aggregation", "chargeback_report", "showback_report"]
+        description: Type of cost center inventory
+      summary:
+        type: object
+        properties:
+          total_cost_centers:
+            type: integer
+            description: Total number of cost centers tracked
+          total_monthly_cost:
+            type: number
+            description: Total monthly cost across all cost centers
+          tagging_compliance_percentage:
+            type: number
+            description: Percentage of resources properly tagged
+          untagged_cost:
+            type: number
+            description: Total cost from untagged resources
+          top_cost_center:
+            type: string
+            description: Highest spending cost center
+        required: ["total_cost_centers", "total_monthly_cost", "tagging_compliance_percentage"]
+      cost_centers:
+        type: array
+        items:
+          type: object
+          properties:
+            cost_center_id:
+              type: string
+            cost_center_name:
+              type: string
+            organizational_unit:
+              type: object
+              properties:
+                division:
+                  type: string
+                department:
+                  type: string
+                team:
+                  type: string
+              description: Hierarchical organization structure
+            cost_breakdown:
+              type: object
+              properties:
+                total_monthly_cost:
+                  type: number
+                compute_cost:
+                  type: number
+                storage_cost:
+                  type: number
+                database_cost:
+                  type: number
+                network_cost:
+                  type: number
+                other_cost:
+                  type: number
+            resource_attribution:
+              type: object
+              properties:
+                total_resources:
+                  type: integer
+                tagged_resources:
+                  type: integer
+                untagged_resources:
+                  type: integer
+                tagging_compliance:
+                  type: number
+                  description: Percentage of resources properly tagged
+            projects:
+              type: array
+              items:
+                type: object
+                properties:
+                  project_name:
+                    type: string
+                  project_cost:
+                    type: number
+                  resource_count:
+                    type: integer
+              description: Projects within this cost center
+            environments:
+              type: object
+              properties:
+                production_cost:
+                  type: number
+                staging_cost:
+                  type: number
+                development_cost:
+                  type: number
+              description: Environment-based cost split
+            accounts:
+              type: array
+              items:
+                type: string
+              description: AWS accounts associated with this cost center
+            cost_trend:
+              type: object
+              properties:
+                current_month:
+                  type: number
+                last_month:
+                  type: number
+                month_over_month_change:
+                  type: number
+                trend:
+                  type: string
+                  enum: ["increasing", "decreasing", "stable"]
+          required: ["cost_center_id", "cost_center_name", "cost_breakdown", "resource_attribution"]
+        description: List of all cost centers with attribution
+      tagging_compliance:
+        type: object
+        properties:
+          compliant_resources:
+            type: integer
+          non_compliant_resources:
+            type: integer
+          compliance_percentage:
+            type: number
+          missing_tags:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_id:
+                  type: string
+                resource_type:
+                  type: string
+                estimated_cost:
+                  type: number
+                required_tags:
+                  type: array
+                  items:
+                    type: string
+        description: Tagging compliance analysis
+      unattributed_costs:
+        type: object
+        properties:
+          total_unattributed_cost:
+            type: number
+          unattributed_percentage:
+            type: number
+          untagged_resources:
+            type: array
+            items:
+              type: object
+              properties:
+                resource_id:
+                  type: string
+                resource_type:
+                  type: string
+                monthly_cost:
+                  type: number
+                account:
+                  type: string
+                region:
+                  type: string
+        description: Costs that cannot be attributed to cost centers
+      metadata:
+        type: object
+        properties:
+          snapshot_timestamp:
+            type: string
+          reporting_period:
+            type: string
+          accounts_covered:
+            type: array
+            items:
+              type: string
+          attribution_method:
+            type: string
+            enum: ["tag_based", "label_based", "account_based", "hybrid"]
+        description: Inventory snapshot metadata
+tools:
+  - "__query_resources"
+  - "__get_cost_and_usage"
+  - "__get_allocation"
+---
+
+{{role "system"}}
+You are a Cost Center Aggregator that tracks and attributes costs to organizational units (cost centers, teams, projects) using tag-based resource attribution for chargeback and showback reporting.
+
+**Aggregation Process:**
+
+1. **Resource Tagging**: Use query_resources to identify resources and their tags
+2. **AWS Cost Attribution**: Use get_cost_and_usage with cost center tag filtering
+3. **K8s Cost Attribution**: Use get_allocation with label-based filtering
+4. **Untagged Analysis**: Identify and quantify unattributed costs
+5. **Aggregated Report**: Generate cost center inventory with full attribution
+
+**What You Aggregate:**
+- **Cost Centers**: Department/division-level cost rollups
+- **Teams**: Engineering, product, data, infrastructure team costs
+- **Projects**: Feature, initiative, or product-specific costs
+- **Environments**: Production, staging, development cost separation
+- **Untagged Resources**: Orphaned costs without attribution
+
+**Attribution Methods:**
+- **Tag-Based**: Resources tagged with CostCenter, Team, Project
+- **Label-Based**: K8s workloads with team/project labels
+- **Account-Based**: Entire account mapped to cost center
+- **Service-Based**: Shared services allocated by usage
+
+**Aggregation Dimensions:**
+- **Cost Center Hierarchy**: Company → Division → Department → Team
+- **Project Allocation**: Cross-functional project cost tracking
+- **Environment Split**: Prod vs non-prod cost separation
+- **Service Type**: Compute, storage, database, network breakdown
+
+**Tracking Metrics:**
+- Total cost per cost center/team/project
+- Resource count per attribution tag
+- Tagging compliance percentage
+- Untagged cost amount and percentage
+- Month-over-month cost trends per unit
+
+**Output Requirements:**
+- Resource ID (cost center, team, or project identifier)
+- Resource name (organizational unit name)
+- Account/region (primary location or multi-account)
+- Current monthly cost with service breakdown
+- Tags showing attribution hierarchy
+- Metadata (resource count, tagging compliance %, untagged cost)
+
+{{role "user"}}
+{{userInput}}

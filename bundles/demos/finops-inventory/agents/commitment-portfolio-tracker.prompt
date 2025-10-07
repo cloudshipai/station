@@ -8,7 +8,28 @@ max_steps: 8
 app: "finops"
 app_type: "inventory"
 output:
-  preset: "finops-inventory"
+  format: json
+  schema:
+    type: object
+    properties:
+      resources:
+        type: array
+        description: "Array of tracked commitments (RIs and Savings Plans)"
+      summary:
+        type: string
+        description: "Summary of commitment portfolio"
+      metadata:
+        type: object
+        description: "Portfolio statistics and utilization metrics"
+      tagging_compliance:
+        type: object
+        description: "Commitment attribution and categorization"
+      total_cost:
+        type: number
+        description: "Total monthly commitment value"
+      snapshot_timestamp:
+        type: string
+        description: "Timestamp of portfolio snapshot"
 tools:
   - "__list_reserved_instances"
   - "__list_savings_plans"

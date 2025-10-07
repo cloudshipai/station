@@ -584,6 +584,284 @@ func NewCloudTrailMock() *MockServer {
 	return server
 }
 
+// NewAWSInspectorMock creates a mock AWS Inspector MCP server for vulnerability assessment
+func NewAWSInspectorMock() *MockServer {
+	server := NewMockServer(
+		"aws-inspector",
+		"1.0.0",
+		"Mock AWS Inspector for EC2/ECR vulnerability assessment and CVE analysis",
+	)
+
+	// list_inspector_findings - List vulnerability findings
+	server.RegisterTool(mcp.Tool{
+		Name:        "list_inspector_findings",
+		Description: "List AWS Inspector vulnerability findings with CVE details and CVSS scores",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"severity": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter by severity: INFORMATIONAL, LOW, MEDIUM, HIGH, CRITICAL",
+					"enum":        []string{"INFORMATIONAL", "LOW", "MEDIUM", "HIGH", "CRITICAL"},
+				},
+				"max_results": map[string]interface{}{
+					"type":        "number",
+					"description": "Maximum number of findings to return",
+				},
+			},
+		},
+	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		data := map[string]interface{}{
+			"findings": []map[string]interface{}{
+				{
+					"finding_arn": "arn:aws:inspector2:us-east-1:123456789012:finding/abc123def456",
+					"severity":    "CRITICAL",
+					"status":      "ACTIVE",
+					"title":       "CVE-2024-1234 - OpenSSL Buffer Overflow",
+					"type":        "PACKAGE_VULNERABILITY",
+					"vulnerability_id": "CVE-2024-1234",
+					"cvss_score": map[string]interface{}{
+						"base_score": 9.8,
+						"version":    "3.1",
+						"vector":     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+					},
+					"package_vulnerability_details": map[string]interface{}{
+						"package_name":      "openssl",
+						"installed_version": "1.1.1n-0+deb11u3",
+						"fixed_version":     "1.1.1n-0+deb11u5",
+						"source":            "DEBIAN_CVE",
+						"vulnerability_source_url": "https://security-tracker.debian.org/tracker/CVE-2024-1234",
+					},
+					"resources": []map[string]interface{}{
+						{
+							"type": "AWS_ECR_CONTAINER_IMAGE",
+							"id":   "sha256:abcd1234ef567890",
+							"details": map[string]interface{}{
+								"repository": "company/nginx-app",
+								"image_tags": []string{"v1.2.3", "latest"},
+								"image_pushed_at": time.Now().Add(-30 * 24 * time.Hour).Format(time.RFC3339),
+							},
+						},
+					},
+					"first_observed_at": time.Now().Add(-14 * 24 * time.Hour).Format(time.RFC3339),
+					"last_observed_at":  time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
+					"description":       "OpenSSL versions before 1.1.1n-0+deb11u5 contain a buffer overflow vulnerability that allows remote code execution",
+					"exploit_available": "YES",
+					"epss_score":        0.89,
+					"cisa_kev":          true,
+					"kev_deadline":      time.Now().Add(14 * 24 * time.Hour).Format("2006-01-02"),
+				},
+				{
+					"finding_arn": "arn:aws:inspector2:us-east-1:123456789012:finding/ghi789jkl012",
+					"severity":    "HIGH",
+					"status":      "ACTIVE",
+					"title":       "CVE-2023-5678 - curl Heap Buffer Overflow",
+					"type":        "PACKAGE_VULNERABILITY",
+					"vulnerability_id": "CVE-2023-5678",
+					"cvss_score": map[string]interface{}{
+						"base_score": 7.5,
+						"version":    "3.1",
+						"vector":     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+					},
+					"package_vulnerability_details": map[string]interface{}{
+						"package_name":      "curl",
+						"installed_version": "7.74.0-1.3+deb11u3",
+						"fixed_version":     "7.74.0-1.3+deb11u7",
+						"source":            "NVD",
+						"vulnerability_source_url": "https://nvd.nist.gov/vuln/detail/CVE-2023-5678",
+					},
+					"resources": []map[string]interface{}{
+						{
+							"type": "AWS_EC2_INSTANCE",
+							"id":   "i-0123456789abcdef0",
+							"details": map[string]interface{}{
+								"instance_type": "t3.medium",
+								"platform":      "AMAZON_LINUX_2",
+								"tags": map[string]string{
+									"Environment": "production",
+									"Team":        "platform",
+								},
+							},
+						},
+					},
+					"first_observed_at": time.Now().Add(-45 * 24 * time.Hour).Format(time.RFC3339),
+					"last_observed_at":  time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+					"description":       "curl heap buffer overflow in URL parsing allows denial of service",
+					"exploit_available": "POC",
+					"epss_score":        0.12,
+					"cisa_kev":          false,
+				},
+				{
+					"finding_arn": "arn:aws:inspector2:us-west-2:123456789012:finding/mno345pqr678",
+					"severity":    "MEDIUM",
+					"status":      "ACTIVE",
+					"title":       "CVE-2023-9012 - Python Pillow Integer Overflow",
+					"type":        "PACKAGE_VULNERABILITY",
+					"vulnerability_id": "CVE-2023-9012",
+					"cvss_score": map[string]interface{}{
+						"base_score": 5.3,
+						"version":    "3.1",
+						"vector":     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+					},
+					"package_vulnerability_details": map[string]interface{}{
+						"package_name":      "pillow",
+						"installed_version": "9.0.1",
+						"fixed_version":     "9.0.2",
+						"source":            "PYPI",
+						"vulnerability_source_url": "https://github.com/python-pillow/Pillow/security/advisories",
+					},
+					"resources": []map[string]interface{}{
+						{
+							"type": "AWS_LAMBDA_FUNCTION",
+							"id":   "image-processor",
+							"details": map[string]interface{}{
+								"function_name": "image-processor",
+								"runtime":       "python3.9",
+								"last_modified": time.Now().Add(-60 * 24 * time.Hour).Format(time.RFC3339),
+							},
+						},
+					},
+					"first_observed_at": time.Now().Add(-90 * 24 * time.Hour).Format(time.RFC3339),
+					"last_observed_at":  time.Now().Add(-6 * time.Hour).Format(time.RFC3339),
+					"description":       "Integer overflow in Pillow image processing library allows information disclosure",
+					"exploit_available": "NO",
+					"epss_score":        0.003,
+					"cisa_kev":          false,
+				},
+			},
+			"total_findings": 3,
+			"summary": map[string]interface{}{
+				"critical": 1,
+				"high":     1,
+				"medium":   1,
+				"low":      0,
+			},
+		}
+		return SuccessResult(data)
+	})
+
+	// get_inspector_finding_details - Get detailed information about a specific finding
+	server.RegisterTool(mcp.Tool{
+		Name:        "get_inspector_finding_details",
+		Description: "Get detailed information about a specific Inspector finding including remediation guidance",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"finding_arn": map[string]interface{}{
+					"type":        "string",
+					"description": "ARN of the Inspector finding",
+				},
+			},
+			Required: []string{"finding_arn"},
+		},
+	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		data := map[string]interface{}{
+			"finding_arn": "arn:aws:inspector2:us-east-1:123456789012:finding/abc123def456",
+			"severity":    "CRITICAL",
+			"status":      "ACTIVE",
+			"title":       "CVE-2024-1234 - OpenSSL Buffer Overflow",
+			"vulnerability_id": "CVE-2024-1234",
+			"cvss_details": map[string]interface{}{
+				"base_score": 9.8,
+				"version":    "3.1",
+				"vector":     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+				"breakdown": map[string]interface{}{
+					"attack_vector":       "NETWORK",
+					"attack_complexity":   "LOW",
+					"privileges_required": "NONE",
+					"user_interaction":    "NONE",
+					"scope":               "UNCHANGED",
+					"confidentiality":     "HIGH",
+					"integrity":           "HIGH",
+					"availability":        "HIGH",
+				},
+			},
+			"exploit_intelligence": map[string]interface{}{
+				"exploit_available":     "YES",
+				"exploit_maturity":      "FUNCTIONAL",
+				"epss_score":            0.89,
+				"epss_percentile":       98.5,
+				"cisa_kev":              true,
+				"kev_deadline":          time.Now().Add(14 * 24 * time.Hour).Format("2006-01-02"),
+				"active_exploitation":   true,
+				"metasploit_module":     true,
+				"public_exploit_urls":   []string{"https://www.exploit-db.com/exploits/51234"},
+				"threat_actor_groups":   []string{"APT29", "Lazarus"},
+			},
+			"remediation": map[string]interface{}{
+				"recommendation": "Upgrade openssl package to version 1.1.1n-0+deb11u5 or later",
+				"patch_commands": []string{
+					"apt-get update",
+					"apt-get install --only-upgrade openssl=1.1.1n-0+deb11u5",
+				},
+				"vendor_advisory": "https://www.openssl.org/news/secadv/20240101.txt",
+				"mitigation_controls": []string{
+					"Restrict network access to affected systems",
+					"Enable WAF rules to block exploitation attempts",
+					"Monitor for suspicious outbound connections",
+				},
+			},
+			"network_exposure": "INTERNET_FACING",
+			"data_classification": "CONFIDENTIAL",
+			"compliance_impact": map[string]interface{}{
+				"frameworks": []string{"PCI-DSS", "SOC2", "ISO27001"},
+				"requires_notification": true,
+				"deadline":              time.Now().Add(72 * time.Hour).Format(time.RFC3339),
+			},
+		}
+		return SuccessResult(data)
+	})
+
+	// get_cve_information - Get CVE details from NVD
+	server.RegisterTool(mcp.Tool{
+		Name:        "get_cve_information",
+		Description: "Get detailed CVE information from National Vulnerability Database",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"cve_id": map[string]interface{}{
+					"type":        "string",
+					"description": "CVE identifier (e.g., CVE-2024-1234)",
+					"pattern":     "^CVE-\\d{4}-\\d{4,}$",
+				},
+			},
+			Required: []string{"cve_id"},
+		},
+	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		data := map[string]interface{}{
+			"cve_id":           "CVE-2024-1234",
+			"published_date":   "2024-01-15T00:00:00Z",
+			"last_modified":    "2024-02-10T00:00:00Z",
+			"description":      "OpenSSL versions before 1.1.1n-0+deb11u5 contain a buffer overflow vulnerability in certificate parsing that allows remote attackers to execute arbitrary code via a specially crafted certificate.",
+			"cvss_v3": map[string]interface{}{
+				"base_score":      9.8,
+				"vector_string":   "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+				"exploitability":  3.9,
+				"impact_score":    5.9,
+			},
+			"cwe": []string{"CWE-120"},
+			"cwe_description": "Buffer Overflow",
+			"references": []map[string]interface{}{
+				{
+					"url":  "https://www.openssl.org/news/secadv/20240115.txt",
+					"tags": []string{"Vendor Advisory", "Patch"},
+				},
+				{
+					"url":  "https://github.com/openssl/openssl/commit/abc123",
+					"tags": []string{"Patch"},
+				},
+			},
+			"vulnerable_configurations": []string{
+				"cpe:2.3:a:openssl:openssl:1.1.1n:*:*:*:*:*:*:*",
+				"cpe:2.3:a:openssl:openssl:1.1.1o:*:*:*:*:*:*:*",
+			},
+		}
+		return SuccessResult(data)
+	})
+
+	return server
+}
+
 // NewFalcoMock creates a mock Falco runtime security MCP server
 func NewFalcoMock() *MockServer {
 	server := NewMockServer(

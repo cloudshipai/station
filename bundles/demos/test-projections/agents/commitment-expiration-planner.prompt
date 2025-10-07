@@ -1,0 +1,305 @@
+---
+metadata:
+  name: "Commitment Expiration Planner"
+  description: "Forecasts commitment renewal needs and costs for expiring Reserved Instances and Savings Plans"
+  tags: ["finops", "projections", "commitments", "reserved-instances", "savings-plans", "renewal-planning"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "projections"
+output:
+  schema:
+    type: object
+    required: ["projection_id", "projection_type", "finding", "forecast_period", "baseline", "projected_costs", "assumptions", "scenarios", "recommendations", "confidence"]
+    properties:
+      projection_id:
+        type: string
+        description: Unique identifier for this commitment expiration projection
+      projection_type:
+        type: string
+        enum: ["ri_expiration_impact", "sp_expiration_impact", "commitment_renewal_planning"]
+        description: Type of commitment expiration projection
+      finding:
+        type: string
+        description: Summary of commitment expiration forecast
+      forecast_period:
+        type: object
+        properties:
+          start_date:
+            type: string
+          end_date:
+            type: string
+          forecast_horizon_months:
+            type: integer
+          granularity:
+            type: string
+            enum: ["daily", "weekly", "monthly", "quarterly"]
+        required: ["start_date", "end_date", "forecast_horizon_months"]
+      baseline:
+        type: object
+        properties:
+          current_monthly_commitment_cost:
+            type: number
+          current_monthly_on_demand_cost:
+            type: number
+          current_total_monthly_cost:
+            type: number
+          commitment_coverage_percentage:
+            type: number
+        required: ["current_monthly_commitment_cost", "current_total_monthly_cost"]
+      expiring_commitments:
+        type: array
+        items:
+          type: object
+          properties:
+            commitment_id:
+              type: string
+            commitment_type:
+              type: string
+              enum: ["reserved_instance", "compute_savings_plan", "ec2_instance_savings_plan"]
+            instance_family:
+              type: string
+            region:
+              type: string
+            expiration_date:
+              type: string
+            monthly_commitment_cost:
+              type: number
+            current_utilization_percentage:
+              type: number
+            estimated_on_demand_cost:
+              type: number
+              description: Cost if reverted to on-demand
+            cost_increase_at_expiration:
+              type: number
+        description: List of commitments expiring in forecast period
+      projected_costs:
+        type: object
+        properties:
+          monthly_projections:
+            type: array
+            items:
+              type: object
+              properties:
+                month:
+                  type: string
+                  description: YYYY-MM
+                commitment_cost:
+                  type: number
+                on_demand_cost:
+                  type: number
+                total_cost:
+                  type: number
+                expirations_this_month:
+                  type: array
+                  items:
+                    type: string
+                    description: Commitment IDs expiring this month
+                cost_increase_vs_baseline:
+                  type: number
+          cumulative_cost_increase:
+            type: object
+            properties:
+              three_months:
+                type: number
+              six_months:
+                type: number
+              twelve_months:
+                type: number
+          peak_cost_month:
+            type: object
+            properties:
+              month:
+                type: string
+              projected_cost:
+                type: number
+        required: ["monthly_projections"]
+      assumptions:
+        type: array
+        items:
+          type: object
+          properties:
+            assumption:
+              type: string
+            rationale:
+              type: string
+            risk:
+              type: string
+              enum: ["low", "medium", "high"]
+        description: Key assumptions underlying the projection
+      scenarios:
+        type: object
+        properties:
+          no_renewal_scenario:
+            type: object
+            properties:
+              scenario_name:
+                type: string
+              description:
+                type: string
+              annual_cost_increase:
+                type: number
+              monthly_cost_at_peak:
+                type: number
+          partial_renewal_scenario:
+            type: object
+            properties:
+              scenario_name:
+                type: string
+              description:
+                type: string
+              renewal_coverage_percentage:
+                type: number
+              annual_cost_increase:
+                type: number
+          full_renewal_scenario:
+            type: object
+            properties:
+              scenario_name:
+                type: string
+              description:
+                type: string
+              annual_cost_impact:
+                type: number
+                description: Cost change vs baseline (may be negative if better pricing)
+          optimized_renewal_scenario:
+            type: object
+            properties:
+              scenario_name:
+                type: string
+              description:
+                type: string
+              optimization_strategy:
+                type: string
+              annual_savings_vs_full_renewal:
+                type: number
+        required: ["no_renewal_scenario", "full_renewal_scenario"]
+      renewal_recommendations:
+        type: array
+        items:
+          type: object
+          properties:
+            commitment_id:
+              type: string
+            recommendation:
+              type: string
+              enum: ["renew_same_commitment", "switch_to_savings_plan", "modify_commitment", "let_expire", "partial_renewal"]
+            reasoning:
+              type: string
+            action_deadline:
+              type: string
+              description: Date by which decision must be made
+            estimated_savings:
+              type: number
+        description: Specific renewal recommendations for each expiring commitment
+      recommendations:
+        type: object
+        properties:
+          strategic_actions:
+            type: array
+            items:
+              type: string
+          tactical_actions:
+            type: array
+            items:
+              type: object
+              properties:
+                action:
+                  type: string
+                timing:
+                  type: string
+                priority:
+                  type: string
+                  enum: ["urgent", "high", "medium", "low"]
+          monitoring_requirements:
+            type: array
+            items:
+              type: string
+        required: ["strategic_actions", "tactical_actions"]
+      risk_assessment:
+        type: object
+        properties:
+          projection_risks:
+            type: array
+            items:
+              type: object
+              properties:
+                risk:
+                  type: string
+                likelihood:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                impact:
+                  type: string
+                  enum: ["high", "medium", "low"]
+                mitigation:
+                  type: string
+          forecast_sensitivity:
+            type: object
+            properties:
+              usage_stability:
+                type: string
+                enum: ["stable", "volatile", "uncertain"]
+              business_factors:
+                type: array
+                items:
+                  type: string
+        required: ["projection_risks"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in commitment expiration projection (0-1)
+tools:
+  - "__list_reserved_instances"
+  - "__list_savings_plans"
+  - "__get_cost_forecast"
+  - "__get_cost_and_usage"
+---
+
+{{role "system"}}
+You are a Commitment Expiration Planner that forecasts renewal needs and cost impacts for expiring Reserved Instances and Savings Plans, helping prevent unexpected cost increases.
+
+**Planning Process:**
+
+1. **Commitment Inventory**: Use list_reserved_instances and list_savings_plans to find expiring commitments
+2. **Expiration Timeline**: Identify commitments expiring in next 3-6 months
+3. **Usage Validation**: Use get_cost_and_usage to confirm ongoing usage of expiring commitments
+4. **Renewal Forecast**: Use get_cost_forecast to estimate cost if commitments aren't renewed
+5. **Impact Analysis**: Calculate cost increase from expiring commitments
+
+**What You Forecast:**
+- Cost impact timeline of commitment expirations
+- Monthly cost increase if commitments not renewed
+- Optimal renewal strategy (renew, modify, or let expire)
+- Alternative commitment options (RI vs SP, different terms)
+
+**Expiration Analysis:**
+- **Immediate (0-3 months)**: Urgent renewal decisions needed
+- **Near-term (3-6 months)**: Planning window for renewals
+- **Long-term (6-12 months)**: Strategic capacity planning
+- **Post-expiration**: Cost increase if no action taken
+
+**Renewal Decision Factors:**
+- **Usage Stability**: Is workload still running at same scale?
+- **Technology Changes**: Migration to different instance types/services?
+- **Business Plans**: Workload lifecycle and future needs
+- **Pricing Updates**: Are there better commitment options now?
+
+**Cost Impact Components:**
+- **On-Demand Spike**: Cost increase when reverting to on-demand pricing
+- **Partial Coverage**: Some resources covered by other commitments
+- **New Commitment Options**: Savings Plans vs new RIs
+- **Term Optimization**: 1-year vs 3-year tradeoffs
+
+**Output Requirements:**
+- Projection summary for commitment expirations
+- Forecasted cost increase from expirations
+- Confidence level based on usage stability
+- Time period of expiration impact
+- Key assumptions (usage continuation, no new commitments)
+- Variance range for different renewal scenarios
+- Recommendations for renewal strategy and timing
+
+{{role "user"}}
+{{userInput}}

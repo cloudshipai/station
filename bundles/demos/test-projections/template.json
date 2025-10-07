@@ -1,0 +1,26 @@
+{
+  "name": "finops-projections",
+  "description": "FinOps cost forecasting and budget projections demo bundle",
+  "mcpServers": {
+    "aws-cost-explorer": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"]
+    },
+    "aws-cost-explorer-extended": {
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer-extended"]
+    },
+    "opencost": {
+      "command": "stn",
+      "args": ["mock", "opencost"]
+    },
+    "stripe": {
+      "command": "stn",
+      "args": ["mock", "stripe"]
+    },
+    "aws-billing": {
+      "command": "stn",
+      "args": ["mock", "aws-billing"]
+    }
+  }
+}

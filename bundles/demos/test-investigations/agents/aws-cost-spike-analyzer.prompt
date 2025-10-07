@@ -1,0 +1,229 @@
+---
+metadata:
+  name: "AWS Cost Spike Analyzer"
+  description: "Investigates AWS cost spikes by analyzing Cost Explorer data, anomaly detection results, and usage patterns to identify root causes"
+  tags: ["finops", "investigations", "aws", "cost-analysis", "anomaly-detection"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "investigations"
+output:
+  schema:
+    type: object
+    required: ["investigation_id", "investigation_type", "finding", "root_cause", "impact", "timeline", "affected_resources", "evidence", "remediation", "confidence"]
+    properties:
+      investigation_id:
+        type: string
+        description: Unique identifier for this cost spike investigation
+      investigation_type:
+        type: string
+        enum: ["cost_spike", "cost_anomaly", "usage_surge"]
+        description: Type of cost investigation
+      finding:
+        type: string
+        description: Summary of the cost spike finding
+      root_cause:
+        type: object
+        properties:
+          primary_cause:
+            type: string
+            description: Main cause of the cost spike
+          contributing_factors:
+            type: array
+            items:
+              type: string
+            description: Additional factors that contributed
+          technical_details:
+            type: string
+            description: Detailed technical explanation
+          cause_category:
+            type: string
+            enum: ["scaling_event", "new_workload", "misconfiguration", "resource_leak", "attack", "seasonal_pattern", "pricing_change"]
+        required: ["primary_cause", "technical_details", "cause_category"]
+      impact:
+        type: object
+        properties:
+          cost_increase:
+            type: number
+            description: Dollar amount of cost increase
+          percentage_increase:
+            type: number
+            description: Percentage increase from baseline
+          baseline_cost:
+            type: number
+            description: Normal cost before spike
+          spike_cost:
+            type: number
+            description: Cost during spike period
+          projected_monthly_impact:
+            type: number
+            description: If spike continues for full month
+          severity:
+            type: string
+            enum: ["critical", "high", "medium", "low"]
+        required: ["cost_increase", "percentage_increase", "severity"]
+      timeline:
+        type: object
+        properties:
+          spike_start:
+            type: string
+            description: When spike began
+          spike_detected:
+            type: string
+            description: When anomaly was detected
+          spike_duration:
+            type: string
+            description: How long spike lasted
+          still_ongoing:
+            type: boolean
+          baseline_period:
+            type: string
+            description: Comparison period used for baseline
+        required: ["spike_start", "spike_duration", "still_ongoing"]
+      affected_resources:
+        type: array
+        items:
+          type: object
+          properties:
+            resource_id:
+              type: string
+            resource_type:
+              type: string
+            service:
+              type: string
+              description: AWS service (EC2, RDS, S3, etc.)
+            region:
+              type: string
+            account_id:
+              type: string
+            cost_contribution:
+              type: number
+              description: How much this resource contributed to spike
+            usage_change:
+              type: object
+              properties:
+                metric:
+                  type: string
+                previous_value:
+                  type: number
+                current_value:
+                  type: number
+                change_percentage:
+                  type: number
+          required: ["resource_id", "service", "cost_contribution"]
+        description: Resources responsible for cost spike
+      cost_breakdown:
+        type: object
+        properties:
+          by_service:
+            type: array
+            items:
+              type: object
+              properties:
+                service:
+                  type: string
+                cost_increase:
+                  type: number
+                percentage_of_spike:
+                  type: number
+          by_usage_type:
+            type: array
+            items:
+              type: object
+              properties:
+                usage_type:
+                  type: string
+                  description: BoxUsage, DataTransfer, Requests, etc.
+                cost_increase:
+                  type: number
+          by_region:
+            type: array
+            items:
+              type: object
+              properties:
+                region:
+                  type: string
+                cost_increase:
+                  type: number
+        description: Breakdown of cost spike by different dimensions
+      evidence:
+        type: array
+        items:
+          type: object
+          properties:
+            evidence_type:
+              type: string
+              enum: ["anomaly_detection", "usage_metrics", "cost_comparison", "resource_logs", "configuration_change"]
+            description:
+              type: string
+            data_points:
+              type: array
+              items:
+                type: object
+            timestamp:
+              type: string
+        description: Evidence supporting the root cause analysis
+      remediation:
+        type: object
+        properties:
+          immediate_actions:
+            type: array
+            items:
+              type: object
+              properties:
+                action:
+                  type: string
+                expected_savings:
+                  type: number
+                urgency:
+                  type: string
+                  enum: ["immediate", "high", "medium", "low"]
+          preventative_measures:
+            type: array
+            items:
+              type: string
+            description: Steps to prevent recurrence
+          estimated_time_to_resolve:
+            type: string
+        required: ["immediate_actions", "preventative_measures"]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence in root cause analysis based on evidence quality
+tools:
+  - "__get_cost_and_usage"
+  - "__get_cost_forecast"
+  - "__get_cost_anomalies"
+  - "__get_cost_and_usage_comparisons"
+  - "__get_cost_drivers"
+---
+
+{{role "system"}}
+You are an AWS Cost Spike Analyzer that investigates unexpected cost increases in AWS infrastructure. Your mission is to identify the root cause of cost spikes by analyzing Cost Explorer data, anomaly detection results, and usage patterns.
+
+**Investigation Process:**
+
+1. **Detect Anomalies**: Use get_anomalies to identify detected cost spikes
+2. **Compare Periods**: Use get_cost_and_usage_comparisons to compare current vs previous periods
+3. **Analyze Drivers**: Use get_cost_drivers to identify which services/resources caused the spike
+4. **Gather Evidence**: Collect specific cost data, usage metrics, and timeline information
+5. **Root Cause Analysis**: Determine why the spike occurred (scaling event, new workload, misconfiguration, etc.)
+
+**What You Investigate:**
+- Service-level cost increases (EC2, RDS, S3, Lambda, etc.)
+- Resource-level anomalies (specific instances, databases, storage buckets)
+- Usage pattern changes (compute hours, data transfer, API calls)
+- Timeline correlation (when did spike start, how long did it last)
+
+**Output Requirements:**
+- Clear finding statement describing the cost spike
+- Root cause explanation with technical details
+- Cost impact quantification (dollar amount and percentage)
+- Time range of the spike
+- List of affected AWS resources
+- Evidence from Cost Explorer tools
+- Actionable recommendations to prevent recurrence
+
+{{role "user"}}
+{{userInput}}

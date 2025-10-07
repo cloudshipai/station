@@ -8,7 +8,28 @@ max_steps: 8
 app: "finops"
 app_type: "inventory"
 output:
-  preset: "finops-inventory"
+  format: json
+  schema:
+    type: object
+    properties:
+      resources:
+        type: array
+        description: "Array of tracked Kubernetes workloads"
+      summary:
+        type: string
+        description: "Summary of K8s workload inventory"
+      metadata:
+        type: object
+        description: "Workload statistics and cluster information"
+      tagging_compliance:
+        type: object
+        description: "Label compliance metrics for workloads"
+      total_cost:
+        type: number
+        description: "Total monthly cost of all tracked workloads"
+      snapshot_timestamp:
+        type: string
+        description: "Timestamp of workload inventory snapshot"
 tools:
   - "__get_allocation"
 ---
