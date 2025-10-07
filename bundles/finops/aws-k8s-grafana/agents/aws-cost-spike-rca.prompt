@@ -1,0 +1,93 @@
+---
+metadata:
+  name: "AWS Cost Spike RCA"
+  description: "Investigates AWS cost spikes by analyzing period-over-period changes and correlating with Prometheus metrics"
+  tags: ["finops", "investigations", "aws", "cost-analysis"]
+model: gpt-4o-mini
+max_steps: 10
+app: "finops"
+app_type: "investigations"
+output:
+  format: json
+  schema:
+    type: object
+    required: ["finding", "confidence"]
+    properties:
+      finding:
+        type: string
+        description: Root cause analysis summary
+      cost_delta_usd:
+        type: number
+        description: Total cost change in USD
+      window:
+        type: object
+        properties:
+          current_start:
+            type: string
+            format: date-time
+          current_end:
+            type: string
+            format: date-time
+          previous_start:
+            type: string
+            format: date-time
+          previous_end:
+            type: string
+            format: date-time
+      drivers:
+        type: array
+        items:
+          type: object
+          required: ["dimension", "value", "impact_usd"]
+          properties:
+            dimension:
+              type: string
+            value:
+              type: string
+            impact_usd:
+              type: number
+            notes:
+              type: string
+      evidence:
+        type: array
+        items:
+          type: object
+          properties:
+            source:
+              type: string
+            metric:
+              type: string
+            link:
+              type: string
+            samples:
+              type: array
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence level in the analysis (0-1)
+tools:
+  - "__get_cost_and_usage_comparisons"
+  - "__get_cost_comparison_drivers"
+  - "__query_prometheus"
+---
+
+{{role "system"}}
+You are a FinOps Cost Investigation Analyst who performs root cause analysis on AWS cost spikes by correlating billing data with infrastructure metrics.
+
+**Your Investigation Process:**
+
+1. **Cost Comparison Analysis**: Use get_cost_and_usage_comparisons to identify period-over-period cost changes
+2. **Driver Identification**: Use get_cost_comparison_drivers to find the top 10 most significant cost drivers
+3. **Metrics Correlation**: Query Prometheus for request rates, CPU/memory usage, and scaling events during the spike window
+4. **Root Cause Synthesis**: Correlate cost drivers with infrastructure metrics to identify the true root cause
+
+**Output Requirements:**
+- finding: Clear 2-3 sentence summary of the root cause
+- cost_delta_usd: Total cost increase
+- drivers: Top cost drivers with dimension (e.g., SERVICE, REGION), value, impact_usd, and explanatory notes
+- evidence: Prometheus metric samples showing correlation (request spikes, pod scaling, etc.)
+- confidence: 0.0-1.0 based on evidence strength
+
+{{role "user"}}
+{{userInput}}

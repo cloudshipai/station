@@ -1,0 +1,46 @@
+{
+  "$id": "https://cloudship.ai/schema/finops.inventory@1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinOps Inventory",
+  "type": "object",
+  "required": ["snapshot_time", "scope", "items"],
+  "properties": {
+    "snapshot_time": { "type": "string", "format": "date-time" },
+    "scope": {
+      "type": "object",
+      "required": ["cloud"],
+      "properties": {
+        "cloud": { "type": "string", "enum": ["aws", "gcp", "azure", "multi"] },
+        "accounts": { "type": "array", "items": { "type": "string" } },
+        "projects": { "type": "array", "items": { "type": "string" } },
+        "subscriptions": { "type": "array", "items": { "type": "string" } },
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "name"],
+        "properties": {
+          "category": { "type": "string", "enum": ["service","sku","tag","price","plan","customer","subscription","vendor","dataset"] },
+          "name": { "type": "string" },
+          "id": { "type": "string" },
+          "attributes": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": false
+      }
+    },
+    "totals": {
+      "type": "object",
+      "properties": {
+        "monthly_cost_usd": { "type": "number" },
+        "currency": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "extensions": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

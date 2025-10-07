@@ -1,0 +1,51 @@
+{
+  "$id": "https://cloudship.ai/schema/finops.investigation@1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinOps Investigation",
+  "type": "object",
+  "required": ["finding", "confidence"],
+  "properties": {
+    "finding": { "type": "string" },
+    "cost_delta_usd": { "type": "number" },
+    "window": {
+      "type": "object",
+      "properties": {
+        "current_start": { "type": "string", "format": "date-time" },
+        "current_end": { "type": "string", "format": "date-time" },
+        "previous_start": { "type": "string", "format": "date-time" },
+        "previous_end": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "drivers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dimension", "value", "impact_usd"],
+        "properties": {
+          "dimension": { "type": "string" },
+          "value": { "type": "string" },
+          "impact_usd": { "type": "number" },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "metric": { "type": "string" },
+          "link": { "type": "string" },
+          "samples": { "type": "array", "items": { "type": "array", "items": [{ "type": "string" }, { "type": "string" }] } }
+        },
+        "additionalProperties": true
+      }
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "extensions": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

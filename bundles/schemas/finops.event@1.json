@@ -1,0 +1,16 @@
+{
+  "$id": "https://cloudship.ai/schema/finops.event@1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinOps Event",
+  "type": "object",
+  "required": ["event_type", "timestamp", "source"],
+  "properties": {
+    "event_type": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "source": { "type": "string" },
+    "details": { "type": "object", "additionalProperties": true },
+    "correlation_keys": { "type": "object", "additionalProperties": { "type": "string" } },
+    "extensions": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}
