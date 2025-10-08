@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Copy, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import axios from 'axios';
 
@@ -45,6 +45,16 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
   const [result, setResult] = useState<CopyResult | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
 
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setResult(null);
+      setSelectedTargetEnv(null);
+      setShowConflicts(false);
+      setCopying(false);
+    }
+  }, [isOpen]);
+
   // Filter out source environment from target list
   const availableTargets = environments.filter(env => env.id !== sourceEnvironmentId);
 
@@ -85,8 +95,8 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
   };
 
   const handleComplete = () => {
+    // Just close - useEffect will reset state when modal reopens
     onCopyComplete();
-    handleClose();
   };
 
   if (!isOpen) return null;
@@ -218,9 +228,9 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
                   <p className="text-sm text-tokyo-fg font-mono mb-2 font-semibold">
                     Next Steps:
                   </p>
-                  <ol className="text-sm text-tokyo-comment font-mono list-decimal list-inside space-y-1">
+                  <ol className="text-sm text-tokyo-fg font-mono list-decimal list-inside space-y-1">
                     <li>Run <code className="bg-black bg-opacity-30 px-1 rounded text-tokyo-orange">stn sync {result.target_environment}</code></li>
-                    <li>Click "Assign Tools" button below to complete the copy</li>
+                    <li>Use "Assign Tools" button to complete the copy</li>
                   </ol>
                 </div>
               )}
@@ -256,7 +266,7 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
               >
                 Close
               </button>
-              {result.success && (
+              {result?.success && (
                 <button
                   onClick={handleComplete}
                   className="px-4 py-2 bg-tokyo-green text-tokyo-bg rounded font-mono text-sm hover:bg-opacity-90"
