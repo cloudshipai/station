@@ -15,15 +15,17 @@ import (
 
 // EnvironmentCopyService handles copying environments with conflict detection
 type EnvironmentCopyService struct {
-	repos          *repositories.Repositories
-	envMgmtService *EnvironmentManagementService
+	repos             *repositories.Repositories
+	envMgmtService    *EnvironmentManagementService
+	agentExportService *AgentExportService
 }
 
 // NewEnvironmentCopyService creates a new environment copy service
 func NewEnvironmentCopyService(repos *repositories.Repositories) *EnvironmentCopyService {
 	return &EnvironmentCopyService{
-		repos:          repos,
-		envMgmtService: NewEnvironmentManagementService(repos),
+		repos:             repos,
+		envMgmtService:    NewEnvironmentManagementService(repos),
+		agentExportService: NewAgentExportService(repos),
 	}
 }
 
@@ -268,7 +270,46 @@ func (s *EnvironmentCopyService) buildPromptFileContent(agent *models.Agent, too
 	if agent.Description != "" {
 		sb.WriteString(fmt.Sprintf("  description: \"%s\"\n", agent.Description))
 	}
+
+	// Add tags if present (stored in description metadata, or hardcode for finops)
+	if agent.App == "finops" {
+		sb.WriteString("  tags: [\"finops\", \"investigations\", \"cost-analysis\"]\n")
+	}
+
+	// Add model
+	sb.WriteString("model: gpt-4o-mini\n")
+
 	sb.WriteString(fmt.Sprintf("max_steps: %d\n", agent.MaxSteps))
+
+	// Add app and app_type if present
+	if agent.App != "" {
+		sb.WriteString(fmt.Sprintf("app: \"%s\"\n", agent.App))
+	}
+	if agent.AppType != "" {
+		sb.WriteString(fmt.Sprintf("app_type: \"%s\"\n", agent.AppType))
+	}
+
+	// Add output schema if present
+	if agent.OutputSchema != nil && *agent.OutputSchema != "" {
+		sb.WriteString("output:\n")
+		sb.WriteString("  format: json\n")
+		sb.WriteString("  schema:\n")
+
+		// Parse and indent the JSON schema
+		var schemaMap map[string]interface{}
+		if err := json.Unmarshal([]byte(*agent.OutputSchema), &schemaMap); err == nil {
+			// Indent each line of the schema with 4 spaces
+			schemaLines := s.formatSchemaYAML(schemaMap, 4)
+			sb.WriteString(schemaLines)
+		} else {
+			// Fallback to inline if parsing fails
+			sb.WriteString("    ")
+			sb.WriteString(*agent.OutputSchema)
+			sb.WriteString("\n")
+		}
+	} else if agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
+		sb.WriteString(fmt.Sprintf("output_schema_preset: \"%s\"\n", *agent.OutputSchemaPreset))
+	}
 
 	if len(toolNames) > 0 {
 		sb.WriteString("tools:\n")
@@ -282,6 +323,55 @@ func (s *EnvironmentCopyService) buildPromptFileContent(agent *models.Agent, too
 	// Agent prompt
 	sb.WriteString(agent.Prompt)
 	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+// formatSchemaYAML converts a JSON schema map to indented YAML format
+func (s *EnvironmentCopyService) formatSchemaYAML(schema map[string]interface{}, indent int) string {
+	var sb strings.Builder
+	prefix := strings.Repeat(" ", indent)
+
+	// Ordered keys for consistent output
+	keys := []string{"type", "required", "properties"}
+	remaining := make([]string, 0)
+
+	for k := range schema {
+		found := false
+		for _, orderedKey := range keys {
+			if k == orderedKey {
+				found = true
+				break
+			}
+		}
+		if !found {
+			remaining = append(remaining, k)
+		}
+	}
+
+	allKeys := append(keys, remaining...)
+
+	for _, key := range allKeys {
+		value, exists := schema[key]
+		if !exists {
+			continue
+		}
+
+		switch v := value.(type) {
+		case string:
+			sb.WriteString(fmt.Sprintf("%s%s: %s\n", prefix, key, v))
+		case []interface{}:
+			sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, key))
+			for _, item := range v {
+				if str, ok := item.(string); ok {
+					sb.WriteString(fmt.Sprintf("%s  - %s\n", prefix, str))
+				}
+			}
+		case map[string]interface{}:
+			sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, key))
+			sb.WriteString(s.formatSchemaYAML(v, indent+2))
+		}
+	}
 
 	return sb.String()
 }
@@ -373,6 +463,7 @@ func (s *EnvironmentCopyService) AssignToolsFromSource(targetEnvID, sourceEnvID 
 		}
 
 		// Assign each tool to target agent by matching tool name and MCP server name
+		agentToolsAssigned := 0
 		for _, sourceTool := range sourceTools {
 			// Find matching tool in target environment by name and server name
 			targetTool, err := s.findToolByNameAndServer(targetEnvID, sourceTool.ToolName, sourceTool.ServerName)
@@ -409,6 +500,16 @@ func (s *EnvironmentCopyService) AssignToolsFromSource(targetEnvID, sourceEnvID 
 
 			logging.Debug("Assigned tool '%s' to agent '%s'", sourceTool.ToolName, targetAgent.Name)
 			totalAssigned++
+			agentToolsAssigned++
+		}
+
+		// Regenerate .prompt file for this agent with updated tools
+		if agentToolsAssigned > 0 {
+			if err := s.agentExportService.ExportAgentAfterSaveWithMetadata(targetAgent.ID, targetAgent.App, targetAgent.AppType); err != nil {
+				logging.Error("Failed to regenerate .prompt file for agent '%s': %v", targetAgent.Name, err)
+			} else {
+				logging.Debug("Regenerated .prompt file for agent '%s' with %d tools", targetAgent.Name, agentToolsAssigned)
+			}
 		}
 	}
 
