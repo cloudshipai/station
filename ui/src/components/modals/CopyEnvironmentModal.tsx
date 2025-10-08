@@ -95,8 +95,8 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
   };
 
   const handleComplete = () => {
-    // Just close - useEffect will reset state when modal reopens
-    onCopyComplete();
+    // Just close the modal directly
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -262,18 +262,10 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
             <>
               <button
                 onClick={handleClose}
-                className="px-4 py-2 text-sm font-mono text-tokyo-comment hover:text-tokyo-fg transition-colors"
+                className="px-4 py-2 bg-tokyo-green text-tokyo-bg rounded font-mono text-sm hover:bg-opacity-90"
               >
-                Close
+                {result?.success ? 'Done' : 'Close'}
               </button>
-              {result?.success && (
-                <button
-                  onClick={handleComplete}
-                  className="px-4 py-2 bg-tokyo-green text-tokyo-bg rounded font-mono text-sm hover:bg-opacity-90"
-                >
-                  Done
-                </button>
-              )}
             </>
           )}
         </div>
