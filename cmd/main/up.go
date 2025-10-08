@@ -399,7 +399,8 @@ func buildRuntimeContainer() error {
 	pullCmd.Stdout = os.Stdout
 	pullCmd.Stderr = os.Stderr
 
-	if err := pullCmd.Run(); err == nil {
+	pullErr := pullCmd.Run()
+	if pullErr == nil {
 		// Successfully pulled, tag for local use
 		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
 		if tagErr := tagCmd.Run(); tagErr != nil {
@@ -411,7 +412,7 @@ func buildRuntimeContainer() error {
 
 	// Pull failed, try building if Dockerfile exists (development mode)
 	if !hasDockerfile {
-		return fmt.Errorf("failed to pull image and no Dockerfile found for local build: %w", err)
+		return fmt.Errorf("failed to pull image and no Dockerfile found for local build: %w", pullErr)
 	}
 
 	fmt.Printf("⚠️  Pull failed, building from Dockerfile (development mode)...\n")

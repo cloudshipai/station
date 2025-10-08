@@ -138,6 +138,18 @@ func (r *AgentRepo) GetByName(name string) (*models.Agent, error) {
 	return convertAgentFromSQLc(agent), nil
 }
 
+func (r *AgentRepo) GetByNameAndEnvironment(name string, environmentID int64) (*models.Agent, error) {
+	params := queries.GetAgentByNameAndEnvironmentParams{
+		Name:          name,
+		EnvironmentID: environmentID,
+	}
+	agent, err := r.queries.GetAgentByNameAndEnvironment(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+	return convertAgentFromSQLc(agent), nil
+}
+
 func (r *AgentRepo) List() ([]*models.Agent, error) {
 	agents, err := r.queries.ListAgents(context.Background())
 	if err != nil {

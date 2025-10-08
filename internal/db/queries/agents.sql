@@ -9,6 +9,9 @@ SELECT * FROM agents WHERE id = ?;
 -- name: GetAgentByName :one
 SELECT * FROM agents WHERE name = ?;
 
+-- name: GetAgentByNameAndEnvironment :one
+SELECT * FROM agents WHERE name = ? AND environment_id = ?;
+
 -- name: ListAgents :many
 SELECT * FROM agents ORDER BY name;
 

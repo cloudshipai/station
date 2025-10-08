@@ -30,6 +30,7 @@ func (h *APIHandlers) registerEnvironmentRoutes(group *gin.RouterGroup) {
 	group.PUT("/:env_id/variables", h.updateEnvironmentVariables)
 	group.POST("/:env_id/deploy", h.generateDeploymentTemplate)
 	group.POST("/:env_id/copy", h.copyEnvironment)
+	group.POST("/:env_id/assign-tools-from/:source_env_id", h.assignToolsFromSource)
 }
 
 // Environment handlers
@@ -526,7 +527,52 @@ func (h *APIHandlers) copyEnvironment(c *gin.Context) {
 		"agents_copied":      result.AgentsCopied,
 		"conflicts":          result.Conflicts,
 		"errors":             result.Errors,
-		"message":            fmt.Sprintf("Copied %d MCP servers and %d agents. %d conflicts detected. Run 'stn sync %s' to apply changes.",
-			result.MCPServersCopied, result.AgentsCopied, len(result.Conflicts), targetEnv.Name),
+		"message":            fmt.Sprintf("Copied %d MCP servers and %d agents. %d conflicts detected. Run 'stn sync %s' then assign tools with POST /api/v1/environments/%d/assign-tools-from/%d",
+			result.MCPServersCopied, result.AgentsCopied, len(result.Conflicts), targetEnv.Name, req.TargetEnvironmentID, sourceEnvID),
+	})
+}
+
+// assignToolsFromSource assigns tools to agents in target environment by matching from source environment
+func (h *APIHandlers) assignToolsFromSource(c *gin.Context) {
+	targetEnvID, err := strconv.ParseInt(c.Param("env_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid target environment ID"})
+		return
+	}
+
+	sourceEnvID, err := strconv.ParseInt(c.Param("source_env_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid source environment ID"})
+		return
+	}
+
+	// Validate target environment exists
+	targetEnv, err := h.repos.Environments.GetByID(targetEnvID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Target environment not found"})
+		return
+	}
+
+	// Validate source environment exists
+	sourceEnv, err := h.repos.Environments.GetByID(sourceEnvID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Source environment not found"})
+		return
+	}
+
+	// Assign tools
+	copyService := services.NewEnvironmentCopyService(h.repos)
+	toolsAssigned, err := copyService.AssignToolsFromSource(targetEnvID, sourceEnvID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to assign tools: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"source_environment": sourceEnv.Name,
+		"target_environment": targetEnv.Name,
+		"tools_assigned":     toolsAssigned,
+		"message":           fmt.Sprintf("Successfully assigned %d tools from '%s' to agents in '%s'", toolsAssigned, sourceEnv.Name, targetEnv.Name),
 	})
 }
