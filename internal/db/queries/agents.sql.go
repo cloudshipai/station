@@ -149,6 +149,43 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 	return i, err
 }
 
+const getAgentByNameAndEnvironment = `-- name: GetAgentByNameAndEnvironment :one
+SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, app, app_subtype, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE name = ? AND environment_id = ?
+`
+
+type GetAgentByNameAndEnvironmentParams struct {
+	Name          string `json:"name"`
+	EnvironmentID int64  `json:"environment_id"`
+}
+
+func (q *Queries) GetAgentByNameAndEnvironment(ctx context.Context, arg GetAgentByNameAndEnvironmentParams) (Agent, error) {
+	row := q.db.QueryRowContext(ctx, getAgentByNameAndEnvironment, arg.Name, arg.EnvironmentID)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Prompt,
+		&i.MaxSteps,
+		&i.EnvironmentID,
+		&i.CreatedBy,
+		&i.ModelID,
+		&i.InputSchema,
+		&i.OutputSchema,
+		&i.OutputSchemaPreset,
+		&i.App,
+		&i.AppSubtype,
+		&i.CronSchedule,
+		&i.IsScheduled,
+		&i.LastScheduledRun,
+		&i.NextScheduledRun,
+		&i.ScheduleEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentBySchedule = `-- name: GetAgentBySchedule :one
 SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, app, app_subtype, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, created_at, updated_at FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE
 `
