@@ -1388,14 +1388,9 @@ const EnvironmentsPage = () => {
   };
 
   const handleCopyComplete = () => {
-    // Refresh environments and graph
-    setRebuildingGraph(true);
-    // Refetch environments
-    axios.get('http://localhost:8585/api/v1/environments').then((response) => {
-      setEnvironments(response.data.environments || []);
-    }).catch((error) => {
-      console.error('Error fetching environments:', error);
-    });
+    // Simply close the modal - user will manually refresh or navigate
+    // to see the copied environment
+    setIsCopyModalOpen(false);
   };
 
   const handleRefreshGraph = () => {
