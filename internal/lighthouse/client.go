@@ -145,7 +145,7 @@ func InitializeLighthouseFromConfig(cfg *config.Config, mode DeploymentMode) (*L
 
 	// Apply defaults
 	if lighthouseConfig.Endpoint == "" {
-		lighthouseConfig.Endpoint = "lighthouse.cloudshipai.com:443"
+		lighthouseConfig.Endpoint = "lighthouse.cloudshipai.com:50051"
 	}
 
 	// Disable TLS for localhost testing and port 50051 (standard insecure gRPC port)

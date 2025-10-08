@@ -29,6 +29,7 @@ func (h *APIHandlers) registerEnvironmentRoutes(group *gin.RouterGroup) {
 	group.GET("/:env_id/variables", h.getEnvironmentVariables)
 	group.PUT("/:env_id/variables", h.updateEnvironmentVariables)
 	group.POST("/:env_id/deploy", h.generateDeploymentTemplate)
+	group.POST("/:env_id/copy", h.copyEnvironment)
 }
 
 // Environment handlers
@@ -463,5 +464,69 @@ func (h *APIHandlers) generateDeploymentTemplate(c *gin.Context) {
 		"template": template,
 		"filename": filename,
 		"provider": req.Provider,
+	})
+}
+
+// copyEnvironment copies agents and MCP servers from source environment to target environment
+func (h *APIHandlers) copyEnvironment(c *gin.Context) {
+	sourceEnvID, err := strconv.ParseInt(c.Param("env_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid source environment ID"})
+		return
+	}
+
+	var req struct {
+		TargetEnvironmentID int64 `json:"target_environment_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Validate source environment exists
+	sourceEnv, err := h.repos.Environments.GetByID(sourceEnvID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Source environment not found"})
+		return
+	}
+
+	// Validate target environment exists
+	targetEnv, err := h.repos.Environments.GetByID(req.TargetEnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Target environment not found"})
+		return
+	}
+
+	// Prevent copying to same environment
+	if sourceEnvID == req.TargetEnvironmentID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot copy environment to itself"})
+		return
+	}
+
+	// Perform the copy operation
+	copyService := services.NewEnvironmentCopyService(h.repos)
+	result, err := copyService.CopyEnvironment(sourceEnvID, req.TargetEnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to copy environment: %v", err)})
+		return
+	}
+
+	// Return result with conflict information
+	statusCode := http.StatusOK
+	if !result.Success {
+		statusCode = http.StatusPartialContent // 206 - some items copied, some failed
+	}
+
+	c.JSON(statusCode, gin.H{
+		"success":            result.Success,
+		"source_environment": sourceEnv.Name,
+		"target_environment": targetEnv.Name,
+		"mcp_servers_copied": result.MCPServersCopied,
+		"agents_copied":      result.AgentsCopied,
+		"conflicts":          result.Conflicts,
+		"errors":             result.Errors,
+		"message":            fmt.Sprintf("Copied %d MCP servers and %d agents. %d conflicts detected. Run 'stn sync %s' to apply changes.",
+			result.MCPServersCopied, result.AgentsCopied, len(result.Conflicts), targetEnv.Name),
 	})
 }

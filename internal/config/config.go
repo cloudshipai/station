@@ -62,7 +62,7 @@ func Load() (*Config, error) {
 		CloudShip: CloudShipConfig{
 			Enabled:         getEnvBoolOrDefault("STN_CLOUDSHIP_ENABLED", false),
 			RegistrationKey: getEnvOrDefault("STN_CLOUDSHIP_KEY", ""),
-			Endpoint:        getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:443"),
+			Endpoint:        getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:50051"),
 			StationID:       getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
 		},
 	}
