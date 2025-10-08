@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket, Copy } from 'lucide-react';
 import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import { CloudShipPage } from './components/pages/CloudShipPage';
@@ -35,6 +35,7 @@ import { BundleEnvironmentModal } from './components/modals/BundleEnvironmentMod
 import BuildImageModal from './components/modals/BuildImageModal';
 import { InstallBundleModal } from './components/modals/InstallBundleModal';
 import DeployModal from './components/modals/DeployModal';
+import { CopyEnvironmentModal } from './components/modals/CopyEnvironmentModal';
 import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
 import type { AgentRunWithDetails } from './types/station';
 
@@ -1248,21 +1249,40 @@ const EnvironmentNode = ({ data }: NodeProps) => {
     }
   };
 
+  const handleCopyClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.onCopyEnvironment && data.environmentId) {
+      data.onCopyEnvironment(data.environmentId, data.label);
+    }
+  };
+
   return (
     <div className="w-[320px] h-[160px] px-4 py-3 shadow-lg border border-tokyo-orange rounded-lg relative bg-tokyo-dark2 group">
       <Handle type="source" position={Position.Right} style={{ background: '#ff9e64', width: 12, height: 12 }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#7dcfff', width: 12, height: 12 }} />
 
-      {/* Delete button - appears on hover */}
-      {data.label !== 'default' && (
+      {/* Action buttons - appears on hover */}
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        {/* Copy button */}
         <button
-          onClick={handleDeleteClick}
-          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-red hover:bg-red-600 text-tokyo-bg"
-          title={`Delete environment "${data.label}"`}
+          onClick={handleCopyClick}
+          className="p-1 rounded bg-tokyo-blue hover:bg-blue-600 text-tokyo-bg"
+          title={`Copy environment "${data.label}"`}
         >
-          <Trash2 className="h-3 w-3" />
+          <Copy className="h-3 w-3" />
         </button>
-      )}
+
+        {/* Delete button - only for non-default environments */}
+        {data.label !== 'default' && (
+          <button
+            onClick={handleDeleteClick}
+            className="p-1 rounded bg-tokyo-red hover:bg-red-600 text-tokyo-bg"
+            title={`Delete environment "${data.label}"`}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
 
       <div className="flex items-center gap-2 mb-3">
         <Globe className="h-6 w-6 text-tokyo-orange" />
@@ -1328,6 +1348,9 @@ const EnvironmentsPage = () => {
   const [isInstallBundleModalOpen, setIsInstallBundleModalOpen] = useState(false);
   const [isVariablesModalOpen, setIsVariablesModalOpen] = useState(false);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [copySourceEnvId, setCopySourceEnvId] = useState<number | null>(null);
+  const [copySourceEnvName, setCopySourceEnvName] = useState<string>('');
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1356,6 +1379,23 @@ const EnvironmentsPage = () => {
 
   const handleDeploy = () => {
     setIsDeployModalOpen(true);
+  };
+
+  const handleCopyEnvironment = (environmentId: number, environmentName: string) => {
+    setCopySourceEnvId(environmentId);
+    setCopySourceEnvName(environmentName);
+    setIsCopyModalOpen(true);
+  };
+
+  const handleCopyComplete = () => {
+    // Refresh environments and graph
+    setRebuildingGraph(true);
+    // Refetch environments
+    axios.get('http://localhost:8585/api/v1/environments').then((response) => {
+      setEnvironments(response.data.environments || []);
+    }).catch((error) => {
+      console.error('Error fetching environments:', error);
+    });
   };
 
   const handleRefreshGraph = () => {
@@ -1465,6 +1505,7 @@ const EnvironmentsPage = () => {
             serverCount: mcpServers.length,
             environmentId: selectedEnvironment,
             onDeleteEnvironment: handleDeleteEnvironment,
+            onCopyEnvironment: handleCopyEnvironment,
           },
         });
 
@@ -1745,6 +1786,18 @@ const EnvironmentsPage = () => {
           onClose={() => setIsDeployModalOpen(false)}
           environmentId={selectedEnvironment}
           environmentName={environments.find(env => env.id === selectedEnvironment)?.name || 'default'}
+        />
+      )}
+
+      {/* Copy Environment Modal */}
+      {copySourceEnvId && (
+        <CopyEnvironmentModal
+          isOpen={isCopyModalOpen}
+          onClose={() => setIsCopyModalOpen(false)}
+          sourceEnvironmentId={copySourceEnvId}
+          sourceEnvironmentName={copySourceEnvName}
+          environments={environments}
+          onCopyComplete={handleCopyComplete}
         />
       )}
     </div>
