@@ -364,12 +364,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	if developMode {
 		fmt.Printf("\n🧪 Genkit Developer UI Mode Enabled!\n")
-		fmt.Printf("📖 Station is running with reflection API exposed on port 4033\n")
-		fmt.Printf("📖 In a separate terminal, run:\n")
-		fmt.Printf("   genkit start\n")
+		fmt.Printf("📖 Container is running 'stn develop' with Genkit initialized\n")
+		fmt.Printf("📖 To use Genkit Developer UI:\n")
+		fmt.Printf("   1. Stop this container: stn down\n")
+		fmt.Printf("   2. Run: genkit start -- stn up --develop\n")
 		fmt.Printf("🔗 Genkit UI will be available at: http://localhost:4000\n")
-		fmt.Printf("🔗 Reflection API: http://localhost:4033\n")
-		fmt.Printf("💡 GENKIT_ENV=dev is set in container\n")
+		fmt.Printf("💡 This integrates Genkit UI with containerized Station\n")
 	}
 
 	if detach {
