@@ -17,11 +17,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket, Copy } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket, Copy, BookOpen } from 'lucide-react';
 import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import { CloudShipPage } from './components/pages/CloudShipPage';
 import { LiveDemoPage } from './components/pages/LiveDemoPage';
+import { GettingStartedPage } from './components/pages/GettingStartedPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -251,6 +252,7 @@ const Layout = ({ children }: any) => {
   // Determine current page from URL
   const getCurrentPage = () => {
     const path = location.pathname;
+    if (path.startsWith('/getting-started')) return 'getting-started';
     if (path.startsWith('/agents')) return 'agents';
     if (path.startsWith('/mcps')) return 'mcps';
     if (path.startsWith('/mcp-directory')) return 'mcp-directory';
@@ -290,6 +292,7 @@ const Layout = ({ children }: any) => {
   };
 
   const sidebarItems = [
+    { id: 'getting-started', label: 'Getting Started', icon: BookOpen, path: '/getting-started' },
     { id: 'agents', label: 'Agents', icon: Bot, path: currentEnvironmentName ? `/agents/${currentEnvironmentName}` : '/agents' },
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
     { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
@@ -2757,6 +2760,7 @@ function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<AgentsCanvas />} />
+                  <Route path="/getting-started" element={<GettingStartedPage />} />
                   <Route path="/agents" element={<AgentsCanvas />} />
                   <Route path="/agents/:env" element={<AgentsCanvas />} />
                   <Route path="/mcps" element={<MCPServersPage />} />

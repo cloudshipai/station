@@ -37,7 +37,7 @@ graph LR
     Agent1 --> Custom
 ```
 
-📚 **[Documentation](https://cloudshipai.github.io/station)** | 🌐 **[Bundle Registry](https://cloudshipai.github.io/registry)**
+📚 **[Documentation](https://cloudshipai.github.io/station)** | 🚀 **[Getting Started Guide](./docs/GETTING_STARTED.md)** | 🌐 **[Bundle Registry](https://cloudshipai.github.io/registry)**
 
 ---
 
