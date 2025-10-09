@@ -199,17 +199,17 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			return
 		}
 		defer file.Close()
-		
+
 		content, err := io.ReadAll(file)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read vite.svg"})
 			return
 		}
-		
+
 		c.Header("Content-Type", "image/svg+xml")
 		c.Data(http.StatusOK, "image/svg+xml", content)
 	})
-	
+
 	// Serve index.html for all other routes (SPA catch-all)
 	router.NoRoute(func(c *gin.Context) {
 		// Skip API routes
@@ -217,6 +217,28 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 		   strings.HasPrefix(c.Request.URL.Path, "/health") ||
 		   strings.HasPrefix(c.Request.URL.Path, "/debug") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+			return
+		}
+
+		// Handle PNG images at root level (for screenshots in Getting Started)
+		if strings.HasSuffix(c.Request.URL.Path, ".png") && !strings.Contains(c.Request.URL.Path[1:], "/") {
+			filename := strings.TrimPrefix(c.Request.URL.Path, "/")
+
+			file, err := uiFS.Open(filename)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+				return
+			}
+			defer file.Close()
+
+			content, err := io.ReadAll(file)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read image"})
+				return
+			}
+
+			c.Header("Content-Type", "image/png")
+			c.Data(http.StatusOK, "image/png", content)
 			return
 		}
 		
