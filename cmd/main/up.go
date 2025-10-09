@@ -242,9 +242,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Prepare Docker run command
 	dockerArgs := []string{"run", "--name", "station-server"}
 
-	// Add detach flag if requested
+	// Don't expose port 4033 - genkit start manages the reflection API
+	developMode, _ := cmd.Flags().GetBool("develop")
+
+	// Add detach flag if requested (but not in develop mode - needs to stay foreground)
 	detach, _ := cmd.Flags().GetBool("detach")
-	if detach {
+	if developMode {
+		// Force foreground mode for genkit start compatibility
+		dockerArgs = append(dockerArgs, "-it")
+		detach = false // Override detach flag
+	} else if detach {
 		dockerArgs = append(dockerArgs, "-d")
 	} else {
 		dockerArgs = append(dockerArgs, "-it")
@@ -309,9 +316,6 @@ func runUp(cmd *cobra.Command, args []string) error {
 		"-p", "3002:3002",  // MCP Agents
 		"-p", "8585:8585",  // UI/API
 	)
-
-	// Don't expose port 4033 - genkit start manages the reflection API
-	developMode, _ := cmd.Flags().GetBool("develop")
 
 	// Environment variables
 	if err := addEnvironmentVariables(&dockerArgs, cmd); err != nil {
