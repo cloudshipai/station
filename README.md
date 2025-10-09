@@ -64,7 +64,25 @@ stn up --provider openai
 - ✅ MCP server configured for Claude Code/Cursor
 - ✅ Ready to create and run AI agents
 
-### 3. Managing Station
+### 3. Testing Agents Interactively
+
+Use Genkit Developer UI for interactive agent testing:
+
+```bash
+# Start with Genkit Developer UI (default environment)
+stn up --develop
+
+# Start with specific environment
+stn up --develop --environment security
+```
+
+**Genkit Developer UI provides:**
+- 🎯 Interactive agent testing at `http://localhost:4000`
+- 🔍 Real-time tool call inspection
+- 📊 Token usage tracking
+- 🐛 Step-by-step execution debugging
+
+### 4. Managing Station
 
 ```bash
 # Stop Station (preserves all data)
