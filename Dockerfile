@@ -86,7 +86,7 @@ ENV STATION_MCP_POOLING="false"
 WORKDIR /workspace
 
 # Expose ports for MCP, Dynamic Agent MCP, UI/API, and Genkit Developer UI
-EXPOSE 3000 3001 3002 4000 8585
+EXPOSE 3000 3030 3002 4000 8585
 
 # Use entrypoint to handle permission fixes
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
