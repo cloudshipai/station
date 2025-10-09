@@ -230,8 +230,9 @@ func runMainServer() error {
 
 	go func() {
 		defer wg.Done()
-		log.Printf("🤖 Starting Dynamic Agent MCP server on port %d", cfg.MCPPort+1)
-		if err := dynamicAgentServer.Start(ctx, cfg.MCPPort+1); err != nil {
+		dynamicAgentPort := 3030
+		log.Printf("🤖 Starting Dynamic Agent MCP server on port %d", dynamicAgentPort)
+		if err := dynamicAgentServer.Start(ctx, dynamicAgentPort); err != nil {
 			log.Printf("Dynamic Agent MCP server error: %v", err)
 		}
 

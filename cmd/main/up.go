@@ -25,7 +25,7 @@ This command:
 - Stores all configuration in Docker volume (isolated from host)
 - Mounts your workspace directory with correct file permissions
 - Automatically configures .mcp.json for Claude integration
-- Exposes ports for MCP (3000), Dynamic MCP (3001), UI (8585)
+- Exposes ports for MCP (3000), Dynamic MCP (3030), UI (8585)
 
 Key Features:
 - Config management via UI (restart container to apply changes)
@@ -314,7 +314,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Port mappings
 	dockerArgs = append(dockerArgs,
 		"-p", "3000:3000",  // MCP
-		"-p", "3001:3001",  // Dynamic Agent MCP
+		"-p", "3030:3030",  // Dynamic Agent MCP
 		"-p", "3002:3002",  // MCP Agents
 		"-p", "8585:8585",  // UI/API
 	)
@@ -367,7 +367,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\n✅ Station server started successfully!\n")
 	fmt.Printf("🔗 MCP: http://localhost:3000/mcp\n")
-	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3001/mcp\n")
+	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3030/mcp\n")
 	fmt.Printf("🔗 UI:  http://localhost:8585\n")
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
 
