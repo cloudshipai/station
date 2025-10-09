@@ -310,11 +310,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 		"-p", "8585:8585",  // UI/API
 	)
 
-	// Add Genkit reflection API port if --develop flag is set
+	// Don't expose port 4033 - genkit start manages the reflection API
 	developMode, _ := cmd.Flags().GetBool("develop")
-	if developMode {
-		dockerArgs = append(dockerArgs, "-p", "4033:4033")  // Genkit reflection API (telemetry)
-	}
 
 	// Environment variables
 	if err := addEnvironmentVariables(&dockerArgs, cmd); err != nil {
