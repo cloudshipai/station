@@ -55,6 +55,7 @@ func init() {
 	upCmd.Flags().Bool("upgrade", false, "Rebuild container image before starting")
 	upCmd.Flags().StringSlice("env", []string{}, "Additional environment variables to pass through")
 	upCmd.Flags().Bool("develop", false, "Enable Genkit Developer UI mode (exposes port 4033 for reflection API)")
+	upCmd.Flags().String("environment", "default", "Station environment to use in develop mode (e.g., default, production, security)")
 
 	// Init flags for first-time setup
 	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, custom)")
@@ -318,6 +319,11 @@ func runUp(cmd *cobra.Command, args []string) error {
 		"-p", "8585:8585",  // UI/API
 	)
 
+	// Add Genkit Developer UI port if --develop flag is set
+	if developMode {
+		dockerArgs = append(dockerArgs, "-p", "4000:4000")  // Genkit Developer UI
+	}
+
 	// Environment variables
 	if err := addEnvironmentVariables(&dockerArgs, cmd); err != nil {
 		log.Printf("Warning: Some environment variables may not be set: %v", err)
@@ -331,9 +337,10 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Set working directory
 	dockerArgs = append(dockerArgs, "-w", "/workspace")
 
-	// Add image and command - use 'develop' mode if --develop flag is set
+	// Add image and command - use 'genkit start' in develop mode to enable Developer UI
 	if developMode {
-		dockerArgs = append(dockerArgs, imageName, "stn", "develop")
+		environment, _ := cmd.Flags().GetString("environment")
+		dockerArgs = append(dockerArgs, imageName, "genkit", "start", "--non-interactive", "--", "stn", "develop", "--env", environment)
 	} else {
 		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/root/.config/station/station.db")
 	}
@@ -365,13 +372,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
 
 	if developMode {
+		environment, _ := cmd.Flags().GetString("environment")
 		fmt.Printf("\n🧪 Genkit Developer UI Mode Enabled!\n")
-		fmt.Printf("📖 Container is running 'stn develop' with Genkit initialized\n")
-		fmt.Printf("📖 To use Genkit Developer UI:\n")
-		fmt.Printf("   1. Stop this container: stn down\n")
-		fmt.Printf("   2. Run: genkit start -- stn up --develop\n")
-		fmt.Printf("🔗 Genkit UI will be available at: http://localhost:4000\n")
-		fmt.Printf("💡 This integrates Genkit UI with containerized Station\n")
+		fmt.Printf("📖 Container is running: genkit start -- stn develop --env %s\n", environment)
+		fmt.Printf("🔗 Genkit Developer UI: http://localhost:4000\n")
+		fmt.Printf("🔗 Station UI: http://localhost:8585\n")
+		fmt.Printf("💡 All agents and MCP tools from '%s' environment available\n", environment)
 	}
 
 	if detach {
