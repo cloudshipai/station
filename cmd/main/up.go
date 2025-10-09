@@ -329,8 +329,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Set working directory
 	dockerArgs = append(dockerArgs, "-w", "/workspace")
 
-	// Add image and command with database path override
-	dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/root/.config/station/station.db")
+	// Add image and command - use 'develop' mode if --develop flag is set
+	if developMode {
+		dockerArgs = append(dockerArgs, imageName, "stn", "develop")
+	} else {
+		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/root/.config/station/station.db")
+	}
 
 	// Run the container
 	fmt.Printf("🐳 Starting container...\n")
