@@ -249,7 +249,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 	detach, _ := cmd.Flags().GetBool("detach")
 	if developMode {
 		// Force foreground mode for genkit start compatibility
-		dockerArgs = append(dockerArgs, "-it")
+		// Use -i (not -it) since genkit start doesn't provide a TTY
+		dockerArgs = append(dockerArgs, "-i")
 		detach = false // Override detach flag
 	} else if detach {
 		dockerArgs = append(dockerArgs, "-d")
