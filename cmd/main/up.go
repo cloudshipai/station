@@ -54,6 +54,7 @@ func init() {
 	upCmd.Flags().BoolP("detach", "d", true, "Run container in background")
 	upCmd.Flags().Bool("upgrade", false, "Rebuild container image before starting")
 	upCmd.Flags().StringSlice("env", []string{}, "Additional environment variables to pass through")
+	upCmd.Flags().Bool("develop", false, "Enable Genkit Developer UI mode (exposes port 4000 for genkit start)")
 
 	// Init flags for first-time setup
 	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, custom)")
@@ -309,9 +310,20 @@ func runUp(cmd *cobra.Command, args []string) error {
 		"-p", "8585:8585",  // UI/API
 	)
 
+	// Add Genkit Developer UI port if --develop flag is set
+	developMode, _ := cmd.Flags().GetBool("develop")
+	if developMode {
+		dockerArgs = append(dockerArgs, "-p", "4000:4000")  // Genkit Developer UI
+	}
+
 	// Environment variables
 	if err := addEnvironmentVariables(&dockerArgs, cmd); err != nil {
 		log.Printf("Warning: Some environment variables may not be set: %v", err)
+	}
+
+	// Enable Genkit Developer UI mode if --develop flag is set
+	if developMode {
+		dockerArgs = append(dockerArgs, "-e", "GENKIT_ENV=dev")
 	}
 
 	// Set working directory
@@ -345,6 +357,14 @@ func runUp(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3001/mcp\n")
 	fmt.Printf("🔗 UI:  http://localhost:8585\n")
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
+
+	if developMode {
+		fmt.Printf("\n🧪 Genkit Developer UI Mode Enabled!\n")
+		fmt.Printf("📖 To start the Genkit Developer UI, run:\n")
+		fmt.Printf("   genkit start -o -- stn up --develop\n")
+		fmt.Printf("🔗 Genkit UI will be available at: http://localhost:4000\n")
+		fmt.Printf("💡 GENKIT_ENV=dev is set, reflection API enabled\n")
+	}
 
 	if detach {
 		fmt.Printf("\n💡 Configuration: Managed via UI at http://localhost:8585/settings\n")
