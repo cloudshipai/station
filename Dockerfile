@@ -20,10 +20,11 @@ RUN apt-get update && apt-get install -y \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20
+# Install Node.js 20 and genkit CLI for development mode
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g genkit-cli
 
 # Install uv (Python package manager)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
@@ -84,8 +85,8 @@ ENV STATION_MCP_POOLING="false"
 # Set working directory
 WORKDIR /workspace
 
-# Expose ports for MCP, Dynamic Agent MCP, and UI/API
-EXPOSE 3000 3001 3002 8585
+# Expose ports for MCP, Dynamic Agent MCP, UI/API, and Genkit Developer UI
+EXPOSE 3000 3001 3002 4000 8585
 
 # Use entrypoint to handle permission fixes
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
