@@ -28,14 +28,13 @@ func (s *Server) setupTools() {
 
 	// Update agent tool
 	updateAgentTool := mcp.NewTool("update_agent",
-		mcp.WithDescription("Update an existing agent's configuration"),
+		mcp.WithDescription("Update an existing agent's configuration. Note: To manage tools, use add_tool/remove_tool instead."),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to update")),
 		mcp.WithString("name", mcp.Description("New name for the agent")),
 		mcp.WithString("description", mcp.Description("New description for the agent")),
 		mcp.WithString("prompt", mcp.Description("New system prompt for the agent")),
 		mcp.WithNumber("max_steps", mcp.Description("New maximum steps for the agent")),
 		mcp.WithBoolean("enabled", mcp.Description("Whether the agent should be enabled")),
-		mcp.WithArray("tool_names", mcp.Description("New list of tool names to assign to the agent"), mcp.WithStringItems()),
 		mcp.WithString("output_schema", mcp.Description("JSON schema for output format (optional)")),
 		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
 	)

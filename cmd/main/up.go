@@ -352,6 +352,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 	dockerCmd.Stderr = os.Stderr
 
 	if err := dockerCmd.Run(); err != nil {
+		// Clean up failed container to avoid "name already in use" errors
+		cleanupCmd := exec.Command("docker", "rm", "-f", "station-server")
+		_ = cleanupCmd.Run() // Ignore errors, container might not exist
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 
