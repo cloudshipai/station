@@ -227,7 +227,7 @@ Station uses **template variables** to keep sensitive data secure:
 
 ## License
 
-**AGPL-3.0** - Free for all use, open source contributions welcome.
+**Apache 2.0** - Free for all use, open source contributions welcome.
 
 ---
 

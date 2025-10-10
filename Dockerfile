@@ -97,4 +97,4 @@ CMD ["stn", "serve"]
 # OCI labels
 LABEL org.opencontainers.image.source="https://github.com/cloudshipai/station"
 LABEL org.opencontainers.image.description="Station - AI Infrastructure Platform for MCP agents"
-LABEL org.opencontainers.image.licenses="AGPL-3.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
