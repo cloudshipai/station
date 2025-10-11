@@ -801,6 +801,7 @@ const MCPServersPage = () => {
   const [rawConfig, setRawConfig] = useState('');
   const [rawConfigEnvironment, setRawConfigEnvironment] = useState('');
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
 
   // Function to open MCP server details modal
@@ -893,7 +894,9 @@ const MCPServersPage = () => {
         // Refresh the servers list
         await fetchMCPServers();
         setIsRawConfigModalOpen(false);
-        alert(response.data.message);
+
+        // Trigger sync after successful save
+        setIsSyncModalOpen(true);
       } else {
         alert('Failed to save server config');
       }
@@ -1036,6 +1039,14 @@ const MCPServersPage = () => {
         onConfigChange={setRawConfig}
         onSave={handleSaveRawConfig}
         environmentName={rawConfigEnvironment}
+      />
+
+      {/* Sync Modal */}
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        environment={rawConfigEnvironment}
+        onSyncComplete={() => fetchMCPServers()}
       />
     </div>
   );
@@ -1757,6 +1768,10 @@ const EnvironmentsPage = () => {
         isOpen={isAddServerModalOpen}
         onClose={() => setIsAddServerModalOpen(false)}
         environmentName={selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default'}
+        onSuccess={() => {
+          setIsAddServerModalOpen(false);
+          setIsSyncModalOpen(true);
+        }}
       />
 
       {/* Bundle Environment Modal */}

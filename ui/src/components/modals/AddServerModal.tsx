@@ -6,12 +6,14 @@ interface AddServerModalProps {
   isOpen: boolean;
   onClose: () => void;
   environmentName: string;
+  onSuccess?: () => void;
 }
 
 export const AddServerModal: React.FC<AddServerModalProps> = ({
   isOpen,
   onClose,
-  environmentName
+  environmentName,
+  onSuccess
 }) => {
   const [serverName, setServerName] = useState('');
   const [serverConfig, setServerConfig] = useState('');
@@ -51,6 +53,11 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
       });
       setResponse(result.data);
       setShowSuccess(true);
+
+      // Trigger success callback (for auto-sync)
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       console.error('Failed to create MCP server:', error);
       // Extract error message from API response if available

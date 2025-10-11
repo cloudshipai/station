@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink } from 'lucide-react';
+import { SyncModal } from '../sync/SyncModal';
 
 interface MCPServer {
   id: string;
@@ -594,6 +595,8 @@ export const MCPDirectoryPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [shipInstalled, setShipInstalled] = useState(false);
   const [checkingShip, setCheckingShip] = useState(true);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncEnvironment, setSyncEnvironment] = useState<string>('');
 
   // Build categories from servers, ensuring Ship Security Tools is always included
   const serverCategories = Array.from(new Set(mcpServers.map(s => s.category)));
@@ -667,7 +670,15 @@ export const MCPDirectoryPage: React.FC = () => {
         setServers(prev => prev.map(s =>
           s.id === serverId ? { ...s, isInstalled: true } : s
         ));
-        alert('Server added successfully!');
+
+        // Find environment name and trigger sync
+        const environment = environments.find(env => env.id === environmentId);
+        if (environment) {
+          setSyncEnvironment(environment.name);
+          setSyncModalOpen(true);
+        } else {
+          alert('Server added successfully!');
+        }
       } else {
         const errorData = await response.text();
         alert(`Failed to add server: ${errorData}`);
@@ -676,6 +687,11 @@ export const MCPDirectoryPage: React.FC = () => {
       console.error('Failed to add server:', error);
       alert('Failed to add server');
     }
+  };
+
+  const handleSyncComplete = () => {
+    // Refresh environments or any other data if needed
+    fetchEnvironments();
   };
 
   const filteredServers = servers.filter(server => {
@@ -783,6 +799,13 @@ export const MCPDirectoryPage: React.FC = () => {
         environments={environments}
         onClose={() => setSelectedServer(null)}
         onConfirm={handleConfirmAddServer}
+      />
+
+      <SyncModal
+        isOpen={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+        environment={syncEnvironment}
+        onSyncComplete={handleSyncComplete}
       />
     </div>
   );

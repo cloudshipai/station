@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Package, Download, CheckCircle, AlertCircle, Loader, Sparkles, Lock, BarChart3, Server, Database, Brain, Shield, GitBranch } from 'lucide-react';
+import { SyncModal } from '../sync/SyncModal';
 
 interface DemoBundle {
   id: string;
@@ -79,6 +80,8 @@ export const LiveDemoPage: React.FC = () => {
   const [installSuccess, setInstallSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [environmentName, setEnvironmentName] = useState('');
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncEnvironment, setSyncEnvironment] = useState('');
 
   useEffect(() => {
     loadDemoBundles();
@@ -132,6 +135,10 @@ export const LiveDemoPage: React.FC = () => {
       if (data.success) {
         setInstallSuccess(bundleId);
         setEnvironmentName(autoEnvName); // Store for display in success message
+
+        // Trigger sync after successful installation
+        setSyncEnvironment(autoEnvName);
+        setSyncModalOpen(true);
       } else {
         setError(data.error || 'Installation failed');
       }
@@ -394,6 +401,13 @@ export const LiveDemoPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      <SyncModal
+        isOpen={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+        environment={syncEnvironment}
+        onSyncComplete={() => loadDemoBundles()}
+      />
     </div>
   );
 };
