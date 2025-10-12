@@ -658,8 +658,26 @@ func (mhs *ManagementHandlerService) handleGetAgentDetails(ctx context.Context, 
 		toolNames = append(toolNames, tool.ToolName)
 	}
 
-	// Generate dotprompt content (similar to export_handlers.go)
-	dotpromptContent := mhs.generateDotpromptContent(agent, agentTools, environmentName)
+	// Try to read dotprompt content from file first (most accurate)
+	var dotpromptContent string
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir, _ = os.UserHomeDir()
+	}
+
+	if homeDir != "" {
+		promptFilePath := filepath.Join(homeDir, ".config", "station", "environments", environmentName, "agents", agent.Name+".prompt")
+		if fileContent, err := os.ReadFile(promptFilePath); err == nil {
+			dotpromptContent = string(fileContent)
+			logging.Debug("Loaded dotprompt content from file: %s", promptFilePath)
+		}
+	}
+
+	// Fall back to generating dotprompt content if file not found
+	if dotpromptContent == "" {
+		dotpromptContent = mhs.generateDotpromptContent(agent, agentTools, environmentName)
+		logging.Debug("Generated dotprompt content for agent %s (file not found)", agent.Name)
+	}
 
 	// Convert timestamps
 	var createdAt, updatedAt *timestamppb.Timestamp
@@ -730,14 +748,21 @@ func (mhs *ManagementHandlerService) generateDotpromptContent(agent *models.Agen
 
 	content.WriteString("---\n\n")
 
-	// Multi-role prompt content
-	content.WriteString("{{role \"system\"}}\n")
-	content.WriteString(agent.Prompt)
-	content.WriteString("\n\n")
+	// Check if agent prompt already contains role directives
+	promptHasRoles := strings.Contains(agent.Prompt, "{{role") ||
+	                  strings.Contains(agent.Prompt, "{{userInput}}")
 
-	// User role with variable substitution
-	content.WriteString("{{role \"user\"}}\n")
-	content.WriteString("{{userInput}}")
+	if promptHasRoles {
+		// Prompt already has role directives, use as-is
+		content.WriteString(agent.Prompt)
+	} else {
+		// Legacy prompt without role directives, add them
+		content.WriteString("{{role \"system\"}}\n")
+		content.WriteString(agent.Prompt)
+		content.WriteString("\n\n")
+		content.WriteString("{{role \"user\"}}\n")
+		content.WriteString("{{userInput}}")
+	}
 
 	return content.String()
 }

@@ -513,7 +513,61 @@ func (h *APIHandlers) copyEnvironment(c *gin.Context) {
 		return
 	}
 
-	// Return result with conflict information
+	// Now automatically trigger sync for the target environment
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load configuration for auto-sync"})
+		return
+	}
+
+	syncService := services.NewDeclarativeSync(h.repos, cfg)
+	syncOptions := services.SyncOptions{
+		DryRun:      false,
+		Validate:    true,
+		Interactive: true,
+		Verbose:     true,
+		Confirm:     false,
+	}
+
+	ctx := c.Request.Context()
+	syncResult, syncErr := syncService.SyncEnvironment(ctx, targetEnv.Name, syncOptions)
+
+	if syncErr != nil {
+		// Sync failed but copy succeeded - partial success
+		c.JSON(http.StatusPartialContent, gin.H{
+			"success":            false,
+			"source_environment": sourceEnv.Name,
+			"target_environment": targetEnv.Name,
+			"mcp_servers_copied": result.MCPServersCopied,
+			"agents_copied":      result.AgentsCopied,
+			"conflicts":          result.Conflicts,
+			"errors":             append(result.Errors, fmt.Sprintf("Auto-sync failed: %v", syncErr)),
+			"message":            fmt.Sprintf("Copied %d MCP servers and %d agents but auto-sync failed. Please run 'stn sync %s' manually", result.MCPServersCopied, result.AgentsCopied, targetEnv.Name),
+			"sync_failed":        true,
+		})
+		return
+	}
+
+	// Sync succeeded - now automatically assign tools from source to target
+	toolsAssigned, assignErr := copyService.AssignToolsFromSource(req.TargetEnvironmentID, sourceEnvID)
+	if assignErr != nil {
+		// Tool assignment failed but copy and sync succeeded
+		c.JSON(http.StatusPartialContent, gin.H{
+			"success":            false,
+			"source_environment": sourceEnv.Name,
+			"target_environment": targetEnv.Name,
+			"mcp_servers_copied": result.MCPServersCopied,
+			"agents_copied":      result.AgentsCopied,
+			"conflicts":          result.Conflicts,
+			"errors":             append(result.Errors, fmt.Sprintf("Tool assignment failed: %v", assignErr)),
+			"message":            fmt.Sprintf("Copied and synced but tool assignment failed. %d MCP servers and %d agents copied, %d MCP servers connected", result.MCPServersCopied, result.AgentsCopied, syncResult.MCPServersConnected),
+			"tools_assigned":     0,
+			"sync_succeeded":     true,
+		})
+		return
+	}
+
+	// Everything succeeded!
 	statusCode := http.StatusOK
 	if !result.Success {
 		statusCode = http.StatusPartialContent // 206 - some items copied, some failed
@@ -525,10 +579,11 @@ func (h *APIHandlers) copyEnvironment(c *gin.Context) {
 		"target_environment": targetEnv.Name,
 		"mcp_servers_copied": result.MCPServersCopied,
 		"agents_copied":      result.AgentsCopied,
+		"mcp_servers_synced": syncResult.MCPServersConnected,
+		"tools_assigned":     toolsAssigned,
 		"conflicts":          result.Conflicts,
 		"errors":             result.Errors,
-		"message":            fmt.Sprintf("Copied %d MCP servers and %d agents. %d conflicts detected. Run 'stn sync %s' then assign tools with POST /api/v1/environments/%d/assign-tools-from/%d",
-			result.MCPServersCopied, result.AgentsCopied, len(result.Conflicts), targetEnv.Name, req.TargetEnvironmentID, sourceEnvID),
+		"message":            fmt.Sprintf("Successfully copied %d MCP servers and %d agents, synced %d MCP servers, and assigned %d tools to agents!", result.MCPServersCopied, result.AgentsCopied, syncResult.MCPServersConnected, toolsAssigned),
 	})
 }
 

@@ -33,10 +33,11 @@ type Config struct {
 
 // CloudShipConfig holds CloudShip Lighthouse integration settings
 type CloudShipConfig struct {
-	Enabled         bool   `yaml:"enabled"`          // Enable CloudShip integration
-	RegistrationKey string `yaml:"registration_key"` // CloudShip registration key
-	Endpoint        string `yaml:"endpoint"`         // Lighthouse gRPC endpoint
-	StationID       string `yaml:"station_id"`       // Station ID (auto-generated)
+	Enabled           bool   `yaml:"enabled"`             // Enable CloudShip integration
+	RegistrationKey   string `yaml:"registration_key"`    // CloudShip registration key
+	Endpoint          string `yaml:"endpoint"`            // Lighthouse gRPC endpoint
+	StationID         string `yaml:"station_id"`          // Station ID (auto-generated)
+	BundleRegistryURL string `yaml:"bundle_registry_url"` // Bundle registry API URL
 }
 
 func Load() (*Config, error) {
@@ -60,10 +61,11 @@ func Load() (*Config, error) {
 		AIBaseURL:        getEnvOrDefault("STN_AI_BASE_URL", ""), // Empty means use provider default
 		// CloudShip Integration (disabled by default)
 		CloudShip: CloudShipConfig{
-			Enabled:         getEnvBoolOrDefault("STN_CLOUDSHIP_ENABLED", false),
-			RegistrationKey: getEnvOrDefault("STN_CLOUDSHIP_KEY", ""),
-			Endpoint:        getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:50051"),
-			StationID:       getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
+			Enabled:           getEnvBoolOrDefault("STN_CLOUDSHIP_ENABLED", false),
+			RegistrationKey:   getEnvOrDefault("STN_CLOUDSHIP_KEY", ""),
+			Endpoint:          getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:50051"),
+			StationID:         getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
+			BundleRegistryURL: getEnvOrDefault("STN_CLOUDSHIP_BUNDLE_REGISTRY_URL", "https://api.cloudshipai.com"),
 		},
 	}
 
@@ -128,6 +130,9 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("cloudship.station_id") {
 		cfg.CloudShip.StationID = viper.GetString("cloudship.station_id")
+	}
+	if viper.IsSet("cloudship.bundle_registry_url") {
+		cfg.CloudShip.BundleRegistryURL = viper.GetString("cloudship.bundle_registry_url")
 	}
 
 	return cfg, nil

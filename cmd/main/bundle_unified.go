@@ -201,10 +201,9 @@ type CloudShipUploadResponse struct {
 
 func runBundleShare(cmd *cobra.Command, args []string) error {
 	source := args[0]
-	apiURL, _ := cmd.Flags().GetString("api-url")
 	keepLocal, _ := cmd.Flags().GetBool("keep-local")
 
-	// Load Station config to get CloudShip registration key
+	// Load Station config to get CloudShip configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
@@ -213,6 +212,13 @@ func runBundleShare(cmd *cobra.Command, args []string) error {
 	// Check if CloudShip is configured
 	if !cfg.CloudShip.Enabled || cfg.CloudShip.RegistrationKey == "" {
 		return fmt.Errorf("CloudShip is not configured. Please set cloudship.enabled=true and cloudship.registration_key in your config")
+	}
+
+	// Use bundle registry URL from config (can be overridden by flag)
+	apiURL, _ := cmd.Flags().GetString("api-url")
+	if apiURL == "https://api.cloudshipai.com" && cfg.CloudShip.BundleRegistryURL != "" {
+		// If flag is default and config has a value, use config
+		apiURL = cfg.CloudShip.BundleRegistryURL
 	}
 
 	registrationKey := cfg.CloudShip.RegistrationKey
