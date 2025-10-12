@@ -306,9 +306,96 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		return
 	}
 
+	// Now trigger a sync to validate the configuration
+	// This will attempt to connect to the MCP server and discover tools
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, MCPServerResponse{
+			Success: false,
+			Error:   "Failed to load configuration for sync",
+		})
+		return
+	}
+
+	syncService := services.NewDeclarativeSync(h.repos, cfg)
+	syncOptions := services.SyncOptions{
+		DryRun:      false,
+		Validate:    true,  // Validate the configuration
+		Interactive: false, // Non-interactive
+		Verbose:     true,  // Log details
+		Confirm:     false,
+	}
+
+	// Run the sync
+	ctx := c.Request.Context()
+	syncResult, syncErr := syncService.SyncEnvironment(ctx, req.Environment, syncOptions)
+
+	if syncErr != nil {
+		// Sync failed - remove the file we just created
+		filePath := fmt.Sprintf("~/.config/station/environments/%s/%s.json", req.Environment, req.Name)
+		absolutePath := config.ResolvePath(filePath)
+		os.Remove(absolutePath) // Clean up the file
+
+		c.JSON(http.StatusBadRequest, MCPServerResponse{
+			Success: false,
+			Error:   fmt.Sprintf("MCP server configuration validation failed: %v", syncErr),
+		})
+		return
+	}
+
+	// Check if the server actually got created and has tools
+	// First get the environment ID
+	environment, err := h.repos.Environments.GetByName(req.Environment)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, MCPServerResponse{
+			Success: false,
+			Error:   "Failed to get environment",
+		})
+		return
+	}
+
+	// Find the server that was just created
+	var createdServerID int64
+	servers, _ := h.repos.MCPServers.GetByEnvironmentID(environment.ID)
+	for _, server := range servers {
+		if server.Name == req.Name {
+			createdServerID = server.ID
+			break
+		}
+	}
+
+	if createdServerID == 0 {
+		// Server wasn't created in DB, sync may have failed
+		filePath := fmt.Sprintf("~/.config/station/environments/%s/%s.json", req.Environment, req.Name)
+		absolutePath := config.ResolvePath(filePath)
+		os.Remove(absolutePath) // Clean up the file
+
+		c.JSON(http.StatusInternalServerError, MCPServerResponse{
+			Success: false,
+			Error:   "MCP server was not created in database after sync. Configuration may be invalid.",
+		})
+		return
+	}
+
+	// Check if server has tools (indicates successful connection)
+	tools, _ := h.repos.MCPTools.GetByServerID(createdServerID)
+	if len(tools) == 0 {
+		// No tools discovered - server likely failed to connect
+		// Note: We don't remove the server here as it might be a valid config
+		// that just needs variables configured
+		c.JSON(http.StatusCreated, MCPServerResponse{
+			Success:     true,
+			Message:     fmt.Sprintf("MCP server created but no tools discovered. Server may need configuration or may have failed to connect. Found %d MCP servers connected during sync.", syncResult.MCPServersConnected),
+			ServerName:  req.Name,
+			Environment: req.Environment,
+			FilePath:    fmt.Sprintf("~/.config/station/environments/%s/%s.json", req.Environment, req.Name),
+		})
+		return
+	}
+
 	c.JSON(http.StatusCreated, MCPServerResponse{
 		Success:     true,
-		Message:     result.Message,
+		Message:     fmt.Sprintf("MCP server created successfully with %d tools discovered!", len(tools)),
 		ServerName:  req.Name,
 		Environment: req.Environment,
 		FilePath:    fmt.Sprintf("~/.config/station/environments/%s/%s.json", req.Environment, req.Name),

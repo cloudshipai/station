@@ -7,6 +7,7 @@ interface SyncModalProps {
   onClose: () => void;
   environment: string;
   onSyncComplete?: () => void;
+  autoStart?: boolean;
 }
 
 interface SyncStatus {
@@ -36,7 +37,7 @@ interface SyncStatus {
   updated_at: string;
 }
 
-export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environment, onSyncComplete }) => {
+export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environment, onSyncComplete, autoStart = false }) => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmittingVariables, setIsSubmittingVariables] = useState(false);
@@ -45,6 +46,19 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
   const [variablesInitialized, setVariablesInitialized] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const inputRefs = useRef<Record<string, HTMLInputElement>>({});
+  const lastAutoStartKey = useRef<string>('');
+
+  // Auto-start sync when modal opens if autoStart is true
+  // Use a composite key of isOpen + environment to prevent re-triggering for the same environment
+  useEffect(() => {
+    const autoStartKey = `${isOpen}-${environment}`;
+
+    if (isOpen && autoStart && environment && lastAutoStartKey.current !== autoStartKey) {
+      console.log('[SyncModal] Auto-starting sync for environment:', environment);
+      lastAutoStartKey.current = autoStartKey;
+      startSync();
+    }
+  }, [isOpen, autoStart, environment]);
 
   // Clean up polling on unmount or modal close
   useEffect(() => {
@@ -58,6 +72,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
       setVariablesInitialized(false);
       setValidationErrors({});
       setIsSubmittingVariables(false);
+      lastAutoStartKey.current = '';
       inputRefs.current = {};
     }
   }, [isOpen, pollInterval]);
@@ -65,27 +80,30 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
   const startSync = async () => {
     setIsLoading(true);
     try {
+      console.log('[SyncModal] Starting sync for environment:', environment);
       const response = await syncApi.startInteractive(environment);
       const { sync_id, status } = response.data;
+      console.log('[SyncModal] Sync started with ID:', sync_id, 'status:', status);
       setSyncStatus(status);
-      
+
       // Start polling for status updates
       const interval = setInterval(async () => {
         try {
           const statusResponse = await syncApi.getStatus(sync_id);
           const newStatus = statusResponse.data;
-          
+          console.log('[SyncModal] Poll result - status:', newStatus.status, 'progress:', newStatus.progress);
+
           // Only update state if status actually changed to avoid unnecessary re-renders
           setSyncStatus(prevStatus => {
-            if (!prevStatus || 
-                prevStatus.status !== newStatus.status || 
+            if (!prevStatus ||
+                prevStatus.status !== newStatus.status ||
                 prevStatus.updated_at !== newStatus.updated_at ||
                 JSON.stringify(prevStatus.variables) !== JSON.stringify(newStatus.variables)) {
               return newStatus;
             }
             return prevStatus;
           });
-          
+
           // Initialize variables form when waiting for input (only once)
           if (newStatus.status === 'waiting_for_input' && newStatus.variables && !variablesInitialized) {
             const initialVars: Record<string, string> = {};
@@ -101,40 +119,53 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
             setVariables(initialVars);
             setVariablesInitialized(true);
           }
-          
+
           // Stop polling when sync is complete or failed
           if (newStatus.status === 'completed' || newStatus.status === 'failed') {
+            console.log('[SyncModal] Sync finished with status:', newStatus.status);
             clearInterval(interval);
             setPollInterval(null);
-            
+
             // Call onSyncComplete callback when sync completes successfully
             if (newStatus.status === 'completed' && onSyncComplete) {
               onSyncComplete();
             }
           }
-        } catch (error) {
+        } catch (error: any) {
           // Handle 404 errors gracefully - sync might have been cleaned up
           if (error.response?.status === 404) {
-            console.log('Sync operation not found, stopping polling');
+            console.log('[SyncModal] Sync operation not found (404), assuming completed and stopping polling');
             clearInterval(interval);
             setPollInterval(null);
-            // If we don't have a final status, mark as completed
-            if (syncStatus?.status === 'running') {
-              setSyncStatus(prev => prev ? {...prev, status: 'completed'} : null);
-              // Call onSyncComplete callback since sync likely completed
-              if (onSyncComplete) {
-                onSyncComplete();
+            // Mark as completed since backend cleaned it up (means it finished)
+            setSyncStatus(prev => {
+              if (prev) {
+                return {
+                  ...prev,
+                  status: 'completed',
+                  progress: {
+                    ...prev.progress,
+                    steps_complete: prev.progress.steps_total,
+                    current_step: 'Completed',
+                    message: 'Sync completed successfully'
+                  }
+                };
               }
+              return prev;
+            });
+            // Call onSyncComplete callback since sync completed
+            if (onSyncComplete) {
+              onSyncComplete();
             }
           } else {
-            console.error('Failed to poll sync status:', error);
+            console.error('[SyncModal] Failed to poll sync status:', error);
           }
         }
       }, 1000);
-      
+
       setPollInterval(interval);
     } catch (error) {
-      console.error('Failed to start sync:', error);
+      console.error('[SyncModal] Failed to start sync:', error);
     } finally {
       setIsLoading(false);
     }

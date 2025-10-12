@@ -7,12 +7,17 @@ import (
 
 // GetConfigRoot returns the Station configuration root directory
 // This handles container vs host runtime differences
-// In container: /root/.config/station
+// In container: /home/station/.config/station (or STATION_CONFIG_DIR if set)
 // On host: Uses GetStationConfigDir() which checks workspace/XDG paths
 func GetConfigRoot() string {
 	// Check if we're running in container
 	if os.Getenv("STATION_RUNTIME") == "docker" {
-		return "/root/.config/station"
+		// Allow override via environment variable
+		if configDir := os.Getenv("STATION_CONFIG_DIR"); configDir != "" {
+			return configDir
+		}
+		// Default to station user's home directory
+		return "/home/station/.config/station"
 	}
 
 	// Use the existing GetStationConfigDir which handles workspace configuration

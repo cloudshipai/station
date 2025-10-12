@@ -120,15 +120,13 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	// This must happen before agent sync so tools have stable IDs
 	mcpResult, err := s.syncMCPTemplateFiles(ctx, envDir, environmentName, options)
 	if err != nil {
-		fmt.Printf("Warning: Failed to sync MCP templates for %s: %v\n", environmentName, err)
-		result.ValidationErrors++
-		result.ValidationMessages = append(result.ValidationMessages, 
-			fmt.Sprintf("MCP template sync failed: %v", err))
-	} else {
-		result.MCPServersProcessed = mcpResult.MCPServersProcessed
-		result.MCPServersConnected = mcpResult.MCPServersConnected
-		result.Operations = append(result.Operations, mcpResult.Operations...)
+		// MCP template sync failures are FATAL - return error immediately
+		return nil, fmt.Errorf("failed to sync MCP templates: %w", err)
 	}
+
+	result.MCPServersProcessed = mcpResult.MCPServersProcessed
+	result.MCPServersConnected = mcpResult.MCPServersConnected
+	result.Operations = append(result.Operations, mcpResult.Operations...)
 
 	// 4. Sync agents from .prompt files AFTER MCP tools are stable
 	agentResult, err := s.syncAgents(ctx, agentsDir, environmentName, options)
@@ -311,27 +309,44 @@ func (s *DeclarativeSync) processJSONTemplatesParallel(ctx context.Context, json
 	}
 	successCount := 0
 	
+	var firstError error
 	for result := range resultChan {
 		if result.error != nil {
 			fmt.Printf("Template %s processing failed: %v\n", result.configName, result.error)
 			aggregatedResult.ValidationErrors++
-			aggregatedResult.ValidationMessages = append(aggregatedResult.ValidationMessages, 
+			aggregatedResult.ValidationMessages = append(aggregatedResult.ValidationMessages,
 				fmt.Sprintf("Template %s: %v", result.configName, result.error))
+			// Capture first error to return
+			if firstError == nil {
+				firstError = result.error
+			}
 		} else {
 			successCount++
 			fmt.Printf("✅ Template %s processed: %d MCP servers\n", result.configName, result.mcpServersCount)
 		}
-		
+
 		// Aggregate results
 		aggregatedResult.ValidationErrors += result.validationErrors
 		aggregatedResult.MCPServersConnected += result.mcpServersCount
 		aggregatedResult.ValidationMessages = append(aggregatedResult.ValidationMessages, result.validationMessages...)
 		aggregatedResult.Operations = append(aggregatedResult.Operations, result.operations...)
 	}
-	
-	fmt.Printf("Parallel template processing completed: %d templates, %d successful\n", 
+
+	fmt.Printf("Parallel template processing completed: %d templates, %d successful\n",
 		len(jsonFiles), successCount)
-	
+
+	// Only fail if ALL templates failed - partial success is acceptable
+	// This allows good configs to work even if some are broken
+	if successCount == 0 && len(jsonFiles) > 0 {
+		return aggregatedResult, fmt.Errorf("all %d template(s) failed to process: %w", len(jsonFiles), firstError)
+	}
+
+	// Log warning if some templates failed but others succeeded
+	if successCount > 0 && successCount < len(jsonFiles) {
+		fmt.Printf("⚠️  WARNING: %d/%d templates processed successfully, %d failed\n",
+			successCount, len(jsonFiles), len(jsonFiles)-successCount)
+	}
+
 	return aggregatedResult, nil
 }
 
@@ -413,14 +428,12 @@ func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, conf
 	if serversCount > 0 && !options.DryRun {
 		toolsDiscovered, err := s.performToolDiscovery(ctx, env.ID, configName)
 		if err != nil {
-			// Show tool discovery failure during verbose output
+			// Tool discovery failure IS fatal - broken servers are auto-cleaned by performToolDiscovery
 			fmt.Printf("   ❌ Tool discovery failed for %s: %v\n", configName, err)
-			// Don't treat tool discovery failure as fatal - servers are still synced
-			result.validationMessages = append(result.validationMessages,
-				fmt.Sprintf("Template %s: Tool discovery failed - %v", configName, err))
-		} else {
-			fmt.Printf("   🔧 Discovered %d tools from MCP servers\n", toolsDiscovered)
+			result.error = fmt.Errorf("tool discovery failed: %w", err)
+			return result
 		}
+		fmt.Printf("   🔧 Discovered %d tools from MCP servers\n", toolsDiscovered)
 		result.mcpServersCount = serversCount
 	} else if serversCount > 0 {
 		result.mcpServersCount = serversCount
@@ -633,8 +646,8 @@ func (s *DeclarativeSync) resolveConfigPath(path string) string {
 			// Use configured workspace
 			baseDir = s.config.Workspace
 		} else if os.Getenv("STATION_RUNTIME") == "docker" {
-			// In container, use /root/.config/station
-			baseDir = "/root/.config/station"
+			// In container, use station user's config directory
+			baseDir = config.GetConfigRoot()
 		} else {
 			// On host, use actual home directory
 			homeDir, _ := os.UserHomeDir()

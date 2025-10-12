@@ -800,6 +800,7 @@ const MCPServersPage = () => {
   const [isRawConfigModalOpen, setIsRawConfigModalOpen] = useState(false);
   const [rawConfig, setRawConfig] = useState('');
   const [rawConfigEnvironment, setRawConfigEnvironment] = useState('');
+  const [syncEnvironmentName, setSyncEnvironmentName] = useState('');
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const environmentContext = React.useContext(EnvironmentContext);
@@ -859,6 +860,16 @@ const MCPServersPage = () => {
         }
         setRawConfigEnvironment(`${serverName} (ID: ${serverId})`);
         setSelectedServerId(serverId); // Store server ID for saving
+
+        // Find the environment name for this server
+        const server = mcpServers.find(s => s.id === serverId);
+        if (server && server.environment_id) {
+          const env = environments.find(e => e.id === server.environment_id);
+          if (env) {
+            setSyncEnvironmentName(env.name);
+          }
+        }
+
         setIsRawConfigModalOpen(true);
       } else {
         alert('Failed to fetch raw config');
@@ -1045,7 +1056,7 @@ const MCPServersPage = () => {
       <SyncModal
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
-        environment={rawConfigEnvironment}
+        environment={syncEnvironmentName}
         onSyncComplete={() => fetchMCPServers()}
       />
     </div>

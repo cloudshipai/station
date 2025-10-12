@@ -270,6 +270,12 @@ func initTelemetry() {
 }
 
 func getXDGConfigDir() string {
+	// Check for explicit STATION_CONFIG_DIR override first
+	// This should be the complete path including 'station' suffix
+	if configDir := os.Getenv("STATION_CONFIG_DIR"); configDir != "" {
+		return configDir
+	}
+
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
 		homeDir, _ := os.UserHomeDir()
@@ -279,6 +285,12 @@ func getXDGConfigDir() string {
 }
 
 func getWorkspacePath() string {
+	// Check for explicit STATION_CONFIG_DIR override first
+	// This is needed for container environments
+	if configDir := os.Getenv("STATION_CONFIG_DIR"); configDir != "" {
+		return configDir
+	}
+
 	// Check if workspace is configured via viper
 	if workspace := viper.GetString("workspace"); workspace != "" {
 		return workspace

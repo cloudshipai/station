@@ -26,11 +26,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g genkit-cli
 
-# Install uv (Python package manager)
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && ln -sf /root/.cargo/bin/uv /usr/local/bin/uv \
-    && ln -sf /root/.cargo/bin/uvx /usr/local/bin/uvx
-
 # Install Docker CLI (for Docker-in-Docker via socket mount)
 ARG TARGETARCH
 RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") && \
@@ -39,46 +34,88 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") && \
     && rm -rf docker \
     && chmod +x /usr/local/bin/docker
 
-# Install Ship CLI for security tools
+# Create a non-root user 'station' with UID 1000 (common Linux desktop UID)
+RUN groupadd -g 1000 station && \
+    useradd -m -u 1000 -g station -s /bin/bash station && \
+    # Give station user sudo access for flexibility
+    apt-get update && apt-get install -y sudo gosu && rm -rf /var/lib/apt/lists/* && \
+    usermod -aG sudo station && \
+    echo "station ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Set up directories for station user
+RUN mkdir -p /home/station/.local/bin /home/station/.cargo/bin \
+    /home/station/.config/station /home/station/.cache \
+    /home/station/.npm /home/station/.local/share && \
+    chown -R station:station /home/station
+
+# Install uv as station user
+USER station
+WORKDIR /home/station
+ENV HOME=/home/station
+ENV PATH="/home/station/.local/bin:/home/station/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Ship CLI as station user
 ARG INSTALL_SHIP=true
 RUN if [ "$INSTALL_SHIP" = "true" ]; then \
         timeout 300 bash -c 'curl -fsSL --max-time 60 https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash' || \
         echo 'Ship CLI installation failed or timed out'; \
-        if [ -f /root/.local/bin/ship ]; then \
-            cp /root/.local/bin/ship /usr/local/bin/ship && \
-            chmod +x /usr/local/bin/ship; \
-        fi \
     fi
+
+# Switch back to root for system-level setup
+USER root
 
 # Copy Station binary for the target architecture
 # GoReleaser builds binaries in dist/station_${GOOS}_${GOARCH}/stn
 COPY dist/station_${TARGETOS}_${TARGETARCH}*/stn /usr/local/bin/stn
 RUN chmod +x /usr/local/bin/stn
 
-# Create necessary directories
-RUN mkdir -p /workspace /root/.config/station /root/.local/bin /root/.cache /var/log/station
-
-# Make /root writable for Dagger and other tools when running as mapped user
-RUN chmod 777 /root /root/.cache
+# Create necessary directories with proper ownership
+# Also create symlink from /root/.config to /home/station/.config for compatibility
+RUN mkdir -p /workspace /var/log/station /root && \
+    ln -s /home/station/.config /root/.config && \
+    chown -R station:station /workspace /var/log/station /home/station && \
+    chmod 755 /root
 
 # Health check script
 RUN echo '#!/bin/bash\ncurl -f http://localhost:3000/health || exit 1' > /usr/local/bin/health-check && \
     chmod +x /usr/local/bin/health-check
 
-# Entrypoint script to fix permissions on mounted volumes
+# Flexible entrypoint that handles different UIDs
 RUN echo '#!/bin/bash\n\
-# Fix permissions for Dagger cache if it exists and is not writable\n\
-if [ -d /root/.cache ] && [ ! -w /root/.cache ]; then\n\
-    chmod 777 /root/.cache 2>/dev/null || true\n\
+set -e\n\
+\n\
+# If running with --user flag (Linux host), just exec\n\
+if [ "$(id -u)" != "0" ] && [ "$(id -u)" != "1000" ]; then\n\
+    exec "$@"\n\
 fi\n\
-# Execute the actual command\n\
+\n\
+# If running as root, drop to station user using gosu\n\
+if [ "$(id -u)" = "0" ]; then\n\
+    # Fix workspace ownership if needed\n\
+    if [ -d /workspace ]; then\n\
+        chown station:station /workspace 2>/dev/null || true\n\
+    fi\n\
+    # Set proper environment for station user\n\
+    export HOME=/home/station\n\
+    export USER=station\n\
+    # Drop privileges to station user\n\
+    exec gosu station "$@"\n\
+fi\n\
+\n\
+# Running as station user (UID 1000)\n\
 exec "$@"' > /usr/local/bin/docker-entrypoint.sh && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Environment variables
-ENV PATH="/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ENV HOME="/root"
+# Switch to station user by default
+USER station
+
+# Environment variables for station user
+ENV PATH="/home/station/.local/bin:/home/station/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV HOME="/home/station"
 ENV STATION_RUNTIME="docker"
+ENV STATION_CONFIG_DIR="/home/station/.config/station"
 # Disable MCP connection pooling in container to prevent hanging
 ENV STATION_MCP_POOLING="false"
 
