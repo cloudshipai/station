@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui tag-check release jaeger jaeger-down proto-gen proto-clean
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui rebuild-all tag-check release jaeger jaeger-down proto-gen proto-clean
 
 # Build configuration
 BINARY_NAME=stn
@@ -40,6 +40,17 @@ local-install-ui: stop-station build-with-ui
 	@echo "📋 Ready for manual startup:"
 	@echo "   Start: stn stdio --dev"
 	@echo "   Monitor: tail -f /tmp/station-stdio-debug.log"
+
+# Rebuild everything: UI, binary, and Docker image
+rebuild-all: local-install-ui
+	@echo "🐳 Building Docker image..."
+	@mkdir -p dist/station_linux_amd64_v1
+	@cp ~/.local/bin/stn dist/station_linux_amd64_v1/
+	@docker build -t station-server:latest -f Dockerfile .
+	@echo "✅ Complete rebuild finished!"
+	@echo "📦 Local binary: ~/.local/bin/stn"
+	@echo "🐳 Docker image: station-server:latest"
+	@echo "🚀 Ready to start Station with: stn up"
 
 # Release targets
 tag-check:

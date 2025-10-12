@@ -133,8 +133,11 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			return
 		}
 
-		// Use default CloudShip API URL
-		apiURL := "https://api.cloudshipai.com"
+		// Use CloudShip bundle registry URL from config
+		apiURL := cfg.CloudShip.BundleRegistryURL
+		if apiURL == "" {
+			apiURL = "https://api.cloudshipai.com"
+		}
 
 		// Upload to CloudShip
 		cloudShipResp, err := uploadToCloudShip(tarData, fmt.Sprintf("%s.tar.gz", req.Environment), apiURL, cfg.CloudShip.RegistrationKey)
@@ -661,8 +664,11 @@ func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
 		return
 	}
 
-	// Use default CloudShip API URL
-	apiURL := "https://api.cloudshipai.com"
+	// Use CloudShip bundle registry URL from config
+	apiURL := cfg.CloudShip.BundleRegistryURL
+	if apiURL == "" {
+		apiURL = "https://api.cloudshipai.com"
+	}
 
 	// Fetch bundles from CloudShip
 	listURL := fmt.Sprintf("%s/api/public/bundles", strings.TrimSuffix(apiURL, "/"))

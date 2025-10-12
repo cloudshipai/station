@@ -37,7 +37,6 @@ import BuildImageModal from './components/modals/BuildImageModal';
 import { InstallBundleModal } from './components/modals/InstallBundleModal';
 import DeployModal from './components/modals/DeployModal';
 import { CopyEnvironmentModal } from './components/modals/CopyEnvironmentModal';
-import { AssignToolsModal } from './components/modals/AssignToolsModal';
 import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
 import type { AgentRunWithDetails } from './types/station';
 
@@ -1377,8 +1376,6 @@ const EnvironmentsPage = () => {
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [copySourceEnvId, setCopySourceEnvId] = useState<number | null>(null);
   const [copySourceEnvName, setCopySourceEnvName] = useState<string>('');
-  const [isAssignToolsModalOpen, setIsAssignToolsModalOpen] = useState(false);
-  const [assignToolsTargetEnvId, setAssignToolsTargetEnvId] = useState<number | null>(null);
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1419,13 +1416,6 @@ const EnvironmentsPage = () => {
     // Simply close the modal - user will manually refresh or navigate
     // to see the copied environment
     setIsCopyModalOpen(false);
-  };
-
-  const handleAssignTools = () => {
-    if (selectedEnvironment) {
-      setAssignToolsTargetEnvId(selectedEnvironment);
-      setIsAssignToolsModalOpen(true);
-    }
   };
 
   const handleRefreshGraph = () => {
@@ -1717,14 +1707,6 @@ const EnvironmentsPage = () => {
               <span>Add MCP Server</span>
             </button>
 
-            <button
-              onClick={handleAssignTools}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
-            >
-              <Link className="h-4 w-4" />
-              <span>Assign Tools</span>
-            </button>
-
             <div className="border-t border-tokyo-dark4 pt-3 mt-3">
               <h3 className="text-sm font-mono text-tokyo-comment mb-3">Deployment</h3>
 
@@ -1843,19 +1825,6 @@ const EnvironmentsPage = () => {
         />
       )}
 
-      {/* Assign Tools Modal */}
-      {assignToolsTargetEnvId && (
-        <AssignToolsModal
-          isOpen={isAssignToolsModalOpen}
-          onClose={() => setIsAssignToolsModalOpen(false)}
-          targetEnvironmentId={assignToolsTargetEnvId}
-          environments={environments}
-          onAssignComplete={() => {
-            setIsAssignToolsModalOpen(false);
-            // Refresh page or show success message
-          }}
-        />
-      )}
     </div>
   );
 };
@@ -2659,7 +2628,17 @@ const SettingsPage = () => {
                         type="text"
                         value={configObj.cloudship?.endpoint || ''}
                         onChange={(e) => updateCloudShipConfig({ endpoint: e.target.value })}
-                        placeholder="lighthouse.cloudshipai.com:443"
+                        placeholder="lighthouse.cloudshipai.com:50051"
+                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Bundle Registry URL</label>
+                      <input
+                        type="text"
+                        value={configObj.cloudship?.bundle_registry_url || ''}
+                        onChange={(e) => updateCloudShipConfig({ bundle_registry_url: e.target.value })}
+                        placeholder="https://api.cloudshipai.com"
                         className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
                       />
                     </div>

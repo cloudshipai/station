@@ -23,6 +23,10 @@ interface CopyResult {
   target_environment: string;
   mcp_servers_copied: number;
   agents_copied: number;
+  mcp_servers_synced?: number;
+  tools_assigned?: number;
+  sync_failed?: boolean;
+  sync_succeeded?: boolean;
   conflicts: Array<{
     type: string;
     name: string;
@@ -124,7 +128,7 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
               {/* Info */}
               <div className="bg-tokyo-blue7 bg-opacity-20 border border-tokyo-blue7 rounded p-3">
                 <p className="text-sm text-tokyo-fg font-mono">
-                  This will copy all agents and MCP servers from <span className="text-tokyo-orange font-semibold">{sourceEnvironmentName}</span> to the selected target environment.
+                  This will copy all agents and MCP servers from <span className="text-tokyo-orange font-semibold">{sourceEnvironmentName}</span> to the selected target environment, then automatically sync and assign tools.
                 </p>
               </div>
 
@@ -146,14 +150,16 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
                 </select>
               </div>
 
-              {/* Warning about workflow */}
-              <div className="bg-yellow-900 bg-opacity-30 border border-yellow-500 border-opacity-50 rounded p-3">
-                <p className="text-sm text-yellow-300 font-mono">
-                  <strong>Note:</strong> After copying, you must:
+              {/* Info about automatic process */}
+              <div className="bg-green-900 bg-opacity-20 border border-green-500 border-opacity-50 rounded p-3">
+                <p className="text-sm text-green-300 font-mono">
+                  <strong>Automatic Process:</strong>
                   <br />
-                  1. Run <code className="bg-black bg-opacity-30 px-1 rounded">stn sync [target]</code> to discover tools
+                  1. Copy MCP servers and agents to target environment
                   <br />
-                  2. Use the "Assign Tools" button to complete the copy
+                  2. Auto-sync target environment to discover tools
+                  <br />
+                  3. Auto-assign tools to agents based on source environment
                 </p>
               </div>
             </>
@@ -176,13 +182,25 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-sm font-mono">
                   <div>
-                    <span className="text-tokyo-comment">MCP Servers: </span>
+                    <span className="text-tokyo-comment">MCP Servers Copied: </span>
                     <span className="text-tokyo-cyan font-semibold">{result.mcp_servers_copied}</span>
                   </div>
                   <div>
-                    <span className="text-tokyo-comment">Agents: </span>
+                    <span className="text-tokyo-comment">Agents Copied: </span>
                     <span className="text-tokyo-blue font-semibold">{result.agents_copied}</span>
                   </div>
+                  {result.mcp_servers_synced !== undefined && (
+                    <div>
+                      <span className="text-tokyo-comment">MCP Servers Synced: </span>
+                      <span className="text-tokyo-green font-semibold">{result.mcp_servers_synced}</span>
+                    </div>
+                  )}
+                  {result.tools_assigned !== undefined && (
+                    <div>
+                      <span className="text-tokyo-comment">Tools Assigned: </span>
+                      <span className="text-tokyo-purple font-semibold">{result.tools_assigned}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -222,16 +240,39 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
                 </div>
               )}
 
-              {/* Next Steps */}
-              {result.success && (
-                <div className="bg-tokyo-blue7 bg-opacity-20 border border-tokyo-blue7 rounded p-3">
-                  <p className="text-sm text-tokyo-fg font-mono mb-2 font-semibold">
-                    Next Steps:
+              {/* Success Summary */}
+              {result.success && result.tools_assigned !== undefined && result.tools_assigned > 0 && (
+                <div className="bg-green-900 bg-opacity-20 border border-green-500 border-opacity-50 rounded p-3">
+                  <p className="text-sm text-green-300 font-mono font-semibold">
+                    ✅ Complete! Environment copied, synced, and tools assigned automatically.
                   </p>
-                  <ol className="text-sm text-tokyo-fg font-mono list-decimal list-inside space-y-1">
-                    <li>Run <code className="bg-black bg-opacity-30 px-1 rounded text-tokyo-orange">stn sync {result.target_environment}</code></li>
-                    <li>Use "Assign Tools" button to complete the copy</li>
-                  </ol>
+                  <p className="text-sm text-green-200 font-mono mt-2">
+                    Your agents in <span className="text-tokyo-orange">{result.target_environment}</span> are ready to use!
+                  </p>
+                </div>
+              )}
+
+              {/* Partial Success - Sync Failed */}
+              {result.sync_failed && (
+                <div className="bg-yellow-900 bg-opacity-30 border border-yellow-500 border-opacity-50 rounded p-3">
+                  <p className="text-sm text-yellow-300 font-mono font-semibold">
+                    ⚠️ Copied but sync failed
+                  </p>
+                  <p className="text-sm text-yellow-200 font-mono mt-2">
+                    MCP servers and agents were copied, but auto-sync failed. Run <code className="bg-black bg-opacity-30 px-1 rounded">stn sync {result.target_environment}</code> manually.
+                  </p>
+                </div>
+              )}
+
+              {/* Partial Success - Tool Assignment Failed */}
+              {result.sync_succeeded && result.tools_assigned === 0 && (
+                <div className="bg-yellow-900 bg-opacity-30 border border-yellow-500 border-opacity-50 rounded p-3">
+                  <p className="text-sm text-yellow-300 font-mono font-semibold">
+                    ⚠️ Copied and synced but tool assignment failed
+                  </p>
+                  <p className="text-sm text-yellow-200 font-mono mt-2">
+                    MCP servers connected successfully, but tool assignment failed. You may need to manually assign tools to agents.
+                  </p>
                 </div>
               )}
             </>
