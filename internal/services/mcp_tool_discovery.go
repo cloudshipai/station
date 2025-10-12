@@ -20,29 +20,41 @@ import (
 func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64, configName string) (int, error) {
 	// Create MCP connection manager for tool discovery
 	mcpConnManager := NewMCPConnectionManager(s.repos, nil)
-	
+
 	// Initialize Genkit application (needed for MCP connections)
 	genkitApp, err := s.initializeGenkitForSync(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to initialize Genkit for tool discovery: %w", err)
 	}
 	mcpConnManager.genkitApp = genkitApp
-	
+
 	// Get the specific file config we just registered
 	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get file config %s: %w", configName, err)
 	}
-	
+
 	// Discover tools per server (preserving server-to-tool mapping)
 	serverToolMappings, clients, err := s.discoverToolsPerServer(ctx, mcpConnManager, fileConfig)
-	if err != nil {
-		return 0, fmt.Errorf("failed to discover tools per server for %s: %w", configName, err)
-	}
-	
+
 	// Clean up connections immediately
 	defer mcpConnManager.CleanupConnections(clients)
-	
+
+	if err != nil {
+		// Tool discovery failed - clean up the broken MCP server(s) from database
+		logging.Info("   ❌ Tool discovery failed for %s: %v", configName, err)
+		logging.Info("   🧹 Cleaning up broken MCP server configuration from database...")
+
+		// Delete all MCP servers associated with this config
+		if cleanupErr := s.cleanupBrokenMCPServers(ctx, envID, configName); cleanupErr != nil {
+			logging.Info("   ⚠️  Warning: Failed to cleanup broken servers: %v", cleanupErr)
+		} else {
+			logging.Info("   ✅ Successfully removed broken MCP server configuration")
+		}
+
+		return 0, fmt.Errorf("failed to discover tools per server for %s: %w", configName, err)
+	}
+
 	// Save discovered tools to database with proper server associations
 	totalToolsSaved := 0
 	for serverName, tools := range serverToolMappings {
@@ -54,9 +66,37 @@ func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64,
 		logging.Info("     ✅ Saved %d tools for server '%s'", toolsSaved, serverName)
 		totalToolsSaved += toolsSaved
 	}
-	
+
 	logging.Info("   🔍 Tool discovery completed for %s: %d tools saved across %d servers", configName, totalToolsSaved, len(serverToolMappings))
 	return totalToolsSaved, nil
+}
+
+// cleanupBrokenMCPServers removes broken MCP servers and their tools from the database
+func (s *DeclarativeSync) cleanupBrokenMCPServers(ctx context.Context, envID int64, configName string) error {
+	// Get all MCP servers for this environment
+	servers, err := s.repos.MCPServers.GetByEnvironmentID(envID)
+	if err != nil {
+		return fmt.Errorf("failed to list servers: %w", err)
+	}
+
+	// Delete servers that belong to this config
+	for _, server := range servers {
+		// Check if server belongs to this config by name matching
+		// (we could improve this with explicit config tracking in the future)
+		logging.Info("     🗑️  Deleting MCP server: %s (ID: %d)", server.Name, server.ID)
+
+		// Delete associated tools first
+		if err := s.repos.MCPTools.DeleteByServerID(server.ID); err != nil {
+			logging.Info("     ⚠️  Warning: Failed to delete tools for server %s: %v", server.Name, err)
+		}
+
+		// Delete the server
+		if err := s.repos.MCPServers.Delete(server.ID); err != nil {
+			logging.Info("     ⚠️  Warning: Failed to delete server %s: %v", server.Name, err)
+		}
+	}
+
+	return nil
 }
 
 // discoverToolsPerServer connects to each MCP server individually and returns tools mapped by server name
@@ -95,17 +135,18 @@ func (s *DeclarativeSync) discoverToolsPerServer(ctx context.Context, mcpConnMan
 
 	serverToolMappings := make(map[string][]ai.Tool)
 	var allClients []*mcp.GenkitMCPClient
+	var connectionErrors []string
 
 	// Process each server individually to preserve server-to-tool mapping
 	logging.Info("     🔍 Discovering tools from %d servers individually...", len(serversData))
 	for serverName, serverConfigRaw := range serversData {
 		logging.Info("       🖥️  Connecting to server: %s", serverName)
-		
+
 		tools, client := mcpConnManager.connectToMCPServer(ctx, serverName, serverConfigRaw)
 		if client != nil {
 			allClients = append(allClients, client)
 		}
-		
+
 		if tools != nil && len(tools) > 0 {
 			serverToolMappings[serverName] = tools
 			logging.Info("       ✅ Discovered %d tools from server '%s'", len(tools), serverName)
@@ -119,8 +160,16 @@ func (s *DeclarativeSync) discoverToolsPerServer(ctx context.Context, mcpConnMan
 				}
 			}
 		} else {
-			logging.Info("       ⚠️  No tools discovered from server '%s'", serverName)
+			// Connection or tool discovery failed for this server
+			errorMsg := fmt.Sprintf("Failed to connect or discover tools from server '%s'", serverName)
+			logging.Info("       ❌ %s", errorMsg)
+			connectionErrors = append(connectionErrors, errorMsg)
 		}
+	}
+
+	// If any server failed to connect, return error
+	if len(connectionErrors) > 0 {
+		return serverToolMappings, allClients, fmt.Errorf("tool discovery failed for %d server(s): %v", len(connectionErrors), connectionErrors)
 	}
 
 	return serverToolMappings, allClients, nil

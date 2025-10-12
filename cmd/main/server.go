@@ -132,10 +132,16 @@ func runMainServer() error {
 		Confirm:     false,
 	})
 	if err != nil {
-		return fmt.Errorf("CRITICAL: Environment sync failed for '%s' - startup aborted. Docker containers require fully rendered environment. Error: %w", environmentName, err)
+		// Log sync failure but don't crash the server - cleanup already ran
+		// This allows the server to start even if MCP configs are broken
+		log.Printf("⚠️  WARNING: Environment sync failed for '%s': %v", environmentName, err)
+		log.Printf("⚠️  Broken MCP servers have been cleaned up from database")
+		log.Printf("⚠️  Please fix or remove broken config files and re-sync via UI or CLI")
+		log.Printf("⚠️  Server will continue starting with no MCP tools available")
+	} else {
+		log.Printf("✅ Sync completed - Agents: %d processed, %d synced | MCP Servers: %d processed, %d connected",
+			syncResult.AgentsProcessed, syncResult.AgentsSynced, syncResult.MCPServersProcessed, syncResult.MCPServersConnected)
 	}
-	log.Printf("✅ Sync completed - Agents: %d processed, %d synced | MCP Servers: %d processed, %d connected",
-		syncResult.AgentsProcessed, syncResult.AgentsSynced, syncResult.MCPServersProcessed, syncResult.MCPServersConnected)
 
 	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)

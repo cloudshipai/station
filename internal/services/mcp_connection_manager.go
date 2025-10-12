@@ -244,7 +244,7 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 		for key, value := range serverConfig.Env {
 			envSlice = append(envSlice, key+"="+value)
 		}
-		
+
 		mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
 			Name:    "_",
 			Version: "1.0.0",
@@ -403,7 +403,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	// Add timeout for MCP client creation to prevent freezing
 	clientCtx, clientCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer clientCancel()
-	
+
 	// Channel to receive client creation result
 	type clientResult struct {
 		client *mcp.GenkitMCPClient
@@ -445,7 +445,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		} else {
 			err = fmt.Errorf("invalid MCP server config - no URL or Command specified")
 		}
-		
+
 		clientChan <- clientResult{client: client, err: err}
 	}()
 	
@@ -512,6 +512,12 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	return serverTools, mcpClient
 }
 
+// fileExists checks if a file exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // CleanupConnections closes all provided MCP connections
 func (mcm *MCPConnectionManager) CleanupConnections(clients []*mcp.GenkitMCPClient) {
 	if mcm.poolingEnabled {
@@ -519,7 +525,7 @@ func (mcm *MCPConnectionManager) CleanupConnections(clients []*mcp.GenkitMCPClie
 		logging.Debug("Pooling enabled: keeping %d connections alive", len(clients))
 		return
 	}
-	
+
 	logging.Debug("Cleaning up %d active MCP connections", len(clients))
 	for i, client := range clients {
 		if client != nil {

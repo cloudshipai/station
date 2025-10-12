@@ -17,7 +17,7 @@ interface MCPServer {
 }
 
 interface Environment {
-  id: string;
+  id: number;
   name: string;
 }
 
@@ -672,11 +672,13 @@ export const MCPDirectoryPage: React.FC = () => {
         ));
 
         // Find environment name and trigger sync
-        const environment = environments.find(env => env.id === environmentId);
+        // Convert environmentId to number for comparison since API returns numeric IDs
+        const environment = environments.find(env => env.id === parseInt(environmentId));
         if (environment) {
           setSyncEnvironment(environment.name);
           setSyncModalOpen(true);
         } else {
+          console.error('Environment not found for ID:', environmentId);
           alert('Server added successfully!');
         }
       } else {

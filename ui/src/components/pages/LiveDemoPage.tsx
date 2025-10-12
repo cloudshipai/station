@@ -87,9 +87,12 @@ export const LiveDemoPage: React.FC = () => {
     loadDemoBundles();
   }, []);
 
-  const loadDemoBundles = async () => {
+  const loadDemoBundles = async (skipLoadingState = false) => {
     try {
-      setLoading(true);
+      // Only show loading state on initial load, not when called from sync completion
+      if (!skipLoadingState) {
+        setLoading(true);
+      }
       setError(null);
 
       // Call HTTP API to list demo bundles
@@ -105,7 +108,9 @@ export const LiveDemoPage: React.FC = () => {
       console.error('Failed to load demo bundles:', err);
       setError(err.message || 'Failed to load demo bundles');
     } finally {
-      setLoading(false);
+      if (!skipLoadingState) {
+        setLoading(false);
+      }
     }
   };
 
@@ -136,9 +141,12 @@ export const LiveDemoPage: React.FC = () => {
         setInstallSuccess(bundleId);
         setEnvironmentName(autoEnvName); // Store for display in success message
 
-        // Trigger sync after successful installation
-        setSyncEnvironment(autoEnvName);
-        setSyncModalOpen(true);
+        // Wait a bit for environment to be fully created before triggering sync
+        // The backend needs time to create the environment and write files
+        setTimeout(() => {
+          setSyncEnvironment(autoEnvName);
+          setSyncModalOpen(true);
+        }, 500);
       } else {
         setError(data.error || 'Installation failed');
       }
@@ -406,7 +414,8 @@ export const LiveDemoPage: React.FC = () => {
         isOpen={syncModalOpen}
         onClose={() => setSyncModalOpen(false)}
         environment={syncEnvironment}
-        onSyncComplete={() => loadDemoBundles()}
+        onSyncComplete={() => loadDemoBundles(true)}
+        autoStart={true}
       />
     </div>
   );

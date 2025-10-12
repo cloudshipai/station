@@ -21,20 +21,31 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
   const [response, setResponse] = useState<any>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const defaultConfig = `{
+  // Generate default config dynamically based on server name
+  const getDefaultConfig = (name: string) => `{
   "mcpServers": {
-    "filesystem": {
+    "${name || 'server'}": {
+      "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-filesystem@latest",
-        "{{ .ROOT_PATH }}"
-      ],
-      "autoApprove": [],
-      "command": "npx",
-      "disabled": false
+        "@modelcontextprotocol/server-${name || 'example'}@latest"
+      ]
     }
   }
 }`;
+
+  // Auto-update config when server name changes
+  React.useEffect(() => {
+    if (serverName) {
+      // Always update config to match server name
+      const newConfig = getDefaultConfig(serverName);
+      setServerConfig(newConfig);
+      console.log(`[AddServerModal] Auto-populated config for server: ${serverName}`);
+    } else {
+      // Clear config if server name is empty
+      setServerConfig('');
+    }
+  }, [serverName]); // Only depend on serverName
 
   const handleSubmit = async () => {
     if (!serverName.trim() || !serverConfig.trim()) {
@@ -119,7 +130,7 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
                   value={serverConfig}
                   onChange={(e) => setServerConfig(e.target.value)}
                   className="w-full h-80 px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-cyan text-xs"
-                  placeholder={defaultConfig}
+                  placeholder={getDefaultConfig(serverName)}
                 />
               </div>
 

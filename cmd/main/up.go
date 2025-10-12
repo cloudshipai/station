@@ -130,9 +130,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 	} else {
 		// Volume exists, check if it contains config
 		checkConfigCmd := exec.Command("docker", "run", "--rm",
-			"-v", "station-config:/root/.config/station",
+			"-v", "station-config:/home/station/.config/station",
 			imageName,
-			"test", "-f", "/root/.config/station/config.yaml")
+			"test", "-f", "/home/station/.config/station/config.yaml")
 		checkConfigCmd.Stdout = nil
 		checkConfigCmd.Stderr = nil
 		configExists := checkConfigCmd.Run() == nil
@@ -208,8 +208,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 
 		initArgs = append(initArgs,
-			"-v", "station-config:/root/.config/station",
-			"-e", "HOME=/root",
+			"-v", "station-config:/home/station/.config/station",
+			"-e", "HOME=/home/station",
+			"-e", "STATION_CONFIG_DIR=/home/station/.config/station",
 			imageName,
 			"stn", "init",
 			"--provider", provider,
@@ -276,26 +277,15 @@ func runUp(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// Fix volume permissions: chown the volume to match host user
-		// This is necessary because init runs as root but serve runs as user
-		fmt.Printf("🔧 Fixing volume permissions for user %d:%d...\n", uid, gid)
-		chownArgs := []string{
-			"run", "--rm",
-			"-v", "station-config:/root/.config/station",
-			imageName,
-			"sh", "-c", fmt.Sprintf("chown -R %d:%d /root/.config/station", uid, gid),
-		}
-		chownCmd := exec.Command("docker", chownArgs...)
-		if err := chownCmd.Run(); err != nil {
-			log.Printf("Warning: Could not fix volume permissions: %v", err)
-		}
+		// With the new user setup, we don't need to fix permissions manually
+		// The entrypoint handles it automatically
 	}
 	// macOS and Windows: Docker Desktop handles permissions automatically
 
 	// Volume mounts
 	dockerArgs = append(dockerArgs,
 		"-v", fmt.Sprintf("%s:/workspace:rw", absWorkspace),
-		"-v", "station-config:/root/.config/station:rw",  // All Station data in volume (including config.yaml)
+		"-v", "station-config:/home/station/.config/station:rw",  // All Station data in volume (including config.yaml)
 	)
 
 	// Pass the host workspace path so container knows the mapping
@@ -308,8 +298,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 		dockerArgs = append(dockerArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock")
 	}
 
-	// Named volume for Dagger cache (persists across container restarts)
-	dockerArgs = append(dockerArgs, "-v", "station-dagger-cache:/root/.cache")
+	// Named volume for cache (persists across container restarts)
+	dockerArgs = append(dockerArgs, "-v", "station-cache:/home/station/.cache")
 
 	// Port mappings
 	dockerArgs = append(dockerArgs,
@@ -334,6 +324,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 		dockerArgs = append(dockerArgs, "-e", "GENKIT_ENV=dev")
 	}
 
+	// Ensure STATION_CONFIG_DIR is set for proper paths
+	dockerArgs = append(dockerArgs, "-e", "STATION_CONFIG_DIR=/home/station/.config/station")
+
 	// Set working directory
 	dockerArgs = append(dockerArgs, "-w", "/workspace")
 
@@ -342,7 +335,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		environment, _ := cmd.Flags().GetString("environment")
 		dockerArgs = append(dockerArgs, imageName, "genkit", "start", "--non-interactive", "--", "stn", "develop", "--env", environment)
 	} else {
-		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/root/.config/station/station.db")
+		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db")
 	}
 
 	// Run the container
@@ -574,10 +567,10 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 	}
 
 	// Set HOME appropriately for the container
-	*dockerArgs = append(*dockerArgs, "-e", "HOME=/root")
+	*dockerArgs = append(*dockerArgs, "-e", "HOME=/home/station")
 
 	// Set PATH to include common tool locations
-	*dockerArgs = append(*dockerArgs, "-e", "PATH=/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
+	*dockerArgs = append(*dockerArgs, "-e", "PATH=/home/station/.local/bin:/home/station/.cargo/bin:/usr/local/bin:/usr/bin:/bin")
 
 	return nil
 }
