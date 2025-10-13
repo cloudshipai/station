@@ -167,23 +167,32 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
 
         {/* Footer */}
         <div className="p-4 border-t border-tokyo-blue7">
-          <button
-            onClick={handleBundle}
-            disabled={isLoading}
-            className="w-full px-4 py-2 bg-tokyo-orange text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-orange5 transition-colors shadow-tokyo-glow disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-tokyo-bg border-t-transparent"></div>
-                Creating Bundle...
-              </>
-            ) : (
-              <>
-                <Package className="h-4 w-4" />
-                Bundle
-              </>
-            )}
-          </button>
+          {!response?.success ? (
+            <button
+              onClick={handleBundle}
+              disabled={isLoading}
+              className="w-full px-4 py-2 bg-tokyo-orange text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-orange5 transition-colors shadow-tokyo-glow disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-tokyo-bg border-t-transparent"></div>
+                  Creating Bundle...
+                </>
+              ) : (
+                <>
+                  <Package className="h-4 w-4" />
+                  Bundle
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2 bg-tokyo-blue text-tokyo-bg rounded font-mono font-medium hover:bg-opacity-90 transition-colors"
+            >
+              Close
+            </button>
+          )}
         </div>
       </div>
     </div>

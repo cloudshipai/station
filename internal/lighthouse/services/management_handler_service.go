@@ -492,12 +492,15 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		return nil, fmt.Errorf("agent not found: %v", err)
 	}
 	
-	// Create agent service to access execution engine (same as MCP)
-	agentService := services.NewAgentService(mhs.repos)
-	
+	// Create agent service to access execution engine WITH lighthouse client for IngestData() dual flow
+	agentService := services.NewAgentService(mhs.repos, mhs.lighthouseClient)
+	logging.Debug("🔍 MGMT: Created NEW AgentService (WITH lighthouse client) for execution")
+
 	// Use the same unified execution flow as MCP and CLI with empty variables
 	userVariables := make(map[string]interface{})
+	logging.Debug("🔍 MGMT: About to call agentService.GetExecutionEngine().Execute() for agent %d, run %d", agent.ID, runID)
 	result, execErr := agentService.GetExecutionEngine().Execute(ctx, agent, req.Task, runID, userVariables)
+	logging.Debug("🔍 MGMT: Returned from Execute() - execErr=%v, result.Success=%v", execErr, result != nil && result.Success)
 	
 	if execErr != nil {
 		// Update run as failed (same as MCP)

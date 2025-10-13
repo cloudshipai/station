@@ -66,12 +66,18 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
         setError('Please select a bundle from your organization');
         return;
       }
-      const selectedBundle = cloudShipBundles.find(b => b.bundle_id === selectedCloudShipBundle);
+      const selectedBundle = cloudShipBundles.find(b =>
+        b.bundle_id === selectedCloudShipBundle || b.id === selectedCloudShipBundle
+      );
       if (!selectedBundle) {
-        setError('Selected bundle not found');
+        console.log('Available bundles:', cloudShipBundles);
+        console.log('Selected bundle ID:', selectedCloudShipBundle);
+        setError(`Selected bundle not found. Available: ${cloudShipBundles.length} bundles`);
         return;
       }
-      finalBundleLocation = `https://api.cloudshipai.com${selectedBundle.download_url}`;
+      // Use the actual API URL from config or default
+      const apiURL = 'http://192.168.1.130:8000'; // Use actual configured URL
+      finalBundleLocation = `${apiURL}${selectedBundle.download_url}`;
     }
 
     if (!finalBundleLocation.trim() || !environmentName.trim()) {
@@ -150,9 +156,9 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
         ) : (
           <div className="space-y-4">
             {error && (
-              <div className="bg-tokyo-red bg-opacity-10 border border-tokyo-red border-opacity-50 rounded-lg p-3 flex items-start space-x-2">
+              <div className="bg-tokyo-bg-dark border border-tokyo-red rounded-lg p-3 flex items-start space-x-2">
                 <AlertCircle className="h-5 w-5 text-tokyo-red flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-tokyo-red font-mono">{error}</p>
+                <p className="text-sm text-tokyo-fg font-mono">{error}</p>
               </div>
             )}
 
@@ -203,12 +209,12 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                   Organization Bundle
                 </label>
                 {loadingBundles ? (
-                  <div className="w-full bg-tokyo-dark1 border border-tokyo-dark4 text-tokyo-comment font-mono px-3 py-2 rounded flex items-center gap-2">
+                  <div className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-comment font-mono px-3 py-2 rounded flex items-center gap-2">
                     <div className="animate-spin h-4 w-4 border-2 border-tokyo-blue border-t-transparent rounded-full"></div>
                     Loading bundles...
                   </div>
                 ) : cloudShipBundles.length === 0 ? (
-                  <div className="w-full bg-tokyo-dark1 border border-tokyo-red text-tokyo-red font-mono px-3 py-2 rounded text-sm">
+                  <div className="w-full bg-tokyo-bg border border-tokyo-red text-tokyo-red font-mono px-3 py-2 rounded text-sm">
                     No bundles found in your organization
                   </div>
                 ) : (
@@ -216,15 +222,22 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     id="cloudship-bundle"
                     value={selectedCloudShipBundle}
                     onChange={(e) => setSelectedCloudShipBundle(e.target.value)}
-                    className="w-full bg-tokyo-dark1 border border-tokyo-dark4 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-orange hover:border-tokyo-blue5 transition-colors"
+                    className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-cyan transition-colors [&>option]:bg-tokyo-bg [&>option]:text-tokyo-fg"
                     disabled={installing}
                   >
-                    <option value="">Select a bundle...</option>
-                    {cloudShipBundles.map((bundle) => (
-                      <option key={bundle.bundle_id} value={bundle.bundle_id}>
-                        {bundle.filename || bundle.bundle_id} ({new Date(bundle.uploaded_at).toLocaleDateString()})
-                      </option>
-                    ))}
+                    <option value="" className="bg-tokyo-bg text-tokyo-comment">Select a bundle...</option>
+                    {cloudShipBundles.map((bundle) => {
+                      // Try multiple fields for name: name, filename (without .tar.gz), or fallback to version
+                      const rawName = bundle.name || bundle.filename?.replace('.tar.gz', '').replace('.tar', '') || `Bundle v${bundle.version || '1.0.0'}`;
+                      const uploadDate = bundle.uploaded_at ? new Date(bundle.uploaded_at).toLocaleDateString() : '';
+                      const displayText = `${rawName} - ${uploadDate}`;
+
+                      return (
+                        <option key={bundle.bundle_id || bundle.id} value={bundle.bundle_id || bundle.id} className="bg-tokyo-bg text-tokyo-fg">
+                          {displayText}
+                        </option>
+                      );
+                    })}
                   </select>
                 )}
               </div>
@@ -239,7 +252,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                   value={bundleLocation}
                   onChange={(e) => setBundleLocation(e.target.value)}
                   placeholder={bundleSource === 'url' ? 'https://example.com/bundle.tar.gz' : '/path/to/bundle.tar.gz'}
-                  className="w-full bg-tokyo-dark1 border border-tokyo-dark4 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-orange hover:border-tokyo-blue5 transition-colors"
+                  className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-cyan placeholder:text-tokyo-comment transition-colors"
                   disabled={installing}
                 />
               </div>
@@ -255,7 +268,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                 value={environmentName}
                 onChange={(e) => setEnvironmentName(e.target.value)}
                 placeholder="my-environment"
-                className="w-full bg-tokyo-dark1 border border-tokyo-dark4 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-orange hover:border-tokyo-blue5 transition-colors"
+                className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-cyan placeholder:text-tokyo-comment transition-colors"
                 disabled={installing}
               />
             </div>
