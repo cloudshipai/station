@@ -51,6 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 
 ### 2. Start Station
 
+**Option 1: Using environment variables (recommended)**
 ```bash
 # Set your OpenAI API key
 export OPENAI_API_KEY=sk-your-key-here
@@ -59,9 +60,30 @@ export OPENAI_API_KEY=sk-your-key-here
 stn up --provider openai
 ```
 
+**Option 2: Pass API key directly (no env var needed)**
+```bash
+# OpenAI
+stn up --provider openai --api-key sk-your-key-here
+
+# Gemini/Google AI
+stn up --provider gemini --api-key your-google-api-key --model gemini-2.5-flash
+
+# Custom provider (Ollama, Anthropic, etc.)
+stn up --provider custom --base-url http://localhost:11434/v1 --model llama3.2
+```
+
+**Option 3: With additional features**
+```bash
+# Specific workspace directory
+stn up --provider openai --workspace ~/my-project
+
+# Custom model selection
+stn up --provider openai --model gpt-4o
+```
+
 **That's it!** Station is now running with:
 - ✅ Web UI at `http://localhost:8585`
-- ✅ MCP server configured for Claude Code/Cursor
+- ✅ MCP server at `http://localhost:8586/mcp` configured for Claude Code/Cursor
 - ✅ Ready to create and run AI agents
 
 ### 3. Testing Agents Interactively
