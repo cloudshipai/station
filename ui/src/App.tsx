@@ -17,10 +17,9 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, Ship, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket, Copy, BookOpen } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket, Copy, BookOpen } from 'lucide-react';
 import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
-import { CloudShipPage } from './components/pages/CloudShipPage';
 import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
 import Editor from '@monaco-editor/react';
@@ -28,7 +27,6 @@ import Editor from '@monaco-editor/react';
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes, layoutElements } from './utils/layoutUtils';
-import CloudShipStatus from './components/CloudShipStatus';
 import { RunsPage as RunsPageComponent } from './components/runs/RunsPage';
 import { SyncModal } from './components/sync/SyncModal';
 import { AddServerModal } from './components/modals/AddServerModal';
@@ -258,7 +256,6 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/runs')) return 'runs';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
-    if (path.startsWith('/cloudship')) return 'cloudship';
     if (path.startsWith('/live-demo')) return 'live-demo';
     if (path.startsWith('/settings')) return 'settings';
     return 'agents'; // default
@@ -298,7 +295,6 @@ const Layout = ({ children }: any) => {
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
-    { id: 'cloudship', label: 'CloudShip', icon: Ship, path: '/cloudship' },
     { id: 'live-demo', label: 'Live Demo', icon: Play, path: '/live-demo' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
@@ -348,11 +344,6 @@ const Layout = ({ children }: any) => {
             ))}
           </ul>
         </nav>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-tokyo-dark4">
-          <CloudShipStatus />
-        </div>
       </div>
 
       {/* Main Content */}
@@ -2377,7 +2368,6 @@ const SettingsPage = () => {
   const [configObj, setConfigObj] = useState<any>({});
   const [expandedSections, setExpandedSections] = useState({
     ai: true,
-    cloudship: false,
     ports: false,
     other: false,
   });
@@ -2416,11 +2406,6 @@ const SettingsPage = () => {
     } catch (e) {
       console.error('YAML dump error:', e);
     }
-  };
-
-  const updateCloudShipConfig = (updates: any) => {
-    const newCloudShip = { ...configObj.cloudship, ...updates };
-    updateConfig({ cloudship: newCloudShip });
   };
 
   const handleYamlChange = (value: string | undefined) => {
@@ -2592,69 +2577,6 @@ const SettingsPage = () => {
                 )}
               </div>
 
-              {/* CloudShip Integration Section */}
-              <div className="mb-4">
-                <button
-                  onClick={() => toggleSection('cloudship')}
-                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-purple7 rounded font-mono text-sm text-tokyo-purple hover:bg-tokyo-dark2"
-                >
-                  <span>CloudShip Integration</span>
-                  {expandedSections.cloudship ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-                {expandedSections.cloudship && (
-                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-purple7 rounded">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs text-tokyo-comment font-mono">Enabled</label>
-                      <input
-                        type="checkbox"
-                        checked={configObj.cloudship?.enabled || false}
-                        onChange={(e) => updateCloudShipConfig({ enabled: e.target.checked })}
-                        className="bg-tokyo-bg border border-tokyo-purple7"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Registration Key</label>
-                      <input
-                        type="password"
-                        value={configObj.cloudship?.registration_key || ''}
-                        onChange={(e) => updateCloudShipConfig({ registration_key: e.target.value })}
-                        placeholder="Enter CloudShip key"
-                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Endpoint</label>
-                      <input
-                        type="text"
-                        value={configObj.cloudship?.endpoint || ''}
-                        onChange={(e) => updateCloudShipConfig({ endpoint: e.target.value })}
-                        placeholder="lighthouse.cloudshipai.com:50051"
-                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Bundle Registry URL</label>
-                      <input
-                        type="text"
-                        value={configObj.cloudship?.bundle_registry_url || ''}
-                        onChange={(e) => updateCloudShipConfig({ bundle_registry_url: e.target.value })}
-                        placeholder="https://api.cloudshipai.com"
-                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Station ID (auto-generated)</label>
-                      <input
-                        type="text"
-                        value={configObj.cloudship?.station_id || ''}
-                        disabled
-                        className="w-full bg-tokyo-dark2 border border-tokyo-purple7 text-tokyo-comment font-mono text-sm p-2 rounded"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Server Ports Section */}
               <div className="mb-4">
                 <button
@@ -2774,7 +2696,6 @@ function App() {
                   <Route path="/runs" element={<RunsPage />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />
-                  <Route path="/cloudship" element={<CloudShipPage />} />
                   <Route path="/live-demo" element={<LiveDemoPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
