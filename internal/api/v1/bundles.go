@@ -351,8 +351,11 @@ type BundleInstallResponse struct {
 
 // installBundle handles the POST /bundles/install endpoint
 func (h *APIHandlers) installBundle(c *gin.Context) {
+	log.Printf("[BundleInstall] Starting bundle installation request")
+
 	var req BundleInstallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[BundleInstall] ERROR: Failed to parse request: %v", err)
 		c.JSON(http.StatusBadRequest, BundleInstallResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Invalid request: %v", err),
@@ -360,9 +363,12 @@ func (h *APIHandlers) installBundle(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[BundleInstall] Request parsed - Location: %s, Environment: %s, Source: %s", req.BundleLocation, req.EnvironmentName, req.Source)
+
 	// Get home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
+		log.Printf("[BundleInstall] ERROR: Failed to get home directory: %v", err)
 		c.JSON(http.StatusInternalServerError, BundleInstallResponse{
 			Success: false,
 			Error:   "Failed to get home directory",
@@ -370,9 +376,12 @@ func (h *APIHandlers) installBundle(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[BundleInstall] Home directory: %s", homeDir)
+
 	// Create bundles directory if it doesn't exist
 	bundlesDir := filepath.Join(homeDir, ".config", "station", "bundles")
 	if err := os.MkdirAll(bundlesDir, 0755); err != nil {
+		log.Printf("[BundleInstall] ERROR: Failed to create bundles directory: %v", err)
 		c.JSON(http.StatusInternalServerError, BundleInstallResponse{
 			Success: false,
 			Error:   "Failed to create bundles directory",
@@ -380,28 +389,36 @@ func (h *APIHandlers) installBundle(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[BundleInstall] Bundles directory created: %s", bundlesDir)
+
 	// Download or copy the bundle
 	var bundlePath string
 	if req.Source == "url" {
+		log.Printf("[BundleInstall] Downloading bundle from URL: %s", req.BundleLocation)
 		// Download from URL
 		bundlePath, err = downloadBundle(req.BundleLocation, bundlesDir)
 		if err != nil {
+			log.Printf("[BundleInstall] ERROR: Failed to download bundle: %v", err)
 			c.JSON(http.StatusBadRequest, BundleInstallResponse{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to download bundle: %v", err),
 			})
 			return
 		}
+		log.Printf("[BundleInstall] Bundle downloaded to: %s", bundlePath)
 	} else {
+		log.Printf("[BundleInstall] Copying bundle from file path: %s", req.BundleLocation)
 		// Copy from file path
 		bundlePath, err = copyBundle(req.BundleLocation, bundlesDir)
 		if err != nil {
+			log.Printf("[BundleInstall] ERROR: Failed to copy bundle: %v", err)
 			c.JSON(http.StatusBadRequest, BundleInstallResponse{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to copy bundle: %v", err),
 			})
 			return
 		}
+		log.Printf("[BundleInstall] Bundle copied to: %s", bundlePath)
 	}
 
 	// Create new environment
@@ -442,6 +459,8 @@ func (h *APIHandlers) installBundle(c *gin.Context) {
 
 // downloadBundle downloads a bundle from a URL to the bundles directory
 func downloadBundle(url, bundlesDir string) (string, error) {
+	log.Printf("[DownloadBundle] Starting download from URL: %s", url)
+
 	// Extract filename from URL
 	parts := strings.Split(url, "/")
 	filename := parts[len(parts)-1]
@@ -451,14 +470,38 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 		filename = fmt.Sprintf("%s.tar.gz", bundleName)
 	}
 
-	// Download the file
-	resp, err := http.Get(url)
+	log.Printf("[DownloadBundle] Target filename: %s", filename)
+
+	// Create HTTP request to support authentication headers
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		log.Printf("[DownloadBundle] ERROR: Failed to create request: %v", err)
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	// Check if this is a CloudShip URL and add authentication if needed
+	cfg, err := config.Load()
+	if err == nil && cfg.CloudShip.Enabled && cfg.CloudShip.RegistrationKey != "" {
+		// Check if URL matches CloudShip bundle registry
+		if cfg.CloudShip.BundleRegistryURL != "" && strings.Contains(url, cfg.CloudShip.BundleRegistryURL) {
+			log.Printf("[DownloadBundle] Detected CloudShip URL, adding authentication header")
+			req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+		}
+	}
+
+	// Download the file
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[DownloadBundle] ERROR: Download failed: %v", err)
 		return "", fmt.Errorf("failed to download bundle: %v", err)
 	}
 	defer resp.Body.Close()
 
+	log.Printf("[DownloadBundle] Response status: %d", resp.StatusCode)
+
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[DownloadBundle] ERROR: Download failed with status %d", resp.StatusCode)
 		return "", fmt.Errorf("download failed with status %d", resp.StatusCode)
 	}
 
@@ -762,6 +805,16 @@ func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
 			Error:   "Failed to parse CloudShip response: " + err.Error(),
 		})
 		return
+	}
+
+	// Transform relative download_url to absolute URL
+	for i := range cloudShipResp.Bundles {
+		if downloadURL, ok := cloudShipResp.Bundles[i]["download_url"].(string); ok {
+			if strings.HasPrefix(downloadURL, "/") {
+				// Convert relative URL to absolute using configured CloudShip API URL
+				cloudShipResp.Bundles[i]["download_url"] = fmt.Sprintf("%s%s", strings.TrimSuffix(apiURL, "/"), downloadURL)
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, CloudShipBundleListResponse{

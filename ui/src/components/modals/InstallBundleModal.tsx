@@ -5,7 +5,7 @@ import { apiClient } from '../../api/client';
 interface InstallBundleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (environmentName: string) => void;
 }
 
 export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
@@ -75,9 +75,8 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
         setError(`Selected bundle not found. Available: ${cloudShipBundles.length} bundles`);
         return;
       }
-      // Use the actual API URL from config or default
-      const apiURL = 'http://192.168.1.130:8000'; // Use actual configured URL
-      finalBundleLocation = `${apiURL}${selectedBundle.download_url}`;
+      // Use the absolute download_url from backend (backend converts relative to absolute)
+      finalBundleLocation = selectedBundle.download_url;
     }
 
     if (!finalBundleLocation.trim() || !environmentName.trim()) {
@@ -97,7 +96,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
 
       setInstallDetails(response.data);
       setInstallSuccess(true);
-      onSuccess?.();
+      onSuccess?.(environmentName);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to install bundle');
     } finally {

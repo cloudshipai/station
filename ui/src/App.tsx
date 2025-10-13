@@ -1358,6 +1358,7 @@ const EnvironmentsPage = () => {
 
   // Modal states
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncEnvironmentName, setSyncEnvironmentName] = useState('');
   const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
   const [isBundleModalOpen, setIsBundleModalOpen] = useState(false);
   const [isBuildImageModalOpen, setIsBuildImageModalOpen] = useState(false);
@@ -1744,7 +1745,7 @@ const EnvironmentsPage = () => {
       <SyncModal
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
-        environment={selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default'}
+        environment={syncEnvironmentName || (selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default')}
       />
 
       {/* Add Server Modal */}
@@ -1776,11 +1777,16 @@ const EnvironmentsPage = () => {
       <InstallBundleModal
         isOpen={isInstallBundleModalOpen}
         onClose={() => setIsInstallBundleModalOpen(false)}
-        onSuccess={async () => {
+        onSuccess={async (environmentName: string) => {
           // Refresh environments list after successful installation
           const response = await environmentsApi.getAll();
           const envs = response.data.environments || [];
           setEnvironments(envs);
+
+          // Close install modal and trigger sync modal (auto-sync feature)
+          setIsInstallBundleModalOpen(false);
+          setSyncEnvironmentName(environmentName);
+          setIsSyncModalOpen(true);
         }}
       />
 
