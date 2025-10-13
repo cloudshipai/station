@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/common"
 	"station/internal/config"
+	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/internal/services"
 )
 
@@ -168,8 +170,24 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("📦 Installing bundle from: %s\n", bundleSource)
 
-	// Use BundleService to install bundle directly (no server dependency)
-	bundleService := services.NewBundleService()
+	// Load Station config to get database URL
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Initialize database connection
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer database.Close()
+
+	// Initialize repositories
+	repos := repositories.New(database)
+
+	// Use BundleService with repos for full database + filesystem support
+	bundleService := services.NewBundleServiceWithRepos(repos)
 	result, err := bundleService.InstallBundle(bundleSource, environmentName)
 	if err != nil || !result.Success {
 		errorMsg := result.Error
