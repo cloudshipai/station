@@ -41,13 +41,18 @@ services:
     command: >
       sh -c "
         stn init &&
-        stn bundle install https://api.cloudshipai.com/bundles/security-scanner.tar.gz prod &&
-        stn sync prod &&
+        stn bundle install https://api.cloudshipai.com/bundles/security-scanner.tar.gz default &&
+        stn sync default &&
         stn serve
       "
 
 volumes:
   station-data:
+
+# Important Notes:
+# - stn init is REQUIRED on fresh containers (creates database and config)
+# - Use 'default' environment name for production deployments
+# - Only the default environment is synced automatically
 ```
 
 ### Kubernetes Deployment Example
@@ -90,8 +95,8 @@ spec:
         - -c
         - |
           stn init && \
-          stn bundle install https://api.cloudshipai.com/bundles/security-scanner.tar.gz prod && \
-          stn sync prod && \
+          stn bundle install https://api.cloudshipai.com/bundles/security-scanner.tar.gz default && \
+          stn sync default && \
           stn serve
         volumeMounts:
         - name: workspace
@@ -131,22 +136,33 @@ if strings.HasSuffix(file, "variables.yml") || strings.HasSuffix(file, "variable
 ### 2. Bundle Installation with Database Integration
 
 ```bash
-stn bundle install https://api.example.com/bundle.tar.gz production
+stn bundle install https://api.example.com/bundle.tar.gz default
 ```
 
 **What happens:**
 1. Downloads/copies bundle to `~/.config/station/bundles/`
 2. Creates environment entry in database (id, name, description, timestamps)
-3. Extracts agents and MCP configs to `~/.config/station/environments/production/`
-4. Ready for sync with environment variable resolution
+3. Extracts agents and MCP configs to `~/.config/station/environments/default/`
+4. Extracts `manifest.json` with complete bundle metadata
+5. Ready for sync with environment variable resolution
 
-**Code Reference:** `internal/services/bundle_service.go:238-274`
+**Code Reference:** `internal/services/bundle_service.go:283-340`
+
+**Bundle Manifest (manifest.json):**
+Every bundle now includes a manifest with:
+- Agent metadata (names, descriptions, models, tools)
+- MCP server configurations
+- Tool listings with server relationships
+- Required template variables
+- Bundle tags and versioning
 
 ### 3. Environment Variable Resolution During Sync
 
 ```bash
-PROJECT_ROOT=/workspace API_KEY=secret stn sync production
+PROJECT_ROOT=/workspace API_KEY=secret stn sync default
 ```
+
+**Note:** In production deployments, always use the `default` environment as it's the only environment that Station automatically syncs.
 
 **Variable Resolution Order:**
 1. Loads environment's `variables.yml` (if exists)
@@ -632,6 +648,91 @@ docker run -d \
   "
 ```
 
+## Bundle Manifest Format
+
+Every Station bundle includes a `manifest.json` file with complete metadata:
+
+```json
+{
+  "version": "1.0",
+  "bundle": {
+    "name": "finops-demo",
+    "description": "FinOps investigation agents with cost analysis tools",
+    "tags": ["finops", "cost-optimization", "aws"],
+    "created_at": "2025-10-13T01:31:56Z",
+    "station_version": "v0.2.6"
+  },
+  "agents": [
+    {
+      "name": "aws-cost-spike-analyzer",
+      "description": "Investigates AWS cost spikes",
+      "model": "gpt-4o-mini",
+      "max_steps": 10,
+      "tags": ["aws", "cost", "finops"],
+      "tools": ["__get_cost_and_usage", "__get_cost_anomalies"],
+      "mcp_servers": ["aws-cost-explorer"],
+      "app": "finops",
+      "app_type": "investigations"
+    }
+  ],
+  "mcp_servers": [
+    {
+      "name": "aws-cost-explorer",
+      "command": "stn",
+      "args": ["mock", "aws-cost-explorer"],
+      "env": {},
+      "tools": ["__get_cost_and_usage", "__get_cost_anomalies"],
+      "description": "AWS Cost Explorer integration"
+    }
+  ],
+  "tools": [
+    {
+      "name": "__get_cost_and_usage",
+      "server": "aws-cost-explorer",
+      "description": "Tool from aws-cost-explorer server"
+    }
+  ],
+  "agent_mcp_relationships": [
+    {
+      "agent": "aws-cost-spike-analyzer",
+      "mcp_servers": ["aws-cost-explorer"]
+    }
+  ],
+  "required_variables": [
+    {
+      "name": "PROJECT_ROOT",
+      "description": "Required variable: PROJECT_ROOT",
+      "type": "string",
+      "required": true
+    }
+  ]
+}
+```
+
+### Using the Manifest
+
+The manifest enables:
+- **Bundle Catalogs**: Display available bundles with complete metadata
+- **Dependency Checking**: Verify required variables before installation
+- **Tool Discovery**: Know what MCP tools are available
+- **Agent Inspection**: Preview agent capabilities without installation
+- **Automated Deployment**: CI/CD systems can validate requirements
+
+**Accessing the Manifest:**
+```bash
+# Extract manifest from bundle
+tar -xzf bundle.tar.gz manifest.json
+
+# View required variables
+cat manifest.json | jq '.required_variables'
+
+# List all agents
+cat manifest.json | jq '.agents[].name'
+
+# Check MCP servers
+cat manifest.json | jq '.mcp_servers[].name'
+```
+
 ## Summary
 
 Zero-configuration deployment with Station bundles provides:
@@ -641,6 +742,7 @@ Zero-configuration deployment with Station bundles provides:
 ✅ **Simplicity**: No manual configuration files needed
 ✅ **Automation**: Perfect for CI/CD pipelines
 ✅ **Flexibility**: Override any configuration at runtime
+✅ **Transparency**: Complete bundle metadata in manifest.json
 
 For questions or issues, see:
 - [Station Documentation](https://docs.station.dev)
