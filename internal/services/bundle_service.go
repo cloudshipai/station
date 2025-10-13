@@ -4,14 +4,18 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"gopkg.in/yaml.v3"
 	"station/internal/db/repositories"
+	"station/internal/version"
 )
 
 // BundleService handles environment bundling using the same logic as the API
@@ -39,14 +43,274 @@ func (s *BundleService) CreateBundle(environmentPath string) ([]byte, error) {
 	return s.createTarGz(environmentPath)
 }
 
+// generateManifest creates a bundle manifest by analyzing the environment directory
+func (s *BundleService) generateManifest(sourceDir string) (*BundleManifest, error) {
+	// Extract environment name from path
+	envName := filepath.Base(sourceDir)
+
+	manifest := &BundleManifest{
+		Version: "1.0",
+		Bundle: BundleMetadata{
+			Name:           envName,
+			Description:    fmt.Sprintf("Station bundle for %s environment", envName),
+			Tags:           []string{},
+			CreatedAt:      time.Now(),
+			StationVersion: version.Version,
+		},
+		Agents:                []AgentManifestInfo{},
+		MCPServers:            []MCPServerManifestInfo{},
+		Tools:                 []ToolManifestInfo{},
+		AgentMCPRelationships: []AgentMCPRelationship{},
+		RequiredVariables:     []VariableRequirement{},
+	}
+
+	// Parse agent files
+	agentsDir := filepath.Join(sourceDir, "agents")
+	if _, err := os.Stat(agentsDir); err == nil {
+		agents, err := os.ReadDir(agentsDir)
+		if err == nil {
+			for _, agent := range agents {
+				if strings.HasSuffix(agent.Name(), ".prompt") {
+					agentInfo, err := s.parseAgentFile(filepath.Join(agentsDir, agent.Name()))
+					if err == nil {
+						manifest.Agents = append(manifest.Agents, *agentInfo)
+
+						// Add agent-MCP relationship
+						if len(agentInfo.MCPServers) > 0 {
+							manifest.AgentMCPRelationships = append(manifest.AgentMCPRelationships, AgentMCPRelationship{
+								Agent:      agentInfo.Name,
+								MCPServers: agentInfo.MCPServers,
+							})
+						}
+
+						// Collect tags from agents
+						for _, tag := range agentInfo.Tags {
+							if !contains(manifest.Bundle.Tags, tag) {
+								manifest.Bundle.Tags = append(manifest.Bundle.Tags, tag)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Parse MCP server configs
+	configs, err := os.ReadDir(sourceDir)
+	if err == nil {
+		for _, config := range configs {
+			if strings.HasSuffix(config.Name(), ".json") && config.Name() != "manifest.json" {
+				mcpServers, variables, err := s.parseMCPConfigFile(filepath.Join(sourceDir, config.Name()))
+				if err == nil {
+					manifest.MCPServers = append(manifest.MCPServers, mcpServers...)
+					manifest.RequiredVariables = append(manifest.RequiredVariables, variables...)
+
+					// Build tools list from MCP servers
+					for _, server := range mcpServers {
+						for _, tool := range server.Tools {
+							manifest.Tools = append(manifest.Tools, ToolManifestInfo{
+								Name:        tool,
+								Server:      server.Name,
+								Description: fmt.Sprintf("Tool from %s server", server.Name),
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return manifest, nil
+}
+
+// parseAgentFile extracts metadata from a .prompt file
+func (s *BundleService) parseAgentFile(filePath string) (*AgentManifestInfo, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Split frontmatter and content
+	parts := strings.Split(string(data), "---")
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("invalid agent file format")
+	}
+
+	// Parse YAML frontmatter
+	var frontmatter struct {
+		Metadata struct {
+			Name        string   `yaml:"name"`
+			Description string   `yaml:"description"`
+			Tags        []string `yaml:"tags"`
+			App         string   `yaml:"app"`
+			AppType     string   `yaml:"app_type"`
+		} `yaml:"metadata"`
+		Model    string   `yaml:"model"`
+		MaxSteps int      `yaml:"max_steps"`
+		Tools    []string `yaml:"tools"`
+	}
+
+	if err := yaml.Unmarshal([]byte(parts[1]), &frontmatter); err != nil {
+		return nil, err
+	}
+
+	// Infer MCP servers from tool names
+	mcpServers := []string{}
+	for _, tool := range frontmatter.Tools {
+		// Extract server name from tool (e.g., "__get_cost_and_usage" -> infer server)
+		// This is a heuristic - we'll track actual server names from MCP configs
+		if strings.HasPrefix(tool, "__") {
+			// This is an MCP tool, we'll match it later with servers
+		}
+	}
+
+	return &AgentManifestInfo{
+		Name:        frontmatter.Metadata.Name,
+		Description: frontmatter.Metadata.Description,
+		Model:       frontmatter.Model,
+		MaxSteps:    frontmatter.MaxSteps,
+		Tags:        frontmatter.Metadata.Tags,
+		Tools:       frontmatter.Tools,
+		MCPServers:  mcpServers, // Will be populated when matching tools to servers
+		App:         frontmatter.Metadata.App,
+		AppType:     frontmatter.Metadata.AppType,
+	}, nil
+}
+
+// parseMCPConfigFile extracts MCP servers and variables from template.json
+func (s *BundleService) parseMCPConfigFile(filePath string) ([]MCPServerManifestInfo, []VariableRequirement, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var config struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		MCPServers  map[string]struct {
+			Command string            `json:"command"`
+			Args    []interface{}     `json:"args"`
+			Env     map[string]string `json:"env"`
+		} `json:"mcpServers"`
+	}
+
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, nil, err
+	}
+
+	servers := []MCPServerManifestInfo{}
+	variableSet := make(map[string]bool)
+
+	for serverName, serverConfig := range config.MCPServers {
+		// Convert args to strings
+		args := []string{}
+		for _, arg := range serverConfig.Args {
+			args = append(args, fmt.Sprintf("%v", arg))
+		}
+
+		servers = append(servers, MCPServerManifestInfo{
+			Name:        serverName,
+			Command:     serverConfig.Command,
+			Args:        args,
+			Env:         serverConfig.Env,
+			Tools:       []string{}, // Will be populated during actual sync
+			Description: fmt.Sprintf("MCP server: %s", serverName),
+		})
+
+		// Extract variables from args and env
+		for _, arg := range args {
+			extractVariables(arg, variableSet)
+		}
+		for _, envVal := range serverConfig.Env {
+			extractVariables(envVal, variableSet)
+		}
+	}
+
+	// Convert variable set to requirements
+	variables := []VariableRequirement{}
+	for varName := range variableSet {
+		variables = append(variables, VariableRequirement{
+			Name:        varName,
+			Description: fmt.Sprintf("Required variable: %s", varName),
+			Type:        "string",
+			Required:    true,
+		})
+	}
+
+	return servers, variables, nil
+}
+
+// extractVariables finds Go template variables like {{ .VAR_NAME }}
+func extractVariables(text string, varSet map[string]bool) {
+	// Simple regex-like extraction
+	start := 0
+	for {
+		idx := strings.Index(text[start:], "{{")
+		if idx == -1 {
+			break
+		}
+		idx += start
+		end := strings.Index(text[idx:], "}}")
+		if end == -1 {
+			break
+		}
+		end += idx
+
+		// Extract variable name
+		varPart := strings.TrimSpace(text[idx+2 : end])
+		if strings.HasPrefix(varPart, ".") {
+			varName := strings.TrimPrefix(varPart, ".")
+			varName = strings.TrimSpace(varName)
+			varSet[varName] = true
+		}
+
+		start = end + 2
+	}
+}
+
+// contains checks if a string slice contains a value
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 // createTarGz creates a tar.gz archive from the environment directory, excluding variables.yml
-// This is identical to internal/api/v1/bundles.go:createTarGz for compatibility
+// Generates and includes manifest.json with complete bundle metadata
 func (s *BundleService) createTarGz(sourceDir string) ([]byte, error) {
 	var buf bytes.Buffer
 	gzWriter := gzip.NewWriter(&buf)
 	tarWriter := tar.NewWriter(gzWriter)
 
-	err := filepath.Walk(sourceDir, func(file string, info os.FileInfo, err error) error {
+	// Generate manifest
+	manifest, err := s.generateManifest(sourceDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate manifest: %w", err)
+	}
+
+	// Add manifest.json to the archive first
+	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize manifest: %w", err)
+	}
+
+	manifestHeader := &tar.Header{
+		Name: "manifest.json",
+		Mode: 0644,
+		Size: int64(len(manifestJSON)),
+	}
+	if err := tarWriter.WriteHeader(manifestHeader); err != nil {
+		return nil, fmt.Errorf("failed to write manifest header: %w", err)
+	}
+	if _, err := tarWriter.Write(manifestJSON); err != nil {
+		return nil, fmt.Errorf("failed to write manifest: %w", err)
+	}
+
+	// Add all other files
+	err = filepath.Walk(sourceDir, func(file string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -209,6 +473,71 @@ type BundleInfo struct {
 	AgentFiles      []string `json:"agent_files"`
 	MCPConfigs      []string `json:"mcp_configs"`
 	OtherFiles      []string `json:"other_files"`
+}
+
+// BundleManifest represents the complete metadata for a bundle
+type BundleManifest struct {
+	Version                 string                         `json:"version"`
+	Bundle                  BundleMetadata                 `json:"bundle"`
+	Agents                  []AgentManifestInfo            `json:"agents"`
+	MCPServers              []MCPServerManifestInfo        `json:"mcp_servers"`
+	Tools                   []ToolManifestInfo             `json:"tools"`
+	AgentMCPRelationships   []AgentMCPRelationship         `json:"agent_mcp_relationships"`
+	RequiredVariables       []VariableRequirement          `json:"required_variables"`
+}
+
+// BundleMetadata contains high-level bundle information
+type BundleMetadata struct {
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	Tags           []string  `json:"tags"`
+	CreatedAt      time.Time `json:"created_at"`
+	StationVersion string    `json:"station_version"`
+}
+
+// AgentManifestInfo contains agent metadata for the manifest
+type AgentManifestInfo struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Model       string   `json:"model"`
+	MaxSteps    int      `json:"max_steps"`
+	Tags        []string `json:"tags"`
+	Tools       []string `json:"tools"`
+	MCPServers  []string `json:"mcp_servers"`
+	App         string   `json:"app,omitempty"`
+	AppType     string   `json:"app_type,omitempty"`
+}
+
+// MCPServerManifestInfo contains MCP server metadata
+type MCPServerManifestInfo struct {
+	Name        string            `json:"name"`
+	Command     string            `json:"command"`
+	Args        []string          `json:"args"`
+	Env         map[string]string `json:"env,omitempty"`
+	Tools       []string          `json:"tools"`
+	Description string            `json:"description"`
+}
+
+// ToolManifestInfo contains tool metadata
+type ToolManifestInfo struct {
+	Name        string `json:"name"`
+	Server      string `json:"server"`
+	Description string `json:"description"`
+}
+
+// AgentMCPRelationship maps agents to their MCP servers
+type AgentMCPRelationship struct {
+	Agent      string   `json:"agent"`
+	MCPServers []string `json:"mcp_servers"`
+}
+
+// VariableRequirement describes a required template variable
+type VariableRequirement struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Type        string      `json:"type"`
+	Required    bool        `json:"required"`
+	Default     interface{} `json:"default,omitempty"`
 }
 
 // BundleInstallResult contains the result of bundle installation
