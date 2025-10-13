@@ -327,6 +327,9 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 	}
 
 	// Convert ExecutionResponse to AgentExecutionResult
+	logging.Debug("🔍 ENGINE: Converting dotprompt response to AgentExecutionResult for agent %d, run %d", agent.ID, runID)
+	logging.Debug("🔍 ENGINE: Response.App='%s', Response.AppType='%s'", response.App, response.AppType)
+
 	result := &AgentExecutionResult{
 		Success:        response.Success,
 		Response:       response.Response,
@@ -342,6 +345,8 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 		App:            response.App,            // ✅ Pass through app classification for CloudShip data ingestion
 		AppType:        response.AppType,        // ✅ Pass through app_type classification for CloudShip data ingestion
 	}
+
+	logging.Debug("🔍 ENGINE: AgentExecutionResult created - result.App='%s', result.AppType='%s'", result.App, result.AppType)
 
 	// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
 	// Send to CloudShip Lighthouse (dual flow: SendRun always + IngestData conditionally)

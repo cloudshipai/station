@@ -1,5 +1,6 @@
 import React from 'react';
 import { Bot, Server, Library, Play, Layers, Package, Settings, Cloud, Sparkles } from 'lucide-react';
+import CloudShipStatus from '../CloudShipStatus';
 
 interface SidebarItem {
   id: string;
@@ -55,6 +56,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) =
           })}
         </ul>
       </nav>
+
+      {/* CloudShip Status at bottom */}
+      <div className="mt-4 pt-4 border-t border-tokyo-dark4">
+        <CloudShipStatus />
+      </div>
     </div>
   );
 };

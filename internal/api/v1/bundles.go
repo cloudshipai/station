@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -47,8 +48,11 @@ type ShareServerResponse struct {
 
 // createBundle handles the POST /bundles endpoint
 func (h *APIHandlers) createBundle(c *gin.Context) {
+	log.Printf("[Bundle] Starting bundle creation request")
+
 	var req BundleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[Bundle] ERROR: Failed to parse request: %v", err)
 		c.JSON(http.StatusBadRequest, BundleResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Invalid request: %v", err),
@@ -56,9 +60,12 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[Bundle] Request parsed - Environment: %s, Local: %v, Endpoint: %s", req.Environment, req.Local, req.Endpoint)
+
 	// Get home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
+		log.Printf("[Bundle] ERROR: Failed to get home directory: %v", err)
 		c.JSON(http.StatusInternalServerError, BundleResponse{
 			Success: false,
 			Error:   "Failed to get home directory",
@@ -68,9 +75,11 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 
 	// Environment directory path
 	envPath := filepath.Join(homeDir, ".config", "station", "environments", req.Environment)
+	log.Printf("[Bundle] Environment path: %s", envPath)
 	
 	// Check if environment directory exists
 	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		log.Printf("[Bundle] ERROR: Environment directory not found: %s", envPath)
 		c.JSON(http.StatusNotFound, BundleResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Environment '%s' not found", req.Environment),
@@ -78,9 +87,12 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[Bundle] Environment directory exists, creating tar.gz bundle")
+
 	// Create tar.gz bundle
 	tarData, err := createTarGz(envPath)
 	if err != nil {
+		log.Printf("[Bundle] ERROR: Failed to create tar.gz: %v", err)
 		c.JSON(http.StatusInternalServerError, BundleResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Failed to create bundle: %v", err),
@@ -88,10 +100,14 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[Bundle] Bundle created successfully, size: %d bytes", len(tarData))
+
 	if req.Local {
+		log.Printf("[Bundle] Saving bundle locally")
 		// Save locally
 		bundlesDir := filepath.Join(homeDir, ".config", "station", "bundles")
 		if err := os.MkdirAll(bundlesDir, 0755); err != nil {
+			log.Printf("[Bundle] ERROR: Failed to create bundles directory: %v", err)
 			c.JSON(http.StatusInternalServerError, BundleResponse{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to create bundles directory: %v", err),
@@ -101,6 +117,7 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 
 		localPath := filepath.Join(bundlesDir, fmt.Sprintf("%s.tar.gz", req.Environment))
 		if err := os.WriteFile(localPath, tarData, 0644); err != nil {
+			log.Printf("[Bundle] ERROR: Failed to write bundle file: %v", err)
 			c.JSON(http.StatusInternalServerError, BundleResponse{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to save bundle locally: %v", err),
@@ -108,15 +125,18 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			return
 		}
 
+		log.Printf("[Bundle] Bundle saved successfully to: %s", localPath)
 		c.JSON(http.StatusOK, BundleResponse{
 			Success:   true,
 			Message:   "Bundle created successfully",
 			LocalPath: localPath,
 		})
 	} else {
+		log.Printf("[Bundle] Uploading bundle to CloudShip")
 		// Upload to CloudShip
 		cfg, err := config.Load()
 		if err != nil {
+			log.Printf("[Bundle] ERROR: Failed to load config: %v", err)
 			c.JSON(http.StatusInternalServerError, BundleResponse{
 				Success: false,
 				Error:   "Failed to load Station config: " + err.Error(),
@@ -124,8 +144,11 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			return
 		}
 
+		log.Printf("[Bundle] Config loaded - CloudShip enabled: %v, Has key: %v", cfg.CloudShip.Enabled, cfg.CloudShip.RegistrationKey != "")
+
 		// Check if CloudShip is configured
 		if !cfg.CloudShip.Enabled || cfg.CloudShip.RegistrationKey == "" {
+			log.Printf("[Bundle] ERROR: CloudShip not configured properly")
 			c.JSON(http.StatusBadRequest, BundleResponse{
 				Success: false,
 				Error:   "CloudShip is not configured. Please enable CloudShip and set registration key in config",
@@ -139,9 +162,13 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			apiURL = "https://api.cloudshipai.com"
 		}
 
+		log.Printf("[Bundle] CloudShip API URL: %s", apiURL)
+		log.Printf("[Bundle] Registration key length: %d", len(cfg.CloudShip.RegistrationKey))
+
 		// Upload to CloudShip
 		cloudShipResp, err := uploadToCloudShip(tarData, fmt.Sprintf("%s.tar.gz", req.Environment), apiURL, cfg.CloudShip.RegistrationKey)
 		if err != nil {
+			log.Printf("[Bundle] ERROR: CloudShip upload failed: %v", err)
 			c.JSON(http.StatusInternalServerError, BundleResponse{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to upload to CloudShip: %v", err),
@@ -149,6 +176,7 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			return
 		}
 
+		log.Printf("[Bundle] Upload successful! Response: %+v", cloudShipResp)
 		c.JSON(http.StatusOK, BundleResponse{
 			Success:       true,
 			Message:       fmt.Sprintf("Bundle uploaded to CloudShip (Org: %s)", cloudShipResp["organization"]),
@@ -224,58 +252,80 @@ func createTarGz(sourceDir string) ([]byte, error) {
 
 // uploadToCloudShip uploads the bundle to CloudShip's authenticated API
 func uploadToCloudShip(tarData []byte, filename, apiURL, registrationKey string) (map[string]interface{}, error) {
+	log.Printf("[CloudShip] Starting upload - Filename: %s, Size: %d bytes", filename, len(tarData))
+
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
 	// Create the file field
 	part, err := writer.CreateFormFile("bundle", filename)
 	if err != nil {
+		log.Printf("[CloudShip] ERROR: Failed to create form file: %v", err)
 		return nil, err
 	}
 
 	// Write the tar data
 	if _, err := part.Write(tarData); err != nil {
+		log.Printf("[CloudShip] ERROR: Failed to write tar data: %v", err)
 		return nil, err
 	}
 
 	// Close the writer to finalize the multipart data
 	if err := writer.Close(); err != nil {
+		log.Printf("[CloudShip] ERROR: Failed to close multipart writer: %v", err)
 		return nil, err
 	}
 
 	// Create the request
 	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload", strings.TrimSuffix(apiURL, "/"))
+	log.Printf("[CloudShip] Upload URL: %s", uploadURL)
+	log.Printf("[CloudShip] Content-Type: %s", writer.FormDataContentType())
+	log.Printf("[CloudShip] Request size: %d bytes", buf.Len())
+
 	req, err := http.NewRequest("POST", uploadURL, &buf)
 	if err != nil {
+		log.Printf("[CloudShip] ERROR: Failed to create HTTP request: %v", err)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("X-Registration-Key", registrationKey)
 
+	log.Printf("[CloudShip] Sending request to CloudShip...")
+
 	// Send the request
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("[CloudShip] ERROR: HTTP request failed: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	log.Printf("[CloudShip] Response received - Status Code: %d", resp.StatusCode)
+
 	// Read response
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("[CloudShip] ERROR: Failed to read response body: %v", err)
 		return nil, err
 	}
 
-	if resp.StatusCode != http.StatusCreated {
+	log.Printf("[CloudShip] Response body: %s", string(respBody))
+
+	// CloudShipAI returns 200 OK on successful upload (not 201 Created)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		log.Printf("[CloudShip] ERROR: Upload failed with HTTP %d: %s", resp.StatusCode, string(respBody))
 		return nil, fmt.Errorf("CloudShip upload failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	// Parse response
 	var cloudShipResp map[string]interface{}
 	if err := json.Unmarshal(respBody, &cloudShipResp); err != nil {
+		log.Printf("[CloudShip] ERROR: Failed to parse JSON response: %v", err)
 		return nil, fmt.Errorf("failed to parse CloudShip response: %v", err)
 	}
 
+	log.Printf("[CloudShip] Upload successful! Parsed response: %+v", cloudShipResp)
 	return cloudShipResp, nil
 }
 
