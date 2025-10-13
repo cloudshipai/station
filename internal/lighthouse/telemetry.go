@@ -12,7 +12,9 @@ import (
 
 // SendRun sends agent run data to CloudShip (async, buffered)
 func (lc *LighthouseClient) SendRun(runData *types.AgentRun, environment string, labels map[string]string) {
-	if !lc.IsRegistered() {
+	// In server mode, station is registered via management channel, not traditional registration
+	// Allow sending data if connected, even if IsRegistered() returns false
+	if !lc.IsRegistered() && lc.mode != ModeServe {
 		return // Graceful degradation - no cloud integration
 	}
 
@@ -159,7 +161,9 @@ func (lc *LighthouseClient) getOrganizationID() (string, error) {
 
 // IngestData sends structured data to CloudShip Data Ingestion service (sync)
 func (lc *LighthouseClient) IngestData(app, appType string, data map[string]interface{}, metadata map[string]string, correlationID string) error {
-	if !lc.IsRegistered() {
+	// In server mode, station is registered via management channel, not traditional registration
+	// Allow sending data if connected, even if IsRegistered() returns false
+	if !lc.IsRegistered() && lc.mode != ModeServe {
 		logging.Debug("CloudShip not registered, skipping structured data ingestion")
 		return nil // Graceful degradation - no cloud integration
 	}

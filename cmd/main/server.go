@@ -199,6 +199,11 @@ func runMainServer() error {
 	log.Printf("🤖 Serving agents from environment: %s", environmentName)
 
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
+	// Set lighthouse client for IngestData dual flow
+	if lighthouseClient != nil {
+		mcpServer.SetLighthouseClient(lighthouseClient)
+		log.Printf("✅ Lighthouse client configured for MCP server IngestData dual flow")
+	}
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServer(repos, agentSvc, localMode, environmentName)
 	apiServer := api.New(cfg, database, localMode, nil)
 
