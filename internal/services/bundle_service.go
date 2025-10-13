@@ -833,3 +833,49 @@ func (s *BundleService) generateBundleNameFromURL(url string) string {
 	}
 	return "bundle"
 }
+
+// ExtractManifestFromTarGz extracts manifest.json from a tar.gz bundle
+func (s *BundleService) ExtractManifestFromTarGz(bundleData []byte) (*BundleManifest, error) {
+	// Create a reader from the bundle data
+	reader := bytes.NewReader(bundleData)
+
+	// Create gzip reader
+	gzipReader, err := gzip.NewReader(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gzipReader.Close()
+
+	// Create tar reader
+	tarReader := tar.NewReader(gzipReader)
+
+	// Find and extract manifest.json
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to read tar entry: %w", err)
+		}
+
+		// Check if this is the manifest file
+		if header.Name == "manifest.json" || header.Name == "./manifest.json" {
+			// Read the manifest content
+			manifestData, err := io.ReadAll(tarReader)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read manifest: %w", err)
+			}
+
+			// Parse the manifest
+			var manifest BundleManifest
+			if err := json.Unmarshal(manifestData, &manifest); err != nil {
+				return nil, fmt.Errorf("failed to parse manifest: %w", err)
+			}
+
+			return &manifest, nil
+		}
+	}
+
+	return nil, fmt.Errorf("manifest.json not found in bundle")
+}

@@ -2,12 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { Play, Package, Download, CheckCircle, AlertCircle, Loader, Sparkles, Lock, BarChart3, Server, Database, Brain, Shield, GitBranch } from 'lucide-react';
 import { SyncModal } from '../sync/SyncModal';
 
+interface AgentSummary {
+  name: string;
+  description: string;
+  tools_count: number;
+}
+
+interface MCPServerSummary {
+  name: string;
+  command: string;
+}
+
 interface DemoBundle {
   id: string;
   name: string;
   description: string;
   category: string;
   size: number;
+  agents_count: number;
+  mcp_servers_count: number;
+  tags: string[];
+  agents: AgentSummary[];
+  mcp_servers: MCPServerSummary[];
+  required_vars: string[];
 }
 
 type AppCategory = 'finops' | 'security' | 'reliability' | 'deployments' | 'data-platform' | 'mlops';
@@ -281,9 +298,41 @@ export const LiveDemoPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <p className="text-tokyo-fg text-sm mb-6 leading-relaxed">
+                    <p className="text-tokyo-fg text-sm mb-4 leading-relaxed">
                       {bundle.description}
                     </p>
+
+                    {/* Bundle Metadata */}
+                    <div className="grid grid-cols-2 gap-3 mb-4 pb-4 border-b border-tokyo-dark3">
+                      <div className="bg-tokyo-bg rounded p-2">
+                        <div className="text-xs text-tokyo-comment font-mono mb-1">Agents</div>
+                        <div className="text-lg font-bold text-tokyo-green font-mono">{bundle.agents_count || 0}</div>
+                      </div>
+                      <div className="bg-tokyo-bg rounded p-2">
+                        <div className="text-xs text-tokyo-comment font-mono mb-1">MCP Servers</div>
+                        <div className="text-lg font-bold text-tokyo-blue font-mono">{bundle.mcp_servers_count || 0}</div>
+                      </div>
+                    </div>
+
+                    {/* Agent List */}
+                    {bundle.agents && bundle.agents.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-xs text-tokyo-comment font-mono mb-2">Included Agents:</div>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {bundle.agents.slice(0, 3).map((agent, idx) => (
+                            <div key={idx} className="text-xs text-tokyo-fg font-mono flex items-start gap-2">
+                              <span className="text-tokyo-cyan">•</span>
+                              <span className="flex-1">{agent.name} ({agent.tools_count} tools)</span>
+                            </div>
+                          ))}
+                          {bundle.agents.length > 3 && (
+                            <div className="text-xs text-tokyo-comment font-mono italic">
+                              +{bundle.agents.length - 3} more agents...
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-xs text-tokyo-comment font-mono">
