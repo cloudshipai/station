@@ -11,11 +11,30 @@ import (
 
 // DemoBundleInfo represents information about a demo bundle for the API
 type DemoBundleInfo struct {
-	ID          string `json:"id"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Category     string   `json:"category"`
+	Size         int      `json:"size"`
+	AgentsCount  int      `json:"agents_count"`
+	MCPServersCount int   `json:"mcp_servers_count"`
+	Tags         []string `json:"tags"`
+	Agents       []AgentSummary `json:"agents"`
+	MCPServers   []MCPServerSummary `json:"mcp_servers"`
+	RequiredVars []string `json:"required_vars"`
+}
+
+// AgentSummary provides basic agent information for bundle cards
+type AgentSummary struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Category    string `json:"category"`
-	Size        int    `json:"size"`
+	ToolsCount  int    `json:"tools_count"`
+}
+
+// MCPServerSummary provides basic MCP server information for bundle cards
+type MCPServerSummary struct {
+	Name    string `json:"name"`
+	Command string `json:"command"`
 }
 
 // DemoBundleListResponse represents the list of demo bundles
@@ -46,15 +65,53 @@ type DemoBundleInstallResponse struct {
 func (h *APIHandlers) listDemoBundles(c *gin.Context) {
 	bundles := embedded.GetDemoBundles()
 	var bundleInfos []DemoBundleInfo
+	bundleService := services.NewBundleService()
 
 	for _, bundle := range bundles {
-		bundleInfos = append(bundleInfos, DemoBundleInfo{
+		bundleInfo := DemoBundleInfo{
 			ID:          bundle.ID,
 			Name:        bundle.Name,
 			Description: bundle.Description,
 			Category:    bundle.Category,
 			Size:        len(bundle.Data),
-		})
+			Agents:      []AgentSummary{},
+			MCPServers:  []MCPServerSummary{},
+			Tags:        []string{},
+			RequiredVars: []string{},
+		}
+
+		// Extract manifest from bundle
+		manifest, err := bundleService.ExtractManifestFromTarGz(bundle.Data)
+		if err == nil && manifest != nil {
+			// Populate metadata from manifest
+			bundleInfo.AgentsCount = len(manifest.Agents)
+			bundleInfo.MCPServersCount = len(manifest.MCPServers)
+			bundleInfo.Tags = manifest.Bundle.Tags
+
+			// Add agent summaries
+			for _, agent := range manifest.Agents {
+				bundleInfo.Agents = append(bundleInfo.Agents, AgentSummary{
+					Name:        agent.Name,
+					Description: agent.Description,
+					ToolsCount:  len(agent.Tools),
+				})
+			}
+
+			// Add MCP server summaries
+			for _, server := range manifest.MCPServers {
+				bundleInfo.MCPServers = append(bundleInfo.MCPServers, MCPServerSummary{
+					Name:    server.Name,
+					Command: server.Command,
+				})
+			}
+
+			// Add required variables
+			for _, varReq := range manifest.RequiredVariables {
+				bundleInfo.RequiredVars = append(bundleInfo.RequiredVars, varReq.Name)
+			}
+		}
+
+		bundleInfos = append(bundleInfos, bundleInfo)
 	}
 
 	c.JSON(http.StatusOK, DemoBundleListResponse{
