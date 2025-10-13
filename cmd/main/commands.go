@@ -451,8 +451,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	var providerConfig *ProviderConfig
 	provider, _ := cmd.Flags().GetString("provider")
 	model, _ := cmd.Flags().GetString("model")
+	apiKey, _ := cmd.Flags().GetString("api-key")
 	baseURL, _ := cmd.Flags().GetString("base-url")
 	useDefaults, _ := cmd.Flags().GetBool("yes")
+
+	// If --api-key flag is provided, set it as environment variable for this session
+	if apiKey != "" {
+		os.Setenv("STN_AI_API_KEY", apiKey)
+	}
 
 	if !configExists && !useDefaults && provider == "" {
 		// Interactive provider setup
