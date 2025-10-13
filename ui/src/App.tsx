@@ -2374,6 +2374,7 @@ const SettingsPage = () => {
   const [configObj, setConfigObj] = useState<any>({});
   const [expandedSections, setExpandedSections] = useState({
     ai: true,
+    cloudship: false,
     ports: false,
     other: false,
   });
@@ -2412,6 +2413,11 @@ const SettingsPage = () => {
     } catch (e) {
       console.error('YAML dump error:', e);
     }
+  };
+
+  const updateCloudShipConfig = (updates: any) => {
+    const newCloudShip = { ...configObj.cloudship, ...updates };
+    updateConfig({ cloudship: newCloudShip });
   };
 
   const handleYamlChange = (value: string | undefined) => {
@@ -2577,6 +2583,69 @@ const SettingsPage = () => {
                         onChange={(e) => updateConfig({ ai_base_url: e.target.value })}
                         placeholder="https://api.openai.com/v1"
                         className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* CloudShip Integration Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('cloudship')}
+                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-purple7 rounded font-mono text-sm text-tokyo-purple hover:bg-tokyo-dark2"
+                >
+                  <span>CloudShip Integration</span>
+                  {expandedSections.cloudship ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.cloudship && (
+                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-purple7 rounded">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-tokyo-comment font-mono">Enabled</label>
+                      <input
+                        type="checkbox"
+                        checked={configObj.cloudship?.enabled || false}
+                        onChange={(e) => updateCloudShipConfig({ enabled: e.target.checked })}
+                        className="bg-tokyo-bg border border-tokyo-purple7"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Registration Key</label>
+                      <input
+                        type="password"
+                        value={configObj.cloudship?.registration_key || ''}
+                        onChange={(e) => updateCloudShipConfig({ registration_key: e.target.value })}
+                        placeholder="Enter CloudShip key"
+                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Endpoint</label>
+                      <input
+                        type="text"
+                        value={configObj.cloudship?.endpoint || ''}
+                        onChange={(e) => updateCloudShipConfig({ endpoint: e.target.value })}
+                        placeholder="lighthouse.cloudshipai.com:50051"
+                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Bundle Registry URL</label>
+                      <input
+                        type="text"
+                        value={configObj.cloudship?.bundle_registry_url || ''}
+                        onChange={(e) => updateCloudShipConfig({ bundle_registry_url: e.target.value })}
+                        placeholder="https://api.cloudshipai.com"
+                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Station ID (auto-generated)</label>
+                      <input
+                        type="text"
+                        value={configObj.cloudship?.station_id || ''}
+                        disabled
+                        className="w-full bg-tokyo-dark2 border border-tokyo-purple7 text-tokyo-comment font-mono text-sm p-2 rounded"
                       />
                     </div>
                   </div>
