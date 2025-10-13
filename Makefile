@@ -43,9 +43,12 @@ local-install-ui: stop-station build-with-ui
 
 # Rebuild everything: UI, binary, and Docker image
 rebuild-all: local-install-ui
+	@echo "🔨 Cross-compiling Linux binary for Docker..."
+	@mkdir -p dist/station_linux_arm64_v1 dist/station_linux_amd64_v1
+	@GOOS=linux GOARCH=arm64 go build -ldflags "-X 'station/internal/version.Version=v0.1.0' -X 'station/internal/version.BuildTime=$(shell date -u +'%Y-%m-%d %H:%M:%S UTC')'" -tags ui -o dist/station_linux_arm64_v1/stn ./cmd/main
+	@GOOS=linux GOARCH=amd64 go build -ldflags "-X 'station/internal/version.Version=v0.1.0' -X 'station/internal/version.BuildTime=$(shell date -u +'%Y-%m-%d %H:%M:%S UTC')'" -tags ui -o dist/station_linux_amd64_v1/stn ./cmd/main
+	@echo "✅ Linux binaries built"
 	@echo "🐳 Building Docker image..."
-	@mkdir -p dist/station_linux_amd64_v1
-	@cp ~/.local/bin/stn dist/station_linux_amd64_v1/
 	@docker build -t station-server:latest -f Dockerfile .
 	@echo "✅ Complete rebuild finished!"
 	@echo "📦 Local binary: ~/.local/bin/stn"
