@@ -15,6 +15,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// dockerCommand creates an exec.Command for docker with proper environment inheritance
+func dockerCommand(args ...string) *exec.Cmd {
+	cmd := exec.Command("docker", args...)
+	cmd.Env = os.Environ() // Inherit environment to preserve Docker context
+	return cmd
+}
+
 var upCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Start Station server in a Docker container",
@@ -68,6 +75,14 @@ func init() {
 }
 
 func runUp(cmd *cobra.Command, args []string) error {
+	// Check if Docker daemon is running
+	checkDockerCmd := dockerCommand("info")
+	checkDockerCmd.Stdout = nil
+	checkDockerCmd.Stderr = nil
+	if err := checkDockerCmd.Run(); err != nil {
+		return fmt.Errorf("Docker daemon is not running. Please start Docker Desktop and try again")
+	}
+
 	// Check if container is already running
 	if containerID := getRunningStationContainer(); containerID != "" {
 		fmt.Printf("✅ Station server already running (container: %s)\n", containerID[:12])
@@ -103,17 +118,11 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
 
-	// Get config path early for initialization
-	configPath := filepath.Join(os.Getenv("HOME"), ".config", "station")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return fmt.Errorf("Station config not found at %s. Run 'stn init' first", configPath)
-	}
-
 	// Image name for all operations
 	imageName := "station-server:latest"
 
 	// Check if station-config volume exists
-	checkVolumeCmd := exec.Command("docker", "volume", "inspect", "station-config")
+	checkVolumeCmd := dockerCommand("volume", "inspect", "station-config")
 	checkVolumeCmd.Stdout = nil
 	checkVolumeCmd.Stderr = nil
 	volumeExists := checkVolumeCmd.Run() == nil
@@ -121,7 +130,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	needsInit := false
 	if !volumeExists {
 		fmt.Printf("📦 Creating Station data volume (first run)...\n")
-		createVolumeCmd := exec.Command("docker", "volume", "create", "station-config")
+		createVolumeCmd := dockerCommand("volume", "create", "station-config")
 		if err := createVolumeCmd.Run(); err != nil {
 			return fmt.Errorf("failed to create station-config volume: %w", err)
 		}
@@ -129,7 +138,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		needsInit = true
 	} else {
 		// Volume exists, check if it contains config
-		checkConfigCmd := exec.Command("docker", "run", "--rm",
+		checkConfigCmd := dockerCommand("run", "--rm",
 			"-v", "station-config:/home/station/.config/station",
 			imageName,
 			"test", "-f", "/home/station/.config/station/config.yaml")
@@ -180,12 +189,6 @@ func runUp(cmd *cobra.Command, args []string) error {
 		// Default to openai if not specified
 		if provider == "" {
 			provider = "openai"
-			// Try to read from host config if it exists
-			if cfg, err := readConfigFile(configPath + "/config.yaml"); err == nil {
-				if p, ok := cfg["ai_provider"].(string); ok {
-					provider = p
-				}
-			}
 		}
 
 		// Run init in a temporary container
@@ -230,7 +233,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 			initArgs = append(initArgs, "--yes")
 		}
 
-		initCmd := exec.Command("docker", initArgs...)
+		initCmd := dockerCommand(initArgs...)
 		initCmd.Stdout = os.Stdout
 		initCmd.Stderr = os.Stderr
 
@@ -303,7 +306,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	// Port mappings
 	dockerArgs = append(dockerArgs,
-		"-p", "3000:3000",  // MCP
+		"-p", "8586:8586",  // MCP
 		"-p", "3030:3030",  // Dynamic Agent MCP
 		"-p", "3002:3002",  // MCP Agents
 		"-p", "8585:8585",  // UI/API
@@ -335,18 +338,18 @@ func runUp(cmd *cobra.Command, args []string) error {
 		environment, _ := cmd.Flags().GetString("environment")
 		dockerArgs = append(dockerArgs, imageName, "genkit", "start", "--non-interactive", "--", "stn", "develop", "--env", environment)
 	} else {
-		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db")
+		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586")
 	}
 
 	// Run the container
 	fmt.Printf("🐳 Starting container...\n")
-	dockerCmd := exec.Command("docker", dockerArgs...)
+	dockerCmd := dockerCommand(dockerArgs...)
 	dockerCmd.Stdout = os.Stdout
 	dockerCmd.Stderr = os.Stderr
 
 	if err := dockerCmd.Run(); err != nil {
 		// Clean up failed container to avoid "name already in use" errors
-		cleanupCmd := exec.Command("docker", "rm", "-f", "station-server")
+		cleanupCmd := dockerCommand("rm", "-f", "station-server")
 		_ = cleanupCmd.Run() // Ignore errors, container might not exist
 		return fmt.Errorf("failed to start container: %w", err)
 	}
@@ -356,13 +359,13 @@ func runUp(cmd *cobra.Command, args []string) error {
 		log.Printf("Warning: Failed to update .mcp.json: %v", err)
 		fmt.Printf("⚠️  Please manually add Station to your .mcp.json:\n")
 		fmt.Printf(`  "station": {
-    "url": "http://localhost:3000/sse",
-    "transport": "sse"
+    "url": "http://localhost:8586/mcp",
+    "transport": "http"
   }`+"\n")
 	}
 
 	fmt.Printf("\n✅ Station server started successfully!\n")
-	fmt.Printf("🔗 MCP: http://localhost:3000/mcp\n")
+	fmt.Printf("🔗 MCP: http://localhost:8586/mcp\n")
 	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3030/mcp\n")
 	fmt.Printf("🔗 UI:  http://localhost:8585\n")
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
@@ -387,7 +390,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 }
 
 func getRunningStationContainer() string {
-	cmd := exec.Command("docker", "ps", "-q", "-f", "name=station-server")
+	cmd := dockerCommand("ps", "-q", "-f", "name=station-server")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -410,7 +413,7 @@ func readConfigFile(path string) (map[string]interface{}, error) {
 }
 
 func dockerImageExists(imageName string) bool {
-	cmd := exec.Command("docker", "images", "-q", imageName)
+	cmd := dockerCommand("images", "-q", imageName)
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -425,14 +428,14 @@ func buildRuntimeContainer() error {
 
 	// Try pulling pre-built image first (production/normal use)
 	fmt.Printf("📥 Pulling Station container from registry...\n")
-	pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station:latest")
+	pullCmd := dockerCommand("pull", "ghcr.io/cloudshipai/station:latest")
 	pullCmd.Stdout = os.Stdout
 	pullCmd.Stderr = os.Stderr
 
 	pullErr := pullCmd.Run()
 	if pullErr == nil {
 		// Successfully pulled, tag for local use
-		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
+		tagCmd := dockerCommand("tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
 		if tagErr := tagCmd.Run(); tagErr != nil {
 			return fmt.Errorf("failed to tag pulled image: %w", tagErr)
 		}
@@ -446,7 +449,7 @@ func buildRuntimeContainer() error {
 	}
 
 	fmt.Printf("⚠️  Pull failed, building from Dockerfile (development mode)...\n")
-	buildCmd := exec.Command("docker", "build",
+	buildCmd := dockerCommand("build",
 		"--build-arg", "INSTALL_SHIP=true",
 		"-t", "station-server:latest",
 		".")
@@ -603,7 +606,7 @@ func updateMCPConfig(workspace string) error {
 	// Add or update Station server configuration (HTTP transport)
 	mcpServers["station"] = map[string]interface{}{
 		"type": "http",
-		"url":  "http://localhost:3000/mcp",
+		"url":  "http://localhost:8586/mcp",
 	}
 
 	// Write back the updated config
