@@ -44,9 +44,15 @@ Examples:
   stn up                                    # Start with current directory as workspace
   stn up --workspace ~/code                 # Use specific directory as workspace
 
-  # First-time setup with configuration
-  stn up --provider openai --ship           # Init with OpenAI and ship CLI
+  # First-time setup with configuration (uses environment variables)
+  stn up --provider openai --ship           # Init with OpenAI (requires OPENAI_API_KEY env var)
   stn up --provider gemini --model gemini-2.0-flash-exp --yes
+
+  # Pass API key via flag (no environment variable needed)
+  stn up --provider openai --api-key sk-xxx... --yes
+  stn up --provider gemini --api-key xxx... --model gemini-2.0-flash-exp --yes
+
+  # Custom provider (Ollama, Anthropic, etc.)
   stn up --provider custom --base-url http://localhost:11434/v1 --model llama2
 
   # Advanced options
@@ -67,6 +73,7 @@ func init() {
 	// Init flags for first-time setup
 	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, custom)")
 	upCmd.Flags().String("model", "", "AI model to use (e.g., gpt-4o-mini, gemini-2.0-flash-exp)")
+	upCmd.Flags().String("api-key", "", "API key for AI provider (alternative to environment variables)")
 	upCmd.Flags().String("base-url", "", "Custom base URL for OpenAI-compatible endpoints")
 	upCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
 	upCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
@@ -182,6 +189,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		// Get init parameters from flags or defaults
 		provider, _ := cmd.Flags().GetString("provider")
 		model, _ := cmd.Flags().GetString("model")
+		apiKey, _ := cmd.Flags().GetString("api-key")
 		baseURL, _ := cmd.Flags().GetString("base-url")
 		ship, _ := cmd.Flags().GetBool("ship")
 		useDefaults, _ := cmd.Flags().GetBool("yes")
@@ -197,16 +205,25 @@ func runUp(cmd *cobra.Command, args []string) error {
 			"run", "--rm",
 		}
 
-		// Pass through AI provider env vars for init
-		aiEnvVars := []string{
-			"OPENAI_API_KEY",
-			"ANTHROPIC_API_KEY",
-			"GOOGLE_API_KEY",
-			"GEMINI_API_KEY",
+		// If --api-key flag is provided, use it as STN_AI_API_KEY
+		if apiKey != "" {
+			initArgs = append(initArgs, "-e", fmt.Sprintf("STN_AI_API_KEY=%s", apiKey))
 		}
-		for _, envVar := range aiEnvVars {
-			if value := os.Getenv(envVar); value != "" {
-				initArgs = append(initArgs, "-e", fmt.Sprintf("%s=%s", envVar, value))
+
+		// Pass through AI provider env vars for init (if not already set via flag)
+		if apiKey == "" {
+			aiEnvVars := []string{
+				"OPENAI_API_KEY",
+				"ANTHROPIC_API_KEY",
+				"GOOGLE_API_KEY",
+				"GEMINI_API_KEY",
+				"STN_AI_API_KEY",
+				"AI_API_KEY",
+			}
+			for _, envVar := range aiEnvVars {
+				if value := os.Getenv(envVar); value != "" {
+					initArgs = append(initArgs, "-e", fmt.Sprintf("%s=%s", envVar, value))
+				}
 			}
 		}
 
@@ -513,7 +530,14 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 	// Note: config.yaml is now in Docker volume, not mounted from host
 	// All configuration is managed through the volume
 
-	// Essential AI provider keys to pass through
+	// Check if --api-key flag was provided
+	apiKey, _ := cmd.Flags().GetString("api-key")
+	if apiKey != "" {
+		// If --api-key flag is set, use it as STN_AI_API_KEY
+		*dockerArgs = append(*dockerArgs, "-e", fmt.Sprintf("STN_AI_API_KEY=%s", apiKey))
+	}
+
+	// Essential AI provider keys to pass through (if not already set via flag)
 	aiKeys := []string{
 		"OPENAI_API_KEY",
 		"ANTHROPIC_API_KEY",
