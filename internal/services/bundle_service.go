@@ -10,14 +10,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"station/internal/db/repositories"
 )
 
 // BundleService handles environment bundling using the same logic as the API
-type BundleService struct{}
+type BundleService struct {
+	repos *repositories.Repositories
+}
 
 // NewBundleService creates a new bundle service
 func NewBundleService() *BundleService {
-	return &BundleService{}
+	return &BundleService{
+		repos: nil, // For backwards compatibility - will use filesystem-only mode
+	}
+}
+
+// NewBundleServiceWithRepos creates a bundle service with database support
+func NewBundleServiceWithRepos(repos *repositories.Repositories) *BundleService {
+	return &BundleService{
+		repos: repos,
+	}
 }
 
 // CreateBundle creates a tar.gz bundle from an environment directory
@@ -210,7 +223,7 @@ type BundleInstallResult struct {
 }
 
 // InstallBundle installs a bundle from URL or file path to create a new environment
-// This replicates the same logic as the API handler but works without server dependency
+// Uses EnvironmentManagementService to properly create both database and filesystem
 func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*BundleInstallResult, error) {
 	// Get home directory
 	homeDir, err := os.UserHomeDir()
@@ -252,8 +265,10 @@ func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*
 		}
 	}
 
-	// Create environment directory (filesystem-based, no database)
+	// Environment directory path
 	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+
+	// Check if environment already exists (filesystem check)
 	if _, err := os.Stat(envDir); !os.IsNotExist(err) {
 		return &BundleInstallResult{
 			Success: false,
@@ -261,25 +276,67 @@ func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*
 		}, fmt.Errorf("environment already exists: %s", environmentName)
 	}
 
-	// Extract bundle to environment directory
-	agentCount, mcpCount, err := s.extractBundle(bundlePath, envDir)
-	if err != nil {
-		// Clean up environment directory on failure
-		os.RemoveAll(envDir)
-		return &BundleInstallResult{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to extract bundle: %v", err),
-		}, err
-	}
+	// Create environment using proper service layer if repos are available
+	if s.repos != nil {
+		// Use EnvironmentManagementService for full database + filesystem creation
+		envService := NewEnvironmentManagementService(s.repos)
+		description := fmt.Sprintf("Environment created from bundle installation")
 
-	return &BundleInstallResult{
-		Success:         true,
-		Message:         fmt.Sprintf("Bundle installed successfully to environment '%s'", environmentName),
-		EnvironmentName: environmentName,
-		BundlePath:      bundlePath,
-		InstalledAgents: agentCount,
-		InstalledMCPs:   mcpCount,
-	}, nil
+		environment, result, err := envService.CreateEnvironment(environmentName, &description, 1)
+		if err != nil || !result.Success {
+			errorMsg := result.Message
+			if errorMsg == "" && err != nil {
+				errorMsg = err.Error()
+			}
+			return &BundleInstallResult{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to create environment: %s", errorMsg),
+			}, err
+		}
+
+		// Extract bundle to environment directory
+		agentCount, mcpCount, err := s.extractBundle(bundlePath, envDir)
+		if err != nil {
+			// Clean up environment if extraction failed
+			envService.DeleteEnvironmentByID(environment.ID)
+			return &BundleInstallResult{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to extract bundle: %v", err),
+			}, err
+		}
+
+		return &BundleInstallResult{
+			Success:         true,
+			Message:         fmt.Sprintf("Bundle installed successfully to environment '%s'", environmentName),
+			EnvironmentName: environmentName,
+			BundlePath:      bundlePath,
+			InstalledAgents: agentCount,
+			InstalledMCPs:   mcpCount,
+		}, nil
+	} else {
+		// Fallback to filesystem-only mode (no database)
+		// This is for backwards compatibility when service is used without repos
+
+		// Extract bundle to environment directory
+		agentCount, mcpCount, err := s.extractBundle(bundlePath, envDir)
+		if err != nil {
+			// Clean up environment directory on failure
+			os.RemoveAll(envDir)
+			return &BundleInstallResult{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to extract bundle: %v", err),
+			}, err
+		}
+
+		return &BundleInstallResult{
+			Success:         true,
+			Message:         fmt.Sprintf("Bundle installed successfully to environment '%s' (filesystem only - run 'stn sync' to register in database)", environmentName),
+			EnvironmentName: environmentName,
+			BundlePath:      bundlePath,
+			InstalledAgents: agentCount,
+			InstalledMCPs:   mcpCount,
+		}, nil
+	}
 }
 
 // downloadBundle downloads a bundle from a URL to the bundles directory

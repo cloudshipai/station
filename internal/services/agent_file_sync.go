@@ -600,61 +600,88 @@ func (s *DeclarativeSync) calculateFileChecksum(filePath string) (string, error)
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-// extractInputSchema extracts and validates input schema from dotprompt config using Picoschema parsing
+// extractInputSchema extracts and validates input schema from dotprompt config
+// Supports both Picoschema format and full JSON Schema format
 func (s *DeclarativeSync) extractInputSchema(config *DotPromptConfig) (*string, error) {
 	if config.Input == nil || config.Input["schema"] == nil {
 		return nil, nil
 	}
-	
-	// Get the raw schema map (Picoschema format)
+
+	// Get the raw schema map
 	schemaData, exists := config.Input["schema"]
 	if !exists {
 		return nil, nil
 	}
-	
+
 	schemaMap, ok := schemaData.(map[interface{}]interface{})
 	if !ok {
 		return nil, fmt.Errorf("input.schema must be a map")
 	}
-	
-	// Convert interface{} map to string-keyed map and filter out userInput (we add that automatically)
+
+	// Check if this is a full JSON Schema (has "type", "properties", "required" keys)
+	// vs Picoschema format (field names with type definitions)
+	hasType := false
+	hasProperties := false
+	for key := range schemaMap {
+		keyStr, ok := key.(string)
+		if !ok {
+			continue
+		}
+		if keyStr == "type" {
+			hasType = true
+		}
+		if keyStr == "properties" {
+			hasProperties = true
+		}
+	}
+
+	// If it looks like full JSON Schema, don't process it as Picoschema
+	if hasType && hasProperties {
+		// This is a full JSON Schema format (like the bundled agents have)
+		// Station automatically provides the userInput parameter, so we don't need
+		// to extract custom input schemas from full JSON Schema definitions
+		// Return nil to indicate no custom input schema needed
+		return nil, nil
+	}
+
+	// Otherwise, parse as Picoschema format
 	customSchema := make(map[string]*schema.InputVariable)
-	
+
 	for key, value := range schemaMap {
 		keyStr, ok := key.(string)
 		if !ok {
 			continue
 		}
-		
+
 		// Skip userInput as it's automatically provided
 		if keyStr == "userInput" {
 			continue
 		}
-		
+
 		// Parse Picoschema format - value is a string like "string, test description"
 		variable := s.parsePicoschemaField(keyStr, value)
 		if variable != nil && variable.Type != "" {
 			customSchema[keyStr] = variable
 		}
 	}
-	
+
 	// If no custom variables, return nil
 	if len(customSchema) == 0 {
 		return nil, nil
 	}
-	
+
 	// Convert to JSON string for storage
 	schemaJSON, err := json.Marshal(customSchema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize input schema: %w", err)
 	}
-	
+
 	// Validate the schema using our helper
 	helper := schema.NewExportHelper()
 	if err := helper.ValidateInputSchema(string(schemaJSON)); err != nil {
 		return nil, fmt.Errorf("invalid input schema: %w", err)
 	}
-	
+
 	schemaStr := string(schemaJSON)
 	return &schemaStr, nil
 }
@@ -696,9 +723,13 @@ func (s *DeclarativeSync) extractOutputSchema(config *DotPromptConfig) (*string,
 		}
 		schemaJSON := string(schemaBytes)
 
+		// DEBUG: Print the converted schema
+		fmt.Printf("DEBUG: Converted schema JSON: %s\n", schemaJSON)
+
 		// Validate the output schema JSON before storing
 		helper := schema.NewExportHelper()
 		if err := helper.ValidateOutputSchema(schemaJSON); err != nil {
+			fmt.Printf("DEBUG: Validation failed for schema: %s\n", schemaJSON)
 			return nil, nil, fmt.Errorf("invalid output schema in agent file: %w", err)
 		}
 

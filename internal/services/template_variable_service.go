@@ -69,15 +69,32 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 		log.Printf("No variables.yml found for environment %s: %v", envName, err)
 		existingVars = make(map[string]string)
 	}
-	
+
 	log.Printf("Loaded %d existing variables from environment %s", len(existingVars), envName)
-	
-	// 3. Apply environment variable overrides
-	for key := range existingVars {
-		if envValue := os.Getenv(key); envValue != "" {
-			existingVars[key] = envValue
-			log.Printf("Override variable %s with environment value", key)
+
+	// 3. Load ALL environment variables as potential template variables
+	// This enables zero-config deploys where bundles don't include variables.yml
+	// but all configuration comes from container environment variables
+	envVarCount := 0
+	for _, envPair := range os.Environ() {
+		parts := strings.SplitN(envPair, "=", 2)
+		if len(parts) == 2 {
+			key := parts[0]
+			value := parts[1]
+
+			// Skip internal/system environment variables
+			if tvs.isSystemEnvVar(key) {
+				continue
+			}
+
+			// Environment variables override variables.yml values
+			existingVars[key] = value
+			envVarCount++
 		}
+	}
+
+	if envVarCount > 0 {
+		log.Printf("Loaded %d environment variables for template resolution", envVarCount)
 	}
 	
 	// 4. Try to render template with available variables
@@ -305,6 +322,30 @@ func (tvs *TemplateVariableService) isSecretVariable(name string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// isSystemEnvVar filters out internal/system environment variables that shouldn't be used as template variables
+func (tvs *TemplateVariableService) isSystemEnvVar(name string) bool {
+	// Common system variables to exclude
+	systemVars := []string{
+		"PATH", "HOME", "USER", "SHELL", "PWD", "OLDPWD", "TERM",
+		"LANG", "LC_", "TMPDIR", "TMP", "TEMP",
+		"HOSTNAME", "HOSTTYPE", "OSTYPE",
+		"SHLVL", "UID", "GID", "LOGNAME",
+		"DISPLAY", "EDITOR", "PAGER",
+		"SSH_", "GPG_", "XDG_",
+		"DEBIAN_", "UBUNTU_",
+		"_", // Last command variable
+	}
+
+	upperName := strings.ToUpper(name)
+	for _, sysVar := range systemVars {
+		if strings.HasPrefix(upperName, sysVar) {
+			return true
+		}
+	}
+
 	return false
 }
 
