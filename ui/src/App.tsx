@@ -27,6 +27,7 @@ import Editor from '@monaco-editor/react';
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes, layoutElements } from './utils/layoutUtils';
+import CloudShipStatus from './components/CloudShipStatus';
 import { RunsPage as RunsPageComponent } from './components/runs/RunsPage';
 import { SyncModal } from './components/sync/SyncModal';
 import { AddServerModal } from './components/modals/AddServerModal';
@@ -344,6 +345,11 @@ const Layout = ({ children }: any) => {
             ))}
           </ul>
         </nav>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-tokyo-dark4">
+          <CloudShipStatus />
+        </div>
       </div>
 
       {/* Main Content */}

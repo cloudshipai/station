@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -167,33 +166,7 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 		// Task Information
 		fmt.Printf("\n📋 Task:\n")
 		fmt.Printf("%s\n", run.Task)
-		
-		// Tool Calls - Show all in verbose mode
-		if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
-			fmt.Printf("\n🔧 Tool Calls (%d):\n", len(*run.ToolCalls))
-			for i, toolCall := range *run.ToolCalls {
-				toolCallBytes, err := json.MarshalIndent(toolCall, "  ", "  ")
-				if err == nil {
-					fmt.Printf("  %d. %s\n", i+1, string(toolCallBytes))
-				} else {
-					fmt.Printf("  %d. %v\n", i+1, toolCall)
-				}
-			}
-		}
 
-		// Execution Steps - Show all in verbose mode
-		if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
-			fmt.Printf("\n📝 Execution Steps (%d):\n", len(*run.ExecutionSteps))
-			for i, step := range *run.ExecutionSteps {
-				stepBytes, err := json.MarshalIndent(step, "  ", "  ")
-				if err == nil {
-					fmt.Printf("  %d. %s\n", i+1, string(stepBytes))
-				} else {
-					fmt.Printf("  %d. %v\n", i+1, step)
-				}
-			}
-		}
-		
 		// Final Response
 		if run.FinalResponse != "" {
 			fmt.Printf("\n💬 Final Response:\n")
@@ -205,29 +178,6 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 		// Show limited details in non-verbose mode
 		if run.FinalResponse != "" {
 			fmt.Printf("\nResponse:\n%s\n", run.FinalResponse)
-		}
-		
-		if run.ToolCalls != nil && len(*run.ToolCalls) > 0 {
-			fmt.Printf("\nTool Calls (%d):\n", len(*run.ToolCalls))
-			for i, toolCall := range *run.ToolCalls {
-				if i >= 3 { // Show only first 3 in non-verbose mode
-					fmt.Printf("... and %d more (use -v for all)\n", len(*run.ToolCalls)-3)
-					break
-				}
-				fmt.Printf("• %v\n", toolCall)
-			}
-		}
-
-		// Show execution steps if available (limited)
-		if run.ExecutionSteps != nil && len(*run.ExecutionSteps) > 0 {
-			fmt.Printf("\nExecution Steps (%d):\n", len(*run.ExecutionSteps))
-			for i, step := range *run.ExecutionSteps {
-				if i >= 2 { // Show only first 2 in non-verbose mode
-					fmt.Printf("... and %d more (use -v for all)\n", len(*run.ExecutionSteps)-2)
-					break
-				}
-				fmt.Printf("• %v\n", step)
-			}
 		}
 	}
 

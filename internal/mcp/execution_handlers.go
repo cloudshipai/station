@@ -396,8 +396,6 @@ func (s *Server) handleInspectRun(ctx context.Context, request mcp.CallToolReque
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid run_id format: %v", err)), nil
 	}
 
-	verbose := request.GetBool("verbose", true)
-
 	// Get detailed run information
 	run, err := s.repos.AgentRuns.GetByIDWithDetails(context.Background(), runID)
 	if err != nil {
@@ -411,28 +409,6 @@ func (s *Server) handleInspectRun(ctx context.Context, request mcp.CallToolReque
 	response := map[string]interface{}{
 		"success": true,
 		"run":     run,
-	}
-
-	// Add detailed information if verbose is true
-	if verbose {
-		response["detailed"] = map[string]interface{}{
-			"has_tool_calls":        run.ToolCalls != nil,
-			"has_execution_steps":   run.ExecutionSteps != nil,
-			"tool_calls_count":      0,
-			"execution_steps_count": 0,
-		}
-
-		if run.ToolCalls != nil {
-			// Count tool calls if available
-			toolCalls := *run.ToolCalls
-			response["detailed"].(map[string]interface{})["tool_calls_count"] = len(toolCalls)
-		}
-
-		if run.ExecutionSteps != nil {
-			// Count execution steps if available
-			execSteps := *run.ExecutionSteps
-			response["detailed"].(map[string]interface{})["execution_steps_count"] = len(execSteps)
-		}
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
