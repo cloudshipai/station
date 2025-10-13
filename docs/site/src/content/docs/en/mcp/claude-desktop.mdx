@@ -57,7 +57,7 @@ HTTP-based connection for remote or containerized setups:
 
 **1. Start Station MCP server:**
 ```bash
-stn serve --port 3000
+stn serve --mcp-port 8586
 ```
 
 **2. Configure Claude Desktop:**
@@ -65,7 +65,7 @@ stn serve --port 3000
 {
   "mcpServers": {
     "station": {
-      "url": "http://localhost:3000/mcp"
+      "url": "http://localhost:8586/mcp"
     }
   }
 }
@@ -76,7 +76,7 @@ stn serve --port 3000
 {
   "mcpServers": {
     "station-remote": {
-      "url": "https://your-station-server.com:3000/mcp"
+      "url": "https://your-station-server.com:8586/mcp"
     }
   }
 }
@@ -128,18 +128,18 @@ For different environments, you'll need separate Station instances or configurat
 **SSE mode with different ports/instances:**
 ```bash
 # Start servers with different configs
-XDG_CONFIG_HOME=/opt/station-prod stn serve --mcp-port 3000
-XDG_CONFIG_HOME=/opt/station-dev stn serve --mcp-port 3001
+XDG_CONFIG_HOME=/opt/station-prod stn serve --mcp-port 8586
+XDG_CONFIG_HOME=/opt/station-dev stn serve --mcp-port 8587
 ```
 
 ```json
 {
   "mcpServers": {
     "station-prod": {
-      "url": "http://localhost:3000/mcp"
+      "url": "http://localhost:8586/mcp"
     },
     "station-dev": {
-      "url": "http://localhost:3001/mcp"
+      "url": "http://localhost:8587/mcp"
     }
   }
 }
@@ -161,7 +161,7 @@ XDG_CONFIG_HOME=/opt/station-dev stn serve --mcp-port 3001
 
 **SSE mode:**
 ```bash
-stn serve --debug --mcp-port 3000
+stn serve --debug --mcp-port 8586
 ```
 
 ## Mixed Mode Configuration
@@ -176,14 +176,14 @@ You can combine stdio and SSE modes as needed:
       "args": ["stdio"]
     },
     "station-remote": {
-      "url": "https://remote-station.company.com:3000/mcp"
+      "url": "https://remote-station.company.com:8586/mcp"
     },
     "station-docker": {
       "command": "docker",
       "args": ["exec", "station-container", "stn", "stdio"]
     },
     "station-k8s": {
-      "url": "https://station-service.namespace.svc.cluster.local:3000/mcp"
+      "url": "https://station-service.namespace.svc.cluster.local:8586/mcp"
     }
   }
 }
@@ -195,13 +195,13 @@ For remote Station instances, use SSE mode instead of stdio:
 
 ```bash
 # On remote server
-stn serve --mcp-port 3000
+stn serve --mcp-port 8586
 
 # In Claude Desktop config
 {
   "mcpServers": {
     "station-remote": {
-      "url": "https://remote-server.com:3000/mcp"
+      "url": "https://remote-server.com:8586/mcp"
     }
   }
 }
@@ -239,10 +239,10 @@ Create a test agent and run it with a simple task
 Check that Station server is running:
 ```bash
 # Check if server is responding
-curl http://localhost:3000/mcp
+curl http://localhost:8586/mcp
 
 # View server logs
-stn serve --port 3000 --debug
+stn serve --mcp-port 8586 --debug
 ```
 
 You should see MCP protocol messages in the server logs when Claude Desktop connects.
@@ -309,10 +309,10 @@ Create an agent that can manage my development database - backing up before sche
    **SSE mode:**
    ```bash
    # Start server
-   stn serve --port 3000 --debug
-   
+   stn serve --mcp-port 8586 --debug
+
    # Test endpoint (in another terminal)
-   curl -X POST http://localhost:3000/mcp \
+   curl -X POST http://localhost:8586/mcp \
      -H "Content-Type: application/json" \
      -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
    ```
@@ -352,7 +352,7 @@ If Station MCP responses are slow:
 **SSE mode:**
 ```bash
 # Check server configuration - no timeout flags available in current CLI
-stn serve --mcp-port 3000 --debug
+stn serve --mcp-port 8586 --debug
 ```
 
 ### SSE Mode Issues
@@ -360,19 +360,19 @@ stn serve --mcp-port 3000 --debug
 **Server not starting:**
 ```bash
 # Check if port is already in use
-netstat -tulpn | grep :3000
+netstat -tulpn | grep :8586
 
 # Try a different port
-stn serve --mcp-port 3001
+stn serve --mcp-port 8587
 ```
 
 **Connection refused:**
 ```bash
 # Check server status
-curl -v http://localhost:3000/mcp
+curl -v http://localhost:8586/mcp
 
 # Check server logs
-stn serve --mcp-port 3000 --debug
+stn serve --mcp-port 8586 --debug
 ```
 
 ### Multiple Environments Not Working

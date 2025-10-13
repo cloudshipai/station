@@ -69,7 +69,7 @@ Station runs as an HTTP MCP server. After running `stn up`, a `.mcp.json` file i
   "mcpServers": {
     "station": {
       "type": "http",
-      "url": "http://localhost:3000/mcp"
+      "url": "http://localhost:8586/mcp"
     }
   }
 }
@@ -398,7 +398,7 @@ docker build -t my-station-agents .
 # Run Station server with mounted config
 docker run -d \
   -p 8585:8585 \
-  -p 3000:3000 \
+  -p 8586:8586 \
   -v ~/.config/station:/root/.config/station \
   -e OPENAI_API_KEY=${OPENAI_API_KEY} \
   my-station-agents
