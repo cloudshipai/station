@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -185,6 +186,7 @@ func (h *APIHandlers) getMCPServer(c *gin.Context) {
 func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	var req MCPServerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[ERROR] Invalid create MCP server request: %v", err)
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Invalid request: %v", err),
@@ -192,11 +194,14 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[INFO] Creating MCP server name=%s environment=%s", req.Name, req.Environment)
+
 	// Parse the config to extract MCP server configuration
 	var configData map[string]interface{}
 	switch cfg := req.Config.(type) {
 	case string:
 		if err := json.Unmarshal([]byte(cfg), &configData); err != nil {
+			log.Printf("[ERROR] Invalid JSON configuration: %v", err)
 			c.JSON(http.StatusBadRequest, MCPServerResponse{
 				Success: false,
 				Error:   fmt.Sprintf("Invalid JSON configuration: %v", err),
@@ -206,6 +211,7 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	case map[string]interface{}:
 		configData = cfg
 	default:
+		log.Printf("[ERROR] Config must be JSON string or object, got type: %T", cfg)
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
 			Error:   "Config must be a JSON string or object",
@@ -216,6 +222,7 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	// Extract the MCP server configuration from the config
 	mcpServersData, exists := configData["mcpServers"]
 	if !exists {
+		log.Printf("[ERROR] Config missing mcpServers field")
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
 			Error:   "Config must contain 'mcpServers' field",
@@ -225,6 +232,7 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 
 	mcpServersMap, ok := mcpServersData.(map[string]interface{})
 	if !ok {
+		log.Printf("[ERROR] mcpServers is not an object, got type: %T", mcpServersData)
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
 			Error:   "mcpServers must be an object",
@@ -232,12 +240,36 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		return
 	}
 
-	// Get the server config for the specified server name
+	// Log available server keys
+	serverKeys := make([]string, 0, len(mcpServersMap))
+	for key := range mcpServersMap {
+		serverKeys = append(serverKeys, key)
+	}
+	log.Printf("[INFO] Found %d MCP server configs: %v (requested: %s)", len(mcpServersMap), serverKeys, req.Name)
+
+	// Support both single-server and multi-server configs
+	// First try to find a config matching the server name
 	serverConfigData, exists := mcpServersMap[req.Name]
+
+	// If not found, check if there's only one server config and use that
 	if !exists {
+		if len(mcpServersMap) == 1 {
+			// Use the single server config regardless of key name
+			for key, config := range mcpServersMap {
+				serverConfigData = config
+				exists = true
+				log.Printf("[INFO] Using single server config key=%s (requested: %s)", key, req.Name)
+				break
+			}
+		}
+	}
+
+	// If still not found, return error with helpful message
+	if !exists {
+		log.Printf("[ERROR] No matching server config found for %s, available: %v", req.Name, serverKeys)
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
-			Error:   fmt.Sprintf("No configuration found for server '%s' in mcpServers", req.Name),
+			Error:   fmt.Sprintf("No configuration found for server '%s' in mcpServers. Available keys: %v", req.Name, serverKeys),
 		})
 		return
 	}
@@ -295,34 +327,71 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	}
 
 	// Use the management service to create the server file with template variable conversion
+	log.Printf("[INFO] Creating server config file: name=%s command=%s args=%d", req.Name, serverConfig.Command, len(serverConfig.Args))
 	mcpService := services.NewMCPServerManagementService(h.repos)
 	result := mcpService.AddMCPServerToEnvironment(req.Environment, req.Name, serverConfig)
 
 	if !result.Success {
+		log.Printf("[ERROR] Failed to create server config file: %s", result.Message)
 		c.JSON(http.StatusInternalServerError, MCPServerResponse{
 			Success: false,
 			Error:   result.Message,
 		})
 		return
 	}
+	log.Printf("[INFO] Server config file created successfully: %s", result.Message)
 
-	// Now trigger a sync to validate the configuration
-	// This will attempt to connect to the MCP server and discover tools
+	// Load config for variable detection and sync
 	cfg, err := config.Load()
 	if err != nil {
+		log.Printf("[ERROR] Failed to load config: %v", err)
 		c.JSON(http.StatusInternalServerError, MCPServerResponse{
 			Success: false,
-			Error:   "Failed to load configuration for sync",
+			Error:   "Failed to load configuration",
 		})
 		return
 	}
 
+	// Read the created template file to check for Go template variables
+	// Use centralized config path helper
+	templatePath := config.GetTemplateConfigPath(req.Environment, req.Name)
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		log.Printf("[ERROR] Failed to read template file for variable detection: %v", err)
+		c.JSON(http.StatusInternalServerError, MCPServerResponse{
+			Success: false,
+			Error:   "Failed to read template file for validation",
+		})
+		return
+	}
+
+	// Try to render template with empty variables to detect if variables are needed
+	// This uses Go template engine's missingkey=error to properly detect template variables
+	templateService := services.NewTemplateVariableService(cfg.Workspace, h.repos)
+	hasVariables := templateService.HasTemplateVariables(string(templateContent))
+
+	if hasVariables {
+		log.Printf("[INFO] Config contains template variables (detected via Go template parsing), returning VARIABLES_NEEDED")
+		c.JSON(http.StatusCreated, MCPServerResponse{
+			Success:     true,
+			Message:     "MCP server configuration created. Variables detected - please configure them via sync.",
+			ServerName:  req.Name,
+			Environment: req.Environment,
+			FilePath:    fmt.Sprintf("environments/%s/%s.json", req.Environment, req.Name),
+			Error:       "VARIABLES_NEEDED", // Special marker for frontend to open sync modal
+		})
+		return
+	}
+
+	// No template variables detected - run sync immediately to validate and connect
+	log.Printf("[INFO] No template variables detected, running sync to validate config")
+	log.Printf("[INFO] Starting sync for environment: %s", req.Environment)
 	syncService := services.NewDeclarativeSync(h.repos, cfg)
 	syncOptions := services.SyncOptions{
 		DryRun:      false,
-		Validate:    true,  // Validate the configuration
-		Interactive: false, // Non-interactive
-		Verbose:     true,  // Log details
+		Validate:    true,
+		Interactive: false, // Non-interactive since no variables expected
+		Verbose:     true,
 		Confirm:     false,
 	}
 
@@ -331,7 +400,8 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	syncResult, syncErr := syncService.SyncEnvironment(ctx, req.Environment, syncOptions)
 
 	if syncErr != nil {
-		// Sync failed - remove the file we just created
+		// Sync failed - clean up and return error
+		log.Printf("[ERROR] Sync failed for %s: %v", req.Name, syncErr)
 		filePath := fmt.Sprintf("~/.config/station/environments/%s/%s.json", req.Environment, req.Name)
 		absolutePath := config.ResolvePath(filePath)
 		os.Remove(absolutePath) // Clean up the file
@@ -342,11 +412,14 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		})
 		return
 	}
+	log.Printf("[INFO] Sync completed: %d servers connected", syncResult.MCPServersConnected)
 
 	// Check if the server actually got created and has tools
 	// First get the environment ID
+	log.Printf("[INFO] Validating server creation for environment: %s", req.Environment)
 	environment, err := h.repos.Environments.GetByName(req.Environment)
 	if err != nil {
+		log.Printf("[ERROR] Failed to get environment %s: %v", req.Environment, err)
 		c.JSON(http.StatusInternalServerError, MCPServerResponse{
 			Success: false,
 			Error:   "Failed to get environment",
@@ -357,15 +430,18 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 	// Find the server that was just created
 	var createdServerID int64
 	servers, _ := h.repos.MCPServers.GetByEnvironmentID(environment.ID)
+	log.Printf("[INFO] Searching for server %s in environment %d (%d servers)", req.Name, environment.ID, len(servers))
 	for _, server := range servers {
 		if server.Name == req.Name {
 			createdServerID = server.ID
+			log.Printf("[INFO] Found server in database: ID=%d name=%s", createdServerID, server.Name)
 			break
 		}
 	}
 
 	if createdServerID == 0 {
 		// Server wasn't created in DB, sync may have failed
+		log.Printf("[ERROR] Server %s not found in database after sync", req.Name)
 		filePath := fmt.Sprintf("~/.config/station/environments/%s/%s.json", req.Environment, req.Name)
 		absolutePath := config.ResolvePath(filePath)
 		os.Remove(absolutePath) // Clean up the file
@@ -379,10 +455,13 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 
 	// Check if server has tools (indicates successful connection)
 	tools, _ := h.repos.MCPTools.GetByServerID(createdServerID)
+	log.Printf("[INFO] Server %d has %d tools", createdServerID, len(tools))
+
 	if len(tools) == 0 {
 		// No tools discovered - server likely failed to connect
 		// Note: We don't remove the server here as it might be a valid config
 		// that just needs variables configured
+		log.Printf("[WARN] Server %s (ID=%d) created but no tools discovered", req.Name, createdServerID)
 		c.JSON(http.StatusCreated, MCPServerResponse{
 			Success:     true,
 			Message:     fmt.Sprintf("MCP server created but no tools discovered. Server may need configuration or may have failed to connect. Found %d MCP servers connected during sync.", syncResult.MCPServersConnected),
@@ -393,6 +472,7 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[INFO] MCP server %s created successfully: ID=%d tools=%d", req.Name, createdServerID, len(tools))
 	c.JSON(http.StatusCreated, MCPServerResponse{
 		Success:     true,
 		Message:     fmt.Sprintf("MCP server created successfully with %d tools discovered!", len(tools)),

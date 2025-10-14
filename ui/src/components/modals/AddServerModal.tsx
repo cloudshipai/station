@@ -34,14 +34,15 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
   }
 }`;
 
-  // Auto-update config when server name changes
+  // Auto-populate config ONLY when server name changes and config is empty
+  // This prevents overwriting user-pasted configs
   React.useEffect(() => {
-    if (serverName) {
-      // Always update config to match server name
+    if (serverName && !serverConfig.trim()) {
+      // Only populate if config is empty
       const newConfig = getDefaultConfig(serverName);
       setServerConfig(newConfig);
       console.log(`[AddServerModal] Auto-populated config for server: ${serverName}`);
-    } else {
+    } else if (!serverName) {
       // Clear config if server name is empty
       setServerConfig('');
     }
@@ -63,6 +64,18 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
         environment: environmentName
       });
       setResponse(result.data);
+
+      // Check if variables are needed
+      if (result.data.error === 'VARIABLES_NEEDED') {
+        console.log('[AddServerModal] Variables needed, closing modal and triggering sync');
+        // Close this modal and trigger sync (which will open sync modal)
+        handleClose();
+        if (onSuccess) {
+          onSuccess(); // This triggers the sync modal in parent
+        }
+        return;
+      }
+
       setShowSuccess(true);
 
       // Trigger success callback (for auto-sync)

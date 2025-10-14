@@ -41,15 +41,34 @@ func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64,
 	defer mcpConnManager.CleanupConnections(clients)
 
 	if err != nil {
-		// Tool discovery failed - clean up the broken MCP server(s) from database
+		// Tool discovery failed - check if this was a newly created config or an existing one
 		logging.Info("   ❌ Tool discovery failed for %s: %v", configName, err)
-		logging.Info("   🧹 Cleaning up broken MCP server configuration from database...")
 
-		// Delete all MCP servers associated with this config
-		if cleanupErr := s.cleanupBrokenMCPServers(ctx, envID, configName); cleanupErr != nil {
-			logging.Info("   ⚠️  Warning: Failed to cleanup broken servers: %v", cleanupErr)
+		// Check if any servers from this config existed before this sync attempt
+		existingServers, checkErr := s.repos.MCPServers.GetByEnvironmentID(envID)
+		hasExistingServers := false
+		if checkErr == nil && fileConfig != nil {
+			for _, server := range existingServers {
+				if server.FileConfigID != nil && *server.FileConfigID == fileConfig.ID {
+					hasExistingServers = true
+					break
+				}
+			}
+		}
+
+		if hasExistingServers {
+			// This config previously worked - DON'T delete it, just log the error
+			logging.Info("   ⚠️  Config '%s' previously worked but now fails to connect", configName)
+			logging.Info("   ⚠️  Keeping config file - user may need to fix credentials or server settings")
+			logging.Info("   ⚠️  Fix the issue and run 'stn sync' again")
 		} else {
-			logging.Info("   ✅ Successfully removed broken MCP server configuration")
+			// This is a newly created config that never worked - safe to clean up
+			logging.Info("   🧹 New config '%s' failed on first sync - cleaning up...", configName)
+			if cleanupErr := s.cleanupBrokenMCPServers(ctx, envID, configName); cleanupErr != nil {
+				logging.Info("   ⚠️  Warning: Failed to cleanup broken servers: %v", cleanupErr)
+			} else {
+				logging.Info("   ✅ Successfully removed broken MCP server configuration")
+			}
 		}
 
 		return 0, fmt.Errorf("failed to discover tools per server for %s: %w", configName, err)
@@ -71,18 +90,28 @@ func (s *DeclarativeSync) performToolDiscovery(ctx context.Context, envID int64,
 	return totalToolsSaved, nil
 }
 
-// cleanupBrokenMCPServers removes broken MCP servers and their tools from the database
+// cleanupBrokenMCPServers removes broken MCP servers, their tools, the file config record, and the config file from disk
 func (s *DeclarativeSync) cleanupBrokenMCPServers(ctx context.Context, envID int64, configName string) error {
+	// Get the file config ID for this config name
+	fileConfig, err := s.repos.FileMCPConfigs.GetByEnvironmentAndName(envID, configName)
+	if err != nil {
+		return fmt.Errorf("failed to get file config: %w", err)
+	}
+
 	// Get all MCP servers for this environment
 	servers, err := s.repos.MCPServers.GetByEnvironmentID(envID)
 	if err != nil {
 		return fmt.Errorf("failed to list servers: %w", err)
 	}
 
-	// Delete servers that belong to this config
+	// Delete ONLY servers that belong to this specific config (by FileConfigID)
+	deletedCount := 0
 	for _, server := range servers {
-		// Check if server belongs to this config by name matching
-		// (we could improve this with explicit config tracking in the future)
+		// Skip servers that don't belong to this config
+		if server.FileConfigID == nil || *server.FileConfigID != fileConfig.ID {
+			continue
+		}
+
 		logging.Info("     🗑️  Deleting MCP server: %s (ID: %d)", server.Name, server.ID)
 
 		// Delete associated tools first
@@ -94,8 +123,27 @@ func (s *DeclarativeSync) cleanupBrokenMCPServers(ctx context.Context, envID int
 		if err := s.repos.MCPServers.Delete(server.ID); err != nil {
 			logging.Info("     ⚠️  Warning: Failed to delete server %s: %v", server.Name, err)
 		}
+		deletedCount++
 	}
 
+	// Delete the config file from disk
+	configFilePath := s.resolveConfigPath(fileConfig.TemplatePath)
+	logging.Info("     🗑️  Deleting broken config file: %s", configFilePath)
+	if err := os.Remove(configFilePath); err != nil {
+		logging.Info("     ⚠️  Warning: Failed to delete config file %s: %v", configFilePath, err)
+	} else {
+		logging.Info("     ✅ Deleted config file from disk")
+	}
+
+	// Delete the file config record from database
+	logging.Info("     🗑️  Deleting file config record: %s (ID: %d)", configName, fileConfig.ID)
+	if err := s.repos.FileMCPConfigs.Delete(fileConfig.ID); err != nil {
+		logging.Info("     ⚠️  Warning: Failed to delete file config record: %v", err)
+	} else {
+		logging.Info("     ✅ Deleted file config record from database")
+	}
+
+	logging.Info("     ✅ Cleanup complete: deleted %d MCP server(s), config file, and database records for '%s'", deletedCount, configName)
 	return nil
 }
 
