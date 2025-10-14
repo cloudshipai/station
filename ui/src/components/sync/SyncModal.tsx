@@ -104,6 +104,11 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
             return prevStatus;
           });
 
+          // Clear submitting state when status changes away from waiting_for_input
+          if (newStatus.status !== 'waiting_for_input' && isSubmittingVariables) {
+            setIsSubmittingVariables(false);
+          }
+
           // Initialize variables form when waiting for input (only once)
           if (newStatus.status === 'waiting_for_input' && newStatus.variables && !variablesInitialized) {
             const initialVars: Record<string, string> = {};
@@ -173,41 +178,44 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
 
   const submitVariables = async () => {
     if (!syncStatus || isSubmittingVariables) return;
-    
+
     // Validate required fields first (before setting loading state)
     const errors: Record<string, string> = {};
     const currentVariables: Record<string, string> = {};
-    
+
     if (syncStatus.variables) {
       syncStatus.variables.variables.forEach(variable => {
         const input = inputRefs.current[variable.name];
         const value = input?.value?.trim() || '';
-        
+
         if (variable.required && !value) {
           errors[variable.name] = `${variable.name} is required`;
         }
-        
+
         currentVariables[variable.name] = value;
       });
     }
-    
+
     setValidationErrors(errors);
-    
+
     // Don't proceed if there are validation errors
     if (Object.keys(errors).length > 0) {
       return;
     }
-    
+
     // Only set loading state after validation passes
     setIsSubmittingVariables(true);
-    
+
     try {
       await syncApi.submitVariables(syncStatus.id, currentVariables);
-      // The polling will pick up the status change
+      // Keep loading state on for 500ms to ensure user sees the spinner
+      // The polling will pick up the status change and hide the form
       setValidationErrors({}); // Clear any previous errors
+
+      // Don't clear isSubmittingVariables immediately - let the status change from polling clear it
+      // This prevents the form from flashing before the status updates
     } catch (error) {
       console.error('Failed to submit variables:', error);
-    } finally {
       setIsSubmittingVariables(false);
     }
   };
@@ -294,8 +302,17 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
                 disabled={isLoading}
                 className="px-6 py-3 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
               >
-                <Play className="h-4 w-4" />
-                {isLoading ? 'Starting...' : 'Start Sync'}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4" />
+                    Start Sync
+                  </>
+                )}
               </button>
             </div>
           ) : (
@@ -391,12 +408,18 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
                     disabled={isSubmittingVariables || Object.keys(validationErrors).length > 0}
                     className={`w-full px-4 py-2 rounded font-mono font-medium transition-colors flex items-center justify-center gap-2 ${
                       isSubmittingVariables || Object.keys(validationErrors).length > 0
-                        ? 'bg-tokyo-comment text-tokyo-bg cursor-not-allowed' 
+                        ? 'bg-tokyo-comment text-tokyo-bg cursor-not-allowed'
                         : 'bg-tokyo-cyan text-tokyo-bg hover:bg-tokyo-blue'
                     }`}
                   >
-                    {isSubmittingVariables && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {isSubmittingVariables ? 'Submitting...' : 'Continue Sync'}
+                    {isSubmittingVariables ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      'Continue Sync'
+                    )}
                   </button>
                 </div>
               )}

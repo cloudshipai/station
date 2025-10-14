@@ -401,7 +401,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	var mcpClient *mcp.GenkitMCPClient
 
 	// Add timeout for MCP client creation to prevent freezing
-	clientCtx, clientCancel := context.WithTimeout(ctx, 10*time.Second)
+	clientCtx, clientCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer clientCancel()
 
 	// Channel to receive client creation result
@@ -455,7 +455,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		mcpClient = result.client
 		err = result.err
 	case <-clientCtx.Done():
-		logging.Error("CRITICAL: CRITICAL: MCP client creation for server '%s' TIMED OUT after 10 seconds", serverName)
+		logging.Error("CRITICAL: CRITICAL: MCP client creation for server '%s' TIMED OUT after 30 seconds", serverName)
 		logging.Info("   💀 This indicates the MCP server is not responding or misconfigured")
 		logging.Info("   🔧 Check server command: %s %v", serverConfig.Command, serverConfig.Args)
 		logging.Info("   ⚠️  All tools from this server will be UNAVAILABLE")
