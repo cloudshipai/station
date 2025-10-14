@@ -30,6 +30,8 @@ type BuildOptions struct {
 	CloudShipAIKey     string
 	CloudShipAIEndpoint string
 	InstallShip        bool
+	ImageName          string // Custom image name (optional)
+	Tag                string // Custom image tag (optional)
 }
 
 type EnvironmentConfig struct {
@@ -85,31 +87,43 @@ func (b *EnvironmentBuilder) Build(ctx context.Context) (string, error) {
 	}
 	defer os.Remove("stn") // Clean up temp binary
 
-	// Try to load image directly into local Docker daemon
-	imageName := fmt.Sprintf("station-%s:latest", b.environmentName)
-	
+	// Determine image name from build options or use default
+	imageName := b.buildOptions.ImageName
+	if imageName == "" {
+		imageName = fmt.Sprintf("station-%s", b.environmentName)
+	}
+
+	// Determine tag from build options or use default
+	tag := b.buildOptions.Tag
+	if tag == "" {
+		tag = "latest"
+	}
+
+	// Combine image name and tag
+	fullImageName := fmt.Sprintf("%s:%s", imageName, tag)
+
 	// First export to tar
 	tarPath := fmt.Sprintf("station-%s.tar", b.environmentName)
 	_, err = container.Export(ctx, tarPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to export container: %w", err)
 	}
-	
+
 	// Load into Docker daemon
-	imageID, err := b.loadImageToDocker(tarPath, imageName)
+	imageID, err := b.loadImageToDocker(tarPath, fullImageName)
 	if err != nil {
 		log.Printf("Failed to load into Docker daemon, keeping tar file: %v", err)
 		log.Printf("Successfully exported container to: %s", tarPath)
 		return tarPath, nil
 	}
-	
+
 	// Clean up tar file since we have it in Docker now
 	os.Remove(tarPath)
-	
-	log.Printf("Successfully loaded Docker image: %s", imageName)
+
+	log.Printf("Successfully loaded Docker image: %s", fullImageName)
 	log.Printf("Image ID: %s", imageID)
-	log.Printf("Run with: docker run -it %s", imageName)
-	return imageName, nil
+	log.Printf("Run with: docker run -it %s", fullImageName)
+	return fullImageName, nil
 }
 
 // getHostPlatform returns the platform string for the host architecture

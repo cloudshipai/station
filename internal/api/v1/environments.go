@@ -195,7 +195,7 @@ func (h *APIHandlers) buildEnvironmentImage(c *gin.Context) {
 		return
 	}
 
-	// Read environment variables
+	// Read environment variables from variables.yml
 	variablesPath := filepath.Join(envPath, "variables.yml")
 	environmentVariables := make(map[string]string)
 
@@ -204,30 +204,67 @@ func (h *APIHandlers) buildEnvironmentImage(c *gin.Context) {
 		if err == nil {
 			var variables map[string]interface{}
 			if yaml.Unmarshal(variablesData, &variables) == nil {
+				// For each variable in variables.yml, try to get actual value from environment
 				for key, value := range variables {
-					environmentVariables[key] = fmt.Sprintf("%v", value)
+					// First check if there's an actual environment variable with this name
+					if envValue := os.Getenv(key); envValue != "" {
+						environmentVariables[key] = envValue
+					} else {
+						// Fall back to the value from variables.yml
+						environmentVariables[key] = fmt.Sprintf("%v", value)
+					}
 				}
 			}
 		}
 	}
 
-	// Load Station config to get AI provider and add appropriate API key placeholder
+	// Load Station config to get AI provider and add actual API key from environment (matching up.go:541-586 logic)
 	stationConfig, configErr := config.Load()
 	if configErr == nil {
-		// Add provider-specific API key environment variable with placeholder
+		// Add provider-specific API key from environment (matching up.go:541-586 logic)
 		switch stationConfig.AIProvider {
 		case "openai":
-			environmentVariables["OPENAI_API_KEY"] = "<your-openai-api-key>"
+			if key := os.Getenv("OPENAI_API_KEY"); key != "" {
+				environmentVariables["OPENAI_API_KEY"] = key
+			} else if key := os.Getenv("STN_AI_API_KEY"); key != "" {
+				environmentVariables["OPENAI_API_KEY"] = key
+			} else if key := os.Getenv("AI_API_KEY"); key != "" {
+				environmentVariables["OPENAI_API_KEY"] = key
+			}
+		case "anthropic":
+			if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+				environmentVariables["ANTHROPIC_API_KEY"] = key
+			} else if key := os.Getenv("STN_AI_API_KEY"); key != "" {
+				environmentVariables["ANTHROPIC_API_KEY"] = key
+			}
 		case "gemini":
-			environmentVariables["GOOGLE_API_KEY"] = "<your-google-api-key>"
+			if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
+				environmentVariables["GOOGLE_API_KEY"] = key
+			} else if key := os.Getenv("GEMINI_API_KEY"); key != "" {
+				environmentVariables["GOOGLE_API_KEY"] = key
+			} else if key := os.Getenv("STN_AI_API_KEY"); key != "" {
+				environmentVariables["GOOGLE_API_KEY"] = key
+			}
 		case "cloudflare":
-			environmentVariables["CF_TOKEN"] = "<your-cloudflare-token>"
+			if key := os.Getenv("CF_TOKEN"); key != "" {
+				environmentVariables["CF_TOKEN"] = key
+			} else if key := os.Getenv("CLOUDFLARE_API_KEY"); key != "" {
+				environmentVariables["CF_TOKEN"] = key
+			} else if key := os.Getenv("CLOUDFLARE_API_TOKEN"); key != "" {
+				environmentVariables["CF_TOKEN"] = key
+			}
 		case "ollama":
 			// Ollama typically doesn't need API keys for local instances
-			environmentVariables["AI_API_KEY"] = "<your-ai-api-key>"
+			if key := os.Getenv("AI_API_KEY"); key != "" {
+				environmentVariables["AI_API_KEY"] = key
+			}
 		default:
-			// For unknown providers, add as generic AI_API_KEY
-			environmentVariables["AI_API_KEY"] = "<your-ai-api-key>"
+			// For unknown providers, try generic keys
+			if key := os.Getenv("STN_AI_API_KEY"); key != "" {
+				environmentVariables["AI_API_KEY"] = key
+			} else if key := os.Getenv("AI_API_KEY"); key != "" {
+				environmentVariables["AI_API_KEY"] = key
+			}
 		}
 
 		// Add essential Station configuration for Docker container
@@ -250,14 +287,16 @@ func (h *APIHandlers) buildEnvironmentImage(c *gin.Context) {
 		// Add CloudShip configuration placeholders for Docker runtime configuration
 		environmentVariables["STN_CLOUDSHIP_ENABLED"] = "false"  // Default disabled, enable via runtime
 		environmentVariables["STN_CLOUDSHIP_KEY"] = "<your-cloudship-registration-key>"
-		environmentVariables["STN_CLOUDSHIP_ENDPOINT"] = "lighthouse.cloudship.ai:443"  // Default endpoint
+		environmentVariables["STN_CLOUDSHIP_ENDPOINT"] = "lighthouse.cloudshipai.com:50051"  // Default endpoint
 		environmentVariables["STN_CLOUDSHIP_STATION_ID"] = ""  // Auto-generated on first connection
 	}
 
-	// Create build options
+	// Create build options with custom image name and tag
 	buildOptions := &build.BuildOptions{
-		Provider: req.Provider,
-		Model:    req.Model,
+		Provider:  req.Provider,
+		Model:     req.Model,
+		ImageName: req.ImageName,
+		Tag:       req.Tag,
 	}
 
 	// Build the Docker image

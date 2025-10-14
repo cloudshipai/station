@@ -44,7 +44,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		DatabaseURL:      getEnvOrDefault("DATABASE_URL", GetDatabasePath()),
 		SSHPort:          getEnvIntOrDefault("SSH_PORT", 2222),
-		MCPPort:          getEnvIntOrDefault("MCP_PORT", 3000),
+		MCPPort:          getEnvIntOrDefault("MCP_PORT", 8586),
 		APIPort:          getEnvIntOrDefault("API_PORT", 8585),
 		SSHHostKeyPath:   getEnvOrDefault("SSH_HOST_KEY_PATH", "./ssh_host_key"),
 		AdminUsername:    getEnvOrDefault("ADMIN_USERNAME", "admin"),
