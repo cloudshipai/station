@@ -181,7 +181,10 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 
 	// Copy the source environment to the container's default environment
 	// This makes the container's "default" environment contain all the source environment's content
-	envDir := client.Host().Directory(b.environmentPath)
+	// SECURITY: Exclude variables.yml to prevent baking secrets into the image
+	envDir := client.Host().Directory(b.environmentPath, dagger.HostDirectoryOpts{
+		Exclude: []string{"variables.yml"},
+	})
 	base = base.WithExec([]string{"mkdir", "-p", "/root/.config/station/environments/default"})
 	base = base.WithDirectory("/root/.config/station/environments/default", envDir)
 
