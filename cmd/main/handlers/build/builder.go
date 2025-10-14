@@ -112,8 +112,42 @@ func (b *EnvironmentBuilder) Build(ctx context.Context) (string, error) {
 	return imageName, nil
 }
 
+// getHostPlatform returns the platform string for the host architecture
+func getHostPlatform() string {
+	arch := runtime.GOARCH
+	os := runtime.GOOS
+
+	// Map Go architecture names to Docker platform names
+	switch arch {
+	case "amd64":
+		return fmt.Sprintf("%s/amd64", os)
+	case "arm64":
+		return fmt.Sprintf("%s/arm64", os)
+	default:
+		log.Printf("Warning: Unknown architecture %s, defaulting to linux/amd64", arch)
+		return "linux/amd64"
+	}
+}
+
+// getDockerArch returns the Docker-compatible architecture string
+func getDockerArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x86_64"
+	case "arm64":
+		return "aarch64"
+	default:
+		log.Printf("Warning: Unknown architecture %s, defaulting to x86_64", runtime.GOARCH)
+		return "x86_64"
+	}
+}
+
 func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.Client) (*dagger.Container, string, error) {
-	base := client.Container().From("ubuntu:22.04")
+	// Detect host platform and build for the correct architecture
+	platform := dagger.Platform(getHostPlatform())
+	log.Printf("Building container for platform: %s (host: %s/%s)", platform, runtime.GOOS, runtime.GOARCH)
+
+	base := client.Container(dagger.ContainerOpts{Platform: platform}).From("ubuntu:22.04")
 
 	base = base.WithExec([]string{"apt-get", "update"}).
 		WithExec([]string{"apt-get", "install", "-y", "ca-certificates", "curl", "sqlite3", "git", "python3", "python3-pip", "python3-venv"}).
@@ -249,15 +283,17 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 		// Download and install Ship CLI inside the container
 		base = base.WithExec([]string{"bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash"})
 		
-		log.Printf("🐳 Downloading Docker CLI inside container...")
-		
-		// Download and install Docker CLI static binary inside the container
-		base = base.WithExec([]string{"bash", "-c", `
-			curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz | tar -xz && 
-			mv docker/docker /usr/local/bin/docker && 
-			rm -rf docker && 
+		dockerArch := getDockerArch()
+		log.Printf("🐳 Downloading Docker CLI inside container (architecture: %s)...", dockerArch)
+
+		// Download and install Docker CLI static binary inside the container (architecture-aware)
+		dockerDownloadCmd := fmt.Sprintf(`
+			curl -fsSL https://download.docker.com/linux/static/stable/%s/docker-27.1.1.tgz | tar -xz &&
+			mv docker/docker /usr/local/bin/docker &&
+			rm -rf docker &&
 			chmod +x /usr/local/bin/docker
-		`})
+		`, dockerArch)
+		base = base.WithExec([]string{"bash", "-c", dockerDownloadCmd})
 		
 		// The Ship CLI installs to ~/.local/bin by default, so ensure it's executable and in the right location
 		base = base.WithExec([]string{"bash", "-c", `
@@ -375,9 +411,10 @@ func (b *EnvironmentBuilder) downloadDockerCLI(ctx context.Context) (string, err
 	
 	finalTempFile := filepath.Join(workingDir, "docker-cli-temp")
 	
-	// Download Docker CLI static binary directly
-	log.Printf("Downloading Docker CLI static binary...")
-	dockerURL := "https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz"
+	// Download Docker CLI static binary directly (architecture-aware)
+	dockerArch := getDockerArch()
+	log.Printf("Downloading Docker CLI static binary (architecture: %s)...", dockerArch)
+	dockerURL := fmt.Sprintf("https://download.docker.com/linux/static/stable/%s/docker-27.1.1.tgz", dockerArch)
 	
 	// Create temporary directory for Docker CLI download
 	tempDir, err := os.MkdirTemp("", "docker-download-*")
