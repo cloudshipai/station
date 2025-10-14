@@ -1,0 +1,11 @@
+# Environment files with secrets
+.env
+
+# Docker volumes
+data/
+
+# Downloaded bundles (users will add their own)
+bundles/*.tar.gz
+
+# Keep bundles directory but not the contents
+!bundles/.gitkeep
