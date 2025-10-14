@@ -74,11 +74,10 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
       '-v /var/run/docker.sock:/var/run/docker.sock',  // Mount docker socket for Ship tools
     ];
 
-    // Port mapping for Station API and SSH
+    // Port mapping for Station API and MCP
     const portOptions = [
       '-p 8585:8585',  // Station API port
-      '-p 2222:2222',  // Station SSH port
-      '-p 3000:3000',  // Station MCP port
+      '-p 8586:8586',  // Station MCP port
     ];
 
     // Essential environment variables for Station
@@ -123,7 +122,7 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
     const containerOptions = [
       `--name station-${environmentName.toLowerCase()}`,
       `${fullImageName}`,
-      'stn serve --api-port 8585 --local'
+      'stn serve'
     ];
 
     // Build the complete command

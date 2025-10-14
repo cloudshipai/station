@@ -495,7 +495,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Set default configuration
 	viper.Set("ssh_port", 2222)
-	viper.Set("mcp_port", 3000)
+	viper.Set("mcp_port", 8586)
 	viper.Set("api_port", 8585)
 	viper.Set("ssh_host_key_path", "./ssh_host_key")
 	viper.Set("admin_username", "admin")
