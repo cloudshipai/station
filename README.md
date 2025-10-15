@@ -1,57 +1,74 @@
 ![Station](./station-logo.png)
 
-# Station - Self-Hosted AI Agent Runtime
+# Station
 
-**A secure, self-hosted platform for building and deploying intelligent AI agents with MCP tool integration.**
+**Open-Source Runtime for Infrastructure Management Agents**
 
-```mermaid
-graph LR
-    subgraph "Development Environment"
-        Claude[Claude Code]
-        Cursor[Cursor]
-        Station[Station Runtime]
-    end
+Deploy AI agents on your infrastructure. Keep sensitive data secure. Maintain full control.
 
-    subgraph "AI Agents"
-        Agent1["Security Scanner<br/>🔍 checkov<br/>📦 trivy"]
-        Agent2["Cost Analyzer<br/>💰 aws-cost-explorer<br/>📊 grafana"]
-        Agent3["Code Reviewer<br/>📝 filesystem<br/>🔧 github"]
-    end
+[Quick Start](#quick-start) | [Documentation](./docs/station/) | [Examples](./docs/station/examples.md)
 
-    subgraph "MCP Tool Pool"
-        Security[Security Tools]
-        Cloud[Cloud APIs]
-        Dev[Dev Tools]
-        Custom[Custom MCPs]
-    end
+---
 
-    Claude --> Station
-    Cursor --> Station
-    Station --> Agent1
-    Station --> Agent2
-    Station --> Agent3
+## Why Station?
 
-    Agent1 --> Security
-    Agent2 --> Cloud
-    Agent3 --> Dev
-    Agent1 --> Custom
+AI agents can automate infrastructure management—cost optimization, security compliance, deployments—but most solutions require sharing credentials and sensitive data with third-party platforms.
+
+**Station gives you control:**
+- ✅ **Run on your infrastructure** - Deploy agents wherever you need them (AWS, GCP, on-prem, local)
+- ✅ **Keep data private** - Agents access your tools directly, no data leaves your environment
+- ✅ **Simple agent development** - Declarative dotprompt format, develop and test locally
+- ✅ **Fine-grained security** - Control exactly which tools each agent can use (read vs write)
+- ✅ **Share and collaborate** - Bundle agents with MCP configs for easy distribution
+- ✅ **Open source** - Full transparency, audit the code yourself
+
+[Learn more about Station's architecture →](./docs/station/architecture.md)
+
+---
+
+## How Simple Are Agents?
+
+Here's a complete FinOps agent in dotprompt format:
+
+```yaml
+---
+metadata:
+  name: "AWS Cost Spike Analyzer"
+  description: "Detects unusual cost increases and identifies root causes"
+model: gpt-4o-mini
+max_steps: 5
+tools:
+  - "__get_cost_and_usage"      # AWS Cost Explorer - read only
+  - "__list_cost_allocation_tags"
+  - "__get_savings_plans_coverage"
+---
+
+{{role "system"}}
+You are a FinOps analyst specializing in AWS cost anomaly detection.
+Analyze cost trends, identify spikes, and provide actionable recommendations.
+
+{{role "user"}}
+{{userInput}}
 ```
 
-📚 **[Documentation](https://cloudshipai.github.io/station)** | 🚀 **[Getting Started Guide](./docs/GETTING_STARTED.md)** | 🌐 **[Bundle Registry](https://cloudshipai.github.io/registry)**
+That's it. Station handles:
+- MCP tool connections (AWS Cost Explorer, Stripe, Grafana, etc.)
+- Template variables for secrets/config (`{{ .AWS_REGION }}`)
+- Multi-environment isolation (dev/staging/prod)
+- Execution tracking and structured outputs
+
+[See more agent examples →](./docs/station/examples.md)
 
 ---
 
 ## Quick Start
 
 ### 1. Install Station
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
 ### 2. Start Station
-
-**Option 1: Using environment variables (recommended)**
 ```bash
 # Set your OpenAI API key
 export OPENAI_API_KEY=sk-your-key-here
@@ -60,172 +77,181 @@ export OPENAI_API_KEY=sk-your-key-here
 stn up --provider openai
 ```
 
-**Option 2: Pass API key directly (no env var needed)**
+**More provider options:**
 ```bash
-# OpenAI
-stn up --provider openai --api-key sk-your-key-here
+# OpenAI with specific model
+stn up --provider openai --model gpt-4o
 
-# Gemini/Google AI
-stn up --provider gemini --api-key your-google-api-key --model gemini-2.5-flash
+# Anthropic Claude
+stn up --provider anthropic --api-key sk-ant-...
 
-# Custom provider (Ollama, Anthropic, etc.)
+# Google Gemini
+stn up --provider gemini --api-key your-key --model gemini-2.0-flash-exp
+
+# Custom provider (Ollama, etc.)
 stn up --provider custom --base-url http://localhost:11434/v1 --model llama3.2
+
+# With CloudShip registration for centralized management
+stn up --provider openai --cloudshipai-registration-key your-registration-key
 ```
 
-**Option 3: With additional features**
+**Stop Station:**
 ```bash
-# Specific workspace directory
-stn up --provider openai --workspace ~/my-project
-
-# Custom model selection
-stn up --provider openai --model gpt-4o
+stn down
 ```
 
 **That's it!** Station is now running with:
-- ✅ Web UI at `http://localhost:8585`
+- ✅ Web UI at `http://localhost:8585` for managing tools, bundles, and builds
 - ✅ MCP server at `http://localhost:8586/mcp` configured for Claude Code/Cursor
-- ✅ Ready to create and run AI agents
+- ✅ Dynamic Agent MCP at `http://localhost:3030/mcp`
+- ✅ `.mcp.json` automatically created for seamless Claude integration
 
-### 3. Testing Agents Interactively
-
-Use Genkit Developer UI for interactive agent testing:
-
-```bash
-# Start with Genkit Developer UI (default environment)
-stn up --develop
-
-# Start with specific environment
-stn up --develop --environment security
-```
-
-**Genkit Developer UI provides:**
-- 🎯 Interactive agent testing at `http://localhost:4000`
-- 🔍 Real-time tool call inspection
-- 📊 Token usage tracking
-- 🐛 Step-by-step execution debugging
-
-### 4. Managing Station
-
-```bash
-# Stop Station (preserves all data)
-stn down
-
-# Stop and clear all data
-stn down --remove-volume
-
-# View logs
-stn logs
-
-# Check status
-stn status
-```
+[Full installation guide →](./docs/station/installation.md)
 
 ---
 
-## What is Station?
+## Development Workflow
 
-Station makes it easy to **create custom AI agents** that combine MCP tools for your specific needs.
+Station provides a complete agent development workflow using Claude Code or Cursor:
 
-**Key Features:**
-- 🔐 **Secure Template Variables** - Render sensitive values at runtime, never stored in configs
-- 🔧 **Mix and Match Tools** - Combine any MCP servers with custom agents
-- 📦 **Portable Bundles** - Package agents + MCPs for easy sharing and deployment
-- 🐳 **Deploy Anywhere** - Build Docker containers from your agent environments
-- 🌐 **Multi-Environment** - Separate dev/staging/production configurations
+### 1. Add MCP Tools (via UI)
+Open the Web UI at `http://localhost:8585`:
+- Browse available MCP servers (AWS, Stripe, Grafana, filesystem, security tools)
+- Add MCP tools to your environment
+- Configure template variables for secrets
 
----
-
-## Creating Your First Agent
-
-Use your preferred LLM via MCP to create agents. Station provides an MCP server that lets you create, manage, and execute agents directly from Claude Code, Cursor, or any MCP-compatible client.
-
-After creating agents through MCP or editing `.prompt` files directly, sync your environment via the web UI at `http://localhost:8585` in the Environments section.
-
----
-
-## Installing Pre-Built Bundles
-
-Install production-ready agent bundles from the [Station Registry](https://cloudshipai.github.io/registry) via the web UI at `http://localhost:8585`.
-
-After installing a bundle, **sync the environment** in the Environments section to activate the agents.
-
----
-
-## Building Docker Containers
-
-Deploy your agents as Docker containers:
-
-```bash
-# Build container from any environment
-stn build env default --output station-default:latest
-
-# Run the container
-docker run -d \
-  -e OPENAI_API_KEY=sk-your-key \
-  -e STATION_ENCRYPTION_KEY=$(openssl rand -hex 32) \
-  -p 8585:8585 \
-  station-default:latest
-```
-
-**What's included in containers:**
-- ✅ Station binary + all dependencies
-- ✅ Your agents pre-configured and synced
-- ✅ MCP servers with variables resolved
-- ✅ Production-ready for deployment
-
----
-
-## Security: Template Variables
-
-Station uses **template variables** to keep sensitive data secure:
-
-**Why this matters:**
-- ❌ **Without templates**: API keys, paths, and credentials stored in plain text configs
-- ✅ **With templates**: Values rendered at runtime from environment variables
-
-**Example:**
+### 2. Connect Claude Code/Cursor
+Station automatically creates `.mcp.json` when you run `stn up`:
 ```json
 {
   "mcpServers": {
-    "ship-semgrep": {
-      "command": "ship",
-      "args": ["mcp", "semgrep", "--stdio"]
+    "station": {
+      "type": "http",
+      "url": "http://localhost:8586/mcp"
     }
   }
 }
 ```
 
-**Benefits:**
-- 🔐 Share configs safely (no secrets exposed)
-- 📦 Distribute bundles securely
-- 🌍 Deploy across environments with different credentials
-- 🔄 Change secrets without updating configs
+Restart Claude Code/Cursor to connect to Station.
+
+### 3. Create & Manage Agents (via Claude)
+Use Claude Code/Cursor with Station's MCP tools to:
+- **Create agents** - Write dotprompt files with agent definitions
+- **Run agents** - Execute agents and see results in real-time
+- **List agents** - View all agents in your environments
+- **Update agents** - Modify agent configs and tools
+- **Create environments** - Set up dev/staging/prod isolation
+- **Sync environments** - Apply changes and resolve variables
+
+Example interaction with Claude:
+```
+You: "Create a FinOps agent that analyzes AWS costs using the cost explorer tools"
+
+Claude: [Uses Station MCP tools to create agent with proper dotprompt format]
+
+You: "Run the agent to analyze last month's costs"
+
+Claude: [Executes agent and shows cost analysis results]
+```
+
+### 4. Bundle & Deploy (via UI)
+Back to the Web UI at `http://localhost:8585`:
+- **Create bundles** - Package agents + MCP configs for distribution
+- **Share bundles** - Export bundles to share with team
+- **Build Docker images** - Create production containers from environments
+- **Install bundles** - Import bundles from registry or files
+
+[Agent Development Guide →](./docs/station/agent-development.md) | [Bundling & Distribution →](./docs/station/bundles.md)
+
+---
+
+## MCP Tools & Templates
+
+Station uses the Model Context Protocol (MCP) to give agents access to tools—AWS APIs, databases, filesystems, security scanners, and more.
+
+**Fine-grained control over agent capabilities:**
+```yaml
+tools:
+  - "__get_cost_and_usage"          # AWS Cost Explorer - read only
+  - "__list_cost_allocation_tags"   # Read cost tags
+  - "__read_text_file"              # Filesystem read
+  # No write permissions - agent can analyze but not modify
+```
+
+**Template variables for secure configuration:**
+```json
+{
+  "mcpServers": {
+    "aws-cost-explorer": {
+      "command": "mcp-server-aws",
+      "env": {
+        "AWS_REGION": "{{ .AWS_REGION }}",
+        "AWS_PROFILE": "{{ .AWS_PROFILE }}"
+      }
+    }
+  }
+}
+```
+
+Variables are resolved at runtime from `variables.yml`—never hardcoded in configs.
+
+[MCP Tools Documentation →](./docs/station/mcp-tools.md) | [Template Variables Guide →](./docs/station/templates.md)
+
+---
+
+## Zero-Config Deployments
+
+Deploy Station agents to production without manual configuration. Station supports zero-config deployments that automatically:
+- Discover cloud credentials and configuration
+- Set up MCP tool connections
+- Deploy agents with production-ready settings
+
+**Deploy to Docker Compose:**
+```bash
+# Build environment container
+stn build env production
+
+# Deploy with docker-compose
+docker-compose up -d
+```
+
+Station automatically configures:
+- AWS credentials from instance role or environment
+- Database connections from service discovery
+- MCP servers with template variables resolved
+
+**Supported platforms:**
+- Docker / Docker Compose
+- AWS ECS
+- Kubernetes
+- AWS Lambda (coming soon)
+
+[Zero-Config Deployment Guide →](./docs/station/zero-config-deployments.md) | [Docker Compose Examples →](./docs/station/docker-compose-deployments.md)
 
 ---
 
 ## Use Cases
 
-**Development:**
-- Local AI agents with full MCP tool access
-- Mix filesystem, cloud, security, and custom tools
-- Test agents before production deployment
+**FinOps & Cost Optimization:**
+- Cost spike detection and root cause analysis
+- Reserved instance utilization tracking
+- Multi-cloud cost attribution
+- COGS analysis for SaaS businesses
 
-**CI/CD:**
-```yaml
-# GitHub Actions example
-- name: Security Scan
-  run: |
-    docker run --rm \
-      -v ${{ github.workspace }}:/workspace \
-      -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-      ghcr.io/cloudshipai/station:latest \
-      stn agent run "Security Scanner" "Analyze /workspace"
-```
+**Security & Compliance:**
+- Infrastructure security scanning
+- Compliance violation detection
+- Secret rotation monitoring
+- Vulnerability assessments
 
-**Production:**
-- Deploy containerized agents to Kubernetes
-- Horizontal scaling with multiple instances
-- Remote management via CloudShip integration
+**Deployment & Operations:**
+- Automated deployment validation
+- Performance regression detection
+- Incident response automation
+- Change impact analysis
+
+[See Example Agents →](./docs/station/examples.md)
 
 ---
 
@@ -240,8 +266,7 @@ Station uses **template variables** to keep sensitive data secure:
 
 ## Resources
 
-- 📚 **[Documentation](https://cloudshipai.github.io/station)** - Complete guides and tutorials
-- 🌐 **[Bundle Registry](https://cloudshipai.github.io/registry)** - Community agent bundles
+- 📚 **[Documentation](./docs/station/)** - Complete guides and tutorials
 - 🐛 **[Issues](https://github.com/cloudshipai/station/issues)** - Bug reports and feature requests
 - 💬 **[Discord](https://discord.gg/station-ai)** - Community support
 
@@ -253,6 +278,6 @@ Station uses **template variables** to keep sensitive data secure:
 
 ---
 
-**Station - Self-Hosted AI Agent Runtime**
+**Station - Open-Source Runtime for Infrastructure Management Agents**
 
-*Secure AI agents. Custom MCP tools. Deploy anywhere.*
+*Deploy AI agents on your infrastructure. Keep data secure. Maintain control.*
