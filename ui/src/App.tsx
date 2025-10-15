@@ -1004,9 +1004,6 @@ const MCPServersPage = () => {
                 </div>
 
                 <h3 className="font-mono font-medium text-tokyo-cyan">{server.name}</h3>
-                <p className="text-sm text-tokyo-comment mt-1 font-mono">
-                  {server.command} {server.args ? server.args.join(' ') : ''}
-                </p>
 
                 {/* Error message */}
                 {server.error && (
