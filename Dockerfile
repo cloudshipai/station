@@ -71,6 +71,10 @@ USER root
 COPY dist/station_${TARGETOS}_${TARGETARCH}*/stn /usr/local/bin/stn
 RUN chmod +x /usr/local/bin/stn
 
+# Copy MCP server templates directory
+COPY mcp-servers/ /usr/share/station/mcp-servers/
+RUN chown -R station:station /usr/share/station
+
 # Create necessary directories with proper ownership
 # Also create symlink from /root/.config to /home/station/.config for compatibility
 RUN mkdir -p /workspace /var/log/station /root && \

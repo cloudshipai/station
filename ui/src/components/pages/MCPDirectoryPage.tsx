@@ -22,317 +22,11 @@ interface Environment {
 }
 
 const mcpServers: MCPServer[] = [
-  {
-    id: 'tavily',
-    name: 'Tavily',
-    description: 'Search the web and get search results for a given query',
-    category: 'Search & Research',
-    command: 'npx',
-    args: ['-y', '@mcptools/mcp-tavily'],
-    env: { TAVILY_API_KEY: '{{ .TAVILY_API_KEY }}' },
-    icon: Search
-  },
-  {
-    id: 'powertools',
-    name: 'PowerTools for AWS',
-    description: 'AWS utilities and tools for development',
-    category: 'Cloud Platform',
-    command: 'npx',
-    args: ['-y', 'powertools-for-aws-mcp'],
-    icon: Cloud
-  },
-  {
-    id: 'e2b-mcp-server',
-    name: 'E2B Code Interpreter',
-    description: 'Run code in secure, sandboxed cloud environments',
-    category: 'Code Execution',
-    command: 'uvx',
-    args: ['e2b-mcp-server'],
-    env: { E2B_API_KEY: '{{ .E2B_API_KEY }}' },
-    icon: Code
-  },
-  {
-    id: 'heroku',
-    name: 'Heroku',
-    description: 'Use Heroku CLI to manage apps on the Heroku platform',
-    category: 'Cloud Platform',
-    command: 'heroku',
-    args: ['mcp:start'],
-    icon: Cloud
-  },
-  {
-    id: 'kubernetes',
-    name: 'Kubernetes',
-    description: 'Manage Kubernetes cluster (pods, deployments, services)',
-    category: 'Infrastructure',
-    command: 'npx',
-    args: ['mcp-server-kubernetes'],
-    icon: Layers
-  },
-  {
-    id: 'couchbase',
-    name: 'Couchbase',
-    description: 'Query and manage Couchbase databases',
-    category: 'Database',
-    command: 'docker',
-    args: ['run', '-i', '--rm', '-e', 'CB_CONNECTION_STRING', '-e', 'CB_USERNAME', '-e', 'CB_BUCKET_NAME', '-e', 'CB_MCP_READ_ONLY_QUERY_MODE', '-e', 'CB_PASSWORD', 'mcp/couchbase'],
-    env: {
-      CB_CONNECTION_STRING: '{{ .CB_CONNECTION_STRING }}',
-      CB_USERNAME: '{{ .CB_USERNAME }}',
-      CB_BUCKET_NAME: '{{ .CB_BUCKET_NAME }}',
-      CB_MCP_READ_ONLY_QUERY_MODE: '{{ .CB_MCP_READ_ONLY_QUERY_MODE }}',
-      CB_PASSWORD: '{{ .CB_PASSWORD }}'
-    },
-    icon: Database
-  },
-  {
-    id: 'terraform',
-    name: 'Terraform',
-    description: 'Manage infrastructure with Terraform',
-    category: 'Infrastructure',
-    command: 'docker',
-    args: ['run', '-i', '--rm', 'hashicorp/terraform-mcp-server'],
-    icon: Layers
-  },
-  {
-    id: 'sqlite-mcp-server',
-    name: 'SQLite MCP Server',
-    description: 'Read and write data in SQLite databases',
-    category: 'Database',
-    command: 'uvx',
-    args: ['mcp-server-sqlite@git+https://github.com/neverinfamous/mcp_server_sqlite.git'],
-    icon: Database
-  },
-  {
-    id: 'argocd-mcp',
-    name: 'ArgoCD',
-    description: 'Manage ArgoCD applications and repositories',
-    category: 'Infrastructure',
-    command: 'npx',
-    args: ['argocd-mcp@latest', 'stdio'],
-    env: {
-      ARGOCD_BASE_URL: '{{ .ARGOCD_BASE_URL }}',
-      ARGOCD_API_TOKEN: '{{ .ARGOCD_API_TOKEN }}'
-    },
-    icon: Layers
-  },
-  {
-    id: 'supabase',
-    name: 'Supabase',
-    description: 'Interact with Supabase projects and databases',
-    category: 'Database',
-    command: 'npx',
-    args: ['-y', '@supabase/mcp-server-supabase@latest', '--access-token', '{{ .SUPABASE_ACCESS_TOKEN }}'],
-    icon: Database
-  },
-  {
-    id: 'github',
-    name: 'GitHub',
-    description: 'Create issues, search repositories, manage files and more',
-    category: 'Development Tools',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-github'],
-    env: { GITHUB_PERSONAL_ACCESS_TOKEN: '{{ .GITHUB_PERSONAL_ACCESS_TOKEN }}' },
-    transport: 'http',
-    icon: Code
-  },
-  {
-    id: 'dbhub-postgres-npx',
-    name: 'DBHub Postgres',
-    description: 'Connect to Postgres databases via DBHub',
-    category: 'Database',
-    command: 'npx',
-    args: ['-y', '@bytebase/dbhub', '--transport', 'stdio', '--dsn', '{{ .POSTGRES_DSN }}'],
-    icon: Database
-  },
-  {
-    id: 'python-repl',
-    name: 'Python REPL',
-    description: 'Execute Python code in a REPL environment',
-    category: 'Code Execution',
-    command: 'uv',
-    args: ['--directory', '{{ .PYTHON_REPL_PATH }}', 'run', 'mcp_python'],
-    icon: Code
-  },
-  {
-    id: 'docling',
-    name: 'Docling',
-    description: 'Convert various document formats to text and structured formats',
-    category: 'Document Processing',
-    command: 'uvx',
-    args: ['--from=docling-mcp', 'docling-mcp-server'],
-    icon: FileText
-  },
-  {
-    id: 'sentry',
-    name: 'Sentry',
-    description: 'Query Sentry for error tracking and performance monitoring',
-    category: 'Monitoring',
-    command: 'npx',
-    args: ['-y', '@sentry/mcp-server@latest', '--access-token={{ .SENTRY_AUTH_TOKEN }}'],
-    icon: AlertCircle
-  },
-  {
-    id: 'perplexity-ask',
-    name: 'Perplexity',
-    description: 'Search and ask questions using Perplexity AI',
-    category: 'Search & Research',
-    command: 'npx',
-    args: ['-y', 'server-perplexity-ask'],
-    env: { PERPLEXITY_API_KEY: '{{ .PERPLEXITY_API_KEY }}' },
-    icon: Search
-  },
-  {
-    id: 'posthog',
-    name: 'PostHog',
-    description: 'Query PostHog for analytics insights and user behavior data',
-    category: 'Analytics',
-    command: 'npx',
-    args: ['-y', 'mcp-remote@latest', 'https://mcp.posthog.com/mcp', '--header', 'Authorization:{{ .POSTHOG_AUTH_HEADER }}'],
-    env: { POSTHOG_AUTH_HEADER: '{{ .POSTHOG_AUTH_HEADER }}' },
-    icon: Settings
-  },
-  {
-    id: 'fetch',
-    name: 'Fetch',
-    description: 'Fetch and extract content from web pages',
-    category: 'Web Scraping',
-    command: 'uvx',
-    args: ['mcp-server-fetch'],
-    icon: Globe
-  },
-  {
-    id: 'stripe',
-    name: 'Stripe',
-    description: 'Access Stripe API for payment processing and financial data',
-    category: 'Financial',
-    command: 'npx',
-    args: ['-y', '@stripe/mcp', '--tools=all', '--api-key={{ .STRIPE_SECRET_KEY }}'],
-    icon: Settings
-  },
-  {
-    id: 'notionMCP',
-    name: 'Notion',
-    description: 'Read and search through Notion pages and databases',
-    category: 'Productivity',
-    command: 'npx',
-    args: ['-y', 'mcp-remote', 'https://mcp.notion.com/sse'],
-    icon: FileText
-  },
-  {
-    id: 'aws-knowledge-mcp',
-    name: 'AWS Knowledge',
-    description: 'Search AWS documentation and get answers about AWS services',
-    category: 'Cloud Platform',
-    command: 'npx',
-    args: ['-y', 'mcp-remote', 'https://knowledge-mcp.global.api.aws'],
-    transport: 'http',
-    icon: Cloud
-  },
-  {
-    id: 'desktop-commander',
-    name: 'Desktop Commander',
-    description: 'Control your desktop environment and applications',
-    category: 'System Control',
-    command: 'npx',
-    args: ['-y', '@wonderwhy-er/desktop-commander@latest'],
-    icon: Terminal
-  },
-  {
-    id: 'resend',
-    name: 'Resend',
-    description: 'Send emails using the Resend API',
-    category: 'Communication',
-    command: 'node',
-    args: ['{{ .RESEND_MCP_PATH }}/build/index.js', '--key={{ .RESEND_API_KEY }}'],
-    icon: MessageSquare
-  },
-  {
-    id: 'upstash',
-    name: 'Upstash',
-    description: 'Interact with Upstash Redis and Kafka services',
-    category: 'Database',
-    command: 'npx',
-    args: ['-y', '@upstash/mcp-server', 'run', '{{ .UPSTASH_EMAIL }}', '{{ .UPSTASH_API_KEY }}'],
-    icon: Database
-  },
-  {
-    id: 'playwright',
-    name: 'Playwright',
-    description: 'Browser automation and web testing framework',
-    category: 'Development Tools',
-    command: 'npx',
-    args: ['@playwright/mcp@latest'],
-    icon: Code
-  },
-  {
-    id: 'awslabs.cost-explorer-mcp-server',
-    name: 'AWS Cost Explorer',
-    description: 'Analyze AWS costs and usage with Cost Explorer API',
-    category: 'Cloud Platform',
-    command: 'uvx',
-    args: ['awslabs.cost-explorer-mcp-server@latest'],
-    env: {
-      FASTMCP_LOG_LEVEL: '{{ .FASTMCP_LOG_LEVEL }}',
-      AWS_PROFILE: '{{ .AWS_PROFILE }}'
-    },
-    icon: Cloud
-  },
   // Ship Security Tools
-  {
-    id: 'ship-security',
-    name: 'Ship Security (All)',
-    description: 'All 31 security tools: Trivy, GitLeaks, Semgrep, Grype, TruffleHog, and more',
-    category: 'Ship Security Tools',
-    command: 'ship',
-    args: ['mcp', 'security'],
-    icon: Shield,
-    requiresShip: true
-  },
-  {
-    id: 'ship-terraform',
-    name: 'Ship Terraform',
-    description: 'All 11 Terraform tools: TFLint, Checkov, terraform-docs, TFSec, and more',
-    category: 'Ship Security Tools',
-    command: 'ship',
-    args: ['mcp', 'terraform'],
-    icon: Shield,
-    requiresShip: true
-  },
-  {
-    id: 'ship-kubernetes',
-    name: 'Ship Kubernetes',
-    description: 'All Kubernetes tools: Kubescape, Kube-bench, Velero, Falco, Kyverno',
-    category: 'Ship Security Tools',
-    command: 'ship',
-    args: ['mcp', 'kubernetes'],
-    icon: Shield,
-    requiresShip: true
-  },
-  {
-    id: 'ship-cloud',
-    name: 'Ship Cloud',
-    description: 'Cloud security tools: Prowler, Scout-suite, CloudQuery, Custodian',
-    category: 'Ship Security Tools',
-    command: 'ship',
-    args: ['mcp', 'cloud'],
-    icon: Shield,
-    requiresShip: true
-  },
-  {
-    id: 'ship-aws-iam',
-    name: 'Ship AWS IAM',
-    description: 'AWS IAM security: Cloudsplaining, Parliament, PMMapper, Policy Sentry',
-    category: 'Ship Security Tools',
-    command: 'ship',
-    args: ['mcp', 'aws-iam'],
-    icon: Shield,
-    requiresShip: true
-  },
   {
     id: 'ship-gitleaks',
     name: 'GitLeaks',
-    description: 'Detect secrets and sensitive information in code repositories',
+    description: 'Fast secret scanning for git repositories (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
     args: ['mcp', 'gitleaks'],
@@ -340,9 +34,19 @@ const mcpServers: MCPServer[] = [
     requiresShip: true
   },
   {
+    id: 'ship-trufflehog',
+    name: 'TruffleHog',
+    description: 'Advanced secret scanning with verification (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'trufflehog'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
     id: 'ship-trivy',
     name: 'Trivy',
-    description: 'Comprehensive security scanner for containers and filesystems',
+    description: 'Comprehensive vulnerability scanner for containers and filesystems (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
     args: ['mcp', 'trivy'],
@@ -350,9 +54,29 @@ const mcpServers: MCPServer[] = [
     requiresShip: true
   },
   {
+    id: 'ship-syft',
+    name: 'Syft',
+    description: 'SBOM (Software Bill of Materials) generation tool (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'syft'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-grype',
+    name: 'Grype',
+    description: 'Vulnerability scanner for container images and filesystems (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'grype'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
     id: 'ship-semgrep',
     name: 'Semgrep',
-    description: 'Static analysis security scanning for code',
+    description: 'Static analysis security scanning for code (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
     args: ['mcp', 'semgrep'],
@@ -362,7 +86,7 @@ const mcpServers: MCPServer[] = [
   {
     id: 'ship-checkov',
     name: 'Checkov',
-    description: 'Infrastructure as Code security scanning',
+    description: 'Infrastructure as Code security scanning (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
     args: ['mcp', 'checkov'],
@@ -370,9 +94,29 @@ const mcpServers: MCPServer[] = [
     requiresShip: true
   },
   {
+    id: 'ship-terrascan',
+    name: 'Terrascan',
+    description: 'Infrastructure as Code security scanner (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'terrascan'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-tfsec',
+    name: 'TFSec',
+    description: 'Terraform-specific security scanner (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'tfsec'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
     id: 'ship-tflint',
     name: 'TFLint',
-    description: 'Terraform linting for syntax and best practices',
+    description: 'Terraform linter for syntax and best practices (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
     args: ['mcp', 'tflint'],
@@ -380,19 +124,39 @@ const mcpServers: MCPServer[] = [
     requiresShip: true
   },
   {
-    id: 'ship-grype',
-    name: 'Grype',
-    description: 'Vulnerability scanning with Anchore Grype',
+    id: 'ship-terraform-docs',
+    name: 'Terraform Docs',
+    description: 'Terraform documentation generator (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
-    args: ['mcp', 'grype'],
+    args: ['mcp', 'terraform-docs'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-nuclei',
+    name: 'Nuclei',
+    description: 'Fast vulnerability scanner with community templates (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'nuclei'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-dockle',
+    name: 'Dockle',
+    description: 'Container image linter for security best practices (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'dockle'],
     icon: Shield,
     requiresShip: true
   },
   {
     id: 'ship-kubescape',
     name: 'Kubescape',
-    description: 'Kubernetes security scanning and compliance',
+    description: 'Kubernetes security scanner and compliance checker (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
     args: ['mcp', 'kubescape'],
@@ -400,12 +164,32 @@ const mcpServers: MCPServer[] = [
     requiresShip: true
   },
   {
-    id: 'ship-all',
-    name: 'Ship All Tools',
-    description: 'All 86 Ship tools across security, infrastructure, cloud, and development',
+    id: 'ship-kube-bench',
+    name: 'Kube-bench',
+    description: 'Kubernetes CIS benchmark security scanner (Note: Requires Docker-in-Docker for ECS deployments)',
     category: 'Ship Security Tools',
     command: 'ship',
-    args: ['mcp', 'all'],
+    args: ['mcp', 'kube-bench'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-kube-hunter',
+    name: 'Kube-hunter',
+    description: 'Kubernetes penetration testing tool (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'kube-hunter'],
+    icon: Shield,
+    requiresShip: true
+  },
+  {
+    id: 'ship-cosign',
+    name: 'Cosign',
+    description: 'Container signing and verification for supply chain security (Note: Requires Docker-in-Docker for ECS deployments)',
+    category: 'Ship Security Tools',
+    command: 'ship',
+    args: ['mcp', 'cosign'],
     icon: Shield,
     requiresShip: true
   }
@@ -445,7 +229,7 @@ const MCPServerCard: React.FC<MCPServerCardProps> = ({ server, onAddServer, disa
         <div className="text-sm">
           <span className="font-medium text-gray-300">Command:</span>
           <code className="ml-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">
-            {server.command} {server.args.join(' ')}
+            {server.command} {server.args?.join(' ') || ''}
           </code>
         </div>
 
@@ -598,17 +382,16 @@ export const MCPDirectoryPage: React.FC = () => {
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [syncEnvironment, setSyncEnvironment] = useState<string>('');
 
-  // Build categories from servers, ensuring Ship Security Tools is always included
-  const serverCategories = Array.from(new Set(mcpServers.map(s => s.category)));
-  if (!serverCategories.includes('Ship Security Tools')) {
-    serverCategories.push('Ship Security Tools');
-  }
+  // Build categories from servers, excluding Ship Security Tools
+  const serverCategories = Array.from(new Set(mcpServers.map(s => s.category)))
+    .filter(cat => cat !== 'Ship Security Tools');
   const categories = ['All', ...serverCategories];
 
   useEffect(() => {
     fetchEnvironments();
     fetchInstalledServers();
     checkShipInstallation();
+    fetchDirectoryTemplates();
   }, []);
 
   const fetchEnvironments = async () => {
@@ -645,6 +428,32 @@ export const MCPDirectoryPage: React.FC = () => {
       setShipInstalled(false);
     } finally {
       setCheckingShip(false);
+    }
+  };
+
+  const fetchDirectoryTemplates = async () => {
+    try {
+      const response = await fetch('/api/v1/directory/templates');
+      const data = await response.json();
+
+      // Map API templates to MCPServer format
+      const mappedTemplates: MCPServer[] = (data.templates || []).map((template: any) => ({
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        category: template.category,
+        command: template.command,
+        args: template.args || [], // Ensure args is always an array
+        env: template.env,
+        icon: Package, // Use Package icon for directory templates
+        isInstalled: false,
+        requiresShip: false,
+      }));
+
+      // Merge with existing hardcoded servers
+      setServers(prev => [...prev, ...mappedTemplates]);
+    } catch (error) {
+      console.error('Failed to fetch directory templates:', error);
     }
   };
 

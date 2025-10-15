@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "browserbase": {
+      "description": "Cloud browser automation capabilities using Browserbase and Stagehand. Enables LLMs to interact with web pages, take screenshots, extract information, and perform automated actions with atomic precision.",
+      "command": "npx",
+      "args": [
+        "@browserbasehq/mcp-server-browserbase"
+      ],
+      "env": {
+        "BROWSERBASE_API_KEY": "{{ .BROWSERBASE_API_KEY }}",
+        "BROWSERBASE_PROJECT_ID": "{{ .BROWSERBASE_PROJECT_ID }}",
+        "GEMINI_API_KEY": "{{ .GEMINI_API_KEY }}"
+      },
+      "metadata": {
+        "category": "Automation"
+      }
+    }
+  }
+}

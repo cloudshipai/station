@@ -80,6 +80,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// MCP server management routes (file-based configuration)
 	h.registerMCPManagementRoutes(envGroup)
 
+	// MCP Directory template routes
+	h.registerMCPDirectoryRoutes(router)
+
 	// Tools routes (nested under environments)
 	toolsGroup := envGroup.Group("/:env_id/tools")
 	// Inherits admin-only restriction from envGroup

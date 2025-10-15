@@ -297,6 +297,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// Add host.docker.internal mapping for Linux (needed for CloudShip/Lighthouse connectivity)
+		dockerArgs = append(dockerArgs, "--add-host", "host.docker.internal:host-gateway")
+
 		// With the new user setup, we don't need to fix permissions manually
 		// The entrypoint handles it automatically
 	}

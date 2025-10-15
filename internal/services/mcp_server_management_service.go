@@ -39,9 +39,11 @@ type MCPServerOperationResult struct {
 type MCPServerConfig struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
-	Command     string                 `json:"command"`
+	Command     string                 `json:"command,omitempty"`
 	Args        []string               `json:"args,omitempty"`
 	Env         map[string]string      `json:"env,omitempty"`
+	URL         string                 `json:"url,omitempty"`         // For HTTP-based servers
+	Type        string                 `json:"type,omitempty"`        // "stdio" or "http"
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -303,4 +305,82 @@ func (s *MCPServerManagementService) UpdateRawMCPConfig(environmentName, content
 
 	templatePath := filepath.Join(envDir, "template.json")
 	return os.WriteFile(templatePath, []byte(content), 0644)
+}
+
+// MCPDirectoryTemplate represents a template from the mcp-servers/ directory
+type MCPDirectoryTemplate struct {
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Category    string            `json:"category"`
+	Command     string            `json:"command"`
+	Args        []string          `json:"args"`
+	Env         map[string]string `json:"env,omitempty"`
+}
+
+// GetMCPDirectoryTemplates reads all MCP server templates from the mcp-servers/ directory
+func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryTemplate, error) {
+	// Get the mcp-servers directory path
+	// Check multiple locations: embedded in binary location, system-wide, local dev
+	mcpServersDirs := []string{
+		"/usr/share/station/mcp-servers", // Docker/system installation
+		"mcp-servers",                     // Local development
+	}
+
+	var mcpServersDir string
+	for _, dir := range mcpServersDirs {
+		if _, err := os.Stat(dir); err == nil {
+			mcpServersDir = dir
+			break
+		}
+	}
+
+	// If no directory found, return empty array
+	if mcpServersDir == "" {
+		return []MCPDirectoryTemplate{}, nil
+	}
+
+	// Read all JSON files in the mcp-servers directory
+	files, err := filepath.Glob(filepath.Join(mcpServersDir, "*.json"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read mcp-servers directory: %v", err)
+	}
+
+	var templates []MCPDirectoryTemplate
+
+	for _, filePath := range files {
+		// Read the template file
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			continue // Skip files that can't be read
+		}
+
+		var singleServerTemplate SingleServerTemplate
+		if err := json.Unmarshal(fileData, &singleServerTemplate); err != nil {
+			continue // Skip files that can't be parsed
+		}
+
+		// Extract templates from this file
+		for serverName, serverConfig := range singleServerTemplate.MCPServers {
+			// Try to infer category from tags or default to "Community"
+			category := "Community"
+			if categoryVal, ok := serverConfig.Metadata["category"].(string); ok {
+				category = categoryVal
+			}
+
+			template := MCPDirectoryTemplate{
+				ID:          serverName,
+				Name:        serverName,
+				Description: serverConfig.Description,
+				Category:    category,
+				Command:     serverConfig.Command,
+				Args:        serverConfig.Args,
+				Env:         serverConfig.Env,
+			}
+
+			templates = append(templates, template)
+		}
+	}
+
+	return templates, nil
 }

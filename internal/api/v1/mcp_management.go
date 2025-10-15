@@ -29,6 +29,11 @@ func (h *APIHandlers) registerMCPManagementRoutes(envGroup *gin.RouterGroup) {
 	configGroup.PUT("/files/:filename", h.updateEnvironmentFileConfig)
 }
 
+// registerMCPDirectoryRoutes registers MCP directory template routes
+func (h *APIHandlers) registerMCPDirectoryRoutes(router *gin.RouterGroup) {
+	router.GET("/directory/templates", h.listMCPDirectoryTemplates)
+}
+
 // listMCPServersForEnvironment lists all MCP servers for an environment
 func (h *APIHandlers) listMCPServersForEnvironment(c *gin.Context) {
 	envID, err := strconv.ParseInt(c.Param("env_id"), 10, 64)
@@ -450,5 +455,20 @@ func (h *APIHandlers) updateServerConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": result.Message,
 		"result":  result,
+	})
+}
+
+// listMCPDirectoryTemplates lists all MCP server templates from mcp-servers/ directory
+func (h *APIHandlers) listMCPDirectoryTemplates(c *gin.Context) {
+	mcpService := services.NewMCPServerManagementService(h.repos)
+	templates, err := mcpService.GetMCPDirectoryTemplates()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get MCP directory templates"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"templates": templates,
+		"count":     len(templates),
 	})
 }
