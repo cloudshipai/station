@@ -76,8 +76,8 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	// Check if agents directory exists
 	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
 		fmt.Printf("⚠️  Agents directory does not exist: %s\n", agentsDir)
-		fmt.Printf("💡 Create some agents first using: stn agent create\n")
-		fmt.Printf("📖 Or export existing agents using: stn agent export <id>\n")
+		fmt.Printf("💡 Create .prompt files in this directory or use Claude Code/Cursor to create agents\n")
+		fmt.Printf("📖 See docs/station/agent-development.md for dotprompt format details\n")
 	}
 
 	genkitApp, err := initializeGenKitWithPromptDir(ctx, agentsDir)

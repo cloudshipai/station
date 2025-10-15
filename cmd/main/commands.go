@@ -632,12 +632,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Printf("🔗 Connect via SSH: ssh admin@localhost -p 2222\n")
 		fmt.Printf("\n📖 Next steps:\n")
-		if !shipSetup {
-			fmt.Printf("   • Run 'stn mcp init' to create sample configurations\n")
-			fmt.Printf("   • Run 'stn init --ship' to bootstrap with ship CLI MCP integration\n")
-		}
-		fmt.Printf("   • Run 'stn mcp env list' to see your environments\n")
-		fmt.Printf("   • Use 'stn init --replicate' for database replication setup\n")
+		fmt.Printf("   • Run 'stn up' to start Station and connect Claude Code/Cursor\n")
+		fmt.Printf("   • Visit http://localhost:8585 to add MCP tools and manage bundles\n")
+		fmt.Printf("   • Use 'stn mcp list' to see your MCP configurations\n")
+		fmt.Printf("   • Create and manage agents via Claude Code/Cursor using Station's MCP tools\n")
 	}
 
 	return nil
