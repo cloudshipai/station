@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "description": "A Model Context Protocol server for interacting with Grafana dashboards and monitoring. Supports both self-hosted Grafana instances and Grafana Cloud.",
+      "command": "mcp-grafana",
+      "args": [],
+      "env": {
+        "GRAFANA_URL": "{{ .GRAFANA_URL }}",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "{{ .GRAFANA_SERVICE_ACCOUNT_TOKEN }}",
+        "GRAFANA_USERNAME": "{{ .GRAFANA_USERNAME }}",
+        "GRAFANA_PASSWORD": "{{ .GRAFANA_PASSWORD }}"
+      },
+      "metadata": {
+        "category": "Monitoring"
+      }
+    }
+  }
+}

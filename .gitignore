@@ -4,12 +4,13 @@
 *.dll
 *.so
 *.dylib
-station
+/station
 station-cli
 stn
 stn-ui
 stn-*
 station-*
+!docs/station/
 
 # All binaries and archives
 *.tar.gz

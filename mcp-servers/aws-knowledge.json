@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "aws-knowledge": {
+      "description": "A fully managed remote MCP server that provides up-to-date documentation, code samples, knowledge about the regional availability of AWS APIs and CloudFormation resources, and other official AWS content.",
+      "url": "https://knowledge-mcp.global.api.aws",
+      "type": "http",
+      "metadata": {
+        "category": "Cloud & Infrastructure",
+        "notes": "Remote MCP server - requires MCP client support for HTTP transport"
+      }
+    }
+  }
+}

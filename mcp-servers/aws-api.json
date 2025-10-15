@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "aws-api": {
+      "description": "The AWS API MCP Server enables AI assistants to interact with AWS services and resources through AWS CLI commands. It provides programmatic access to manage your AWS infrastructure while maintaining proper security controls. Acts as a bridge between AI assistants and AWS services, allowing you to create, update, and manage AWS resources across all available services.",
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-api-mcp-server@latest"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}"
+      },
+      "metadata": {
+        "category": "Cloud & Infrastructure"
+      }
+    }
+  }
+}

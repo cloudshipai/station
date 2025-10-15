@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "postgresql": {
+      "description": "Connect to PostgreSQL databases for advanced data operations, complex queries, and enterprise database management. Note: If connecting to localhost PostgreSQL from Station container, use host.docker.internal instead of localhost in connection string.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "{{ .POSTGRES_CONNECTION_STRING }}"
+      },
+      "metadata": {
+        "category": "Database",
+        "notes": "For local PostgreSQL databases, use host.docker.internal:5432 instead of localhost:5432 when running Station in Docker"
+      }
+    }
+  }
+}
