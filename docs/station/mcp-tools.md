@@ -385,15 +385,15 @@ After configuring MCP servers, discover available tools:
 
 ```bash
 # List all tools
-stn tools list
+stn mcp tools
 
 # Search for specific tools
-stn tools list | grep aws
-stn tools list | grep filesystem
-stn tools list | grep checkov
+stn mcp tools | grep aws
+stn mcp tools | grep filesystem
+stn mcp tools | grep checkov
 
 # Get detailed tool information
-stn tools list --verbose
+stn mcp tools --verbose
 ```
 
 **Example Output:**
@@ -698,7 +698,7 @@ cat ~/.config/station/environments/my-env/template.json
 stn mcp list --env my-env
 
 # 3. List available tools
-stn tools list | grep tool_name
+stn mcp tools | grep tool_name
 
 # 4. Verify tool name matches exactly (case-sensitive)
 ```

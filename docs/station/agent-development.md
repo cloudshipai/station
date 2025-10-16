@@ -63,7 +63,7 @@ Focus on:
 | `metadata.tags` | array | No | Categories for organization and search |
 | `model` | string | Yes | AI model: `gpt-4o`, `gpt-4o-mini`, `claude-3-5-sonnet-latest` |
 | `max_steps` | integer | Yes | Maximum tool calls (5-15 typical, 3-5 for simple tasks) |
-| `tools` | array | Yes | MCP tool names agent can use (use `stn tools list` to discover) |
+| `tools` | array | Yes | MCP tool names agent can use (use `stn mcp tools` to discover) |
 
 ### Template Body
 
@@ -96,11 +96,11 @@ Agents can only use tools explicitly listed in the `tools` array. Discover avail
 
 ```bash
 # List all tools in current environment
-stn tools list
+stn mcp tools
 
 # Search for specific tool categories
-stn tools list | grep filesystem
-stn tools list | grep aws
+stn mcp tools | grep filesystem
+stn mcp tools | grep aws
 ```
 
 Common tool patterns:
@@ -111,38 +111,48 @@ Common tool patterns:
 
 ## Development Workflows
 
-### Method 1: Web UI (Recommended for Beginners)
+### Method 1: Via Claude/Cursor (Recommended)
 
-**Step 1: Start Station with Web UI**
+Use Station's MCP tools directly from Claude Desktop or Cursor to create and manage agents.
+
+**Step 1: Connect Station to Claude/Cursor**
 ```bash
-stn up
-# Opens http://localhost:8585
+# Add to Claude Desktop config (~/.config/claude/claude_desktop_config.json)
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
 ```
 
-**Step 2: Create Environment**
-- Navigate to **Environments** → **Create New**
-- Name: `my-agents`
-- Add MCP servers for tools your agents need
+**Step 2: Create Agent via Natural Language**
+In Claude Code or Cursor, simply ask:
+> "Create a Station agent named cost-analyzer that analyzes AWS costs using the Cost Explorer API tools"
 
-**Step 3: Create Agent via UI**
-- Go to **Agents** → **Create Agent**
-- Fill in metadata (name, description, tags)
-- Select model and max_steps
-- Choose tools from available MCP servers
-- Write system prompt
-- Click **Save**
+Claude will use MCP tools like:
+- `create_agent` - Creates the agent in Station
+- `list_tools` - Discovers available MCP tools
+- `add_tool` - Assigns tools to the agent
+- `call_agent` - Tests agent execution
+- `list_runs` - Views execution history
 
-**Step 4: Test Agent**
-- Click **Run** on the agent card
-- Enter a test task
-- View live execution with tool calls
-- Inspect results and debug if needed
+**Step 3: Iterate and Test**
+> "Run the cost-analyzer agent with task: Analyze yesterday's EC2 costs"
+
+Claude can:
+- Execute agents and show results
+- Debug failures by inspecting runs
+- Modify agent prompts based on results
+- Add or remove tools as needed
 
 **Advantages:**
-- Visual tool discovery
-- Live execution feedback
-- Easy debugging with run history
-- No file editing required
+- Natural language interface - no manual file editing
+- AI-assisted tool discovery and assignment
+- Immediate testing and iteration
+- Full access to all Station MCP management tools
 
 ### Method 2: File-Based Development (Recommended for Advanced Users)
 
@@ -203,7 +213,7 @@ stn sync my-agents
 
 **Step 6: Test Agent**
 ```bash
-stn agent run "Cost Analyzer" "Analyze yesterday's AWS costs"
+stn agent run cost-analyzer "Analyze yesterday's AWS costs"
 ```
 
 **Advantages:**
@@ -212,32 +222,32 @@ stn agent run "Cost Analyzer" "Analyze yesterday's AWS costs"
 - Easy to duplicate and modify
 - Scriptable and automatable
 
-### Method 3: Claude Code/Cursor Integration
+### Method 3: Web UI
 
-Develop agents directly in your editor with AI assistance:
+Use the Station web interface for MCP server management, syncing, and Docker builds.
 
-**Step 1: Connect Station to Editor**
+**Step 1: Start Station Server**
 ```bash
-# Add to Claude Desktop config (~/.config/claude/claude_desktop_config.json)
-{
-  "mcpServers": {
-    "station": {
-      "command": "stn",
-      "args": ["stdio"]
-    }
-  }
-}
+stn up
+# Opens http://localhost:8585
 ```
 
-**Step 2: Use AI to Create Agents**
-In Claude Code/Cursor, ask:
-> "Create a Station agent that scans Terraform files for security issues using checkov and trivy"
+**Step 2: Manage MCP Servers**
+- Navigate to **MCP Servers** → **Add Server**
+- Configure server command, args, and environment variables
+- Test connection and view available tools
 
-The AI can:
-- Discover available MCP tools
-- Generate dotprompt files
-- Test agent execution
-- Debug and iterate
+**Step 3: Sync Environments**
+- Go to **Environments** → Select environment
+- Click **Sync** to load file-based agents and templates
+- Resolve any template variable prompts
+
+**Step 4: Build Docker Images**
+- Navigate to **Bundles** → Select bundle
+- Click **Build Docker Image**
+- Configure environment variables and deployment settings
+
+**Note:** The Web UI is for *infrastructure management*, not agent creation. Use Method 1 (Claude/Cursor) or Method 2 (file-based) to create agents.
 
 ## Testing and Debugging
 
@@ -245,10 +255,10 @@ The AI can:
 
 ```bash
 # Run agent and stream output
-stn agent run "Agent Name" "Task description" --tail
+stn agent run agent-name "Task description" --tail
 
 # Run in specific environment
-stn agent run "Agent Name" "Task" --env production
+stn agent run agent-name "Task" --env production
 ```
 
 ### View Execution History
@@ -273,7 +283,7 @@ stn runs inspect <run-id> -v
 **Issue: "Tool not found"**
 ```bash
 # Verify tool is available
-stn tools list | grep tool_name
+stn mcp tools | grep tool_name
 
 # Check MCP server is connected
 stn mcp list --env my-agents
@@ -298,17 +308,17 @@ stn mcp list --env my-agents
 
 1. **Start with Simple Task**: Test basic functionality first
    ```bash
-   stn agent run "File Analyzer" "List files in /tmp"
+   stn agent run file-analyzer "List files in /tmp"
    ```
 
 2. **Add Complexity Gradually**: Increase task difficulty
    ```bash
-   stn agent run "File Analyzer" "Find all Python files modified in last 7 days"
+   stn agent run file-analyzer "Find all Python files modified in last 7 days"
    ```
 
 3. **Test Edge Cases**: Verify error handling
    ```bash
-   stn agent run "File Analyzer" "Analyze /nonexistent/path"
+   stn agent run file-analyzer "Analyze /nonexistent/path"
    ```
 
 4. **Measure Performance**: Check execution time and costs
@@ -387,7 +397,7 @@ tools:
 
 **Tool Naming Convention:**
 - Tools from MCP servers are prefixed with `__`
-- Use `stn tools list` to get exact names
+- Use `stn mcp tools` to get exact names
 - Tool names must match exactly (case-sensitive)
 
 ### Model and Max Steps Guidelines
@@ -507,9 +517,9 @@ Generate security report from analysis results.
 
 Run sequentially:
 ```bash
-FILES=$(stn agent run "Terraform File Discoverer" "Find all .tf files")
-ISSUES=$(stn agent run "Terraform Security Analyzer" "Analyze $FILES")
-stn agent run "Security Report Generator" "Create report from: $ISSUES"
+FILES=$(stn agent run terraform-file-discoverer "Find all .tf files")
+ISSUES=$(stn agent run terraform-security-analyzer "Analyze $FILES")
+stn agent run security-report-generator "Create report from: $ISSUES"
 ```
 
 ### Dynamic Tool Selection
@@ -546,10 +556,10 @@ Run agents automatically with cron:
 
 ```bash
 # Daily cost analysis at 8 AM
-0 8 * * * stn agent run "AWS Cost Analyzer" "Daily cost report" >> /var/log/station-costs.log
+0 8 * * * stn agent run aws-cost-analyzer "Daily cost report" >> /var/log/station-costs.log
 
 # Weekly security scan
-0 0 * * 0 stn agent run "Security Scanner" "Weekly infrastructure scan" >> /var/log/station-security.log
+0 0 * * 0 stn agent run security-scanner "Weekly infrastructure scan" >> /var/log/station-security.log
 ```
 
 ### CI/CD Integration
@@ -568,7 +578,7 @@ jobs:
         run: curl -fsSL https://install.station.dev | bash
       - name: Run Security Scan
         run: |
-          stn agent run "Infrastructure Security Scanner" \
+          stn agent run infrastructure-security-scanner \
             "Scan for security issues and fail if critical findings" \
             --format json > results.json
         env:
@@ -583,7 +593,7 @@ When an agent doesn't work as expected:
    ```bash
    stn env list
    stn mcp list --env my-environment
-   stn tools list
+   stn mcp tools
    ```
 
 2. **Check Agent Configuration**
@@ -594,7 +604,7 @@ When an agent doesn't work as expected:
 
 3. **Test with Simple Task**
    ```bash
-   stn agent run "My Agent" "Simple test task" --tail
+   stn agent run my-agent "Simple test task" --tail
    ```
 
 4. **Inspect Execution Details**
