@@ -49,11 +49,11 @@ Focus on:
 **Usage**:
 ```bash
 # Daily automated check
-stn agent run "AWS Cost Spike Analyzer" \
+stn agent run aws-cost-spike-analyzer \
   "Analyze yesterday's AWS costs and identify any spikes or anomalies"
 
 # Specific timeframe
-stn agent run "AWS Cost Spike Analyzer" \
+stn agent run aws-cost-spike-analyzer \
   "Compare last week's costs to the previous 4 weeks and identify trends"
 ```
 
@@ -122,11 +122,11 @@ Your process:
 **Usage**:
 ```bash
 # Monthly COGS report
-stn agent run "Multi-Cloud Cost Attribution" \
+stn agent run multi-cloud-cost-attribution \
   "Generate COGS report for all customers for last month"
 
 # Specific customer analysis
-stn agent run "Multi-Cloud Cost Attribution" \
+stn agent run multi-cloud-cost-attribution \
   "Calculate infrastructure costs for customer acme-corp for Q4 2024"
 ```
 
@@ -176,7 +176,7 @@ Recommend:
 **Usage**:
 ```bash
 # Quarterly optimization review
-stn agent run "RI Optimizer" \
+stn agent run ri-optimizer \
   "Analyze our EC2 usage and recommend RI purchases for maximum savings"
 ```
 
@@ -236,11 +236,11 @@ Focus on:
 **Usage**:
 ```bash
 # CI/CD integration
-stn agent run "Infrastructure Security Scanner" \
+stn agent run infrastructure-security-scanner \
   "Scan the terraform/ directory for security issues and block if critical findings"
 
 # Pre-deployment validation
-stn agent run "Infrastructure Security Scanner" \
+stn agent run infrastructure-security-scanner \
   "Perform comprehensive security scan of all IaC before production deployment"
 ```
 
@@ -324,11 +324,11 @@ Provide:
 **Usage**:
 ```bash
 # Daily compliance monitoring
-stn agent run "Compliance Violation Detector" \
+stn agent run compliance-violation-detector \
   "Scan AWS infrastructure for CIS benchmark violations"
 
 # Pre-audit check
-stn agent run "Compliance Violation Detector" \
+stn agent run compliance-violation-detector \
   "Generate SOC2 compliance report for all production resources"
 ```
 
@@ -378,11 +378,11 @@ For each finding:
 **Usage**:
 ```bash
 # Repository scan
-stn agent run "Secret Leak Detector" \
+stn agent run secret-leak-detector \
   "Scan the current repository for any exposed secrets or credentials"
 
 # Pre-commit check
-stn agent run "Secret Leak Detector" \
+stn agent run secret-leak-detector \
   "Check staged git changes for secrets before committing"
 ```
 
@@ -433,11 +433,11 @@ If validation fails:
 **Usage**:
 ```bash
 # Post-deployment validation
-stn agent run "Deployment Validator" \
+stn agent run deployment-validator \
   "Validate the api-service deployment in production namespace"
 
 # Canary validation
-stn agent run "Deployment Validator" \
+stn agent run deployment-validator \
   "Check if canary deployment is healthy before promoting to 100%"
 ```
 
@@ -491,7 +491,7 @@ Report:
 **Usage**:
 ```bash
 # Post-deployment performance check
-stn agent run "Performance Regression Detector" \
+stn agent run performance-regression-detector \
   "Compare performance metrics before and after deployment v1.2.3"
 ```
 
@@ -514,7 +514,7 @@ jobs:
 
       - name: Run Security Scanner
         run: |
-          stn agent run "Infrastructure Security Scanner" \
+          stn agent run infrastructure-security-scanner \
             "Scan for security issues and fail if critical findings" \
             --format json > scan-results.json
         env:
@@ -536,7 +536,7 @@ security_scan:
   stage: test
   script:
     - curl -fsSL https://install.station.dev | bash
-    - stn agent run "Infrastructure Security Scanner" "Scan terraform/ for issues"
+    - stn agent run infrastructure-security-scanner "Scan terraform/ for issues"
   only:
     - merge_requests
 ```
@@ -547,7 +547,7 @@ security_scan:
 
 ```bash
 # /etc/cron.d/station-cost-analysis
-0 8 * * * station stn agent run "AWS Cost Spike Analyzer" "Daily cost analysis" >> /var/log/station-costs.log
+0 8 * * * station stn agent run aws-cost-spike-analyzer "Daily cost analysis" >> /var/log/station-costs.log
 ```
 
 ### Weekly Compliance Check
@@ -555,7 +555,7 @@ security_scan:
 ```bash
 # /etc/cron.weekly/station-compliance
 #!/bin/bash
-stn agent run "Compliance Violation Detector" \
+stn agent run compliance-violation-detector \
   "Weekly SOC2 compliance scan" \
   --format json | mail -s "Weekly Compliance Report" compliance@company.com
 ```
