@@ -87,9 +87,15 @@ func (aee *AgentExecutionEngine) ExecuteAgent(ctx context.Context, agent *models
 }
 
 // Execute executes an agent with optional user variables for dotprompt rendering
+// skipLighthouse: if true, skips sending to Lighthouse (used by management channel which handles its own SendRun)
 func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
+	return aee.ExecuteWithOptions(ctx, agent, task, runID, userVariables, false)
+}
+
+// ExecuteWithOptions executes an agent with options to control Lighthouse integration
+func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}, skipLighthouse bool) (*AgentExecutionResult, error) {
 	startTime := time.Now()
-	logging.Debug("Execute called for agent %s (ID: %d)", agent.Name, agent.ID)
+	logging.Debug("Execute called for agent %s (ID: %d), skipLighthouse=%v", agent.Name, agent.ID, skipLighthouse)
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
 	// Create telemetry span if telemetry service is available
@@ -351,9 +357,14 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 
 	// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
 	// Send to CloudShip Lighthouse (dual flow: SendRun always + IngestData conditionally)
-	logging.Debug("🔍 DEBUG: About to call sendToLighthouse for agent %d, run %d", agent.ID, runID)
-	aee.sendToLighthouse(agent, task, runID, startTime, result)
-	logging.Debug("🔍 DEBUG: Returned from sendToLighthouse for agent %d, run %d", agent.ID, runID)
+	// Skip if management channel is handling the SendRun (they use their own run_id)
+	if !skipLighthouse {
+		logging.Debug("🔍 DEBUG: About to call sendToLighthouse for agent %d, run %d", agent.ID, runID)
+		aee.sendToLighthouse(agent, task, runID, startTime, result)
+		logging.Debug("🔍 DEBUG: Returned from sendToLighthouse for agent %d, run %d", agent.ID, runID)
+	} else {
+		logging.Debug("🔍 DEBUG: Skipping sendToLighthouse for agent %d, run %d (management channel will handle SendRun)", agent.ID, runID)
+	}
 
 	return result, nil
 }
