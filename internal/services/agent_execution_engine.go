@@ -18,6 +18,7 @@ import (
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/plugins/mcp"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -514,7 +515,8 @@ func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agen
 	metadata["duration_ms"] = fmt.Sprintf("%d", result.Duration.Milliseconds())
 
 	// Send structured data to CloudShip Data Ingestion service
-	correlationID := fmt.Sprintf("run_%d", runID)
+	// Use UUID for correlation to prevent collisions across multiple stations
+	correlationID := uuid.New().String()
 	logging.Debug("🚀 Attempting IngestData call to CloudShip (app: %s, app_type: %s, run_id: %d, correlation_id: %s)", app, appType, runID, correlationID)
 	if err := aee.lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID); err != nil {
 		logging.Debug("❌ Failed to send structured data to CloudShip: %v", err)
@@ -531,8 +533,11 @@ func (aee *AgentExecutionEngine) convertToAgentRun(agent *models.Agent, task str
 		status = "failed"
 	}
 
+	// Generate UUID for run ID to prevent collisions across multiple stations
+	runUUID := uuid.New().String()
+
 	return &types.AgentRun{
-		ID:             fmt.Sprintf("run_%d", runID),
+		ID:             runUUID,
 		AgentID:        fmt.Sprintf("agent_%d", agent.ID),
 		AgentName:      agent.Name,
 		Task:           task,
@@ -558,10 +563,12 @@ func (aee *AgentExecutionEngine) convertToAgentRun(agent *models.Agent, task str
 			return ""
 		}(),
 		Metadata: map[string]string{
-			"steps_used": fmt.Sprintf("%d", result.StepsUsed),
-			"tools_used": fmt.Sprintf("%d", result.ToolsUsed),
-			"run_id":     fmt.Sprintf("%d", runID),
-			"agent_id":   fmt.Sprintf("%d", agent.ID),
+			"steps_used":      fmt.Sprintf("%d", result.StepsUsed),
+			"tools_used":      fmt.Sprintf("%d", result.ToolsUsed),
+			"run_id":          fmt.Sprintf("%d", runID),
+			"run_uuid":        runUUID,
+			"agent_id":        fmt.Sprintf("%d", agent.ID),
+			"station_run_id":  fmt.Sprintf("%d", runID), // Keep local DB ID for correlation
 		},
 	}
 }
