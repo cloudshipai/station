@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
@@ -665,9 +666,12 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			completedAt := time.Now()
 			startedAt := completedAt.Add(-result.Duration)
 
+			// Generate UUID for run ID to prevent collisions across multiple stations
+			runUUID := uuid.New().String()
+
 			// Create proper types.AgentRun structure (same as MCP conversion function)
 			lighthouseRun := &types.AgentRun{
-				ID:          fmt.Sprintf("run_%d", agentRun.ID),
+				ID:          runUUID,
 				AgentID:     fmt.Sprintf("agent_%d", agent.ID),
 				AgentName:   agent.Name,
 				Task:        task,
@@ -698,8 +702,10 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 					return ""
 				}(),
 				Metadata: map[string]string{
-					"source": "cli",
-					"mode":   "cli",
+					"source":          "cli",
+					"mode":            "cli",
+					"run_uuid":        runUUID,
+					"station_run_id":  fmt.Sprintf("%d", agentRun.ID), // Keep local DB ID for correlation
 				},
 			}
 
@@ -768,7 +774,8 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 				}
 
 				// Send structured data to CloudShip Data Ingestion service
-				correlationID := fmt.Sprintf("run_%d", agentRun.ID)
+				// Use UUID for correlation to prevent collisions across multiple stations
+				correlationID := uuid.New().String()
 				if err := lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID); err != nil {
 					debugLog(fmt.Sprintf("Failed to send structured data to CloudShip: %v", err))
 					// Don't fail the execution - this is supplementary data

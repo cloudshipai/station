@@ -20,9 +20,9 @@ func (s *Server) setupTools() {
 		mcp.WithArray("tool_names", mcp.Description("List of tool names to assign to the agent"), mcp.WithStringItems()),
 		mcp.WithString("input_schema", mcp.Description("JSON schema for custom input variables (optional)")),
 		mcp.WithString("output_schema", mcp.Description("JSON schema for output format (optional)")),
-		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
-		mcp.WithString("app", mcp.Description("CloudShip data ingestion app classification (optional, must be provided with app_type)")),
-		mcp.WithString("app_type", mcp.Description("CloudShip data ingestion app_type classification (optional, must be provided with app)")),
+		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops-inventory', 'security-investigations') - alternative to output_schema. Available presets: finops (inventory, investigations, opportunities, projections, events), security (inventory, investigations, opportunities, projections, events), deployments (inventory, investigations, opportunities, projections, events)")),
+		mcp.WithString("app", mcp.Description("CloudShip data ingestion app classification for structured data routing (optional, must be provided with app_type). Valid values: 'finops', 'security', 'deployments'. Auto-populated from preset if not provided. Requires output_schema or output_schema_preset to enable structured data ingestion.")),
+		mcp.WithString("app_type", mcp.Description("CloudShip data ingestion app_type classification for data categorization (optional, must be provided with app). Valid values: 'inventory', 'investigations', 'opportunities', 'projections', 'events'. Auto-populated from preset if not provided. Defines the type of operational data this agent generates.")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 

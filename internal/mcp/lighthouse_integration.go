@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"station/internal/services"
 	"station/pkg/models"
 	"station/pkg/types"
@@ -20,8 +21,11 @@ func ConvertToLighthouseRun(agent *models.Agent, task string, runID int64, resul
 	completedAt := time.Now()
 	startedAt := completedAt.Add(-result.Duration)
 
+	// Generate UUID for run ID to prevent collisions across multiple stations
+	runUUID := uuid.New().String()
+
 	return &types.AgentRun{
-		ID:             fmt.Sprintf("run_%d", runID),
+		ID:             runUUID,
 		AgentID:        fmt.Sprintf("agent_%d", agent.ID),
 		AgentName:      agent.Name,
 		Task:           task,
@@ -47,8 +51,10 @@ func ConvertToLighthouseRun(agent *models.Agent, task string, runID int64, resul
 			return ""
 		}(),
 		Metadata: map[string]string{
-			"source": "mcp",
-			"mode":   "stdio",
+			"source":          "mcp",
+			"mode":            "stdio",
+			"run_uuid":        runUUID,
+			"station_run_id":  fmt.Sprintf("%d", runID), // Keep local DB ID for correlation
 		},
 	}
 }
