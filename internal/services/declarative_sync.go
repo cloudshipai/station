@@ -763,7 +763,8 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 			continue
 		}
 
-		// Process template variables in the OpenAPI spec
+		// Process template variables in the OpenAPI spec for validation only
+		// We keep the original source with template variables intact for bundling
 		templateResult, err := templateService.ProcessTemplateWithVariables(env.ID, specName, string(specData), options.Interactive)
 		if err != nil {
 			result.ValidationErrors++
@@ -772,7 +773,7 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 			continue
 		}
 
-		// Validate the OpenAPI spec
+		// Validate the RENDERED OpenAPI spec (with variables expanded) to ensure it's valid
 		if err := openapiService.ValidateSpec(templateResult.RenderedContent); err != nil {
 			result.ValidationErrors++
 			result.ValidationMessages = append(result.ValidationMessages,
@@ -781,12 +782,16 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 		}
 
 		// Convert OpenAPI spec to MCP configuration
+		// IMPORTANT: Pass the SOURCE spec (with template variables), not the rendered version
+		// Also provide the spec file path so the generated config references it instead of embedding
 		convertOptions := openapi.ConvertOptions{
 			ServerName:     specName,
 			ToolNamePrefix: specName,
+			SpecFilePath:   filepath.Base(specFile), // Relative path: github.openapi.json
 		}
 
-		mcpConfigJSON, err := openapiService.ConvertFromSpec(templateResult.RenderedContent, convertOptions)
+		// Convert using the ORIGINAL source spec (with {{ .VARIABLES }})
+		mcpConfigJSON, err := openapiService.ConvertFromSpec(string(specData), convertOptions)
 		if err != nil {
 			result.ValidationErrors++
 			result.ValidationMessages = append(result.ValidationMessages,

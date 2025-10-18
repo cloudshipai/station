@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"station/pkg/openapi/runtime"
-	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -21,6 +20,7 @@ var openapiRuntimeCmd = &cobra.Command{
 }
 
 func init() {
+	openapiRuntimeCmd.Flags().String("spec", "", "Path to OpenAPI specification file (.openapi.json)")
 	rootCmd.AddCommand(openapiRuntimeCmd)
 }
 
@@ -29,16 +29,26 @@ func runOpenAPIRuntime(cmd *cobra.Command, args []string) error {
 	log.SetOutput(os.Stderr)
 	log.Println("=== OpenAPI Runtime MCP Server starting ===")
 	log.Printf("Args: %v", args)
-	log.Printf("Environment variables:")
-	for _, env := range os.Environ() {
-		if strings.Contains(env, "OPENAPI") {
-			log.Printf("  %s", env)
+
+	// Get the spec file path from flags
+	specPath, _ := cmd.Flags().GetString("spec")
+
+	// Create server config - either from file path or environment variable (backwards compat)
+	var serverConfig runtime.ServerConfig
+	if specPath != "" {
+		log.Printf("Loading OpenAPI spec from file: %s", specPath)
+		serverConfig = runtime.ServerConfig{
+			ConfigPath: specPath,
 		}
+	} else {
+		// Fallback to inline config from environment (backwards compatibility)
+		log.Println("No --spec flag provided, checking OPENAPI_MCP_CONFIG environment variable")
+		serverConfig = runtime.ServerConfig{}
 	}
 
 	// Create the OpenAPI runtime server
 	log.Println("Creating OpenAPI server...")
-	openapiServer := runtime.NewServer(runtime.ServerConfig{})
+	openapiServer := runtime.NewServer(serverConfig)
 	log.Println("OpenAPI server created successfully")
 
 	// Get server info for MCP server creation

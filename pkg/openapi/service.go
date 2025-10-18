@@ -28,6 +28,7 @@ type ConvertOptions struct {
 	ServerName     string
 	ToolNamePrefix string
 	BaseURL        string // Optional base URL override
+	SpecFilePath   string // Path to the source .openapi.json file (for bundling)
 }
 
 // ConvertFromSpec converts an OpenAPI specification to MCP server configuration
@@ -78,7 +79,12 @@ func (s *Service) ConvertFromSpec(spec string, options ConvertOptions) (string, 
 	}
 
 	// Convert to Station's expected MCP server format
-	stationConfig := s.convertToStationFormat(mcpConfig)
+	// Use the spec file path if provided, otherwise fall back to inline config
+	specPath := options.SpecFilePath
+	if specPath == "" {
+		specPath = "inline" // Backwards compatibility - will use OPENAPI_MCP_CONFIG env var
+	}
+	stationConfig := s.convertToStationFormat(mcpConfig, specPath)
 
 	// Marshal to JSON
 	jsonData, err := json.MarshalIndent(stationConfig, "", "  ")
@@ -100,17 +106,16 @@ func (s *Service) ConvertFromReader(reader io.Reader, options ConvertOptions) (s
 
 // convertToStationFormat converts the MCP config to Station's expected format
 // For OpenAPI specs, we use the openapi-runtime-server which is built into Station
-func (s *Service) convertToStationFormat(mcpConfig *models.MCPConfig) map[string]interface{} {
+// specFilePath: path to the source .openapi.json file (relative to environment directory)
+func (s *Service) convertToStationFormat(mcpConfig *models.MCPConfig, specFilePath string) map[string]interface{} {
 	// Create the Station MCP server configuration using the built-in runtime
+	// Reference the source .openapi.json file instead of embedding the config
 	config := map[string]interface{}{
 		"command": "stn",
 		"args": []string{
 			"openapi-runtime",
-			"--config",
-			"inline",
-		},
-		"env": map[string]string{
-			"OPENAPI_MCP_CONFIG": s.serializeMCPConfig(mcpConfig),
+			"--spec",
+			specFilePath, // Path to source OpenAPI spec (will be rendered with variables at runtime)
 		},
 	}
 
