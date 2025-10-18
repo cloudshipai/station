@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"station/pkg/openapi/converter"
 	"station/pkg/openapi/models"
+	"station/pkg/openapi/parser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,13 +65,66 @@ func (s *Server) LoadConfig() error {
 }
 
 // LoadConfigFromFile loads MCP config from a file
+// Supports both .openapi.json files and MCP config files
 func (s *Server) LoadConfigFromFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
 
+	// Check if this is an OpenAPI spec by looking for "openapi" or "swagger" field
+	var check map[string]interface{}
+	if err := json.Unmarshal(data, &check); err == nil {
+		if _, hasOpenAPI := check["openapi"]; hasOpenAPI {
+			// This is an OpenAPI spec - convert it to MCP config
+			return s.LoadConfigFromOpenAPISpec(data)
+		}
+		if _, hasSwagger := check["swagger"]; hasSwagger {
+			// This is a Swagger 2.0 spec - convert it to MCP config
+			return s.LoadConfigFromOpenAPISpec(data)
+		}
+	}
+
+	// Otherwise treat as MCP config (YAML or JSON)
 	return s.LoadConfigFromBytes(data)
+}
+
+// LoadConfigFromOpenAPISpec loads and converts an OpenAPI spec to MCP config
+func (s *Server) LoadConfigFromOpenAPISpec(specData []byte) error {
+	// Import the converter package
+	var p = parser.NewParser()
+
+	// Create temp file for the spec
+	tmpFile, err := os.CreateTemp("", "openapi-runtime-*.json")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// Write spec data
+	if _, err := tmpFile.Write(specData); err != nil {
+		return fmt.Errorf("failed to write spec: %w", err)
+	}
+	tmpFile.Close()
+
+	// Parse the OpenAPI spec
+	if err := p.ParseFile(tmpFile.Name()); err != nil {
+		return fmt.Errorf("failed to parse OpenAPI spec: %w", err)
+	}
+
+	// Convert to MCP config
+	convertOpts := models.ConvertOptions{
+		ServerName: "openapi-server",
+	}
+	c := converter.NewConverter(p, convertOpts)
+	mcpConfig, err := c.Convert()
+	if err != nil {
+		return fmt.Errorf("failed to convert OpenAPI to MCP: %w", err)
+	}
+
+	// Set the config
+	s.config = mcpConfig
+	return nil
 }
 
 // LoadConfigFromString loads MCP config from a string

@@ -787,7 +787,7 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 		convertOptions := openapi.ConvertOptions{
 			ServerName:     specName,
 			ToolNamePrefix: specName,
-			SpecFilePath:   filepath.Base(specFile), // Relative path: github.openapi.json
+			SpecFilePath:   specFile, // Full absolute path so runtime can find it
 		}
 
 		// Convert using the ORIGINAL source spec (with {{ .VARIABLES }})
