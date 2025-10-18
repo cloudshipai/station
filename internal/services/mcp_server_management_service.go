@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"station/internal/config"
 	"station/internal/db/repositories"
@@ -230,6 +231,21 @@ func (s *MCPServerManagementService) DeleteMCPServerFromEnvironment(environmentN
 	// Delete the individual server file
 	if err := os.Remove(serverFilePath); err != nil {
 		fileCleanupError = err
+	}
+
+	// Check if this is an OpenAPI-based MCP server and delete source .openapi.json file
+	if strings.HasSuffix(serverName, "-openapi-mcp") {
+		// Extract the spec name (remove -openapi-mcp suffix)
+		specName := strings.TrimSuffix(serverName, "-openapi-mcp")
+		openapiFilePath := filepath.Join(envDir, fmt.Sprintf("%s.openapi.json", specName))
+
+		// Delete the source OpenAPI spec file if it exists
+		if _, err := os.Stat(openapiFilePath); err == nil {
+			if err := os.Remove(openapiFilePath); err != nil {
+				// Log but don't fail the operation if OpenAPI file deletion fails
+				fileCleanupError = fmt.Errorf("MCP file deleted but OpenAPI spec deletion failed: %w", err)
+			}
+		}
 	}
 
 	// Prepare response

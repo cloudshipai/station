@@ -15,13 +15,14 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
   environmentName,
   onSuccess
 }) => {
+  const [activeTab, setActiveTab] = useState<'mcp' | 'openapi'>('mcp');
   const [serverName, setServerName] = useState('');
   const [serverConfig, setServerConfig] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<any>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // Generate default config dynamically based on server name
+  // Generate default MCP config dynamically based on server name
   const getDefaultConfig = (name: string) => `{
   "mcpServers": {
     "${name || 'server'}": {
@@ -34,19 +35,60 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
   }
 }`;
 
-  // Auto-populate config ONLY when server name changes and config is empty
+  // Generate default OpenAPI spec template
+  const getDefaultOpenAPISpec = (name: string) => `{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "${name || 'My API'}",
+    "version": "1.0.0",
+    "description": "API integration for ${name || 'My Service'}"
+  },
+  "servers": [
+    {
+      "url": "https://api.example.com",
+      "description": "Production API"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Bearer token authentication"
+      }
+    }
+  },
+  "paths": {
+    "/example": {
+      "get": {
+        "operationId": "getExample",
+        "summary": "Get example data",
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  }
+}`;
+
+  // Auto-populate config ONLY when server name or tab changes and config is empty
   // This prevents overwriting user-pasted configs
   React.useEffect(() => {
     if (serverName && !serverConfig.trim()) {
       // Only populate if config is empty
-      const newConfig = getDefaultConfig(serverName);
+      const newConfig = activeTab === 'mcp'
+        ? getDefaultConfig(serverName)
+        : getDefaultOpenAPISpec(serverName);
       setServerConfig(newConfig);
-      console.log(`[AddServerModal] Auto-populated config for server: ${serverName}`);
+      console.log(`[AddServerModal] Auto-populated ${activeTab} config for: ${serverName}`);
     } else if (!serverName) {
       // Clear config if server name is empty
       setServerConfig('');
     }
-  }, [serverName]); // Only depend on serverName
+  }, [serverName, activeTab]); // Depend on both serverName and activeTab
 
   const handleSubmit = async () => {
     if (!serverName.trim() || !serverConfig.trim()) {
@@ -58,11 +100,13 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
     setResponse(null);
 
     try {
-      const result = await apiClient.post('/mcp-servers', {
-        name: serverName,
-        config: serverConfig,
-        environment: environmentName
-      });
+      // Route to correct endpoint based on active tab
+      const endpoint = activeTab === 'mcp' ? '/mcp-servers' : '/openapi/specs';
+      const payload = activeTab === 'mcp'
+        ? { name: serverName, config: serverConfig, environment: environmentName }
+        : { name: serverName, spec: serverConfig, environment: environmentName };
+
+      const result = await apiClient.post(endpoint, payload);
       setResponse(result.data);
 
       // Check if variables are needed
@@ -120,13 +164,39 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-tokyo-blue7 bg-tokyo-bg">
+          <button
+            onClick={() => setActiveTab('mcp')}
+            className={`flex-1 px-4 py-3 font-mono text-sm font-medium transition-colors ${
+              activeTab === 'mcp'
+                ? 'text-tokyo-cyan border-b-2 border-tokyo-cyan bg-tokyo-bg-dark'
+                : 'text-tokyo-comment hover:text-tokyo-fg'
+            }`}
+          >
+            MCP Config
+          </button>
+          <button
+            onClick={() => setActiveTab('openapi')}
+            className={`flex-1 px-4 py-3 font-mono text-sm font-medium transition-colors ${
+              activeTab === 'openapi'
+                ? 'text-tokyo-cyan border-b-2 border-tokyo-cyan bg-tokyo-bg-dark'
+                : 'text-tokyo-comment hover:text-tokyo-fg'
+            }`}
+          >
+            OpenAPI Spec
+          </button>
+        </div>
+
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {!showSuccess ? (
             <>
               {/* Server Name Input */}
               <div className="space-y-2">
-                <label className="text-sm font-mono text-tokyo-cyan font-medium">Server Name:</label>
+                <label className="text-sm font-mono text-tokyo-cyan font-medium">
+                  {activeTab === 'mcp' ? 'Server Name:' : 'Spec Name:'}
+                </label>
                 <input
                   type="text"
                   value={serverName}
@@ -138,27 +208,47 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
 
               {/* Server Config Input */}
               <div className="space-y-2">
-                <label className="text-sm font-mono text-tokyo-cyan font-medium">Server Configuration:</label>
+                <label className="text-sm font-mono text-tokyo-cyan font-medium">
+                  {activeTab === 'mcp' ? 'Server Configuration:' : 'OpenAPI Specification (JSON):'}
+                </label>
                 <textarea
                   value={serverConfig}
                   onChange={(e) => setServerConfig(e.target.value)}
                   className="w-full h-80 px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded font-mono text-tokyo-fg focus:outline-none focus:border-tokyo-cyan text-xs"
-                  placeholder={getDefaultConfig(serverName)}
+                  placeholder={activeTab === 'mcp' ? getDefaultConfig(serverName) : getDefaultOpenAPISpec(serverName)}
                 />
               </div>
 
               {/* Documentation Note */}
               <div className="bg-blue-900 bg-opacity-30 border border-blue-500 border-opacity-50 rounded p-4">
                 <p className="text-sm text-blue-300 font-mono">
-                  <strong>Note:</strong> Replace any arguments you want as variables with <code className="bg-gray-800 px-1 rounded">{'{{ .VAR }}'}</code> Go variable notation.{' '}
-                  <a
-                    href="https://cloudshipai.github.io/station/en/mcp/overview/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 underline hover:text-blue-300"
-                  >
-                    More info here
-                  </a>
+                  {activeTab === 'mcp' ? (
+                    <>
+                      <strong>Note:</strong> Replace any arguments you want as variables with <code className="bg-gray-800 px-1 rounded">{'{{ .VAR }}'}</code> Go variable notation.{' '}
+                      <a
+                        href="https://cloudshipai.github.io/station/en/mcp/overview/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 underline hover:text-blue-300"
+                      >
+                        More info here
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <strong>Note:</strong> Use <code className="bg-gray-800 px-1 rounded">{'{{ .VAR }}'}</code> for template variables in your spec.
+                      {' '}For authentication, add security schemes in the <code className="bg-gray-800 px-1 rounded">components.securitySchemes</code> section.
+                      {' '}
+                      <a
+                        href="https://cloudshipai.github.io/station/en/mcp/openapi/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 underline hover:text-blue-300"
+                      >
+                        More info here
+                      </a>
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -228,12 +318,12 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-tokyo-bg border-t-transparent"></div>
-                  Creating Server...
+                  {activeTab === 'mcp' ? 'Creating Server...' : 'Creating Spec...'}
                 </>
               ) : (
                 <>
                   <Plus className="h-4 w-4" />
-                  Create Server
+                  {activeTab === 'mcp' ? 'Create Server' : 'Create OpenAPI Spec'}
                 </>
               )}
             </button>
