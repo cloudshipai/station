@@ -116,6 +116,14 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 - Follow security best practices for secrets/keys
 - Maintain environment isolation
 
+### Git Commit Policy
+- **CRITICAL**: NEVER add Claude Code co-author footers to commits
+- **CRITICAL**: NEVER add "🤖 Generated with Claude Code" messages
+- **CRITICAL**: Use ONLY the default Git author configured in the repository
+- All commits should be authored by: `epuerta9 <epuer94@gmail.com>`
+- Commit messages should be clean, descriptive, and professional
+- No AI attribution or co-authorship in commit metadata
+
 ### Code Conventions
 - Analyze existing code patterns before making changes
 - Check for available libraries/frameworks in codebase

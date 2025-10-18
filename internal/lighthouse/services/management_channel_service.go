@@ -133,6 +133,11 @@ func (mcs *ManagementChannelService) maintainConnection() {
 			// Successful connection - reset retry delay and set registered state
 			retryDelay = baseDelay
 			mcs.registrationState = RegistrationStateRegistered
+
+			// Update global lighthouse status for API status endpoint
+			lighthouse.SetConnected(true, "cloudship")
+			lighthouse.SetRegistered(true, mcs.registrationKey)
+
 			logging.Info("Successfully registered with CloudShip management channel")
 		}
 	}
@@ -195,6 +200,9 @@ func (mcs *ManagementChannelService) establishConnection() error {
 			logging.Error("Management channel receive error: %v", err)
 			// Clear stream reference on error
 			mcs.currentStream = nil
+			// Update global lighthouse status to disconnected
+			lighthouse.SetConnected(false, "")
+			lighthouse.SetRegistered(false, "")
 			// Connection will be retried by maintainConnection loop
 		}
 	}()

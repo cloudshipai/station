@@ -95,6 +95,7 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 // ExecuteWithOptions executes an agent with options to control Lighthouse integration
 func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}, skipLighthouse bool) (*AgentExecutionResult, error) {
 	startTime := time.Now()
+	logging.Info("🎬 [EXECUTION TRACKER] ExecuteWithOptions STARTED - agent_id=%d agent_name='%s' station_run_id=%d skipLighthouse=%v", agent.ID, agent.Name, runID, skipLighthouse)
 	logging.Debug("Execute called for agent %s (ID: %d), skipLighthouse=%v", agent.Name, agent.ID, skipLighthouse)
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
@@ -376,6 +377,7 @@ func (aee *AgentExecutionEngine) GetGenkitProvider() *GenKitProvider {
 
 // sendToLighthouse sends agent run data to CloudShip Lighthouse (async, non-blocking)
 func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult) {
+	logging.Info("🚀 [SENDRUN TRACKER] sendToLighthouse CALLED - agent_id=%d agent_name='%s' station_run_id=%d", agent.ID, agent.Name, runID)
 	logging.Debug("🔍 DEBUG: sendToLighthouse called for agent %d, run %d", agent.ID, runID)
 	logging.Debug("🔍 DEBUG: lighthouseClient nil? %v", aee.lighthouseClient == nil)
 	if aee.lighthouseClient != nil {
@@ -392,15 +394,19 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 
 	// Convert AgentExecutionResult to types.AgentRun for Lighthouse
 	agentRun := aee.convertToAgentRun(agent, task, runID, startTime, result)
+	logging.Info("🆔 [SENDRUN TRACKER] Generated run_uuid=%s for station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 
 	// Determine deployment mode and send appropriate data
 	mode := aee.lighthouseClient.GetMode()
+	logging.Info("📡 [SENDRUN TRACKER] Detected mode=%s for station_run_id=%d run_uuid=%s", mode, runID, agentRun.ID)
 	logging.Debug("Lighthouse client mode detected: %v (comparing with ModeCLI: %v)", mode, lighthouse.ModeCLI)
 	switch mode {
 	case lighthouse.ModeStdio:
 		// stdio mode: Local development context
 		context := aee.deploymentContextService.GatherContextForMode("stdio")
+		logging.Info("📤 [SENDRUN TRACKER] Calling SendRun for STDIO mode - run_uuid=%s station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for STDIO mode - run_uuid=%s", agentRun.ID)
 		// Dual flow: Send structured data if conditions are met
 		logging.Debug("🚀 [LIGHTHOUSE DEBUG] About to call sendStructuredDataIfEligible for stdio mode (run_id: %d)", runID)
 		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
@@ -408,27 +414,34 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 	case lighthouse.ModeServe:
 		// serve mode: Server deployment context
 		context := aee.deploymentContextService.GatherContextForMode("serve")
+		logging.Info("📤 [SENDRUN TRACKER] Calling SendRun for SERVE mode - run_uuid=%s station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for SERVE mode - run_uuid=%s", agentRun.ID)
 		// Dual flow: Send structured data if conditions are met
 		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
 
 	case lighthouse.ModeCLI:
 		// CLI mode: Rich execution context (may include CI/CD)
 		context := aee.deploymentContextService.GatherContextForMode("cli")
+		logging.Info("📤 [SENDRUN TRACKER] Calling SendRun for CLI mode - run_uuid=%s station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
+		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for CLI mode - run_uuid=%s", agentRun.ID)
 		// Dual flow: Send structured data if conditions are met
 		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
 		logging.Info("Successfully sent CLI run data with deployment context for run_id: %d", runID)
 
 	default:
 		// Unknown mode - send basic run data
+		logging.Info("📤 [SENDRUN TRACKER] Calling SendRun for UNKNOWN mode - run_uuid=%s station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 		aee.lighthouseClient.SendRun(agentRun, "unknown", map[string]string{
 			"mode": "unknown",
 		})
+		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for UNKNOWN mode - run_uuid=%s", agentRun.ID)
 		// Dual flow: Send structured data if conditions are met
 		aee.sendStructuredDataIfEligible(agent, result, runID, map[string]string{"mode": "unknown"})
 	}
 
+	logging.Info("🏁 [SENDRUN TRACKER] Completed sendToLighthouse for station_run_id=%d run_uuid=%s mode=%s", runID, agentRun.ID, mode)
 	logging.Debug("Completed CloudShip Lighthouse integration (run_id: %d, mode: %s)", runID, mode)
 }
 

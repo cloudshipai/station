@@ -14,6 +14,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/pkg/models"
+	"station/pkg/openapi"
 )
 
 // DeclarativeSync handles synchronization between file-based configs and database
@@ -205,10 +206,18 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 		return result, nil
 	}
 
-	// Find all .json files (excluding agent .prompt files)
-	jsonFiles, err := filepath.Glob(filepath.Join(envDir, "*.json"))
+	// Find all .json files (excluding agent .prompt files and .openapi.json files)
+	allJSONFiles, err := filepath.Glob(filepath.Join(envDir, "*.json"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan JSON template files: %w", err)
+	}
+
+	// Filter out .openapi.json files - they'll be handled separately
+	jsonFiles := []string{}
+	for _, file := range allJSONFiles {
+		if !strings.HasSuffix(file, ".openapi.json") {
+			jsonFiles = append(jsonFiles, file)
+		}
 	}
 
 	result.MCPServersProcessed = len(jsonFiles)
@@ -239,12 +248,33 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 		if err != nil {
 			return nil, fmt.Errorf("parallel template processing failed: %w", err)
 		}
-		
+
 		// Merge parallel results
 		result.ValidationErrors += parallelResult.ValidationErrors
 		result.MCPServersConnected += parallelResult.MCPServersConnected
 		result.ValidationMessages = append(result.ValidationMessages, parallelResult.ValidationMessages...)
 		result.Operations = append(result.Operations, parallelResult.Operations...)
+	}
+
+	// Also check for .openapi.json files that need to be converted to MCP configs
+	fmt.Printf("DEBUG: Checking for OpenAPI files in %s\n", envDir)
+	openapiFiles, err := filepath.Glob(filepath.Join(envDir, "*.openapi.json"))
+	fmt.Printf("DEBUG: Found %d OpenAPI files, err=%v\n", len(openapiFiles), err)
+	if err == nil && len(openapiFiles) > 0 {
+		fmt.Printf("Processing %d OpenAPI specification files\n", len(openapiFiles))
+		openapiResult, err := s.processOpenAPISpecs(ctx, openapiFiles, environmentName, options)
+		if err != nil {
+			fmt.Printf("Warning: Failed to process OpenAPI specs: %v\n", err)
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("OpenAPI processing failed: %v", err))
+		} else if openapiResult != nil {
+			result.MCPServersProcessed += openapiResult.MCPServersProcessed
+			result.MCPServersConnected += openapiResult.MCPServersConnected
+			result.ValidationErrors += openapiResult.ValidationErrors
+			result.ValidationMessages = append(result.ValidationMessages, openapiResult.ValidationMessages...)
+			result.Operations = append(result.Operations, openapiResult.Operations...)
+		}
 	}
 
 	return result, nil
@@ -674,5 +704,153 @@ type AgentRecord struct {
 	FilePath        string
 	EnvironmentName string
 	ChecksumMD5     string
+}
+
+// processOpenAPISpecs converts OpenAPI specs to static MCP tools and integrates them directly
+func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles []string, environmentName string, options SyncOptions) (*SyncResult, error) {
+	result := &SyncResult{
+		Environment:        environmentName,
+		Operations:         []SyncOperation{},
+		ValidationMessages: []string{},
+	}
+
+	fmt.Printf("Processing %d OpenAPI specification files\n", len(openapiFiles))
+
+	// Only process if there are OpenAPI specs
+	if len(openapiFiles) == 0 {
+		return result, nil
+	}
+
+	// Import the openapi package for conversion
+	openapiService := openapi.NewService()
+
+	// Create template service for variable resolution
+	var templateWorkspaceDir string
+	if s.config.Workspace != "" {
+		templateWorkspaceDir = s.config.Workspace
+	} else {
+		configHome := os.Getenv("XDG_CONFIG_HOME")
+		if configHome == "" {
+			homeDir, _ := os.UserHomeDir()
+			configHome = filepath.Join(homeDir, ".config")
+		}
+		templateWorkspaceDir = filepath.Join(configHome, "station")
+	}
+	templateService := NewTemplateVariableService(templateWorkspaceDir, s.repos)
+	if s.customVariableResolver != nil {
+		templateService.SetVariableResolver(s.customVariableResolver)
+	}
+
+	// Get environment ID
+	env, err := s.repos.Environments.GetByName(environmentName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// Convert each OpenAPI spec to MCP tools and save as individual MCP configs
+	for _, specFile := range openapiFiles {
+		specName := filepath.Base(specFile)
+		specName = strings.TrimSuffix(specName, ".openapi.json")
+
+		fmt.Printf("  Converting OpenAPI spec: %s\n", specName)
+
+		// Read the OpenAPI spec
+		specData, err := os.ReadFile(specFile)
+		if err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Failed to read OpenAPI spec %s: %v", specName, err))
+			continue
+		}
+
+		// Process template variables in the OpenAPI spec
+		templateResult, err := templateService.ProcessTemplateWithVariables(env.ID, specName, string(specData), options.Interactive)
+		if err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Failed to process template variables in OpenAPI spec %s: %v", specName, err))
+			continue
+		}
+
+		// Validate the OpenAPI spec
+		if err := openapiService.ValidateSpec(templateResult.RenderedContent); err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Invalid OpenAPI spec %s: %v", specName, err))
+			continue
+		}
+
+		// Convert OpenAPI spec to MCP configuration
+		convertOptions := openapi.ConvertOptions{
+			ServerName:     specName,
+			ToolNamePrefix: specName,
+		}
+
+		mcpConfigJSON, err := openapiService.ConvertFromSpec(templateResult.RenderedContent, convertOptions)
+		if err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Failed to convert OpenAPI spec %s: %v", specName, err))
+			continue
+		}
+
+		// Parse the MCP config to extract the actual server configuration
+		var stationConfig map[string]interface{}
+		if err := json.Unmarshal([]byte(mcpConfigJSON), &stationConfig); err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Failed to parse converted config for %s: %v", specName, err))
+			continue
+		}
+
+		// Create a static MCP server configuration with the converted tools embedded
+		// This will be handled by Station's native MCP infrastructure
+		mcpServerConfig := map[string]interface{}{
+			"name":        fmt.Sprintf("%s OpenAPI", specName),
+			"description": fmt.Sprintf("OpenAPI-generated MCP tools for %s", specName),
+			"mcpServers": map[string]interface{}{
+				fmt.Sprintf("%s-openapi", specName): stationConfig,
+			},
+		}
+
+		// Save the MCP config file
+		envDir := filepath.Dir(specFile)
+		mcpConfigFile := filepath.Join(envDir, fmt.Sprintf("%s-openapi-mcp.json", specName))
+		configBytes, err := json.MarshalIndent(mcpServerConfig, "", "  ")
+		if err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Failed to marshal MCP config for %s: %v", specName, err))
+			continue
+		}
+
+		if err := os.WriteFile(mcpConfigFile, configBytes, 0644); err != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Failed to save MCP config for %s: %v", specName, err))
+			continue
+		}
+
+		// Process the MCP config as a template to register it with Station
+		templateJobResult := s.processTemplateJob(ctx, mcpConfigFile, fmt.Sprintf("%s-openapi-mcp", specName),
+			environmentName, templateService, options)
+
+		if templateJobResult.error != nil {
+			result.ValidationErrors++
+			result.ValidationMessages = append(result.ValidationMessages,
+				fmt.Sprintf("Failed to register OpenAPI MCP server %s: %v", specName, templateJobResult.error))
+		} else {
+			result.MCPServersProcessed++
+			result.MCPServersConnected++
+			result.Operations = append(result.Operations, SyncOperation{
+				Type:        OpTypeCreate,
+				Target:      fmt.Sprintf("%s OpenAPI Server", specName),
+				Description: fmt.Sprintf("Created MCP tools from OpenAPI spec: %s", specName),
+			})
+			fmt.Printf("  ✅ Successfully converted %s to MCP tools\n", specName)
+		}
+	}
+
+	return result, nil
 }
 
