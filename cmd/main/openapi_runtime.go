@@ -1,13 +1,15 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"station/pkg/openapi/runtime"
+	"strings"
 
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 )
 
@@ -22,132 +24,151 @@ func init() {
 	rootCmd.AddCommand(openapiRuntimeCmd)
 }
 
-// MCPRequest represents an MCP JSON-RPC request
-type MCPRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      interface{}     `json:"id"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
-}
-
-// MCPResponse represents an MCP JSON-RPC response
-type MCPResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      interface{} `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   *MCPError   `json:"error,omitempty"`
-}
-
-// MCPError represents an MCP error
-type MCPError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
 func runOpenAPIRuntime(cmd *cobra.Command, args []string) error {
-	// Create the runtime server
-	server := runtime.NewServer(runtime.ServerConfig{})
-
-	// Set up stdio communication
-	reader := bufio.NewReader(os.Stdin)
-	encoder := json.NewEncoder(os.Stdout)
-
-	// Log to stderr to avoid interfering with JSON-RPC
+	// Log to stderr to avoid interfering with stdio protocol
 	log.SetOutput(os.Stderr)
-	log.Println("OpenAPI Runtime MCP Server started")
-
-	// Main loop - read JSON-RPC requests from stdin
-	for {
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			break
-		}
-
-		var req MCPRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			log.Printf("Error parsing request: %v", err)
-			continue
-		}
-
-		response := handleRequest(server, req)
-		if err := encoder.Encode(response); err != nil {
-			log.Printf("Error sending response: %v", err)
+	log.Println("=== OpenAPI Runtime MCP Server starting ===")
+	log.Printf("Args: %v", args)
+	log.Printf("Environment variables:")
+	for _, env := range os.Environ() {
+		if strings.Contains(env, "OPENAPI") {
+			log.Printf("  %s", env)
 		}
 	}
 
+	// Create the OpenAPI runtime server
+	log.Println("Creating OpenAPI server...")
+	openapiServer := runtime.NewServer(runtime.ServerConfig{})
+	log.Println("OpenAPI server created successfully")
+
+	// Get server info for MCP server creation
+	serverInfo := openapiServer.GetServerInfo()
+
+	// Extract name and version from serverInfo map
+	serverName := "OpenAPI MCP Server"
+	if name, ok := serverInfo["name"].(string); ok && name != "" {
+		serverName = name
+	}
+	serverVersion := "1.0.0"
+	if version, ok := serverInfo["version"].(string); ok && version != "" {
+		serverVersion = version
+	}
+
+	// Create MCP server using the official mcp-go library (same as Station's stdio command)
+	mcpServer := server.NewMCPServer(
+		serverName,
+		serverVersion,
+		server.WithToolCapabilities(true),
+	)
+
+	// Register tools from OpenAPI runtime
+	tools := openapiServer.ListTools()
+	log.Printf("Registering %d OpenAPI tools with MCP server", len(tools))
+
+	for _, toolData := range tools {
+		// Extract tool information
+		toolName := toolData["name"].(string)
+		toolDescription := ""
+		if desc, ok := toolData["description"].(string); ok {
+			toolDescription = desc
+		}
+
+		// Capture tool name in closure for handler
+		currentToolName := toolName
+
+		// Create MCP tool with input schema if available
+		toolOptions := []mcp.ToolOption{
+			mcp.WithDescription(toolDescription),
+		}
+
+		// Add parameters from input schema if present
+		if inputSchema, ok := toolData["inputSchema"].(map[string]interface{}); ok {
+			if properties, ok := inputSchema["properties"].(map[string]interface{}); ok {
+				// Get required fields
+				requiredFields := make(map[string]bool)
+				if required, ok := inputSchema["required"].([]interface{}); ok {
+					for _, field := range required {
+						if fieldName, ok := field.(string); ok {
+							requiredFields[fieldName] = true
+						}
+					}
+				}
+
+				// Add each parameter
+				for paramName, paramDefRaw := range properties {
+					if paramDef, ok := paramDefRaw.(map[string]interface{}); ok {
+						paramDesc := ""
+						if desc, ok := paramDef["description"].(string); ok {
+							paramDesc = desc
+						}
+
+						paramType := "string"
+						if pType, ok := paramDef["type"].(string); ok {
+							paramType = pType
+						}
+
+						// Build parameter options (PropertyOption, not ToolOption)
+						var paramOptions []mcp.PropertyOption
+						if paramDesc != "" {
+							paramOptions = append(paramOptions, mcp.Description(paramDesc))
+						}
+						if requiredFields[paramName] {
+							paramOptions = append(paramOptions, mcp.Required())
+						}
+
+						// Add parameter based on type
+						switch paramType {
+						case "string":
+							toolOptions = append(toolOptions, mcp.WithString(paramName, paramOptions...))
+						case "number", "integer":
+							toolOptions = append(toolOptions, mcp.WithNumber(paramName, paramOptions...))
+						case "boolean":
+							toolOptions = append(toolOptions, mcp.WithBoolean(paramName, paramOptions...))
+						default:
+							// For complex types, use string as fallback
+							toolOptions = append(toolOptions, mcp.WithString(paramName, paramOptions...))
+						}
+					}
+				}
+			}
+		}
+
+		tool := mcp.NewTool(toolName, toolOptions...)
+
+		// Create handler function
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Convert MCP tool request to OpenAPI runtime format
+			arguments := make(map[string]interface{})
+			if request.Params.Arguments != nil {
+				if argsMap, ok := request.Params.Arguments.(map[string]interface{}); ok {
+					arguments = argsMap
+				}
+			}
+
+			// Call the OpenAPI runtime tool
+			result, err := openapiServer.CallTool(currentToolName, arguments)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("tool execution failed: %v", err)), nil
+			}
+
+			// Convert result to MCP response format
+			return mcp.NewToolResultText(fmt.Sprintf("%v", result)), nil
+		}
+
+		// Register tool with MCP server (same as Station does)
+		mcpServer.AddTool(tool, handler)
+	}
+
+	log.Printf("=== OpenAPI Runtime MCP Server registered %d tools ===", len(tools))
+	log.Println("Starting ServeStdio...")
+	log.Println("MCP Server is now ready to accept stdio communication")
+
+	// Use the mcp-go ServeStdio convenience function (same as Station)
+	if err := server.ServeStdio(mcpServer); err != nil {
+		log.Printf("ERROR: ServeStdio failed: %v", err)
+		return fmt.Errorf("MCP stdio server error: %w", err)
+	}
+
+	log.Println("ServeStdio completed normally")
 	return nil
-}
-
-func handleRequest(server *runtime.Server, req MCPRequest) MCPResponse {
-	response := MCPResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-	}
-
-	switch req.Method {
-	case "initialize":
-		result := map[string]interface{}{
-			"protocolVersion": "0.1.0",
-			"capabilities": map[string]interface{}{
-				"tools": map[string]interface{}{},
-			},
-		}
-
-		// Add server info
-		serverInfo := server.GetServerInfo()
-		result["serverInfo"] = serverInfo
-
-		response.Result = result
-
-	case "tools/list":
-		// Return tools from the runtime server
-		response.Result = map[string]interface{}{
-			"tools": server.ListTools(),
-		}
-
-	case "tools/call":
-		// Extract parameters
-		var params map[string]interface{}
-		if err := json.Unmarshal(req.Params, &params); err != nil {
-			response.Error = &MCPError{
-				Code:    -32602,
-				Message: "Invalid params",
-			}
-			return response
-		}
-
-		toolName, ok := params["name"].(string)
-		if !ok {
-			response.Error = &MCPError{
-				Code:    -32602,
-				Message: "Missing tool name",
-			}
-			return response
-		}
-
-		arguments, _ := params["arguments"].(map[string]interface{})
-
-		// Call the tool using the runtime server
-		result, err := server.CallTool(toolName, arguments)
-		if err != nil {
-			response.Error = &MCPError{
-				Code:    -32603,
-				Message: err.Error(),
-			}
-			return response
-		}
-		response.Result = result
-
-	case "notifications/initialized":
-		// Client has finished initialization
-		return MCPResponse{} // No response for notifications
-
-	default:
-		response.Error = &MCPError{
-			Code:    -32601,
-			Message: fmt.Sprintf("Method not found: %s", req.Method),
-		}
-	}
-
-	return response
 }
