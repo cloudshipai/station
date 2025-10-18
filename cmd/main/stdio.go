@@ -37,12 +37,14 @@ including agent management, file operations, and system resources.`,
 
 func init() {
 	stdioCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
+	stdioCmd.Flags().Bool("core", false, "Run in core mode - MCP server only, no API server or ports (ideal for containers)")
 	rootCmd.AddCommand(stdioCmd)
 }
 
 func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Set GenKit environment based on --dev flag
 	devMode, _ := cmd.Flags().GetBool("dev")
+	coreMode, _ := cmd.Flags().GetBool("core")
 	if !devMode && os.Getenv("GENKIT_ENV") == "" {
 		os.Setenv("GENKIT_ENV", "prod") // Disable reflection server by default
 	}
@@ -139,17 +141,18 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Try to start API server if port is available (avoid conflicts with other stdio instances)
+	// Skip API server entirely in core mode
 	var apiServer *api.Server
 	var apiCtx context.Context
 	var apiCancel context.CancelFunc
 	var wg sync.WaitGroup
 
-	if isPortAvailable(cfg.APIPort) {
+	if !coreMode && isPortAvailable(cfg.APIPort) {
 		fmt.Fprintf(os.Stderr, "🚀 Starting API server on port %d in stdio mode\n", cfg.APIPort)
-		
+
 		apiServer = api.New(cfg, database, localMode, telemetryService)
 		apiCtx, apiCancel = context.WithCancel(ctx)
-		
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -157,6 +160,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(os.Stderr, "⚠️  API server error: %v\n", err)
 			}
 		}()
+	} else if coreMode {
+		fmt.Fprintf(os.Stderr, "⚙️  Core mode: running MCP server only (no API server)\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "⚠️  Port %d already in use, skipping API server (another Station instance running?)\n", cfg.APIPort)
 	}
