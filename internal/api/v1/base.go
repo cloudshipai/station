@@ -159,6 +159,13 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	shipGroup := router.Group("/ship")
 	h.registerShipRoutes(shipGroup)
 
+	// OpenAPI to MCP conversion routes - admin only in server mode
+	openapiGroup := router.Group("/openapi")
+	if !h.localMode {
+		openapiGroup.Use(h.requireAdminInServerMode())
+	}
+	h.registerOpenAPIRoutes(openapiGroup)
+
 	// CloudShip lighthouse status
 	router.GET("/lighthouse/status", h.LighthouseStatusHandler)
 }
