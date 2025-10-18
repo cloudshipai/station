@@ -844,20 +844,51 @@ const MCPServersPage = () => {
       const response = await apiClient.get(`/mcp-servers/${serverId}/config`);
 
       if (response.data && response.data.config) {
-        // Parse and pretty-format the JSON config for display
+        // Check if this is an OpenAPI-based MCP server
+        const configObj = JSON.parse(response.data.config);
+        const isOpenAPI = configObj.command === 'stn' &&
+                         configObj.args?.[0] === 'openapi-runtime' &&
+                         configObj.args?.[1] === '--spec';
+
+        if (isOpenAPI) {
+          // This is an OpenAPI server - fetch the source .openapi.json file
+          const server = mcpServers.find(s => s.id === serverId);
+          if (server && server.environment_id) {
+            const env = environments.find(e => e.id === server.environment_id);
+            if (env) {
+              // Extract spec name from server name (remove -openapi suffix if present)
+              const specName = serverName.replace(/-openapi$/, '');
+
+              try {
+                const openapiResponse = await apiClient.get(`/openapi/specs/${env.name}/${specName}`);
+                if (openapiResponse.data && openapiResponse.data.content) {
+                  // Format the OpenAPI spec
+                  const formattedSpec = JSON.stringify(JSON.parse(openapiResponse.data.content), null, 2);
+                  setRawConfig(formattedSpec);
+                  setRawConfigEnvironment(`${specName} OpenAPI Spec (ID: ${serverId})`);
+                  setSelectedServerId(serverId);
+                  setSyncEnvironmentName(env.name);
+                  setIsRawConfigModalOpen(true);
+                  return;
+                }
+              } catch (openapiError) {
+                console.warn('Failed to fetch OpenAPI spec, falling back to MCP config:', openapiError);
+              }
+            }
+          }
+        }
+
+        // Regular MCP server or fallback - show MCP config
         try {
-          const configObj = JSON.parse(response.data.config);
           const formattedConfig = JSON.stringify(configObj, null, 2);
           setRawConfig(formattedConfig);
         } catch (parseError) {
-          // If parsing fails, use the raw config as-is
           console.warn('Failed to parse config JSON:', parseError);
           setRawConfig(response.data.config);
         }
         setRawConfigEnvironment(`${serverName} (ID: ${serverId})`);
-        setSelectedServerId(serverId); // Store server ID for saving
+        setSelectedServerId(serverId);
 
-        // Find the environment name for this server
         const server = mcpServers.find(s => s.id === serverId);
         if (server && server.environment_id) {
           const env = environments.find(e => e.id === server.environment_id);
@@ -892,24 +923,48 @@ const MCPServersPage = () => {
         return;
       }
 
-      // Update the server config using the MCP servers endpoint
-      const response = await apiClient.put(`/mcp-servers/${selectedServerId}/config`, {
-        config: rawConfig
-      });
+      // Check if this is an OpenAPI spec based on modal title
+      const isOpenAPISpec = rawConfigEnvironment.includes('OpenAPI Spec');
 
-      if (response.data && response.data.message) {
-        // Refresh the servers list
-        await fetchMCPServers();
-        setIsRawConfigModalOpen(false);
+      if (isOpenAPISpec) {
+        // Extract spec name from environment string
+        const specNameMatch = rawConfigEnvironment.match(/^(.+?)\s+OpenAPI Spec/);
+        const specName = specNameMatch ? specNameMatch[1] : null;
 
-        // Trigger sync after successful save
-        setIsSyncModalOpen(true);
+        if (!specName || !syncEnvironmentName) {
+          alert('Failed to determine spec name or environment');
+          return;
+        }
+
+        // Update OpenAPI spec
+        const response = await apiClient.put(`/openapi/specs/${syncEnvironmentName}/${specName}`, {
+          content: rawConfig
+        });
+
+        if (response.data && response.data.success) {
+          await fetchMCPServers();
+          setIsRawConfigModalOpen(false);
+          setIsSyncModalOpen(true);
+        } else {
+          alert('Failed to save OpenAPI spec');
+        }
       } else {
-        alert('Failed to save server config');
+        // Update regular MCP server config
+        const response = await apiClient.put(`/mcp-servers/${selectedServerId}/config`, {
+          config: rawConfig
+        });
+
+        if (response.data && response.data.message) {
+          await fetchMCPServers();
+          setIsRawConfigModalOpen(false);
+          setIsSyncModalOpen(true);
+        } else {
+          alert('Failed to save server config');
+        }
       }
     } catch (error) {
-      console.error('Failed to save server config:', error);
-      alert('Failed to save server config. Check console for details.');
+      console.error('Failed to save config:', error);
+      alert('Failed to save config. Check console for details.');
     }
   };
 
@@ -1751,7 +1806,7 @@ const EnvironmentsPage = () => {
         environment={syncEnvironmentName || (selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default')}
       />
 
-      {/* Add Server Modal */}
+      {/* Add Server Modal (includes OpenAPI tab) */}
       <AddServerModal
         isOpen={isAddServerModalOpen}
         onClose={() => setIsAddServerModalOpen(false)}
