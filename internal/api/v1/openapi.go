@@ -195,9 +195,11 @@ func (h *APIHandlers) createOpenAPISpec(c *gin.Context) {
 	}
 
 	// Convert the spec to MCP config
+	// Use relative path from config root so it works in containers
+	relativeSpecPath := filepath.Join("environments", req.Environment, specFileName)
 	options := openapi.ConvertOptions{
 		ServerName:   req.Name,
-		SpecFilePath: specFilePath, // Use absolute path for runtime
+		SpecFilePath: relativeSpecPath, // Use relative path for container compatibility
 	}
 
 	config, err := svc.ConvertFromSpec(req.Spec, options)
@@ -356,9 +358,11 @@ func (h *APIHandlers) updateOpenAPISpec(c *gin.Context) {
 	}
 
 	// Regenerate MCP config
+	// Use relative path from config root so it works in containers
+	relativeSpecPath := filepath.Join("environments", envName, specName+".openapi.json")
 	options := openapi.ConvertOptions{
 		ServerName:   specName,
-		SpecFilePath: specPath,
+		SpecFilePath: relativeSpecPath,
 	}
 
 	mcpConfig, err := svc.ConvertFromSpec(req.Content, options)

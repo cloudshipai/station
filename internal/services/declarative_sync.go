@@ -783,11 +783,13 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 
 		// Convert OpenAPI spec to MCP configuration
 		// IMPORTANT: Pass the SOURCE spec (with template variables), not the rendered version
-		// Also provide the spec file path so the generated config references it instead of embedding
+		// Use relative path from environment directory so it works in containers
+		specFileName := filepath.Base(specFile)
+		relativeSpecPath := filepath.Join("environments", environmentName, specFileName)
 		convertOptions := openapi.ConvertOptions{
 			ServerName:     specName,
 			ToolNamePrefix: specName,
-			SpecFilePath:   specFile, // Full absolute path so runtime can find it
+			SpecFilePath:   relativeSpecPath, // Relative path from config root
 		}
 
 		// Convert using the ORIGINAL source spec (with {{ .VARIABLES }})

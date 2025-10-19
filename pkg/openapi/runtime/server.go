@@ -73,16 +73,42 @@ func (s *Server) LoadConfigFromFile(path string) error {
 	}
 
 	// Check if this is an OpenAPI spec by looking for "openapi" or "swagger" field
+	// Try JSON first, then YAML
 	var check map[string]interface{}
+	isJSON := false
 	if err := json.Unmarshal(data, &check); err == nil {
-		if _, hasOpenAPI := check["openapi"]; hasOpenAPI {
-			// This is an OpenAPI spec - convert it to MCP config
-			return s.LoadConfigFromOpenAPISpec(data)
+		isJSON = true
+	} else {
+		// Try YAML
+		if err := yaml.Unmarshal(data, &check); err != nil {
+			return fmt.Errorf("failed to parse config as JSON or YAML: %w", err)
 		}
-		if _, hasSwagger := check["swagger"]; hasSwagger {
-			// This is a Swagger 2.0 spec - convert it to MCP config
-			return s.LoadConfigFromOpenAPISpec(data)
+	}
+
+	// Check if it's an OpenAPI spec
+	if _, hasOpenAPI := check["openapi"]; hasOpenAPI {
+		// Convert YAML to JSON if needed (parser expects JSON)
+		if !isJSON {
+			jsonData, err := json.Marshal(check)
+			if err != nil {
+				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
+			}
+			data = jsonData
 		}
+		// This is an OpenAPI spec - convert it to MCP config
+		return s.LoadConfigFromOpenAPISpec(data)
+	}
+	if _, hasSwagger := check["swagger"]; hasSwagger {
+		// Convert YAML to JSON if needed (parser expects JSON)
+		if !isJSON {
+			jsonData, err := json.Marshal(check)
+			if err != nil {
+				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
+			}
+			data = jsonData
+		}
+		// This is a Swagger 2.0 spec - convert it to MCP config
+		return s.LoadConfigFromOpenAPISpec(data)
 	}
 
 	// Otherwise treat as MCP config (YAML or JSON)
