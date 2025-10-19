@@ -1,0 +1,403 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Station Management API",
+    "version": "1.0.0",
+    "description": "REST API for managing Station - a self-hosted platform for intelligent multi-environment MCP agents.\n\nThis API enables programmatic control of agents, environments, MCP servers, and tools."
+  },
+  "servers": [
+    {
+      "url": "{{ .STATION_API_URL }}",
+      "description": "Station API endpoint"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Optional API key for remote Station instances"
+      }
+    }
+  },
+  "tags": [
+    {"name": "Agents", "description": "Agent lifecycle management"},
+    {"name": "Runs", "description": "Execution monitoring"},
+    {"name": "Environments", "description": "Environment management"},
+    {"name": "MCP Servers", "description": "MCP server configuration"},
+    {"name": "Tools", "description": "Tool discovery"}
+  ],
+  "paths": {
+    "/agents": {
+      "get": {
+        "operationId": "listAgents",
+        "tags": ["Agents"],
+        "summary": "List all agents",
+        "parameters": [
+          {
+            "name": "environment_id",
+            "in": "query",
+            "schema": {"type": "integer"},
+            "description": "Filter by environment"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of agents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Agent"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/agents": {
+      "post": {
+        "operationId": "createAgent",
+        "tags": ["Agents"],
+        "summary": "Create agent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CreateAgentRequest"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Agent created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Agent"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agents/{id}": {
+      "get": {
+        "operationId": "getAgent",
+        "tags": ["Agents"],
+        "summary": "Get agent details",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent details",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Agent"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/agents/{id}": {
+      "put": {
+        "operationId": "updateAgent",
+        "tags": ["Agents"],
+        "summary": "Update agent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/UpdateAgentRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent updated"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAgent",
+        "tags": ["Agents"],
+        "summary": "Delete agent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Agent deleted"
+          }
+        }
+      }
+    },
+    "/agents/{id}/execute": {
+      "post": {
+        "operationId": "executeAgent",
+        "tags": ["Agents"],
+        "summary": "Execute agent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["message"],
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "Input for the agent"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Execution started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "run_id": {"type": "integer"},
+                    "status": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs": {
+      "get": {
+        "operationId": "listRuns",
+        "tags": ["Runs"],
+        "summary": "List agent runs",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": {"type": "integer"}
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["running", "completed", "failed", "error"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Run"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{id}": {
+      "get": {
+        "operationId": "getRun",
+        "tags": ["Runs"],
+        "summary": "Get run details",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run details",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Run"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/environments": {
+      "get": {
+        "operationId": "listEnvironments",
+        "tags": ["Environments"],
+        "summary": "List environments",
+        "responses": {
+          "200": {
+            "description": "List of environments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Environment"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp-servers": {
+      "get": {
+        "operationId": "listMCPServers",
+        "tags": ["MCP Servers"],
+        "summary": "List MCP servers",
+        "responses": {
+          "200": {
+            "description": "List of MCP servers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/MCPServer"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/environments/{env_id}/tools": {
+      "get": {
+        "operationId": "listTools",
+        "tags": ["Tools"],
+        "summary": "List tools in environment",
+        "parameters": [
+          {
+            "name": "env_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available tools",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Tool"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Agent": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "model": {"type": "string"},
+          "max_steps": {"type": "integer"},
+          "environment_id": {"type": "integer"}
+        }
+      },
+      "CreateAgentRequest": {
+        "type": "object",
+        "required": ["name", "model", "environment_id"],
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "model": {"type": "string"},
+          "max_steps": {"type": "integer"},
+          "environment_id": {"type": "integer"}
+        }
+      },
+      "UpdateAgentRequest": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "max_steps": {"type": "integer"}
+        }
+      },
+      "Run": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "agent_id": {"type": "integer"},
+          "status": {"type": "string"},
+          "input": {"type": "string"},
+          "output": {"type": "string"},
+          "started_at": {"type": "string", "format": "date-time"},
+          "completed_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Environment": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      },
+      "MCPServer": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "command": {"type": "string"},
+          "status": {"type": "string"}
+        }
+      },
+      "Tool": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    }
+  }
+}

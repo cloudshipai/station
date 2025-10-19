@@ -1,0 +1,26 @@
+{
+  "name": "Station Management API",
+  "description": "Control Station agents, environments, and MCP servers via REST API",
+  "mcpServers": {
+    "station-api": {
+      "command": "stn",
+      "args": [
+        "openapi-runtime",
+        "--spec",
+        "{{ .MCP_SERVERS_DIR }}/station-api.openapi.json"
+      ],
+      "description": "Station Management API - control agents, runs, environments, MCP servers, and tools"
+    }
+  },
+  "metadata": {
+    "category": "Management",
+    "tags": ["station", "management", "api", "agents", "automation"],
+    "variables": {
+      "STATION_API_URL": {
+        "description": "Station API endpoint URL",
+        "default": "http://localhost:8585/api/v1",
+        "required": true
+      }
+    }
+  }
+}
