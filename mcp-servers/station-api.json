@@ -7,7 +7,7 @@
       "args": [
         "openapi-runtime",
         "--spec",
-        "{{ .MCP_SERVERS_DIR }}/station-api.openapi.json"
+        "environments/{{ .ENVIRONMENT_NAME }}/station-api.openapi.json"
       ],
       "description": "Station Management API - control agents, runs, environments, MCP servers, and tools"
     }
@@ -15,11 +15,19 @@
   "metadata": {
     "category": "Management",
     "tags": ["station", "management", "api", "agents", "automation"],
+    "openapiSpec": "station-api.openapi.json",
+    "requiresOpenAPISpec": true,
     "variables": {
+      "ENVIRONMENT_NAME": {
+        "description": "Environment name (auto-populated)",
+        "default": "{{ .ENVIRONMENT_NAME }}",
+        "required": false,
+        "autoPopulate": true
+      },
       "STATION_API_URL": {
         "description": "Station API endpoint URL",
         "default": "http://localhost:8585/api/v1",
-        "required": true
+        "required": false
       }
     }
   }

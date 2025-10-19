@@ -32,6 +32,7 @@ func (h *APIHandlers) registerMCPManagementRoutes(envGroup *gin.RouterGroup) {
 // registerMCPDirectoryRoutes registers MCP directory template routes
 func (h *APIHandlers) registerMCPDirectoryRoutes(router *gin.RouterGroup) {
 	router.GET("/directory/templates", h.listMCPDirectoryTemplates)
+	router.POST("/directory/templates/:template_id/install", h.installMCPDirectoryTemplate)
 }
 
 // listMCPServersForEnvironment lists all MCP servers for an environment
@@ -470,5 +471,62 @@ func (h *APIHandlers) listMCPDirectoryTemplates(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"templates": templates,
 		"count":     len(templates),
+	})
+}
+
+// installMCPDirectoryTemplate installs a template from the MCP directory
+func (h *APIHandlers) installMCPDirectoryTemplate(c *gin.Context) {
+	templateID := c.Param("template_id")
+	if templateID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Template ID is required"})
+		return
+	}
+
+	var req struct {
+		EnvironmentID   int64                      `json:"environment_id" binding:"required"`
+		Config          services.MCPServerConfig   `json:"config" binding:"required"`
+		OpenAPISpecFile string                     `json:"openapi_spec_file"` // Optional: OpenAPI spec filename
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get environment to get the name
+	env, err := h.repos.Environments.GetByID(req.EnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Environment not found"})
+		return
+	}
+
+	mcpService := services.NewMCPServerManagementService(h.repos)
+
+	// If this template requires an OpenAPI spec, install it first
+	if req.OpenAPISpecFile != "" {
+		result := mcpService.InstallOpenAPITemplate(env.Name, templateID, req.OpenAPISpecFile)
+		if !result.Success {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":  "Failed to install OpenAPI spec",
+				"result": result,
+			})
+			return
+		}
+	}
+
+	// Now install the MCP server config
+	result := mcpService.AddMCPServerToEnvironment(env.Name, templateID, req.Config)
+
+	if !result.Success {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  "Failed to install MCP template",
+			"result": result,
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": result.Message,
+		"result":  result,
 	})
 }

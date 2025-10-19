@@ -14,6 +14,8 @@ interface MCPServer {
   icon: React.ComponentType<any>;
   isInstalled?: boolean;
   requiresShip?: boolean;
+  openapiSpec?: string;           // OpenAPI spec filename
+  requiresOpenAPISpec?: boolean;  // Whether this template requires OpenAPI spec
 }
 
 interface Environment {
@@ -212,7 +214,14 @@ const MCPServerCard: React.FC<MCPServerCardProps> = ({ server, onAddServer, disa
             <Icon size={24} className="text-purple-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-100">{server.name}</h3>
+            <div className="flex items-center space-x-2">
+              <h3 className="text-lg font-semibold text-gray-100">{server.name}</h3>
+              {server.requiresOpenAPISpec && (
+                <span className="px-2 py-0.5 text-xs bg-blue-900 text-blue-300 rounded border border-blue-700" title={`OpenAPI Spec: ${server.openapiSpec}`}>
+                  OpenAPI
+                </span>
+              )}
+            </div>
             <span className="text-sm text-gray-400">{server.category}</span>
           </div>
         </div>
@@ -448,6 +457,8 @@ export const MCPDirectoryPage: React.FC = () => {
         icon: Package, // Use Package icon for directory templates
         isInstalled: false,
         requiresShip: false,
+        openapiSpec: template.openapiSpec,
+        requiresOpenAPISpec: template.requiresOpenAPISpec || false,
       }));
 
       // Merge with existing hardcoded servers
@@ -463,16 +474,37 @@ export const MCPDirectoryPage: React.FC = () => {
 
   const handleConfirmAddServer = async (serverId: string, environmentId: string, config: any) => {
     try {
-      const response = await fetch(`/api/v1/environments/${environmentId}/mcp-servers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          server_name: serverId,
-          config: config
-        }),
-      });
+      // Check if this is an OpenAPI template
+      const server = servers.find(s => s.id === serverId);
+      const isOpenAPITemplate = server?.requiresOpenAPISpec;
+
+      let response;
+      if (isOpenAPITemplate) {
+        // Use the new OpenAPI template installation endpoint
+        response = await fetch(`/api/v1/directory/templates/${serverId}/install`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            environment_id: parseInt(environmentId),
+            config: config,
+            openapi_spec_file: server?.openapiSpec || ''
+          }),
+        });
+      } else {
+        // Use the regular MCP server installation endpoint
+        response = await fetch(`/api/v1/environments/${environmentId}/mcp-servers`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            server_name: serverId,
+            config: config
+          }),
+        });
+      }
 
       if (response.ok) {
         // Mark server as installed and refresh
