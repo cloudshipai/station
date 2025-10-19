@@ -752,6 +752,15 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 		specName := filepath.Base(specFile)
 		specName = strings.TrimSuffix(specName, ".openapi.json")
 
+		// Check if a manually-created MCP config already exists for this OpenAPI spec
+		// This prevents duplicate tool generation when using MCP Directory templates
+		envDir := filepath.Dir(specFile)
+		manualConfigPath := filepath.Join(envDir, fmt.Sprintf("%s.json", specName))
+		if _, err := os.Stat(manualConfigPath); err == nil {
+			fmt.Printf("  Skipping OpenAPI spec %s - manual MCP config exists at %s.json\n", specName, specName)
+			continue
+		}
+
 		fmt.Printf("  Converting OpenAPI spec: %s\n", specName)
 
 		// Read the OpenAPI spec
@@ -821,7 +830,7 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 		}
 
 		// Save the MCP config file
-		envDir := filepath.Dir(specFile)
+		// envDir already defined above when checking for manual config
 		mcpConfigFile := filepath.Join(envDir, fmt.Sprintf("%s-openapi-mcp.json", specName))
 		configBytes, err := json.MarshalIndent(mcpServerConfig, "", "  ")
 		if err != nil {
