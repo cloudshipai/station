@@ -325,13 +325,15 @@ func (s *MCPServerManagementService) UpdateRawMCPConfig(environmentName, content
 
 // MCPDirectoryTemplate represents a template from the mcp-servers/ directory
 type MCPDirectoryTemplate struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Category    string            `json:"category"`
-	Command     string            `json:"command"`
-	Args        []string          `json:"args"`
-	Env         map[string]string `json:"env,omitempty"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Description         string            `json:"description"`
+	Category            string            `json:"category"`
+	Command             string            `json:"command"`
+	Args                []string          `json:"args"`
+	Env                 map[string]string `json:"env,omitempty"`
+	OpenAPISpec         string            `json:"openapiSpec,omitempty"`         // Name of the OpenAPI spec file
+	RequiresOpenAPISpec bool              `json:"requiresOpenAPISpec,omitempty"` // Whether this template requires an OpenAPI spec
 }
 
 // GetMCPDirectoryTemplates reads all MCP server templates from the mcp-servers/ directory
@@ -384,14 +386,28 @@ func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryT
 				category = categoryVal
 			}
 
+			// Check for OpenAPI spec metadata
+			var openapiSpec string
+			var requiresOpenAPISpec bool
+			if singleServerTemplate.Metadata != nil {
+				if specVal, ok := singleServerTemplate.Metadata["openapiSpec"].(string); ok {
+					openapiSpec = specVal
+				}
+				if requiresVal, ok := singleServerTemplate.Metadata["requiresOpenAPISpec"].(bool); ok {
+					requiresOpenAPISpec = requiresVal
+				}
+			}
+
 			template := MCPDirectoryTemplate{
-				ID:          serverName,
-				Name:        serverName,
-				Description: serverConfig.Description,
-				Category:    category,
-				Command:     serverConfig.Command,
-				Args:        serverConfig.Args,
-				Env:         serverConfig.Env,
+				ID:                  serverName,
+				Name:                serverName,
+				Description:         serverConfig.Description,
+				Category:            category,
+				Command:             serverConfig.Command,
+				Args:                serverConfig.Args,
+				Env:                 serverConfig.Env,
+				OpenAPISpec:         openapiSpec,
+				RequiresOpenAPISpec: requiresOpenAPISpec,
 			}
 
 			templates = append(templates, template)
@@ -399,4 +415,85 @@ func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryT
 	}
 
 	return templates, nil
+}
+
+// InstallOpenAPITemplate installs an OpenAPI-based MCP template
+// This copies the OpenAPI spec file and creates/updates the variables.yml file
+func (s *MCPServerManagementService) InstallOpenAPITemplate(environmentName, templateID, specFileName string) *MCPServerOperationResult {
+	// Find the mcp-servers directory
+	mcpServersDirs := []string{
+		"/usr/share/station/mcp-servers", // Docker/system installation
+		"mcp-servers",                     // Local development
+	}
+
+	var mcpServersDir string
+	for _, dir := range mcpServersDirs {
+		if _, err := os.Stat(dir); err == nil {
+			mcpServersDir = dir
+			break
+		}
+	}
+
+	if mcpServersDir == "" {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: "MCP servers directory not found",
+		}
+	}
+
+	// Read the OpenAPI spec file from mcp-servers directory
+	specSourcePath := filepath.Join(mcpServersDir, specFileName)
+	specData, err := os.ReadFile(specSourcePath)
+	if err != nil {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Failed to read OpenAPI spec: %v", err),
+		}
+	}
+
+	// Copy the OpenAPI spec to the environment directory
+	envDir := config.GetEnvironmentDir(environmentName)
+	specDestPath := filepath.Join(envDir, specFileName)
+	if err := os.WriteFile(specDestPath, specData, 0644); err != nil {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Failed to copy OpenAPI spec to environment: %v", err),
+		}
+	}
+
+	// Create/update variables.yml with default values
+	variablesPath := filepath.Join(envDir, "variables.yml")
+	variablesContent := fmt.Sprintf(`ENVIRONMENT_NAME: %s
+STATION_API_URL: http://localhost:8585/api/v1
+`, environmentName)
+
+	// Check if variables.yml exists
+	existingVars := make(map[string]interface{})
+	if existingData, err := os.ReadFile(variablesPath); err == nil {
+		// Parse existing variables
+		if err := json.Unmarshal(existingData, &existingVars); err == nil {
+			// Merge with new variables (don't overwrite existing)
+			if _, hasEnvName := existingVars["ENVIRONMENT_NAME"]; !hasEnvName {
+				existingVars["ENVIRONMENT_NAME"] = environmentName
+			}
+			if _, hasAPIURL := existingVars["STATION_API_URL"]; !hasAPIURL {
+				existingVars["STATION_API_URL"] = "http://localhost:8585/api/v1"
+			}
+		}
+	}
+
+	// Write variables.yml (only if it doesn't exist or needs updating)
+	if len(existingVars) == 0 {
+		if err := os.WriteFile(variablesPath, []byte(variablesContent), 0644); err != nil {
+			// Don't fail installation if variables file write fails
+			fmt.Printf("Warning: Failed to write variables.yml: %v\n", err)
+		}
+	}
+
+	return &MCPServerOperationResult{
+		Success:     true,
+		ServerName:  templateID,
+		Environment: environmentName,
+		Message:     fmt.Sprintf("OpenAPI spec '%s' installed to environment '%s'", specFileName, environmentName),
+	}
 }
