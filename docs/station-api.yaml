@@ -1,0 +1,727 @@
+openapi: 3.0.0
+info:
+  title: Station Management API
+  version: 1.0.0
+  description: |
+    REST API for managing Station - a self-hosted platform for intelligent multi-environment MCP agents.
+
+    This API enables programmatic control of agents, environments, MCP servers, and tools.
+  contact:
+    name: Station Support
+    url: https://github.com/cloudshipai/station
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8585/api/v1
+    description: Local Station instance
+
+tags:
+  - name: Agents
+    description: Agent lifecycle management and execution
+  - name: Runs
+    description: Agent execution history and monitoring
+  - name: Environments
+    description: Multi-environment isolation
+  - name: MCP Servers
+    description: MCP server configuration
+  - name: Tools
+    description: Tool discovery and availability
+  - name: Settings
+    description: System configuration
+
+paths:
+  # Agents
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [Agents]
+      summary: List all agents
+      parameters:
+        - name: environment_id
+          in: query
+          schema:
+            type: integer
+          description: Filter by environment ID
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Agent'
+
+  /admin/agents:
+    post:
+      operationId: createAgent
+      tags: [Agents]
+      summary: Create a new agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentRequest'
+      responses:
+        '201':
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [Agents]
+      summary: Get agent by ID
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/agents/{id}:
+    put:
+      operationId: updateAgent
+      tags: [Agents]
+      summary: Update agent configuration
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAgentRequest'
+      responses:
+        '200':
+          description: Agent updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+    delete:
+      operationId: deleteAgent
+      tags: [Agents]
+      summary: Delete an agent
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '204':
+          description: Agent deleted
+
+  /agents/{id}/details:
+    get:
+      operationId: getAgentWithTools
+      tags: [Agents]
+      summary: Get agent with assigned tools
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent with tools
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWithTools'
+
+  /agents/{id}/prompt:
+    get:
+      operationId: getAgentPrompt
+      tags: [Agents]
+      summary: Get agent prompt file
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent prompt content
+          content:
+            text/plain:
+              schema:
+                type: string
+    put:
+      operationId: updateAgentPrompt
+      tags: [Agents]
+      summary: Update agent prompt file
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Prompt updated
+
+  /agents/{id}/execute:
+    post:
+      operationId: executeAgent
+      tags: [Agents]
+      summary: Execute an agent
+      description: Start agent execution with input message
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  description: User input for the agent
+      responses:
+        '200':
+          description: Execution started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id:
+                    type: integer
+                    description: ID of the created run
+                  status:
+                    type: string
+                    enum: [running]
+
+  # Runs
+  /runs:
+    get:
+      operationId: listRuns
+      tags: [Runs]
+      summary: List agent execution runs
+      parameters:
+        - name: agent_id
+          in: query
+          schema:
+            type: integer
+          description: Filter by agent ID
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [running, completed, failed, error]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Run'
+
+  /runs/{id}:
+    get:
+      operationId: getRun
+      tags: [Runs]
+      summary: Get run details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+
+  # Environments
+  /environments:
+    get:
+      operationId: listEnvironments
+      tags: [Environments]
+      summary: List all environments
+      responses:
+        '200':
+          description: List of environments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Environment'
+    post:
+      operationId: createEnvironment
+      tags: [Environments]
+      summary: Create a new environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Environment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Environment'
+
+  /environments/{env_id}/tools:
+    get:
+      operationId: listTools
+      tags: [Tools]
+      summary: List tools in environment
+      parameters:
+        - name: env_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Available tools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tool'
+
+  # MCP Servers
+  /mcp-servers:
+    get:
+      operationId: listMCPServers
+      tags: [MCP Servers]
+      summary: List all MCP servers
+      parameters:
+        - name: environment_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of MCP servers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MCPServer'
+
+  /environments/{environment}/mcp-servers:
+    get:
+      operationId: listEnvironmentMCPServers
+      tags: [MCP Servers]
+      summary: List MCP servers for environment
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentName'
+      responses:
+        '200':
+          description: MCP servers configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/MCPServerConfig'
+    post:
+      operationId: addMCPServer
+      tags: [MCP Servers]
+      summary: Add MCP server to environment
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - config
+              properties:
+                name:
+                  type: string
+                config:
+                  type: string
+                  description: JSON configuration for MCP server
+      responses:
+        '201':
+          description: MCP server added
+
+  /environments/{environment}/mcp-servers/{server_name}:
+    put:
+      operationId: updateMCPServer
+      tags: [MCP Servers]
+      summary: Update MCP server configuration
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentName'
+        - $ref: '#/components/parameters/ServerName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - config
+              properties:
+                config:
+                  type: string
+      responses:
+        '200':
+          description: MCP server updated
+    delete:
+      operationId: deleteMCPServer
+      tags: [MCP Servers]
+      summary: Delete MCP server
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentName'
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '204':
+          description: MCP server deleted
+
+  /mcp/directory/templates:
+    get:
+      operationId: listMCPTemplates
+      tags: [MCP Servers]
+      summary: List available MCP server templates
+      description: Browse pre-configured MCP server templates for quick installation
+      responses:
+        '200':
+          description: Available templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MCPTemplate'
+
+  # Settings
+  /settings:
+    get:
+      operationId: listSettings
+      tags: [Settings]
+      summary: List all settings
+      responses:
+        '200':
+          description: System settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Setting'
+
+  /settings/{key}:
+    get:
+      operationId: getSetting
+      tags: [Settings]
+      summary: Get setting value
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Setting value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Setting'
+    put:
+      operationId: updateSetting
+      tags: [Settings]
+      summary: Update setting value
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - value
+              properties:
+                value:
+                  type: string
+      responses:
+        '200':
+          description: Setting updated
+
+  # System
+  /lighthouse/status:
+    get:
+      operationId: getLighthouseStatus
+      tags: [Settings]
+      summary: Get CloudShip Lighthouse connection status
+      responses:
+        '200':
+          description: Lighthouse status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connected:
+                    type: boolean
+                  mode:
+                    type: string
+                  station_id:
+                    type: string
+
+components:
+  parameters:
+    AgentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Agent ID
+
+    EnvironmentName:
+      name: environment
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Environment name
+
+    ServerName:
+      name: server_name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: MCP server name
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  schemas:
+    Agent:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        max_steps:
+          type: integer
+        environment_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AgentWithTools:
+      allOf:
+        - $ref: '#/components/schemas/Agent'
+        - type: object
+          properties:
+            tools:
+              type: array
+              items:
+                $ref: '#/components/schemas/Tool'
+
+    CreateAgentRequest:
+      type: object
+      required:
+        - name
+        - model
+        - environment_id
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        max_steps:
+          type: integer
+          default: 10
+        environment_id:
+          type: integer
+        prompt:
+          type: string
+
+    UpdateAgentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        max_steps:
+          type: integer
+
+    Run:
+      type: object
+      properties:
+        id:
+          type: integer
+        agent_id:
+          type: integer
+        status:
+          type: string
+          enum: [running, completed, failed, error]
+        input:
+          type: string
+        output:
+          type: string
+        error:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+
+    Environment:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Tool:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        mcp_server_id:
+          type: integer
+        environment_id:
+          type: integer
+        input_schema:
+          type: object
+
+    MCPServer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        environment_id:
+          type: integer
+        status:
+          type: string
+          enum: [active, error]
+        tool_count:
+          type: integer
+
+    MCPServerConfig:
+      type: object
+      properties:
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        description:
+          type: string
+
+    MCPTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+
+    Setting:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+        description:
+          type: string
