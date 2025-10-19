@@ -799,6 +799,9 @@ const MCPServersPage = () => {
   const [syncEnvironmentName, setSyncEnvironmentName] = useState('');
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isOpenAPIServer, setIsOpenAPIServer] = useState(false);
+  const [openAPISpec, setOpenAPISpec] = useState('');
+  const [activeTab, setActiveTab] = useState<'mcp' | 'openapi'>('mcp');
   const environmentContext = React.useContext(EnvironmentContext);
 
   // Function to open MCP server details modal
@@ -867,8 +870,18 @@ const MCPServersPage = () => {
           isOpenAPI = true;
         }
 
+        // Format the MCP config
+        let formattedMCPConfig = '';
+        try {
+          formattedMCPConfig = JSON.stringify(configObj, null, 2);
+        } catch (parseError) {
+          console.warn('Failed to parse config JSON:', parseError);
+          formattedMCPConfig = response.data.config;
+        }
+
+        // If this is an OpenAPI server, also fetch the OpenAPI spec
+        let formattedOpenAPISpec = '';
         if (isOpenAPI) {
-          // This is an OpenAPI server - fetch the source .openapi.json file
           const server = mcpServers.find(s => s.id === serverId);
           if (server && server.environment_id) {
             const env = environments.find(e => e.id === server.environment_id);
@@ -879,32 +892,22 @@ const MCPServersPage = () => {
               try {
                 const openapiResponse = await apiClient.get(`/openapi/specs/${env.name}/${specName}`);
                 if (openapiResponse.data && openapiResponse.data.content) {
-                  // Format the OpenAPI spec
-                  const formattedSpec = JSON.stringify(JSON.parse(openapiResponse.data.content), null, 2);
-                  setRawConfig(formattedSpec);
-                  setRawConfigEnvironment(`${specName} OpenAPI Spec (ID: ${serverId})`);
-                  setSelectedServerId(serverId);
-                  setSyncEnvironmentName(env.name);
-                  setIsRawConfigModalOpen(true);
-                  return;
+                  formattedOpenAPISpec = JSON.stringify(JSON.parse(openapiResponse.data.content), null, 2);
                 }
               } catch (openapiError) {
-                console.warn('Failed to fetch OpenAPI spec, falling back to MCP config:', openapiError);
+                console.warn('Failed to fetch OpenAPI spec:', openapiError);
               }
             }
           }
         }
 
-        // Regular MCP server or fallback - show MCP config
-        try {
-          const formattedConfig = JSON.stringify(configObj, null, 2);
-          setRawConfig(formattedConfig);
-        } catch (parseError) {
-          console.warn('Failed to parse config JSON:', parseError);
-          setRawConfig(response.data.config);
-        }
+        // Set state for modal
+        setRawConfig(formattedMCPConfig);
+        setOpenAPISpec(formattedOpenAPISpec);
+        setIsOpenAPIServer(isOpenAPI);
         setRawConfigEnvironment(`${serverName} (ID: ${serverId})`);
         setSelectedServerId(serverId);
+        setActiveTab(isOpenAPI && formattedOpenAPISpec ? 'openapi' : 'mcp');
 
         const server = mcpServers.find(s => s.id === serverId);
         if (server && server.environment_id) {
@@ -932,30 +935,34 @@ const MCPServersPage = () => {
         return;
       }
 
+      // Determine what we're saving based on active tab
+      const contentToSave = activeTab === 'openapi' ? openAPISpec : rawConfig;
+
       // Validate JSON before saving
       try {
-        JSON.parse(rawConfig);
+        JSON.parse(contentToSave);
       } catch (jsonError) {
         alert('Invalid JSON format. Please check your configuration.');
         return;
       }
 
-      // Check if this is an OpenAPI spec based on modal title
-      const isOpenAPISpec = rawConfigEnvironment.includes('OpenAPI Spec');
+      // Save OpenAPI spec if on the OpenAPI tab
+      if (activeTab === 'openapi' && isOpenAPIServer) {
+        // Extract server name from environment string (format: "server-name (ID: X)")
+        const serverNameMatch = rawConfigEnvironment.match(/^(.+?)\s+\(ID:/);
+        const serverName = serverNameMatch ? serverNameMatch[1] : null;
 
-      if (isOpenAPISpec) {
-        // Extract spec name from environment string
-        const specNameMatch = rawConfigEnvironment.match(/^(.+?)\s+OpenAPI Spec/);
-        const specName = specNameMatch ? specNameMatch[1] : null;
-
-        if (!specName || !syncEnvironmentName) {
-          alert('Failed to determine spec name or environment');
+        if (!serverName || !syncEnvironmentName) {
+          alert('Failed to determine server name or environment');
           return;
         }
 
+        // Remove -openapi suffix if present to get spec name
+        const specName = serverName.replace(/-openapi$/, '');
+
         // Update OpenAPI spec
         const response = await apiClient.put(`/openapi/specs/${syncEnvironmentName}/${specName}`, {
-          content: rawConfig
+          content: contentToSave
         });
 
         if (response.data && response.data.success) {
@@ -1115,6 +1122,11 @@ const MCPServersPage = () => {
         onConfigChange={setRawConfig}
         onSave={handleSaveRawConfig}
         environmentName={rawConfigEnvironment}
+        isOpenAPIServer={isOpenAPIServer}
+        openAPISpec={openAPISpec}
+        onOpenAPISpecChange={setOpenAPISpec}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
 
       {/* Sync Modal */}
@@ -2212,7 +2224,12 @@ const RawConfigEditorModal = ({
   config,
   onConfigChange,
   onSave,
-  environmentName
+  environmentName,
+  isOpenAPIServer,
+  openAPISpec,
+  onOpenAPISpecChange,
+  activeTab,
+  onTabChange
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -2220,8 +2237,23 @@ const RawConfigEditorModal = ({
   onConfigChange: (config: string) => void;
   onSave: () => void;
   environmentName: string;
+  isOpenAPIServer?: boolean;
+  openAPISpec?: string;
+  onOpenAPISpecChange?: (spec: string) => void;
+  activeTab?: 'mcp' | 'openapi';
+  onTabChange?: (tab: 'mcp' | 'openapi') => void;
 }) => {
   if (!isOpen) return null;
+
+  const currentTab = activeTab || 'mcp';
+  const editorValue = currentTab === 'openapi' ? (openAPISpec || '') : config;
+  const handleEditorChange = (value: string) => {
+    if (currentTab === 'openapi' && onOpenAPISpecChange) {
+      onOpenAPISpecChange(value);
+    } else {
+      onConfigChange(value);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -2246,13 +2278,39 @@ const RawConfigEditorModal = ({
             </p>
           </div>
 
+          {/* Tab Switcher - Only show if this is an OpenAPI server */}
+          {isOpenAPIServer && onTabChange && (
+            <div className="flex gap-2 mb-4 border-b border-tokyo-dark4">
+              <button
+                onClick={() => onTabChange('mcp')}
+                className={`px-4 py-2 font-mono text-sm transition-colors ${
+                  currentTab === 'mcp'
+                    ? 'text-tokyo-cyan border-b-2 border-tokyo-cyan'
+                    : 'text-tokyo-comment hover:text-tokyo-fg'
+                }`}
+              >
+                MCP Config
+              </button>
+              <button
+                onClick={() => onTabChange('openapi')}
+                className={`px-4 py-2 font-mono text-sm transition-colors ${
+                  currentTab === 'openapi'
+                    ? 'text-tokyo-cyan border-b-2 border-tokyo-cyan'
+                    : 'text-tokyo-comment hover:text-tokyo-fg'
+                }`}
+              >
+                OpenAPI Spec
+              </button>
+            </div>
+          )}
+
           {/* Monaco Editor */}
           <div className="flex-1 border border-tokyo-blue7 rounded overflow-hidden min-h-[500px]">
             <Editor
               height="500px"
               defaultLanguage="json"
-              value={config}
-              onChange={(value) => onConfigChange(value || '')}
+              value={editorValue}
+              onChange={(value) => handleEditorChange(value || '')}
               theme="vs-dark"
               options={{
                 minimap: { enabled: false },
