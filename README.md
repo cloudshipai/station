@@ -200,6 +200,99 @@ Variables are resolved at runtime from `variables.yml`—never hardcoded in conf
 
 ---
 
+## OpenAPI MCP Servers
+
+Station can automatically convert OpenAPI/Swagger specifications into MCP servers, making any REST API instantly available as agent tools.
+
+**Turn any OpenAPI spec into MCP tools:**
+```json
+{
+  "name": "Station Management API",
+  "description": "Control Station via REST API",
+  "mcpServers": {
+    "station-api": {
+      "command": "stn",
+      "args": [
+        "openapi-runtime",
+        "--spec",
+        "environments/{{ .ENVIRONMENT_NAME }}/station-api.openapi.json"
+      ]
+    }
+  },
+  "metadata": {
+    "openapiSpec": "station-api.openapi.json",
+    "variables": {
+      "STATION_API_URL": {
+        "description": "Station API endpoint URL",
+        "default": "http://localhost:8585/api/v1"
+      }
+    }
+  }
+}
+```
+
+**Template variables in OpenAPI specs:**
+```json
+{
+  "openapi": "3.0.0",
+  "servers": [
+    {
+      "url": "{{ .STATION_API_URL }}",
+      "description": "Station API endpoint"
+    }
+  ]
+}
+```
+
+Station automatically:
+- ✅ **Converts OpenAPI paths to MCP tools** - Each endpoint becomes a callable tool
+- ✅ **Processes template variables** - Resolves `{{ .VAR }}` from `variables.yml` and env vars
+- ✅ **Supports authentication** - Bearer tokens, API keys, OAuth
+- ✅ **Smart tool sync** - Detects OpenAPI spec updates and refreshes tools
+
+**Example: Station Admin Agent**
+
+Create an agent that manages Station itself using the Station API:
+
+```yaml
+---
+metadata:
+  name: "Station Admin"
+  description: "Manages Station environments, agents, and MCP servers"
+model: gpt-4o-mini
+max_steps: 10
+tools:
+  - "__listEnvironments"    # From station-api OpenAPI spec
+  - "__listAgents"
+  - "__listMCPServers"
+  - "__createAgent"
+  - "__executeAgent"
+---
+
+{{role "system"}}
+You are a Station administrator that helps manage environments, agents, and MCP servers.
+
+Use the Station API tools to:
+- List and inspect environments, agents, and MCP servers
+- Create new agents from user requirements
+- Execute agents and monitor their runs
+- Provide comprehensive overviews of the Station deployment
+
+{{role "user"}}
+{{userInput}}
+```
+
+**Usage:**
+```bash
+stn agent run station-admin "Show me all environments and their agents"
+```
+
+The agent will use the OpenAPI-generated tools to query the Station API and provide a comprehensive overview.
+
+[OpenAPI MCP Documentation →](./docs/station/openapi-mcp-servers.md) | [Station Admin Agent Guide →](./docs/station/station-admin-agent.md)
+
+---
+
 ## Zero-Config Deployments
 
 Deploy Station agents to production without manual configuration. Station supports zero-config deployments that automatically:

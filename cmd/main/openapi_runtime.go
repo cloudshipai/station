@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -8,10 +9,13 @@ import (
 	"path/filepath"
 	"station/internal/config"
 	"station/pkg/openapi/runtime"
+	"strings"
+	"text/template"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var openapiRuntimeCmd = &cobra.Command{
@@ -50,8 +54,26 @@ func runOpenAPIRuntime(cmd *cobra.Command, args []string) error {
 		}
 
 		log.Printf("Loading OpenAPI spec from file: %s", fullPath)
+
+		// Read the OpenAPI spec file
+		specData, err := os.ReadFile(fullPath)
+		if err != nil {
+			return fmt.Errorf("failed to read OpenAPI spec: %w", err)
+		}
+
+		// Process template variables in the spec
+		processedSpec, err := processTemplateVariables(string(specData), fullPath)
+		if err != nil {
+			log.Printf("Warning: Failed to process template variables: %v", err)
+			log.Printf("Continuing with unprocessed spec...")
+			processedSpec = string(specData)
+		} else {
+			log.Printf("Successfully processed template variables in OpenAPI spec")
+		}
+
+		// Pass processed spec data to runtime
 		serverConfig = runtime.ServerConfig{
-			ConfigPath: fullPath,
+			ConfigData: processedSpec,
 		}
 	} else {
 		// Fallback to inline config from environment (backwards compatibility)
@@ -194,4 +216,114 @@ func runOpenAPIRuntime(cmd *cobra.Command, args []string) error {
 
 	log.Println("ServeStdio completed normally")
 	return nil
+}
+
+// processTemplateVariables processes Go template variables in the OpenAPI spec
+// It loads variables from the environment's variables.yml and environment variables
+func processTemplateVariables(specContent, specPath string) (string, error) {
+	// Determine environment name from spec path
+	// Path format: environments/{env_name}/some.openapi.json
+	envName := "default"
+	if strings.Contains(specPath, "environments/") {
+		parts := strings.Split(specPath, "environments/")
+		if len(parts) > 1 {
+			envParts := strings.Split(parts[1], "/")
+			if len(envParts) > 0 && envParts[0] != "" {
+				envName = envParts[0]
+			}
+		}
+	}
+
+	log.Printf("Loading variables for environment: %s", envName)
+
+	// Load variables from variables.yml
+	variables, err := loadEnvironmentVariables(envName)
+	if err != nil {
+		log.Printf("No variables.yml found for environment %s, using environment variables only", envName)
+		variables = make(map[string]string)
+	}
+
+	// Load environment variables (these override variables.yml)
+	for _, envPair := range os.Environ() {
+		parts := strings.SplitN(envPair, "=", 2)
+		if len(parts) == 2 {
+			key := parts[0]
+			value := parts[1]
+
+			// Skip internal/system environment variables
+			if isSystemEnvVar(key) {
+				continue
+			}
+
+			variables[key] = value
+		}
+	}
+
+	log.Printf("Loaded %d variables for template processing", len(variables))
+
+	// Process the template
+	return renderTemplate(specContent, variables)
+}
+
+// loadEnvironmentVariables loads variables from environment's variables.yml
+func loadEnvironmentVariables(envName string) (map[string]string, error) {
+	variablesPath := config.GetVariablesPath(envName)
+
+	data, err := os.ReadFile(variablesPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var variables map[string]interface{}
+	if err := yaml.Unmarshal(data, &variables); err != nil {
+		return nil, err
+	}
+
+	// Convert to string map
+	stringVars := make(map[string]string)
+	for key, value := range variables {
+		stringVars[key] = fmt.Sprintf("%v", value)
+	}
+
+	return stringVars, nil
+}
+
+// renderTemplate renders a template with the given variables
+func renderTemplate(templateContent string, variables map[string]string) (string, error) {
+	// Create a new template with the content
+	tmpl, err := template.New("openapi-spec").Parse(templateContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	// Convert variables to interface{} map for template execution
+	templateData := make(map[string]interface{})
+	for key, value := range variables {
+		templateData[key] = value
+	}
+
+	// Execute the template with the variables
+	var rendered bytes.Buffer
+	if err := tmpl.Execute(&rendered, templateData); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return rendered.String(), nil
+}
+
+// isSystemEnvVar returns true if the variable name is a system/internal environment variable
+func isSystemEnvVar(key string) bool {
+	systemPrefixes := []string{
+		"PATH", "HOME", "USER", "SHELL", "TERM", "LANG",
+		"PWD", "OLDPWD", "SHLVL", "HOSTNAME", "HOSTTYPE",
+		"_", "LS_COLORS", "GOPATH", "GOROOT", "GOCACHE",
+	}
+
+	for _, prefix := range systemPrefixes {
+		if key == prefix || strings.HasPrefix(key, prefix+"_") {
+			return true
+		}
+	}
+
+	return false
 }

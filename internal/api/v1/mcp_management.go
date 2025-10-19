@@ -484,7 +484,7 @@ func (h *APIHandlers) installMCPDirectoryTemplate(c *gin.Context) {
 
 	var req struct {
 		EnvironmentID   int64                      `json:"environment_id" binding:"required"`
-		Config          services.MCPServerConfig   `json:"config" binding:"required"`
+		Config          services.MCPServerConfig   `json:"config" binding:"required"`  // Ignored - kept for backward compat
 		OpenAPISpecFile string                     `json:"openapi_spec_file"` // Optional: OpenAPI spec filename
 	}
 
@@ -502,20 +502,8 @@ func (h *APIHandlers) installMCPDirectoryTemplate(c *gin.Context) {
 
 	mcpService := services.NewMCPServerManagementService(h.repos)
 
-	// If this template requires an OpenAPI spec, install it first
-	if req.OpenAPISpecFile != "" {
-		result := mcpService.InstallOpenAPITemplate(env.Name, templateID, req.OpenAPISpecFile)
-		if !result.Success {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":  "Failed to install OpenAPI spec",
-				"result": result,
-			})
-			return
-		}
-	}
-
-	// Now install the MCP server config
-	result := mcpService.AddMCPServerToEnvironment(env.Name, templateID, req.Config)
+	// Install template by copying from the mcp-servers directory (preserves metadata)
+	result := mcpService.InstallTemplateFromDirectory(env.Name, templateID, req.OpenAPISpecFile)
 
 	if !result.Success {
 		c.JSON(http.StatusInternalServerError, gin.H{

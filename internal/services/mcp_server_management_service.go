@@ -497,3 +497,65 @@ STATION_API_URL: http://localhost:8585/api/v1
 		Message:     fmt.Sprintf("OpenAPI spec '%s' installed to environment '%s'", specFileName, environmentName),
 	}
 }
+
+// InstallTemplateFromDirectory installs a complete MCP template from the mcp-servers directory
+// This preserves all metadata including description, tags, variables, etc.
+func (s *MCPServerManagementService) InstallTemplateFromDirectory(environmentName, templateID, openapiSpecFile string) *MCPServerOperationResult {
+	// Find the mcp-servers directory
+	mcpServersDirs := []string{
+		"/usr/share/station/mcp-servers", // Docker/system installation
+		"mcp-servers",                     // Local development
+	}
+
+	var mcpServersDir string
+	for _, dir := range mcpServersDirs {
+		if _, err := os.Stat(dir); err == nil {
+			mcpServersDir = dir
+			break
+		}
+	}
+
+	if mcpServersDir == "" {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: "MCP servers directory not found",
+		}
+	}
+
+	// Read the template JSON file from mcp-servers directory
+	templateSourcePath := filepath.Join(mcpServersDir, fmt.Sprintf("%s.json", templateID))
+	templateData, err := os.ReadFile(templateSourcePath)
+	if err != nil {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Failed to read template file: %v", err),
+		}
+	}
+
+	// Copy the complete template to the environment directory
+	envDir := config.GetEnvironmentDir(environmentName)
+	templateDestPath := filepath.Join(envDir, fmt.Sprintf("%s.json", templateID))
+	if err := os.WriteFile(templateDestPath, templateData, 0644); err != nil {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Failed to copy template to environment: %v", err),
+		}
+	}
+
+	// If this is an OpenAPI template, also copy the OpenAPI spec file
+	if openapiSpecFile != "" {
+		openapiResult := s.InstallOpenAPITemplate(environmentName, templateID, openapiSpecFile)
+		if !openapiResult.Success {
+			// Clean up the template file we just created
+			os.Remove(templateDestPath)
+			return openapiResult
+		}
+	}
+
+	return &MCPServerOperationResult{
+		Success:     true,
+		ServerName:  templateID,
+		Environment: environmentName,
+		Message:     fmt.Sprintf("Template '%s' installed to environment '%s'", templateID, environmentName),
+	}
+}
