@@ -389,6 +389,11 @@ func (h *APIHandlers) getAgentWithTools(c *gin.Context) {
 		mcpServers = []gin.H{} // Return empty array on error
 	}
 
+	// Ensure we never return nil - always return at least an empty array
+	if mcpServers == nil {
+		mcpServers = []gin.H{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"agent":       agent,
 		"mcp_servers": mcpServers,
@@ -429,7 +434,7 @@ func (h *APIHandlers) getAgentAssignedTools(agent *models.Agent, environmentName
 	}
 
 	// Convert to the expected format
-	var result []gin.H
+	result := []gin.H{} // Initialize as empty array instead of nil
 	serverID := 1
 	for serverName, tools := range mcpServers {
 		server := gin.H{
