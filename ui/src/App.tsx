@@ -846,9 +846,26 @@ const MCPServersPage = () => {
       if (response.data && response.data.config) {
         // Check if this is an OpenAPI-based MCP server
         const configObj = JSON.parse(response.data.config);
-        const isOpenAPI = configObj.command === 'stn' &&
-                         configObj.args?.[0] === 'openapi-runtime' &&
-                         configObj.args?.[1] === '--spec';
+
+        // Check if the config has mcpServers (template format) or direct command (runtime format)
+        let isOpenAPI = false;
+        if (configObj.mcpServers) {
+          // Template format - check any server in mcpServers
+          for (const serverConfig of Object.values(configObj.mcpServers)) {
+            const serverObj = serverConfig as any;
+            if (serverObj.command === 'stn' &&
+                serverObj.args?.[0] === 'openapi-runtime' &&
+                serverObj.args?.[1] === '--spec') {
+              isOpenAPI = true;
+              break;
+            }
+          }
+        } else if (configObj.command === 'stn' &&
+                   configObj.args?.[0] === 'openapi-runtime' &&
+                   configObj.args?.[1] === '--spec') {
+          // Runtime format - direct command/args
+          isOpenAPI = true;
+        }
 
         if (isOpenAPI) {
           // This is an OpenAPI server - fetch the source .openapi.json file
