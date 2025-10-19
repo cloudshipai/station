@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"station/internal/config"
 	"station/pkg/openapi/runtime"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -36,9 +38,20 @@ func runOpenAPIRuntime(cmd *cobra.Command, args []string) error {
 	// Create server config - either from file path or environment variable (backwards compat)
 	var serverConfig runtime.ServerConfig
 	if specPath != "" {
-		log.Printf("Loading OpenAPI spec from file: %s", specPath)
+		// Resolve relative path using centralized config directory
+		// This ensures it works in both host and container environments
+		var fullPath string
+		if filepath.IsAbs(specPath) {
+			fullPath = specPath
+		} else {
+			// Relative path - resolve from station config directory
+			configDir := config.GetStationConfigDir()
+			fullPath = filepath.Join(configDir, specPath)
+		}
+
+		log.Printf("Loading OpenAPI spec from file: %s", fullPath)
 		serverConfig = runtime.ServerConfig{
-			ConfigPath: specPath,
+			ConfigPath: fullPath,
 		}
 	} else {
 		// Fallback to inline config from environment (backwards compatibility)

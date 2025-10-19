@@ -1,3 +1,30 @@
+// Package api provides the HTTP API server for Station
+//
+// @title Station API
+// @version 1.0
+// @description Station is a secure, self-hosted platform for creating intelligent multi-environment MCP agents
+// @description
+// @description ## Features
+// @description - Agent management and execution
+// @description - MCP server configuration
+// @description - OpenAPI to MCP conversion
+// @description - Environment management
+// @description - Tool discovery and assignment
+//
+// @contact.name Station Support
+// @contact.url https://github.com/cloudshipai/station
+//
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+//
+// @host localhost:8585
+// @BasePath /api/v1
+// @schemes http https
+//
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
+// @description Bearer token authentication
 package api
 
 import (
@@ -8,9 +35,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	
+
 	"github.com/gin-gonic/gin"
-	
+
 	"station/internal/api/v1"
 	internalconfig "station/internal/config"
 	"station/internal/db"
