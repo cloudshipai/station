@@ -72,17 +72,14 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 
 ### 2. Start Station
 ```bash
-# Set your OpenAI API key
-export OPENAI_API_KEY=sk-your-key-here
-
-# Start Station (automatically configures .mcp.json for Claude Code/Cursor)
-stn up --provider openai
+# Start Station with your OpenAI API key (automatically configures .mcp.json for Claude Code/Cursor)
+stn up --provider openai --api-key sk-your-key-here
 ```
 
 **More provider options:**
 ```bash
 # OpenAI with specific model
-stn up --provider openai --model gpt-4o
+stn up --provider openai --api-key sk-your-key-here --model gpt-4o
 
 # Anthropic Claude
 stn up --provider anthropic --api-key sk-ant-...
@@ -93,8 +90,12 @@ stn up --provider gemini --api-key your-key --model gemini-2.0-flash-exp
 # Custom provider (Ollama, etc.)
 stn up --provider custom --base-url http://localhost:11434/v1 --model llama3.2
 
+# Alternative: Use environment variable instead of --api-key flag
+export OPENAI_API_KEY=sk-your-key-here
+stn up --provider openai
+
 # With CloudShip registration for centralized management
-stn up --provider openai --cloudshipai-registration-key your-registration-key
+stn up --provider openai --api-key sk-your-key-here --cloudshipai-registration-key your-registration-key
 ```
 
 **Stop Station:**
