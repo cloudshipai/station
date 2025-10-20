@@ -2,6 +2,8 @@
 
 # Station
 
+[![Test Coverage](https://img.shields.io/badge/coverage-52.7%25-yellow?style=flat-square)](./TESTING_PROGRESS.md) [![Go Tests](https://img.shields.io/badge/tests-passing-brightgreen?style=flat-square)](./.github/workflows/test-coverage.yml)
+
 **Open-Source Runtime for Infrastructure Management Agents**
 
 Deploy AI agents on your infrastructure. Keep sensitive data secure. Maintain full control.

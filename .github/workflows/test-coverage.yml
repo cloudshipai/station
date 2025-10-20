@@ -1,0 +1,137 @@
+name: Test Coverage
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    name: Run Tests and Generate Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run tests with coverage
+      run: |
+        mkdir -p coverage
+        go test -v -race -covermode=atomic -coverprofile=coverage/coverage.out ./...
+
+    - name: Generate coverage report
+      run: go tool cover -html=coverage/coverage.out -o coverage/coverage.html
+
+    - name: Calculate coverage percentage
+      id: coverage
+      run: |
+        COVERAGE=$(go tool cover -func=coverage/coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+        echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+        echo "## Test Coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+
+    - name: Generate coverage badge data
+      run: |
+        COVERAGE=${{ steps.coverage.outputs.coverage }}
+        COLOR="red"
+        if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+          COLOR="brightgreen"
+        elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+          COLOR="yellow"
+        elif (( $(echo "$COVERAGE >= 40" | bc -l) )); then
+          COLOR="orange"
+        fi
+        echo "COVERAGE_COLOR=$COLOR" >> $GITHUB_ENV
+        echo "Coverage: ${COVERAGE}% (${COLOR})"
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage/coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Archive coverage results
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage/
+        retention-days: 30
+
+    - name: Comment PR with coverage
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const coverage = '${{ steps.coverage.outputs.coverage }}';
+          const color = process.env.COVERAGE_COLOR;
+
+          const comment = `## 📊 Test Coverage Report
+
+          **Coverage:** ${coverage}%
+
+          ![Coverage Badge](https://img.shields.io/badge/coverage-${coverage}%25-${color})
+
+          [View detailed coverage report in artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ### Coverage by Package
+          Run \`go tool cover -func=coverage/coverage.out\` to see detailed coverage breakdown.
+          `;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+    - name: Check coverage threshold
+      run: |
+        COVERAGE=${{ steps.coverage.outputs.coverage }}
+        THRESHOLD=40
+        if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+          echo "❌ Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
+          echo "⚠️  Warning: Coverage is below recommended threshold" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ Coverage ${COVERAGE}% meets threshold ${THRESHOLD}%"
+          echo "✅ Coverage meets threshold!" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  lint:
+    name: Run Linters
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
