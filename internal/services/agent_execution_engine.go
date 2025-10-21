@@ -94,6 +94,11 @@ func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agen
 
 // ExecuteWithOptions executes an agent with options to control Lighthouse integration
 func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}, skipLighthouse bool) (*AgentExecutionResult, error) {
+	// Nil check to prevent panic
+	if agent == nil {
+		return nil, fmt.Errorf("agent cannot be nil")
+	}
+
 	startTime := time.Now()
 	logging.Info("🎬 [EXECUTION TRACKER] ExecuteWithOptions STARTED - agent_id=%d agent_name='%s' station_run_id=%d skipLighthouse=%v", agent.ID, agent.Name, runID, skipLighthouse)
 	logging.Debug("Execute called for agent %s (ID: %d), skipLighthouse=%v", agent.Name, agent.ID, skipLighthouse)
