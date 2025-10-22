@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"station/internal/config"
+	"station/internal/db"
+	"station/internal/db/repositories"
 	"station/pkg/models"
 )
 
@@ -493,4 +496,135 @@ func TestDeclarativeSyncPerformance(t *testing.T) {
 
 		assert.False(t, needsChange, "Should detect no changes needed")
 	})
+}
+
+func TestParseDotPrompt(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer testDB.Close()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	tests := []struct {
+		name            string
+		content         string
+		expectConfig    *DotPromptConfig
+		expectPrompt    string
+		expectError     bool
+		description     string
+	}{
+		{
+			name: "Valid dotprompt with frontmatter",
+			content: `---
+model: gpt-4o-mini
+max_steps: 5
+metadata:
+  name: "Test Agent"
+  description: "Test description"
+tools:
+  - "__read_file"
+  - "__write_file"
+---
+
+{{role "system"}}
+You are a test agent.
+
+{{role "user"}}
+{{userInput}}`,
+			expectConfig: &DotPromptConfig{
+				Model: "gpt-4o-mini",
+				MaxSteps: 5,
+				Tools: []string{"__read_file", "__write_file"},
+				Metadata: map[string]interface{}{
+					"name": "Test Agent",
+					"description": "Test description",
+				},
+			},
+			expectPrompt: `{{role "system"}}
+You are a test agent.
+
+{{role "user"}}
+{{userInput}}`,
+			expectError: false,
+			description: "Should parse valid dotprompt with frontmatter",
+		},
+		{
+			name: "Dotprompt without frontmatter",
+			content: `{{role "system"}}
+You are a simple agent.`,
+			expectConfig: &DotPromptConfig{},
+			expectPrompt: `{{role "system"}}
+You are a simple agent.`,
+			expectError: false,
+			description: "Should handle dotprompt without frontmatter",
+		},
+		{
+			name: "Invalid YAML frontmatter",
+			content: `---
+model: gpt-4o-mini
+invalid yaml: [unclosed bracket
+---
+
+{{role "system"}}
+Test`,
+			expectConfig: nil,
+			expectPrompt: "",
+			expectError: true,
+			description: "Should error on invalid YAML",
+		},
+		{
+			name: "Empty frontmatter",
+			content: `---
+---
+
+{{role "system"}}
+You are an agent.`,
+			expectConfig: &DotPromptConfig{},
+			expectPrompt: `{{role "system"}}
+You are an agent.`,
+			expectError: false,
+			description: "Should handle empty frontmatter",
+		},
+		{
+			name: "Multiple --- in prompt content",
+			content: `---
+model: gpt-4o-mini
+---
+
+{{role "system"}}
+Use --- to separate sections.
+---
+Another section`,
+			expectConfig: &DotPromptConfig{
+				Model: "gpt-4o-mini",
+			},
+			expectPrompt: `{{role "system"}}
+Use --- to separate sections.
+---
+Another section`,
+			expectError: false,
+			description: "Should handle --- in prompt content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, promptContent, err := service.parseDotPrompt(tt.content)
+
+			if tt.expectError {
+				require.Error(t, err, tt.description)
+			} else {
+				require.NoError(t, err, tt.description)
+				assert.Equal(t, tt.expectPrompt, promptContent, "Prompt content should match")
+
+				if tt.expectConfig != nil {
+					assert.Equal(t, tt.expectConfig.Model, config.Model, "Model should match")
+					assert.Equal(t, tt.expectConfig.MaxSteps, config.MaxSteps, "MaxSteps should match")
+					assert.Equal(t, tt.expectConfig.Tools, config.Tools, "Tools should match")
+				}
+			}
+		})
+	}
 }
