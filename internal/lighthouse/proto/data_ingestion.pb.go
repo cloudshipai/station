@@ -316,8 +316,12 @@ type IngestDataRequest struct {
 	ParentId      string `protobuf:"bytes,15,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`                // For hierarchical data relationships
 	// Processing hints
 	ProcessingOptions *ProcessingOptions `protobuf:"bytes,16,opt,name=processing_options,json=processingOptions,proto3" json:"processing_options,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Agent run lineage (links data to agent execution)
+	RunId         string `protobuf:"bytes,17,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`             // UUID of StationRun that generated this data (becomes run_group_id)
+	AgentName     string `protobuf:"bytes,18,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"` // Name of the agent that produced this data
+	AgentId       string `protobuf:"bytes,19,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`       // UUID of the agent (optional)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IngestDataRequest) Reset() {
@@ -460,6 +464,27 @@ func (x *IngestDataRequest) GetProcessingOptions() *ProcessingOptions {
 		return x.ProcessingOptions
 	}
 	return nil
+}
+
+func (x *IngestDataRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *IngestDataRequest) GetAgentName() string {
+	if x != nil {
+		return x.AgentName
+	}
+	return ""
+}
+
+func (x *IngestDataRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
 }
 
 type IngestDataResponse struct {
@@ -2238,7 +2263,7 @@ var File_internal_lighthouse_proto_data_ingestion_proto protoreflect.FileDescrip
 
 const file_internal_lighthouse_proto_data_ingestion_proto_rawDesc = "" +
 	"\n" +
-	".internal/lighthouse/proto/data_ingestion.proto\x12\rlighthouse.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x19google/protobuf/any.proto\"\x90\x06\n" +
+	".internal/lighthouse/proto/data_ingestion.proto\x12\rlighthouse.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x19google/protobuf/any.proto\"\xe1\x06\n" +
 	"\x11IngestDataRequest\x12)\n" +
 	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12!\n" +
@@ -2257,7 +2282,11 @@ const file_internal_lighthouse_proto_data_ingestion_proto_rawDesc = "" +
 	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12\x19\n" +
 	"\bbatch_id\x18\x0e \x01(\tR\abatchId\x12\x1b\n" +
 	"\tparent_id\x18\x0f \x01(\tR\bparentId\x12O\n" +
-	"\x12processing_options\x18\x10 \x01(\v2 .lighthouse.v1.ProcessingOptionsR\x11processingOptions\x1a;\n" +
+	"\x12processing_options\x18\x10 \x01(\v2 .lighthouse.v1.ProcessingOptionsR\x11processingOptions\x12\x15\n" +
+	"\x06run_id\x18\x11 \x01(\tR\x05runId\x12\x1d\n" +
+	"\n" +
+	"agent_name\x18\x12 \x01(\tR\tagentName\x12\x19\n" +
+	"\bagent_id\x18\x13 \x01(\tR\aagentId\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9b\x02\n" +

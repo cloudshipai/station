@@ -33,11 +33,11 @@ func TestLoad_WithValidEncryptionKey(t *testing.T) {
 	if cfg.SSHPort != 2222 {
 		t.Errorf("Expected default SSH port to be 2222, got %d", cfg.SSHPort)
 	}
-	if cfg.MCPPort != 3000 {
-		t.Errorf("Expected default MCP port to be 3000, got %d", cfg.MCPPort)
+	if cfg.MCPPort != 8586 {
+		t.Errorf("Expected default MCP port to be 8586, got %d", cfg.MCPPort)
 	}
-	if cfg.APIPort != 8080 {
-		t.Errorf("Expected default API port to be 8080, got %d", cfg.APIPort)
+	if cfg.APIPort != 8585 {
+		t.Errorf("Expected default API port to be 8585, got %d", cfg.APIPort)
 	}
 }
 
@@ -51,14 +51,14 @@ func TestLoad_WithoutEncryptionKey(t *testing.T) {
 		}
 	}()
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("Expected error when ENCRYPTION_KEY is not set")
+	// Config should load successfully even without ENCRYPTION_KEY
+	// Encryption key validation is now handled by the KeyManager at runtime
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Config should load without ENCRYPTION_KEY (validation moved to KeyManager): %v", err)
 	}
-
-	expectedError := "encryption key is required"
-	if !strings.Contains(err.Error(), expectedError) {
-		t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
+	if cfg == nil {
+		t.Fatal("Config should not be nil")
 	}
 }
 

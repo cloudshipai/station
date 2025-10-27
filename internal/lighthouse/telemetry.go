@@ -160,7 +160,7 @@ func (lc *LighthouseClient) getOrganizationID() (string, error) {
 }
 
 // IngestData sends structured data to CloudShip Data Ingestion service (sync)
-func (lc *LighthouseClient) IngestData(app, appType string, data map[string]interface{}, metadata map[string]string, correlationID string) error {
+func (lc *LighthouseClient) IngestData(app, appType string, data map[string]interface{}, metadata map[string]string, correlationID, runID, agentName, agentID string) error {
 	// In server mode, station is registered via management channel, not traditional registration
 	// Allow sending data if connected, even if IsRegistered() returns false
 	if !lc.IsRegistered() && lc.mode != ModeServe {
@@ -177,7 +177,7 @@ func (lc *LighthouseClient) IngestData(app, appType string, data map[string]inte
 		return fmt.Errorf("failed to convert data to protobuf struct: %w", err)
 	}
 
-	// Create IngestDataRequest
+	// Create IngestDataRequest with agent lineage fields
 	req := &proto.IngestDataRequest{
 		RegistrationKey: lc.config.RegistrationKey,
 		OrganizationId:  organizationID,
@@ -188,6 +188,9 @@ func (lc *LighthouseClient) IngestData(app, appType string, data map[string]inte
 		Metadata:        metadata,
 		Timestamp:       timestamppb.Now(),
 		CorrelationId:   correlationID,
+		RunId:           runID,       // UUID of StationRun for lineage tracing
+		AgentName:       agentName,   // Agent name for citation context
+		AgentId:         agentID,     // Agent ID for traceability
 	}
 
 	// Use DataIngestionServiceClient to send the data

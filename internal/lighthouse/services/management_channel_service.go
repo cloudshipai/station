@@ -147,6 +147,9 @@ func (mcs *ManagementChannelService) maintainConnection() {
 func (mcs *ManagementChannelService) establishConnection() error {
 	logging.Info("Establishing ManagementChannel stream with CloudShip")
 
+	// 🚨 CRITICAL FIX: Ensure RegisterStation completed BEFORE opening ManagementChannel
+	// This fixes the "station not found in ConnectionManager" error when containers restart
+
 	// First ensure the underlying lighthouse client is connected
 	if !mcs.lighthouseClient.IsConnected() {
 		logging.Info("LighthouseClient not connected, attempting reconnection...")
@@ -156,7 +159,27 @@ func (mcs *ManagementChannelService) establishConnection() error {
 		}
 		logging.Info("Successfully reconnected LighthouseClient")
 	} else {
-		logging.Debug("LighthouseClient already connected, proceeding with stream creation")
+		logging.Debug("LighthouseClient already connected, proceeding with registration check")
+	}
+
+	// ✅ REQUIRED: Verify RegisterStation completed successfully before opening stream
+	// CloudShip requirement: Station MUST call RegisterStation gRPC before ManagementChannel
+	if !mcs.lighthouseClient.IsRegistered() {
+		logging.Info("Station not registered, attempting registration before opening ManagementChannel...")
+		// Registration is handled in NewLighthouseClient, but might have failed
+		// In server mode with container recreation, we need to re-register
+		if err := mcs.lighthouseClient.Reconnect(); err != nil {
+			logging.Error("Failed to register station: %v", err)
+			return fmt.Errorf("station registration required before ManagementChannel: %w", err)
+		}
+
+		// Verify registration succeeded
+		if !mcs.lighthouseClient.IsRegistered() {
+			return fmt.Errorf("station registration failed - cannot open ManagementChannel without successful RegisterStation call")
+		}
+		logging.Info("✅ Station successfully registered, proceeding with ManagementChannel")
+	} else {
+		logging.Debug("✅ Station already registered, proceeding with ManagementChannel stream creation")
 	}
 
 	// Create independent stream context that doesn't get canceled during normal operations

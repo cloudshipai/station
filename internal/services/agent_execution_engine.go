@@ -412,9 +412,9 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 		logging.Info("📤 [SENDRUN TRACKER] Calling SendRun for STDIO mode - run_uuid=%s station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
 		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for STDIO mode - run_uuid=%s", agentRun.ID)
-		// Dual flow: Send structured data if conditions are met
-		logging.Debug("🚀 [LIGHTHOUSE DEBUG] About to call sendStructuredDataIfEligible for stdio mode (run_id: %d)", runID)
-		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
+		// Dual flow: Send structured data if conditions are met (pass run UUID for lineage)
+		logging.Debug("🚀 [LIGHTHOUSE DEBUG] About to call sendStructuredDataIfEligible for stdio mode (run_id: %d, run_uuid: %s)", runID, agentRun.ID)
+		aee.sendStructuredDataIfEligible(agent, result, runID, agentRun.ID, context.ToLabelsMap())
 
 	case lighthouse.ModeServe:
 		// serve mode: Server deployment context
@@ -422,8 +422,8 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 		logging.Info("📤 [SENDRUN TRACKER] Calling SendRun for SERVE mode - run_uuid=%s station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
 		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for SERVE mode - run_uuid=%s", agentRun.ID)
-		// Dual flow: Send structured data if conditions are met
-		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
+		// Dual flow: Send structured data if conditions are met (pass run UUID for lineage)
+		aee.sendStructuredDataIfEligible(agent, result, runID, agentRun.ID, context.ToLabelsMap())
 
 	case lighthouse.ModeCLI:
 		// CLI mode: Rich execution context (may include CI/CD)
@@ -431,8 +431,8 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 		logging.Info("📤 [SENDRUN TRACKER] Calling SendRun for CLI mode - run_uuid=%s station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
 		aee.lighthouseClient.SendRun(agentRun, "default", context.ToLabelsMap())
 		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for CLI mode - run_uuid=%s", agentRun.ID)
-		// Dual flow: Send structured data if conditions are met
-		aee.sendStructuredDataIfEligible(agent, result, runID, context.ToLabelsMap())
+		// Dual flow: Send structured data if conditions are met (pass run UUID for lineage)
+		aee.sendStructuredDataIfEligible(agent, result, runID, agentRun.ID, context.ToLabelsMap())
 		logging.Info("Successfully sent CLI run data with deployment context for run_id: %d", runID)
 
 	default:
@@ -442,8 +442,8 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 			"mode": "unknown",
 		})
 		logging.Info("✅ [SENDRUN TRACKER] SendRun completed for UNKNOWN mode - run_uuid=%s", agentRun.ID)
-		// Dual flow: Send structured data if conditions are met
-		aee.sendStructuredDataIfEligible(agent, result, runID, map[string]string{"mode": "unknown"})
+		// Dual flow: Send structured data if conditions are met (pass run UUID for lineage)
+		aee.sendStructuredDataIfEligible(agent, result, runID, agentRun.ID, map[string]string{"mode": "unknown"})
 	}
 
 	logging.Info("🏁 [SENDRUN TRACKER] Completed sendToLighthouse for station_run_id=%d run_uuid=%s mode=%s", runID, agentRun.ID, mode)
@@ -451,8 +451,8 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 }
 
 // sendStructuredDataIfEligible checks if agent qualifies for structured data ingestion and sends it
-func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agent, result *AgentExecutionResult, runID int64, contextLabels map[string]string) {
-	logging.Debug("🔍 [LIGHTHOUSE DEBUG] sendStructuredDataIfEligible called for agent %d (name: %s, run_id: %d)", agent.ID, agent.Name, runID)
+func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agent, result *AgentExecutionResult, runID int64, runUUID string, contextLabels map[string]string) {
+	logging.Debug("🔍 [LIGHTHOUSE DEBUG] sendStructuredDataIfEligible called for agent %d (name: %s, run_id: %d, run_uuid: %s)", agent.ID, agent.Name, runID, runUUID)
 
 	// Log lighthouse client state
 	if aee.lighthouseClient == nil {
@@ -546,12 +546,18 @@ func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agen
 	// Send structured data to CloudShip Data Ingestion service
 	// Use UUID for correlation to prevent collisions across multiple stations
 	correlationID := uuid.New().String()
-	logging.Debug("🚀 Attempting IngestData call to CloudShip (app: %s, app_type: %s, run_id: %d, correlation_id: %s)", app, appType, runID, correlationID)
-	if err := aee.lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID); err != nil {
+	agentIDStr := fmt.Sprintf("%d", agent.ID)
+
+	logging.Debug("🚀 Attempting IngestData call to CloudShip (app: %s, app_type: %s, run_id: %d, run_uuid: %s, agent: %s, correlation_id: %s)",
+		app, appType, runID, runUUID, agent.Name, correlationID)
+
+	// Pass run_uuid, agent_name, and agent_id for lineage tracing
+	if err := aee.lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID, runUUID, agent.Name, agentIDStr); err != nil {
 		logging.Debug("❌ Failed to send structured data to CloudShip: %v", err)
 		// Don't fail the execution - this is supplementary data
 	} else {
-		logging.Debug("✅ Successfully sent structured data to CloudShip (app: %s, app_type: %s, run_id: %d)", app, appType, runID)
+		logging.Debug("✅ Successfully sent structured data to CloudShip (app: %s, app_type: %s, run_id: %d, run_uuid: %s, agent: %s)",
+			app, appType, runID, runUUID, agent.Name)
 	}
 }
 

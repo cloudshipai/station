@@ -748,7 +748,8 @@ func TestSendStructuredDataIfEligible(t *testing.T) {
 			}
 
 			// This function doesn't return anything, just testing it doesn't panic
-			engine.sendStructuredDataIfEligible(tt.agent, tt.result, tt.runID, contextLabels)
+			runUUID := fmt.Sprintf("test-run-%d", tt.runID)
+			engine.sendStructuredDataIfEligible(tt.agent, tt.result, tt.runID, runUUID, contextLabels)
 
 			t.Logf("sendStructuredDataIfEligible completed for agent %d (runID: %d)",
 				tt.agent.ID, tt.runID)

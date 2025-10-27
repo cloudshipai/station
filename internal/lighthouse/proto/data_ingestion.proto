@@ -57,9 +57,14 @@ message IngestDataRequest {
     string correlation_id = 13;       // For tracking related data across requests
     string batch_id = 14;            // For grouping related records
     string parent_id = 15;           // For hierarchical data relationships
-    
+
     // Processing hints
     ProcessingOptions processing_options = 16;
+
+    // Agent run lineage (links data to agent execution)
+    string run_id = 17;              // UUID of StationRun that generated this data (becomes run_group_id)
+    string agent_name = 18;          // Name of the agent that produced this data
+    string agent_id = 19;            // UUID of the agent (optional)
 }
 
 message IngestDataResponse {

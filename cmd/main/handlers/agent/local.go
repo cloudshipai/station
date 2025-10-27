@@ -776,7 +776,10 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 				// Send structured data to CloudShip Data Ingestion service
 				// Use UUID for correlation to prevent collisions across multiple stations
 				correlationID := uuid.New().String()
-				if err := lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID); err != nil {
+				runID := fmt.Sprintf("%d", agentRun.ID)
+				agentName := agent.Name
+				agentID := fmt.Sprintf("%d", agent.ID)
+				if err := lighthouseClient.IngestData(app, appType, structuredData, metadata, correlationID, runID, agentName, agentID); err != nil {
 					debugLog(fmt.Sprintf("Failed to send structured data to CloudShip: %v", err))
 					// Don't fail the execution - this is supplementary data
 				} else {
