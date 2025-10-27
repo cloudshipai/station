@@ -111,9 +111,4 @@ jobs:
       run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
     - name: Run Gosec Security Scanner
-      run: gosec -no-fail -fmt sarif -out results.sarif ./...
-
-    - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: results.sarif
+      run: gosec -no-fail ./...
