@@ -51,6 +51,11 @@ func TestLighthouseIntegration(t *testing.T) {
 		t.Skip("Skipping integration tests in short mode (use -short=false or remove -short)")
 	}
 
+	// Skip in CI environments (no real CloudShip service available)
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping Lighthouse integration tests in CI environment")
+	}
+
 	// Check if we can reach the endpoint
 	if !isEndpointReachable(t, testEndpoint) {
 		t.Skipf("CloudShip not reachable at %s, skipping integration tests", testEndpoint)

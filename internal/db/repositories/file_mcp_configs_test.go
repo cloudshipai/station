@@ -349,12 +349,12 @@ func TestFileMCPConfigRepo_UpdateLastLoadedAt(t *testing.T) {
 	}
 
 	// Update LastLoadedAt
-	beforeUpdate := time.Now()
+	beforeUpdate := time.Now().Add(-1 * time.Second) // Add 1 second buffer for DB precision
 	err = repo.UpdateLastLoadedAt(id)
 	if err != nil {
 		t.Fatalf("Failed to update last loaded at: %v", err)
 	}
-	afterUpdate := time.Now()
+	afterUpdate := time.Now().Add(1 * time.Second) // Add 1 second buffer for DB precision
 
 	// Verify LastLoadedAt was set
 	updated, err := repo.GetByID(id)
@@ -366,7 +366,8 @@ func TestFileMCPConfigRepo_UpdateLastLoadedAt(t *testing.T) {
 		t.Errorf("Expected LastLoadedAt to be set")
 	} else {
 		if updated.LastLoadedAt.Before(beforeUpdate) || updated.LastLoadedAt.After(afterUpdate) {
-			t.Errorf("LastLoadedAt timestamp not in expected range")
+			t.Errorf("LastLoadedAt timestamp not in expected range: got %v, expected between %v and %v",
+				updated.LastLoadedAt, beforeUpdate, afterUpdate)
 		}
 	}
 }
