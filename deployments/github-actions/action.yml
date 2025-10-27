@@ -1,0 +1,223 @@
+name: 'CloudShip AI Security Scanner'
+description: 'AI-powered security scanning for infrastructure, containers, and code using Station agents'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  agent:
+    description: |
+      Agent to run. Available agents:
+      - infrastructure-security (Terraform, K8s, Docker IaC scanning)
+      - pr-security (PR code review with security focus)
+      - supply-chain (SBOM generation and dependency scanning)
+      - deployment-gate (Pre-deployment security validation)
+      - security-advisor (Security improvement recommendations)
+      - security-metrics (Security posture reporting)
+      Or specify 'all' to run all agents
+    required: false
+    default: 'infrastructure-security'
+
+  task:
+    description: 'Custom task description to override default agent behavior (optional)'
+    required: false
+    default: ''
+
+  openai_api_key:
+    description: 'OpenAI API key (will use OPENAI_API_KEY secret if not provided)'
+    required: false
+
+  cloudship_key:
+    description: 'CloudShip AI registration key for telemetry and monitoring (optional)'
+    required: false
+
+  comment_pr:
+    description: 'Post results as PR comment (true/false)'
+    required: false
+    default: 'true'
+
+  fail_on_critical:
+    description: 'Fail the workflow if critical security issues are found (true/false)'
+    required: false
+    default: 'false'
+
+  docker_image:
+    description: 'Override the default CloudShip security image'
+    required: false
+    default: 'ghcr.io/cloudshipai/station-security:latest'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Determine agent configuration
+      id: config
+      shell: bash
+      run: |
+        # Map friendly names to actual agent names
+        case "${{ inputs.agent }}" in
+          infrastructure-security|infrastructure)
+            echo "agent_name=Infrastructure Security Auditor" >> $GITHUB_OUTPUT
+            echo "default_task=Scan /workspace for infrastructure security vulnerabilities in Terraform, Kubernetes, and Docker configurations. Focus on critical misconfigurations, secrets, and compliance violations." >> $GITHUB_OUTPUT
+            ;;
+          pr-security|pr-review)
+            echo "agent_name=PR Security Reviewer" >> $GITHUB_OUTPUT
+            echo "default_task=Review PR #${{ github.event.pull_request.number }} for security vulnerabilities, focusing on code changes, secrets exposure, and security anti-patterns. Provide actionable remediation guidance." >> $GITHUB_OUTPUT
+            ;;
+          supply-chain|sbom)
+            echo "agent_name=Supply Chain Guardian" >> $GITHUB_OUTPUT
+            echo "default_task=Generate SBOM and scan /workspace dependencies for known vulnerabilities, malicious packages, and supply chain risks." >> $GITHUB_OUTPUT
+            ;;
+          deployment-gate|gate)
+            echo "agent_name=Deployment Security Gate" >> $GITHUB_OUTPUT
+            echo "default_task=Validate security posture before deployment. Check for blocking security issues, compliance requirements, and generate deployment attestation." >> $GITHUB_OUTPUT
+            ;;
+          security-advisor|advisor)
+            echo "agent_name=Security Improvement Advisor" >> $GITHUB_OUTPUT
+            echo "default_task=Analyze /workspace for security improvement opportunities, modernization recommendations, and best practices that can enhance security posture." >> $GITHUB_OUTPUT
+            ;;
+          security-metrics|metrics)
+            echo "agent_name=Security Metrics Reporter" >> $GITHUB_OUTPUT
+            echo "default_task=Generate security metrics report for /workspace including vulnerability trends, compliance status, and security KPIs." >> $GITHUB_OUTPUT
+            ;;
+          all)
+            echo "agent_name=all" >> $GITHUB_OUTPUT
+            echo "default_task=Comprehensive security analysis" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            # Assume it's a custom agent name
+            echo "agent_name=${{ inputs.agent }}" >> $GITHUB_OUTPUT
+            echo "default_task=Analyze /workspace for security issues" >> $GITHUB_OUTPUT
+            ;;
+        esac
+
+        # Use custom task if provided, otherwise use default
+        if [ -n "${{ inputs.task }}" ]; then
+          echo "task=${{ inputs.task }}" >> $GITHUB_OUTPUT
+        else
+          echo "task=$(cat $GITHUB_OUTPUT | grep default_task | cut -d= -f2-)" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Sync Station environment
+      shell: bash
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          ${{ inputs.docker_image }} \
+          stn sync default -i=false || echo "Sync completed with warnings (non-blocking)"
+
+    - name: Run Station Agent
+      id: scan
+      shell: bash
+      run: |
+        set +e  # Don't fail immediately on non-zero exit
+
+        OPENAI_KEY="${{ inputs.openai_api_key }}"
+        if [ -z "$OPENAI_KEY" ]; then
+          OPENAI_KEY="${{ env.OPENAI_API_KEY }}"
+        fi
+
+        if [ -z "$OPENAI_KEY" ]; then
+          echo "::error::OPENAI_API_KEY is not set. Please provide it via input or environment variable."
+          exit 1
+        fi
+
+        # Build environment variables for Docker
+        DOCKER_ENV_VARS="-e OPENAI_API_KEY=${OPENAI_KEY} -e PROJECT_ROOT=/workspace"
+
+        # Add CloudShip key if provided
+        CLOUDSHIP_KEY="${{ inputs.cloudship_key }}"
+        if [ -z "$CLOUDSHIP_KEY" ]; then
+          CLOUDSHIP_KEY="${{ env.STN_CLOUDSHIP_KEY }}"
+        fi
+        if [ -n "$CLOUDSHIP_KEY" ]; then
+          DOCKER_ENV_VARS="$DOCKER_ENV_VARS -e STN_CLOUDSHIP_KEY=${CLOUDSHIP_KEY}"
+        fi
+
+        echo "::group::Running CloudShip AI Security Agent: ${{ steps.config.outputs.agent_name }}"
+
+        if [ "${{ steps.config.outputs.agent_name }}" = "all" ]; then
+          # Run all agents sequentially
+          docker run --rm \
+            --privileged \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ${{ github.workspace }}:/workspace \
+            $DOCKER_ENV_VARS \
+            ${{ inputs.docker_image }} \
+            bash -c "
+              for agent in 'Infrastructure Security Auditor' 'PR Security Reviewer' 'Supply Chain Guardian'; do
+                echo '═══════════════════════════════════════════════════════'
+                echo \"Running: \$agent\"
+                echo '═══════════════════════════════════════════════════════'
+                stn agent run \"\$agent\" '${{ steps.config.outputs.task }}' --tail || echo \"Agent \$agent completed with warnings\"
+              done
+            "
+        else
+          # Run single agent
+          docker run --rm \
+            --privileged \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ${{ github.workspace }}:/workspace \
+            $DOCKER_ENV_VARS \
+            ${{ inputs.docker_image }} \
+            stn agent run "${{ steps.config.outputs.agent_name }}" "${{ steps.config.outputs.task }}" --tail
+        fi
+
+        SCAN_EXIT_CODE=$?
+        echo "exit_code=$SCAN_EXIT_CODE" >> $GITHUB_OUTPUT
+
+        echo "::endgroup::"
+
+        # Only fail if critical issues AND fail_on_critical is true
+        if [ "${{ inputs.fail_on_critical }}" = "true" ] && [ $SCAN_EXIT_CODE -ne 0 ]; then
+          echo "::error::Critical security issues found and fail_on_critical is enabled"
+          exit 1
+        fi
+
+        exit 0
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request' && inputs.comment_pr == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const agentName = '${{ steps.config.outputs.agent_name }}';
+          const exitCode = '${{ steps.scan.outputs.exit_code }}';
+
+          let agentEmoji = '🔒';
+          let agentDescription = 'Security Analysis';
+
+          if (agentName.includes('Infrastructure')) {
+            agentEmoji = '🏗️';
+            agentDescription = 'Infrastructure Security';
+          } else if (agentName.includes('PR Security')) {
+            agentEmoji = '🔍';
+            agentDescription = 'PR Security Review';
+          } else if (agentName.includes('Supply Chain')) {
+            agentEmoji = '🔗';
+            agentDescription = 'Supply Chain Security';
+          } else if (agentName.includes('Deployment')) {
+            agentEmoji = '🚀';
+            agentDescription = 'Deployment Security Gate';
+          }
+
+          const statusEmoji = exitCode === '0' ? '✅' : '⚠️';
+          const statusText = exitCode === '0' ? 'Passed' : 'Issues Found';
+
+          const body = '## ' + agentEmoji + ' CloudShip AI ' + agentDescription + '\n\n' +
+            statusEmoji + ' **Status**: ' + statusText + '\n\n' +
+            'Your pull request has been analyzed by **' + agentName + '**.\n\n' +
+            '**View detailed findings:** [CloudShip Dashboard](https://cloudshipai.com/dashboard)\n\n' +
+            '**Workflow run:** https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + '\n\n' +
+            '_Powered by [CloudShip AI](https://cloudshipai.com)_';
+
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
+
+outputs:
+  exit_code:
+    description: 'Exit code from the security scan (0 = clean, non-zero = issues found)'
+    value: ${{ steps.scan.outputs.exit_code }}

@@ -1,0 +1,25 @@
+# Example: Automated PR Security Review
+# Reviews pull requests for security vulnerabilities in code changes
+
+name: PR Security Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Security Review
+        uses: cloudshipai/station-action@v1
+        with:
+          agent: pr-security
+          comment_pr: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

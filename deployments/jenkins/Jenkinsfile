@@ -1,0 +1,64 @@
+pipeline {
+  agent {
+    docker {
+      image 'ghcr.io/cloudshipai/station-security:latest'
+      args '-v /var/run/docker.sock:/var/run/docker.sock --privileged'
+    }
+  }
+
+  environment {
+    OPENAI_API_KEY = credentials('openai-api-key')
+    PROJECT_ROOT = "${WORKSPACE}"
+  }
+
+  stages {
+    stage('Infrastructure Security') {
+      when {
+        anyOf {
+          branch 'main'
+          changeRequest()
+        }
+      }
+      steps {
+        sh '''
+          stn agent run "Infrastructure Security Auditor" \
+            "Scan terraform, kubernetes, and docker configurations for security vulnerabilities and compliance violations"
+        '''
+      }
+    }
+
+    stage('Supply Chain Security') {
+      steps {
+        sh '''
+          stn agent run "Supply Chain Guardian" \
+            "Generate SBOM and scan dependencies for known vulnerabilities and malicious packages"
+        '''
+      }
+    }
+
+    stage('Deployment Gate') {
+      when {
+        branch 'main'
+      }
+      steps {
+        input message: 'Security scan complete. Approve deployment?', ok: 'Deploy'
+        sh '''
+          stn agent run "Deployment Security Gate" \
+            "Validate security posture and compliance requirements before deployment"
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      echo 'Station security scan completed'
+    }
+    success {
+      echo 'No critical security issues found'
+    }
+    failure {
+      echo 'Critical security issues detected - review logs'
+    }
+  }
+}

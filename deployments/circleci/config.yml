@@ -1,0 +1,59 @@
+version: 2.1
+
+jobs:
+  infrastructure-security:
+    docker:
+      - image: ghcr.io/cloudshipai/station-security:latest
+    steps:
+      - checkout
+      - run:
+          name: Infrastructure Security Scan
+          command: |
+            stn agent run "Infrastructure Security Auditor" \
+              "Scan terraform, kubernetes, and docker configurations for security vulnerabilities and compliance violations"
+
+  supply-chain-security:
+    docker:
+      - image: ghcr.io/cloudshipai/station-security:latest
+    steps:
+      - checkout
+      - run:
+          name: Supply Chain Security Scan
+          command: |
+            stn agent run "Supply Chain Guardian" \
+              "Generate SBOM and scan dependencies for known vulnerabilities and malicious packages"
+
+  deployment-gate:
+    docker:
+      - image: ghcr.io/cloudshipai/station-security:latest
+    steps:
+      - checkout
+      - run:
+          name: Deployment Security Gate
+          command: |
+            stn agent run "Deployment Security Gate" \
+              "Validate security posture and compliance requirements before deployment"
+
+workflows:
+  version: 2
+  security-pipeline:
+    jobs:
+      - infrastructure-security:
+          context: station-security
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+
+      - supply-chain-security:
+          context: station-security
+
+      - deployment-gate:
+          context: station-security
+          requires:
+            - infrastructure-security
+            - supply-chain-security
+          filters:
+            branches:
+              only: main
