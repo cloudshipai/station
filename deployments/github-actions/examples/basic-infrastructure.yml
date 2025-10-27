@@ -1,0 +1,25 @@
+# Example: Basic Infrastructure Security Scanning
+# Scans Terraform, Kubernetes, and Docker files for security issues
+
+name: Infrastructure Security
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Infrastructure Security Scan
+        uses: cloudshipai/station-action@v1
+        with:
+          agent: infrastructure-security
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
