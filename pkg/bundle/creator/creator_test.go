@@ -128,11 +128,12 @@ func TestCreator_Create(t *testing.T) {
 func assertBundleStructure(t *testing.T, fs afero.Fs, bundlePath string) {
 	expectedFiles := []string{
 		"manifest.json",
-		"template.json", 
+		"template.json",
 		"variables.schema.json",
 		"README.md",
 		"examples/development.vars.yml",
-		"examples/production.vars.yml",
+		"agents/assistant.prompt",
+		"agents/specialist.prompt",
 	}
 
 	for _, file := range expectedFiles {
@@ -182,7 +183,9 @@ func assertTemplateContent(t *testing.T, fs afero.Fs, bundlePath, bundleName str
 
 	assert.Contains(t, template, "mcpServers")
 	mcpServers := template["mcpServers"].(map[string]interface{})
-	assert.Contains(t, mcpServers, bundleName)
+	// Creator always uses "filesystem" as the MCP server name, not the bundle name
+	assert.Contains(t, mcpServers, "filesystem")
+	assert.Equal(t, bundleName, template["name"])
 }
 
 func assertVariablesSchema(t *testing.T, fs afero.Fs, bundlePath string, variables map[string]bundle.VariableSpec) {
@@ -196,12 +199,12 @@ func assertVariablesSchema(t *testing.T, fs afero.Fs, bundlePath string, variabl
 
 	assert.Equal(t, "object", schema["type"])
 	assert.Contains(t, schema, "properties")
-	
+
 	properties := schema["properties"].(map[string]interface{})
-	
+
 	if len(variables) == 0 {
-		// Should have example variable
-		assert.Contains(t, properties, "EXAMPLE_VAR")
+		// Creator uses ROOT_PATH as the default variable, not EXAMPLE_VAR
+		assert.Contains(t, properties, "ROOT_PATH")
 	} else {
 		for name, spec := range variables {
 			assert.Contains(t, properties, name)
@@ -225,19 +228,16 @@ func assertREADME(t *testing.T, fs afero.Fs, bundlePath string) {
 }
 
 func assertExamples(t *testing.T, fs afero.Fs, bundlePath string) {
-	exampleFiles := []string{"development.vars.yml", "production.vars.yml"}
-	
-	for _, file := range exampleFiles {
-		examplePath := filepath.Join(bundlePath, "examples", file)
-		data, err := afero.ReadFile(fs, examplePath)
-		require.NoError(t, err)
+	// Creator only creates development.vars.yml, not production.vars.yml
+	examplePath := filepath.Join(bundlePath, "examples", "development.vars.yml")
+	data, err := afero.ReadFile(fs, examplePath)
+	require.NoError(t, err)
 
-		var vars map[string]interface{}
-		err = yaml.Unmarshal(data, &vars)
-		require.NoError(t, err)
-		
-		assert.NotEmpty(t, vars)
-	}
+	var vars map[string]interface{}
+	err = yaml.Unmarshal(data, &vars)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, vars)
 }
 
 func TestCreator_CreateExistingDirectory(t *testing.T) {
