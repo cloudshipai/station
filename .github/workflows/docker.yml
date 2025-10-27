@@ -12,7 +12,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: cloudship-io/station
+  IMAGE_NAME: cloudshipai/station
 
 jobs:
   build:
