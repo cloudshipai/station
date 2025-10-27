@@ -374,7 +374,8 @@ func TestExecuteTool(t *testing.T) {
 	// Create a test HTTP server
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		encoder := json.NewEncoder(w)
+		_ = encoder.Encode(map[string]interface{}{
 			"success": true,
 			"data":    "test response",
 		})

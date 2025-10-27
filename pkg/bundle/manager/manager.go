@@ -84,7 +84,7 @@ func (m *Manager) Install(ctx context.Context, ref string, opts bundle.InstallOp
 	if err := m.fs.MkdirAll(tempDir, 0755); err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer m.fs.RemoveAll(tempDir) // Cleanup
+	defer func() { _ = m.fs.RemoveAll(tempDir) }() // Cleanup
 
 	if err := m.extractBundle(bundleData, tempDir); err != nil {
 		return fmt.Errorf("failed to extract bundle: %w", err)
@@ -436,7 +436,7 @@ func (m *Manager) updateEnvironmentVariables(environment string, variables map[s
 	if exists, _ := afero.Exists(m.fs, variablesPath); exists {
 		data, err := afero.ReadFile(m.fs, variablesPath)
 		if err == nil {
-			yaml.Unmarshal(data, &existingVars)
+			_ = yaml.Unmarshal(data, &existingVars)
 		}
 	}
 	

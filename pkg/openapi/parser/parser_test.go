@@ -448,7 +448,7 @@ func BenchmarkParseWithValidation(b *testing.B) {
 
 func BenchmarkGetPaths(b *testing.B) {
 	parser := NewParser()
-	parser.Parse([]byte(validOpenAPIJSON))
+	_ = parser.Parse([]byte(validOpenAPIJSON))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

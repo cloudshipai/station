@@ -332,7 +332,7 @@ You are a test agent.
 
 	t.Run("Sync gracefully handles missing tools in MCP", func(t *testing.T) {
 		// Clear current tools
-		agentToolsRepo.Clear(testAgent.ID)
+		_ = agentToolsRepo.Clear(testAgent.ID)
 
 		// Config with a tool that doesn't exist in MCP
 		configTools := []string{"__read_file", "__nonexistent_tool", "__write_file"}
@@ -399,7 +399,7 @@ func TestDeclarativeSyncIdempotency(t *testing.T) {
 		// Remove tools not in config
 		for toolName, toolID := range currentToolMap {
 			if !configToolSet[toolName] {
-				agentToolsRepo.RemoveAgentTool(testAgent.ID, toolID)
+				_ = agentToolsRepo.RemoveAgentTool(testAgent.ID, toolID)
 				removed++
 			}
 		}
