@@ -283,7 +283,7 @@ func TestConvertPropertiesRecursive(t *testing.T) {
 	// Get the response schema
 	var successResponse *openapi3.Response
 	if userOperation.Responses != nil {
-		for code, responseRef := range userOperation.Responses {
+		for code, responseRef := range userOperation.Responses.Map() {
 			if strings.HasPrefix(code, "2") && responseRef != nil && responseRef.Value != nil {
 				successResponse = responseRef.Value
 				break
@@ -306,7 +306,7 @@ func TestConvertPropertiesRecursive(t *testing.T) {
 	assert.NotNil(t, schema)
 
 	// Test the convertProperties function directly
-	if schema.Type == "object" && len(schema.Properties) > 0 {
+	if isSchemaType(schema, "object") && len(schema.Properties) > 0 {
 		properties := c.convertProperties(schema.Properties, schema.Required)
 
 		// Verify top-level properties

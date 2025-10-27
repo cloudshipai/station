@@ -130,6 +130,12 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 	go func() {
 		ctx := context.Background()
 
+		// Skip execution in test mode (when repos is nil)
+		if h.repos == nil || h.repos.AgentRuns == nil {
+			log.Printf("⚠️  Agent execution skipped (test mode)")
+			return
+		}
+
 		// Create run record
 		userID := int64(1) // Console user for local execution
 
