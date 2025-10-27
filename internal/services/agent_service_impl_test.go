@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -520,6 +521,11 @@ func TestDeleteAgent(t *testing.T) {
 func TestExecuteAgentIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Skip in CI environments (no OpenAI API key available)
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping agent execution test in CI environment (requires OpenAI API key)")
 	}
 
 	testDB, err := db.NewTest(t)
