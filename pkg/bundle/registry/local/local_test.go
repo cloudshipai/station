@@ -25,7 +25,7 @@ func TestLocalRegistry_List(t *testing.T) {
 		{
 			name: "empty registry",
 			setupRegistry: func(fs afero.Fs, registryPath string) {
-				fs.MkdirAll(registryPath, 0755)
+				_ = fs.MkdirAll(registryPath, 0755)
 			},
 			opts:            bundle.ListOptions{},
 			expectedBundles: 0,
@@ -169,7 +169,7 @@ func TestLocalRegistry_Get(t *testing.T) {
 			name: "bundle not found",
 			setupRegistry: func(fs afero.Fs, registryPath string) {
 				// Create empty registry
-				fs.MkdirAll(registryPath, 0755)
+				_ = fs.MkdirAll(registryPath, 0755)
 			},
 			bundleName:  "nonexistent-bundle",
 			version:     "",
@@ -244,7 +244,7 @@ func TestLocalRegistry_GetVersions(t *testing.T) {
 		{
 			name: "bundle not found",
 			setupRegistry: func(fs afero.Fs, registryPath string) {
-				fs.MkdirAll(registryPath, 0755)
+				_ = fs.MkdirAll(registryPath, 0755)
 			},
 			bundleName:  "nonexistent-bundle",
 			expectError: true,
@@ -372,9 +372,9 @@ func TestLocalRegistry_EdgeCases(t *testing.T) {
 
 		// Create bundle with invalid manifest
 		bundlePath := filepath.Join(registryPath, "invalid-bundle", "1.0.0")
-		fs.MkdirAll(bundlePath, 0755)
+		_ = fs.MkdirAll(bundlePath, 0755)
 		manifestPath := filepath.Join(bundlePath, "manifest.json")
-		afero.WriteFile(fs, manifestPath, []byte("invalid json"), 0644)
+		_ = afero.WriteFile(fs, manifestPath, []byte("invalid json"), 0644)
 
 		bundles, err := registry.List(context.Background(), bundle.ListOptions{})
 		require.NoError(t, err)
