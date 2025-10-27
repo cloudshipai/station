@@ -294,7 +294,7 @@ tools:
 		},
 		{
 			name:    "Invalid config",
-			data:    []byte(`{invalid}`),
+			data:    []byte("\x00\xFF\xFE\xFD invalid bytes"),
 			wantErr: true,
 		},
 	}
