@@ -169,6 +169,74 @@ Back to the Web UI at `http://localhost:8585`:
 
 ---
 
+## CICD Deployments
+
+Run Station agents in your CICD pipelines for automated security scanning, cost analysis, compliance checks, and deployment validation.
+
+**Pre-built agent containers available:**
+- `ghcr.io/cloudshipai/station-security:latest` - Infrastructure, container, and code security scanning
+- `ghcr.io/cloudshipai/station-finops:latest` - Cost analysis and optimization (coming soon)
+- `ghcr.io/cloudshipai/station-compliance:latest` - Policy and compliance validation (coming soon)
+
+### Quick Start: GitHub Actions
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: "Infrastructure Security Auditor"
+    task: "Scan terraform and kubernetes for security issues"
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+That's it! 3 lines to add AI-powered security scanning to your pipeline.
+
+### Supported CICD Platforms
+
+Station agents work across all major CICD platforms using the same Docker containers:
+
+- **GitHub Actions** - Composite action with 3-line setup
+- **GitLab CI** - Docker-based pipeline stages
+- **Jenkins** - Docker agent pipelines
+- **CircleCI** - Docker executor workflows
+- **Argo Workflows** - Kubernetes-native workflows
+- **Tekton** - Cloud-native CI/CD pipelines
+
+**Complete deployment templates and guides available in [`deployments/`](./deployments/):**
+- Platform-specific configuration examples
+- Secret management guides (OpenAI API keys, CloudShip registration)
+- Scheduled execution setups (daily cost analysis, compliance scans)
+- Multi-agent pipeline orchestration
+
+### Use Cases Beyond Code Scanning
+
+**FinOps & Cost Management:**
+```yaml
+# Daily cost analysis on schedule
+schedule: "0 9 * * *"  # 9 AM daily
+agent: "AWS Cost Analyzer"
+task: "Analyze yesterday's AWS spend and identify optimization opportunities"
+```
+
+**Compliance Monitoring:**
+```yaml
+# Weekly compliance checks
+schedule: "0 0 * * 1"  # Monday midnight
+agent: "SOC2 Compliance Auditor"
+task: "Verify infrastructure meets SOC2 requirements"
+```
+
+**Platform Engineering:**
+```yaml
+# Post-deployment validation
+agent: "Deployment Validator"
+task: "Verify deployment health, check metrics, and validate configuration"
+```
+
+[Complete CICD Integration Guide →](./deployments/README.md) | [Secrets Management →](./deployments/SECRETS.md)
+
+---
+
 ## MCP Tools & Templates
 
 Station uses the Model Context Protocol (MCP) to give agents access to tools—AWS APIs, databases, filesystems, security scanners, and more.
