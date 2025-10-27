@@ -1,0 +1,101 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: station-security-pipeline-
+  namespace: security
+spec:
+  entrypoint: security-pipeline
+  arguments:
+    parameters:
+    - name: repo-url
+      value: https://github.com/your-org/your-repo.git
+
+  volumeClaimTemplates:
+  - metadata:
+      name: workspace
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
+
+  templates:
+  - name: security-pipeline
+    steps:
+    - - name: checkout
+        template: git-checkout
+    - - name: infrastructure-scan
+        template: infrastructure-security
+      - name: supply-chain-scan
+        template: supply-chain-security
+    - - name: deployment-gate
+        template: deployment-gate
+
+  - name: git-checkout
+    container:
+      image: alpine/git
+      command: [sh, -c]
+      args:
+        - git clone {{workflow.parameters.repo-url}} /workspace
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+
+  - name: infrastructure-security
+    container:
+      image: ghcr.io/cloudshipai/station-security:latest
+      command: [stn]
+      args:
+        - agent
+        - run
+        - "Infrastructure Security Auditor"
+        - "Scan terraform, kubernetes, and docker configurations for security vulnerabilities and misconfigurations"
+      env:
+      - name: OPENAI_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: station-secrets
+            key: openai-api-key
+      - name: PROJECT_ROOT
+        value: /workspace
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+
+  - name: supply-chain-security
+    container:
+      image: ghcr.io/cloudshipai/station-security:latest
+      command: [stn]
+      args:
+        - agent
+        - run
+        - "Supply Chain Guardian"
+        - "Generate SBOM and scan dependencies for known vulnerabilities"
+      env:
+      - name: OPENAI_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: station-secrets
+            key: openai-api-key
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+
+  - name: deployment-gate
+    container:
+      image: ghcr.io/cloudshipai/station-security:latest
+      command: [stn]
+      args:
+        - agent
+        - run
+        - "Deployment Security Gate"
+        - "Validate security posture and compliance requirements before deployment"
+      env:
+      - name: OPENAI_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: station-secrets
+            key: openai-api-key
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
