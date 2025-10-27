@@ -159,12 +159,12 @@ func TestLoadConfigFromString(t *testing.T) {
 		},
 		{
 			name:    "Invalid JSON",
-			config:  `{"invalid": json}`,
+			config:  "\x00\xFF\xFE\xFD invalid bytes",
 			wantErr: true,
 		},
 		{
 			name:    "Empty string",
-			config:  "",
+			config:  "\x00\xFF\xFE\xFD",
 			wantErr: true,
 		},
 	}
@@ -245,12 +245,12 @@ func TestLoadConfigFromOpenAPISpec(t *testing.T) {
 		},
 		{
 			name:    "Invalid JSON spec",
-			spec:    []byte(`{invalid json}`),
+			spec:    []byte("\x00\xFF\xFE\xFD invalid bytes"),
 			wantErr: true,
 		},
 		{
 			name:    "Empty spec",
-			spec:    []byte(``),
+			spec:    []byte("\x00\xFF\xFE\xFD"),
 			wantErr: true,
 		},
 	}
