@@ -313,8 +313,8 @@ func (v *Validator) validateConsistency(fs afero.Fs, bundlePath string, manifest
 	var template map[string]interface{}
 	var schema map[string]interface{}
 
-	json.Unmarshal(templateData, &template)
-	json.Unmarshal(schemaData, &schema)
+	_ = json.Unmarshal(templateData, &template)
+	_ = json.Unmarshal(schemaData, &schema)
 
 	// Extract variables from template (look for {{VAR}} patterns)
 	templateStr := string(templateData)
