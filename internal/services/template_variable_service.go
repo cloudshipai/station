@@ -422,11 +422,16 @@ func (tvs *TemplateVariableService) containsString(slice []string, str string) b
 
 // extractMissingVariableFromError extracts variable name from Go template error messages
 func (tvs *TemplateVariableService) extractMissingVariableFromError(err error) string {
+	if err == nil {
+		return ""
+	}
+
 	errorStr := err.Error()
-	
+
 	// Go template errors for missing variables look like:
-	// "template: detect:1:23: executing \"detect\" at <.MISSING_VAR>: map has no entry for key \"MISSING_VAR\""
-	if strings.Contains(errorStr, "map has no entry for key") {
+	// "template: :1:3: executing \"\" at <.MISSING>: map has no entry for key \"MISSING\""
+	// Priority 1: Extract from the "map has no entry for key" part (most reliable)
+	if strings.Contains(errorStr, "map has no entry for key \"") {
 		start := strings.Index(errorStr, "map has no entry for key \"")
 		if start != -1 {
 			start += len("map has no entry for key \"")
@@ -436,18 +441,18 @@ func (tvs *TemplateVariableService) extractMissingVariableFromError(err error) s
 			}
 		}
 	}
-	
-	// Alternative pattern: executing "template" at <.VAR_NAME>:
-	if strings.Contains(errorStr, "executing") && strings.Contains(errorStr, "at <.") {
+
+	// Priority 2: Extract from "at <.VAR_NAME>" pattern
+	if strings.Contains(errorStr, "at <.") {
 		start := strings.Index(errorStr, "at <.")
 		if start != -1 {
 			start += len("at <.")
-			end := strings.Index(errorStr[start:], ">:")
+			end := strings.Index(errorStr[start:], ">")
 			if end != -1 {
 				return errorStr[start : start+end]
 			}
 		}
 	}
-	
+
 	return ""
 }

@@ -366,12 +366,7 @@ func (tvs *TemplateVariableService) renderTemplateErr(errStr string) error {
 	if errStr == "" {
 		return nil
 	}
-	// Create a real template error by rendering invalid template
-	_, err := tvs.renderTemplate("{{ ."+errStr+" }}", map[string]string{})
-	if err != nil {
-		return err
-	}
-	// If no error from render, create generic error
+	// Return error with the provided message string
 	return &templateError{msg: errStr}
 }
 
