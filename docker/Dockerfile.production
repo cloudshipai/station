@@ -18,8 +18,8 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates sqlite curl
 
 # Install Litestream
-RUN LITESTREAM_VERSION=$(wget -qO- https://api.github.com/repos/benbjohnson/litestream/releases/latest | grep '"tag_name"' | cut -d '"' -f 4) && \
-    wget https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz \
+ARG LITESTREAM_VERSION=v0.3.13
+RUN wget https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz \
     && tar -C /usr/local/bin -xzf litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz \
     && rm litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz
 
