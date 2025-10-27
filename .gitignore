@@ -75,7 +75,7 @@ station-mcp.json
 *-test.json
 
 # Test files (in root - move to tests/ for permanent tests)
-test_*.go
+/test_*.go
 test-*.sh
 test_*.sh
 
