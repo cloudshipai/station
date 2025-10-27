@@ -40,6 +40,11 @@ func (p *Parser) ParseFile(filePath string) error {
 
 // Parse parses an OpenAPI document from bytes
 func (p *Parser) Parse(data []byte) error {
+	// Validate input data is not empty
+	if len(data) == 0 {
+		return fmt.Errorf("input data is empty")
+	}
+
 	loader := openapi3.NewLoader()
 
 	// Try to parse as JSON first
@@ -51,6 +56,12 @@ func (p *Parser) Parse(data []byte) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to parse OpenAPI document: %w", err)
+	}
+
+	// Basic validation: ensure it's an OpenAPI document
+	// Check for required fields that any valid OpenAPI/Swagger spec should have
+	if doc.OpenAPI == "" || doc.Info == nil {
+		return fmt.Errorf("invalid OpenAPI structure: missing required fields")
 	}
 
 	// Validate the document if validation is enabled

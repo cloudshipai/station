@@ -19,12 +19,14 @@ import (
 type MockAgentToolsRepo struct {
 	tools map[int64][]*models.AgentToolWithDetails // agentID -> tools
 	nextID int64
+	mcpRepo *MockMCPToolsRepo // Need reference to get actual tool names
 }
 
-func NewMockAgentToolsRepo() *MockAgentToolsRepo {
+func NewMockAgentToolsRepo(mcpRepo *MockMCPToolsRepo) *MockAgentToolsRepo {
 	return &MockAgentToolsRepo{
 		tools: make(map[int64][]*models.AgentToolWithDetails),
 		nextID: 1,
+		mcpRepo: mcpRepo,
 	}
 }
 
@@ -40,6 +42,15 @@ func (m *MockAgentToolsRepo) AddAgentTool(agentID, toolID int64) (*models.AgentT
 		}
 	}
 
+	// Get actual tool name from MCP repo
+	toolName := fmt.Sprintf("tool_%d", toolID) // default fallback
+	for name, mcpTool := range m.mcpRepo.tools {
+		if mcpTool.ID == toolID {
+			toolName = name
+			break
+		}
+	}
+
 	agentTool := &models.AgentToolWithDetails{
 		AgentTool: models.AgentTool{
 			ID:        m.nextID,
@@ -47,7 +58,7 @@ func (m *MockAgentToolsRepo) AddAgentTool(agentID, toolID int64) (*models.AgentT
 			ToolID:    toolID,
 			CreatedAt: time.Now(),
 		},
-		ToolName: fmt.Sprintf("tool_%d", toolID),
+		ToolName: toolName,
 	}
 	m.nextID++
 
@@ -105,8 +116,8 @@ func TestDeclarativeSyncToolAssignments(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Setup mock repositories
-	agentToolsRepo := NewMockAgentToolsRepo()
 	mcpToolsRepo := NewMockMCPToolsRepo()
+	agentToolsRepo := NewMockAgentToolsRepo(mcpToolsRepo)
 
 	// Add some tools to MCP repo
 	mcpToolsRepo.AddTool("__read_file", 1)
@@ -251,7 +262,7 @@ You are a test agent.
 		// Verify the new tool is present
 		hasDeleteTool := false
 		for _, tool := range afterTools {
-			if tool.ToolName == "tool_4" { // __delete_file has ID 4
+			if tool.ToolName == "__delete_file" {
 				hasDeleteTool = true
 				break
 			}
@@ -296,10 +307,10 @@ You are a test agent.
 		for _, tool := range afterTools {
 			remainingToolNames[tool.ToolName] = true
 		}
-		assert.True(t, remainingToolNames["tool_1"], "__read_file should remain")
-		assert.True(t, remainingToolNames["tool_2"], "__write_file should remain")
-		assert.False(t, remainingToolNames["tool_3"], "__list_directory should be removed")
-		assert.False(t, remainingToolNames["tool_4"], "__delete_file should be removed")
+		assert.True(t, remainingToolNames["__read_file"], "__read_file should remain")
+		assert.True(t, remainingToolNames["__write_file"], "__write_file should remain")
+		assert.False(t, remainingToolNames["__list_directory"], "__list_directory should be removed")
+		assert.False(t, remainingToolNames["__delete_file"], "__delete_file should be removed")
 	})
 
 	t.Run("Sync handles empty tools in config correctly", func(t *testing.T) {
@@ -354,8 +365,8 @@ You are a test agent.
 
 func TestDeclarativeSyncIdempotency(t *testing.T) {
 	// Create mock repos
-	agentToolsRepo := NewMockAgentToolsRepo()
 	mcpToolsRepo := NewMockMCPToolsRepo()
+	agentToolsRepo := NewMockAgentToolsRepo(mcpToolsRepo)
 
 	// Add tools to MCP repo
 	mcpToolsRepo.AddTool("__tool_a", 1)
@@ -433,8 +444,8 @@ func TestDeclarativeSyncIdempotency(t *testing.T) {
 
 func TestDeclarativeSyncPerformance(t *testing.T) {
 	// This test ensures sync performance doesn't degrade with many tools
-	agentToolsRepo := NewMockAgentToolsRepo()
 	mcpToolsRepo := NewMockMCPToolsRepo()
+	agentToolsRepo := NewMockAgentToolsRepo(mcpToolsRepo)
 
 	// Create many tools
 	numTools := 100
