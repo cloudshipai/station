@@ -338,7 +338,7 @@ func (b *EnvironmentBuilder) downloadShipCLI(ctx context.Context) (string, error
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp install dir: %w", err)
 	}
-	defer os.RemoveAll(tempInstallDir)
+	defer func() { _ = os.RemoveAll(tempInstallDir) }()
 	
 	// Create bin subdirectory for installation
 	installBinDir := filepath.Join(tempInstallDir, "bin")

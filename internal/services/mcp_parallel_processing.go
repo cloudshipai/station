@@ -178,13 +178,13 @@ func debugLogToFile(message string) {
 	
 	// Ensure directory exists
 	logDir := fmt.Sprintf("%s/.config/station", homeDir)
-	os.MkdirAll(logDir, 0755)
-	
+	_ = os.MkdirAll(logDir, 0755)
+
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return // Silently fail if can't write
 	}
 	defer f.Close()
 	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
-	f.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, message))
+	_, _ = f.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, message))
 }
