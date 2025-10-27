@@ -58,10 +58,10 @@ func (p *Parser) Parse(data []byte) error {
 		return fmt.Errorf("failed to parse OpenAPI document: %w", err)
 	}
 
-	// Basic validation: ensure it's an OpenAPI document
-	// Check for required fields that any valid OpenAPI/Swagger spec should have
-	if doc.OpenAPI == "" || doc.Info == nil {
-		return fmt.Errorf("invalid OpenAPI structure: missing required fields")
+	// Basic validation: ensure it's a valid OpenAPI/Swagger document
+	// Check for Info which is required in both OpenAPI 3.x and Swagger 2.0
+	if doc.Info == nil {
+		return fmt.Errorf("invalid OpenAPI structure: missing required Info section")
 	}
 
 	// Validate the document if validation is enabled
