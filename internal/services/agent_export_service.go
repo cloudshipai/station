@@ -255,8 +255,8 @@ func splitLines(s string) []string {
 			start = i + 1
 		}
 	}
-	// Add the last line if it doesn't end with \n
-	if start < len(s) {
+	// Add the last line (including empty string if ends with \n)
+	if start <= len(s) {
 		lines = append(lines, s[start:])
 	}
 	return lines

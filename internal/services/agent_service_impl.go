@@ -347,6 +347,11 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 
 // CreateAgent creates a new agent
 func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*models.Agent, error) {
+	// Validate agent name
+	if config.Name == "" {
+		return nil, fmt.Errorf("agent name cannot be empty")
+	}
+
 	// Create agent using repository
 	agent, err := s.repos.Agents.Create(
 		config.Name,
