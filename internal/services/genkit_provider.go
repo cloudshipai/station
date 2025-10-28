@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"station/internal/config"
 	"station/internal/logging"
@@ -18,6 +19,7 @@ import (
 
 // GenKitProvider manages GenKit initialization and AI provider configuration
 type GenKitProvider struct {
+	mu              sync.RWMutex   // Protect concurrent access to provider config fields
 	genkitApp       *genkit.Genkit
 	currentProvider string         // Track current AI provider to detect changes
 	currentAPIKey   string         // Track current API key to detect changes
@@ -80,12 +82,24 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Check if configuration has changed
+	// Lock for reading current configuration
+	gp.mu.RLock()
 	configChanged := gp.currentProvider != strings.ToLower(cfg.AIProvider) ||
 		gp.currentAPIKey != cfg.AIAPIKey ||
 		gp.currentBaseURL != cfg.AIBaseURL
+	alreadyInitialized := gp.genkitApp != nil
+	gp.mu.RUnlock()
 
 	// If already initialized with same config, return early
+	if alreadyInitialized && !configChanged {
+		return nil
+	}
+
+	// Lock for writing (initialization or reinitialization)
+	gp.mu.Lock()
+	defer gp.mu.Unlock()
+
+	// Double-check after acquiring write lock (another goroutine might have initialized)
 	if gp.genkitApp != nil && !configChanged {
 		return nil
 	}
