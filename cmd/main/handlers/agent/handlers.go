@@ -71,7 +71,7 @@ func (h *AgentHandler) showAgentLocalByName(agentName, environment string) error
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	agentService := services.NewAgentService(repos)
@@ -162,7 +162,7 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	agentService := services.NewAgentService(repos)

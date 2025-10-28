@@ -31,7 +31,7 @@ func setupFileConfigRepoTest(t *testing.T) (*sql.DB, *FileMCPConfigRepo) {
 
 func TestFileMCPConfigRepo_Create(t *testing.T) {
 	db, repo := setupFileConfigRepoTest(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test environment first
 	envRepo := NewEnvironmentRepo(db)
@@ -83,7 +83,7 @@ func TestFileMCPConfigRepo_Create(t *testing.T) {
 
 func TestFileMCPConfigRepo_GetByEnvironmentAndName(t *testing.T) {
 	db, repo := setupFileConfigRepoTest(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test environment
 	envRepo := NewEnvironmentRepo(db)
@@ -156,7 +156,7 @@ func TestFileMCPConfigRepo_GetByEnvironmentAndName(t *testing.T) {
 
 func TestFileMCPConfigRepo_ListByEnvironment(t *testing.T) {
 	db, repo := setupFileConfigRepoTest(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test environments
 	envRepo := NewEnvironmentRepo(db)
@@ -249,7 +249,7 @@ func TestFileMCPConfigRepo_ListByEnvironment(t *testing.T) {
 
 func TestFileMCPConfigRepo_UpdateHashes(t *testing.T) {
 	db, repo := setupFileConfigRepoTest(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test environment
 	envRepo := NewEnvironmentRepo(db)
@@ -312,7 +312,7 @@ func TestFileMCPConfigRepo_UpdateHashes(t *testing.T) {
 
 func TestFileMCPConfigRepo_UpdateLastLoadedAt(t *testing.T) {
 	db, repo := setupFileConfigRepoTest(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test environment
 	envRepo := NewEnvironmentRepo(db)
@@ -374,7 +374,7 @@ func TestFileMCPConfigRepo_UpdateLastLoadedAt(t *testing.T) {
 
 func TestFileMCPConfigRepo_Upsert(t *testing.T) {
 	db, repo := setupFileConfigRepoTest(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test environment
 	envRepo := NewEnvironmentRepo(db)
@@ -436,7 +436,7 @@ func TestFileMCPConfigRepo_Upsert(t *testing.T) {
 
 func TestFileMCPConfigRepo_HasChanges(t *testing.T) {
 	db, repo := setupFileConfigRepoTest(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test environment
 	envRepo := NewEnvironmentRepo(db)

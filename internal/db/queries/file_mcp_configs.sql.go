@@ -194,7 +194,7 @@ func (q *Queries) GetFileMCPConfigsForChangeDetection(ctx context.Context, envir
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []GetFileMCPConfigsForChangeDetectionRow
 	for rows.Next() {
 		var i GetFileMCPConfigsForChangeDetectionRow
@@ -231,7 +231,7 @@ func (q *Queries) ListFileMCPConfigsByEnvironment(ctx context.Context, environme
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []FileMcpConfig
 	for rows.Next() {
 		var i FileMcpConfig

@@ -29,7 +29,7 @@ func TestNewEnvironmentCopyService(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create test database: %v", err)
 			}
-			defer testDB.Close()
+			defer func() { _ = testDB.Close() }()
 
 			repos := repositories.New(testDB)
 			service := NewEnvironmentCopyService(repos)
@@ -63,7 +63,7 @@ func TestCopyEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -152,7 +152,7 @@ func TestCopyEnvironmentNonExistentSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -176,7 +176,7 @@ func TestCopyMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -269,7 +269,7 @@ func TestCopyAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -379,7 +379,7 @@ func TestBuildPromptFileContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -494,7 +494,7 @@ func TestFormatSchemaYAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -562,7 +562,7 @@ func TestRegenerateTemplateJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -636,7 +636,7 @@ func TestFindToolByNameAndServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -843,7 +843,7 @@ func BenchmarkCopyEnvironment(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -869,7 +869,7 @@ func BenchmarkBuildPromptFileContent(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)
@@ -894,7 +894,7 @@ func BenchmarkFormatSchemaYAML(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentCopyService(repos)

@@ -138,7 +138,7 @@ func (q *Queries) ListEnabledModelProviders(ctx context.Context) ([]ModelProvide
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []ModelProvider
 	for rows.Next() {
 		var i ModelProvider
@@ -176,7 +176,7 @@ func (q *Queries) ListModelProviders(ctx context.Context) ([]ModelProvider, erro
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []ModelProvider
 	for rows.Next() {
 		var i ModelProvider

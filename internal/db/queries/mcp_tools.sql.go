@@ -181,7 +181,7 @@ func (q *Queries) GetMCPToolsByFileConfigID(ctx context.Context, fileConfigID sq
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []McpTool
 	for rows.Next() {
 		var i McpTool
@@ -243,7 +243,7 @@ func (q *Queries) GetMCPToolsWithDetails(ctx context.Context) ([]GetMCPToolsWith
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []GetMCPToolsWithDetailsRow
 	for rows.Next() {
 		var i GetMCPToolsWithDetailsRow
@@ -305,7 +305,7 @@ func (q *Queries) GetMCPToolsWithFileConfigInfo(ctx context.Context, environment
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []GetMCPToolsWithFileConfigInfoRow
 	for rows.Next() {
 		var i GetMCPToolsWithFileConfigInfoRow
@@ -359,7 +359,7 @@ func (q *Queries) GetOrphanedMCPTools(ctx context.Context, environmentID int64) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []McpTool
 	for rows.Next() {
 		var i McpTool
@@ -398,7 +398,7 @@ func (q *Queries) ListMCPToolsByEnvironment(ctx context.Context, environmentID i
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []McpTool
 	for rows.Next() {
 		var i McpTool
@@ -434,7 +434,7 @@ func (q *Queries) ListMCPToolsByServer(ctx context.Context, mcpServerID int64) (
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []McpTool
 	for rows.Next() {
 		var i McpTool
@@ -478,7 +478,7 @@ func (q *Queries) ListMCPToolsByServerInEnvironment(ctx context.Context, arg Lis
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []McpTool
 	for rows.Next() {
 		var i McpTool

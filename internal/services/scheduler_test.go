@@ -15,7 +15,7 @@ func TestNewSchedulerService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -48,7 +48,7 @@ func TestSchedulerStartStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -98,7 +98,7 @@ func TestScheduleAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -201,7 +201,7 @@ func TestUnscheduleAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -263,7 +263,7 @@ func TestRescheduleAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -325,7 +325,7 @@ func TestGetScheduledAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -391,7 +391,7 @@ func TestSchedulerWithNilSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -434,7 +434,7 @@ func TestCronExpressionValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -497,7 +497,7 @@ func TestSchedulerGracefulShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -529,7 +529,7 @@ func BenchmarkScheduleAgent(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
@@ -561,7 +561,7 @@ func BenchmarkUnscheduleAgent(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)

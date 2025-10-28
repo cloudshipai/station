@@ -181,7 +181,7 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Initialize repositories
 	repos := repositories.New(database)
@@ -317,7 +317,7 @@ func uploadBundleToCloudShip(apiURL, registrationKey, bundlePath string) (*Cloud
 	if err != nil {
 		return nil, fmt.Errorf("failed to open bundle: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create multipart form
 	body := &bytes.Buffer{}
@@ -350,7 +350,7 @@ func uploadBundleToCloudShip(apiURL, registrationKey, bundlePath string) (*Cloud
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response body
 	bodyBytes, err := io.ReadAll(resp.Body)

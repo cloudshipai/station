@@ -74,7 +74,7 @@ func (b *EnvironmentBuilder) Build(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to Dagger: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	container, tempDBPath, err := b.buildContainer(ctx, client)
 	if err != nil {
@@ -395,13 +395,13 @@ func (b *EnvironmentBuilder) downloadShipCLI(ctx context.Context) (string, error
 	if err != nil {
 		return "", fmt.Errorf("failed to open source binary: %w", err)
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 	
 	destFile, err := os.Create(finalTempFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to create dest binary: %w", err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 	
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		os.Remove(finalTempFile)
@@ -460,13 +460,13 @@ func (b *EnvironmentBuilder) downloadDockerCLI(ctx context.Context) (string, err
 	if err != nil {
 		return "", fmt.Errorf("failed to open source binary: %w", err)
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 	
 	destFile, err := os.Create(finalTempFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to create dest binary: %w", err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 	
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		os.Remove(finalTempFile)
@@ -530,7 +530,7 @@ func (b *EnvironmentBuilder) createMinimalDatabase(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Run migrations to set up schema
 	if err := database.Migrate(); err != nil {
@@ -552,7 +552,7 @@ func (b *EnvironmentBuilder) loadImageToDocker(tarPath, imageName string) (strin
 	if err != nil {
 		return "", fmt.Errorf("failed to open tar file: %w", err)
 	}
-	defer tarFile.Close()
+	defer func() { _ = tarFile.Close() }()
 	
 	// Pipe tar content to docker load
 	cmd.Stdin = tarFile
@@ -650,13 +650,13 @@ func (b *EnvironmentBuilder) copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		return fmt.Errorf("failed to copy file: %w", err)
@@ -733,7 +733,7 @@ func (b *EnvironmentBuilder) exportDatabase(database *db.DB, outputPath string) 
 	if err != nil {
 		return fmt.Errorf("failed to create destination database: %w", err)
 	}
-	defer destDB.Close()
+	defer func() { _ = destDB.Close() }()
 
 	return b.copyDatabase(sourceDB, destDB.Conn())
 }
@@ -744,7 +744,7 @@ func (b *EnvironmentBuilder) copyDatabase(source, dest *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("failed to get table names: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tables []string
 	for rows.Next() {
@@ -839,7 +839,7 @@ func (b *BaseBuilder) Build(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to Dagger: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	container, tempDBPath, err := b.buildBaseContainer(ctx, client)
 	if err != nil {
@@ -975,7 +975,7 @@ func (b *BaseBuilder) createMinimalDatabase(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Run migrations to set up schema
 	if err := database.Migrate(); err != nil {
@@ -997,7 +997,7 @@ func (b *BaseBuilder) loadImageToDocker(tarPath, imageName string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("failed to open tar file: %w", err)
 	}
-	defer tarFile.Close()
+	defer func() { _ = tarFile.Close() }()
 	
 	// Pipe tar content to docker load
 	cmd.Stdin = tarFile

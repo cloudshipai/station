@@ -94,7 +94,7 @@ func (h *AgentHandler) findAgentByName(agentName string, cmd *cobra.Command) (in
 	if err != nil {
 		return 0, fmt.Errorf("failed to open database: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 

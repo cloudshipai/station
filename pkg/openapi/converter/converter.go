@@ -631,9 +631,9 @@ func (c *Converter) processSchemaProperties(prependBody *strings.Builder, schema
 
 				// Write the property description
 				propPath := fmt.Sprintf("%s[].%s", path, propName)
-				fmt.Fprintf(prependBody, "%s- **%s**: %s", indent, propPath, propRef.Value.Description)
+				_, _ = fmt.Fprintf(prependBody, "%s- **%s**: %s", indent, propPath, propRef.Value.Description)
 				if getSchemaType(propRef.Value) != "" {
-					fmt.Fprintf(prependBody, " (Type: %s)", getSchemaType(propRef.Value))
+					_, _ = fmt.Fprintf(prependBody, " (Type: %s)", getSchemaType(propRef.Value))
 				}
 				prependBody.WriteString("\n")
 
@@ -642,7 +642,7 @@ func (c *Converter) processSchemaProperties(prependBody *strings.Builder, schema
 			}
 		} else if getSchemaType(arrayItemSchema) != "" {
 			// If array items are not objects, just describe the array item type
-			fmt.Fprintf(prependBody, "%s- **%s[]**: Items of type %s\n", indent, path, getSchemaType(arrayItemSchema))
+			_, _ = fmt.Fprintf(prependBody, "%s- **%s[]**: Items of type %s\n", indent, path, getSchemaType(arrayItemSchema))
 		}
 		return
 	}
@@ -665,9 +665,9 @@ func (c *Converter) processSchemaProperties(prependBody *strings.Builder, schema
 
 			// Write the property description
 			propPath := fmt.Sprintf("%s.%s", path, propName)
-			fmt.Fprintf(prependBody, "%s- **%s**: %s", indent, propPath, propRef.Value.Description)
+			_, _ = fmt.Fprintf(prependBody, "%s- **%s**: %s", indent, propPath, propRef.Value.Description)
 			if getSchemaType(propRef.Value) != "" {
-				fmt.Fprintf(prependBody, " (Type: %s)", getSchemaType(propRef.Value))
+				_, _ = fmt.Fprintf(prependBody, " (Type: %s)", getSchemaType(propRef.Value))
 			}
 			prependBody.WriteString("\n")
 

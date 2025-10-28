@@ -18,7 +18,7 @@ func TestNewMCPConnectionManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	ctx := context.Background()
@@ -387,7 +387,7 @@ func TestEnableConnectionPooling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	genkitApp := genkit.Init(context.Background())
@@ -416,7 +416,7 @@ func TestCleanupConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	genkitApp := genkit.Init(context.Background())
@@ -463,7 +463,7 @@ func TestGetEnvironmentMCPTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	genkitApp := genkit.Init(context.Background())
@@ -509,7 +509,7 @@ func TestCacheInvalidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	genkitApp := genkit.Init(context.Background())

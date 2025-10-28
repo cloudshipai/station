@@ -512,7 +512,7 @@ func TestDeclarativeSyncPerformance(t *testing.T) {
 func TestParseDotPrompt(t *testing.T) {
 	testDB, err := db.NewTest(t)
 	require.NoError(t, err)
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	cfg := &config.Config{}

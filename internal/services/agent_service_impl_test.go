@@ -16,7 +16,7 @@ func TestNewAgentService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 
@@ -58,7 +58,7 @@ func TestNewAgentServiceWithLighthouse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 
@@ -83,7 +83,7 @@ func TestGetExecutionEngine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -107,7 +107,7 @@ func TestCreateAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -191,7 +191,7 @@ func TestGetAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -258,7 +258,7 @@ func TestListAgentsByEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -329,7 +329,7 @@ func TestUpdateAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -411,7 +411,7 @@ func TestUpdateAgentPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -458,7 +458,7 @@ func TestDeleteAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -532,7 +532,7 @@ func TestExecuteAgentIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -585,7 +585,7 @@ func BenchmarkCreateAgent(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)
@@ -616,7 +616,7 @@ func BenchmarkGetAgent(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewAgentService(repos)

@@ -250,11 +250,11 @@ func validateArchiveContents(t *testing.T, fs afero.Fs, outputPath string) {
 	// Open and read the archive
 	file, err := fs.Open(outputPath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	
 	gzReader, err := gzip.NewReader(file)
 	require.NoError(t, err)
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 	
 	tarReader := tar.NewReader(gzReader)
 	
@@ -299,11 +299,11 @@ func validateNestedArchiveContents(t *testing.T, fs afero.Fs, outputPath string)
 	// Open and read the archive
 	file, err := fs.Open(outputPath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	
 	gzReader, err := gzip.NewReader(file)
 	require.NoError(t, err)
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 	
 	tarReader := tar.NewReader(gzReader)
 	

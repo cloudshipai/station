@@ -166,7 +166,7 @@ func runMCPList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	
@@ -215,7 +215,7 @@ func runMCPTools(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
@@ -277,7 +277,7 @@ func runMCPDelete(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	
@@ -321,7 +321,7 @@ func runUI(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// For the UI command, we'll create a minimal setup
 	// The TUI can work with nil services for basic functionality
@@ -404,7 +404,7 @@ func runMCPStatus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
@@ -811,13 +811,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 	
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 	
 	_, err = io.Copy(destFile, sourceFile)
 	return err
@@ -828,13 +828,13 @@ func extractTarGz(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	
 	gzr, err := gzip.NewReader(file)
 	if err != nil {
 		return err
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 	
 	tr := tar.NewReader(gzr)
 	
@@ -944,7 +944,7 @@ func downloadBundle(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer tempFile.Close()
+	defer func() { _ = tempFile.Close() }()
 
 	// Try downloading without authentication first
 	resp, err := downloadWithAuth(url, "")
@@ -952,7 +952,7 @@ func downloadBundle(url string) (string, error) {
 		os.Remove(tempFile.Name())
 		return "", fmt.Errorf("failed to download from %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// If we get a 404 and this is a GitHub URL, try with authentication
 	if resp.StatusCode == http.StatusNotFound && strings.Contains(url, "github.com") {
@@ -971,7 +971,7 @@ func downloadBundle(url string) (string, error) {
 				os.Remove(tempFile.Name())
 				return "", fmt.Errorf("failed to download from %s with authentication: %w", url, err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 		}
 	}
 

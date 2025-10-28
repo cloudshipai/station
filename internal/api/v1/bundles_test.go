@@ -57,7 +57,7 @@ func TestCreateTarGz(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create gzip reader: %v", err)
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	tarReader := tar.NewReader(gzReader)
 	foundFiles := make(map[string]bool)
@@ -133,7 +133,7 @@ func TestCreateTarGzWithEmptyDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create gzip reader: %v", err)
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	tarReader := tar.NewReader(gzReader)
 	

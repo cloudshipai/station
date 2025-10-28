@@ -66,7 +66,7 @@ func (h *RunsHandler) listRunsLocal(limit int) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	
@@ -111,7 +111,7 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	run, err := repos.AgentRuns.GetByIDWithDetails(context.Background(), runID)

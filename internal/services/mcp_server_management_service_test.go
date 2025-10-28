@@ -17,7 +17,7 @@ func TestNewMCPServerManagementService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -36,7 +36,7 @@ func TestGetMCPServersForEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -139,7 +139,7 @@ func TestAddMCPServerToEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -220,7 +220,7 @@ func TestUpdateMCPServerInEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -313,7 +313,7 @@ func TestDeleteMCPServerFromEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -390,7 +390,7 @@ func TestGetRawMCPConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -458,7 +458,7 @@ func TestUpdateRawMCPConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -642,7 +642,7 @@ func BenchmarkGetMCPServersForEnvironment(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)
@@ -679,7 +679,7 @@ func BenchmarkAddMCPServerToEnvironment(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewMCPServerManagementService(repos)

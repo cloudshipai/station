@@ -447,12 +447,12 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		// Selected item
 		title := selectedItemStyle.Render(fmt.Sprintf("▶ %s", providerName))
 		desc := selectedDescStyle.Render(description)
-		fmt.Fprintf(w, "%s\n%s", title, desc)
+		_, _ = fmt.Fprintf(w, "%s\n%s", title, desc)
 	} else {
 		// Unselected item
 		title := itemStyle.Render(fmt.Sprintf("  %s", providerName))
 		desc := descStyle.Render(description)
-		fmt.Fprintf(w, "%s\n%s", title, desc)
+		_, _ = fmt.Fprintf(w, "%s\n%s", title, desc)
 	}
 }
 

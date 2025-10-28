@@ -144,7 +144,7 @@ func (q *Queries) ListEnabledWebhooks(ctx context.Context) ([]Webhook, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []Webhook
 	for rows.Next() {
 		var i Webhook
@@ -184,7 +184,7 @@ func (q *Queries) ListWebhooks(ctx context.Context) ([]Webhook, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []Webhook
 	for rows.Next() {
 		var i Webhook

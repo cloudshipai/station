@@ -28,7 +28,7 @@ func TestCreateEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)
@@ -117,7 +117,7 @@ func TestDeleteEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)
@@ -184,7 +184,7 @@ func TestDeleteEnvironmentByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)
@@ -217,7 +217,7 @@ func TestGetEnvironmentFileConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)
@@ -281,7 +281,7 @@ func TestUpdateEnvironmentFileConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)
@@ -381,7 +381,7 @@ func TestEnvironmentOperationsEdgeCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)
@@ -484,7 +484,7 @@ func BenchmarkCreateEnvironment(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)
@@ -504,7 +504,7 @@ func BenchmarkGetEnvironmentFileConfig(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewEnvironmentManagementService(repos)

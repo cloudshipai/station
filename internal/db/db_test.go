@@ -14,7 +14,7 @@ func TestNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if db.conn == nil {
 		t.Error("Database connection should not be nil")
@@ -43,7 +43,7 @@ func TestRunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Run embedded migrations
 	if err := RunMigrations(db.conn); err != nil {

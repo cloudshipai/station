@@ -137,7 +137,7 @@ func (q *Queries) ListFailedDeliveriesForRetry(ctx context.Context) ([]WebhookDe
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []WebhookDelivery
 	for rows.Next() {
 		var i WebhookDelivery
@@ -179,7 +179,7 @@ func (q *Queries) ListPendingDeliveries(ctx context.Context) ([]WebhookDelivery,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []WebhookDelivery
 	for rows.Next() {
 		var i WebhookDelivery
@@ -221,7 +221,7 @@ func (q *Queries) ListWebhookDeliveries(ctx context.Context, limit int64) ([]Web
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []WebhookDelivery
 	for rows.Next() {
 		var i WebhookDelivery
@@ -268,7 +268,7 @@ func (q *Queries) ListWebhookDeliveriesByWebhook(ctx context.Context, arg ListWe
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []WebhookDelivery
 	for rows.Next() {
 		var i WebhookDelivery

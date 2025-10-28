@@ -129,7 +129,7 @@ func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, server
 	if err := mcpClient.Start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start client: %w", err)
 	}
-	defer mcpClient.Close()
+	defer func() { _ = mcpClient.Close() }()
 
 	// Initialize MCP session
 	initRequest := mcp.InitializeRequest{}
@@ -188,7 +188,7 @@ func (c *MCPClient) DiscoverToolsFromServer(serverConfig models.MCPServerConfig)
 	if err := mcpClient.Start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start client: %v", err)
 	}
-	defer mcpClient.Close()
+	defer func() { _ = mcpClient.Close() }()
 
 	// Initialize the client
 	initRequest := mcp.InitializeRequest{}

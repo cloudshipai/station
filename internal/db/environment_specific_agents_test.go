@@ -11,7 +11,7 @@ func TestEnvironmentSpecificAgentsMigration(t *testing.T) {
 	// Create a test database with all migrations
 	db, err := New(":memory:")
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Run migrations to apply the new schema
 	err = db.Migrate()
@@ -24,7 +24,7 @@ func TestEnvironmentSpecificAgentsMigration(t *testing.T) {
 	// Test 2: Verify agent_tools table has simplified structure (tool_id instead of tool_name + environment_id)
 	rows, err := db.Conn().Query("PRAGMA table_info(agent_tools)")
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	columns := make(map[string]bool)
 	for rows.Next() {
@@ -47,7 +47,7 @@ func TestEnvironmentSpecificAgentsMigration(t *testing.T) {
 	// Test 3: Verify agents table still has environment_id (single environment per agent)
 	rows, err = db.Conn().Query("PRAGMA table_info(agents)")
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	agentColumns := make(map[string]bool)
 	for rows.Next() {
@@ -68,7 +68,7 @@ func TestEnvironmentSpecificAgentDataIntegrity(t *testing.T) {
 	// Create a test database with all migrations
 	db, err := New(":memory:")
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Run migrations
 	err = db.Migrate()
@@ -122,7 +122,7 @@ func TestEnvironmentSpecificAgentDataIntegrity(t *testing.T) {
 		WHERE at.agent_id = ? AND s.environment_id = a.environment_id
 	`, agentID)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	toolCount := 0
 	for rows.Next() {
