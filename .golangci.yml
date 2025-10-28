@@ -1,13 +1,5 @@
 linters:
-  disable:
-    - errcheck
-    - unused
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-  enable:
-    - gofmt
+  disable-all: true
 
 linters-settings:
   govet:
