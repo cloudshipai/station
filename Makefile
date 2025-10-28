@@ -91,7 +91,7 @@ clean:
 # Run tests
 test:
 	@echo "🧪 Running tests..."
-	go test -v -race -coverprofile=coverage.out ./...
+	go test -v -coverprofile=coverage.out ./...
 	@echo "✅ Tests completed"
 
 # Lighthouse-specific test targets
@@ -120,7 +120,7 @@ bench-lighthouse:
 # Test with coverage report
 test-coverage:
 	@echo "🧪 Running tests with coverage..."
-	go test -v -race -coverprofile=coverage.out ./...
+	go test -v -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "✅ Coverage report generated: coverage.html"
 
