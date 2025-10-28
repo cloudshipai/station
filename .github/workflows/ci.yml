@@ -28,6 +28,8 @@ jobs:
       run: go mod download
 
     - name: Run tests
+      env:
+        OPENAI_API_KEY: sk-test-dummy-key-for-ci
       run: make test
 
     - name: Run integration tests (Linux only)
@@ -50,6 +52,8 @@ jobs:
       run: go mod download
 
     - name: Run tests with coverage
+      env:
+        OPENAI_API_KEY: sk-test-dummy-key-for-ci
       run: make test-coverage
 
     - name: Upload coverage to Codecov
