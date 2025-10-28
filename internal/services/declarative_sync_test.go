@@ -109,6 +109,12 @@ func TestSyncEnvironment(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	// Skip if OPENAI_API_KEY is not set or is a dummy test key
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" || apiKey == "sk-test-dummy-key-for-ci" {
+		t.Skip("Skipping test: requires valid OPENAI_API_KEY for GenKit initialization")
+	}
+
 	testDB, err := db.NewTest(t)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
