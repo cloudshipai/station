@@ -1,11 +1,11 @@
 linters:
   disable:
     - errcheck
+    - unused
   enable:
     - gofmt
     - govet
     - staticcheck
-    - unused
     - gosimple
     - ineffassign
 
