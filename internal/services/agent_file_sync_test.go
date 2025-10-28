@@ -639,3 +639,300 @@ Another section`,
 		})
 	}
 }
+
+// TestCalculateFileChecksum tests MD5 checksum calculation
+func TestCalculateFileChecksum(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	tests := []struct {
+		name         string
+		content      string
+		expectError  bool
+		description  string
+	}{
+		{
+			name:        "Simple text file",
+			content:     "Hello, World!",
+			expectError: false,
+			description: "Should calculate checksum for simple text",
+		},
+		{
+			name:        "Empty file",
+			content:     "",
+			expectError: false,
+			description: "Should handle empty file",
+		},
+		{
+			name:        "Multi-line content",
+			content:     "Line 1\nLine 2\nLine 3",
+			expectError: false,
+			description: "Should handle multi-line content",
+		},
+		{
+			name:        "Binary-like content",
+			content:     "\x00\x01\x02\x03\x04\x05",
+			expectError: false,
+			description: "Should handle binary content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary file
+			tmpFile := filepath.Join(t.TempDir(), "test.txt")
+			err := os.WriteFile(tmpFile, []byte(tt.content), 0644)
+			require.NoError(t, err)
+
+			checksum, err := service.calculateFileChecksum(tmpFile)
+
+			if tt.expectError {
+				require.Error(t, err, tt.description)
+			} else {
+				require.NoError(t, err, tt.description)
+				assert.NotEmpty(t, checksum, "Checksum should not be empty")
+				assert.Len(t, checksum, 32, "MD5 checksum should be 32 hex characters")
+				
+				// Verify checksum is deterministic
+				checksum2, err := service.calculateFileChecksum(tmpFile)
+				require.NoError(t, err)
+				assert.Equal(t, checksum, checksum2, "Checksum should be deterministic")
+			}
+		})
+	}
+}
+
+// TestCalculateFileChecksumErrors tests error cases
+func TestCalculateFileChecksumErrors(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	t.Run("Non-existent file", func(t *testing.T) {
+		checksum, err := service.calculateFileChecksum("/nonexistent/file.txt")
+		assert.Error(t, err)
+		assert.Empty(t, checksum)
+	})
+}
+
+// TestParsePicoschemaString tests Picoschema string parsing
+func TestParsePicoschemaString(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	tests := []struct {
+		name         string
+		fieldName    string
+		definition   string
+		expectType   string
+		expectDesc   string
+		expectReq    bool
+		description  string
+	}{
+		{
+			name:        "Simple type",
+			fieldName:   "name",
+			definition:  "string",
+			expectType:  "string",
+			expectDesc:  "",
+			expectReq:   true,
+			description: "Should parse simple type definition",
+		},
+		{
+			name:        "Type with description",
+			fieldName:   "email",
+			definition:  "string, User email address",
+			expectType:  "string",
+			expectDesc:  "User email address",
+			expectReq:   true,
+			description: "Should parse type with description",
+		},
+		{
+			name:        "Optional field",
+			fieldName:   "age?",
+			definition:  "number",
+			expectType:  "number",
+			expectDesc:  "",
+			expectReq:   false,
+			description: "Should mark field as optional",
+		},
+		{
+			name:        "Optional with description",
+			fieldName:   "nickname?",
+			definition:  "string, Optional nickname",
+			expectType:  "string",
+			expectDesc:  "Optional nickname",
+			expectReq:   false,
+			description: "Should handle optional field with description",
+		},
+		{
+			name:        "Boolean type",
+			fieldName:   "active",
+			definition:  "boolean, Is user active",
+			expectType:  "boolean",
+			expectDesc:  "Is user active",
+			expectReq:   true,
+			description: "Should parse boolean type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.parsePicoschemaString(tt.fieldName, tt.definition)
+
+			require.NotNil(t, result, tt.description)
+			assert.Equal(t, tt.expectType, string(result.Type), "Type should match")
+			assert.Equal(t, tt.expectDesc, result.Description, "Description should match")
+			assert.Equal(t, tt.expectReq, result.Required, "Required flag should match")
+		})
+	}
+}
+
+// TestConvertYAMLMapToJSONMap tests YAML to JSON map conversion
+func TestConvertYAMLMapToJSONMap(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       interface{}
+		expectType  string
+		description string
+	}{
+		{
+			name: "Simple map with interface keys",
+			input: map[interface{}]interface{}{
+				"name":  "John",
+				"age":   30,
+				"email": "john@example.com",
+			},
+			expectType:  "map[string]interface {}",
+			description: "Should convert interface keys to string keys",
+		},
+		{
+			name: "Already string keys",
+			input: map[string]interface{}{
+				"name":  "Jane",
+				"age":   25,
+			},
+			expectType:  "map[string]interface {}",
+			description: "Should handle already correct format",
+		},
+		{
+			name: "Nested maps",
+			input: map[interface{}]interface{}{
+				"user": map[interface{}]interface{}{
+					"name": "Bob",
+					"profile": map[interface{}]interface{}{
+						"bio": "Developer",
+					},
+				},
+			},
+			expectType:  "map[string]interface {}",
+			description: "Should recursively convert nested maps",
+		},
+		{
+			name: "Array of maps",
+			input: []interface{}{
+				map[interface{}]interface{}{"id": 1, "name": "Item 1"},
+				map[interface{}]interface{}{"id": 2, "name": "Item 2"},
+			},
+			expectType:  "[]interface {}",
+			description: "Should convert maps in arrays",
+		},
+		{
+			name:        "Primitive string",
+			input:       "test string",
+			expectType:  "string",
+			description: "Should pass through primitive strings",
+		},
+		{
+			name:        "Primitive number",
+			input:       42,
+			expectType:  "int",
+			description: "Should pass through primitive numbers",
+		},
+		{
+			name:        "Primitive boolean",
+			input:       true,
+			expectType:  "bool",
+			description: "Should pass through primitive booleans",
+		},
+		{
+			name:        "Nil value",
+			input:       nil,
+			expectType:  "invalid",
+			description: "Should handle nil values",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertYAMLMapToJSONMap(tt.input)
+
+			// Check type
+			resultType := fmt.Sprintf("%T", result)
+			if tt.expectType == "invalid" {
+				assert.Nil(t, result, tt.description)
+			} else {
+				assert.Contains(t, resultType, tt.expectType, tt.description)
+			}
+
+			// For map types, verify keys are strings
+			if resultMap, ok := result.(map[string]interface{}); ok {
+				for key := range resultMap {
+					assert.IsType(t, "", key, "All keys should be strings")
+				}
+			}
+		})
+	}
+}
+
+// TestConvertYAMLMapToJSONMapComplex tests complex conversion scenarios
+func TestConvertYAMLMapToJSONMapComplex(t *testing.T) {
+	t.Run("Complex nested structure", func(t *testing.T) {
+		input := map[interface{}]interface{}{
+			"schema": map[interface{}]interface{}{
+				"type": "object",
+				"properties": map[interface{}]interface{}{
+					"name": map[interface{}]interface{}{
+						"type": "string",
+					},
+					"tags": []interface{}{"tag1", "tag2"},
+				},
+			},
+		}
+
+		result := convertYAMLMapToJSONMap(input)
+		resultMap, ok := result.(map[string]interface{})
+		require.True(t, ok, "Result should be a string-keyed map")
+
+		// Verify structure
+		schema, ok := resultMap["schema"].(map[string]interface{})
+		require.True(t, ok, "schema should be a string-keyed map")
+
+		assert.Equal(t, "object", schema["type"])
+
+		properties, ok := schema["properties"].(map[string]interface{})
+		require.True(t, ok, "properties should be a string-keyed map")
+
+		name, ok := properties["name"].(map[string]interface{})
+		require.True(t, ok, "name should be a string-keyed map")
+		assert.Equal(t, "string", name["type"])
+
+		tags, ok := properties["tags"].([]interface{})
+		require.True(t, ok, "tags should be an array")
+		assert.Len(t, tags, 2)
+	})
+}
