@@ -71,7 +71,9 @@ func TestCreateTarGz(t *testing.T) {
 			t.Fatalf("Failed to read tar entry: %v", err)
 		}
 
-		foundFiles[header.Name] = true
+		// Normalize path separators to forward slashes for cross-platform compatibility
+		normalizedPath := filepath.ToSlash(header.Name)
+		foundFiles[normalizedPath] = true
 		t.Logf("Found file in bundle: %s", header.Name)
 
 		// Read content to verify it's not corrupted
