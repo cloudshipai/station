@@ -72,6 +72,44 @@ func TestCleanupOrphanedResources(t *testing.T) {
 			wantErr:     false,
 			description: "Should report what would be removed without removing",
 		},
+		{
+			name: "Actually remove orphaned config",
+			setupFunc: func() {
+				// Create a file config in database but no corresponding file
+				repos.FileMCPConfigs.Create(&repositories.FileConfigRecord{
+					EnvironmentID: env.ID,
+					ConfigName:    "orphaned-to-remove",
+					TemplatePath:  filepath.Join(envDir, "orphaned-to-remove.json"),
+				})
+			},
+			options:     SyncOptions{DryRun: false},
+			wantErr:     false,
+			description: "Should actually remove orphaned config when DryRun=false",
+		},
+		{
+			name: "Remove orphaned config with associated servers",
+			setupFunc: func() {
+				// Create orphaned config
+				fileConfig, _ := repos.FileMCPConfigs.Create(&repositories.FileConfigRecord{
+					EnvironmentID: env.ID,
+					ConfigName:    "orphaned-with-servers",
+					TemplatePath:  filepath.Join(envDir, "orphaned-with-servers.json"),
+				})
+
+				// Create associated server with similar name
+				repos.MCPServers.Create(&models.MCPServer{
+					Name:          "orphaned-with-servers-fs",
+					Command:       "npx",
+					Args:          []string{},
+					EnvironmentID: env.ID,
+				})
+
+				_ = fileConfig // avoid unused variable
+			},
+			options:     SyncOptions{DryRun: false},
+			wantErr:     false,
+			description: "Should remove orphaned config and associated servers",
+		},
 	}
 
 	for _, tt := range tests {
