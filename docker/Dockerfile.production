@@ -36,7 +36,6 @@ WORKDIR /app
 
 # Copy application and config
 COPY --from=builder /app/station .
-COPY --from=builder /app/config/litestream.yml /config/
 COPY --from=builder /app/examples/ ./examples/
 
 # Health check
