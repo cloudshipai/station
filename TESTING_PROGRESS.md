@@ -1,9 +1,9 @@
 # Station Testing Progress Report
-*Generated: 2025-10-19 | Updated: 2025-10-20*
+*Generated: 2025-10-19 | Updated: 2025-10-28*
 
 ## Executive Summary
 
-Successfully expanded comprehensive test suites across **25+ services**, improving overall test coverage from **3.7% to 52.7%** (1,324% improvement).
+Successfully expanded comprehensive test suites across **25+ services**, improving overall test coverage from **3.7% to 52.8%** (1,327% improvement).
 
 ## Coverage Metrics
 
@@ -12,13 +12,38 @@ Successfully expanded comprehensive test suites across **25+ services**, improvi
 - **Test Files**: 4 out of 23 services (17.4%)
 - **Untested Critical Services**: 19 services, 6,344 lines of code
 
-### Current Status (2025-10-20)
-- **Services Package Coverage**: 52.7% of statements [![Coverage](https://img.shields.io/badge/coverage-52.7%25-yellow?style=flat-square)](./TESTING_PROGRESS.md)
+### Current Status (2025-10-28)
+- **Services Package Coverage**: 52.8% of statements [![Coverage](https://img.shields.io/badge/coverage-52.8%25-yellow?style=flat-square)](./TESTING_PROGRESS.md)
 - **Test Files**: 25+ test files covering all major services
-- **New Test Lines**: 5,000+ lines of comprehensive tests
-- **Coverage Improvement**: +49.0 percentage points (+1,324%)
+- **New Test Lines**: 5,300+ lines of comprehensive tests
+- **Coverage Improvement**: +49.1 percentage points (+1,327%)
 
 ## Tests Created
+
+### Recent Additions (2025-10-28)
+
+#### `template_variable_service_test.go` - Helper Function Tests
+**Functions Tested**: `saveVariablesToEnvironment`, `getVariableNames`, `containsString`
+
+**Test Cases Added**:
+- `TestSaveVariablesToEnvironment` - 3 test cases for YAML variable persistence
+- `TestGetVariableNames` - 3 test cases for variable name extraction
+- `TestContainsString` - 6 test cases for string slice operations
+
+**Coverage Improvements**:
+- `saveVariablesToEnvironment`: 0.0% → 77.8%
+- `getVariableNames`: 0.0% → 100.0%
+- `containsString`: 0.0% → 100.0%
+- Overall services package: 51.8% → 52.4% (+0.6%)
+
+#### `sync_cleanup_test.go` - Enhanced Coverage
+**Test Cases Added**:
+- Comprehensive cleanup operation tests
+- Dry-run mode validation
+- Orphaned resource detection
+
+**Coverage Improvements**:
+- `sync_cleanup.go`: 43.5% → 82.6%
 
 ### 1. `agent_execution_engine_test.go` (455 lines)
 **Service Under Test**: `agent_execution_engine.go` (739 lines - CRITICAL)
@@ -47,6 +72,11 @@ Successfully expanded comprehensive test suites across **25+ services**, improvi
 - ✅ Nil pointer safety verified
 - ✅ Panic recovery mechanisms working correctly
 - ⚠️ ExecuteAgent panics with nil agent (line 98 accesses agent.ID without nil check)
+
+**Recent Improvements (2025-10-28)**:
+- Enhanced `TestConvertExecutionSteps` with 4 new test cases covering all field conversions, partial fields, invalid types, and error handling
+- Enhanced `TestConvertTokenUsage` with 3 new test cases covering all token usage fields with detailed assertions
+- Coverage improvements: `convertExecutionSteps` 60.0% → 100.0%, `convertTokenUsage` 50.0% → 100.0%
 
 ### 2. `agent_service_impl_test.go` (640 lines)
 **Service Under Test**: `agent_service_impl.go` (545 lines - CRITICAL)
