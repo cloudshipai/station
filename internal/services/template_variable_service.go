@@ -257,8 +257,15 @@ func (tvs *TemplateVariableService) renderTemplate(templateContent string, varia
 
 // loadEnvironmentVariables loads variables from environment's variables.yml
 func (tvs *TemplateVariableService) loadEnvironmentVariables(envName string) (map[string]string, error) {
-	variablesPath := config.GetVariablesPath(envName)
-	
+	var variablesPath string
+	if tvs.configDir != "" {
+		// Use custom config dir (for tests)
+		variablesPath = filepath.Join(tvs.configDir, "environments", envName, "variables.yml")
+	} else {
+		// Use standard config path
+		variablesPath = config.GetVariablesPath(envName)
+	}
+
 	data, err := os.ReadFile(variablesPath)
 	if err != nil {
 		return nil, err
@@ -280,8 +287,15 @@ func (tvs *TemplateVariableService) loadEnvironmentVariables(envName string) (ma
 
 // saveVariablesToEnvironment saves new variables to environment's variables.yml
 func (tvs *TemplateVariableService) saveVariablesToEnvironment(envName string, newVars map[string]string) error {
-	variablesPath := config.GetVariablesPath(envName)
-	
+	var variablesPath string
+	if tvs.configDir != "" {
+		// Use custom config dir (for tests)
+		variablesPath = filepath.Join(tvs.configDir, "environments", envName, "variables.yml")
+	} else {
+		// Use standard config path
+		variablesPath = config.GetVariablesPath(envName)
+	}
+
 	// Load existing variables
 	existingVars := make(map[string]interface{})
 	if data, err := os.ReadFile(variablesPath); err == nil {
@@ -377,6 +391,7 @@ func (tvs *TemplateVariableService) isSystemEnvVar(name string) bool {
 		"DISPLAY", "EDITOR", "PAGER",
 		"SSH_", "GPG_", "XDG_",
 		"DEBIAN_", "UBUNTU_",
+		"GO", // Go-related variables (GOPATH, GOROOT, GOTOOLDIR, etc.)
 		"_", // Last command variable
 	}
 
