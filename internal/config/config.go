@@ -4,30 +4,30 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	
+
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	DatabaseURL       string
-	SSHPort           int
-	MCPPort           int
-	APIPort           int
-	SSHHostKeyPath    string
-	AdminUsername     string
-	Environment       string
-	TelemetryEnabled  bool
-	OTELEndpoint      string // OpenTelemetry OTLP endpoint for exporting traces
-	Debug             bool   // Debug mode enables verbose logging
+	DatabaseURL      string
+	SSHPort          int
+	MCPPort          int
+	APIPort          int
+	SSHHostKeyPath   string
+	AdminUsername    string
+	Environment      string
+	TelemetryEnabled bool
+	OTELEndpoint     string // OpenTelemetry OTLP endpoint for exporting traces
+	Debug            bool   // Debug mode enables verbose logging
 	// Workspace Configuration
-	Workspace         string // Custom workspace path (overrides XDG paths)
+	Workspace string // Custom workspace path (overrides XDG paths)
 	// AI Provider Configuration
-	AIProvider        string // openai, ollama, gemini
-	AIAPIKey          string // The API key for the AI provider  
-	AIModel           string // Model name (e.g., gpt-4o, llama3, gemini-pro)
-	AIBaseURL         string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
+	AIProvider string // openai, ollama, gemini
+	AIAPIKey   string // The API key for the AI provider
+	AIModel    string // Model name (e.g., gpt-4o, llama3, gemini-pro)
+	AIBaseURL  string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
 	// CloudShip Integration
-	CloudShip         CloudShipConfig
+	CloudShip CloudShipConfig
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
 }
 
@@ -49,16 +49,16 @@ func Load() (*Config, error) {
 		SSHHostKeyPath:   getEnvOrDefault("SSH_HOST_KEY_PATH", "./ssh_host_key"),
 		AdminUsername:    getEnvOrDefault("ADMIN_USERNAME", "admin"),
 		Environment:      getEnvOrDefault("ENVIRONMENT", "development"),
-		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true), // Default enabled with opt-out
+		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true),     // Default enabled with opt-out
 		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", ""), // Default empty (no export)
-		Debug:            getEnvBoolOrDefault("STN_DEBUG", false), // Default to info level
-		// Workspace Configuration  
-		Workspace:        getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
+		Debug:            getEnvBoolOrDefault("STN_DEBUG", false),            // Default to info level
+		// Workspace Configuration
+		Workspace: getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults
-		AIProvider:       getEnvOrDefault("STN_AI_PROVIDER", "openai"), // Default to OpenAI
-		AIAPIKey:         getAIAPIKey(), // Smart fallback for API keys
-		AIModel:          getAIModelDefault(), // Provider-specific defaults
-		AIBaseURL:        getEnvOrDefault("STN_AI_BASE_URL", ""), // Empty means use provider default
+		AIProvider: getEnvOrDefault("STN_AI_PROVIDER", "openai"), // Default to OpenAI
+		AIAPIKey:   getAIAPIKey(),                                // Smart fallback for API keys
+		AIModel:    getAIModelDefault(),                          // Provider-specific defaults
+		AIBaseURL:  getEnvOrDefault("STN_AI_BASE_URL", ""),       // Empty means use provider default
 		// CloudShip Integration (disabled by default)
 		CloudShip: CloudShipConfig{
 			Enabled:           getEnvBoolOrDefault("STN_CLOUDSHIP_ENABLED", false),
@@ -117,7 +117,7 @@ func Load() (*Config, error) {
 	if viper.IsSet("workspace") {
 		cfg.Workspace = viper.GetString("workspace")
 	}
-	
+
 	// CloudShip configuration overrides from config file
 	if viper.IsSet("cloudship.enabled") {
 		cfg.CloudShip.Enabled = viper.GetBool("cloudship.enabled")
@@ -145,7 +145,7 @@ func GetStationConfigDir() string {
 	if workspace := viper.GetString("workspace"); workspace != "" {
 		return workspace
 	}
-	
+
 	// Fall back to XDG config directory
 	return getXDGConfigDir()
 }
@@ -199,12 +199,12 @@ func getAIAPIKey() string {
 	if key := os.Getenv("STN_AI_API_KEY"); key != "" {
 		return key
 	}
-	
+
 	// Try generic AI_API_KEY
 	if key := os.Getenv("AI_API_KEY"); key != "" {
 		return key
 	}
-	
+
 	// Fall back to provider-specific keys for backward compatibility
 	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
 	switch provider {
@@ -241,14 +241,14 @@ func getAIModelDefault() string {
 	if model := os.Getenv("AI_MODEL"); model != "" {
 		return model
 	}
-	
+
 	// Provide sane defaults based on provider
 	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
 	switch provider {
 	case "openai":
 		// Official GenKit v1.0.1 OpenAI plugin supported models:
 		// Latest: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4.5-preview
-		// Production: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo  
+		// Production: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo
 		// Reasoning: o3-mini, o1, o1-preview, o1-mini
 		return "gpt-4o-mini" // Fast and cost-effective default
 	case "gemini":
@@ -267,7 +267,7 @@ func GetSupportedOpenAIModels() []string {
 	return []string{
 		// Latest Models
 		"gpt-4.1",
-		"gpt-4.1-mini", 
+		"gpt-4.1-mini",
 		"gpt-4.1-nano",
 		"gpt-4.5-preview",
 		// Production Models
@@ -279,7 +279,7 @@ func GetSupportedOpenAIModels() []string {
 		// Reasoning Models
 		"o3-mini",
 		"o1",
-		"o1-preview", 
+		"o1-preview",
 		"o1-mini",
 	}
 }

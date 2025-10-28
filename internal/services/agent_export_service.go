@@ -179,31 +179,31 @@ func (s *AgentExportService) generateInputSchemaSection(agent *models.Agent) (st
 // extractCustomVariableNames extracts variable names from input schema JSON
 func (s *AgentExportService) extractCustomVariableNames(agent *models.Agent) []string {
 	var varNames []string
-	
+
 	if agent.InputSchema == nil || *agent.InputSchema == "" {
 		return varNames
 	}
-	
+
 	// Parse the JSON schema to extract variable names
 	var schemaMap map[string]interface{}
 	if err := json.Unmarshal([]byte(*agent.InputSchema), &schemaMap); err != nil {
 		return varNames
 	}
-	
+
 	// Extract all keys except userInput
 	for key := range schemaMap {
 		if key != "userInput" {
 			varNames = append(varNames, key)
 		}
 	}
-	
+
 	return varNames
 }
 
 // generateOutputSchemaSection generates the output schema section for dotprompt
 func (s *AgentExportService) generateOutputSchemaSection(agent *models.Agent) string {
 	var schemaYAML string
-	
+
 	// First, check if there's a preset that needs to be resolved
 	if agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
 		presetSchema, err := s.schemaRegistry.GetPresetSchema(*agent.OutputSchemaPreset)
@@ -214,17 +214,17 @@ func (s *AgentExportService) generateOutputSchemaSection(agent *models.Agent) st
 			schemaYAML = s.convertJSONSchemaToYAML(presetSchema)
 		}
 	}
-	
+
 	// If no preset or preset failed, check for direct output schema
 	if schemaYAML == "" && agent.OutputSchema != nil && *agent.OutputSchema != "" {
 		schemaYAML = s.convertJSONSchemaToYAML(*agent.OutputSchema)
 	}
-	
+
 	// If no output schema at all, return empty
 	if schemaYAML == "" {
 		return ""
 	}
-	
+
 	// Format the output schema for GenKit dotprompt YAML frontmatter
 	return fmt.Sprintf("\noutput:\n  schema:\n%s", s.indentLines(schemaYAML, "    "))
 }
@@ -269,7 +269,7 @@ func (s *AgentExportService) convertJSONSchemaToYAML(schemaStr string) string {
 		// Already YAML format, return as-is
 		return schemaStr
 	}
-	
+
 	// Parse JSON schema
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(schemaStr), &schema); err != nil {
@@ -277,14 +277,14 @@ func (s *AgentExportService) convertJSONSchemaToYAML(schemaStr string) string {
 		log.Printf("Warning: Failed to parse JSON schema: %v", err)
 		return ""
 	}
-	
+
 	// Convert to YAML using the yaml library
 	yamlBytes, err := yaml.Marshal(schema)
 	if err != nil {
 		log.Printf("Warning: Failed to convert schema to YAML: %v", err)
 		return ""
 	}
-	
+
 	return string(yamlBytes)
 }
 

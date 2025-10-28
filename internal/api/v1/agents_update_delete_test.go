@@ -13,10 +13,10 @@ import (
 
 func TestAPIHandlers_UpdateAgent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	handlers := setupTestAPIHandlers()
 	mockService := handlers.agentService.(*MockAgentService)
-	
+
 	// Create a test agent first
 	testAgent := &models.Agent{
 		ID:            1,
@@ -81,10 +81,10 @@ func TestAPIHandlers_UpdateAgent(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.requestBody)
 			req := httptest.NewRequest("PUT", "/agents/"+tt.agentID, bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
-			
+
 			// Create response recorder
 			w := httptest.NewRecorder()
-			
+
 			// Create Gin context with URL parameter
 			c, _ := gin.CreateTestContext(w)
 			c.Request = req
@@ -119,7 +119,7 @@ func TestAPIHandlers_UpdateAgent(t *testing.T) {
 
 func TestAPIHandlers_DeleteAgent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	tests := []struct {
 		name           string
 		agentID        string
@@ -147,7 +147,7 @@ func TestAPIHandlers_DeleteAgent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			handlers := setupTestAPIHandlers()
 			mockService := handlers.agentService.(*MockAgentService)
-			
+
 			// Create a test agent first for valid deletion
 			if tt.agentID == "1" {
 				testAgent := &models.Agent{
@@ -156,7 +156,7 @@ func TestAPIHandlers_DeleteAgent(t *testing.T) {
 				}
 				mockService.agents[1] = testAgent
 			}
-			
+
 			if tt.shouldError {
 				mockService.shouldError = true
 			} else {
@@ -165,10 +165,10 @@ func TestAPIHandlers_DeleteAgent(t *testing.T) {
 
 			// Create request
 			req := httptest.NewRequest("DELETE", "/agents/"+tt.agentID, nil)
-			
+
 			// Create response recorder
 			w := httptest.NewRecorder()
-			
+
 			// Create Gin context with URL parameter
 			c, _ := gin.CreateTestContext(w)
 			c.Request = req
@@ -203,10 +203,10 @@ func TestAPIHandlers_DeleteAgent(t *testing.T) {
 
 func TestAPIHandlers_CallAgent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	handlers := setupTestAPIHandlers()
 	mockService := handlers.agentService.(*MockAgentService)
-	
+
 	// Create a test agent
 	testAgent := &models.Agent{
 		ID:   1,
@@ -263,10 +263,10 @@ func TestAPIHandlers_CallAgent(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.requestBody)
 			req := httptest.NewRequest("POST", "/agents/"+tt.agentID+"/execute", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
-			
+
 			// Create response recorder
 			w := httptest.NewRecorder()
-			
+
 			// Create Gin context with URL parameter
 			c, _ := gin.CreateTestContext(w)
 			c.Request = req
@@ -282,7 +282,7 @@ func TestAPIHandlers_CallAgent(t *testing.T) {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
 
-			// If successful execution, verify response structure  
+			// If successful execution, verify response structure
 			if tt.expectedStatus == http.StatusAccepted && w.Code == http.StatusAccepted {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)

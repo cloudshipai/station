@@ -20,7 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
-	
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"station/internal/config"
@@ -34,13 +34,13 @@ import (
 
 // DotPromptConfig represents the YAML frontmatter in a .prompt file
 type DotPromptConfig struct {
-	Model       string                 `yaml:"model"`
-	Config      map[string]interface{} `yaml:"config"`
-	Metadata    map[string]interface{} `yaml:"metadata"`
-	Tools       []string               `yaml:"tools"`
-	Station     map[string]interface{} `yaml:"station"`
-	Input       map[string]interface{} `yaml:"input"`
-	Output      map[string]interface{} `yaml:"output"`
+	Model    string                 `yaml:"model"`
+	Config   map[string]interface{} `yaml:"config"`
+	Metadata map[string]interface{} `yaml:"metadata"`
+	Tools    []string               `yaml:"tools"`
+	Station  map[string]interface{} `yaml:"station"`
+	Input    map[string]interface{} `yaml:"input"`
+	Output   map[string]interface{} `yaml:"output"`
 }
 
 // parseDotPrompt parses a .prompt file with YAML frontmatter and prompt content
@@ -51,11 +51,11 @@ func parseDotPrompt(content string) (*DotPromptConfig, string, error) {
 		// No frontmatter, treat entire content as prompt
 		return &DotPromptConfig{}, content, nil
 	}
-	
+
 	// The YAML frontmatter is parts[1], the prompt content starts from parts[2]
 	yamlContent := strings.TrimSpace(parts[1])
 	promptContent := strings.TrimSpace(strings.Join(parts[2:], "---"))
-	
+
 	var config DotPromptConfig
 	if yamlContent != "" {
 		err := yaml.Unmarshal([]byte(yamlContent), &config)
@@ -63,7 +63,7 @@ func parseDotPrompt(content string) (*DotPromptConfig, string, error) {
 			return nil, "", fmt.Errorf("failed to parse YAML frontmatter: %w", err)
 		}
 	}
-	
+
 	return &config, promptContent, nil
 }
 
@@ -72,47 +72,47 @@ func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir, 
 	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
 		return 0, fmt.Errorf("agents directory does not exist: %s", agentsDir)
 	}
-	
+
 	promptCount := 0
 	err := filepath.Walk(agentsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// Only process .prompt files
 		if !strings.HasSuffix(info.Name(), ".prompt") {
 			return nil
 		}
-		
+
 		// Get the agent name from filename (without .prompt extension)
 		agentName := strings.TrimSuffix(info.Name(), ".prompt")
-		
+
 		// Read the prompt file
 		content, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Printf("   ⚠️  Warning: failed to read prompt file %s: %v\n", path, err)
 			return nil // Continue with other files
 		}
-		
+
 		// Parse the dotprompt format (YAML frontmatter + prompt content)
 		promptConfig, promptContent, err := parseDotPrompt(string(content))
 		if err != nil {
 			fmt.Printf("   ⚠️  Warning: failed to parse prompt file %s: %v\n", path, err)
 			return nil // Continue with other files
 		}
-		
+
 		// Log what we parsed for debugging
 		fmt.Printf("   📝 Parsed prompt: %s (model: %s, %d tools)\n", agentName, promptConfig.Model, len(promptConfig.Tools))
-		
+
 		// Build GenKit prompt options with parsed content
 		promptOptions := []ai.PromptOption{
 			ai.WithPrompt(promptContent),
 		}
-		
+
 		// Log the model from frontmatter for debugging
 		if promptConfig.Model != "" {
 		}
-		
+
 		// Add input schema matching the prompt template variables
 		inputType := struct {
 			TASK        string `json:"TASK" jsonschema:"description=The specific task or instruction for the agent to perform"`
@@ -121,7 +121,7 @@ func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir, 
 			TASK:        "Please analyze and explore the file structure within the allowed directories",
 			ENVIRONMENT: environment,
 		}
-		
+
 		if promptConfig.Input != nil && len(promptConfig.Input) > 0 {
 			// TODO: Parse the frontmatter input schema properly
 			// For now, use the default template variable schema
@@ -130,7 +130,7 @@ func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir, 
 			// Default input matches Station prompt template variables ({{TASK}}, {{ENVIRONMENT}})
 			promptOptions = append(promptOptions, ai.WithInputType(inputType))
 		}
-		
+
 		// Add output schema if defined in frontmatter
 		if promptConfig.Output != nil && len(promptConfig.Output) > 0 {
 			// Create output type - for most Station agents, this should be a string response
@@ -139,19 +139,18 @@ func loadAgentPrompts(ctx context.Context, genkitApp *genkit.Genkit, agentsDir, 
 			// Default to string output to avoid schema errors
 			promptOptions = append(promptOptions, ai.WithOutputType(""))
 		}
-		
+
 		// Define the prompt in GenKit with proper configuration
 		_ = genkit.DefinePrompt(genkitApp, agentName, promptOptions...)
 		// GenKit v1.0.1 DefinePrompt doesn't return error
-		
+
 		fmt.Printf("   ✅ Agent Prompt: %s\n", agentName)
 		promptCount++
 		return nil
 	})
-	
+
 	return promptCount, err
 }
-
 
 // runMCPList implements the "station mcp list" command
 func runMCPList(cmd *cobra.Command, args []string) error {
@@ -169,36 +168,36 @@ func runMCPList(cmd *cobra.Command, args []string) error {
 	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
-	
+
 	// Get environment (default to "default" if not specified)
 	environmentName := "default"
 	if len(args) > 0 {
 		environmentName = args[0]
 	}
-	
+
 	env, err := repos.Environments.GetByName(environmentName)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
 	}
-	
+
 	// Get file-based MCP configs
 	configs, err := repos.FileMCPConfigs.ListByEnvironment(env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get MCP configs: %w", err)
 	}
-	
+
 	fmt.Printf("MCP Servers in environment '%s':\n\n", environmentName)
 	for _, config := range configs {
 		fmt.Printf("📦 %s\n", config.ConfigName)
 		fmt.Printf("   Config ID: %d\n", config.ID)
 		fmt.Printf("   Updated: %s\n\n", config.UpdatedAt.Format("2006-01-02 15:04:05"))
 	}
-	
+
 	if len(configs) == 0 {
 		fmt.Printf("No MCP servers configured in environment '%s'\n", environmentName)
 		fmt.Printf("Use 'stn sync' to synchronize MCP configurations\n")
 	}
-	
+
 	return nil
 }
 
@@ -219,24 +218,24 @@ func runMCPTools(cmd *cobra.Command, args []string) error {
 
 	repos := repositories.New(database)
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
-	
+
 	// Get environment (default to "default" if not specified)
 	environmentName := "default"
 	if len(args) > 0 {
 		environmentName = args[0]
 	}
-	
+
 	env, err := repos.Environments.GetByName(environmentName)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
 	}
-	
+
 	// Get discovered tools
 	tools, err := toolDiscoveryService.GetToolsByEnvironment(env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get tools: %w", err)
 	}
-	
+
 	fmt.Printf("MCP Tools in environment '%s':\n\n", environmentName)
 	for _, tool := range tools {
 		fmt.Printf("🔧 %s\n", tool.Name)
@@ -245,12 +244,12 @@ func runMCPTools(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("   Tool ID: %d\n\n", tool.ID)
 	}
-	
+
 	if len(tools) == 0 {
 		fmt.Printf("No tools discovered in environment '%s'\n", environmentName)
 		fmt.Printf("Use 'stn sync' to discover tools from configured MCP servers\n")
 	}
-	
+
 	return nil
 }
 
@@ -259,13 +258,13 @@ func runMCPDelete(cmd *cobra.Command, args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: stn mcp delete <config-name> [environment]")
 	}
-	
+
 	configName := args[0]
 	environmentName := "default"
 	if len(args) > 1 {
 		environmentName = args[1]
 	}
-	
+
 	// Load Station config
 	cfg, err := config.Load()
 	if err != nil {
@@ -280,28 +279,28 @@ func runMCPDelete(cmd *cobra.Command, args []string) error {
 	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
-	
+
 	// Get environment
 	env, err := repos.Environments.GetByName(environmentName)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
 	}
-	
+
 	// Get the config to delete
 	mcpConfig, err := repos.FileMCPConfigs.GetByEnvironmentAndName(env.ID, configName)
 	if err != nil {
 		return fmt.Errorf("MCP config '%s' not found in environment '%s': %w", configName, environmentName, err)
 	}
-	
+
 	// Delete the file-based config
 	err = repos.FileMCPConfigs.Delete(mcpConfig.ID)
 	if err != nil {
 		return fmt.Errorf("failed to delete MCP config: %w", err)
 	}
-	
+
 	fmt.Printf("✅ Deleted MCP config '%s' from environment '%s'\n", configName, environmentName)
 	fmt.Printf("Note: You may want to run 'stn sync' to update tool discovery\n")
-	
+
 	return nil
 }
 
@@ -309,7 +308,7 @@ func runMCPDelete(cmd *cobra.Command, args []string) error {
 func runUI(cmd *cobra.Command, args []string) error {
 	// Disable all logging for clean TUI experience
 	log.SetOutput(io.Discard)
-	
+
 	// Check if configuration exists
 	databasePath := viper.GetString("database_url")
 	if databasePath == "" {
@@ -325,16 +324,16 @@ func runUI(cmd *cobra.Command, args []string) error {
 
 	// For the UI command, we'll create a minimal setup
 	// The TUI can work with nil services for basic functionality
-	
+
 	// Create TUI model with minimal services (nil is acceptable for basic UI)
 	tuiModel := tui.NewModel(database, nil)
-	
+
 	// Launch the TUI with same options as SSH
-	program := tea.NewProgram(tuiModel, 
+	program := tea.NewProgram(tuiModel,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
-	
+
 	_, err = program.Run()
 	return err
 }
@@ -384,7 +383,7 @@ func runMCPAddInteractive(cmd *cobra.Command, args []string) error {
 
 	// Get basic flags that might be pre-set
 	_, _ = cmd.Flags().GetString("environment")
-	
+
 	// Interactive MCP configuration deprecated
 	return fmt.Errorf("Interactive MCP configuration deprecated - use file-based configuration in ~/.config/station/environments/<env>/template.json and run 'stn sync'")
 }
@@ -408,34 +407,34 @@ func runMCPStatus(cmd *cobra.Command, args []string) error {
 
 	repos := repositories.New(database)
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
-	
+
 	// Get environment (default to "default" if not specified)
 	environmentName := "default"
 	if len(args) > 0 {
 		environmentName = args[0]
 	}
-	
+
 	env, err := repos.Environments.GetByName(environmentName)
 	if err != nil {
 		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
 	}
-	
+
 	// Get file-based MCP configs
 	configs, err := repos.FileMCPConfigs.ListByEnvironment(env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get MCP configs: %w", err)
 	}
-	
+
 	// Get discovered tools
 	tools, err := toolDiscoveryService.GetToolsByEnvironment(env.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get tools: %w", err)
 	}
-	
+
 	fmt.Printf("MCP Status for environment '%s':\n\n", environmentName)
 	fmt.Printf("📦 Configured Servers: %d\n", len(configs))
 	fmt.Printf("🔧 Discovered Tools: %d\n\n", len(tools))
-	
+
 	if len(configs) > 0 {
 		fmt.Printf("Server Configurations:\n")
 		for _, config := range configs {
@@ -443,13 +442,13 @@ func runMCPStatus(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println()
 	}
-	
+
 	if len(configs) == 0 {
 		fmt.Printf("No MCP servers configured. Use 'stn sync' to synchronize configurations.\n")
 	} else if len(tools) == 0 {
 		fmt.Printf("No tools discovered. You may need to run 'stn sync' to discover tools.\n")
 	}
-	
+
 	return nil
 }
 
@@ -460,30 +459,30 @@ func runTemplateCreate(cmd *cobra.Command, args []string) error {
 	author, _ := cmd.Flags().GetString("author")
 	description, _ := cmd.Flags().GetString("description")
 	envName, _ := cmd.Flags().GetString("env")
-	
+
 	// Use bundle path from args
 	bundlePath := args[0]
-	
+
 	// If name not provided, use directory name
 	if name == "" {
 		name = filepath.Base(bundlePath)
 	}
-	
+
 	// Show banner
 	styles := getCLIStyles(nil)
-	
+
 	if envName != "" {
 		// Enhanced mode: Create bundle from existing environment
 		banner := styles.Banner.Render("📦 Create Template Bundle from Environment")
 		fmt.Println(banner)
 		fmt.Printf("🌍 Scanning environment: %s\n", envName)
-		
+
 		return createBundleFromEnvironment(bundlePath, envName, name, author, description)
 	} else {
 		// Original mode: Create empty bundle template
 		banner := styles.Banner.Render("📦 Create Template Bundle")
 		fmt.Println(banner)
-		
+
 		// Create bundle CLI
 		bundleCLI := bundlecli.NewBundleCLI(nil)
 		opts := bundle.CreateOptions{
@@ -491,7 +490,7 @@ func runTemplateCreate(cmd *cobra.Command, args []string) error {
 			Author:      author,
 			Description: description,
 		}
-		
+
 		return bundleCLI.CreateBundle(bundlePath, opts)
 	}
 }
@@ -501,51 +500,51 @@ func createBundleFromEnvironment(bundlePath, envName, name, author, description 
 	// Get workspace path and environment directory
 	workspacePath := getWorkspacePath()
 	envDir := filepath.Join(workspacePath, "environments", envName)
-	
+
 	// Check if environment exists
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
 		return fmt.Errorf("environment '%s' does not exist at %s", envName, envDir)
 	}
-	
+
 	// Create bundle directory
 	if err := os.MkdirAll(bundlePath, 0755); err != nil {
 		return fmt.Errorf("failed to create bundle directory: %w", err)
 	}
-	
+
 	fmt.Printf("📂 Scanning environment directory: %s\n", envDir)
-	
+
 	// Scan for MCP configurations
 	mcpConfigs, err := scanMCPConfigs(envDir)
 	if err != nil {
 		return fmt.Errorf("failed to scan MCP configs: %w", err)
 	}
 	fmt.Printf("   📡 Found %d MCP configuration(s)\n", len(mcpConfigs))
-	
+
 	// Scan for agent prompts
 	agents, err := scanAgentPrompts(envDir)
 	if err != nil {
 		return fmt.Errorf("failed to scan agent prompts: %w", err)
 	}
 	fmt.Printf("   🤖 Found %d agent prompt(s)\n", len(agents))
-	
+
 	// Scan for template variables
 	variables, err := scanTemplateVariables(envDir, mcpConfigs, agents)
 	if err != nil {
 		return fmt.Errorf("failed to scan template variables: %w", err)
 	}
 	fmt.Printf("   📝 Found %d template variable(s)\n", len(variables))
-	
+
 	// Merge MCP configurations into single template
 	mergedMCPConfig, err := mergeMCPConfigs(mcpConfigs)
 	if err != nil {
 		return fmt.Errorf("failed to merge MCP configs: %w", err)
 	}
-	
+
 	// Create bundle structure
 	if err := createEnhancedBundleStructure(bundlePath, name, author, description, envName, mergedMCPConfig, agents, variables); err != nil {
 		return fmt.Errorf("failed to create bundle structure: %w", err)
 	}
-	
+
 	fmt.Printf("✅ Bundle created successfully from environment '%s'\n", envName)
 	fmt.Printf("📁 Bundle path: %s\n", bundlePath)
 	fmt.Printf("📝 Next steps:\n")
@@ -553,26 +552,26 @@ func createBundleFromEnvironment(bundlePath, envName, name, author, description 
 	fmt.Printf("   2. Update manifest.json with additional metadata\n")
 	fmt.Printf("   3. Run 'stn template validate %s' to test your bundle\n", bundlePath)
 	fmt.Printf("   4. Run 'stn template bundle %s' to package for distribution\n", bundlePath)
-	
+
 	return nil
 }
 
 // runTemplateValidate implements the "station template validate" command
 func runTemplateValidate(cmd *cobra.Command, args []string) error {
 	bundlePath := args[0]
-	
+
 	// Show banner
 	styles := getCLIStyles(nil)
 	banner := styles.Banner.Render("🔍 Validate Template Bundle")
 	fmt.Println(banner)
-	
+
 	// Create bundle CLI and validate
 	bundleCLI := bundlecli.NewBundleCLI(nil)
 	summary, err := bundleCLI.ValidateBundle(bundlePath)
 	if err != nil {
 		return err
 	}
-	
+
 	// Print validation results
 	bundleCLI.PrintValidationSummary(summary)
 	return nil
@@ -583,19 +582,19 @@ func runTemplateBundle(cmd *cobra.Command, args []string) error {
 	bundlePath := args[0]
 	outputPath, _ := cmd.Flags().GetString("output")
 	validateFirst, _ := cmd.Flags().GetBool("validate")
-	
+
 	// Show banner
 	styles := getCLIStyles(nil)
 	banner := styles.Banner.Render("📦 Package Template Bundle")
 	fmt.Println(banner)
-	
+
 	// Create bundle CLI and package
 	bundleCLI := bundlecli.NewBundleCLI(nil)
 	summary, err := bundleCLI.PackageBundle(bundlePath, outputPath, validateFirst)
 	if err != nil {
 		return err
 	}
-	
+
 	// Print packaging results
 	bundleCLI.PrintPackageSummary(summary)
 	return nil
@@ -606,50 +605,50 @@ func runTemplatePublish(cmd *cobra.Command, args []string) error {
 	bundlePath := args[0]
 	registry, _ := cmd.Flags().GetString("registry")
 	skipValidation, _ := cmd.Flags().GetBool("skip-validation")
-	
+
 	// Show banner
 	styles := getCLIStyles(nil)
 	banner := styles.Banner.Render("📤 Publish Template Bundle")
 	fmt.Println(banner)
-	
+
 	// TODO: Implement publishing logic
 	fmt.Printf("Publishing %s to registry '%s'...\n", bundlePath, registry)
 	if skipValidation {
 		fmt.Println("⚠️  Skipping validation")
 	}
-	
+
 	// For now, just package the bundle
 	bundleCLI := bundlecli.NewBundleCLI(nil)
 	summary, err := bundleCLI.PackageBundle(bundlePath, "", !skipValidation)
 	if err != nil {
 		return err
 	}
-	
+
 	if !summary.Success {
 		return fmt.Errorf("bundle packaging failed")
 	}
-	
+
 	fmt.Printf("✅ Bundle packaged successfully: %s\n", summary.OutputPath)
-	
+
 	return nil
 }
 
-// runTemplateInstall implements the "station template install" command  
+// runTemplateInstall implements the "station template install" command
 func runTemplateInstall(cmd *cobra.Command, args []string) error {
 	bundleRef := args[0]
 	environmentName := "default" // Default environment
 	if len(args) > 1 {
 		environmentName = args[1]
 	}
-	
+
 	registry, _ := cmd.Flags().GetString("registry")
 	force, _ := cmd.Flags().GetBool("force")
-	
+
 	// Show banner
 	styles := getCLIStyles(nil)
 	banner := styles.Banner.Render("📥 Install Template Bundle")
 	fmt.Println(banner)
-	
+
 	if registry != "" {
 		fmt.Printf("📡 Registry: %s\n", registry)
 	}
@@ -657,17 +656,17 @@ func runTemplateInstall(cmd *cobra.Command, args []string) error {
 		fmt.Printf("⚠️  Force reinstall mode enabled\n")
 	}
 	fmt.Println()
-	
+
 	// Call our installation logic
 	if err := installTemplateBundle(bundleRef, environmentName, force); err != nil {
 		return fmt.Errorf("installation failed: %w", err)
 	}
-	
+
 	fmt.Printf("✅ Bundle '%s' installed successfully!\n", bundleRef)
 	fmt.Printf("📋 Next steps:\n")
 	fmt.Printf("   1. Run 'stn sync %s' to load MCP configs and agents\n", environmentName)
 	fmt.Printf("   2. If prompted for variables, update ~/.config/station/environments/%s/variables.yml\n", environmentName)
-	
+
 	return nil
 }
 
@@ -690,28 +689,28 @@ func installTemplateBundle(bundleRef, environmentName string, force bool) error 
 		// TODO: Handle registry-based bundles by name in the future
 		return fmt.Errorf("bundle not found. Please provide a local .tar.gz file or remote URL")
 	}
-	
+
 	// Get Station config directory
 	configDir := os.ExpandEnv("$HOME/.config/station")
 	envDir := filepath.Join(configDir, "environments", environmentName)
-	
+
 	// Create environment directory if it doesn't exist
 	if err := os.MkdirAll(envDir, 0755); err != nil {
 		return fmt.Errorf("failed to create environment directory: %w", err)
 	}
-	
+
 	// Extract bundle to temporary directory
 	tempDir, err := os.MkdirTemp("", "bundle-install-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	fmt.Printf("📦 Extracting bundle...\n")
 	if err := extractTarGz(bundlePath, tempDir); err != nil {
 		return fmt.Errorf("failed to extract bundle: %w", err)
 	}
-	
+
 	// Install MCP configuration
 	fmt.Printf("⚙️  Installing MCP configuration...\n")
 	templatePath := filepath.Join(tempDir, "template.json")
@@ -726,57 +725,57 @@ func installTemplateBundle(bundleRef, environmentName string, force bool) error 
 				configName = strings.ReplaceAll(configName, "_", "-")
 			}
 		}
-		
+
 		destConfigPath := filepath.Join(envDir, configName+".json")
 		if err := copyFile(templatePath, destConfigPath); err != nil {
 			return fmt.Errorf("failed to install MCP config: %w", err)
 		}
 		fmt.Printf("   ✅ Installed MCP config: %s.json\n", configName)
 	}
-	
+
 	// Install agents
 	agentsDir := filepath.Join(tempDir, "agents")
 	if dirExists(agentsDir) {
 		fmt.Printf("🤖 Installing agents...\n")
-		
+
 		destAgentsDir := filepath.Join(envDir, "agents")
 		if err := os.MkdirAll(destAgentsDir, 0755); err != nil {
 			return fmt.Errorf("failed to create agents directory: %w", err)
 		}
-		
+
 		// Copy all .prompt files
 		entries, err := os.ReadDir(agentsDir)
 		if err != nil {
 			return fmt.Errorf("failed to read agents directory: %w", err)
 		}
-		
+
 		agentCount := 0
 		for _, entry := range entries {
 			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".prompt") {
 				continue
 			}
-			
+
 			srcPath := filepath.Join(agentsDir, entry.Name())
 			destPath := filepath.Join(destAgentsDir, entry.Name())
-			
+
 			// Don't overwrite existing agents unless force is enabled
 			if !force && fileExists(destPath) {
 				fmt.Printf("   ⏭️  Skipping existing agent: %s (use --force to overwrite)\n", entry.Name())
 				continue
 			}
-			
+
 			if err := copyFile(srcPath, destPath); err != nil {
 				return fmt.Errorf("failed to install agent %s: %w", entry.Name(), err)
 			}
 			fmt.Printf("   ✅ Installed agent: %s\n", entry.Name())
 			agentCount++
 		}
-		
+
 		if agentCount == 0 {
 			fmt.Printf("   ℹ️  No new agents installed\n")
 		}
 	}
-	
+
 	// Install example variables (only if variables.yml doesn't exist)
 	variablesPath := filepath.Join(envDir, "variables.yml")
 	if !fileExists(variablesPath) {
@@ -791,7 +790,7 @@ func installTemplateBundle(bundleRef, environmentName string, force bool) error 
 	} else {
 		fmt.Printf("📝 Preserving existing variables.yml\n")
 	}
-	
+
 	return nil
 }
 
@@ -812,13 +811,13 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer func() { _ = sourceFile.Close() }()
-	
+
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = destFile.Close() }()
-	
+
 	_, err = io.Copy(destFile, sourceFile)
 	return err
 }
@@ -829,15 +828,15 @@ func extractTarGz(src, dst string) error {
 		return err
 	}
 	defer func() { _ = file.Close() }()
-	
+
 	gzr, err := gzip.NewReader(file)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = gzr.Close() }()
-	
+
 	tr := tar.NewReader(gzr)
-	
+
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -846,14 +845,14 @@ func extractTarGz(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		
+
 		target := filepath.Join(dst, header.Name)
-		
+
 		// Security: ensure target is within dst directory
 		if !strings.HasPrefix(target, filepath.Clean(dst)+string(os.PathSeparator)) {
 			continue
 		}
-		
+
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
@@ -863,12 +862,12 @@ func extractTarGz(src, dst string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return err
 			}
-			
+
 			file, err := os.Create(target)
 			if err != nil {
 				return err
 			}
-			
+
 			if _, err := io.Copy(file, tr); err != nil {
 				file.Close()
 				return err
@@ -876,7 +875,7 @@ func extractTarGz(src, dst string) error {
 			file.Close()
 		}
 	}
-	
+
 	return nil
 }
 
@@ -890,21 +889,21 @@ func loadManifestFile(path string) (*bundle.BundleManifest, error) {
 func runTemplateList(cmd *cobra.Command, args []string) error {
 	registry, _ := cmd.Flags().GetString("registry")
 	search, _ := cmd.Flags().GetString("search")
-	
+
 	// Show banner
 	styles := getCLIStyles(nil)
 	banner := styles.Banner.Render("📋 Available Template Bundles")
 	fmt.Println(banner)
-	
+
 	if registry != "" {
 		fmt.Printf("Registry: %s\n", registry)
 	}
 	if search != "" {
 		fmt.Printf("Search: %s\n", search)
 	}
-	
+
 	// TODO: Implement registry listing
-	
+
 	return nil
 }
 
@@ -912,16 +911,16 @@ func runTemplateList(cmd *cobra.Command, args []string) error {
 func runTemplateRegistryAdd(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	url := args[1]
-	
+
 	// Show banner
 	styles := getCLIStyles(nil)
 	banner := styles.Banner.Render("➕ Add Template Registry")
 	fmt.Println(banner)
-	
+
 	fmt.Printf("Adding registry '%s' at %s\n", name, url)
-	
+
 	// TODO: Implement registry configuration
-	
+
 	return nil
 }
 
@@ -931,9 +930,9 @@ func runTemplateRegistryList(cmd *cobra.Command, args []string) error {
 	styles := getCLIStyles(nil)
 	banner := styles.Banner.Render("📋 Configured Registries")
 	fmt.Println(banner)
-	
+
 	// TODO: Implement registry listing
-	
+
 	return nil
 }
 
@@ -957,13 +956,13 @@ func downloadBundle(url string) (string, error) {
 	// If we get a 404 and this is a GitHub URL, try with authentication
 	if resp.StatusCode == http.StatusNotFound && strings.Contains(url, "github.com") {
 		resp.Body.Close()
-		
+
 		// Look for GitHub token
 		token := os.Getenv("GITHUB_TOKEN")
 		if token == "" {
 			token = os.Getenv("GH_TOKEN") // Alternative env var used by gh CLI
 		}
-		
+
 		if token != "" {
 			fmt.Printf("   🔐 Trying with GitHub authentication for private repo...\n")
 			resp, err = downloadWithAuth(url, token)
@@ -1000,12 +999,12 @@ func downloadWithAuth(url, token string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Add GitHub token if provided
 	if token != "" {
 		req.Header.Set("Authorization", "token "+token)
 	}
-	
+
 	return client.Do(req)
 }
 
@@ -1018,7 +1017,7 @@ type MCPConfigInfo struct {
 	Config   map[string]interface{}
 }
 
-// AgentPromptInfo holds information about an agent prompt file  
+// AgentPromptInfo holds information about an agent prompt file
 type AgentPromptInfo struct {
 	Name       string
 	FilePath   string
@@ -1038,36 +1037,36 @@ type TemplateVariable struct {
 // scanMCPConfigs scans the environment directory for MCP configuration files
 func scanMCPConfigs(envDir string) ([]*MCPConfigInfo, error) {
 	var configs []*MCPConfigInfo
-	
+
 	// Walk through environment directory looking for .json files
 	err := filepath.Walk(envDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// Skip non-JSON files and directories
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".json") {
 			return nil
 		}
-		
+
 		// Skip files in agents subdirectory
 		if strings.Contains(path, filepath.Join(envDir, "agents")) {
 			return nil
 		}
-		
+
 		// Read and parse the JSON file
 		content, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Printf("   ⚠️  Warning: failed to read %s: %v\n", path, err)
 			return nil // Continue with other files
 		}
-		
+
 		var config map[string]interface{}
 		if err := json.Unmarshal(content, &config); err != nil {
 			fmt.Printf("   ⚠️  Warning: failed to parse JSON in %s: %v\n", path, err)
 			return nil // Continue with other files
 		}
-		
+
 		// Check if this looks like an MCP config (has mcpServers field)
 		if _, hasMCPServers := config["mcpServers"]; hasMCPServers {
 			name := strings.TrimSuffix(info.Name(), ".json")
@@ -1078,46 +1077,46 @@ func scanMCPConfigs(envDir string) ([]*MCPConfigInfo, error) {
 			})
 			fmt.Printf("   ✅ MCP Config: %s\n", name)
 		}
-		
+
 		return nil
 	})
-	
+
 	return configs, err
 }
 
 // scanAgentPrompts scans the environment directory for agent prompt files
 func scanAgentPrompts(envDir string) ([]*AgentPromptInfo, error) {
 	var agents []*AgentPromptInfo
-	
+
 	agentsDir := filepath.Join(envDir, "agents")
 	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
 		return agents, nil // No agents directory is fine
 	}
-	
+
 	err := filepath.Walk(agentsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// Only process .prompt files
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".prompt") {
 			return nil
 		}
-		
+
 		// Read and parse the prompt file
 		content, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Printf("   ⚠️  Warning: failed to read %s: %v\n", path, err)
 			return nil // Continue with other files
 		}
-		
+
 		// Parse the dotprompt format
 		config, promptText, err := parseDotPrompt(string(content))
 		if err != nil {
 			fmt.Printf("   ⚠️  Warning: failed to parse prompt file %s: %v\n", path, err)
 			return nil // Continue with other files
 		}
-		
+
 		name := strings.TrimSuffix(info.Name(), ".prompt")
 		agents = append(agents, &AgentPromptInfo{
 			Name:       name,
@@ -1126,24 +1125,24 @@ func scanAgentPrompts(envDir string) ([]*AgentPromptInfo, error) {
 			PromptText: promptText,
 		})
 		fmt.Printf("   ✅ Agent Prompt: %s\n", name)
-		
+
 		return nil
 	})
-	
+
 	return agents, err
 }
 
 // scanTemplateVariables scans MCP configs, agent prompts, and variables.yml for template variables
 func scanTemplateVariables(envDir string, mcpConfigs []*MCPConfigInfo, agents []*AgentPromptInfo) ([]*TemplateVariable, error) {
 	variableMap := make(map[string]*TemplateVariable)
-	
+
 	// Scan MCP configurations for template variables using proper Go template parsing
 	for _, mcpConfig := range mcpConfigs {
 		content, err := json.Marshal(mcpConfig.Config)
 		if err != nil {
 			continue
 		}
-		
+
 		variables := extractTemplateVariables(string(content))
 		for _, varName := range variables {
 			if _, exists := variableMap[varName]; !exists {
@@ -1156,7 +1155,7 @@ func scanTemplateVariables(envDir string, mcpConfigs []*MCPConfigInfo, agents []
 			}
 		}
 	}
-	
+
 	// Scan agent prompts for template variables using proper Go template parsing
 	for _, agent := range agents {
 		variables := extractTemplateVariables(agent.PromptText)
@@ -1171,7 +1170,7 @@ func scanTemplateVariables(envDir string, mcpConfigs []*MCPConfigInfo, agents []
 			}
 		}
 	}
-	
+
 	// Read existing variables.yml file to get more context
 	variablesFile := filepath.Join(envDir, "variables.yml")
 	if content, err := os.ReadFile(variablesFile); err == nil {
@@ -1204,13 +1203,13 @@ func scanTemplateVariables(envDir string, mcpConfigs []*MCPConfigInfo, agents []
 			fmt.Printf("   📄 Loaded existing variables from variables.yml\n")
 		}
 	}
-	
+
 	// Convert map to slice
 	var variables []*TemplateVariable
 	for _, variable := range variableMap {
 		variables = append(variables, variable)
 	}
-	
+
 	return variables, nil
 }
 
@@ -1218,29 +1217,29 @@ func scanTemplateVariables(envDir string, mcpConfigs []*MCPConfigInfo, agents []
 func extractTemplateVariables(content string) []string {
 	var variables []string
 	variableSet := make(map[string]bool)
-	
+
 	// Create a template and parse the content
 	tmpl, err := template.New("scan").Parse(content)
 	if err != nil {
 		// If parsing fails, template might have syntax errors or no variables
 		return variables
 	}
-	
+
 	// Create a visitor that captures variable accesses
 	visitor := &templateVariableVisitor{
 		variables: variableSet,
 	}
-	
+
 	// Walk the parsed template tree to find variable references
 	if tmpl.Tree != nil && tmpl.Tree.Root != nil {
 		visitor.visitNode(tmpl.Tree.Root)
 	}
-	
+
 	// Convert set to slice
 	for varName := range variableSet {
 		variables = append(variables, varName)
 	}
-	
+
 	return variables
 }
 
@@ -1254,7 +1253,7 @@ func (v *templateVariableVisitor) visitNode(node parse.Node) {
 	if node == nil {
 		return
 	}
-	
+
 	switch n := node.(type) {
 	case *parse.ListNode:
 		if n != nil {
@@ -1298,7 +1297,7 @@ func (v *templateVariableVisitor) visitPipe(pipe *parse.PipeNode) {
 	if pipe == nil {
 		return
 	}
-	
+
 	for _, cmd := range pipe.Cmds {
 		if cmd != nil {
 			for _, arg := range cmd.Args {
@@ -1313,7 +1312,7 @@ func (v *templateVariableVisitor) visitArg(arg parse.Node) {
 	if arg == nil {
 		return
 	}
-	
+
 	switch a := arg.(type) {
 	case *parse.FieldNode:
 		// Field access like .ROOT_PATH
@@ -1345,16 +1344,16 @@ func mergeMCPConfigs(configs []*MCPConfigInfo) (map[string]interface{}, error) {
 			"mcpServers":  map[string]interface{}{},
 		}, nil
 	}
-	
+
 	// Start with the first config as base
 	baseConfig := configs[0]
 	result := make(map[string]interface{})
-	
+
 	// Copy base config
 	for k, v := range baseConfig.Config {
 		result[k] = v
 	}
-	
+
 	// Ensure we have the required fields
 	if result["name"] == nil {
 		result["name"] = "merged-template"
@@ -1362,10 +1361,10 @@ func mergeMCPConfigs(configs []*MCPConfigInfo) (map[string]interface{}, error) {
 	if result["description"] == nil {
 		result["description"] = "Template bundle created from environment MCP configurations"
 	}
-	
+
 	// Merge all mcpServers sections
 	allServers := make(map[string]interface{})
-	
+
 	for _, config := range configs {
 		if mcpServers, ok := config.Config["mcpServers"].(map[string]interface{}); ok {
 			for serverName, serverConfig := range mcpServers {
@@ -1378,7 +1377,7 @@ func mergeMCPConfigs(configs []*MCPConfigInfo) (map[string]interface{}, error) {
 			}
 		}
 	}
-	
+
 	result["mcpServers"] = allServers
 	return result, nil
 }
@@ -1386,7 +1385,7 @@ func mergeMCPConfigs(configs []*MCPConfigInfo) (map[string]interface{}, error) {
 // createEnhancedBundleStructure creates the bundle directory structure with scanned content
 func createEnhancedBundleStructure(bundlePath, name, author, description, envName string, mcpConfig map[string]interface{}, agents []*AgentPromptInfo, variables []*TemplateVariable) error {
 	// Create main bundle files
-	
+
 	// 1. Create template.json with merged MCP configuration
 	templatePath := filepath.Join(bundlePath, "template.json")
 	templateContent, err := json.MarshalIndent(mcpConfig, "", "  ")
@@ -1396,7 +1395,7 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 	if err := os.WriteFile(templatePath, templateContent, 0644); err != nil {
 		return fmt.Errorf("failed to write template.json: %w", err)
 	}
-	
+
 	// 2. Create manifest.json with bundle metadata and variable schema
 	manifest := map[string]interface{}{
 		"name":            name,
@@ -1410,11 +1409,11 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 		"agents":          createAgentManifest(agents),
 		"mcp_servers":     len(mcpConfig["mcpServers"].(map[string]interface{})),
 	}
-	
+
 	if description == "" {
 		manifest["description"] = fmt.Sprintf("Template bundle created from environment '%s'", envName)
 	}
-	
+
 	manifestPath := filepath.Join(bundlePath, "manifest.json")
 	manifestContent, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -1423,14 +1422,14 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 	if err := os.WriteFile(manifestPath, manifestContent, 0644); err != nil {
 		return fmt.Errorf("failed to write manifest.json: %w", err)
 	}
-	
+
 	// 3. Create agents directory and copy agent prompt files
 	if len(agents) > 0 {
 		agentsDir := filepath.Join(bundlePath, "agents")
 		if err := os.MkdirAll(agentsDir, 0755); err != nil {
 			return fmt.Errorf("failed to create agents directory: %w", err)
 		}
-		
+
 		for _, agent := range agents {
 			// Reconstruct the original .prompt file format
 			var yamlContent []byte
@@ -1440,28 +1439,28 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 					return fmt.Errorf("failed to marshal agent config for %s: %w", agent.Name, err)
 				}
 			}
-			
+
 			var fullContent string
 			if len(yamlContent) > 0 && string(yamlContent) != "{}\n" {
 				fullContent = fmt.Sprintf("---\n%s---\n%s", string(yamlContent), agent.PromptText)
 			} else {
 				fullContent = agent.PromptText
 			}
-			
+
 			agentPath := filepath.Join(agentsDir, agent.Name+".prompt")
 			if err := os.WriteFile(agentPath, []byte(fullContent), 0644); err != nil {
 				return fmt.Errorf("failed to write agent file %s: %w", agentPath, err)
 			}
 		}
 	}
-	
+
 	// 4. Create examples directory with variable examples
 	if len(variables) > 0 {
 		examplesDir := filepath.Join(bundlePath, "examples")
 		if err := os.MkdirAll(examplesDir, 0755); err != nil {
 			return fmt.Errorf("failed to create examples directory: %w", err)
 		}
-		
+
 		// Create development.vars.yml with example values
 		exampleVars := make(map[string]interface{})
 		for _, variable := range variables {
@@ -1482,7 +1481,7 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 				}
 			}
 		}
-		
+
 		exampleVarsPath := filepath.Join(examplesDir, "development.vars.yml")
 		exampleVarsContent, err := yaml.Marshal(exampleVars)
 		if err != nil {
@@ -1492,7 +1491,7 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 			return fmt.Errorf("failed to write example variables: %w", err)
 		}
 	}
-	
+
 	// 5. Create variables.schema.json for validation
 	schemaPath := filepath.Join(bundlePath, "variables.schema.json")
 	schema := createJSONSchema(variables)
@@ -1503,14 +1502,14 @@ func createEnhancedBundleStructure(bundlePath, name, author, description, envNam
 	if err := os.WriteFile(schemaPath, schemaContent, 0644); err != nil {
 		return fmt.Errorf("failed to write variables schema: %w", err)
 	}
-	
+
 	return nil
 }
 
 // createVariableSchema creates a simplified variable schema for the manifest
 func createVariableSchema(variables []*TemplateVariable) []map[string]interface{} {
 	var schema []map[string]interface{}
-	
+
 	for _, variable := range variables {
 		varSchema := map[string]interface{}{
 			"name":        variable.Name,
@@ -1523,20 +1522,20 @@ func createVariableSchema(variables []*TemplateVariable) []map[string]interface{
 		}
 		schema = append(schema, varSchema)
 	}
-	
+
 	return schema
 }
 
 // createAgentManifest creates agent metadata for the manifest
 func createAgentManifest(agents []*AgentPromptInfo) []map[string]interface{} {
 	var agentList []map[string]interface{}
-	
+
 	for _, agent := range agents {
 		agentInfo := map[string]interface{}{
 			"name": agent.Name,
 			"file": agent.Name + ".prompt",
 		}
-		
+
 		if agent.Config != nil {
 			if agent.Config.Model != "" {
 				agentInfo["model"] = agent.Config.Model
@@ -1545,49 +1544,49 @@ func createAgentManifest(agents []*AgentPromptInfo) []map[string]interface{} {
 				agentInfo["tools"] = agent.Config.Tools
 			}
 		}
-		
+
 		agentList = append(agentList, agentInfo)
 	}
-	
+
 	return agentList
 }
 
 // createJSONSchema creates a JSON Schema for template variables
 func createJSONSchema(variables []*TemplateVariable) map[string]interface{} {
 	schema := map[string]interface{}{
-		"$schema": "http://json-schema.org/draft-07/schema#",
-		"type":    "object",
-		"title":   "Template Variables Schema",
+		"$schema":     "http://json-schema.org/draft-07/schema#",
+		"type":        "object",
+		"title":       "Template Variables Schema",
 		"description": "JSON Schema for template bundle variables",
-		"properties": make(map[string]interface{}),
-		"required": []string{},
+		"properties":  make(map[string]interface{}),
+		"required":    []string{},
 	}
-	
+
 	properties := schema["properties"].(map[string]interface{})
 	var required []string
-	
+
 	for _, variable := range variables {
 		propSchema := map[string]interface{}{
 			"type":        variable.Type,
 			"description": variable.Description,
 		}
-		
+
 		if variable.Default != nil {
 			propSchema["default"] = variable.Default
 		}
-		
+
 		// Use lowercase for JSON schema (matches YAML convention)
 		propName := strings.ToLower(variable.Name)
 		properties[propName] = propSchema
-		
+
 		if variable.Required {
 			required = append(required, propName)
 		}
 	}
-	
+
 	if len(required) > 0 {
 		schema["required"] = required
 	}
-	
+
 	return schema
 }

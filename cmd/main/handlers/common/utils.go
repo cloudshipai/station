@@ -44,7 +44,7 @@ func GetCLIStyles(themeManager *theme.ThemeManager) CLIStyles {
 
 	palette := themeManager.GetPalette()
 	themeStyles := themeManager.GetStyles()
-	
+
 	return CLIStyles{
 		Banner: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Primary)).

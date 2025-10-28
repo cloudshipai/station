@@ -30,7 +30,7 @@ func NewTelemetryService(enabled bool) *TelemetryService {
 		posthog.Config{
 			Endpoint: "https://us.i.posthog.com",
 			// Send events immediately for better debugging
-			Interval: time.Second * 1,  // Very frequent sending
+			Interval:  time.Second * 1, // Very frequent sending
 			BatchSize: 1,               // Send each event immediately
 			Verbose:   false,           // Disable verbose for now due to logger interface issue
 		},
@@ -49,11 +49,11 @@ func NewTelemetryService(enabled bool) *TelemetryService {
 
 	// Send initial installation/boot event
 	service.TrackEvent("stn_boot", map[string]interface{}{
-		"os":           runtime.GOOS,
-		"arch":         runtime.GOARCH,
-		"go_version":   runtime.Version(),
-		"machine_id":   service.machineID,
-		"timestamp":    time.Now().UTC(),
+		"os":         runtime.GOOS,
+		"arch":       runtime.GOARCH,
+		"go_version": runtime.Version(),
+		"machine_id": service.machineID,
+		"timestamp":  time.Now().UTC(),
 	})
 
 	return service
@@ -89,7 +89,7 @@ func (t *TelemetryService) TrackEvent(eventName string, properties map[string]in
 	if properties == nil {
 		properties = make(map[string]interface{})
 	}
-	
+
 	properties["machine_id"] = t.machineID
 	properties["os"] = runtime.GOOS
 	properties["arch"] = runtime.GOARCH
@@ -115,19 +115,19 @@ func (t *TelemetryService) TrackEvent(eventName string, properties map[string]in
 // TrackAgentCreated tracks agent creation events
 func (t *TelemetryService) TrackAgentCreated(agentID int64, environmentID int64, toolCount int) {
 	t.TrackEvent("stn_agent_created", map[string]interface{}{
-		"agent_id":      agentID,
+		"agent_id":       agentID,
 		"environment_id": environmentID,
-		"tool_count":    toolCount,
+		"tool_count":     toolCount,
 	})
 }
 
 // TrackAgentExecuted tracks agent execution events
 func (t *TelemetryService) TrackAgentExecuted(agentID int64, executionTimeMs int64, success bool, stepCount int) {
 	t.TrackEvent("stn_agent_executed", map[string]interface{}{
-		"agent_id":         agentID,
+		"agent_id":          agentID,
 		"execution_time_ms": executionTimeMs,
-		"success":          success,
-		"step_count":       stepCount,
+		"success":           success,
+		"step_count":        stepCount,
 	})
 }
 
@@ -147,12 +147,12 @@ func (t *TelemetryService) TrackError(errorType string, errorMessage string, con
 		"error_type":    errorType,
 		"error_message": errorMessage,
 	}
-	
+
 	// Merge context properties
 	for k, v := range context {
 		properties[k] = v
 	}
-	
+
 	t.TrackEvent("stn_error_occurred", properties)
 }
 

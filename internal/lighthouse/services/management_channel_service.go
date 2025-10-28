@@ -24,13 +24,13 @@ const (
 
 // ManagementChannelService handles the bidirectional ManagementChannel streaming
 type ManagementChannelService struct {
-	lighthouseClient   *lighthouse.LighthouseClient
-	managementHandler  *ManagementHandlerService
-	registrationKey    string
-	connectionCtx      context.Context
-	connectionCancel   context.CancelFunc
-	currentStream      proto.LighthouseService_ManagementChannelClient
-	registrationState  RegistrationState
+	lighthouseClient  *lighthouse.LighthouseClient
+	managementHandler *ManagementHandlerService
+	registrationKey   string
+	connectionCtx     context.Context
+	connectionCancel  context.CancelFunc
+	currentStream     proto.LighthouseService_ManagementChannelClient
+	registrationState RegistrationState
 }
 
 // NewManagementChannelService creates a new management channel service
@@ -40,10 +40,10 @@ func NewManagementChannelService(
 	registrationKey string,
 ) *ManagementChannelService {
 	return &ManagementChannelService{
-		lighthouseClient:   lighthouseClient,
-		managementHandler:  managementHandler,
-		registrationKey:    registrationKey,
-		registrationState:  RegistrationStateUnregistered,
+		lighthouseClient:  lighthouseClient,
+		managementHandler: managementHandler,
+		registrationKey:   registrationKey,
+		registrationState: RegistrationStateUnregistered,
 	}
 }
 
@@ -106,7 +106,7 @@ func (mcs *ManagementChannelService) maintainConnection() {
 			if err := mcs.establishConnection(); err != nil {
 				// Check if this is a registration rejection (1:1 limit reached)
 				isRegistrationRejected := strings.Contains(err.Error(), "already has") &&
-										 strings.Contains(err.Error(), "online stations")
+					strings.Contains(err.Error(), "online stations")
 
 				if isRegistrationRejected {
 					// Set state to rejected and stop trying
@@ -358,11 +358,11 @@ func (mcs *ManagementChannelService) SendStatusUpdate(statusMsg *proto.Managemen
 	if mcs.currentStream == nil {
 		return fmt.Errorf("no active management channel stream")
 	}
-	
+
 	if err := mcs.currentStream.Send(statusMsg); err != nil {
 		return fmt.Errorf("failed to send status update: %w", err)
 	}
-	
+
 	return nil
 }
 

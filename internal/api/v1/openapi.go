@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"station/pkg/openapi"
 	"github.com/gin-gonic/gin"
 	"station/internal/config"
+	"station/pkg/openapi"
 )
 
 // OpenAPIConvertRequest represents a request to convert OpenAPI spec to MCP server
@@ -33,10 +33,10 @@ type OpenAPIConvertResponse struct {
 func (h *APIHandlers) registerOpenAPIRoutes(router *gin.RouterGroup) {
 	router.POST("/convert", h.convertOpenAPISpec)
 	router.POST("/save", h.saveOpenAPIMCPConfig)
-	router.POST("/specs", h.createOpenAPISpec) // Unified endpoint for UI modal
-	router.GET("/specs/:environment", h.listOpenAPISpecs) // List OpenAPI specs for an environment
-	router.GET("/specs/:environment/:name", h.getOpenAPISpec) // Get specific OpenAPI spec
-	router.PUT("/specs/:environment/:name", h.updateOpenAPISpec) // Update OpenAPI spec
+	router.POST("/specs", h.createOpenAPISpec)                      // Unified endpoint for UI modal
+	router.GET("/specs/:environment", h.listOpenAPISpecs)           // List OpenAPI specs for an environment
+	router.GET("/specs/:environment/:name", h.getOpenAPISpec)       // Get specific OpenAPI spec
+	router.PUT("/specs/:environment/:name", h.updateOpenAPISpec)    // Update OpenAPI spec
 	router.DELETE("/specs/:environment/:name", h.deleteOpenAPISpec) // Delete OpenAPI spec
 }
 
@@ -139,9 +139,9 @@ func (h *APIHandlers) saveOpenAPIMCPConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": fmt.Sprintf("MCP server config saved to %s. Run 'stn sync %s' to activate.", fileName, env.Name),
-		"file":    fileName,
+		"success":     true,
+		"message":     fmt.Sprintf("MCP server config saved to %s. Run 'stn sync %s' to activate.", fileName, env.Name),
+		"file":        fileName,
 		"environment": env.Name,
 	})
 }
@@ -228,19 +228,19 @@ func (h *APIHandlers) createOpenAPISpec(c *gin.Context) {
 	// Check if spec contains template variables that need to be resolved
 	if strings.Contains(req.Spec, "{{ .") {
 		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"error":   "VARIABLES_NEEDED",
-			"message": fmt.Sprintf("OpenAPI spec created. Variables detected - run 'stn sync %s' to configure.", req.Environment),
-			"file":    specFileName,
+			"success":     true,
+			"error":       "VARIABLES_NEEDED",
+			"message":     fmt.Sprintf("OpenAPI spec created. Variables detected - run 'stn sync %s' to configure.", req.Environment),
+			"file":        specFileName,
 			"environment": req.Environment,
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": fmt.Sprintf("OpenAPI spec created successfully. Run 'stn sync %s' to activate.", req.Environment),
-		"file":    specFileName,
+		"success":     true,
+		"message":     fmt.Sprintf("OpenAPI spec created successfully. Run 'stn sync %s' to activate.", req.Environment),
+		"file":        specFileName,
 		"environment": req.Environment,
 	})
 }

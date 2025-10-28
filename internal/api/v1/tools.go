@@ -36,11 +36,11 @@ func (h *APIHandlers) listTools(c *gin.Context) {
 	toolsWithDetails := make([]*models.MCPToolWithDetails, len(tools))
 	for i, tool := range tools {
 		toolsWithDetails[i] = &models.MCPToolWithDetails{
-			MCPTool:           *tool,
-			ConfigName:        "unknown", // Would need to join with config
-			ConfigVersion:     1,         // Would need to join with config
-			ServerName:        "unknown", // Would need to join with server
-			EnvironmentName:   "unknown", // Would need to join with environment
+			MCPTool:         *tool,
+			ConfigName:      "unknown", // Would need to join with config
+			ConfigVersion:   1,         // Would need to join with config
+			ServerName:      "unknown", // Would need to join with server
+			EnvironmentName: "unknown", // Would need to join with environment
 		}
 	}
 
@@ -48,7 +48,7 @@ func (h *APIHandlers) listTools(c *gin.Context) {
 	if filter != "" {
 		filteredTools := make([]*models.MCPToolWithDetails, 0)
 		filterLower := strings.ToLower(filter)
-		
+
 		for _, tool := range toolsWithDetails {
 			if strings.Contains(strings.ToLower(tool.Name), filterLower) ||
 				strings.Contains(strings.ToLower(tool.Description), filterLower) {
@@ -59,8 +59,8 @@ func (h *APIHandlers) listTools(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"tools": toolsWithDetails,
-		"count": len(toolsWithDetails),
+		"tools":  toolsWithDetails,
+		"count":  len(toolsWithDetails),
 		"filter": filter,
 	})
 }

@@ -26,27 +26,27 @@ func getBuiltInThemes() []ThemeData {
 				"background":       "#0a0a0f", // Void black with blue tint
 				"background_dark":  "#050507", // Deeper void
 				"background_light": "#1a1b26", // Tokyo Night background
-				
+
 				// Neon grid
-				"primary":          "#00d4ff", // Electric blue (Tron-like)
-				"secondary":        "#ff0080", // Holographic pink
-				"accent":           "#b400ff", // Laser purple
-				
+				"primary":   "#00d4ff", // Electric blue (Tron-like)
+				"secondary": "#ff0080", // Holographic pink
+				"accent":    "#b400ff", // Laser purple
+
 				// State colors
-				"success":          "#00ff88", // Matrix green
-				"warning":          "#ffaa00", // Alert amber
-				"error":            "#ff0040", // Critical red
-				"info":             "#00ffcc", // Info cyan
-				
+				"success": "#00ff88", // Matrix green
+				"warning": "#ffaa00", // Alert amber
+				"error":   "#ff0040", // Critical red
+				"info":    "#00ffcc", // Info cyan
+
 				// Text hierarchy
-				"text":             "#e0e0ff", // Slightly blue white
-				"text_muted":       "#9090a0", // Muted purple-gray
-				"text_dim":         "#606070", // Faded text
-				
+				"text":       "#e0e0ff", // Slightly blue white
+				"text_muted": "#9090a0", // Muted purple-gray
+				"text_dim":   "#606070", // Faded text
+
 				// Interactive
-				"border":           "#2d3436", // Techno gray
-				"highlight":        "#00ff88", // Matrix green highlight
-				"selected":         "#ff0080", // Holographic pink selection
+				"border":    "#2d3436", // Techno gray
+				"highlight": "#00ff88", // Matrix green highlight
+				"selected":  "#ff0080", // Holographic pink selection
 			},
 		},
 		{
@@ -59,27 +59,27 @@ func getBuiltInThemes() []ThemeData {
 				"background":       "#1a1b26", // Main background
 				"background_dark":  "#16161e", // Darker sections
 				"background_light": "#24283b", // Raised elements
-				
+
 				// Primary colors
-				"primary":          "#7aa2f7", // Primary blue
-				"secondary":        "#bb9af7", // Purple
-				"accent":           "#73daca", // Cyan
-				
+				"primary":   "#7aa2f7", // Primary blue
+				"secondary": "#bb9af7", // Purple
+				"accent":    "#73daca", // Cyan
+
 				// State colors
-				"success":          "#9ece6a", // Green
-				"warning":          "#e0af68", // Yellow
-				"error":            "#f7768e", // Red
-				"info":             "#7aa2f7", // Blue
-				
+				"success": "#9ece6a", // Green
+				"warning": "#e0af68", // Yellow
+				"error":   "#f7768e", // Red
+				"info":    "#7aa2f7", // Blue
+
 				// Text
-				"text":             "#c0caf5", // Main text
-				"text_muted":       "#787c99", // Secondary text
-				"text_dim":         "#565f89", // Dim text
-				
+				"text":       "#c0caf5", // Main text
+				"text_muted": "#787c99", // Secondary text
+				"text_dim":   "#565f89", // Dim text
+
 				// Interactive
-				"border":           "#414868", // Border
-				"highlight":        "#7aa2f7", // Highlight
-				"selected":         "#364a82", // Selection
+				"border":    "#414868", // Border
+				"highlight": "#7aa2f7", // Highlight
+				"selected":  "#364a82", // Selection
 			},
 		},
 		{
@@ -92,27 +92,27 @@ func getBuiltInThemes() []ThemeData {
 				"background":       "#091833", // Deep blue-black
 				"background_dark":  "#0a0047", // Midnight purple
 				"background_light": "#133e7c", // Deep accent
-				
+
 				// Neon accents
-				"primary":          "#ea00d9", // Hot pink
-				"secondary":        "#0abdc6", // Electric cyan
-				"accent":           "#711c91", // Deep purple
-				
+				"primary":   "#ea00d9", // Hot pink
+				"secondary": "#0abdc6", // Electric cyan
+				"accent":    "#711c91", // Deep purple
+
 				// State colors
-				"success":          "#00ff9f", // Matrix green
-				"warning":          "#fcee0c", // Neon yellow
-				"error":            "#ff4499", // Vibrant pink
-				"info":             "#00b8ff", // Bright blue
-				
+				"success": "#00ff9f", // Matrix green
+				"warning": "#fcee0c", // Neon yellow
+				"error":   "#ff4499", // Vibrant pink
+				"info":    "#00b8ff", // Bright blue
+
 				// Text
-				"text":             "#ffffff", // Pure white
-				"text_muted":       "#b0b0ff", // Light blue-white
-				"text_dim":         "#8080a0", // Dim purple-white
-				
+				"text":       "#ffffff", // Pure white
+				"text_muted": "#b0b0ff", // Light blue-white
+				"text_dim":   "#8080a0", // Dim purple-white
+
 				// Interactive
-				"border":           "#711c91", // Purple border
-				"highlight":        "#ea00d9", // Hot pink highlight
-				"selected":         "#0abdc6", // Cyan selection
+				"border":    "#711c91", // Purple border
+				"highlight": "#ea00d9", // Hot pink highlight
+				"selected":  "#0abdc6", // Cyan selection
 			},
 		},
 		{
@@ -125,27 +125,27 @@ func getBuiltInThemes() []ThemeData {
 				"background":       "#000000", // Pure black
 				"background_dark":  "#0a0047", // Deep blue
 				"background_light": "#004687", // Steel blue
-				
+
 				// Retro highlights
-				"primary":          "#00ffd2", // Bright cyan
-				"secondary":        "#ff4499", // Vibrant pink
-				"accent":           "#bd00ff", // Electric purple
-				
+				"primary":   "#00ffd2", // Bright cyan
+				"secondary": "#ff4499", // Vibrant pink
+				"accent":    "#bd00ff", // Electric purple
+
 				// State colors
-				"success":          "#00ff88", // Green
-				"warning":          "#fcee0c", // Neon yellow
-				"error":            "#ff6b6b", // Soft neon orange
-				"info":             "#00ffd2", // Cyan
-				
+				"success": "#00ff88", // Green
+				"warning": "#fcee0c", // Neon yellow
+				"error":   "#ff6b6b", // Soft neon orange
+				"info":    "#00ffd2", // Cyan
+
 				// Text
-				"text":             "#ffffff", // White
-				"text_muted":       "#cccccc", // Light gray
-				"text_dim":         "#888888", // Dim gray
-				
+				"text":       "#ffffff", // White
+				"text_muted": "#cccccc", // Light gray
+				"text_dim":   "#888888", // Dim gray
+
 				// Interactive
-				"border":           "#bd00ff", // Purple border
-				"highlight":        "#00ffd2", // Cyan highlight
-				"selected":         "#ff4499", // Pink selection
+				"border":    "#bd00ff", // Purple border
+				"highlight": "#00ffd2", // Cyan highlight
+				"selected":  "#ff4499", // Pink selection
 			},
 		},
 	}
@@ -156,7 +156,7 @@ func buildThemeFromRows(rows []queries.GetDefaultThemeWithColorsRow) *Theme {
 	if len(rows) == 0 {
 		return getDefaultTheme()
 	}
-	
+
 	firstRow := rows[0]
 	theme := &Theme{
 		ID:          firstRow.ThemeID,
@@ -164,26 +164,26 @@ func buildThemeFromRows(rows []queries.GetDefaultThemeWithColorsRow) *Theme {
 		DisplayName: firstRow.DisplayName,
 		Colors:      make(map[string]string),
 	}
-	
+
 	if firstRow.ThemeDescription.Valid {
 		theme.Description = firstRow.ThemeDescription.String
 	}
-	
+
 	if firstRow.IsBuiltIn.Valid {
 		theme.IsBuiltIn = firstRow.IsBuiltIn.Bool
 	}
-	
+
 	if firstRow.IsDefault.Valid {
 		theme.IsDefault = firstRow.IsDefault.Bool
 	}
-	
+
 	// Add colors
 	for _, row := range rows {
 		if row.ColorKey.Valid && row.ColorValue.Valid {
 			theme.Colors[row.ColorKey.String] = row.ColorValue.String
 		}
 	}
-	
+
 	return theme
 }
 
@@ -192,7 +192,7 @@ func buildThemeFromUserRows(rows []queries.GetUserThemeWithColorsRow) *Theme {
 	if len(rows) == 0 {
 		return getDefaultTheme()
 	}
-	
+
 	firstRow := rows[0]
 	theme := &Theme{
 		ID:          firstRow.ThemeID,
@@ -200,26 +200,26 @@ func buildThemeFromUserRows(rows []queries.GetUserThemeWithColorsRow) *Theme {
 		DisplayName: firstRow.DisplayName,
 		Colors:      make(map[string]string),
 	}
-	
+
 	if firstRow.ThemeDescription.Valid {
 		theme.Description = firstRow.ThemeDescription.String
 	}
-	
+
 	if firstRow.IsBuiltIn.Valid {
 		theme.IsBuiltIn = firstRow.IsBuiltIn.Bool
 	}
-	
+
 	if firstRow.IsDefault.Valid {
 		theme.IsDefault = firstRow.IsDefault.Bool
 	}
-	
+
 	// Add colors
 	for _, row := range rows {
 		if row.ColorKey.Valid && row.ColorValue.Valid {
 			theme.Colors[row.ColorKey.String] = row.ColorValue.String
 		}
 	}
-	
+
 	return theme
 }
 

@@ -487,15 +487,15 @@ func TestConvertToAgentRun(t *testing.T) {
 	outputPreset := "investigation"
 
 	tests := []struct {
-		name              string
-		agent             *models.Agent
-		task              string
-		runID             int64
-		result            *AgentExecutionResult
-		expectStatus      string
-		expectToolCalls   bool
-		expectSteps       bool
-		description       string
+		name            string
+		agent           *models.Agent
+		task            string
+		runID           int64
+		result          *AgentExecutionResult
+		expectStatus    string
+		expectToolCalls bool
+		expectSteps     bool
+		description     string
 	}{
 		{
 			name: "Successful run with complete metadata",
@@ -522,7 +522,7 @@ func TestConvertToAgentRun(t *testing.T) {
 				},
 				ExecutionSteps: &models.JSONArray{
 					map[string]interface{}{
-						"step": 1,
+						"step":   1,
 						"action": "analyze",
 					},
 				},
@@ -673,12 +673,12 @@ func TestSendStructuredDataIfEligible(t *testing.T) {
 	investigationPreset := "investigation"
 
 	tests := []struct {
-		name             string
-		agent            *models.Agent
-		result           *AgentExecutionResult
-		runID            int64
-		withLighthouse   bool
-		description      string
+		name           string
+		agent          *models.Agent
+		result         *AgentExecutionResult
+		runID          int64
+		withLighthouse bool
+		description    string
 	}{
 		{
 			name: "Agent with user-defined schema and app metadata",

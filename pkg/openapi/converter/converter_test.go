@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"station/pkg/openapi/models"
-	"station/pkg/openapi/parser"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
+	"station/pkg/openapi/models"
+	"station/pkg/openapi/parser"
 )
 
 func TestEndToEndConversion(t *testing.T) {

@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"station/internal/config"
 	"context"
 	"fmt"
+	"station/internal/config"
 	"strings"
 	"time"
 
@@ -39,12 +39,12 @@ func (h *AgentHandler) RunAgentList(cmd *cobra.Command, args []string) error {
 
 	environment, _ := cmd.Flags().GetString("environment")
 	err := h.listAgentsLocalWithFilter(environment)
-	
+
 	// Track telemetry
 	if h.telemetryService != nil {
 		h.telemetryService.TrackCLICommand("agent", "list", err == nil, time.Since(startTime).Milliseconds())
 	}
-	
+
 	return err
 }
 
@@ -197,10 +197,10 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 
 	// Confirm deletion
 	fmt.Printf("⚠ Are you sure you want to delete agent '%s'? [y/N]: ", targetAgent.Name)
-	
+
 	var response string
 	fmt.Scanln(&response)
-	
+
 	if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
 		fmt.Printf("❌ Deletion cancelled\n")
 		return nil
@@ -222,7 +222,7 @@ func (h *AgentHandler) deleteAgentLocalByName(agentName, environment string) err
 	// Track successful deletion
 	if h.telemetryService != nil {
 		h.telemetryService.TrackEvent("stn_agent_deleted", map[string]interface{}{
-			"agent_id":      targetAgent.ID,
+			"agent_id":       targetAgent.ID,
 			"environment_id": targetAgent.EnvironmentID,
 		})
 	}

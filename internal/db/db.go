@@ -28,7 +28,7 @@ func New(databaseURL string) (*DB, error) {
 	var err error
 	maxRetries := 5
 	baseDelay := 100 * time.Millisecond
-	
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		conn, err = sql.Open("sqlite", databaseURL)
 		if err != nil {
@@ -36,21 +36,21 @@ func New(databaseURL string) (*DB, error) {
 		}
 
 		// Configure connection pool for concurrency
-		conn.SetMaxOpenConns(10)  // Allow up to 10 concurrent connections
-		conn.SetMaxIdleConns(5)   // Keep 5 connections in idle pool
-		
+		conn.SetMaxOpenConns(10) // Allow up to 10 concurrent connections
+		conn.SetMaxIdleConns(5)  // Keep 5 connections in idle pool
+
 		// Try to ping with retry logic
 		if err := conn.Ping(); err != nil {
 			if attempt == maxRetries-1 {
 				return nil, fmt.Errorf("failed to ping database after %d attempts: %w", maxRetries, err)
 			}
-			
-			conn.Close() // Close failed connection
+
+			conn.Close()                                         // Close failed connection
 			delay := baseDelay * time.Duration(1<<uint(attempt)) // Exponential backoff
 			time.Sleep(delay)
 			continue
 		}
-		
+
 		// Connection successful
 		break
 	}
@@ -87,7 +87,7 @@ func (db *DB) Close() error {
 	db.conn.SetMaxOpenConns(0)
 	db.conn.SetMaxIdleConns(0)
 	db.conn.SetConnMaxLifetime(0)
-	
+
 	return db.conn.Close()
 }
 

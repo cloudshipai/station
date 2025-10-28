@@ -261,14 +261,14 @@ func TestFileMCPConfigRepo_UpdateHashes(t *testing.T) {
 
 	// Create config
 	config := &FileConfigRecord{
-		EnvironmentID: envID,
-		ConfigName:    "test-config",
-		TemplatePath:  "/test/config.json",
-		VariablesPath: "/test/vars.yml",
-		TemplateHash:  "original-hash",
-		VariablesHash: "original-vars-hash",
+		EnvironmentID:    envID,
+		ConfigName:       "test-config",
+		TemplatePath:     "/test/config.json",
+		VariablesPath:    "/test/vars.yml",
+		TemplateHash:     "original-hash",
+		VariablesHash:    "original-vars-hash",
 		TemplateVarsHash: "original-template-vars-hash",
-		Metadata:      "{}",
+		Metadata:         "{}",
 	}
 
 	id, err := repo.Create(config)
@@ -386,14 +386,14 @@ func TestFileMCPConfigRepo_Upsert(t *testing.T) {
 
 	// Test insert (config doesn't exist)
 	config := &FileConfigRecord{
-		EnvironmentID: envID,
-		ConfigName:    "test-config",
-		TemplatePath:  "/test/config.json",
-		VariablesPath: "/test/vars.yml",
-		TemplateHash:  "hash1",
-		VariablesHash: "vars-hash1",
+		EnvironmentID:    envID,
+		ConfigName:       "test-config",
+		TemplatePath:     "/test/config.json",
+		VariablesPath:    "/test/vars.yml",
+		TemplateHash:     "hash1",
+		VariablesHash:    "vars-hash1",
 		TemplateVarsHash: "template-vars-hash1",
-		Metadata:      "{}",
+		Metadata:         "{}",
 	}
 
 	id1, err := repo.Upsert(config)
@@ -448,14 +448,14 @@ func TestFileMCPConfigRepo_HasChanges(t *testing.T) {
 
 	// Create config
 	config := &FileConfigRecord{
-		EnvironmentID: envID,
-		ConfigName:    "test-config",
-		TemplatePath:  "/test/config.json",
-		VariablesPath: "/test/vars.yml",
-		TemplateHash:  "template-hash-123",
-		VariablesHash: "vars-hash-456",
+		EnvironmentID:    envID,
+		ConfigName:       "test-config",
+		TemplatePath:     "/test/config.json",
+		VariablesPath:    "/test/vars.yml",
+		TemplateHash:     "template-hash-123",
+		VariablesHash:    "vars-hash-456",
 		TemplateVarsHash: "template-vars-hash-789",
-		Metadata:      "{}",
+		Metadata:         "{}",
 	}
 
 	_, err = repo.Create(config)

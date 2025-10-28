@@ -25,7 +25,7 @@ func (s *DeclarativeSync) cleanupOrphanedResources(ctx context.Context, envDir, 
 		return "", fmt.Errorf("failed to scan JSON files: %w", err)
 	}
 
-	// Build map of existing files 
+	// Build map of existing files
 	filesystemConfigs := make(map[string]bool)
 	for _, jsonFile := range jsonFiles {
 		configName := strings.TrimSuffix(filepath.Base(jsonFile), ".json")
@@ -60,7 +60,7 @@ func (s *DeclarativeSync) cleanupOrphanedResources(ctx context.Context, envDir, 
 	var removedConfigs, removedServers, removedTools int
 	for _, configName := range toRemove {
 		logging.Info("   🗑️  Removing orphaned config: %s", configName)
-		
+
 		// Find the config to remove
 		var configToRemove *repositories.FileConfigRecord
 		for _, dbConfig := range dbConfigs {
@@ -69,7 +69,7 @@ func (s *DeclarativeSync) cleanupOrphanedResources(ctx context.Context, envDir, 
 				break
 			}
 		}
-		
+
 		if configToRemove == nil {
 			logging.Info("     ⚠️  Warning: Could not find config %s in database", configName)
 			continue
@@ -104,57 +104,57 @@ func (s *DeclarativeSync) removeConfigServersAndTools(ctx context.Context, envID
 	// Since the file no longer exists, we need to identify servers that belonged to this config
 	// We can get all servers for this environment and match by naming patterns or timestamps
 	// For now, we'll use a simpler approach: delete servers that were created around the same time as this config
-	
+
 	allServers, err := s.repos.MCPServers.GetByEnvironmentID(envID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get servers for environment: %w", err)
 	}
 
 	var serversRemoved, toolsRemoved int
-	
+
 	// Strategy: Remove servers that likely belonged to this config
-	// Since we can't read the deleted file, we'll look for servers with similar timing or 
+	// Since we can't read the deleted file, we'll look for servers with similar timing or
 	// use any available metadata to associate them with this config
-	
+
 	// For safety, we'll only remove servers if there's a clear association
 	// A more robust implementation would store config_name or file_config_id in the servers table
-	
+
 	logging.Info("     🔍 Checking %d servers for association with config %s", len(allServers), configName)
-	
+
 	// Simple heuristic: remove servers whose names might be related to the config name
 	// This is imperfect but better than leaving orphaned servers
 	for _, server := range allServers {
 		shouldRemove := false
-		
+
 		// Check if server name is similar to config name
 		if strings.Contains(server.Name, configName) || strings.Contains(configName, server.Name) {
 			shouldRemove = true
 		}
-		
+
 		// Additional heuristic: if this is the only config being removed and there are few servers,
 		// we might be more aggressive, but for safety we'll be conservative
-		
+
 		if shouldRemove {
 			logging.Info("     🗑️  Removing server: %s (ID: %d)", server.Name, server.ID)
-			
+
 			// Get tools for this server before removing
 			tools, err := s.repos.MCPTools.GetByServerID(server.ID)
 			if err == nil {
 				toolsRemoved += len(tools)
 				logging.Info("       🔧 Removing %d tools from server %s", len(tools), server.Name)
 			}
-			
+
 			// Remove server (tools should cascade delete)
 			err = s.repos.MCPServers.Delete(server.ID)
 			if err != nil {
 				logging.Info("       ❌ Failed to remove server %s: %v", server.Name, err)
 				continue
 			}
-			
+
 			serversRemoved++
 		}
 	}
-	
+
 	return serversRemoved, toolsRemoved, nil
 }
 
@@ -215,13 +215,13 @@ func (s *DeclarativeSync) cleanupOrphanedAgents(ctx context.Context, agentsDir, 
 
 		if shouldDelete {
 			logging.Info("🗑️  Removing orphaned agent: %s", dbAgent.Name)
-			
+
 			err := agentService.DeleteAgent(ctx, dbAgent.ID)
 			if err != nil {
 				logging.Info("Warning: Failed to delete orphaned agent %s: %v", dbAgent.Name, err)
 				continue
 			}
-			
+
 			orphanedCount++
 		} else {
 			fmt.Printf("⏭️  Skipping deletion of agent: %s\n", dbAgent.Name)

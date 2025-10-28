@@ -66,10 +66,10 @@ func (m *BigQueryMock) handleExecuteQuery(ctx context.Context, request mcp.CallT
 	services := []string{"Compute Engine", "Cloud Storage", "BigQuery", "Cloud SQL", "Kubernetes Engine", "Cloud Functions", "Cloud CDN"}
 	projects := []string{"prod-api", "prod-workers", "staging", "analytics"}
 	skus := map[string][]string{
-		"Compute Engine": {"N1 Predefined Instance Core running in Americas", "N1 Predefined Instance Ram running in Americas", "Storage PD Capacity"},
-		"Cloud Storage":  {"Standard Storage US Multi-region", "Network Egress"},
-		"BigQuery":       {"Analysis", "Storage"},
-		"Cloud SQL":      {"MySQL: Database instance core hour", "MySQL: Database instance RAM"},
+		"Compute Engine":    {"N1 Predefined Instance Core running in Americas", "N1 Predefined Instance Ram running in Americas", "Storage PD Capacity"},
+		"Cloud Storage":     {"Standard Storage US Multi-region", "Network Egress"},
+		"BigQuery":          {"Analysis", "Storage"},
+		"Cloud SQL":         {"MySQL: Database instance core hour", "MySQL: Database instance RAM"},
 		"Kubernetes Engine": {"Cluster management fee", "Small cluster in Americas"},
 	}
 
@@ -132,10 +132,10 @@ func (m *BigQueryMock) handleExecuteQuery(ctx context.Context, request mcp.CallT
 				{"name": "labels", "type": "RECORD", "mode": "REPEATED"},
 			},
 		},
-		"rows":            rows,
-		"totalRows":       fmt.Sprintf("%d", len(rows)),
-		"jobComplete":     true,
-		"cacheHit":        false,
+		"rows":                rows,
+		"totalRows":           fmt.Sprintf("%d", len(rows)),
+		"jobComplete":         true,
+		"cacheHit":            false,
 		"totalBytesProcessed": fmt.Sprintf("%d", len(rows)*1024),
 	}
 

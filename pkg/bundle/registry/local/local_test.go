@@ -48,7 +48,7 @@ func TestLocalRegistry_List(t *testing.T) {
 				}
 				assert.True(t, names["openai-assistant"])
 				assert.True(t, names["github-tools"])
-				
+
 				// Should return latest versions
 				for _, b := range bundles {
 					if b.Name == "openai-assistant" {
@@ -109,7 +109,7 @@ func TestLocalRegistry_List(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			registryPath := "/local-registry"
 			registry := NewLocalRegistry("test-registry", registryPath, fs)
-			
+
 			tt.setupRegistry(fs, registryPath)
 
 			// Execute
@@ -192,7 +192,7 @@ func TestLocalRegistry_Get(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			registryPath := "/local-registry"
 			registry := NewLocalRegistry("test-registry", registryPath, fs)
-			
+
 			tt.setupRegistry(fs, registryPath)
 
 			// Execute
@@ -257,7 +257,7 @@ func TestLocalRegistry_GetVersions(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			registryPath := "/local-registry"
 			registry := NewLocalRegistry("test-registry", registryPath, fs)
-			
+
 			tt.setupRegistry(fs, registryPath)
 
 			// Execute
@@ -308,7 +308,7 @@ func TestLocalRegistry_Download(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			registryPath := "/local-registry"
 			registry := NewLocalRegistry("test-registry", registryPath, fs)
-			
+
 			tt.setupRegistry(fs, registryPath)
 
 			// Execute
@@ -336,7 +336,7 @@ func TestLocalRegistry_WithArchiveFile(t *testing.T) {
 	bundleName := "test-bundle"
 	version := "1.0.0"
 	createTestBundle(t, fs, registryPath, bundleName, version, []string{})
-	
+
 	// Create archive file
 	archiveData := []byte("mock-archive-data")
 	archivePath := filepath.Join(registryPath, bundleName, version, bundleName+"-"+version+".tar.gz")

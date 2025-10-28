@@ -56,7 +56,7 @@ func ParseInputSchema(schemaJSON string) (InputSchema, error) {
 // MergeWithDefault merges a custom schema with the default userInput schema
 func (s InputSchema) MergeWithDefault() InputSchema {
 	merged := DefaultInputSchema()
-	
+
 	// Add custom schema variables
 	for key, variable := range s {
 		// Don't allow overriding userInput
@@ -64,7 +64,7 @@ func (s InputSchema) MergeWithDefault() InputSchema {
 			merged[key] = variable
 		}
 	}
-	
+
 	return merged
 }
 
@@ -133,13 +133,13 @@ func validateType(key string, value interface{}, expectedType InputSchemaType) e
 // ToDotpromptInputSchema converts to dotprompt input schema format
 func (s InputSchema) ToDotpromptInputSchema() map[string]string {
 	dotpromptSchema := make(map[string]string)
-	
+
 	for key, variable := range s {
 		switch variable.Type {
 		case TypeString:
 			dotpromptSchema[key] = "string"
 		case TypeNumber:
-			dotpromptSchema[key] = "number" 
+			dotpromptSchema[key] = "number"
 		case TypeBoolean:
 			dotpromptSchema[key] = "boolean"
 		case TypeArray:
@@ -150,6 +150,6 @@ func (s InputSchema) ToDotpromptInputSchema() map[string]string {
 			dotpromptSchema[key] = "string" // fallback
 		}
 	}
-	
+
 	return dotpromptSchema
 }

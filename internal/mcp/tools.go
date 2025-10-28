@@ -35,13 +35,13 @@ func NewToolsServer(repos *repositories.Repositories, mcpServer *server.MCPServe
 // setupEnhancedTools adds enhanced call_agent tools and prompts
 func (ts *ToolsServer) setupEnhancedTools() {
 	// Note: create_agent is now consolidated in the main MCP server (mcp.go)
-	
+
 	// Note: call_agent is now consolidated in the main MCP server (tools_setup.go) with advanced functionality
-	
+
 	// Add prompts for AI-assisted agent creation
 	ts.setupAgentCreationPrompts()
-	
-	// Add specialized prompts for common use cases 
+
+	// Add specialized prompts for common use cases
 	ts.setupSpecializedPrompts()
 }
 
@@ -93,14 +93,14 @@ func (ts *ToolsServer) setupAgentCreationPrompts() {
 		mcp.WithArgument("domain", mcp.ArgumentDescription("Area of work (devops, data-science, marketing, etc.)")),
 		mcp.WithArgument("schedule_preference", mcp.ArgumentDescription("When should this run? (on-demand, daily, weekly, custom cron)")),
 	)
-	
+
 	ts.mcpServer.AddPrompt(agentCreationPrompt, ts.handleAgentCreationPrompt)
 
 	// Export reminder prompt
 	exportReminderPrompt := mcp.NewPrompt("agent_export_reminder",
 		mcp.WithPromptDescription("Important reminder about exporting agents after creation to save them to disk"),
 	)
-	
+
 	ts.mcpServer.AddPrompt(exportReminderPrompt, ts.handleExportReminderPrompt)
 }
 
@@ -112,29 +112,29 @@ func (ts *ToolsServer) handleAgentCreationPrompt(ctx context.Context, request mc
 		log.Printf("Failed to get environments for prompt: %v", err)
 		environments = []*models.Environment{} // Continue with empty list
 	}
-	
+
 	// Get actual tool categories from discovered MCP tools
 	toolsWithDetails, err := ts.repos.MCPTools.GetAllWithDetails()
 	if err != nil {
 		log.Printf("Failed to get tools for prompt: %v", err)
 		toolsWithDetails = []*models.MCPToolWithDetails{} // Continue with empty list
 	}
-	
+
 	// Extract unique tool categories/names
 	toolCategoryMap := make(map[string]bool)
 	for _, tool := range toolsWithDetails {
 		toolCategoryMap[tool.Name] = true
 	}
-	
+
 	var toolCategories []string
 	for category := range toolCategoryMap {
 		toolCategories = append(toolCategories, category)
 	}
-	
+
 	userIntent := ""
 	domain := ""
 	schedulePreference := ""
-	
+
 	// Extract arguments if provided
 	if args := request.Params.Arguments; args != nil {
 		if intent, ok := args["user_intent"]; ok {
@@ -147,7 +147,7 @@ func (ts *ToolsServer) handleAgentCreationPrompt(ctx context.Context, request mc
 			schedulePreference = sched
 		}
 	}
-	
+
 	promptContent := ts.buildAgentCreationPrompt(userIntent, domain, schedulePreference, toolCategories, getEnvironmentNames(environments))
 
 	return mcp.NewGetPromptResult("Station AI Agent Creation Assistant", []mcp.PromptMessage{
@@ -261,7 +261,7 @@ After you provide this plan, I'll:
 
 This ensures you have full control over what agents are created in your Station environment.
 
-Remember: Station's power comes from smart agent design, not tool proliferation. Focus on solving the specific user problem efficiently!`, 
+Remember: Station's power comes from smart agent design, not tool proliferation. Focus on solving the specific user problem efficiently!`,
 		userIntent, domain, schedulePreference, environmentNames, toolCategories)
 }
 
@@ -370,7 +370,7 @@ func (ts *ToolsServer) handleLogsAnalysisPrompt(ctx context.Context, request mcp
 	logSources := ""
 	urgencyCriteria := ""
 	analysisDepth := ""
-	
+
 	// Extract arguments if provided
 	if args := request.Params.Arguments; args != nil {
 		if sources, ok := args["log_sources"]; ok {
@@ -383,7 +383,7 @@ func (ts *ToolsServer) handleLogsAnalysisPrompt(ctx context.Context, request mcp
 			analysisDepth = depth
 		}
 	}
-	
+
 	promptContent := fmt.Sprintf(`# AWS Logs Analysis Agent Creation Guide
 
 ## Specialized Agent Configuration
@@ -463,7 +463,7 @@ func (ts *ToolsServer) handleDevOpsMonitorPrompt(ctx context.Context, request mc
 	infrastructureType := ""
 	monitoringScope := ""
 	alertThresholds := ""
-	
+
 	// Extract arguments if provided
 	if args := request.Params.Arguments; args != nil {
 		if infra, ok := args["infrastructure_type"]; ok {
@@ -476,7 +476,7 @@ func (ts *ToolsServer) handleDevOpsMonitorPrompt(ctx context.Context, request mc
 			alertThresholds = thresholds
 		}
 	}
-	
+
 	promptContent := fmt.Sprintf(`# DevOps Infrastructure Monitoring Agent Guide
 
 ## Specialized Agent Configuration
@@ -557,7 +557,7 @@ func (ts *ToolsServer) handleSecurityScanPrompt(ctx context.Context, request mcp
 	scanTargets := ""
 	scanTypes := ""
 	complianceFrameworks := ""
-	
+
 	// Extract arguments if provided
 	if args := request.Params.Arguments; args != nil {
 		if targets, ok := args["scan_targets"]; ok {
@@ -570,7 +570,7 @@ func (ts *ToolsServer) handleSecurityScanPrompt(ctx context.Context, request mcp
 			complianceFrameworks = frameworks
 		}
 	}
-	
+
 	promptContent := fmt.Sprintf(`# Security Scanning Agent Creation Guide
 
 ## Specialized Agent Configuration
@@ -663,7 +663,7 @@ func (ts *ToolsServer) handleDataProcessingPrompt(ctx context.Context, request m
 	dataSources := ""
 	processingType := ""
 	outputFormat := ""
-	
+
 	// Extract arguments if provided
 	if args := request.Params.Arguments; args != nil {
 		if sources, ok := args["data_sources"]; ok {
@@ -676,7 +676,7 @@ func (ts *ToolsServer) handleDataProcessingPrompt(ctx context.Context, request m
 			outputFormat = format
 		}
 	}
-	
+
 	promptContent := fmt.Sprintf(`# Data Processing Agent Creation Guide
 
 ## Specialized Agent Configuration

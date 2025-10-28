@@ -207,7 +207,7 @@ func (r *HTTPRegistry) addAuth(req *http.Request) {
 			req.SetBasicAuth(username, password)
 		}
 	}
-	
+
 	// Set content type and user agent
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "station-bundle-client/1.0")

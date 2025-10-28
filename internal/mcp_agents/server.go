@@ -35,17 +35,17 @@ func NewDynamicAgentServer(repos *repositories.Repositories, agentService servic
 func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 	// Create a new MCP server
 	das.mcpServer = server.NewMCPServer(
-		"Station Dynamic Agents", 
+		"Station Dynamic Agents",
 		"1.0.0",
 		server.WithToolCapabilities(true),
 		server.WithRecovery(),
 	)
-	
+
 	// Load agents as tools
 	if err := das.loadAgentsAsTools(); err != nil {
 		return err
 	}
-	
+
 	// Start the HTTP server
 	das.httpServer = server.NewStreamableHTTPServer(das.mcpServer)
 	addr := fmt.Sprintf(":%d", port)
@@ -60,35 +60,35 @@ func (das *DynamicAgentServer) loadAgentsAsTools() error {
 		log.Printf("Failed to find environment '%s': %v", das.environmentName, err)
 		return err
 	}
-	
+
 	// Get agents from the specified environment
 	agents, err := das.repos.Agents.ListByEnvironment(environment.ID)
 	if err != nil {
 		log.Printf("Failed to load agents from environment '%s': %v", das.environmentName, err)
 		return err
 	}
-	
+
 	log.Printf("🤖 Loading %d agents from environment '%s' as MCP tools", len(agents), das.environmentName)
-	
+
 	// Register each agent as an MCP tool
 	for _, agent := range agents {
 		toolName := "agent_" + agent.Name
 		log.Printf("  📋 Registering agent '%s' as tool '%s'", agent.Name, toolName)
-		
+
 		// Create tool for this agent using the correct mcp package
 		tool := mcp.NewTool(toolName,
 			mcp.WithDescription("Execute agent: "+agent.Name),
 			mcp.WithString("input", mcp.Required(), mcp.Description("Task or input to provide to the agent")),
 			mcp.WithObject("variables", mcp.Description("Variables for dotprompt rendering (optional)")),
 		)
-		
+
 		// Set handler for this agent tool
 		agentID := agent.ID // capture for closure
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// Extract parameters
 			input := request.GetString("input", "")
-			
-			// Get variables if provided 
+
+			// Get variables if provided
 			variables := make(map[string]interface{})
 			if request.Params.Arguments != nil {
 				if argsMap, ok := request.Params.Arguments.(map[string]interface{}); ok {
@@ -99,20 +99,20 @@ func (das *DynamicAgentServer) loadAgentsAsTools() error {
 					}
 				}
 			}
-			
+
 			// Execute the agent using the agent service
 			result, err := das.agentService.ExecuteAgent(ctx, int64(agentID), input, variables)
 			if err != nil {
 				return mcp.NewToolResultError("Error executing agent: " + err.Error()), nil
 			}
-			
+
 			return mcp.NewToolResultText(result.Content), nil
 		}
-		
+
 		// Register the tool with the MCP server
 		das.mcpServer.AddTool(tool, handler)
 	}
-	
+
 	return nil
 }
 

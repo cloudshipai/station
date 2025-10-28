@@ -4,9 +4,9 @@ import "encoding/json"
 
 // PresetInfo contains the app/app_type mapping and default schema for a preset
 type PresetInfo struct {
-	App        string
-	AppType    string
-	Schema     map[string]interface{}
+	App     string
+	AppType string
+	Schema  map[string]interface{}
 }
 
 // GetPresetInfo returns the app, app_type, and default schema for a given preset name
@@ -50,9 +50,9 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 					"evidence": map[string]interface{}{
 						"type": "object",
 						"properties": map[string]interface{}{
-							"cost_impact":     map[string]interface{}{"type": "number"},
+							"cost_impact": map[string]interface{}{"type": "number"},
 							"affected_resources": map[string]interface{}{
-								"type": "array",
+								"type":  "array",
 								"items": map[string]interface{}{"type": "string"},
 							},
 							"time_period": map[string]interface{}{
@@ -64,10 +64,10 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 							},
 						},
 					},
-					"root_cause":  map[string]interface{}{"type": "string"},
-					"confidence":  map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
+					"root_cause": map[string]interface{}{"type": "string"},
+					"confidence": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
 					"recommended_actions": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 				},
@@ -92,7 +92,7 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 						"required": []string{"amount", "currency"},
 					},
 					"affected_resources": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"implementation_effort": map[string]interface{}{
@@ -139,7 +139,7 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 						},
 					},
 					"assumptions": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"confidence": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
@@ -163,7 +163,7 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 						},
 					},
 					"affected_resources": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"change_description": map[string]interface{}{"type": "string"},
@@ -183,11 +183,11 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 						"items": map[string]interface{}{
 							"type": "object",
 							"properties": map[string]interface{}{
-								"cve_id":      map[string]interface{}{"type": "string"},
-								"severity":    map[string]interface{}{"type": "string", "enum": []string{"critical", "high", "medium", "low", "info"}},
+								"cve_id":            map[string]interface{}{"type": "string"},
+								"severity":          map[string]interface{}{"type": "string", "enum": []string{"critical", "high", "medium", "low", "info"}},
 								"affected_resource": map[string]interface{}{"type": "string"},
-								"status":      map[string]interface{}{"type": "string"},
-								"discovered_at": map[string]interface{}{"type": "string", "format": "date-time"},
+								"status":            map[string]interface{}{"type": "string"},
+								"discovered_at":     map[string]interface{}{"type": "string", "format": "date-time"},
 							},
 							"required": []string{"cve_id", "severity", "affected_resource"},
 						},
@@ -219,11 +219,11 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 						"type": "object",
 						"properties": map[string]interface{}{
 							"indicators_of_compromise": map[string]interface{}{
-								"type": "array",
+								"type":  "array",
 								"items": map[string]interface{}{"type": "string"},
 							},
 							"affected_systems": map[string]interface{}{
-								"type": "array",
+								"type":  "array",
 								"items": map[string]interface{}{"type": "string"},
 							},
 							"attack_vector": map[string]interface{}{"type": "string"},
@@ -242,7 +242,7 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 					"root_cause": map[string]interface{}{"type": "string"},
 					"impact":     map[string]interface{}{"type": "string"},
 					"remediation_steps": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"confidence": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
@@ -266,7 +266,7 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 						},
 					},
 					"affected_systems": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"implementation_effort": map[string]interface{}{
@@ -304,9 +304,9 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 							"projected": map[string]interface{}{"type": "number"},
 						},
 					},
-					"trend":       map[string]interface{}{"type": "string", "enum": []string{"increasing", "decreasing", "stable"}},
+					"trend": map[string]interface{}{"type": "string", "enum": []string{"increasing", "decreasing", "stable"}},
 					"assumptions": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"confidence": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
@@ -324,13 +324,13 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 					"timestamp":  map[string]interface{}{"type": "string", "format": "date-time"},
 					"severity":   map[string]interface{}{"type": "string", "enum": []string{"critical", "high", "medium", "low", "info"}},
 					"affected_systems": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"description": map[string]interface{}{"type": "string"},
 					"source":      map[string]interface{}{"type": "string"},
 					"indicators": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 				},
@@ -369,7 +369,7 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 			Schema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"event_type": map[string]interface{}{"type": "string"},
+					"event_type":    map[string]interface{}{"type": "string"},
 					"deployment_id": map[string]interface{}{"type": "string"},
 					"service_name":  map[string]interface{}{"type": "string"},
 					"version": map[string]interface{}{
@@ -418,18 +418,18 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 							"deployment_id": map[string]interface{}{"type": "string"},
 							"failed_step":   map[string]interface{}{"type": "string"},
 							"error_logs": map[string]interface{}{
-								"type": "array",
+								"type":  "array",
 								"items": map[string]interface{}{"type": "string"},
 							},
 							"affected_services": map[string]interface{}{
-								"type": "array",
+								"type":  "array",
 								"items": map[string]interface{}{"type": "string"},
 							},
 						},
 					},
 					"root_cause": map[string]interface{}{"type": "string"},
 					"remediation_steps": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"confidence": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
@@ -455,7 +455,7 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 						},
 					},
 					"affected_services": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"implementation_effort": map[string]interface{}{
@@ -494,9 +494,9 @@ func GetPresetInfo(presetName string) (PresetInfo, bool) {
 							"projected": map[string]interface{}{"type": "number"},
 						},
 					},
-					"trend":       map[string]interface{}{"type": "string", "enum": []string{"increasing", "decreasing", "stable"}},
+					"trend": map[string]interface{}{"type": "string", "enum": []string{"increasing", "decreasing", "stable"}},
 					"assumptions": map[string]interface{}{
-						"type": "array",
+						"type":  "array",
 						"items": map[string]interface{}{"type": "string"},
 					},
 					"confidence": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},

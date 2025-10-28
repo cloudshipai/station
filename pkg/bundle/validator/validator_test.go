@@ -15,12 +15,12 @@ import (
 
 func TestValidator_Validate(t *testing.T) {
 	tests := []struct {
-		name          string
-		setupBundle   func(fs afero.Fs, bundlePath string)
-		wantValid     bool
-		wantIssues    int
-		wantWarnings  int
-		checkIssues   func(t *testing.T, result *bundle.ValidationResult)
+		name         string
+		setupBundle  func(fs afero.Fs, bundlePath string)
+		wantValid    bool
+		wantIssues   int
+		wantWarnings int
+		checkIssues  func(t *testing.T, result *bundle.ValidationResult)
 	}{
 		{
 			name: "valid complete bundle",
@@ -132,7 +132,7 @@ func TestValidator_Validate(t *testing.T) {
 			},
 			wantValid:    false,
 			wantIssues:   1,
-			wantWarnings: 3, // missing README + empty schema + missing examples  
+			wantWarnings: 3, // missing README + empty schema + missing examples
 			checkIssues: func(t *testing.T, result *bundle.ValidationResult) {
 				found := false
 				for _, issue := range result.Issues {
@@ -149,9 +149,9 @@ func TestValidator_Validate(t *testing.T) {
 			setupBundle: func(fs afero.Fs, bundlePath string) {
 				createValidManifest(t, fs, bundlePath)
 				// Template uses {{ .API_KEY }} but schema doesn't define it
-				createFile(t, fs, filepath.Join(bundlePath, "template.json"), 
+				createFile(t, fs, filepath.Join(bundlePath, "template.json"),
 					`{"mcpServers":{"test":{"env":{"API_KEY":"{{ .API_KEY }}"}}}}`)
-				createFile(t, fs, filepath.Join(bundlePath, "variables.schema.json"), 
+				createFile(t, fs, filepath.Join(bundlePath, "variables.schema.json"),
 					`{"type":"object","properties":{"OTHER_VAR":{"type":"string"}}}`)
 			},
 			wantValid:    true, // This is just a warning
@@ -259,7 +259,7 @@ func TestValidator_ExtractTemplateVariables(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := validator.extractTemplateVariables(tt.template)
-			
+
 			// Sort both slices for comparison since order doesn't matter
 			assert.ElementsMatch(t, tt.expected, result)
 		})
@@ -304,11 +304,11 @@ func TestValidator_IsValidVariableName(t *testing.T) {
 		{"VAR123", true},
 		{"_PRIVATE", true},
 		{"SIMPLE", true},
-		{"api_key", false},  // lowercase
-		{"API-KEY", false},  // hyphen
-		{"123VAR", true},    // starts with number (allowed)
-		{"", false},         // empty
-		{"API KEY", false},  // space
+		{"api_key", false}, // lowercase
+		{"API-KEY", false}, // hyphen
+		{"123VAR", true},   // starts with number (allowed)
+		{"", false},        // empty
+		{"API KEY", false}, // space
 	}
 
 	for _, tt := range tests {
@@ -323,7 +323,7 @@ func TestValidator_IsValidVariableName(t *testing.T) {
 
 func createValidCompleteBundle(t *testing.T, fs afero.Fs, bundlePath string) {
 	createValidManifest(t, fs, bundlePath)
-	
+
 	template := map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"test-server": map[string]interface{}{

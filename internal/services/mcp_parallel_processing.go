@@ -19,16 +19,16 @@ func (mcm *MCPConnectionManager) processFileConfigsParallel(ctx context.Context,
 	if len(fileConfigs) == 0 {
 		return nil, nil
 	}
-	
+
 	// Create worker pool - conservative limit for file config processing
 	maxWorkers := getEnvIntOrDefault("STATION_MCP_CONFIG_WORKERS", 2) // Default: 2 workers
 	if len(fileConfigs) < maxWorkers {
 		maxWorkers = len(fileConfigs)
 	}
-	
+
 	// Channel to send file configs to workers
 	configChan := make(chan *repositories.FileConfigRecord, len(fileConfigs))
-	
+
 	// Channel to collect results
 	type configResult struct {
 		configName string
@@ -36,7 +36,7 @@ func (mcm *MCPConnectionManager) processFileConfigsParallel(ctx context.Context,
 		clients    []*mcp.GenkitMCPClient
 	}
 	resultChan := make(chan configResult, len(fileConfigs))
-	
+
 	// Start worker goroutines
 	var wg sync.WaitGroup
 	for i := 0; i < maxWorkers; i++ {
@@ -54,26 +54,26 @@ func (mcm *MCPConnectionManager) processFileConfigsParallel(ctx context.Context,
 			}
 		}(i)
 	}
-	
+
 	// Send all file configs to workers
 	for _, fileConfig := range fileConfigs {
 		configChan <- fileConfig
 	}
 	close(configChan)
-	
+
 	// Wait for all workers to complete
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
-	
+
 	// Collect results
 	var allTools []ai.Tool
 	var allClients []*mcp.GenkitMCPClient
 	successCount := 0
-	
+
 	for result := range resultChan {
-		
+
 		if result.tools != nil {
 			allTools = append(allTools, result.tools...)
 			successCount++
@@ -82,10 +82,10 @@ func (mcm *MCPConnectionManager) processFileConfigsParallel(ctx context.Context,
 			allClients = append(allClients, result.clients...)
 		}
 	}
-	
-	logging.Info("Parallel file config processing completed: %d configs, %d successful, %d total tools", 
+
+	logging.Info("Parallel file config processing completed: %d configs, %d successful, %d total tools",
 		len(fileConfigs), successCount, len(allTools))
-	
+
 	return allTools, allClients
 }
 
@@ -94,28 +94,28 @@ func (mcm *MCPConnectionManager) processServersParallel(ctx context.Context, ser
 	if len(serversData) == 0 {
 		return nil, nil
 	}
-	
+
 	// Create worker pool - limit concurrent connections to avoid overwhelming system
 	maxWorkers := getEnvIntOrDefault("STATION_MCP_SERVER_WORKERS", 3) // Default: 3 workers
 	if len(serversData) < maxWorkers {
 		maxWorkers = len(serversData)
 	}
-	
+
 	// Channel to send server configs to workers
 	type serverJob struct {
 		name   string
 		config interface{}
 	}
 	jobChan := make(chan serverJob, len(serversData))
-	
+
 	// Channel to collect results
 	type serverResult struct {
-		name    string
-		tools   []ai.Tool
-		client  *mcp.GenkitMCPClient
+		name   string
+		tools  []ai.Tool
+		client *mcp.GenkitMCPClient
 	}
 	resultChan := make(chan serverResult, len(serversData))
-	
+
 	// Start worker goroutines
 	var wg sync.WaitGroup
 	for i := 0; i < maxWorkers; i++ {
@@ -133,24 +133,24 @@ func (mcm *MCPConnectionManager) processServersParallel(ctx context.Context, ser
 			}
 		}(i)
 	}
-	
+
 	// Send all server jobs to workers
 	for serverName, serverConfig := range serversData {
 		jobChan <- serverJob{name: serverName, config: serverConfig}
 	}
 	close(jobChan)
-	
+
 	// Wait for all workers to complete
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
-	
+
 	// Collect results
 	var allTools []ai.Tool
 	var allClients []*mcp.GenkitMCPClient
 	successCount := 0
-	
+
 	for result := range resultChan {
 		if result.tools != nil {
 			allTools = append(allTools, result.tools...)
@@ -160,10 +160,10 @@ func (mcm *MCPConnectionManager) processServersParallel(ctx context.Context, ser
 			allClients = append(allClients, result.client)
 		}
 	}
-	
-	logging.Info("Parallel server processing completed: %d servers, %d successful connections, %d total tools", 
+
+	logging.Info("Parallel server processing completed: %d servers, %d successful connections, %d total tools",
 		len(serversData), successCount, len(allTools))
-	
+
 	return allTools, allClients
 }
 
@@ -175,7 +175,7 @@ func debugLogToFile(message string) {
 		return // Silently fail if can't get home dir
 	}
 	logFile := fmt.Sprintf("%s/.config/station/debug-mcp-sync.log", homeDir)
-	
+
 	// Ensure directory exists
 	logDir := fmt.Sprintf("%s/.config/station", homeDir)
 	_ = os.MkdirAll(logDir, 0755)

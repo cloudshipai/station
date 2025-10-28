@@ -20,21 +20,21 @@ func TestCreateTarGz(t *testing.T) {
 
 	// Create test files and directories
 	testFiles := map[string]string{
-		"fs.json":                    `{"name": "filesystem", "command": "npx @modelcontextprotocol/server-filesystem"}`,
-		"agents/test-agent.prompt":   "You are a test agent",
+		"fs.json":                     `{"name": "filesystem", "command": "npx @modelcontextprotocol/server-filesystem"}`,
+		"agents/test-agent.prompt":    "You are a test agent",
 		"agents/another-agent.prompt": "You are another test agent",
-		"variables.yml":              "# This should be excluded\ntest: value",
+		"variables.yml":               "# This should be excluded\ntest: value",
 	}
 
 	for filePath, content := range testFiles {
 		fullPath := filepath.Join(tempDir, filePath)
-		
+
 		// Create directory if needed
 		dir := filepath.Dir(fullPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatalf("Failed to create dir %s: %v", dir, err)
 		}
-		
+
 		// Write file
 		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
 			t.Fatalf("Failed to write file %s: %v", fullPath, err)
@@ -136,7 +136,7 @@ func TestCreateTarGzWithEmptyDirectory(t *testing.T) {
 	defer func() { _ = gzReader.Close() }()
 
 	tarReader := tar.NewReader(gzReader)
-	
+
 	// Should have no entries
 	_, err = tarReader.Next()
 	if err != io.EOF {

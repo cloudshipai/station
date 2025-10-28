@@ -14,10 +14,10 @@ func (h *APIHandlers) LighthouseStatusHandler(c *gin.Context) {
 
 	// Add summary fields for UI convenience
 	response := map[string]interface{}{
-		"status":             status,
-		"is_healthy":         status.Connected && status.Registered,
-		"has_error":          status.LastError != "",
-		"summary_message":    getLighthouseSummaryMessage(status),
+		"status":          status,
+		"is_healthy":      status.Connected && status.Registered,
+		"has_error":       status.LastError != "",
+		"summary_message": getLighthouseSummaryMessage(status),
 	}
 
 	c.JSON(http.StatusOK, response)

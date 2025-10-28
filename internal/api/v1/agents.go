@@ -25,14 +25,14 @@ import (
 func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 	group.POST("", h.createAgent)
 	group.GET("/:id", h.getAgent)
-	group.GET("/:id/details", h.getAgentWithTools)  // New endpoint for detailed view
+	group.GET("/:id/details", h.getAgentWithTools) // New endpoint for detailed view
 	group.PUT("/:id", h.updateAgent)
 	group.DELETE("/:id", h.deleteAgent)
-	
+
 	// Agent prompt file management
 	group.GET("/:id/prompt", h.getAgentPrompt)
 	group.PUT("/:id/prompt", h.updateAgentPrompt)
-	
+
 }
 
 // Agent handlers
@@ -40,10 +40,10 @@ func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 func (h *APIHandlers) listAgents(c *gin.Context) {
 	// Check for environment filter parameter
 	envFilter := c.Query("environment_id")
-	
+
 	var agents []*models.Agent
 	var err error
-	
+
 	if envFilter != "" {
 		envID, parseErr := strconv.ParseInt(envFilter, 10, 64)
 		if parseErr != nil {
@@ -55,7 +55,7 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 		// For now, list all agents (environment_id = 0 means all environments)
 		agents, err = h.agentService.ListAgentsByEnvironment(c.Request.Context(), 0)
 	}
-	
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agents"})
 		return
@@ -65,7 +65,7 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 	if envFilter != "" {
 		// Try to parse as environment ID or name
 		var targetEnvID int64 = -1
-		
+
 		// Try as ID first
 		if envID, err := strconv.ParseInt(envFilter, 10, 64); err == nil {
 			targetEnvID = envID
@@ -81,12 +81,12 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 				}
 			}
 		}
-		
+
 		if targetEnvID == -1 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Environment with ID '%s' not found", envFilter)})
 			return
 		}
-		
+
 		// Filter agents by environment
 		var filteredAgents []*models.Agent
 		for _, agent := range agents {
@@ -145,7 +145,6 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 			log.Printf("❌ Failed to create agent run: %v", err)
 			return
 		}
-
 
 		// Execute the agent using the full agent execution engine with proper signature
 		response, err := h.agentService.ExecuteAgentWithRunID(ctx, agentID, req.Task, agentRun.ID, nil)
@@ -222,12 +221,12 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 		agentID,
 		userID,
 		req.Task,
-		"", // final_response (will be updated)
-		0,  // steps_taken
-		nil, // tool_calls 
-		nil, // execution_steps
+		"",        // final_response (will be updated)
+		0,         // steps_taken
+		nil,       // tool_calls
+		nil,       // execution_steps
 		"running", // status
-		nil, // completed_at
+		nil,       // completed_at
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create agent run: %v", err)})
@@ -242,14 +241,14 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 			"triggered_by": "api",
 			"api_endpoint": c.Request.URL.Path,
 		}
-		
+
 		_, err := h.agentService.ExecuteAgentWithRunID(ctx, agent.ID, req.Task, agentRun.ID, metadata)
 		if err != nil {
 			log.Printf("Agent execution failed (Run ID: %d): %v", agentRun.ID, err)
 		} else {
 			log.Printf("Agent execution completed successfully (Run ID: %d)", agentRun.ID)
 		}
-		
+
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{
@@ -328,7 +327,7 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 	// For now, we'll skip tool assignment - this would require:
 	// 1. Validating that tools exist in the environment
 	// 2. Creating AgentTool records in the database
-	
+
 	if len(req.AssignedTools) > 0 {
 		// Placeholder for tool assignment
 		// h.assignToolsToAgent(agentID, req.AssignedTools, req.EnvironmentID)
@@ -343,9 +342,9 @@ func (h *APIHandlers) createAgent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":     "Agent created successfully",
-		"agent_id":    agent.ID,
-		"agent_name":  agent.Name,
+		"message":        "Agent created successfully",
+		"agent_id":       agent.ID,
+		"agent_name":     agent.Name,
 		"environment_id": config.EnvironmentID,
 	})
 }
@@ -421,7 +420,7 @@ func (h *APIHandlers) getAgentAssignedTools(agent *models.Agent, environmentName
 	// Map each assigned tool to its MCP server
 	mcpServers := make(map[string][]gin.H)
 	toolID := 1
-	
+
 	for _, toolName := range assignedTools {
 		serverName := h.getToolMCPServer(toolName)
 		if serverName == "" {
@@ -468,10 +467,10 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 	lines := strings.Split(string(content), "\n")
 	inFrontmatter := false
 	var tools []string
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		if line == "---" {
 			if !inFrontmatter {
 				inFrontmatter = true
@@ -480,16 +479,16 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 				break // End of frontmatter
 			}
 		}
-		
+
 		if !inFrontmatter {
 			continue
 		}
-		
+
 		// Look for tools section
 		if strings.HasPrefix(line, "tools:") {
 			continue
 		}
-		
+
 		// Parse tool entries (- "toolname" or - "__toolname")
 		if strings.HasPrefix(line, "- \"") && strings.HasSuffix(line, "\"") {
 			tool := strings.Trim(line[2:], "\"")
@@ -506,7 +505,7 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 			tools = append(tools, tool)
 		}
 	}
-	
+
 	return tools, nil
 }
 
@@ -518,7 +517,7 @@ func (h *APIHandlers) getToolMCPServer(toolName string) string {
 		// Tool not found in any MCP server
 		return ""
 	}
-	
+
 	return serverName
 }
 
@@ -549,7 +548,7 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 			Prompt:      req.Prompt,
 			MaxSteps:    req.MaxSteps,
 		}
-		
+
 		_, err = h.agentService.UpdateAgent(c.Request.Context(), agentID, config)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent"})
@@ -583,7 +582,6 @@ func (h *APIHandlers) deleteAgent(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Agent deleted successfully"})
 }
-
 
 // getAgentPrompt returns the agent's prompt file content
 func (h *APIHandlers) getAgentPrompt(c *gin.Context) {
@@ -709,10 +707,10 @@ func (h *APIHandlers) updateAgentPrompt(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":     "Prompt file updated successfully",
-		"path":        promptFilePath,
-		"agent_id":    agentID,
-		"environment": environment.Name,
+		"message":      "Prompt file updated successfully",
+		"path":         promptFilePath,
+		"agent_id":     agentID,
+		"environment":  environment.Name,
 		"sync_command": fmt.Sprintf("stn sync %s", environment.Name),
 	})
 }
@@ -723,7 +721,7 @@ func extractSystemPromptFromContent(content string) string {
 	inFrontmatter := false
 	frontmatterEnded := false
 	var promptLines []string
-	
+
 	for _, line := range lines {
 		// Check for YAML frontmatter boundaries
 		if strings.TrimSpace(line) == "---" {
@@ -735,22 +733,21 @@ func extractSystemPromptFromContent(content string) string {
 				continue
 			}
 		}
-		
+
 		// Skip frontmatter content
 		if inFrontmatter && !frontmatterEnded {
 			continue
 		}
-		
+
 		// Once we're past the frontmatter, collect the prompt content
 		if frontmatterEnded {
 			promptLines = append(promptLines, line)
 		}
 	}
-	
+
 	// Join the prompt lines and clean up
 	prompt := strings.Join(promptLines, "\n")
 	prompt = strings.TrimSpace(prompt)
-	
+
 	return prompt
 }
-

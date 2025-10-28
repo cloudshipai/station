@@ -22,7 +22,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-
 var stdioCmd = &cobra.Command{
 	Use:   "stdio",
 	Short: "Start Station MCP server in stdio mode",
@@ -86,12 +85,11 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to ensure default environment: %w", err)
 	}
 
-
 	// Initialize minimal services for API server only
 	// Use separate contexts: one for long-lived services (management channel), one for MCP server
 	longLivedCtx := context.Background()
 	ctx := context.Background()
-	
+
 	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)
 	if err != nil {
@@ -166,11 +164,11 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(os.Stderr, "⚠️  Port %d already in use, skipping API server (another Station instance running?)\n", cfg.APIPort)
 	}
 
-	// Track stdio mode startup telemetry  
+	// Track stdio mode startup telemetry
 	if telemetryService != nil {
 		telemetryService.TrackStdioModeStarted(apiServer != nil)
 	}
-	
+
 	// Log startup message to stderr (so it doesn't interfere with stdio protocol)
 	_, _ = fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in stdio mode\n")
 	_, _ = fmt.Fprintf(os.Stderr, "Local mode: %t\n", localMode)

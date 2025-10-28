@@ -10,10 +10,10 @@ import (
 func (s *Server) setupResources() {
 	// Add static resources for read-only data access
 	s.setupStaticResources()
-	
+
 	// Add dynamic resource templates for parameterized access
 	s.setupResourceTemplates()
-	
+
 	log.Printf("MCP resources setup complete - read-only data access via Resources, operations via Tools")
 }
 

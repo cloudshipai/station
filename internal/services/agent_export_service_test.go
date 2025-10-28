@@ -290,31 +290,31 @@ func TestGenerateDotpromptContent(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		app              string
-		appType          string
-		expectApp        bool
-		expectAppType    bool
+		name              string
+		app               string
+		appType           string
+		expectApp         bool
+		expectAppType     bool
 		expectFrontmatter bool
-		description      string
+		description       string
 	}{
 		{
-			name:             "Generate with CloudShip metadata",
-			app:              "test-app",
-			appType:          "test-type",
-			expectApp:        true,
-			expectAppType:    true,
+			name:              "Generate with CloudShip metadata",
+			app:               "test-app",
+			appType:           "test-type",
+			expectApp:         true,
+			expectAppType:     true,
 			expectFrontmatter: true,
-			description:      "Should include app and app_type in generated content",
+			description:       "Should include app and app_type in generated content",
 		},
 		{
-			name:             "Generate without metadata",
-			app:              "",
-			appType:          "",
-			expectApp:        false,
-			expectAppType:    false,
+			name:              "Generate without metadata",
+			app:               "",
+			appType:           "",
+			expectApp:         false,
+			expectAppType:     false,
 			expectFrontmatter: true,
-			description:      "Should generate content without CloudShip metadata",
+			description:       "Should generate content without CloudShip metadata",
 		},
 	}
 
@@ -558,28 +558,28 @@ func TestExtractCustomVariableNames(t *testing.T) {
 	agentService := NewAgentService(repos)
 
 	tests := []struct {
-		name          string
-		inputSchema   *string
-		wantVarCount  int
-		description   string
+		name         string
+		inputSchema  *string
+		wantVarCount int
+		description  string
 	}{
 		{
-			name:          "Agent with no input schema",
-			inputSchema:   nil,
-			wantVarCount:  0,
-			description:   "Should return empty array for nil schema",
+			name:         "Agent with no input schema",
+			inputSchema:  nil,
+			wantVarCount: 0,
+			description:  "Should return empty array for nil schema",
 		},
 		{
-			name:          "Agent with empty input schema",
-			inputSchema:   stringPtr(""),
-			wantVarCount:  0,
-			description:   "Should return empty array for empty schema",
+			name:         "Agent with empty input schema",
+			inputSchema:  stringPtr(""),
+			wantVarCount: 0,
+			description:  "Should return empty array for empty schema",
 		},
 		{
-			name:          "Agent with invalid JSON schema",
-			inputSchema:   stringPtr(`{invalid json`),
-			wantVarCount:  0,
-			description:   "Should return empty array for invalid JSON",
+			name:         "Agent with invalid JSON schema",
+			inputSchema:  stringPtr(`{invalid json`),
+			wantVarCount: 0,
+			description:  "Should return empty array for invalid JSON",
 		},
 	}
 

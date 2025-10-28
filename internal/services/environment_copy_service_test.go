@@ -184,10 +184,10 @@ func TestCopyMCPServer(t *testing.T) {
 	targetEnv, _ := repos.Environments.Create("target-env", nil, 1)
 
 	tests := []struct {
-		name          string
-		server        *models.MCPServer
+		name           string
+		server         *models.MCPServer
 		expectConflict bool
-		description   string
+		description    string
 	}{
 		{
 			name: "Copy new MCP server",
@@ -287,10 +287,10 @@ func TestCopyAgent(t *testing.T) {
 	defer os.Setenv("HOME", originalHome)
 
 	tests := []struct {
-		name          string
-		agent         *models.Agent
+		name           string
+		agent          *models.Agent
 		expectConflict bool
-		description   string
+		description    string
 	}{
 		{
 			name: "Copy new agent",

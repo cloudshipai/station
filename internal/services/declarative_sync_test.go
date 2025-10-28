@@ -136,22 +136,22 @@ func TestSyncEnvironment(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name              string
-		environmentName   string
-		setupFunc         func()
-		wantErr           bool
-		expectAgents      int
-		expectMCPServers  int
-		description       string
+		name             string
+		environmentName  string
+		setupFunc        func()
+		wantErr          bool
+		expectAgents     int
+		expectMCPServers int
+		description      string
 	}{
 		{
-			name:            "Sync empty environment",
-			environmentName: env.Name,
-			setupFunc:       func() {},
-			wantErr:         false,
-			expectAgents:    0,
+			name:             "Sync empty environment",
+			environmentName:  env.Name,
+			setupFunc:        func() {},
+			wantErr:          false,
+			expectAgents:     0,
 			expectMCPServers: 0,
-			description:     "Should handle empty environment without errors",
+			description:      "Should handle empty environment without errors",
 		},
 		{
 			name:            "Sync non-existent environment",
@@ -517,7 +517,6 @@ func TestSyncMCPTemplateFiles(t *testing.T) {
 		})
 	}
 }
-
 
 // Benchmark tests
 func BenchmarkNewDeclarativeSync(b *testing.B) {

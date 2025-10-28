@@ -483,9 +483,9 @@ func (h *APIHandlers) installMCPDirectoryTemplate(c *gin.Context) {
 	}
 
 	var req struct {
-		EnvironmentID   int64                      `json:"environment_id" binding:"required"`
-		Config          services.MCPServerConfig   `json:"config" binding:"required"`  // Ignored - kept for backward compat
-		OpenAPISpecFile string                     `json:"openapi_spec_file"` // Optional: OpenAPI spec filename
+		EnvironmentID   int64                    `json:"environment_id" binding:"required"`
+		Config          services.MCPServerConfig `json:"config" binding:"required"` // Ignored - kept for backward compat
+		OpenAPISpecFile string                   `json:"openapi_spec_file"`         // Optional: OpenAPI spec filename
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

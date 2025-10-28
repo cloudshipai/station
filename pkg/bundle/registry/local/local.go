@@ -62,7 +62,7 @@ func (r *LocalRegistry) List(ctx context.Context, opts bundle.ListOptions) ([]bu
 		}
 
 		bundleName := bundleDir.Name()
-		
+
 		// Read bundle versions
 		bundlePath := filepath.Join(r.path, bundleName)
 		versions, err := r.getBundleVersions(bundlePath)
@@ -95,7 +95,7 @@ func (r *LocalRegistry) List(ctx context.Context, opts bundle.ListOptions) ([]bu
 // Get returns metadata for a specific bundle
 func (r *LocalRegistry) Get(ctx context.Context, name, version string) (*bundle.BundleManifest, error) {
 	bundlePath := filepath.Join(r.path, name)
-	
+
 	// Check if bundle exists
 	exists, err := afero.DirExists(r.fs, bundlePath)
 	if err != nil {
@@ -123,7 +123,7 @@ func (r *LocalRegistry) Get(ctx context.Context, name, version string) (*bundle.
 // Download returns the bundle archive data
 func (r *LocalRegistry) Download(ctx context.Context, name, version string) ([]byte, error) {
 	bundlePath := filepath.Join(r.path, name)
-	
+
 	// If no version specified, get latest
 	if version == "" {
 		versions, err := r.getBundleVersions(bundlePath)
@@ -149,7 +149,7 @@ func (r *LocalRegistry) Download(ctx context.Context, name, version string) ([]b
 // GetVersions returns all available versions for a bundle
 func (r *LocalRegistry) GetVersions(ctx context.Context, name string) ([]string, error) {
 	bundlePath := filepath.Join(r.path, name)
-	
+
 	// Check if bundle exists
 	exists, err := afero.DirExists(r.fs, bundlePath)
 	if err != nil {
@@ -188,7 +188,7 @@ func (r *LocalRegistry) getBundleVersions(bundlePath string) ([]string, error) {
 // readManifest reads a manifest.json file for a specific version
 func (r *LocalRegistry) readManifest(bundlePath, version string) (*bundle.BundleManifest, error) {
 	manifestPath := filepath.Join(bundlePath, version, "manifest.json")
-	
+
 	exists, err := afero.Exists(r.fs, manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check manifest file: %w", err)
@@ -216,7 +216,7 @@ func (r *LocalRegistry) matchesFilters(manifest *bundle.BundleManifest, opts bun
 	if opts.Search != "" {
 		search := strings.ToLower(opts.Search)
 		if !strings.Contains(strings.ToLower(manifest.Name), search) &&
-		   !strings.Contains(strings.ToLower(manifest.Description), search) {
+			!strings.Contains(strings.ToLower(manifest.Description), search) {
 			return false
 		}
 	}

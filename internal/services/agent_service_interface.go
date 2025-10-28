@@ -12,10 +12,10 @@ type AgentServiceInterface interface {
 	// Core agent execution - used by ExecutionQueueService and MCP server
 	// userVariables is optional - pass nil or empty map for no variables
 	ExecuteAgent(ctx context.Context, agentID int64, task string, userVariables map[string]interface{}) (*Message, error)
-	
+
 	// ExecuteAgentWithRunID executes an agent with proper run ID for logging - used by ExecutionQueueService
 	ExecuteAgentWithRunID(ctx context.Context, agentID int64, task string, runID int64, userVariables map[string]interface{}) (*Message, error)
-	
+
 	// Agent management - used by MCP server
 	CreateAgent(ctx context.Context, config *AgentConfig) (*models.Agent, error)
 	GetAgent(ctx context.Context, agentID int64) (*models.Agent, error)
@@ -28,20 +28,20 @@ type AgentServiceInterface interface {
 // AgentConfig represents the configuration for creating/updating an agent
 // This struct is used by GenkitService for agent management
 type AgentConfig struct {
-	EnvironmentID int64    `json:"environment_id"`
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	Prompt        string   `json:"prompt"`        // System prompt (matches db field name)
-	AssignedTools []string `json:"assigned_tools"` // List of tool names to assign to this agent
-	MaxSteps      int64    `json:"max_steps"`     // Maximum steps for agent execution (matches db field type)
-	CreatedBy     int64    `json:"created_by"`    // User ID who created the agent
-	InputSchema         *string  `json:"input_schema,omitempty"`          // JSON schema for input variables
-	OutputSchema        *string  `json:"output_schema,omitempty"`         // JSON schema for output format
-	OutputSchemaPreset  *string  `json:"output_schema_preset,omitempty"`  // Predefined schema preset (e.g., "finops")
-	ModelProvider       string   `json:"model_provider,omitempty"`        // Model provider (e.g., "openai", "anthropic")
-	ModelID             string   `json:"model_id,omitempty"`              // Specific model ID (e.g., "gpt-4o", "claude-3-5-sonnet-20241022")
-	CronSchedule        *string  `json:"cron_schedule,omitempty"`         // Cron schedule for automated runs
-	ScheduleEnabled     bool     `json:"schedule_enabled"`                // Whether scheduled runs are enabled
-	App                 string   `json:"app,omitempty"`                   // CloudShip data ingestion app classification
-	AppType             string   `json:"app_type,omitempty"`              // CloudShip data ingestion app_type classification
+	EnvironmentID      int64    `json:"environment_id"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	Prompt             string   `json:"prompt"`                         // System prompt (matches db field name)
+	AssignedTools      []string `json:"assigned_tools"`                 // List of tool names to assign to this agent
+	MaxSteps           int64    `json:"max_steps"`                      // Maximum steps for agent execution (matches db field type)
+	CreatedBy          int64    `json:"created_by"`                     // User ID who created the agent
+	InputSchema        *string  `json:"input_schema,omitempty"`         // JSON schema for input variables
+	OutputSchema       *string  `json:"output_schema,omitempty"`        // JSON schema for output format
+	OutputSchemaPreset *string  `json:"output_schema_preset,omitempty"` // Predefined schema preset (e.g., "finops")
+	ModelProvider      string   `json:"model_provider,omitempty"`       // Model provider (e.g., "openai", "anthropic")
+	ModelID            string   `json:"model_id,omitempty"`             // Specific model ID (e.g., "gpt-4o", "claude-3-5-sonnet-20241022")
+	CronSchedule       *string  `json:"cron_schedule,omitempty"`        // Cron schedule for automated runs
+	ScheduleEnabled    bool     `json:"schedule_enabled"`               // Whether scheduled runs are enabled
+	App                string   `json:"app,omitempty"`                  // CloudShip data ingestion app classification
+	AppType            string   `json:"app_type,omitempty"`             // CloudShip data ingestion app_type classification
 }

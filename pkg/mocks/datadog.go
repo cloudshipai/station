@@ -142,14 +142,14 @@ func (m *DatadogMock) handleMetricsQuery(ctx context.Context, request mcp.CallTo
 
 	// Generate hourly datapoints for the last 24 hours
 	for i := 0; i < 24; i++ {
-		timestamp := now.Add(-time.Duration(i) * time.Hour).Unix() * 1000 // milliseconds
-		value := 100.0 + rand.Float64()*200.0 + float64(i)*5.0 // Trend upward with noise
+		timestamp := now.Add(-time.Duration(i)*time.Hour).Unix() * 1000 // milliseconds
+		value := 100.0 + rand.Float64()*200.0 + float64(i)*5.0          // Trend upward with noise
 
 		series = append(series, map[string]interface{}{
 			"pointlist": [][]float64{
 				{float64(timestamp), value},
 			},
-			"scope": "service:checkout,env:production",
+			"scope":  "service:checkout,env:production",
 			"metric": "aws.lambda.invocations",
 			"unit": []interface{}{
 				map[string]interface{}{
@@ -165,13 +165,13 @@ func (m *DatadogMock) handleMetricsQuery(ctx context.Context, request mcp.CallTo
 	}
 
 	response := map[string]interface{}{
-		"status": "ok",
-		"res_type": "time_series",
+		"status":       "ok",
+		"res_type":     "time_series",
 		"resp_version": 1,
-		"query": "avg:aws.lambda.invocations{service:checkout}",
-		"from_date": now.Add(-24 * time.Hour).Unix() * 1000,
-		"to_date": now.Unix() * 1000,
-		"series": series,
+		"query":        "avg:aws.lambda.invocations{service:checkout}",
+		"from_date":    now.Add(-24*time.Hour).Unix() * 1000,
+		"to_date":      now.Unix() * 1000,
+		"series":       series,
 	}
 
 	return SuccessResult(response)
@@ -201,10 +201,10 @@ func (m *DatadogMock) handleLogsQuery(ctx context.Context, request mcp.CallToolR
 			"id": fmt.Sprintf("log-%d", i),
 			"content": map[string]interface{}{
 				"timestamp": timestamp,
-				"host": "lambda-prod-us-east-1",
-				"service": "checkout-service",
-				"status": status,
-				"message": errorMessages[i%len(errorMessages)],
+				"host":      "lambda-prod-us-east-1",
+				"service":   "checkout-service",
+				"status":    status,
+				"message":   errorMessages[i%len(errorMessages)],
 				"tags": []string{
 					"env:production",
 					"service:checkout-service",
@@ -213,8 +213,8 @@ func (m *DatadogMock) handleLogsQuery(ctx context.Context, request mcp.CallToolR
 				},
 				"attributes": map[string]interface{}{
 					"aws.lambda.request_id": fmt.Sprintf("req-%d", i),
-					"duration": 1500 + rand.Intn(1000),
-					"memory_used_mb": 128 + rand.Intn(256),
+					"duration":              1500 + rand.Intn(1000),
+					"memory_used_mb":        128 + rand.Intn(256),
 				},
 			},
 		})
@@ -238,49 +238,49 @@ func (m *DatadogMock) handleMonitorsSearch(ctx context.Context, request mcp.Call
 
 	monitors := []map[string]interface{}{
 		{
-			"id": 12345678,
-			"name": "High Lambda Error Rate",
-			"type": "metric alert",
-			"query": "avg(last_5m):sum:aws.lambda.errors{service:checkout} by {function_name}.as_count() > 50",
+			"id":      12345678,
+			"name":    "High Lambda Error Rate",
+			"type":    "metric alert",
+			"query":   "avg(last_5m):sum:aws.lambda.errors{service:checkout} by {function_name}.as_count() > 50",
 			"message": "@slack-alerts Lambda errors spiking on {{function_name.name}}",
-			"tags": []string{"service:checkout", "severity:high", "team:backend"},
+			"tags":    []string{"service:checkout", "severity:high", "team:backend"},
 			"options": map[string]interface{}{
 				"thresholds": map[string]interface{}{
 					"critical": 50.0,
-					"warning": 25.0,
+					"warning":  25.0,
 				},
 				"notify_no_data": false,
-				"notify_audit": false,
+				"notify_audit":   false,
 			},
 			"overall_state": "Alert",
-			"created": now.Add(-30 * 24 * time.Hour).Format(time.RFC3339),
-			"modified": now.Add(-2 * time.Hour).Format(time.RFC3339),
+			"created":       now.Add(-30 * 24 * time.Hour).Format(time.RFC3339),
+			"modified":      now.Add(-2 * time.Hour).Format(time.RFC3339),
 			"creator": map[string]interface{}{
 				"email": "sre@example.com",
-				"name": "SRE Team",
+				"name":  "SRE Team",
 			},
 		},
 		{
-			"id": 12345679,
-			"name": "Lambda Cold Start Latency",
-			"type": "metric alert",
-			"query": "avg(last_10m):avg:aws.lambda.duration.cold_start{service:checkout} > 2000",
-			"message": "@slack-alerts Cold start latency high on checkout service",
-			"tags": []string{"service:checkout", "severity:medium", "team:backend"},
+			"id":            12345679,
+			"name":          "Lambda Cold Start Latency",
+			"type":          "metric alert",
+			"query":         "avg(last_10m):avg:aws.lambda.duration.cold_start{service:checkout} > 2000",
+			"message":       "@slack-alerts Cold start latency high on checkout service",
+			"tags":          []string{"service:checkout", "severity:medium", "team:backend"},
 			"overall_state": "OK",
-			"created": now.Add(-60 * 24 * time.Hour).Format(time.RFC3339),
-			"modified": now.Add(-7 * 24 * time.Hour).Format(time.RFC3339),
+			"created":       now.Add(-60 * 24 * time.Hour).Format(time.RFC3339),
+			"modified":      now.Add(-7 * 24 * time.Hour).Format(time.RFC3339),
 		},
 		{
-			"id": 12345680,
-			"name": "DynamoDB Throttling",
-			"type": "metric alert",
-			"query": "avg(last_5m):sum:aws.dynamodb.user_errors{tablename:payments,operation:putitem} > 10",
-			"message": "@pagerduty DynamoDB throttling detected on payments table",
-			"tags": []string{"service:checkout", "severity:critical", "team:backend"},
+			"id":            12345680,
+			"name":          "DynamoDB Throttling",
+			"type":          "metric alert",
+			"query":         "avg(last_5m):sum:aws.dynamodb.user_errors{tablename:payments,operation:putitem} > 10",
+			"message":       "@pagerduty DynamoDB throttling detected on payments table",
+			"tags":          []string{"service:checkout", "severity:critical", "team:backend"},
 			"overall_state": "Alert",
-			"created": now.Add(-90 * 24 * time.Hour).Format(time.RFC3339),
-			"modified": now.Add(-1 * time.Hour).Format(time.RFC3339),
+			"created":       now.Add(-90 * 24 * time.Hour).Format(time.RFC3339),
+			"modified":      now.Add(-1 * time.Hour).Format(time.RFC3339),
 		},
 	}
 
@@ -288,7 +288,7 @@ func (m *DatadogMock) handleMonitorsSearch(ctx context.Context, request mcp.Call
 		"monitors": monitors,
 		"metadata": map[string]interface{}{
 			"total_count": len(monitors),
-			"page_count": 1,
+			"page_count":  1,
 		},
 	}
 
@@ -302,38 +302,38 @@ func (m *DatadogMock) handleAPMQuery(ctx context.Context, request mcp.CallToolRe
 	spans := []map[string]interface{}{
 		{
 			"trace_id": "1234567890abcdef",
-			"span_id": "abcdef1234567890",
-			"service": "checkout-service",
-			"name": "aws.lambda",
+			"span_id":  "abcdef1234567890",
+			"service":  "checkout-service",
+			"name":     "aws.lambda",
 			"resource": "POST /checkout",
-			"start": now.Add(-5 * time.Minute).UnixNano(),
+			"start":    now.Add(-5 * time.Minute).UnixNano(),
 			"duration": 2500000000, // 2.5s in nanoseconds
-			"error": 1,
+			"error":    1,
 			"meta": map[string]interface{}{
-				"env": "production",
+				"env":                   "production",
 				"aws.lambda.request_id": "req-abc-123",
-				"error.type": "TimeoutError",
-				"error.message": "Lambda timeout after 30 seconds",
-				"error.stack": "at processPayment (index.js:45:10)\nat handler (index.js:23:5)",
+				"error.type":            "TimeoutError",
+				"error.message":         "Lambda timeout after 30 seconds",
+				"error.stack":           "at processPayment (index.js:45:10)\nat handler (index.js:23:5)",
 			},
 			"metrics": map[string]interface{}{
-				"_dd.measured": 1,
+				"_dd.measured":   1,
 				"memory_used_mb": 256,
 			},
 		},
 		{
 			"trace_id": "fedcba0987654321",
-			"span_id": "0987654321fedcba",
-			"service": "checkout-service",
-			"name": "dynamodb.query",
+			"span_id":  "0987654321fedcba",
+			"service":  "checkout-service",
+			"name":     "dynamodb.query",
 			"resource": "payments.getitem",
-			"start": now.Add(-3 * time.Minute).UnixNano(),
+			"start":    now.Add(-3 * time.Minute).UnixNano(),
 			"duration": 45000000, // 45ms in nanoseconds
-			"error": 0,
+			"error":    0,
 			"meta": map[string]interface{}{
-				"env": "production",
+				"env":                     "production",
 				"aws.dynamodb.table_name": "payments",
-				"aws.dynamodb.operation": "GetItem",
+				"aws.dynamodb.operation":  "GetItem",
 			},
 		},
 	}

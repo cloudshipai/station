@@ -19,9 +19,9 @@ import (
 
 // DeclarativeSync handles synchronization between file-based configs and database
 type DeclarativeSync struct {
-	repos                   *repositories.Repositories
-	config                  *config.Config
-	customVariableResolver  VariableResolver // Custom resolver for UI integration
+	repos                  *repositories.Repositories
+	config                 *config.Config
+	customVariableResolver VariableResolver // Custom resolver for UI integration
 }
 
 // SyncOptions controls sync behavior
@@ -36,16 +36,16 @@ type SyncOptions struct {
 
 // SyncResult contains results of a sync operation
 type SyncResult struct {
-	Environment             string
-	AgentsProcessed         int
-	AgentsSynced            int
-	AgentsSkipped           int
-	ValidationErrors        int
-	ValidationMessages      []string
-	MCPServersProcessed     int
-	MCPServersConnected     int
-	Operations              []SyncOperation
-	Duration                time.Duration
+	Environment         string
+	AgentsProcessed     int
+	AgentsSynced        int
+	AgentsSkipped       int
+	ValidationErrors    int
+	ValidationMessages  []string
+	MCPServersProcessed int
+	MCPServersConnected int
+	Operations          []SyncOperation
+	Duration            time.Duration
 }
 
 // SyncOperation represents a single sync operation
@@ -84,7 +84,7 @@ func (s *DeclarativeSync) SetVariableResolver(resolver VariableResolver) {
 // SyncEnvironment synchronizes a specific environment
 func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName string, options SyncOptions) (*SyncResult, error) {
 	startTime := time.Now()
-	
+
 	result := &SyncResult{
 		Environment:        environmentName,
 		Operations:         []SyncOperation{},
@@ -105,7 +105,7 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	if s.config.Workspace != "" {
 		workspaceDir = s.config.Workspace
 	} else {
-		// Fallback to XDG config directory  
+		// Fallback to XDG config directory
 		configHome := os.Getenv("XDG_CONFIG_HOME")
 		if configHome == "" {
 			homeDir, _ := os.UserHomeDir()
@@ -113,7 +113,7 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 		}
 		workspaceDir = filepath.Join(configHome, "station")
 	}
-	
+
 	envDir := filepath.Join(workspaceDir, "environments", environmentName)
 	agentsDir := filepath.Join(envDir, "agents")
 
@@ -148,15 +148,15 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	if err != nil {
 		fmt.Printf("Warning: Failed to cleanup orphaned resources for %s: %v\n", environmentName, err)
 		result.ValidationErrors++
-		result.ValidationMessages = append(result.ValidationMessages, 
+		result.ValidationMessages = append(result.ValidationMessages,
 			fmt.Sprintf("Cleanup failed: %v", err))
 	} else {
 		fmt.Printf("🧹 Cleanup completed: %s\n", cleanupResult)
 	}
 
 	result.Duration = time.Since(startTime)
-	
-	fmt.Printf("Completed sync for environment %s: %d agents processed, %d errors\n", 
+
+	fmt.Printf("Completed sync for environment %s: %d agents processed, %d errors\n",
 		environmentName, result.AgentsProcessed, result.ValidationErrors)
 
 	return result, nil
@@ -228,7 +228,7 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 	if s.config.Workspace != "" {
 		templateWorkspaceDir = s.config.Workspace
 	} else {
-		// Fallback to XDG config directory  
+		// Fallback to XDG config directory
 		configHome := os.Getenv("XDG_CONFIG_HOME")
 		if configHome == "" {
 			homeDir, _ := os.UserHomeDir()
@@ -287,19 +287,19 @@ func (s *DeclarativeSync) processJSONTemplatesParallel(ctx context.Context, json
 	if len(jsonFiles) < maxWorkers {
 		maxWorkers = len(jsonFiles)
 	}
-	
+
 	fmt.Printf("Processing %d MCP templates in parallel with %d workers\n", len(jsonFiles), maxWorkers)
-	
+
 	// Channel to send template jobs to workers
 	type templateJob struct {
 		jsonFile   string
 		configName string
 	}
 	jobChan := make(chan templateJob, len(jsonFiles))
-	
+
 	// Channel to collect results (reuse defined templateResult type)
 	resultChan := make(chan templateResult, len(jsonFiles))
-	
+
 	// Start worker goroutines
 	var wg sync.WaitGroup
 	for i := 0; i < maxWorkers; i++ {
@@ -313,7 +313,7 @@ func (s *DeclarativeSync) processJSONTemplatesParallel(ctx context.Context, json
 			}
 		}(i)
 	}
-	
+
 	// Send all template jobs to workers
 	for _, jsonFile := range jsonFiles {
 		configName := filepath.Base(jsonFile)
@@ -324,13 +324,13 @@ func (s *DeclarativeSync) processJSONTemplatesParallel(ctx context.Context, json
 		}
 	}
 	close(jobChan)
-	
+
 	// Wait for all workers to complete
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
-	
+
 	// Collect results
 	var aggregatedResult = &SyncResult{
 		Environment:        environmentName,
@@ -338,7 +338,7 @@ func (s *DeclarativeSync) processJSONTemplatesParallel(ctx context.Context, json
 		ValidationMessages: []string{},
 	}
 	successCount := 0
-	
+
 	var firstError error
 	for result := range resultChan {
 		if result.error != nil {
@@ -397,7 +397,7 @@ func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, conf
 		validationMessages: []string{},
 		operations:         []SyncOperation{},
 	}
-	
+
 	// Read the template file
 	templateContent, err := os.ReadFile(jsonFile)
 	if err != nil {
@@ -469,7 +469,6 @@ func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, conf
 		result.mcpServersCount = serversCount
 	}
 
-
 	result.operations = append(result.operations, SyncOperation{
 		Type:        OpTypeValidate,
 		Target:      configName,
@@ -478,7 +477,6 @@ func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, conf
 
 	return result
 }
-
 
 // syncMCPServersFromTemplate extracts MCP servers from a rendered template and updates the database
 // Returns the number of servers successfully synced
@@ -496,7 +494,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 
 	logging.Info("    Processing %d MCP servers from config...\n", len(serversData))
 	successCount := 0
-	
+
 	// Process each server configuration
 	for serverName, serverConfigRaw := range serversData {
 		if options.DryRun {
@@ -505,7 +503,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 		}
 
 		logging.Info("       Processing server: %s\n", serverName)
-		
+
 		// Convert server config to proper format
 		serverConfigBytes, err := json.Marshal(serverConfigRaw)
 		if err != nil {
@@ -513,7 +511,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			fmt.Printf("        Raw config: %+v\n", serverConfigRaw)
 			return successCount, fmt.Errorf("failed to marshal server config for %s: %w", serverName, err)
 		}
-		
+
 		var serverConfig map[string]interface{}
 		if err := json.Unmarshal(serverConfigBytes, &serverConfig); err != nil {
 			fmt.Printf("     ❌ Failed to unmarshal config for server %s: %v\n", serverName, err)
@@ -547,7 +545,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			fmt.Printf("        Config: %+v\n", serverConfig)
 			return successCount, fmt.Errorf("server %s missing required 'command' field", serverName)
 		}
-		
+
 		fmt.Printf("        Command: %s %v\n", command, args)
 		if len(env) > 0 {
 			fmt.Printf("        Environment: %+v\n", env)
@@ -586,7 +584,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			existingServer.Args = args
 			existingServer.Env = env
 			existingServer.FileConfigID = &fileConfig.ID
-			
+
 			err = s.repos.MCPServers.Update(existingServer)
 			if err != nil {
 				fmt.Printf("     ❌ DATABASE ERROR: Failed to update server %s: %v\n", serverName, err)
@@ -595,14 +593,13 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			}
 			fmt.Printf("     ✅ Updated MCP server: %s\n", serverName)
 		}
-		
+
 		successCount++
 	}
 
 	fmt.Printf("   ✅ Successfully synced %d/%d MCP servers from template\n", successCount, len(serversData))
 	return successCount, nil
 }
-
 
 // registerOrUpdateFileConfig registers or updates a file config in the database
 func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID int64, configName, jsonFile, envDir string, templateResult *VariableResolutionResult, options SyncOptions) error {
@@ -618,18 +615,18 @@ func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID 
 		fileConfig := &repositories.FileConfigRecord{
 			EnvironmentID:            envID,
 			ConfigName:               configName,
-			TemplatePath:             normalizedPath, // Use normalized path for container compatibility
+			TemplatePath:             normalizedPath,  // Use normalized path for container compatibility
 			VariablesPath:            "variables.yml", // Standard variables file
 			TemplateSpecificVarsPath: "",
 			LastLoadedAt:             &time.Time{}, // Set to current time
-			TemplateHash:             "", // Will be calculated if needed
+			TemplateHash:             "",           // Will be calculated if needed
 			VariablesHash:            "",
 			TemplateVarsHash:         "",
 			Metadata:                 "{}",
 		}
 		now := time.Now()
 		fileConfig.LastLoadedAt = &now
-		
+
 		_, err = s.repos.FileMCPConfigs.Create(fileConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create file config record: %w", err)
@@ -643,7 +640,7 @@ func (s *DeclarativeSync) registerOrUpdateFileConfig(ctx context.Context, envID 
 		}
 		logging.Info("    Updated file config: %s\n", configName)
 	}
-	
+
 	return nil
 }
 
@@ -869,4 +866,3 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 
 	return result, nil
 }
-

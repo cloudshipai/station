@@ -10,12 +10,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 	"station/cmd/main/handlers/build"
 	"station/cmd/main/handlers/common"
 	"station/internal/config"
 	"station/internal/deployment"
 	"station/internal/services"
-	"gopkg.in/yaml.v2"
 )
 
 // registerEnvironmentRoutes registers environment routes
@@ -285,10 +285,10 @@ func (h *APIHandlers) buildEnvironmentImage(c *gin.Context) {
 		}
 
 		// Add CloudShip configuration placeholders for Docker runtime configuration
-		environmentVariables["STN_CLOUDSHIP_ENABLED"] = "false"  // Default disabled, enable via runtime
+		environmentVariables["STN_CLOUDSHIP_ENABLED"] = "false" // Default disabled, enable via runtime
 		environmentVariables["STN_CLOUDSHIP_KEY"] = "<your-cloudship-registration-key>"
-		environmentVariables["STN_CLOUDSHIP_ENDPOINT"] = "lighthouse.cloudshipai.com:50051"  // Default endpoint
-		environmentVariables["STN_CLOUDSHIP_STATION_ID"] = ""  // Auto-generated on first connection
+		environmentVariables["STN_CLOUDSHIP_ENDPOINT"] = "lighthouse.cloudshipai.com:50051" // Default endpoint
+		environmentVariables["STN_CLOUDSHIP_STATION_ID"] = ""                               // Auto-generated on first connection
 	}
 
 	// Create build options with custom image name and tag
@@ -312,10 +312,10 @@ func (h *APIHandlers) buildEnvironmentImage(c *gin.Context) {
 	// Return success response with image ID and environment variables
 	c.JSON(http.StatusOK, gin.H{
 		"success":               true,
-		"message":              "Docker image built successfully",
-		"image_id":             imageID,
-		"image_name":           req.ImageName,
-		"tag":                  req.Tag,
+		"message":               "Docker image built successfully",
+		"image_id":              imageID,
+		"image_name":            req.ImageName,
+		"tag":                   req.Tag,
 		"environment_variables": environmentVariables,
 	})
 }
@@ -663,10 +663,10 @@ func (h *APIHandlers) assignToolsFromSource(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":          true,
+		"success":            true,
 		"source_environment": sourceEnv.Name,
 		"target_environment": targetEnv.Name,
 		"tools_assigned":     toolsAssigned,
-		"message":           fmt.Sprintf("Successfully assigned %d tools from '%s' to agents in '%s'", toolsAssigned, sourceEnv.Name, targetEnv.Name),
+		"message":            fmt.Sprintf("Successfully assigned %d tools from '%s' to agents in '%s'", toolsAssigned, sourceEnv.Name, targetEnv.Name),
 	})
 }

@@ -477,13 +477,13 @@ type BundleInfo struct {
 
 // BundleManifest represents the complete metadata for a bundle
 type BundleManifest struct {
-	Version                 string                         `json:"version"`
-	Bundle                  BundleMetadata                 `json:"bundle"`
-	Agents                  []AgentManifestInfo            `json:"agents"`
-	MCPServers              []MCPServerManifestInfo        `json:"mcp_servers"`
-	Tools                   []ToolManifestInfo             `json:"tools"`
-	AgentMCPRelationships   []AgentMCPRelationship         `json:"agent_mcp_relationships"`
-	RequiredVariables       []VariableRequirement          `json:"required_variables"`
+	Version               string                  `json:"version"`
+	Bundle                BundleMetadata          `json:"bundle"`
+	Agents                []AgentManifestInfo     `json:"agents"`
+	MCPServers            []MCPServerManifestInfo `json:"mcp_servers"`
+	Tools                 []ToolManifestInfo      `json:"tools"`
+	AgentMCPRelationships []AgentMCPRelationship  `json:"agent_mcp_relationships"`
+	RequiredVariables     []VariableRequirement   `json:"required_variables"`
 }
 
 // BundleMetadata contains high-level bundle information

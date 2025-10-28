@@ -19,12 +19,12 @@ type ThemeManager struct {
 
 // Theme represents a complete theme with all color definitions
 type Theme struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Description string `json:"description"`
-	IsBuiltIn   bool   `json:"is_built_in"`
-	IsDefault   bool   `json:"is_default"`
+	ID          int64             `json:"id"`
+	Name        string            `json:"name"`
+	DisplayName string            `json:"display_name"`
+	Description string            `json:"description"`
+	IsBuiltIn   bool              `json:"is_built_in"`
+	IsDefault   bool              `json:"is_default"`
 	Colors      map[string]string `json:"colors"`
 }
 
@@ -34,27 +34,27 @@ type ColorPalette struct {
 	Background      string
 	BackgroundDark  string
 	BackgroundLight string
-	
+
 	// Primary colors
-	Primary     string
-	Secondary   string
-	Accent      string
-	
+	Primary   string
+	Secondary string
+	Accent    string
+
 	// State colors
-	Success     string
-	Warning     string
-	Error       string
-	Info        string
-	
+	Success string
+	Warning string
+	Error   string
+	Info    string
+
 	// Text colors
-	Text        string
-	TextMuted   string
-	TextDim     string
-	
+	Text      string
+	TextMuted string
+	TextDim   string
+
 	// Interactive colors
-	Border      string
-	Highlight   string
-	Selected    string
+	Border    string
+	Highlight string
+	Selected  string
 }
 
 // NewThemeManager creates a new theme manager
@@ -69,14 +69,14 @@ func NewThemeManager(database db.Database) *ThemeManager {
 // InitializeBuiltInThemes creates the built-in themes if they don't exist
 func (tm *ThemeManager) InitializeBuiltInThemes(ctx context.Context) error {
 	themes := getBuiltInThemes()
-	
+
 	for _, themeData := range themes {
 		// Check if theme already exists
 		existing, err := tm.queries.GetThemeByName(ctx, themeData.Name)
 		if err != nil && err != sql.ErrNoRows {
 			return fmt.Errorf("failed to check existing theme: %w", err)
 		}
-		
+
 		if err == sql.ErrNoRows {
 			// Create the theme
 			theme, err := tm.queries.CreateTheme(ctx, queries.CreateThemeParams{
@@ -90,7 +90,7 @@ func (tm *ThemeManager) InitializeBuiltInThemes(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to create theme %s: %w", themeData.Name, err)
 			}
-			
+
 			// Add colors
 			for key, value := range themeData.Colors {
 				_, err := tm.queries.CreateThemeColor(ctx, queries.CreateThemeColorParams{
@@ -113,7 +113,7 @@ func (tm *ThemeManager) InitializeBuiltInThemes(ctx context.Context) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -124,7 +124,7 @@ func (tm *ThemeManager) LoadUserTheme(ctx context.Context, userID int64) error {
 	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("failed to get user theme: %w", err)
 	}
-	
+
 	// If no user preference, get default theme
 	if err == sql.ErrNoRows {
 		defaultTheme, err := tm.queries.GetDefaultThemeWithColors(ctx)
@@ -135,7 +135,7 @@ func (tm *ThemeManager) LoadUserTheme(ctx context.Context, userID int64) error {
 	} else {
 		tm.current = buildThemeFromUserRows(userTheme)
 	}
-	
+
 	return nil
 }
 
@@ -145,7 +145,7 @@ func (tm *ThemeManager) LoadDefaultTheme(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get default theme: %w", err)
 	}
-	
+
 	tm.current = buildThemeFromRows(defaultTheme)
 	return nil
 }
@@ -160,11 +160,11 @@ func (tm *ThemeManager) GetColor(key string) string {
 	if tm.current == nil {
 		return "#ffffff" // Fallback
 	}
-	
+
 	if color, exists := tm.current.Colors[key]; exists {
 		return color
 	}
-	
+
 	return "#ffffff" // Fallback
 }
 
@@ -173,7 +173,7 @@ func (tm *ThemeManager) GetPalette() ColorPalette {
 	if tm.current == nil {
 		return getDefaultPalette()
 	}
-	
+
 	return ColorPalette{
 		Background:      tm.GetColor("background"),
 		BackgroundDark:  tm.GetColor("background_dark"),
@@ -197,47 +197,47 @@ func (tm *ThemeManager) GetPalette() ColorPalette {
 // GetStyles returns pre-configured Lipgloss styles
 func (tm *ThemeManager) GetStyles() ThemeStyles {
 	palette := tm.GetPalette()
-	
+
 	return ThemeStyles{
 		Header: lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color(palette.Primary)).
 			Background(lipgloss.Color(palette.BackgroundDark)),
-		
+
 		Subheader: lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color(palette.Secondary)),
-		
+
 		Text: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Text)),
-		
+
 		Muted: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.TextMuted)),
-		
+
 		Success: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Success)),
-		
+
 		Warning: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Warning)),
-		
+
 		Error: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Error)),
-		
+
 		Info: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Info)),
-		
+
 		Border: lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(palette.Border)),
-		
+
 		Selected: lipgloss.NewStyle().
 			Background(lipgloss.Color(palette.Selected)).
 			Foreground(lipgloss.Color(palette.BackgroundDark)),
-		
+
 		Highlight: lipgloss.NewStyle().
 			Background(lipgloss.Color(palette.Highlight)).
 			Foreground(lipgloss.Color(palette.BackgroundDark)),
-		
+
 		Container: lipgloss.NewStyle().
 			Align(lipgloss.Center).
 			Padding(1, 2).

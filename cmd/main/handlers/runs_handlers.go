@@ -69,12 +69,12 @@ func (h *RunsHandler) listRunsLocal(limit int) error {
 	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
-	
+
 	// Use provided limit or default to 50
 	if limit <= 0 {
 		limit = 50
 	}
-	
+
 	runs, err := repos.AgentRuns.ListRecent(context.Background(), int64(limit))
 	if err != nil {
 		return fmt.Errorf("failed to list runs: %w", err)
@@ -121,7 +121,7 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 
 	styles := getCLIStyles(h.themeManager)
 	statusIcon := h.getStatusIcon(run.Status)
-	
+
 	fmt.Printf("Run: %d %s\n", run.ID, statusIcon)
 	fmt.Printf("Agent: %s (ID: %d)\n", styles.Success.Render(run.AgentName), run.AgentID)
 	fmt.Printf("Status: %s\n", h.colorizeStatus(run.Status))
@@ -130,27 +130,26 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 	}
 	fmt.Printf("Task: %s\n", run.Task)
 	fmt.Printf("Started: %s\n", run.StartedAt.Format("Jan 2, 2006 15:04:05"))
-	
+
 	if run.CompletedAt != nil {
 		duration := run.CompletedAt.Sub(run.StartedAt)
 		fmt.Printf("Completed: %s (Duration: %.1fs)\n", run.CompletedAt.Format("Jan 2, 2006 15:04:05"), duration.Seconds())
 	} else {
 		fmt.Printf("Status: Running...\n")
 	}
-	
+
 	fmt.Printf("Steps Taken: %d\n", run.StepsTaken)
-	
+
 	if verbose {
 		// Show comprehensive details in verbose mode
 		fmt.Print("\n" + styles.Banner.Render("📊 Detailed Run Information") + "\n")
-		
-		
+
 		// Agent Information
 		fmt.Printf("\n🤖 Agent Details:\n")
 		fmt.Printf("• Agent ID: %d\n", run.AgentID)
 		fmt.Printf("• Agent Name: %s\n", run.AgentName)
 		fmt.Printf("• User: %s\n", run.Username)
-		
+
 		// Execution Metadata
 		fmt.Printf("\n⚡ Execution Metadata:\n")
 		fmt.Printf("• Run ID: %d\n", run.ID)
@@ -162,7 +161,7 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 			fmt.Printf("• Completed At: %s\n", run.CompletedAt.Format("Jan 2, 2006 15:04:05 MST"))
 			fmt.Printf("• Total Duration: %.2fs\n", duration.Seconds())
 		}
-		
+
 		// Task Information
 		fmt.Printf("\n📋 Task:\n")
 		fmt.Printf("%s\n", run.Task)
@@ -183,7 +182,6 @@ func (h *RunsHandler) inspectRunLocal(runID int64, verbose bool) error {
 
 	return nil
 }
-
 
 // Helper functions
 

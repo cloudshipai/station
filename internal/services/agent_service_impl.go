@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
 	"station/internal/logging"
 	"station/pkg/models"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // AgentService implements AgentServiceInterface using AgentExecutionEngine directly
@@ -32,7 +32,7 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 		repos:         repos,
 		exportService: NewAgentExportService(repos),
 	}
-	
+
 	// Initialize telemetry service with config
 	cfg, err := config.Load()
 	if err != nil {
@@ -40,20 +40,20 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 		// Use default config
 		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
 	}
-	
+
 	telemetryConfig := &TelemetryConfig{
 		Enabled:      cfg.TelemetryEnabled,
 		OTLPEndpoint: cfg.OTELEndpoint,
 		ServiceName:  "station",
 		Environment:  cfg.Environment,
 	}
-	
+
 	service.telemetry = NewTelemetryService(telemetryConfig)
 	if err := service.telemetry.Initialize(context.Background()); err != nil {
 		log.Printf("Warning: Failed to initialize telemetry: %v", err)
 		// Continue without telemetry rather than failing
 	}
-	
+
 	// Create execution engine with self-reference and optional lighthouse client
 	var client *lighthouse.LighthouseClient
 	if len(lighthouseClient) > 0 && lighthouseClient[0] != nil {
@@ -75,7 +75,7 @@ func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseC
 		repos:         repos,
 		exportService: NewAgentExportService(repos),
 	}
-	
+
 	// Initialize telemetry service with config
 	cfg, err := config.Load()
 	if err != nil {
@@ -83,26 +83,26 @@ func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseC
 		// Use default config
 		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
 	}
-	
+
 	telemetryConfig := &TelemetryConfig{
 		Enabled:      cfg.TelemetryEnabled,
 		OTLPEndpoint: cfg.OTELEndpoint,
 		ServiceName:  "station",
 		Environment:  cfg.Environment,
 	}
-	
+
 	service.telemetry = NewTelemetryService(telemetryConfig)
 	if err := service.telemetry.Initialize(context.Background()); err != nil {
 		log.Printf("Warning: Failed to initialize telemetry: %v", err)
 		// Continue without telemetry rather than failing
 	}
-	
+
 	// Create execution engine with Lighthouse client integration
 	service.executionEngine = NewAgentExecutionEngineWithLighthouse(repos, service, lighthouseClient)
-	
+
 	// Pass telemetry service to execution engine for span creation
 	service.executionEngine.telemetryService = service.telemetry
-	
+
 	return service
 }
 
@@ -114,7 +114,9 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 		trace.WithAttributes(
 			attribute.Int64("agent.id", agentID),
 			attribute.String("task.preview", func() string {
-				if len(task) > 100 { return task[:100] + "..." }
+				if len(task) > 100 {
+					return task[:100] + "..."
+				}
 				return task
 			}()),
 			attribute.Int("variables.count", len(userVariables)),
@@ -126,7 +128,7 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	if userVariables == nil {
 		userVariables = make(map[string]interface{})
 	}
-	
+
 	// Get the agent details
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
@@ -143,10 +145,10 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	)
 
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with %d variables", agent.ID, agent.Name, len(userVariables))
-	
+
 	// Execute using AgentExecutionEngine directly with stdio MCP and user variables
 	result, err := s.executionEngine.Execute(ctx, agent, task, 0, userVariables) // Run ID 0 for MCP calls
-	
+
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
 		span.RecordError(err)
@@ -162,7 +164,7 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 	if modelName == "" {
 		modelName = "unknown"
 	}
-	
+
 	// Add execution result attributes to span
 	span.SetAttributes(
 		attribute.String("execution.model", modelName),
@@ -171,7 +173,7 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 		attribute.Int("execution.tools_used", result.ToolsUsed),
 		attribute.Bool("execution.success", true),
 	)
-	
+
 	// Record business metrics for successful execution
 	s.telemetry.RecordAgentExecution(ctx, agent.ID, agent.Name, modelName, duration, true, result.TokenUsage)
 
@@ -182,38 +184,38 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 
 	// Convert result to Message format with proper types for execution queue
 	extra := map[string]interface{}{
-		"agent_id":     agent.ID,
-		"agent_name":   agent.Name,
-		"steps_taken":  result.StepsTaken,
+		"agent_id":    agent.ID,
+		"agent_name":  agent.Name,
+		"steps_taken": result.StepsTaken,
 	}
-	
+
 	// Include variables in response for tracking if provided
 	if len(userVariables) > 0 {
 		extra["user_variables"] = userVariables
 	}
-	
+
 	// Add tool calls and execution steps directly (they're already *models.JSONArray)
 	if result.ToolCalls != nil {
 		extra["tool_calls"] = result.ToolCalls
 	}
-	
+
 	if result.ExecutionSteps != nil {
 		extra["execution_steps"] = result.ExecutionSteps
 	}
-	
+
 	// Preserve rich GenKit response object data from Station's OpenAI plugin
 	if result.TokenUsage != nil {
 		extra["token_usage"] = result.TokenUsage
 	}
-	
+
 	if result.Duration > 0 {
 		extra["duration"] = result.Duration.Seconds()
 	}
-	
+
 	if result.ModelName != "" {
 		extra["model_name"] = result.ModelName
 	}
-	
+
 	if result.ToolsUsed > 0 {
 		extra["tools_used"] = result.ToolsUsed
 	}
@@ -234,7 +236,9 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 			attribute.Int64("agent.id", agentID),
 			attribute.Int64("run.id", runID),
 			attribute.String("task.preview", func() string {
-				if len(task) > 100 { return task[:100] + "..." }
+				if len(task) > 100 {
+					return task[:100] + "..."
+				}
 				return task
 			}()),
 			attribute.Int("variables.count", len(userVariables)),
@@ -246,7 +250,7 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 	if userVariables == nil {
 		userVariables = make(map[string]interface{})
 	}
-	
+
 	// Get the agent details
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
@@ -263,10 +267,10 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 	)
 
 	log.Printf("DEBUG AgentService: About to execute agent %d (%s) with run ID %d and %d variables", agent.ID, agent.Name, runID, len(userVariables))
-	
+
 	// Execute using AgentExecutionEngine directly with stdio MCP and user variables - PASS THE REAL RUN ID
 	result, err := s.executionEngine.Execute(ctx, agent, task, runID, userVariables) // Use real run ID!
-	
+
 	log.Printf("DEBUG AgentService: Fresh execution context ExecuteAgentViaStdioMCP returned for agent %d, error: %v", agent.ID, err)
 	if err != nil {
 		span.RecordError(err)
@@ -282,7 +286,7 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 	if modelName == "" {
 		modelName = "unknown"
 	}
-	
+
 	// Add execution result attributes to span
 	span.SetAttributes(
 		attribute.String("execution.model", modelName),
@@ -291,7 +295,7 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 		attribute.Int("execution.tools_used", result.ToolsUsed),
 		attribute.Bool("execution.success", true),
 	)
-	
+
 	// Record business metrics for successful execution
 	s.telemetry.RecordAgentExecution(ctx, agent.ID, agent.Name, modelName, duration, true, result.TokenUsage)
 
@@ -302,38 +306,38 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 
 	// Convert result to Message format with proper types for execution queue
 	extra := map[string]interface{}{
-		"agent_id":     agent.ID,
-		"agent_name":   agent.Name,
-		"steps_taken":  result.StepsTaken,
+		"agent_id":    agent.ID,
+		"agent_name":  agent.Name,
+		"steps_taken": result.StepsTaken,
 	}
-	
+
 	// Include variables in response for tracking if provided
 	if len(userVariables) > 0 {
 		extra["user_variables"] = userVariables
 	}
-	
+
 	// Add tool calls and execution steps directly (they're already *models.JSONArray)
 	if result.ToolCalls != nil {
 		extra["tool_calls"] = result.ToolCalls
 	}
-	
+
 	if result.ExecutionSteps != nil {
 		extra["execution_steps"] = result.ExecutionSteps
 	}
-	
+
 	// Preserve rich GenKit response object data from Station's OpenAI plugin
 	if result.TokenUsage != nil {
 		extra["token_usage"] = result.TokenUsage
 	}
-	
+
 	if result.Duration > 0 {
 		extra["duration"] = result.Duration.Seconds()
 	}
-	
+
 	if result.ModelName != "" {
 		extra["model_name"] = result.ModelName
 	}
-	
+
 	if result.ToolsUsed > 0 {
 		extra["tools_used"] = result.ToolsUsed
 	}
@@ -430,7 +434,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *A
 		if err := s.repos.AgentTools.Clear(agentID); err != nil {
 			return nil, fmt.Errorf("failed to clear existing tool assignments: %w", err)
 		}
-		
+
 		// Assign new tools
 		assignedCount := s.assignToolsToAgent(agentID, config.AssignedTools, config.EnvironmentID)
 		if assignedCount == 0 {
@@ -459,7 +463,7 @@ func (s *AgentService) DeleteAgent(ctx context.Context, agentID int64) error {
 	if err := s.repos.AgentTools.Clear(agentID); err != nil {
 		return fmt.Errorf("failed to clear tool assignments: %w", err)
 	}
-	
+
 	// Delete the agent from database
 	if err := s.repos.Agents.Delete(agentID); err != nil {
 		return fmt.Errorf("failed to delete agent from database: %w", err)
@@ -482,7 +486,7 @@ func (s *AgentService) deleteAgentPromptFile(agentName, environmentName string) 
 	}
 
 	promptFilePath := filepath.Join(homeDir, ".config", "station", "environments", environmentName, "agents", agentName+".prompt")
-	
+
 	// Check if file exists before attempting deletion
 	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {
 		return nil // Not an error if file doesn't exist
@@ -512,7 +516,7 @@ func (s *AgentService) InitializeMCP(ctx context.Context) error {
 // assignToolsToAgent assigns tools to an agent and returns the count of tools assigned
 func (s *AgentService) assignToolsToAgent(agentID int64, toolNames []string, environmentID int64) int {
 	assignedCount := 0
-	
+
 	for _, toolName := range toolNames {
 		// Try to find the tool in the MCP tools table
 		tool, err := s.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
@@ -520,7 +524,7 @@ func (s *AgentService) assignToolsToAgent(agentID int64, toolNames []string, env
 			// Tool doesn't exist in MCP tools table, create it
 			log.Printf("Creating new MCP tool entry for: %s", toolName)
 			mcpTool := &models.MCPTool{
-				Name: toolName,
+				Name:        toolName,
 				Description: fmt.Sprintf("Auto-discovered tool: %s", toolName),
 			}
 			toolID, err := s.repos.MCPTools.Create(mcpTool)
@@ -530,18 +534,18 @@ func (s *AgentService) assignToolsToAgent(agentID int64, toolNames []string, env
 			}
 			tool = &models.MCPTool{ID: toolID, Name: toolName}
 		}
-		
+
 		// Assign the tool to the agent
 		_, err = s.repos.AgentTools.AddAgentTool(agentID, tool.ID)
 		if err != nil {
 			log.Printf("Failed to assign tool %s to agent %d: %v", toolName, agentID, err)
 			continue
 		}
-		
+
 		assignedCount++
 		log.Printf("Assigned tool '%s' (ID: %d) to agent %d", toolName, tool.ID, agentID)
 	}
-	
+
 	return assignedCount
 }
 

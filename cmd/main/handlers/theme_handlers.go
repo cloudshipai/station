@@ -30,7 +30,7 @@ type themeItem struct {
 }
 
 func (t themeItem) FilterValue() string { return t.name }
-func (t themeItem) Title() string       { 
+func (t themeItem) Title() string {
 	title := t.displayName
 	if t.isDefault {
 		title += " (current)"
@@ -152,7 +152,7 @@ func (h *ThemeHandler) RunThemeSet(cmd *cobra.Command, args []string) error {
 	styles := getCLIStyles(h.themeManager)
 
 	ctx := context.Background()
-	
+
 	// Find theme by name
 	selectedTheme, err := h.themeManager.GetThemeByName(ctx, themeName)
 	if err != nil {

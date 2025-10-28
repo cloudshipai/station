@@ -52,7 +52,7 @@ func TestRunMigrations(t *testing.T) {
 
 	// Verify some expected tables were created from our embedded migrations
 	expectedTables := []string{"users", "environments", "file_mcp_configs", "agents"}
-	
+
 	for _, tableName := range expectedTables {
 		var name string
 		err = db.conn.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", tableName).Scan(&name)

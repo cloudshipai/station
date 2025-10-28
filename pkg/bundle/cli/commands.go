@@ -190,7 +190,7 @@ func (c *BundleCLI) PrintValidationSummary(summary *ValidationSummary) {
 	}
 }
 
-// PrintPackageSummary prints a formatted packaging summary  
+// PrintPackageSummary prints a formatted packaging summary
 func (c *BundleCLI) PrintPackageSummary(summary *PackageSummary) {
 	if summary.Success {
 		fmt.Printf("✅ Bundle packaging: %s\n", colorGreen("SUCCESS"))
@@ -202,7 +202,7 @@ func (c *BundleCLI) PrintPackageSummary(summary *PackageSummary) {
 		if summary.Error != "" {
 			fmt.Printf("💥 Error: %s\n", summary.Error)
 		}
-		
+
 		if summary.ValidationSummary != nil {
 			c.PrintValidationSummary(summary.ValidationSummary)
 		}

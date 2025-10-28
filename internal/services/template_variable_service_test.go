@@ -136,11 +136,11 @@ func TestRenderTemplate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:     "No variables needed",
-			template: `{"url": "http://example.com"}`,
+			name:      "No variables needed",
+			template:  `{"url": "http://example.com"}`,
 			variables: map[string]string{},
-			want:    `{"url": "http://example.com"}`,
-			wantErr: false,
+			want:      `{"url": "http://example.com"}`,
+			wantErr:   false,
 		},
 		{
 			name:      "Empty template",

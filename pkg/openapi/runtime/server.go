@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	"station/pkg/openapi/converter"
 	"station/pkg/openapi/models"
 	"station/pkg/openapi/parser"
-	"gopkg.in/yaml.v3"
 )
 
 // ServerConfig represents the configuration for the OpenAPI MCP server

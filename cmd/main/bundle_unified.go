@@ -110,7 +110,7 @@ func runBundleCreate(cmd *cobra.Command, args []string) error {
 
 	// Environment directory path
 	envPath := filepath.Join(configRoot, "environments", environmentName)
-	
+
 	// Check if environment directory exists
 	if _, err := os.Stat(envPath); os.IsNotExist(err) {
 		return fmt.Errorf("environment '%s' not found at %s", environmentName, envPath)
@@ -126,7 +126,7 @@ func runBundleCreate(cmd *cobra.Command, args []string) error {
 
 	// Create bundle service
 	bundleService := services.NewBundleService()
-	
+
 	// Validate environment
 	if err := bundleService.ValidateEnvironment(envPath); err != nil {
 		return fmt.Errorf("environment validation failed: %w", err)

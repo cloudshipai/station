@@ -27,7 +27,7 @@ func extractInt64FromTokenUsage(value interface{}) *int64 {
 	if value == nil {
 		return nil
 	}
-	
+
 	switch v := value.(type) {
 	case int64:
 		return &v
@@ -443,7 +443,6 @@ func (mhs *ManagementHandlerService) handleGetEnvironments(ctx context.Context, 
 	}, nil
 }
 
-
 // handleExecuteAgent processes execute agent requests using unified execution flow (same as MCP/CLI)
 func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, originalRequestId string, req *proto.ExecuteAgentManagementRequest) (*proto.ExecuteAgentManagementResponse, error) {
 	logging.Info("Executing agent %s with task: %s", req.AgentId, req.Task)
@@ -475,7 +474,7 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_RUNNING, "Agent execution started", 1)
 
 	var userID int64 = 1 // Default user ID for CloudShip executions
-	
+
 	// Create local agent run (we'll correlate with CloudShip's ID in SendRun)
 	run, err := mhs.repos.AgentRuns.Create(ctx, agentID, userID, req.Task, "", 0, nil, nil, "running", nil)
 	if err != nil {
@@ -484,14 +483,14 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 	}
 	runID := run.ID
 	logging.Info("Using CloudShip's run ID: %s (local database ID: %d) for execution tracking", cloudShipRunID, runID)
-	
+
 	// Get agent details for unified execution flow
 	agent, err := mhs.repos.Agents.GetByID(agentID)
 	if err != nil {
 		mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_FAILED, fmt.Sprintf("Agent not found: %v", err), 1)
 		return nil, fmt.Errorf("agent not found: %v", err)
 	}
-	
+
 	// Create agent service to access execution engine WITH lighthouse client for IngestData() dual flow
 	agentService := services.NewAgentService(mhs.repos, mhs.lighthouseClient)
 	logging.Debug("🔍 MGMT: Created NEW AgentService (WITH lighthouse client) for execution")
@@ -502,7 +501,7 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 	logging.Debug("🔍 MGMT: About to call agentService.GetExecutionEngine().ExecuteWithOptions() for agent %d, run %d (skipLighthouse=true)", agent.ID, runID)
 	result, execErr := agentService.GetExecutionEngine().ExecuteWithOptions(ctx, agent, req.Task, runID, userVariables, true)
 	logging.Debug("🔍 MGMT: Returned from ExecuteWithOptions() - execErr=%v, result.Success=%v", execErr, result != nil && result.Success)
-	
+
 	if execErr != nil {
 		// Update run as failed (same as MCP)
 		completedAt := time.Now()
@@ -522,7 +521,7 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 
 	// Update run as successful (same as CLI and MCP)
 	completedAt := time.Now()
-	
+
 	// Extract token usage from result (using same field names as MCP handlers)
 	var inputTokens, outputTokens, totalTokens *int64
 	if result != nil && result.TokenUsage != nil {
@@ -530,14 +529,14 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		outputTokens = extractInt64FromTokenUsage(result.TokenUsage["output_tokens"])
 		totalTokens = extractInt64FromTokenUsage(result.TokenUsage["total_tokens"])
 	}
-	
+
 	// Calculate duration in seconds
 	var durationSeconds *float64
 	if result != nil {
 		dur := result.Duration.Seconds()
 		durationSeconds = &dur
 	}
-	
+
 	// Determine status based on execution result success
 	status := "completed"
 	var errorMsg *string
@@ -616,7 +615,6 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		Timestamp:       timestamppb.Now(),
 	}, nil
 }
-
 
 // handleGetAgentDetails processes get agent details requests
 func (mhs *ManagementHandlerService) handleGetAgentDetails(ctx context.Context, req *proto.GetAgentDetailsRequest) (*proto.GetAgentDetailsResponse, error) {
@@ -754,7 +752,7 @@ func (mhs *ManagementHandlerService) generateDotpromptContent(agent *models.Agen
 
 	// Check if agent prompt already contains role directives
 	promptHasRoles := strings.Contains(agent.Prompt, "{{role") ||
-	                  strings.Contains(agent.Prompt, "{{userInput}}")
+		strings.Contains(agent.Prompt, "{{userInput}}")
 
 	if promptHasRoles {
 		// Prompt already has role directives, use as-is
@@ -940,7 +938,7 @@ func (mhs *ManagementHandlerService) handleUpdateAgentPrompt(ctx context.Context
 		Id:             fmt.Sprintf("%d", updatedAgent.ID),
 		Name:           updatedAgent.Name,
 		Description:    updatedAgent.Description,
-		PromptTemplate: promptContent, // Return the complete dotprompt content
+		PromptTemplate: promptContent,      // Return the complete dotprompt content
 		ModelName:      "gemini-2.5-flash", // Default model
 		MaxSteps:       int32(updatedAgent.MaxSteps),
 		Tools:          toolNames,
@@ -1017,7 +1015,7 @@ func (mhs *ManagementHandlerService) convertRunDetailsToAgentRun(runDetails *mod
 		}
 	}
 
-	// Parse execution steps from JSON if available  
+	// Parse execution steps from JSON if available
 	var executionSteps []types.ExecutionStep
 	if runDetails.ExecutionSteps != nil {
 		if stepsBytes, err := json.Marshal(*runDetails.ExecutionSteps); err == nil {
@@ -1116,7 +1114,6 @@ func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails
 			tokenUsage.TotalTokens = int32(*runDetails.TotalTokens)
 		}
 	}
-
 
 	// Create proto LighthouseAgentRunData for management channel
 	metadata := map[string]string{

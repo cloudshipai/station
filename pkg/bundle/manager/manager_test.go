@@ -52,49 +52,49 @@ func (m *MockValidator) Validate(fs afero.Fs, bundlePath string) (*bundle.Valida
 
 func TestManager_ParseBundleReference(t *testing.T) {
 	tests := []struct {
-		name           string
-		ref            string
-		expectedName   string
-		expectedReg    string
-		expectedVer    string
-		expectError    bool
+		name         string
+		ref          string
+		expectedName string
+		expectedReg  string
+		expectedVer  string
+		expectError  bool
 	}{
 		{
-			name:        "simple name",
-			ref:         "openai-assistant",
+			name:         "simple name",
+			ref:          "openai-assistant",
 			expectedName: "openai-assistant",
-			expectedReg: "default",
-			expectedVer: "",
+			expectedReg:  "default",
+			expectedVer:  "",
 		},
 		{
-			name:        "name with version",
-			ref:         "openai-assistant@1.0.0",
+			name:         "name with version",
+			ref:          "openai-assistant@1.0.0",
 			expectedName: "openai-assistant",
-			expectedReg: "default",
-			expectedVer: "1.0.0",
+			expectedReg:  "default",
+			expectedVer:  "1.0.0",
 		},
 		{
-			name:        "registry with name",
-			ref:         "official/openai-assistant",
+			name:         "registry with name",
+			ref:          "official/openai-assistant",
 			expectedName: "openai-assistant",
-			expectedReg: "official",
-			expectedVer: "",
+			expectedReg:  "official",
+			expectedVer:  "",
 		},
 		{
-			name:        "full reference",
-			ref:         "official/openai-assistant@1.2.0",
+			name:         "full reference",
+			ref:          "official/openai-assistant@1.2.0",
 			expectedName: "openai-assistant",
-			expectedReg: "official",
-			expectedVer: "1.2.0",
+			expectedReg:  "official",
+			expectedVer:  "1.2.0",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manager := NewManager("/config", afero.NewMemMapFs())
-			
+
 			result, err := manager.parseBundleReference(tt.ref)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -184,8 +184,8 @@ func TestManager_RenderToEnvironment(t *testing.T) {
 
 func TestManager_List(t *testing.T) {
 	tests := []struct {
-		name           string
-		opts           bundle.ListOptions
+		name            string
+		opts            bundle.ListOptions
 		setupRegistries func() map[string]*MockRegistry
 		expectedBundles int
 		expectError     bool

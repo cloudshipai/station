@@ -60,10 +60,10 @@ func (h *BuildHandler) RunBuildEnvironment(cmd *cobra.Command, args []string) er
 	// Create build options
 	buildOptions := &BuildOptions{
 		Provider:            provider,
-		Model:              model,
-		CloudShipAIKey:     cloudshipaiKey,
+		Model:               model,
+		CloudShipAIKey:      cloudshipaiKey,
 		CloudShipAIEndpoint: cloudshipaiEndpoint,
-		InstallShip:        installShip,
+		InstallShip:         installShip,
 	}
 
 	builder := NewEnvironmentBuilderWithOptions(environmentName, envPath, buildOptions)
@@ -102,10 +102,10 @@ func (h *BuildHandler) RunBuildBase(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Printf("Successfully built base Docker image: %s\n", containerImage)
 	}
-	
+
 	fmt.Printf("\nDeploy with config injection:\n")
 	fmt.Printf("docker run -it \\\n")
-	fmt.Printf("  -v ./staging/variables.yml:/app/environment/variables.yml \\\n") 
+	fmt.Printf("  -v ./staging/variables.yml:/app/environment/variables.yml \\\n")
 	fmt.Printf("  -v ./staging/config.yml:/app/environment/config.yml \\\n")
 	fmt.Printf("  -e OPENAI_API_KEY=$STAGING_OPENAI_KEY \\\n")
 	fmt.Printf("  -e ANTHROPIC_API_KEY=$STAGING_ANTHROPIC_KEY \\\n")

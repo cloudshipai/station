@@ -150,8 +150,8 @@ func InitializeLighthouseFromConfig(cfg *config.Config, mode DeploymentMode) (*L
 
 	// Disable TLS for localhost testing and port 50051 (standard insecure gRPC port)
 	if strings.Contains(lighthouseConfig.Endpoint, "localhost:") ||
-	   strings.Contains(lighthouseConfig.Endpoint, "127.0.0.1:") ||
-	   strings.Contains(lighthouseConfig.Endpoint, ":50051") {
+		strings.Contains(lighthouseConfig.Endpoint, "127.0.0.1:") ||
+		strings.Contains(lighthouseConfig.Endpoint, ":50051") {
 		lighthouseConfig.TLS = false
 	}
 

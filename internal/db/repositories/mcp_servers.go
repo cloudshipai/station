@@ -28,7 +28,7 @@ func convertMCPServerFromSQLc(server queries.McpServer) *models.MCPServer {
 		Command:       server.Command,
 		EnvironmentID: server.EnvironmentID,
 	}
-	
+
 	// Handle JSON fields
 	if server.Args.Valid {
 		if err := json.Unmarshal([]byte(server.Args.String), &result.Args); err != nil {
@@ -37,7 +37,7 @@ func convertMCPServerFromSQLc(server queries.McpServer) *models.MCPServer {
 	} else {
 		result.Args = []string{}
 	}
-	
+
 	if server.Env.Valid {
 		if err := json.Unmarshal([]byte(server.Env.String), &result.Env); err != nil {
 			result.Env = map[string]string{}
@@ -45,27 +45,27 @@ func convertMCPServerFromSQLc(server queries.McpServer) *models.MCPServer {
 	} else {
 		result.Env = map[string]string{}
 	}
-	
+
 	if server.WorkingDir.Valid {
 		result.WorkingDir = &server.WorkingDir.String
 	}
-	
+
 	if server.TimeoutSeconds.Valid {
 		result.TimeoutSeconds = &server.TimeoutSeconds.Int64
 	}
-	
+
 	if server.AutoRestart.Valid {
 		result.AutoRestart = &server.AutoRestart.Bool
 	}
-	
+
 	if server.FileConfigID.Valid {
 		result.FileConfigID = &server.FileConfigID.Int64
 	}
-	
+
 	if server.CreatedAt.Valid {
 		result.CreatedAt = server.CreatedAt.Time
 	}
-	
+
 	return result
 }
 
@@ -76,33 +76,33 @@ func convertMCPServerToSQLc(server *models.MCPServer) queries.CreateMCPServerPar
 		Command:       server.Command,
 		EnvironmentID: server.EnvironmentID,
 	}
-	
+
 	// Set FileConfigID if available
 	if server.FileConfigID != nil {
 		params.FileConfigID = sql.NullInt64{Int64: *server.FileConfigID, Valid: true}
 	}
-	
+
 	// Handle JSON fields
 	if argsJSON, err := json.Marshal(server.Args); err == nil {
 		params.Args = sql.NullString{String: string(argsJSON), Valid: true}
 	}
-	
+
 	if envJSON, err := json.Marshal(server.Env); err == nil {
 		params.Env = sql.NullString{String: string(envJSON), Valid: true}
 	}
-	
+
 	if server.WorkingDir != nil {
 		params.WorkingDir = sql.NullString{String: *server.WorkingDir, Valid: true}
 	}
-	
+
 	if server.TimeoutSeconds != nil {
 		params.TimeoutSeconds = sql.NullInt64{Int64: *server.TimeoutSeconds, Valid: true}
 	}
-	
+
 	if server.AutoRestart != nil {
 		params.AutoRestart = sql.NullBool{Bool: *server.AutoRestart, Valid: true}
 	}
-	
+
 	return params
 }
 
@@ -138,12 +138,12 @@ func (r *MCPServerRepo) GetByEnvironmentID(environmentID int64) ([]*models.MCPSe
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.MCPServer
 	for _, server := range servers {
 		result = append(result, convertMCPServerFromSQLc(server))
 	}
-	
+
 	return result, nil
 }
 
@@ -170,12 +170,12 @@ func (r *MCPServerRepo) GetByNameAndEnvironment(name string, environmentID int64
 		Name:          name,
 		EnvironmentID: environmentID,
 	}
-	
+
 	server, err := r.queries.GetMCPServerByNameAndEnvironment(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return convertMCPServerFromSQLc(server), nil
 }
 
@@ -187,32 +187,32 @@ func (r *MCPServerRepo) Update(server *models.MCPServer) error {
 		Name:    server.Name,
 		Command: server.Command,
 	}
-	
+
 	// Handle JSON fields
 	if argsJSON, err := json.Marshal(server.Args); err == nil {
 		params.Args = sql.NullString{String: string(argsJSON), Valid: true}
 	}
-	
+
 	if envJSON, err := json.Marshal(server.Env); err == nil {
 		params.Env = sql.NullString{String: string(envJSON), Valid: true}
 	}
-	
+
 	if server.WorkingDir != nil {
 		params.WorkingDir = sql.NullString{String: *server.WorkingDir, Valid: true}
 	}
-	
+
 	if server.TimeoutSeconds != nil {
 		params.TimeoutSeconds = sql.NullInt64{Int64: *server.TimeoutSeconds, Valid: true}
 	}
-	
+
 	if server.AutoRestart != nil {
 		params.AutoRestart = sql.NullBool{Bool: *server.AutoRestart, Valid: true}
 	}
-	
+
 	if server.FileConfigID != nil {
 		params.FileConfigID = sql.NullInt64{Int64: *server.FileConfigID, Valid: true}
 	}
-	
+
 	_, err := r.queries.UpdateMCPServer(context.Background(), params)
 	return err
 }

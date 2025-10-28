@@ -43,25 +43,25 @@ type MCPServerConfig struct {
 	Command     string                 `json:"command,omitempty"`
 	Args        []string               `json:"args,omitempty"`
 	Env         map[string]string      `json:"env,omitempty"`
-	URL         string                 `json:"url,omitempty"`         // For HTTP-based servers
-	Type        string                 `json:"type,omitempty"`        // "stdio" or "http"
+	URL         string                 `json:"url,omitempty"`  // For HTTP-based servers
+	Type        string                 `json:"type,omitempty"` // "stdio" or "http"
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // TemplateConfig represents the complete template.json structure
 type TemplateConfig struct {
-	Name        string                        `json:"name"`
-	Description string                        `json:"description,omitempty"`
-	MCPServers  map[string]MCPServerConfig    `json:"mcpServers"`
-	Metadata    map[string]interface{}        `json:"metadata,omitempty"`
+	Name        string                     `json:"name"`
+	Description string                     `json:"description,omitempty"`
+	MCPServers  map[string]MCPServerConfig `json:"mcpServers"`
+	Metadata    map[string]interface{}     `json:"metadata,omitempty"`
 }
 
 // SingleServerTemplate represents a single server template file
 type SingleServerTemplate struct {
-	Name        string                        `json:"name"`
-	Description string                        `json:"description,omitempty"`
-	MCPServers  map[string]MCPServerConfig    `json:"mcpServers"`
-	Metadata    map[string]interface{}        `json:"metadata,omitempty"`
+	Name        string                     `json:"name"`
+	Description string                     `json:"description,omitempty"`
+	MCPServers  map[string]MCPServerConfig `json:"mcpServers"`
+	Metadata    map[string]interface{}     `json:"metadata,omitempty"`
 }
 
 // GetMCPServersForEnvironment gets all MCP servers for an environment from individual files
@@ -108,7 +108,6 @@ func (s *MCPServerManagementService) GetMCPServersForEnvironment(environmentName
 
 	return result, nil
 }
-
 
 // AddMCPServerToEnvironment adds an MCP server to an environment as a separate file
 func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, serverName string, serverConfig MCPServerConfig) *MCPServerOperationResult {
@@ -356,7 +355,7 @@ func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryT
 	// Check multiple locations: embedded in binary location, system-wide, local dev
 	mcpServersDirs := []string{
 		"/usr/share/station/mcp-servers", // Docker/system installation
-		"mcp-servers",                     // Local development
+		"mcp-servers",                    // Local development
 	}
 
 	var mcpServersDir string
@@ -437,7 +436,7 @@ func (s *MCPServerManagementService) InstallOpenAPITemplate(environmentName, tem
 	// Find the mcp-servers directory
 	mcpServersDirs := []string{
 		"/usr/share/station/mcp-servers", // Docker/system installation
-		"mcp-servers",                     // Local development
+		"mcp-servers",                    // Local development
 	}
 
 	var mcpServersDir string
@@ -518,7 +517,7 @@ func (s *MCPServerManagementService) InstallTemplateFromDirectory(environmentNam
 	// Find the mcp-servers directory
 	mcpServersDirs := []string{
 		"/usr/share/station/mcp-servers", // Docker/system installation
-		"mcp-servers",                     // Local development
+		"mcp-servers",                    // Local development
 	}
 
 	var mcpServersDir string

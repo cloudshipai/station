@@ -198,10 +198,10 @@ func (s *Server) handleExportAgents(ctx context.Context, request mcp.CallToolReq
 
 	// Prepare response
 	response := map[string]interface{}{
-		"success":         len(exportErrors) == 0,
-		"exported_count":  len(exportResults),
-		"total_agents":    len(filteredAgents),
-		"export_results":  exportResults,
+		"success":          len(exportErrors) == 0,
+		"exported_count":   len(exportResults),
+		"total_agents":     len(filteredAgents),
+		"export_results":   exportResults,
 		"output_directory": outputDirectory,
 	}
 

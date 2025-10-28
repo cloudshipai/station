@@ -14,7 +14,7 @@ import (
 	"station/internal/logging"
 	"station/pkg/models"
 	"station/pkg/schema"
-	
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -35,7 +35,7 @@ type DotPromptConfig struct {
 
 // syncAgents handles synchronization of agent .prompt files
 func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environmentName string, options SyncOptions) (*SyncResult, error) {
-	
+
 	result := &SyncResult{
 		Environment:        environmentName,
 		Operations:         []SyncOperation{},
@@ -62,7 +62,7 @@ func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environment
 	// Process each .prompt file
 	for _, promptFile := range promptFiles {
 		agentName := strings.TrimSuffix(filepath.Base(promptFile), ".prompt")
-		
+
 		operation, err := s.syncSingleAgent(ctx, promptFile, agentName, environmentName, options)
 		if err != nil {
 			result.ValidationErrors++
@@ -82,7 +82,7 @@ func (s *DeclarativeSync) syncAgents(ctx context.Context, agentsDir, environment
 		}
 
 		result.Operations = append(result.Operations, *operation)
-		
+
 		switch operation.Type {
 		case OpTypeCreate, OpTypeUpdate:
 			result.AgentsSynced++
@@ -177,7 +177,7 @@ func (s *DeclarativeSync) parseDotPrompt(content string) (*DotPromptConfig, stri
 
 	// Extract YAML frontmatter (first part after initial ---)
 	yamlContent := strings.TrimSpace(parts[1])
-	
+
 	// Extract prompt content (everything after second ---)
 	promptContent := strings.TrimSpace(strings.Join(parts[2:], "---"))
 
@@ -188,7 +188,7 @@ func (s *DeclarativeSync) parseDotPrompt(content string) (*DotPromptConfig, stri
 			return nil, "", fmt.Errorf("failed to parse YAML frontmatter: %w", err)
 		}
 
-		}
+	}
 
 	return &config, promptContent, nil
 }
@@ -268,14 +268,14 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		promptContent,
 		maxSteps,
 		env.ID,
-		1, // createdBy - system user
-		inputSchema, // input_schema - extracted from frontmatter
-		nil, // cronSchedule
-		true, // scheduleEnabled
-		outputSchema, // outputSchema - extracted from dotprompt frontmatter
+		1,                  // createdBy - system user
+		inputSchema,        // input_schema - extracted from frontmatter
+		nil,                // cronSchedule
+		true,               // scheduleEnabled
+		outputSchema,       // outputSchema - extracted from dotprompt frontmatter
 		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
-		app, // app - CloudShip app classification
-		appType, // appType - CloudShip app_type classification
+		app,                // app - CloudShip app classification
+		appType,            // appType - CloudShip app_type classification
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -290,7 +290,6 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 			if err != nil {
 				return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
 			}
-
 
 			// Assign tool to agent
 			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
@@ -368,7 +367,7 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 	if existingAgent.Description != description {
 		needsUpdate = true
 	}
-	
+
 	// Check if input schema changed
 	currentSchemaStr := ""
 	if existingAgent.InputSchema != nil {
@@ -381,7 +380,7 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 	if currentSchemaStr != newSchemaStr {
 		needsUpdate = true
 	}
-	
+
 	// Check if output schema changed
 	currentOutputSchemaStr := ""
 	if existingAgent.OutputSchema != nil {
@@ -394,7 +393,7 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 	if currentOutputSchemaStr != newOutputSchemaStr {
 		needsUpdate = true
 	}
-	
+
 	// Check if output schema preset changed
 	currentOutputPresetStr := ""
 	if existingAgent.OutputSchemaPreset != nil {
@@ -483,13 +482,13 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			description,
 			promptContent,
 			maxSteps,
-			inputSchema, // input_schema - extracted from frontmatter
-			nil, // cronSchedule
-			true, // scheduleEnabled
-			outputSchema, // outputSchema - extracted from dotprompt frontmatter
+			inputSchema,        // input_schema - extracted from frontmatter
+			nil,                // cronSchedule
+			true,               // scheduleEnabled
+			outputSchema,       // outputSchema - extracted from dotprompt frontmatter
 			outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
-			app, // app - CloudShip app classification
-			appType, // appType - CloudShip app_type classification
+			app,                // app - CloudShip app classification
+			appType,            // appType - CloudShip app_type classification
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update agent: %w", err)
@@ -761,7 +760,7 @@ func (s *DeclarativeSync) parsePicoschemaField(fieldName string, value interface
 	case map[interface{}]interface{}:
 		// Object format (less common in Picoschema but supported)
 		variable := &schema.InputVariable{}
-		
+
 		if typeVal, exists := v["type"]; exists {
 			if typeStr, ok := typeVal.(string); ok {
 				variable.Type = schema.InputSchemaType(typeStr)
@@ -785,21 +784,21 @@ func (s *DeclarativeSync) parsePicoschemaField(fieldName string, value interface
 				variable.Required = reqBool
 			}
 		}
-		
+
 		return variable
 	}
-	
+
 	return nil
 }
 
 // parsePicoschemaString parses Picoschema string definitions
 func (s *DeclarativeSync) parsePicoschemaString(fieldName string, definition string) *schema.InputVariable {
 	variable := &schema.InputVariable{}
-	
+
 	// Check if field is optional (ends with ?)
 	isOptional := strings.HasSuffix(fieldName, "?")
 	variable.Required = !isOptional
-	
+
 	// Handle most common case: "type, description"
 	if strings.Contains(definition, ",") {
 		parts := strings.SplitN(definition, ",", 2)
@@ -807,11 +806,12 @@ func (s *DeclarativeSync) parsePicoschemaString(fieldName string, definition str
 		variable.Description = strings.TrimSpace(parts[1])
 		return variable
 	}
-	
+
 	// Handle simple case: "type"
 	variable.Type = schema.InputSchemaType(strings.TrimSpace(definition))
 	return variable
 }
+
 // convertYAMLMapToJSONMap recursively converts map[interface{}]interface{} to map[string]interface{}
 // This is needed because YAML unmarshaling creates interface{} keys, but JSON requires string keys
 func convertYAMLMapToJSONMap(data interface{}) interface{} {

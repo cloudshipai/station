@@ -30,7 +30,7 @@ type MCPConfig struct {
 	EnvironmentID   int64     `json:"environment_id" db:"environment_id"`
 	ConfigName      string    `json:"config_name" db:"config_name"`
 	Version         int64     `json:"version" db:"version"`
-	ConfigJSON      string    `json:"config_json" db:"config_json"` // encrypted
+	ConfigJSON      string    `json:"config_json" db:"config_json"`      // encrypted
 	EncryptedConfig string    `json:"encrypted_config" db:"config_json"` // alias for consistency
 	EncryptionKeyID string    `json:"encryption_key_id" db:"encryption_key_id"`
 	CreatedAt       time.Time `json:"created_at" db:"created_at"`
@@ -61,25 +61,25 @@ type MCPTool struct {
 }
 
 type Agent struct {
-	ID                int64      `json:"id" db:"id"`
-	Name              string     `json:"name" db:"name"`
-	Description       string     `json:"description" db:"description"`
-	Prompt            string     `json:"prompt" db:"prompt"`
-	MaxSteps          int64      `json:"max_steps" db:"max_steps"`
-	EnvironmentID     int64      `json:"environment_id" db:"environment_id"`
-	CreatedBy         int64      `json:"created_by" db:"created_by"`
-	InputSchema         *string    `json:"input_schema,omitempty" db:"input_schema"`
-	OutputSchema        *string    `json:"output_schema,omitempty" db:"output_schema"`
-	OutputSchemaPreset  *string    `json:"output_schema_preset,omitempty" db:"output_schema_preset"`
-	App                 string     `json:"app,omitempty" db:"app"`
-	AppType             string     `json:"app_type,omitempty" db:"app_subtype"` // Note: DB column is app_subtype but we use app_type in code
-	CronSchedule        *string    `json:"cron_schedule,omitempty" db:"cron_schedule"`
-	IsScheduled       bool       `json:"is_scheduled" db:"is_scheduled"`
-	LastScheduledRun  *time.Time `json:"last_scheduled_run,omitempty" db:"last_scheduled_run"`
-	NextScheduledRun  *time.Time `json:"next_scheduled_run,omitempty" db:"next_scheduled_run"`
-	ScheduleEnabled   bool       `json:"schedule_enabled" db:"schedule_enabled"`
-	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
+	ID                 int64      `json:"id" db:"id"`
+	Name               string     `json:"name" db:"name"`
+	Description        string     `json:"description" db:"description"`
+	Prompt             string     `json:"prompt" db:"prompt"`
+	MaxSteps           int64      `json:"max_steps" db:"max_steps"`
+	EnvironmentID      int64      `json:"environment_id" db:"environment_id"`
+	CreatedBy          int64      `json:"created_by" db:"created_by"`
+	InputSchema        *string    `json:"input_schema,omitempty" db:"input_schema"`
+	OutputSchema       *string    `json:"output_schema,omitempty" db:"output_schema"`
+	OutputSchemaPreset *string    `json:"output_schema_preset,omitempty" db:"output_schema_preset"`
+	App                string     `json:"app,omitempty" db:"app"`
+	AppType            string     `json:"app_type,omitempty" db:"app_subtype"` // Note: DB column is app_subtype but we use app_type in code
+	CronSchedule       *string    `json:"cron_schedule,omitempty" db:"cron_schedule"`
+	IsScheduled        bool       `json:"is_scheduled" db:"is_scheduled"`
+	LastScheduledRun   *time.Time `json:"last_scheduled_run,omitempty" db:"last_scheduled_run"`
+	NextScheduledRun   *time.Time `json:"next_scheduled_run,omitempty" db:"next_scheduled_run"`
+	ScheduleEnabled    bool       `json:"schedule_enabled" db:"schedule_enabled"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // AgentTool represents the many-to-many relationship between agents and tools (environment-specific)
@@ -105,10 +105,10 @@ type AgentToolWithDetails struct {
 type AgentAuditLog struct {
 	ID          int64     `json:"id" db:"id"`
 	AgentID     int64     `json:"agent_id" db:"agent_id"`
-	EventType   string    `json:"event_type" db:"event_type"` // "tool_removed", "tool_added", "config_changed", etc.
+	EventType   string    `json:"event_type" db:"event_type"`     // "tool_removed", "tool_added", "config_changed", etc.
 	EventReason string    `json:"event_reason" db:"event_reason"` // "orphaned_config", "manual_removal", etc.
-	Details     string    `json:"details" db:"details"` // JSON with specifics like tool names, config names
-	Impact      string    `json:"impact" db:"impact"` // "high", "medium", "low" 
+	Details     string    `json:"details" db:"details"`           // JSON with specifics like tool names, config names
+	Impact      string    `json:"impact" db:"impact"`             // "high", "medium", "low"
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
@@ -123,26 +123,26 @@ type MCPToolWithDetails struct {
 }
 
 type AgentRun struct {
-	ID              int64      `json:"id" db:"id"`
-	AgentID         int64      `json:"agent_id" db:"agent_id"`
-	UserID          int64      `json:"user_id" db:"user_id"`
-	Task            string     `json:"task" db:"task"`
-	FinalResponse   string     `json:"final_response" db:"final_response"`
-	StepsTaken      int64      `json:"steps_taken" db:"steps_taken"`
-	ToolCalls       *JSONArray `json:"tool_calls" db:"tool_calls"`
-	ExecutionSteps  *JSONArray `json:"execution_steps" db:"execution_steps"`
-	Status          string     `json:"status" db:"status"`
-	StartedAt       time.Time  `json:"started_at" db:"started_at"`
-	CompletedAt     *time.Time `json:"completed_at" db:"completed_at"`
+	ID             int64      `json:"id" db:"id"`
+	AgentID        int64      `json:"agent_id" db:"agent_id"`
+	UserID         int64      `json:"user_id" db:"user_id"`
+	Task           string     `json:"task" db:"task"`
+	FinalResponse  string     `json:"final_response" db:"final_response"`
+	StepsTaken     int64      `json:"steps_taken" db:"steps_taken"`
+	ToolCalls      *JSONArray `json:"tool_calls" db:"tool_calls"`
+	ExecutionSteps *JSONArray `json:"execution_steps" db:"execution_steps"`
+	Status         string     `json:"status" db:"status"`
+	StartedAt      time.Time  `json:"started_at" db:"started_at"`
+	CompletedAt    *time.Time `json:"completed_at" db:"completed_at"`
 	// Response object metadata from Station's OpenAI plugin
-	InputTokens     *int64          `json:"input_tokens,omitempty" db:"input_tokens"`
-	OutputTokens    *int64          `json:"output_tokens,omitempty" db:"output_tokens"`
-	TotalTokens     *int64          `json:"total_tokens,omitempty" db:"total_tokens"`
-	DurationSeconds *float64        `json:"duration_seconds,omitempty" db:"duration_seconds"`
-	ModelName       *string         `json:"model_name,omitempty" db:"model_name"`
-	ToolsUsed       *int64          `json:"tools_used,omitempty" db:"tools_used"`
-	DebugLogs       *JSONArray      `json:"debug_logs,omitempty" db:"debug_logs"`
-	Error           *string         `json:"error,omitempty" db:"error"`
+	InputTokens     *int64     `json:"input_tokens,omitempty" db:"input_tokens"`
+	OutputTokens    *int64     `json:"output_tokens,omitempty" db:"output_tokens"`
+	TotalTokens     *int64     `json:"total_tokens,omitempty" db:"total_tokens"`
+	DurationSeconds *float64   `json:"duration_seconds,omitempty" db:"duration_seconds"`
+	ModelName       *string    `json:"model_name,omitempty" db:"model_name"`
+	ToolsUsed       *int64     `json:"tools_used,omitempty" db:"tools_used"`
+	DebugLogs       *JSONArray `json:"debug_logs,omitempty" db:"debug_logs"`
+	Error           *string    `json:"error,omitempty" db:"error"`
 }
 
 type AgentRunWithDetails struct {
@@ -166,7 +166,7 @@ func (j *JSONArray) Scan(value interface{}) error {
 		*j = nil
 		return nil
 	}
-	
+
 	var bytes []byte
 	switch v := value.(type) {
 	case []byte:
@@ -176,7 +176,7 @@ func (j *JSONArray) Scan(value interface{}) error {
 	default:
 		return nil
 	}
-	
+
 	return json.Unmarshal(bytes, j)
 }
 
@@ -203,11 +203,11 @@ type ToolCall struct {
 }
 
 type ExecutionStep struct {
-	StepNumber int       `json:"step_number"`
-	Action     string    `json:"action"`
+	StepNumber int        `json:"step_number"`
+	Action     string     `json:"action"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	Response   string    `json:"response"`
-	Timestamp  time.Time `json:"timestamp"`
+	Response   string     `json:"response"`
+	Timestamp  time.Time  `json:"timestamp"`
 }
 
 // Setting represents a system setting
@@ -227,7 +227,7 @@ type Webhook struct {
 	URL            string    `json:"url" db:"url"`
 	Secret         string    `json:"secret,omitempty" db:"secret"`
 	Enabled        bool      `json:"enabled" db:"enabled"`
-	Events         string    `json:"events" db:"events"` // JSON array of event types
+	Events         string    `json:"events" db:"events"`             // JSON array of event types
 	Headers        string    `json:"headers,omitempty" db:"headers"` // JSON object of custom headers
 	TimeoutSeconds int       `json:"timeout_seconds" db:"timeout_seconds"`
 	RetryAttempts  int       `json:"retry_attempts" db:"retry_attempts"`

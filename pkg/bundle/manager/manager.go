@@ -21,13 +21,13 @@ import (
 
 // Manager implements the BundleManager interface
 type Manager struct {
-	fs            afero.Fs
-	configDir     string
-	bundlesDir    string
-	registries    map[string]bundle.BundleRegistry
-	creator       bundle.BundleCreator
-	validator     bundle.BundleValidator
-	packager      bundle.BundlePackager
+	fs         afero.Fs
+	configDir  string
+	bundlesDir string
+	registries map[string]bundle.BundleRegistry
+	creator    bundle.BundleCreator
+	validator  bundle.BundleValidator
+	packager   bundle.BundlePackager
 }
 
 // NewManager creates a new bundle manager
@@ -35,7 +35,7 @@ func NewManager(configDir string, fs afero.Fs) *Manager {
 	if fs == nil {
 		fs = afero.NewOsFs()
 	}
-	
+
 	return &Manager{
 		fs:         fs,
 		configDir:  configDir,
@@ -207,7 +207,7 @@ func (m *Manager) List(ctx context.Context, opts bundle.ListOptions) ([]bundle.B
 // ListInstalled returns all locally installed bundles
 func (m *Manager) ListInstalled() ([]bundle.InstalledBundle, error) {
 	installedPath := filepath.Join(m.bundlesDir, "installed.json")
-	
+
 	exists, err := afero.Exists(m.fs, installedPath)
 	if err != nil {
 		return nil, err
@@ -380,7 +380,7 @@ func (m *Manager) copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		
+
 		dstPath := filepath.Join(dst, relPath)
 
 		if info.IsDir() {
@@ -418,19 +418,19 @@ func (m *Manager) processTemplate(templateContent string, variables map[string]i
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-	
+
 	var result strings.Builder
 	err = tmpl.Execute(&result, variables)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
-	
+
 	return result.String(), nil
 }
 
 func (m *Manager) updateEnvironmentVariables(environment string, variables map[string]interface{}) error {
 	variablesPath := filepath.Join(m.configDir, "environments", environment, "variables.yml")
-	
+
 	// Read existing variables
 	var existingVars map[string]interface{}
 	if exists, _ := afero.Exists(m.fs, variablesPath); exists {
@@ -439,7 +439,7 @@ func (m *Manager) updateEnvironmentVariables(environment string, variables map[s
 			_ = yaml.Unmarshal(data, &existingVars)
 		}
 	}
-	
+
 	if existingVars == nil {
 		existingVars = make(map[string]interface{})
 	}
@@ -483,7 +483,7 @@ func (m *Manager) saveInstalledBundleRecord(installedBundle bundle.InstalledBund
 
 func (m *Manager) saveInstalledBundleList(installed []bundle.InstalledBundle) error {
 	installedPath := filepath.Join(m.bundlesDir, "installed.json")
-	
+
 	if err := m.fs.MkdirAll(m.bundlesDir, 0755); err != nil {
 		return err
 	}
@@ -499,7 +499,7 @@ func (m *Manager) saveInstalledBundleList(installed []bundle.InstalledBundle) er
 // removeRenderedConfigs removes rendered config files from all environments
 func (m *Manager) removeRenderedConfigs(bundleName string) error {
 	environmentsDir := filepath.Join(m.configDir, "environments")
-	
+
 	// Check if environments directory exists
 	exists, err := afero.DirExists(m.fs, environmentsDir)
 	if err != nil || !exists {

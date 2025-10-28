@@ -46,7 +46,7 @@ func (h *APIHandlers) registerMCPServerRoutes(group *gin.RouterGroup) {
 // listMCPServers lists all MCP servers, optionally filtered by environment
 func (h *APIHandlers) listMCPServers(c *gin.Context) {
 	environmentIDStr := c.Query("environment_id")
-	
+
 	if environmentIDStr != "" {
 		// Filter by environment
 		environmentID, err := strconv.ParseInt(environmentIDStr, 10, 64)
@@ -54,13 +54,13 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid environment_id"})
 			return
 		}
-		
+
 		servers, err := h.repos.MCPServers.GetByEnvironmentID(environmentID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch MCP servers"})
 			return
 		}
-		
+
 		// Enhance servers with status information
 		serverResponses := make([]map[string]interface{}, len(servers))
 		for i, server := range servers {
@@ -72,20 +72,20 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 			}
 
 			serverData := map[string]interface{}{
-				"id":             server.ID,
-				"name":           server.Name,
-				"command":        server.Command,
-				"args":           server.Args,
-				"env":            server.Env,
-				"working_dir":    server.WorkingDir,
+				"id":              server.ID,
+				"name":            server.Name,
+				"command":         server.Command,
+				"args":            server.Args,
+				"env":             server.Env,
+				"working_dir":     server.WorkingDir,
 				"timeout_seconds": server.TimeoutSeconds,
-				"auto_restart":   server.AutoRestart,
-				"environment_id": server.EnvironmentID,
-				"created_at":     server.CreatedAt,
-				"file_config_id": server.FileConfigID,
-				"tools_count":    toolsCount,
-				"status":         "active",
-				"error":          nil,
+				"auto_restart":    server.AutoRestart,
+				"environment_id":  server.EnvironmentID,
+				"created_at":      server.CreatedAt,
+				"file_config_id":  server.FileConfigID,
+				"tools_count":     toolsCount,
+				"status":          "active",
+				"error":           nil,
 			}
 
 			// Check for template variable issues
@@ -105,11 +105,11 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 
 			serverResponses[i] = serverData
 		}
-		
+
 		c.JSON(http.StatusOK, gin.H{"servers": serverResponses})
 		return
 	}
-	
+
 	// Get all servers across all environments
 	servers, err := h.repos.MCPServers.GetAll()
 	if err != nil {
@@ -128,20 +128,20 @@ func (h *APIHandlers) listMCPServers(c *gin.Context) {
 		}
 
 		serverData := map[string]interface{}{
-			"id":             server.ID,
-			"name":           server.Name,
-			"command":        server.Command,
-			"args":           server.Args,
-			"env":            server.Env,
-			"working_dir":    server.WorkingDir,
+			"id":              server.ID,
+			"name":            server.Name,
+			"command":         server.Command,
+			"args":            server.Args,
+			"env":             server.Env,
+			"working_dir":     server.WorkingDir,
 			"timeout_seconds": server.TimeoutSeconds,
-			"auto_restart":   server.AutoRestart,
-			"environment_id": server.EnvironmentID,
-			"created_at":     server.CreatedAt,
-			"file_config_id": server.FileConfigID,
-			"tools_count":    toolsCount,
-			"status":         "active",
-			"error":          nil,
+			"auto_restart":    server.AutoRestart,
+			"environment_id":  server.EnvironmentID,
+			"created_at":      server.CreatedAt,
+			"file_config_id":  server.FileConfigID,
+			"tools_count":     toolsCount,
+			"status":          "active",
+			"error":           nil,
 		}
 
 		// Check for template variable issues
@@ -172,13 +172,13 @@ func (h *APIHandlers) getMCPServer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
 		return
 	}
-	
+
 	server, err := h.repos.MCPServers.GetByID(serverID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "MCP server not found"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, server)
 }
 
@@ -550,9 +550,9 @@ func (h *APIHandlers) deleteMCPServer(c *gin.Context) {
 	templateResult := mcpService.DeleteMCPServerFromEnvironment(environment.Name, server.Name)
 
 	response := gin.H{
-		"message": fmt.Sprintf("MCP server '%s' deleted successfully", server.Name),
-		"server_id": serverID,
-		"server_name": server.Name,
+		"message":          fmt.Sprintf("MCP server '%s' deleted successfully", server.Name),
+		"server_id":        serverID,
+		"server_name":      server.Name,
 		"database_deleted": true,
 	}
 
@@ -626,10 +626,10 @@ func (h *APIHandlers) getMCPServerRawConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"server_id": serverID,
+		"server_id":   serverID,
 		"server_name": server.Name,
-		"config": string(content),
-		"file_path": fileConfig.TemplatePath,
+		"config":      string(content),
+		"file_path":   fileConfig.TemplatePath,
 	})
 }
 
@@ -684,9 +684,9 @@ func (h *APIHandlers) updateMCPServerRawConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Configuration updated successfully",
-		"server_id": serverID,
+		"message":     "Configuration updated successfully",
+		"server_id":   serverID,
 		"server_name": server.Name,
-		"file_path": fileConfig.TemplatePath,
+		"file_path":   fileConfig.TemplatePath,
 	})
 }

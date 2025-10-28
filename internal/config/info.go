@@ -113,7 +113,7 @@ func isLocalMode() bool {
 	if executable, err := os.Executable(); err == nil {
 		executableName := filepath.Base(executable)
 		executableDir := filepath.Dir(executable)
-		
+
 		// Local mode indicators
 		if executableName == "station" {
 			// Check if in current directory or bin subdirectory
@@ -170,12 +170,12 @@ func fileExists(path string) bool {
 // GetLoadedConfigs returns information about which configurations are actually loaded
 func GetLoadedConfigs() map[string]interface{} {
 	configs := make(map[string]interface{})
-	
+
 	// This would be populated by the actual config loading logic
 	// For now, we'll return basic information
 	configs["config_file_loaded"] = fileExists(getConfigFilePath())
 	configs["database_connected"] = fileExists(getDatabasePath())
-	
+
 	return configs
 }
 

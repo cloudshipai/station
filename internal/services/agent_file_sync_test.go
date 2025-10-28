@@ -17,15 +17,15 @@ import (
 
 // MockAgentToolsRepo implements the AgentTools repository interface for testing
 type MockAgentToolsRepo struct {
-	tools map[int64][]*models.AgentToolWithDetails // agentID -> tools
-	nextID int64
+	tools   map[int64][]*models.AgentToolWithDetails // agentID -> tools
+	nextID  int64
 	mcpRepo *MockMCPToolsRepo // Need reference to get actual tool names
 }
 
 func NewMockAgentToolsRepo(mcpRepo *MockMCPToolsRepo) *MockAgentToolsRepo {
 	return &MockAgentToolsRepo{
-		tools: make(map[int64][]*models.AgentToolWithDetails),
-		nextID: 1,
+		tools:   make(map[int64][]*models.AgentToolWithDetails),
+		nextID:  1,
 		mcpRepo: mcpRepo,
 	}
 }
@@ -519,12 +519,12 @@ func TestParseDotPrompt(t *testing.T) {
 	service := NewDeclarativeSync(repos, cfg)
 
 	tests := []struct {
-		name            string
-		content         string
-		expectConfig    *DotPromptConfig
-		expectPrompt    string
-		expectError     bool
-		description     string
+		name         string
+		content      string
+		expectConfig *DotPromptConfig
+		expectPrompt string
+		expectError  bool
+		description  string
 	}{
 		{
 			name: "Valid dotprompt with frontmatter",
@@ -545,11 +545,11 @@ You are a test agent.
 {{role "user"}}
 {{userInput}}`,
 			expectConfig: &DotPromptConfig{
-				Model: "gpt-4o-mini",
+				Model:    "gpt-4o-mini",
 				MaxSteps: 5,
-				Tools: []string{"__read_file", "__write_file"},
+				Tools:    []string{"__read_file", "__write_file"},
 				Metadata: map[string]interface{}{
-					"name": "Test Agent",
+					"name":        "Test Agent",
 					"description": "Test description",
 				},
 			},
@@ -582,8 +582,8 @@ invalid yaml: [unclosed bracket
 Test`,
 			expectConfig: nil,
 			expectPrompt: "",
-			expectError: true,
-			description: "Should error on invalid YAML",
+			expectError:  true,
+			description:  "Should error on invalid YAML",
 		},
 		{
 			name: "Empty frontmatter",

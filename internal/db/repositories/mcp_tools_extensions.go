@@ -18,7 +18,7 @@ func (r *MCPToolRepo) CreateWithFileConfig(tool *models.MCPTool, fileConfigID in
 		InputSchema:  sql.NullString{String: string(tool.Schema), Valid: tool.Schema != nil},
 		FileConfigID: sql.NullInt64{Int64: fileConfigID, Valid: true},
 	}
-	
+
 	created, err := r.queries.CreateMCPToolWithFileConfig(context.Background(), params)
 	if err != nil {
 		return 0, err
@@ -35,7 +35,7 @@ func (r *MCPToolRepo) CreateWithFileConfigTx(tx *sql.Tx, tool *models.MCPTool, f
 		InputSchema:  sql.NullString{String: string(tool.Schema), Valid: tool.Schema != nil},
 		FileConfigID: sql.NullInt64{Int64: fileConfigID, Valid: true},
 	}
-	
+
 	txQueries := r.queries.WithTx(tx)
 	created, err := txQueries.CreateMCPToolWithFileConfig(context.Background(), params)
 	if err != nil {
@@ -50,12 +50,12 @@ func (r *MCPToolRepo) GetByFileConfigID(fileConfigID int64) ([]*models.MCPTool, 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.MCPTool
 	for _, tool := range tools {
 		result = append(result, convertMCPToolFromSQLc(tool))
 	}
-	
+
 	return result, nil
 }
 
@@ -77,7 +77,7 @@ func (r *MCPToolRepo) GetToolsWithFileConfigInfo(environmentID int64) ([]*models
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert SQLC row type to domain model
 	var tools []*models.MCPToolWithFileConfig
 	for _, row := range rows {
@@ -92,11 +92,11 @@ func (r *MCPToolRepo) GetToolsWithFileConfigInfo(environmentID int64) ([]*models
 			ConfigName:   row.ConfigName.String,
 			TemplatePath: row.TemplatePath.String,
 		}
-		
+
 		if row.CreatedAt.Valid {
 			tool.CreatedAt = row.CreatedAt.Time
 		}
-		
+
 		if row.InputSchema.Valid {
 			tool.Schema = []byte(row.InputSchema.String)
 		}
@@ -106,10 +106,10 @@ func (r *MCPToolRepo) GetToolsWithFileConfigInfo(environmentID int64) ([]*models
 		if row.LastLoadedAt.Valid {
 			tool.LastLoaded = &row.LastLoadedAt.Time
 		}
-		
+
 		tools = append(tools, tool)
 	}
-	
+
 	return tools, nil
 }
 
@@ -119,12 +119,12 @@ func (r *MCPToolRepo) GetOrphanedTools(environmentID int64) ([]*models.MCPTool, 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.MCPTool
 	for _, tool := range tools {
 		result = append(result, convertMCPToolFromSQLc(tool))
 	}
-	
+
 	return result, nil
 }
 

@@ -76,7 +76,7 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 	// Environment directory path
 	envPath := filepath.Join(homeDir, ".config", "station", "environments", req.Environment)
 	log.Printf("[Bundle] Environment path: %s", envPath)
-	
+
 	// Check if environment directory exists
 	if _, err := os.Stat(envPath); os.IsNotExist(err) {
 		log.Printf("[Bundle] ERROR: Environment directory not found: %s", envPath)
@@ -338,15 +338,15 @@ type BundleInstallRequest struct {
 
 // Bundle install response structure
 type BundleInstallResponse struct {
-	Success           bool   `json:"success"`
-	Message           string `json:"message"`
-	EnvironmentName   string `json:"environment_name,omitempty"`
-	EnvironmentID     int64  `json:"environment_id,omitempty"`
-	BundlePath        string `json:"bundle_path,omitempty"`
-	InstalledAgents   int    `json:"installed_agents,omitempty"`
-	InstalledMCPs     int    `json:"installed_mcps,omitempty"`
-	SyncCommand       string `json:"sync_command,omitempty"`
-	Error             string `json:"error,omitempty"`
+	Success         bool   `json:"success"`
+	Message         string `json:"message"`
+	EnvironmentName string `json:"environment_name,omitempty"`
+	EnvironmentID   int64  `json:"environment_id,omitempty"`
+	BundlePath      string `json:"bundle_path,omitempty"`
+	InstalledAgents int    `json:"installed_agents,omitempty"`
+	InstalledMCPs   int    `json:"installed_mcps,omitempty"`
+	SyncCommand     string `json:"sync_command,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // installBundle handles the POST /bundles/install endpoint
@@ -670,7 +670,7 @@ func (h *APIHandlers) listBundles(c *gin.Context) {
 
 	// Get bundles directory
 	bundlesDir := filepath.Join(homeDir, ".config", "station", "bundles")
-	
+
 	// Check if bundles directory exists
 	if _, err := os.Stat(bundlesDir); os.IsNotExist(err) {
 		c.JSON(http.StatusOK, BundleListResponse{
@@ -827,10 +827,10 @@ func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
 func generateBundleNameFromURL(url string) string {
 	// Parse URL to extract meaningful parts
 	parts := strings.Split(url, "/")
-	
+
 	// Look for repository name in common URL patterns
 	var name string
-	
+
 	// GitHub pattern: https://github.com/user/repo or https://github.com/user/repo/...
 	if strings.Contains(url, "github.com") {
 		for i, part := range parts {
@@ -840,18 +840,18 @@ func generateBundleNameFromURL(url string) string {
 			}
 		}
 	}
-	
+
 	// If no specific pattern matched, use last meaningful part
 	if name == "" {
 		for i := len(parts) - 1; i >= 0; i-- {
-			if parts[i] != "" && parts[i] != "download" && parts[i] != "releases" && 
-			   !strings.Contains(parts[i], ".") {
+			if parts[i] != "" && parts[i] != "download" && parts[i] != "releases" &&
+				!strings.Contains(parts[i], ".") {
 				name = parts[i]
 				break
 			}
 		}
 	}
-	
+
 	// Fallback to generic name with timestamp
 	if name == "" {
 		name = fmt.Sprintf("bundle-%d", time.Now().Unix())
@@ -861,6 +861,6 @@ func generateBundleNameFromURL(url string) string {
 	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "-")
 	name = regexp.MustCompile(`[^a-z0-9\-]`).ReplaceAllString(name, "")
-	
+
 	return name
 }

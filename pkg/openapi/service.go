@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
 	"station/pkg/openapi/converter"
 	"station/pkg/openapi/models"
 	"station/pkg/openapi/parser"
-	"gopkg.in/yaml.v3"
 )
 
 // Service handles OpenAPI to MCP server conversion

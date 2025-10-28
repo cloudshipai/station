@@ -34,7 +34,7 @@ func TestBundleCLI_CreateBundle(t *testing.T) {
 				// Check that required files were created
 				files := []string{
 					"manifest.json",
-					"template.json", 
+					"template.json",
 					"variables.schema.json",
 					"README.md",
 				}
@@ -58,7 +58,7 @@ func TestBundleCLI_CreateBundle(t *testing.T) {
 			bundlePath: "/test/existing-bundle",
 			opts: bundle.CreateOptions{
 				Name:        "existing-bundle",
-				Author:      "Test Author", 
+				Author:      "Test Author",
 				Description: "Test bundle",
 			},
 			setupFS: func(fs afero.Fs) {
@@ -116,8 +116,8 @@ func TestBundleCLI_ValidateBundle(t *testing.T) {
 			setupBundle: func(fs afero.Fs, bundlePath string) {
 				createValidTestBundle(t, fs, bundlePath)
 			},
-			expectError: false,
-			expectValid: true,
+			expectError:  false,
+			expectValid:  true,
 			expectIssues: 0,
 		},
 		{
@@ -268,7 +268,7 @@ func TestBundleCLI_VariableAnalysis(t *testing.T) {
 			setupBundle: func(fs afero.Fs, bundlePath string) {
 				fs.MkdirAll(bundlePath, 0755)
 				createValidManifest(t, fs, bundlePath)
-				
+
 				// Template with variables
 				template := `{
 					"mcpServers": {
@@ -281,7 +281,7 @@ func TestBundleCLI_VariableAnalysis(t *testing.T) {
 					}
 				}`
 				createFile(t, fs, filepath.Join(bundlePath, "template.json"), template)
-				
+
 				// Schema with matching variables
 				schema := `{
 					"type": "object",
@@ -300,7 +300,7 @@ func TestBundleCLI_VariableAnalysis(t *testing.T) {
 			setupBundle: func(fs afero.Fs, bundlePath string) {
 				fs.MkdirAll(bundlePath, 0755)
 				createValidManifest(t, fs, bundlePath)
-				
+
 				// Template with variables
 				template := `{
 					"mcpServers": {
@@ -313,7 +313,7 @@ func TestBundleCLI_VariableAnalysis(t *testing.T) {
 					}
 				}`
 				createFile(t, fs, filepath.Join(bundlePath, "template.json"), template)
-				
+
 				// Schema missing MISSING_VAR
 				schema := `{
 					"type": "object",
@@ -355,9 +355,9 @@ func TestBundleCLI_VariableAnalysis(t *testing.T) {
 
 func createValidTestBundle(t *testing.T, fs afero.Fs, bundlePath string) {
 	fs.MkdirAll(bundlePath, 0755)
-	
+
 	createValidManifest(t, fs, bundlePath)
-	
+
 	createFile(t, fs, filepath.Join(bundlePath, "template.json"), `{
 		"mcpServers": {
 			"test-server": {
@@ -366,14 +366,14 @@ func createValidTestBundle(t *testing.T, fs afero.Fs, bundlePath string) {
 			}
 		}
 	}`)
-	
+
 	createFile(t, fs, filepath.Join(bundlePath, "variables.schema.json"), `{
 		"type": "object",
 		"properties": {}
 	}`)
-	
+
 	createFile(t, fs, filepath.Join(bundlePath, "README.md"), "# Test Bundle")
-	
+
 	// Create examples directory
 	fs.MkdirAll(filepath.Join(bundlePath, "examples"), 0755)
 }

@@ -83,7 +83,6 @@ func (s *Server) handleGetPrompt(ctx context.Context, request mcp.CallToolReques
 	return mcp.NewToolResultText(string(content)), nil
 }
 
-
 func (s *Server) handleListMCPConfigs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// Return empty configs for now since file-based system doesn't use database configs
 	allConfigs := []map[string]interface{}{}

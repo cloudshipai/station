@@ -62,11 +62,11 @@ func (dcs *DeploymentContextService) GatherContextForMode(mode string) *Deployme
 // ToLabelsMap converts deployment context to a labels map for Lighthouse
 func (dc *DeploymentContext) ToLabelsMap() map[string]string {
 	labels := map[string]string{
-		"mode":             dc.Mode,
-		"source":           dc.Source,
-		"command_line":     dc.CommandLine,
-		"working_dir":      dc.WorkingDirectory,
-		"station_version":  dc.StationVersion,
+		"mode":            dc.Mode,
+		"source":          dc.Source,
+		"command_line":    dc.CommandLine,
+		"working_dir":     dc.WorkingDirectory,
+		"station_version": dc.StationVersion,
 	}
 
 	// Add optional fields only if they have values
@@ -120,7 +120,7 @@ func (dcs *DeploymentContextService) getGitBranch() string {
 	if branch := os.Getenv("GIT_BRANCH"); branch != "" {
 		return branch
 	}
-	
+
 	// TODO: Could add git command execution as fallback
 	// exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	return ""
@@ -137,7 +137,7 @@ func (dcs *DeploymentContextService) getGitCommit() string {
 	if commit := os.Getenv("GIT_COMMIT"); commit != "" {
 		return commit
 	}
-	
+
 	// TODO: Could add git command execution as fallback
 	// exec.Command("git", "rev-parse", "HEAD")
 	return ""
@@ -198,18 +198,18 @@ func (dcs *DeploymentContextService) getWorkflowName() string {
 // Environment-specific context gathering
 func (dcs *DeploymentContextService) getStdioEnvironment() map[string]string {
 	env := make(map[string]string)
-	
+
 	// Collect MCP client information
 	if client := os.Getenv("MCP_CLIENT"); client != "" {
 		env["mcp_client"] = client
 	}
-	
+
 	return env
 }
 
 func (dcs *DeploymentContextService) getServerEnvironment() map[string]string {
 	env := make(map[string]string)
-	
+
 	// Collect server deployment information
 	if namespace := os.Getenv("KUBERNETES_NAMESPACE"); namespace != "" {
 		env["k8s_namespace"] = namespace
@@ -220,13 +220,13 @@ func (dcs *DeploymentContextService) getServerEnvironment() map[string]string {
 	if cluster := os.Getenv("CLUSTER_NAME"); cluster != "" {
 		env["cluster"] = cluster
 	}
-	
+
 	return env
 }
 
 func (dcs *DeploymentContextService) getCIEnvironment() map[string]string {
 	env := make(map[string]string)
-	
+
 	// Collect CI/CD specific environment variables
 	relevantKeys := []string{
 		"GITHUB_ACTIONS", "GITHUB_WORKFLOW", "GITHUB_REPOSITORY",
@@ -236,12 +236,12 @@ func (dcs *DeploymentContextService) getCIEnvironment() map[string]string {
 		"TRAVIS", "TRAVIS_REPO_SLUG", "TRAVIS_JOB_NAME",
 		"CIRCLECI", "CIRCLE_PROJECT_REPONAME", "CIRCLE_JOB",
 	}
-	
+
 	for _, key := range relevantKeys {
 		if value := os.Getenv(key); value != "" {
 			env[key] = value
 		}
 	}
-	
+
 	return env
 }

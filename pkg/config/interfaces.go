@@ -14,16 +14,16 @@ type ConfigManager interface {
 	SaveTemplate(ctx context.Context, envID int64, configName string, template *MCPTemplate) error
 	RenderTemplate(ctx context.Context, template *MCPTemplate, variables map[string]interface{}) (*models.MCPConfigData, error)
 	ValidateTemplate(ctx context.Context, templatePath string) (*TemplateValidation, error)
-	
+
 	// Variable operations
 	LoadVariables(ctx context.Context, envID int64) (map[string]interface{}, error)
 	SaveVariables(ctx context.Context, envID int64, variables map[string]interface{}) error
 	PromptForMissingVariables(ctx context.Context, template *MCPTemplate, existing map[string]interface{}) (map[string]interface{}, error)
-	
+
 	// Discovery operations
 	DiscoverTemplates(ctx context.Context, envPath string) ([]TemplateInfo, error)
 	ExtractTemplateVariables(ctx context.Context, templatePath string) ([]TemplateVariable, error)
-	
+
 	// Environment operations
 	GetConfigPath(envName, configName string) string
 	GetVariablesPath(envName string) string

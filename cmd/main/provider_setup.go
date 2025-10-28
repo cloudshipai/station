@@ -52,7 +52,7 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 	detectedProvider := ""
 	if provider, _ := detectProviderFromEnv(); provider != "" {
 		fmt.Print("Use this provider? [Y/n]: ")
-		
+
 		var response string
 		fmt.Scanln(&response)
 		if strings.ToLower(response) != "n" && strings.ToLower(response) != "no" {
@@ -62,7 +62,7 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 
 	log.Printf("\n🤖 Let's set up your AI provider...\n")
 	log.Printf("This will be used for intelligent agent execution and MCP tool management.\n\n")
-	
+
 	// Step 1: Provider selection (or use detected)
 	var provider string
 	var err error
@@ -298,19 +298,19 @@ func (i item) FilterValue() string { return "" }
 // Styles
 var (
 	titleStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#FF6B9D")).
-		Padding(0, 2).
-		MarginBottom(1)
+			Bold(true).
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color("#FF6B9D")).
+			Padding(0, 2).
+			MarginBottom(1)
 
 	subtitleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#626262")).
-		MarginBottom(1)
+			Foreground(lipgloss.Color("#626262")).
+			MarginBottom(1)
 
 	quitTextStyle = lipgloss.NewStyle().
-		Margin(1, 0, 2, 4).
-		Foreground(lipgloss.Color("#04B575"))
+			Margin(1, 0, 2, 4).
+			Foreground(lipgloss.Color("#04B575"))
 
 	focusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B9D"))
 	blurredStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#626262"))
@@ -318,22 +318,22 @@ var (
 	noStyle      = lipgloss.NewStyle()
 
 	focusedButton = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFF")).
-		Background(lipgloss.Color("#FF6B9D")).
-		Padding(0, 3).
-		Render("Submit")
+			Foreground(lipgloss.Color("#FFF")).
+			Background(lipgloss.Color("#FF6B9D")).
+			Padding(0, 3).
+			Render("Submit")
 	blurredButton = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#626262")).
-		Background(lipgloss.Color("#3C3C3C")).
-		Padding(0, 3).
-		Render("Submit")
+			Foreground(lipgloss.Color("#626262")).
+			Background(lipgloss.Color("#3C3C3C")).
+			Padding(0, 3).
+			Render("Submit")
 )
 
 // selectProvider shows interactive provider selection
 func selectProvider() (string, error) {
 	items := []list.Item{
 		item("openai"),
-		item("gemini"), 
+		item("gemini"),
 		item("custom"),
 	}
 
@@ -442,7 +442,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 	providerName := string(i)
 	description := providerDescriptions[providerName]
-	
+
 	if index == m.Index() {
 		// Selected item
 		title := selectedItemStyle.Render(fmt.Sprintf("▶ %s", providerName))
@@ -458,21 +458,21 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 var (
 	itemStyle = lipgloss.NewStyle().
-		PaddingLeft(4).
-		Foreground(lipgloss.Color("#FAFAFA"))
-	
+			PaddingLeft(4).
+			Foreground(lipgloss.Color("#FAFAFA"))
+
 	selectedItemStyle = lipgloss.NewStyle().
-		PaddingLeft(2).
-		Foreground(lipgloss.Color("#FF6B9D")).
-		Bold(true)
-		
+				PaddingLeft(2).
+				Foreground(lipgloss.Color("#FF6B9D")).
+				Bold(true)
+
 	descStyle = lipgloss.NewStyle().
-		PaddingLeft(6).
-		Foreground(lipgloss.Color("#626262")).
-		Italic(true)
-		
+			PaddingLeft(6).
+			Foreground(lipgloss.Color("#626262")).
+			Italic(true)
+
 	selectedDescStyle = lipgloss.NewStyle().
-		PaddingLeft(4).
-		Foreground(lipgloss.Color("#FFA726")).
-		Italic(true)
+				PaddingLeft(4).
+				Foreground(lipgloss.Color("#FFA726")).
+				Italic(true)
 )

@@ -23,25 +23,22 @@ import (
 	"station/pkg/types"
 )
 
-
 // CLIStyles contains all styled components for the CLI
 type CLIStyles struct {
-	Title    lipgloss.Style
-	Banner   lipgloss.Style
-	Success  lipgloss.Style
-	Error    lipgloss.Style
-	Info     lipgloss.Style
-	Focused  lipgloss.Style
-	Blurred  lipgloss.Style
-	Cursor   lipgloss.Style
-	No       lipgloss.Style
-	Help     lipgloss.Style
-	Form     lipgloss.Style
+	Title   lipgloss.Style
+	Banner  lipgloss.Style
+	Success lipgloss.Style
+	Error   lipgloss.Style
+	Info    lipgloss.Style
+	Focused lipgloss.Style
+	Blurred lipgloss.Style
+	Cursor  lipgloss.Style
+	No      lipgloss.Style
+	Help    lipgloss.Style
+	Form    lipgloss.Style
 }
 
-
 // Helper functions
-
 
 // getCLIStyles returns theme-aware CLI styles
 func getCLIStyles(themeManager *theme.ThemeManager) CLIStyles {
@@ -133,16 +130,16 @@ func makeAuthenticatedRequest(method, url string, body io.Reader) (*http.Request
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Add authentication header if available
 	if apiKey := getAPIKeyFromEnv(); apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	
+
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	
+
 	return req, nil
 }
 
@@ -187,7 +184,7 @@ func (h *AgentHandler) listAgentsLocal() error {
 		if envName == "" {
 			envName = fmt.Sprintf("ID:%d", agent.EnvironmentID)
 		}
-		
+
 		fmt.Printf("• %s (ID: %d)", styles.Success.Render(agent.Name), agent.ID)
 		if agent.Description != "" {
 			fmt.Printf(" - %s", agent.Description)
@@ -211,7 +208,7 @@ func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
 	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
-	
+
 	// Get all agents
 	agents, err := repos.Agents.List()
 	if err != nil {
@@ -234,7 +231,7 @@ func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
 	if envFilter != "" {
 		// Try to parse envFilter as environment ID or name
 		var targetEnvID int64 = -1
-		
+
 		// Try as ID first
 		if envID, err := strconv.ParseInt(envFilter, 10, 64); err == nil {
 			targetEnvID = envID
@@ -244,7 +241,7 @@ func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
 		} else {
 			return fmt.Errorf("environment '%s' not found", envFilter)
 		}
-		
+
 		// Filter agents by environment
 		for _, agent := range agents {
 			if agent.EnvironmentID == targetEnvID {
@@ -270,13 +267,13 @@ func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
 	} else {
 		fmt.Printf("Found %d agent(s):\n", len(filteredAgents))
 	}
-	
+
 	for _, agent := range filteredAgents {
 		envName := environments[agent.EnvironmentID]
 		if envName == "" {
 			envName = fmt.Sprintf("ID:%d", agent.EnvironmentID)
 		}
-		
+
 		fmt.Printf("• %s (ID: %d)", styles.Success.Render(agent.Name), agent.ID)
 		if agent.Description != "" {
 			fmt.Printf(" - %s", agent.Description)
@@ -334,7 +331,7 @@ func (h *AgentHandler) showAgentLocal(agentID int64) error {
 
 func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool) error {
 	styles := getCLIStyles(h.themeManager)
-	
+
 	// Load configuration and connect to database (including environment variables)
 	cfg, err := config.Load()
 	if err != nil {
@@ -347,24 +344,24 @@ func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool) erro
 	}
 
 	repos := repositories.New(database)
-	
+
 	// Verify the agent exists
 	agent, err := repos.Agents.GetByID(agentID)
 	if err != nil {
 		database.Close()
 		return fmt.Errorf("agent with ID %d not found: %w", agentID, err)
 	}
-	
+
 	fmt.Printf("📋 Task: %s\n", styles.Info.Render(task))
-	
+
 	// Close database connection before trying server execution to avoid locks
 	database.Close()
-	
+
 	// Try server first, fall back to stdio MCP self-bootstrapping execution
 	if h.tryServerExecution(agentID, task, tail, cfg) == nil {
 		return nil
 	}
-	
+
 	// Server not available, use self-bootstrapping stdio MCP execution
 	fmt.Printf("💡 Server not available, using self-bootstrapping stdio MCP execution\n\n")
 	return h.runAgentWithStdioMCP(agentID, task, tail, cfg, agent)
@@ -383,7 +380,7 @@ func (h *AgentHandler) deleteAgentLocal(agentID int64) error {
 	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
-	
+
 	// Get agent name for confirmation
 	agent, err := repos.Agents.GetByID(agentID)
 	if err != nil {
@@ -407,7 +404,7 @@ func (h *AgentHandler) tryServerExecution(agentID int64, task string, tail bool,
 	if apiPort == 0 {
 		apiPort = 8080 // Default port
 	}
-	
+
 	healthURL := fmt.Sprintf("http://localhost:%d/health", apiPort)
 	client := &http.Client{Timeout: 2 * time.Second} // Quick timeout
 	resp, err := client.Get(healthURL)
@@ -415,21 +412,21 @@ func (h *AgentHandler) tryServerExecution(agentID int64, task string, tail bool,
 		return err // Server not available
 	}
 	resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("server health check failed")
 	}
-	
+
 	fmt.Printf("✅ Connected to Station server (port %d)\n\n", apiPort)
-	
+
 	// Queue the execution via API
 	runID, err := h.queueAgentExecution(agentID, task, apiPort)
 	if err != nil {
 		return fmt.Errorf("failed to queue agent execution: %w", err)
 	}
-	
+
 	fmt.Printf("🔄 Agent execution queued (Run ID: %d)\n", runID)
-	
+
 	// Monitor execution and display results
 	if tail {
 		return h.monitorExecutionWithTail(runID, apiPort)
@@ -442,30 +439,30 @@ func (h *AgentHandler) tryServerExecution(agentID int64, task string, tail bool,
 func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail bool, cfg *config.Config, agent *models.Agent) error {
 	// Create execution context
 	ctx := context.Background()
-	
+
 	fmt.Printf("🔄 Self-bootstrapping stdio MCP execution mode\n")
 	fmt.Printf("🤖 Using Station's own MCP server to execute agent via stdio\n")
 	fmt.Printf("💡 This creates a self-bootstrapping system where Station manages itself\n\n")
-	
+
 	// Create fresh database connection for execution
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer func() { _ = database.Close() }()
-	
+
 	repos := repositories.New(database)
-	
+
 	// Use the config passed to the function (includes environment variables)
 	// No need to reload - cfg already contains CloudShip settings from environment variables
-	
+
 	// keyManager removed - no longer needed for file-based configs
-	
+
 	// Initialize services for file-based configs (MCPConfigService removed)
 	// Initialize Lighthouse client for CloudShip integration
 	mode := lighthouse.DetectModeFromCommand()
-	fmt.Printf("Debug: CloudShip config - Enabled: %v, Key: %v, Endpoint: %v\n", 
-		cfg.CloudShip.Enabled, 
+	fmt.Printf("Debug: CloudShip config - Enabled: %v, Key: %v, Endpoint: %v\n",
+		cfg.CloudShip.Enabled,
 		cfg.CloudShip.RegistrationKey != "",
 		cfg.CloudShip.Endpoint)
 	lighthouseClient, err := lighthouse.InitializeLighthouseFromConfig(cfg, mode)
@@ -476,46 +473,46 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	} else {
 		fmt.Printf("💡 Lighthouse client disabled (CloudShip integration not configured)\n")
 	}
-	
+
 	// Create agent service with Lighthouse integration
 	agentService := services.NewAgentService(repos, lighthouseClient)
-	
-	// Get console user for execution tracking  
+
+	// Get console user for execution tracking
 	consoleUser, err := repos.Users.GetByUsername("console")
 	if err != nil {
 		return fmt.Errorf("failed to get console user: %w", err)
 	}
-	
+
 	// Create agent run record
 	agentRun, err := repos.AgentRuns.Create(
 		ctx,
 		agentID,
 		consoleUser.ID,
 		task,
-		"", // final_response (will be updated)
-		0,  // steps_taken
-		nil, // tool_calls 
-		nil, // execution_steps
+		"",        // final_response (will be updated)
+		0,         // steps_taken
+		nil,       // tool_calls
+		nil,       // execution_steps
 		"running", // status
-		nil, // completed_at
+		nil,       // completed_at
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create agent run record: %w", err)
 	}
-	
+
 	fmt.Printf("🔗 Connecting to Station's stdio MCP server...\n")
-	
+
 	// Use the intelligent agent creator's stdio MCP connection to execute
 	ctx = context.Background()
-	
+
 	fmt.Printf("🤖 Executing agent using self-bootstrapping architecture...\n")
-	
+
 	// Execute the agent using our stdio MCP approach
 	result, err := agentService.GetExecutionEngine().Execute(ctx, agent, task, agentRun.ID, map[string]interface{}{})
 	if err != nil {
 		// Store original error before it gets overwritten
 		originalErr := err
-		
+
 		// Update run as failed
 		completedAt := time.Now()
 		errorMsg := fmt.Sprintf("Stdio MCP execution failed: %v", originalErr)
@@ -524,38 +521,38 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			ctx,
 			agentRun.ID,
 			errorMsg,
-			0, // steps_taken
+			0,   // steps_taken
 			nil, // tool_calls
 			nil, // execution_steps
 			"failed",
 			&completedAt,
-			nil, // inputTokens
-			nil, // outputTokens
-			nil, // totalTokens
-			nil, // durationSeconds
-			nil, // modelName
-			nil, // toolsUsed
+			nil,       // inputTokens
+			nil,       // outputTokens
+			nil,       // totalTokens
+			nil,       // durationSeconds
+			nil,       // modelName
+			nil,       // toolsUsed
 			&errorMsg, // error
 		)
 		if updateErr != nil {
 			return fmt.Errorf("failed to update failed agent run: %w", updateErr)
 		}
-		
+
 		fmt.Printf("❌ Agent execution failed: %v\n", originalErr)
 		return fmt.Errorf("stdio MCP execution failed: %w", originalErr)
 	}
-	
+
 	// Update run as completed with stdio MCP results and metadata
 	completedAt := time.Now()
 	durationSeconds := result.Duration.Seconds()
-	
+
 	// Extract token usage from result using robust type conversion
 	var inputTokens, outputTokens, totalTokens *int64
 	var toolsUsed *int64
-	
+
 	if result.TokenUsage != nil {
 		fmt.Printf("DEBUG CLI: TokenUsage map contains: %+v\n", result.TokenUsage)
-		
+
 		// Handle input_tokens with multiple numeric types
 		if inputVal := extractInt64FromTokenUsage(result.TokenUsage["input_tokens"]); inputVal != nil {
 			inputTokens = inputVal
@@ -563,7 +560,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		} else {
 			fmt.Printf("DEBUG CLI: Failed to extract input_tokens from: %+v (type: %T)\n", result.TokenUsage["input_tokens"], result.TokenUsage["input_tokens"])
 		}
-		
+
 		// Handle output_tokens with multiple numeric types
 		if outputVal := extractInt64FromTokenUsage(result.TokenUsage["output_tokens"]); outputVal != nil {
 			outputTokens = outputVal
@@ -571,7 +568,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 		} else {
 			fmt.Printf("DEBUG CLI: Failed to extract output_tokens from: %+v (type: %T)\n", result.TokenUsage["output_tokens"], result.TokenUsage["output_tokens"])
 		}
-		
+
 		// Handle total_tokens with multiple numeric types
 		if totalVal := extractInt64FromTokenUsage(result.TokenUsage["total_tokens"]); totalVal != nil {
 			totalTokens = totalVal
@@ -582,12 +579,12 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	} else {
 		fmt.Printf("DEBUG CLI: result.TokenUsage is nil\n")
 	}
-	
+
 	if result.ToolsUsed > 0 {
 		toolsUsedVal := int64(result.ToolsUsed)
 		toolsUsed = &toolsUsedVal
 	}
-	
+
 	// Determine status based on execution result success
 	status := "completed"
 	var errorMsg *string
@@ -618,13 +615,13 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	if err != nil {
 		return fmt.Errorf("failed to update agent run: %w", err)
 	}
-	
+
 	// Get updated run and display results
 	updatedRun, err := repos.AgentRuns.GetByID(ctx, agentRun.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get updated run: %w", err)
 	}
-	
+
 	// Track agent execution telemetry
 	if h.telemetryService != nil {
 		h.telemetryService.TrackAgentExecuted(
@@ -671,19 +668,19 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 
 			// Create proper types.AgentRun structure (same as MCP conversion function)
 			lighthouseRun := &types.AgentRun{
-				ID:          runUUID,
-				AgentID:     fmt.Sprintf("agent_%d", agent.ID),
-				AgentName:   agent.Name,
-				Task:        task,
-				Response:    result.Response,
-				Status:      status,
-				DurationMs:  result.Duration.Milliseconds(),
-				ModelName:   result.ModelName,
-				StartedAt:   startedAt,
-				CompletedAt: completedAt, // Use time.Time not pointer
-				ToolCalls:   convertToolCallsToLighthouse(result.ToolCalls),
+				ID:             runUUID,
+				AgentID:        fmt.Sprintf("agent_%d", agent.ID),
+				AgentName:      agent.Name,
+				Task:           task,
+				Response:       result.Response,
+				Status:         status,
+				DurationMs:     result.Duration.Milliseconds(),
+				ModelName:      result.ModelName,
+				StartedAt:      startedAt,
+				CompletedAt:    completedAt, // Use time.Time not pointer
+				ToolCalls:      convertToolCallsToLighthouse(result.ToolCalls),
 				ExecutionSteps: convertExecutionStepsToLighthouse(result.ExecutionSteps),
-				TokenUsage:     &types.TokenUsage{
+				TokenUsage: &types.TokenUsage{
 					PromptTokens:     int(getValueOrZero(inputTokens)),
 					CompletionTokens: int(getValueOrZero(outputTokens)),
 					TotalTokens:      int(getValueOrZero(totalTokens)),
@@ -702,10 +699,10 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 					return ""
 				}(),
 				Metadata: map[string]string{
-					"source":          "cli",
-					"mode":            "cli",
-					"run_uuid":        runUUID,
-					"station_run_id":  fmt.Sprintf("%d", agentRun.ID), // Keep local DB ID for correlation
+					"source":         "cli",
+					"mode":           "cli",
+					"run_uuid":       runUUID,
+					"station_run_id": fmt.Sprintf("%d", agentRun.ID), // Keep local DB ID for correlation
 				},
 			}
 
@@ -760,13 +757,13 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 
 				// Prepare metadata for ingestion
 				metadata := map[string]string{
-					"source":               "cli",
-					"mode":                 "cli",
-					"agent_id":             fmt.Sprintf("%d", agent.ID),
-					"agent_name":           agent.Name,
-					"run_id":               fmt.Sprintf("%d", agentRun.ID),
-					"execution_success":    fmt.Sprintf("%t", result.Success),
-					"duration_ms":          fmt.Sprintf("%d", result.Duration.Milliseconds()),
+					"source":            "cli",
+					"mode":              "cli",
+					"agent_id":          fmt.Sprintf("%d", agent.ID),
+					"agent_name":        agent.Name,
+					"run_id":            fmt.Sprintf("%d", agentRun.ID),
+					"execution_success": fmt.Sprintf("%t", result.Success),
+					"duration_ms":       fmt.Sprintf("%d", result.Duration.Milliseconds()),
 				}
 
 				if agent.OutputSchemaPreset != nil {
@@ -805,7 +802,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			fmt.Printf("Warning: Error stopping Lighthouse client: %v\n", err)
 		}
 	}
-	
+
 	fmt.Printf("✅ Agent execution completed via stdio MCP!\n")
 	return h.displayExecutionResults(updatedRun)
 }
@@ -813,36 +810,36 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 // queueAgentExecution calls the API to queue an agent execution
 func (h *AgentHandler) queueAgentExecution(agentID int64, task string, apiPort int) (int64, error) {
 	url := fmt.Sprintf("http://localhost:%d/api/v1/agents/%d/queue", apiPort, agentID)
-	
+
 	payload := map[string]string{
 		"task": task,
 	}
-	
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return 0, fmt.Errorf("failed to call API: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	
+
 	if resp.StatusCode != http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)
 		return 0, fmt.Errorf("API error: status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	var result struct {
 		RunID int64 `json:"run_id"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return 0, fmt.Errorf("failed to decode response: %w", err)
 	}
-	
+
 	return result.RunID, nil
 }
 
@@ -850,31 +847,31 @@ func (h *AgentHandler) queueAgentExecution(agentID int64, task string, apiPort i
 func (h *AgentHandler) monitorExecution(runID int64, apiPort int) error {
 	styles := getCLIStyles(h.themeManager)
 	fmt.Printf("⏳ Monitoring execution progress...\n")
-	
+
 	// Load fresh config and database connection for each check to avoid locks
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
-	
+
 	maxAttempts := 60 // 2 minutes max
 	attempt := 0
-	
+
 	for attempt < maxAttempts {
 		// Create fresh database connection for each check
 		database, err := db.New(cfg.DatabaseURL)
 		if err != nil {
 			return fmt.Errorf("failed to connect to database: %w", err)
 		}
-		
+
 		freshRepos := repositories.New(database)
 		run, err := freshRepos.AgentRuns.GetByID(context.Background(), runID)
 		database.Close() // Close immediately after reading
-		
+
 		if err != nil {
 			return fmt.Errorf("failed to get run status: %w", err)
 		}
-		
+
 		switch run.Status {
 		case "completed":
 			fmt.Printf("✅ Agent execution completed successfully!\n")
@@ -890,11 +887,11 @@ func (h *AgentHandler) monitorExecution(runID int64, apiPort int) error {
 		case "queued":
 			fmt.Printf("⏸️  Agent is queued for execution...\n")
 		}
-		
+
 		time.Sleep(2 * time.Second)
 		attempt++
 	}
-	
+
 	return fmt.Errorf("execution monitoring timed out after %d attempts", maxAttempts)
 }
 
@@ -996,7 +993,3 @@ func getValueOrZero(ptr *int64) int64 {
 	}
 	return 0
 }
-
-
-
-

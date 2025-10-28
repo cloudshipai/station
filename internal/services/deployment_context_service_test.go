@@ -96,11 +96,11 @@ func TestDeploymentContextToLabelsMap(t *testing.T) {
 		{
 			name: "Minimal context",
 			context: &DeploymentContext{
-				Mode:            "cli",
-				Source:          "analytics",
-				CommandLine:     "stn agent run test",
+				Mode:             "cli",
+				Source:           "analytics",
+				CommandLine:      "stn agent run test",
 				WorkingDirectory: "/workspace",
-				StationVersion:  "v0.11.0",
+				StationVersion:   "v0.11.0",
 			},
 			expectKeys:  []string{"mode", "source", "command_line", "working_dir", "station_version"},
 			description: "Should include only required fields",
@@ -628,11 +628,11 @@ func TestGetCIEnvironment(t *testing.T) {
 		{
 			name: "GitHub Actions environment",
 			envVars: map[string]string{
-				"GITHUB_ACTIONS":     "true",
-				"GITHUB_WORKFLOW":    "CI",
-				"GITHUB_REPOSITORY":  "user/repo",
-				"GITHUB_REF":         "refs/heads/main",
-				"GITHUB_SHA":         "abc123",
+				"GITHUB_ACTIONS":    "true",
+				"GITHUB_WORKFLOW":   "CI",
+				"GITHUB_REPOSITORY": "user/repo",
+				"GITHUB_REF":        "refs/heads/main",
+				"GITHUB_SHA":        "abc123",
 			},
 			expectKeys:  []string{"GITHUB_ACTIONS", "GITHUB_WORKFLOW", "GITHUB_REPOSITORY"},
 			description: "Should collect GitHub Actions variables",

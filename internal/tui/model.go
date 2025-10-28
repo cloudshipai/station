@@ -34,7 +34,7 @@ func NewModel(database *db.DB, genkitService services.AgentServiceInterface) *Mo
 	if database != nil {
 		repos = repositories.New(database)
 	}
-	
+
 	return &Model{
 		db:            database,
 		repos:         repos,
@@ -68,6 +68,6 @@ func (m *Model) View() string {
 		BorderForeground(lipgloss.Color("#04B575"))
 
 	content := fmt.Sprintf("%s\n\nTerminal size: %dx%d", m.content, m.width, m.height)
-	
+
 	return style.Render(content)
 }
