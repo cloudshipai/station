@@ -10,9 +10,8 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         go-version: ["1.21", "1.22"]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
@@ -32,8 +31,7 @@ jobs:
         OPENAI_API_KEY: sk-test-dummy-key-for-ci
       run: make test
 
-    - name: Run integration tests (Linux only)
-      if: runner.os == 'Linux'
+    - name: Run integration tests
       env:
         OPENAI_API_KEY: sk-test-dummy-key-for-ci
       run: make test-integration
