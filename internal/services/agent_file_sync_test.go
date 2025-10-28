@@ -409,7 +409,7 @@ func TestDeclarativeSyncIdempotency(t *testing.T) {
 			if _, exists := currentToolMap[toolName]; !exists {
 				tool, err := mcpToolsRepo.FindByNameInEnvironment(testAgent.EnvironmentID, toolName)
 				if err == nil {
-					agentToolsRepo.AddAgentTool(testAgent.ID, tool.ID)
+					_ = agentToolsRepo.AddAgentTool(testAgent.ID, tool.ID)
 					added++
 				}
 			}
@@ -464,7 +464,7 @@ func TestDeclarativeSyncPerformance(t *testing.T) {
 	for i := 1; i <= numTools; i++ {
 		toolName := fmt.Sprintf("__tool_%d", i)
 		tool, _ := mcpToolsRepo.FindByNameInEnvironment(testAgent.EnvironmentID, toolName)
-		agentToolsRepo.AddAgentTool(testAgent.ID, tool.ID)
+		_ = agentToolsRepo.AddAgentTool(testAgent.ID, tool.ID)
 	}
 
 	t.Run("Sync with no changes is efficient", func(t *testing.T) {

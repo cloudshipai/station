@@ -200,7 +200,7 @@ func TestValidator_Validate(t *testing.T) {
 			validator := NewValidator()
 
 			// Setup test bundle
-			fs.MkdirAll(bundlePath, 0755)
+			_ = fs.MkdirAll(bundlePath, 0755)
 			tt.setupBundle(fs, bundlePath)
 
 			// Validate
@@ -353,7 +353,7 @@ func createValidCompleteBundle(t *testing.T, fs afero.Fs, bundlePath string) {
 	createFile(t, fs, filepath.Join(bundlePath, "README.md"), "# Test Bundle\n\nThis is a test bundle.")
 
 	// Create examples
-	fs.MkdirAll(filepath.Join(bundlePath, "examples"), 0755)
+	_ = fs.MkdirAll(filepath.Join(bundlePath, "examples"), 0755)
 	createFile(t, fs, filepath.Join(bundlePath, "examples", "dev.vars.yml"), "API_KEY: dev-key")
 }
 
