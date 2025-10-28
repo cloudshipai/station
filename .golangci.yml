@@ -4,10 +4,10 @@ linters:
     - unused
     - gosimple
     - govet
+    - ineffassign
+    - staticcheck
   enable:
     - gofmt
-    - staticcheck
-    - ineffassign
 
 linters-settings:
   govet:
