@@ -44,15 +44,15 @@ func (p *Packager) Package(fs afero.Fs, bundlePath, outputPath string) (*bundle.
 	if err != nil {
 		return nil, fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outputFile.Close()
+	defer func() { _ = outputFile.Close() }()
 
 	// Create gzip writer
 	gzWriter := gzip.NewWriter(outputFile)
-	defer gzWriter.Close()
+	defer func() { _ = gzWriter.Close() }()
 
 	// Create tar writer
 	tarWriter := tar.NewWriter(gzWriter)
-	defer tarWriter.Close()
+	defer func() { _ = tarWriter.Close() }()
 
 	// Add all files to the archive
 	if err := p.addDirectoryToTar(fs, tarWriter, bundlePath, ""); err != nil {
@@ -115,7 +115,7 @@ func (p *Packager) addFileToTar(fs afero.Fs, tarWriter *tar.Writer, srcFile, des
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	stat, err := file.Stat()
 	if err != nil {

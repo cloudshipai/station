@@ -28,7 +28,7 @@ func (q *Queries) GetAllSettings(ctx context.Context) ([]Setting, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []Setting
 	for rows.Next() {
 		var i Setting

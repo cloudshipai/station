@@ -684,7 +684,7 @@ func (s *BundleService) downloadBundle(url, bundlesDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to download bundle: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download failed with status %d", resp.StatusCode)
@@ -696,7 +696,7 @@ func (s *BundleService) downloadBundle(url, bundlesDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create file: %v", err)
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	// Copy the response body to file
 	_, err = io.Copy(outFile, resp.Body)
@@ -723,14 +723,14 @@ func (s *BundleService) copyBundle(srcPath, bundlesDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open source file: %v", err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	// Create destination file
 	destFile, err := os.Create(destPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create destination file: %v", err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	// Copy the file
 	_, err = io.Copy(destFile, srcFile)
@@ -753,14 +753,14 @@ func (s *BundleService) extractBundle(bundlePath, envDir string) (int, int, erro
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open bundle: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create gzip reader
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to create gzip reader: %v", err)
 	}
-	defer gzipReader.Close()
+	defer func() { _ = gzipReader.Close() }()
 
 	// Create tar reader
 	tarReader := tar.NewReader(gzipReader)
@@ -844,7 +844,7 @@ func (s *BundleService) ExtractManifestFromTarGz(bundleData []byte) (*BundleMani
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzipReader.Close()
+	defer func() { _ = gzipReader.Close() }()
 
 	// Create tar reader
 	tarReader := tar.NewReader(gzipReader)

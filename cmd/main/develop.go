@@ -57,7 +57,7 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 

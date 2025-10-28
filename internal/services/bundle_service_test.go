@@ -33,7 +33,7 @@ func TestNewBundleServiceWithRepos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewBundleServiceWithRepos(repos)
@@ -666,18 +666,18 @@ func TestReadTarGz(t *testing.T) {
 		Mode: 0644,
 		Size: int64(len("test content")),
 	}
-	tw.WriteHeader(header)
-	tw.Write([]byte("test content"))
+	_ = tw.WriteHeader(header)
+	_, _ = tw.Write([]byte("test content"))
 
-	tw.Close()
-	gw.Close()
+	_ = tw.Close()
+	_ = gw.Close()
 
 	// Read the tar.gz
 	gr, err := gzip.NewReader(&buf)
 	if err != nil {
 		t.Fatalf("Failed to create gzip reader: %v", err)
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	foundFile := false

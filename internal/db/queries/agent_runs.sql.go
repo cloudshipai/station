@@ -240,7 +240,7 @@ func (q *Queries) ListAgentRuns(ctx context.Context) ([]AgentRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []AgentRun
 	for rows.Next() {
 		var i AgentRun
@@ -287,7 +287,7 @@ func (q *Queries) ListAgentRunsByAgent(ctx context.Context, agentID int64) ([]Ag
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []AgentRun
 	for rows.Next() {
 		var i AgentRun
@@ -334,7 +334,7 @@ func (q *Queries) ListAgentRunsByUser(ctx context.Context, userID int64) ([]Agen
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []AgentRun
 	for rows.Next() {
 		var i AgentRun
@@ -410,7 +410,7 @@ func (q *Queries) ListRecentAgentRuns(ctx context.Context, limit int64) ([]ListR
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []ListRecentAgentRunsRow
 	for rows.Next() {
 		var i ListRecentAgentRunsRow

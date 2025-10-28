@@ -130,7 +130,7 @@ func (h *APIHandlers) addMCPServerToEnvironment(c *gin.Context) {
 	}
 
 	mcpService := services.NewMCPServerManagementService(h.repos)
-	fmt.Fprintf(os.Stdout, "DEBUG API: env.Name=%s, req.ServerName=%s, serverConfig.Name=%s\n", env.Name, req.ServerName, serverConfig.Name)
+	_, _ = fmt.Fprintf(os.Stdout, "DEBUG API: env.Name=%s, req.ServerName=%s, serverConfig.Name=%s\n", env.Name, req.ServerName, serverConfig.Name)
 	os.Stdout.Sync()
 	result := mcpService.AddMCPServerToEnvironment(env.Name, req.ServerName, serverConfig)
 

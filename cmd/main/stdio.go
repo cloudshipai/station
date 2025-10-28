@@ -71,7 +71,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Run database migrations
 	if err := database.Migrate(); err != nil {
@@ -95,7 +95,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize Genkit: %v (agent execution will be limited)\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to initialize Genkit: %v (agent execution will be limited)\n", err)
 	}
 
 	// Initialize Lighthouse client for CloudShip integration (same as server mode)
@@ -148,7 +148,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	var wg sync.WaitGroup
 
 	if !coreMode && isPortAvailable(cfg.APIPort) {
-		fmt.Fprintf(os.Stderr, "🚀 Starting API server on port %d in stdio mode\n", cfg.APIPort)
+		_, _ = fmt.Fprintf(os.Stderr, "🚀 Starting API server on port %d in stdio mode\n", cfg.APIPort)
 
 		apiServer = api.New(cfg, database, localMode, telemetryService)
 		apiCtx, apiCancel = context.WithCancel(ctx)
@@ -157,13 +157,13 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		go func() {
 			defer wg.Done()
 			if err := apiServer.Start(apiCtx); err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️  API server error: %v\n", err)
+				_, _ = fmt.Fprintf(os.Stderr, "⚠️  API server error: %v\n", err)
 			}
 		}()
 	} else if coreMode {
-		fmt.Fprintf(os.Stderr, "⚙️  Core mode: running MCP server only (no API server)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "⚙️  Core mode: running MCP server only (no API server)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "⚠️  Port %d already in use, skipping API server (another Station instance running?)\n", cfg.APIPort)
+		_, _ = fmt.Fprintf(os.Stderr, "⚠️  Port %d already in use, skipping API server (another Station instance running?)\n", cfg.APIPort)
 	}
 
 	// Track stdio mode startup telemetry  
@@ -172,36 +172,36 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	}
 	
 	// Log startup message to stderr (so it doesn't interfere with stdio protocol)
-	fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in stdio mode\n")
-	fmt.Fprintf(os.Stderr, "Local mode: %t\n", localMode)
+	_, _ = fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in stdio mode\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Local mode: %t\n", localMode)
 	if agentSvc != nil {
-		fmt.Fprintf(os.Stderr, "Agent execution: enabled\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Agent execution: enabled\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "Agent execution: limited (Genkit initialization failed)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Agent execution: limited (Genkit initialization failed)\n")
 	}
-	fmt.Fprintf(os.Stderr, "Ready for MCP communication via stdin/stdout\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Ready for MCP communication via stdin/stdout\n")
 
 	// Start MCP server in stdio mode in a separate goroutine to keep management channel alive
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		if err := mcpServer.StartStdio(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  MCP stdio server error: %v (management channel remains active)\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "⚠️  MCP stdio server error: %v (management channel remains active)\n", err)
 		}
 	}()
 
 	// Keep the main process alive to maintain the management channel for CloudShip control
 	// This ensures persistent bidirectional communication even when no MCP client is connected
-	fmt.Fprintf(os.Stderr, "🌐 Management channel active - Station remains available for CloudShip control\n")
-	fmt.Fprintf(os.Stderr, "📡 Station will continue running until terminated (Ctrl+C)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "🌐 Management channel active - Station remains available for CloudShip control\n")
+	_, _ = fmt.Fprintf(os.Stderr, "📡 Station will continue running until terminated (Ctrl+C)\n")
 
 	// Block forever to keep management channel alive - only exit on signal
 	<-ctx.Done()
-	fmt.Fprintf(os.Stderr, "🛑 Received termination signal, shutting down...\n")
+	_, _ = fmt.Fprintf(os.Stderr, "🛑 Received termination signal, shutting down...\n")
 
 	// Clean shutdown of services when terminating
 	if apiCancel != nil {
-		fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
+		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down API server...\n")
 		apiCancel()
 	}
 
@@ -210,9 +210,9 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 
 	// Clean shutdown of remote control service for CloudShip management
 	if remoteControlSvc != nil {
-		fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
+		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
 		if err := remoteControlSvc.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Error stopping remote control service: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Error stopping remote control service: %v\n", err)
 		}
 	}
 
@@ -227,6 +227,6 @@ func isPortAvailable(port int) bool {
 	if err != nil {
 		return false
 	}
-	ln.Close()
+	_ = ln.Close()
 	return true
 }

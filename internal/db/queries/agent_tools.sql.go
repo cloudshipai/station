@@ -74,7 +74,7 @@ func (q *Queries) ListAgentTools(ctx context.Context, agentID int64) ([]ListAgen
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []ListAgentToolsRow
 	for rows.Next() {
 		var i ListAgentToolsRow
@@ -135,7 +135,7 @@ func (q *Queries) ListAvailableToolsForAgent(ctx context.Context, arg ListAvaila
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []ListAvailableToolsForAgentRow
 	for rows.Next() {
 		var i ListAvailableToolsForAgentRow

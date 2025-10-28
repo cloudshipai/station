@@ -327,7 +327,7 @@ func (m *Manager) extractBundle(data []byte, targetDir string) error {
 	if err != nil {
 		return err
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	// Create tar reader
 	tarReader := tar.NewReader(gzReader)
@@ -396,7 +396,7 @@ func (m *Manager) copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	if err := m.fs.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
@@ -406,7 +406,7 @@ func (m *Manager) copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	_, err = io.Copy(dstFile, srcFile)
 	return err

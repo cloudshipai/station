@@ -101,7 +101,7 @@ func runMock(cmd *cobra.Command, args []string) {
 	case "datadog":
 		server = mocks.NewDatadogMock()
 	default:
-		fmt.Fprintf(os.Stderr, "Error: Unknown mock tool '%s'\n\n", toolName)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: Unknown mock tool '%s'\n\n", toolName)
 		fmt.Fprintln(os.Stderr, "Available mock tools:")
 		fmt.Fprintln(os.Stderr, "  aws-cost-explorer          - Mock AWS Cost Explorer")
 		fmt.Fprintln(os.Stderr, "  aws-cost-explorer-extended - Extended AWS CE")
@@ -123,11 +123,11 @@ func runMock(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "Starting mock MCP server: %s\n", toolName)
+	_, _ = fmt.Fprintf(os.Stderr, "Starting mock MCP server: %s\n", toolName)
 	fmt.Fprintln(os.Stderr, "Server is running in stdio mode...")
 
 	if err := server.Serve(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error running mock server: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error running mock server: %v\n", err)
 		os.Exit(1)
 	}
 }

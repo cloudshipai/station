@@ -97,7 +97,7 @@ func runMainServer() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	if err := database.Migrate(); err != nil {
 		return fmt.Errorf("failed to run database migrations: %w", err)

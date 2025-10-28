@@ -54,7 +54,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 
 func TestEnvironmentRepo_Create(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments
@@ -92,7 +92,7 @@ func TestEnvironmentRepo_Create(t *testing.T) {
 
 func TestEnvironmentRepo_Create_WithoutDescription(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments
@@ -117,7 +117,7 @@ func TestEnvironmentRepo_Create_WithoutDescription(t *testing.T) {
 
 func TestEnvironmentRepo_GetByID(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments
@@ -152,7 +152,7 @@ func TestEnvironmentRepo_GetByID(t *testing.T) {
 
 func TestEnvironmentRepo_GetByID_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments
@@ -165,7 +165,7 @@ func TestEnvironmentRepo_GetByID_NotFound(t *testing.T) {
 
 func TestEnvironmentRepo_GetByName(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments
@@ -200,7 +200,7 @@ func TestEnvironmentRepo_GetByName(t *testing.T) {
 
 func TestEnvironmentRepo_List(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments
@@ -249,7 +249,7 @@ func TestEnvironmentRepo_List(t *testing.T) {
 
 func TestEnvironmentRepo_Update(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments
@@ -292,7 +292,7 @@ func TestEnvironmentRepo_Update(t *testing.T) {
 
 func TestEnvironmentRepo_Delete(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repos := New(&mockDB{conn: db})
 	repo := repos.Environments

@@ -158,7 +158,7 @@ func (h *AgentHandler) listAgentsLocal() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	agents, err := repos.Agents.List()
@@ -208,7 +208,7 @@ func (h *AgentHandler) listAgentsLocalWithFilter(envFilter string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	
@@ -297,7 +297,7 @@ func (h *AgentHandler) showAgentLocal(agentID int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	agent, err := repos.Agents.GetByID(agentID)
@@ -380,7 +380,7 @@ func (h *AgentHandler) deleteAgentLocal(agentID int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 	
@@ -452,7 +452,7 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 	
 	repos := repositories.New(database)
 	
@@ -828,7 +828,7 @@ func (h *AgentHandler) queueAgentExecution(agentID int64, task string, apiPort i
 	if err != nil {
 		return 0, fmt.Errorf("failed to call API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	
 	if resp.StatusCode != http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)

@@ -131,7 +131,7 @@ func getEnvironmentID(endpoint, environment string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("failed to list environments: status %d", resp.StatusCode)
@@ -166,7 +166,7 @@ func getEnvironmentID(endpoint, environment string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)

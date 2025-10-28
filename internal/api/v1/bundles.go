@@ -299,7 +299,7 @@ func uploadToCloudShip(tarData []byte, filename, apiURL, registrationKey string)
 		log.Printf("[CloudShip] ERROR: HTTP request failed: %v", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	log.Printf("[CloudShip] Response received - Status Code: %d", resp.StatusCode)
 
@@ -496,7 +496,7 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 		log.Printf("[DownloadBundle] ERROR: Download failed: %v", err)
 		return "", fmt.Errorf("failed to download bundle: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	log.Printf("[DownloadBundle] Response status: %d", resp.StatusCode)
 
@@ -511,7 +511,7 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create file: %v", err)
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	// Copy the response body to file
 	_, err = io.Copy(outFile, resp.Body)
@@ -538,14 +538,14 @@ func copyBundle(srcPath, bundlesDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open source file: %v", err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	// Create destination file
 	destFile, err := os.Create(destPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create destination file: %v", err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	// Copy the file
 	_, err = io.Copy(destFile, srcFile)
@@ -568,14 +568,14 @@ func extractBundle(bundlePath, envDir string) (int, int, error) {
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open bundle: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create gzip reader
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to create gzip reader: %v", err)
 	}
-	defer gzipReader.Close()
+	defer func() { _ = gzipReader.Close() }()
 
 	// Create tar reader
 	tarReader := tar.NewReader(gzipReader)
@@ -784,7 +784,7 @@ func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
 		})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {

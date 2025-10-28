@@ -200,7 +200,7 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Asset not found"})
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		
 		content, err := io.ReadAll(file)
 		if err != nil {
@@ -225,7 +225,7 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "vite.svg not found"})
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		content, err := io.ReadAll(file)
 		if err != nil {
@@ -256,7 +256,7 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
 				return
 			}
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 
 			content, err := io.ReadAll(file)
 			if err != nil {
@@ -276,7 +276,7 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load UI"})
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		
 		content, err := io.ReadAll(file)
 		if err != nil {

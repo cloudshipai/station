@@ -90,7 +90,7 @@ func testRegistrationWithTimeout(t *testing.T, registrationKey, endpoint string)
 
 			require.NoError(t, err, "Should create lighthouse client")
 			require.NotNil(t, client, "Client should not be nil")
-			defer client.Close()
+			defer func() { _ = client.Close() }()
 
 			// Wait up to 10 seconds for connection and registration
 			registered := waitForRegistration(t, client, testTimeout)
@@ -112,7 +112,7 @@ func testSendRunDataAllModes(t *testing.T, registrationKey, endpoint string) {
 	for _, tc := range modes {
 		t.Run(tc.mode.String(), func(t *testing.T) {
 			client := setupRegisteredClient(t, registrationKey, endpoint, tc.mode)
-			defer client.Close()
+			defer func() { _ = client.Close() }()
 
 			// Create test data
 			agentRun := createTestAgentRun("test-run-" + tc.mode.String())

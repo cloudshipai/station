@@ -567,7 +567,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	if err := database.Migrate(); err != nil {
 		return fmt.Errorf("failed to run database migrations: %w", err)
@@ -866,7 +866,7 @@ func runSyncForEnvironment(environment string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 
@@ -1112,7 +1112,7 @@ func runSettingsList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Initialize repositories
 	repos := repositories.New(database)
@@ -1161,7 +1161,7 @@ func runSettingsGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Initialize repositories
 	repos := repositories.New(database)
@@ -1204,7 +1204,7 @@ func runSettingsSet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Initialize repositories
 	repos := repositories.New(database)

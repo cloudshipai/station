@@ -22,7 +22,7 @@ func TestCleanupOrphanedResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	workspace := t.TempDir()
@@ -106,7 +106,7 @@ func TestRemoveConfigServersAndTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	cfg := &config.Config{Workspace: t.TempDir()}
@@ -181,7 +181,7 @@ func TestCleanupOrphanedAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	workspace := t.TempDir()
@@ -270,7 +270,7 @@ func TestCleanupOrphanedResourcesNonExistentEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	cfg := &config.Config{Workspace: t.TempDir()}
@@ -291,7 +291,7 @@ func TestCleanupOrphanedAgentsNonExistentEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	cfg := &config.Config{Workspace: t.TempDir()}
@@ -347,7 +347,7 @@ func TestRemoveConfigServersAndToolsServerAssociation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	cfg := &config.Config{Workspace: t.TempDir()}
@@ -409,7 +409,7 @@ func BenchmarkCleanupOrphanedResources(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	workspace := b.TempDir()

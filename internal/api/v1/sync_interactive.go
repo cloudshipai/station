@@ -192,7 +192,7 @@ func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequ
 		h.updateSyncStatus(syncID, "failed", "Failed to initialize database", nil, err.Error())
 		return
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	repos := repositories.New(database)
 

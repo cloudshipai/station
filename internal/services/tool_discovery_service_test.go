@@ -26,7 +26,7 @@ func TestNewToolDiscoveryService(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create test database: %v", err)
 			}
-			defer testDB.Close()
+			defer func() { _ = testDB.Close() }()
 
 			repos := repositories.New(testDB)
 			service := NewToolDiscoveryService(repos)
@@ -52,7 +52,7 @@ func TestGetToolsByEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -139,7 +139,7 @@ func TestGetToolsByServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -237,7 +237,7 @@ func TestGetHybridToolsByEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -281,7 +281,7 @@ func TestDeprecatedDiscoverToolsFromFileConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -308,7 +308,7 @@ func TestDeprecatedDiscoverToolsFromFileConfigNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -331,7 +331,7 @@ func TestDeprecatedGetToolsByFileConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -362,7 +362,7 @@ func TestGetToolsByEnvironmentEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -391,7 +391,7 @@ func TestGetToolsByServerEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -423,7 +423,7 @@ func BenchmarkGetToolsByEnvironment(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -457,7 +457,7 @@ func BenchmarkGetToolsByServer(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)
@@ -491,7 +491,7 @@ func BenchmarkGetHybridToolsByEnvironment(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test database: %v", err)
 	}
-	defer testDB.Close()
+	defer func() { _ = testDB.Close() }()
 
 	repos := repositories.New(testDB)
 	service := NewToolDiscoveryService(repos)

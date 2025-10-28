@@ -72,7 +72,7 @@ func (r *HTTPRegistry) List(ctx context.Context, opts bundle.ListOptions) ([]bun
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
@@ -107,7 +107,7 @@ func (r *HTTPRegistry) Get(ctx context.Context, name, version string) (*bundle.B
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("bundle not found")
@@ -142,7 +142,7 @@ func (r *HTTPRegistry) Download(ctx context.Context, name, version string) ([]by
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("bundle not found")
@@ -174,7 +174,7 @@ func (r *HTTPRegistry) GetVersions(ctx context.Context, name string) ([]string, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("bundle not found")

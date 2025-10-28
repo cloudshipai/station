@@ -155,7 +155,7 @@ func (h *APIHandlers) installDemoBundle(c *gin.Context) {
 		return
 	}
 	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	// Write bundle data to temp file
 	if _, err := tmpFile.Write(bundle.Data); err != nil {
