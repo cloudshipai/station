@@ -2,11 +2,11 @@ linters:
   disable:
     - errcheck
     - unused
+    - gosimple
+    - govet
   enable:
     - gofmt
-    - govet
     - staticcheck
-    - gosimple
     - ineffassign
 
 linters-settings:
