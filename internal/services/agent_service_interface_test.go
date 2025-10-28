@@ -543,7 +543,7 @@ func BenchmarkAgentConfigJSONMarshal(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		json.Marshal(config)
+		_, _ = json.Marshal(config)
 	}
 }
 

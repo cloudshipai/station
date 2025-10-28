@@ -294,7 +294,7 @@ func TestLocalRegistry_Download(t *testing.T) {
 		{
 			name: "bundle not found",
 			setupRegistry: func(fs afero.Fs, registryPath string) {
-				fs.MkdirAll(registryPath, 0755)
+				_ = fs.MkdirAll(registryPath, 0755)
 			},
 			bundleName:  "nonexistent-bundle",
 			version:     "",

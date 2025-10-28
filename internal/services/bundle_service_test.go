@@ -73,7 +73,7 @@ func TestCreateBundle(t *testing.T) {
 			name: "Create bundle with agent files",
 			setupFunc: func(dir string) {
 				agentsDir := filepath.Join(dir, "agents")
-				os.MkdirAll(agentsDir, 0755)
+				_ = os.MkdirAll(agentsDir, 0755)
 
 				agentContent := `---
 metadata:
@@ -111,7 +111,7 @@ You are a test agent.
     }
   }
 }`
-				os.WriteFile(filepath.Join(dir, "template.json"), []byte(templateJSON), 0644)
+				_ = os.WriteFile(filepath.Join(dir, "template.json"), []byte(templateJSON), 0644)
 			},
 			expectError: false,
 			description: "Should create bundle with MCP template",
@@ -191,7 +191,7 @@ func TestGenerateManifest(t *testing.T) {
 			name: "Environment with single agent",
 			setupFunc: func(dir string) {
 				agentsDir := filepath.Join(dir, "agents")
-				os.MkdirAll(agentsDir, 0755)
+				_ = os.MkdirAll(agentsDir, 0755)
 
 				agentContent := `---
 metadata:
@@ -228,7 +228,7 @@ Test content
     }
   }
 }`
-				os.WriteFile(filepath.Join(dir, "template.json"), []byte(templateJSON), 0644)
+				_ = os.WriteFile(filepath.Join(dir, "template.json"), []byte(templateJSON), 0644)
 			},
 			expectAgents:     0,
 			expectMCPServers: 2,
