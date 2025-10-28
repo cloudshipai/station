@@ -66,9 +66,9 @@ func NewAWSComputeOptimizerMock() *MockServer {
 	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data := []map[string]interface{}{
 			{
-				"instance_id":   "i-1234567890abcdef0",
-				"current_type":  "m5.2xlarge",
-				"recommended":   "m5.xlarge",
+				"instance_id":     "i-1234567890abcdef0",
+				"current_type":    "m5.2xlarge",
+				"recommended":     "m5.xlarge",
 				"monthly_savings": 280.50,
 				"cpu_utilization": 25.3,
 			},
@@ -83,9 +83,9 @@ func NewAWSComputeOptimizerMock() *MockServer {
 	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data := []map[string]interface{}{
 			{
-				"db_instance_id": "prod-mysql-01",
-				"current_class":  "db.r5.4xlarge",
-				"recommended":    "db.r5.2xlarge",
+				"db_instance_id":  "prod-mysql-01",
+				"current_class":   "db.r5.4xlarge",
+				"recommended":     "db.r5.2xlarge",
 				"monthly_savings": 650.25,
 			},
 		}
@@ -169,11 +169,11 @@ func NewAWSBillingMock() *MockServer {
 	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data := []map[string]interface{}{
 			{
-				"instance_type":      "m5.xlarge",
-				"recommended_count":  3,
-				"estimated_savings":  450.25,
-				"term":               "1-year",
-				"payment_option":     "No Upfront",
+				"instance_type":     "m5.xlarge",
+				"recommended_count": 3,
+				"estimated_savings": 450.25,
+				"term":              "1-year",
+				"payment_option":    "No Upfront",
 			},
 		}
 		return SuccessResult(data)
@@ -186,10 +186,10 @@ func NewAWSBillingMock() *MockServer {
 	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data := []map[string]interface{}{
 			{
-				"type":                "Compute Savings Plan",
-				"hourly_commitment":   3.50,
-				"estimated_savings":   1250.75,
-				"term":                "1-year",
+				"type":              "Compute Savings Plan",
+				"hourly_commitment": 3.50,
+				"estimated_savings": 1250.75,
+				"term":              "1-year",
 			},
 		}
 		return SuccessResult(data)

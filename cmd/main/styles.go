@@ -2,23 +2,23 @@ package main
 
 import (
 	"fmt"
-	"station/internal/theme"
 	"github.com/charmbracelet/lipgloss"
+	"station/internal/theme"
 )
 
 // CLIStyles contains all styled components for the CLI
 type CLIStyles struct {
-	Title    lipgloss.Style
-	Banner   lipgloss.Style
-	Success  lipgloss.Style
-	Error    lipgloss.Style
-	Info     lipgloss.Style
-	Focused  lipgloss.Style
-	Blurred  lipgloss.Style
-	Cursor   lipgloss.Style
-	No       lipgloss.Style
-	Help     lipgloss.Style
-	Form     lipgloss.Style
+	Title   lipgloss.Style
+	Banner  lipgloss.Style
+	Success lipgloss.Style
+	Error   lipgloss.Style
+	Info    lipgloss.Style
+	Focused lipgloss.Style
+	Blurred lipgloss.Style
+	Cursor  lipgloss.Style
+	No      lipgloss.Style
+	Help    lipgloss.Style
+	Form    lipgloss.Style
 }
 
 // getCLIStyles returns theme-aware CLI styles
@@ -104,11 +104,11 @@ func getCLIStyles(themeManager *theme.ThemeManager) CLIStyles {
 func showSuccessBanner(message string, themeManager *theme.ThemeManager) {
 	styles := getCLIStyles(themeManager)
 	confetti := "🎉✨🎊"
-	
-	banner := styles.Banner.Render(fmt.Sprintf("%s\n%s\n%s", 
-		confetti, 
-		styles.Success.Render(message), 
+
+	banner := styles.Banner.Render(fmt.Sprintf("%s\n%s\n%s",
+		confetti,
+		styles.Success.Render(message),
 		confetti))
-	
+
 	fmt.Println(banner)
 }

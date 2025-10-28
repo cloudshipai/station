@@ -20,14 +20,14 @@ type VariableResolver func(missingVars []VariableInfo) (map[string]string, error
 // TemplateVariableService handles variable detection, resolution, and management
 type TemplateVariableService struct {
 	configDir        string
-	repos           *repositories.Repositories
+	repos            *repositories.Repositories
 	variableResolver VariableResolver // Custom resolver for interactive modes
 }
 
 // VariableInfo represents a detected variable in a template
 type VariableInfo struct {
 	Name        string `json:"name"`
-	Required    bool   `json:"required"`  
+	Required    bool   `json:"required"`
 	Description string `json:"description"`
 	Default     string `json:"default"`
 	Secret      bool   `json:"secret"`
@@ -35,10 +35,10 @@ type VariableInfo struct {
 
 // VariableResolutionResult contains the result of variable resolution
 type VariableResolutionResult struct {
-	AllResolved      bool                       `json:"all_resolved"`
-	ResolvedVars     map[string]string         `json:"resolved_vars"`
-	MissingVars      []VariableInfo            `json:"missing_vars"`
-	RenderedContent  string                    `json:"rendered_content"`
+	AllResolved     bool              `json:"all_resolved"`
+	ResolvedVars    map[string]string `json:"resolved_vars"`
+	MissingVars     []VariableInfo    `json:"missing_vars"`
+	RenderedContent string            `json:"rendered_content"`
 }
 
 func NewTemplateVariableService(configDir string, repos *repositories.Repositories) *TemplateVariableService {
@@ -64,13 +64,13 @@ func (tvs *TemplateVariableService) HasTemplateVariables(templateContent string)
 // ProcessTemplateWithVariables handles the complete variable workflow for a template
 func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, configName, templateContent string, interactive bool) (*VariableResolutionResult, error) {
 	log.Printf("Processing template %s for variable resolution", configName)
-	
+
 	// 1. Get environment name
 	envName, err := tvs.getEnvironmentName(envID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment name: %w", err)
 	}
-	
+
 	// 2. Load existing variables from environment's variables.yml
 	existingVars, err := tvs.loadEnvironmentVariables(envName)
 	if err != nil {
@@ -104,7 +104,7 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 	if envVarCount > 0 {
 		log.Printf("Loaded %d environment variables for template resolution", envVarCount)
 	}
-	
+
 	// 4. Try to render template with available variables
 	renderedContent, err := tvs.renderTemplate(templateContent, existingVars)
 	if err != nil {
@@ -205,23 +205,23 @@ func (tvs *TemplateVariableService) ProcessTemplateWithVariables(envID int64, co
 			}, fmt.Errorf("template rendering failed: %w", err)
 		}
 	}
-	
+
 	// Check for "<no value>" in rendered content - indicates missing variables that didn't cause template failure
 	hasNoValue := strings.Contains(renderedContent, "<no value>")
-	
+
 	result := &VariableResolutionResult{
 		AllResolved:     !hasNoValue, // If no "<no value>", all variables resolved
 		ResolvedVars:    existingVars,
 		MissingVars:     []VariableInfo{}, // We don't track individual missing vars anymore
 		RenderedContent: renderedContent,
 	}
-	
+
 	if hasNoValue {
 		log.Printf("Template rendering completed for %s with some '<no value>' placeholders", configName)
 	} else {
 		log.Printf("Template rendering completed for %s: all variables resolved", configName)
 	}
-	
+
 	return result, nil
 }
 
@@ -251,7 +251,7 @@ func (tvs *TemplateVariableService) renderTemplate(templateContent string, varia
 
 	renderedContent := rendered.String()
 	log.Printf("Template rendering completed for %d variables", len(variables))
-	
+
 	return renderedContent, nil
 }
 
@@ -270,18 +270,18 @@ func (tvs *TemplateVariableService) loadEnvironmentVariables(envName string) (ma
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var variables map[string]interface{}
 	if err := yaml.Unmarshal(data, &variables); err != nil {
 		return nil, err
 	}
-	
+
 	// Convert to string map
 	stringVars := make(map[string]string)
 	for key, value := range variables {
 		stringVars[key] = fmt.Sprintf("%v", value)
 	}
-	
+
 	return stringVars, nil
 }
 
@@ -301,27 +301,27 @@ func (tvs *TemplateVariableService) saveVariablesToEnvironment(envName string, n
 	if data, err := os.ReadFile(variablesPath); err == nil {
 		yaml.Unmarshal(data, &existingVars)
 	}
-	
+
 	// Merge new variables
 	for key, value := range newVars {
 		existingVars[key] = value
 	}
-	
+
 	// Save updated variables
 	data, err := yaml.Marshal(existingVars)
 	if err != nil {
 		return fmt.Errorf("failed to marshal variables: %w", err)
 	}
-	
+
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(variablesPath), 0755); err != nil {
 		return fmt.Errorf("failed to create variables directory: %w", err)
 	}
-	
+
 	if err := os.WriteFile(variablesPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write variables file: %w", err)
 	}
-	
+
 	log.Printf("Saved %d variables to %s", len(newVars), variablesPath)
 	return nil
 }
@@ -329,10 +329,10 @@ func (tvs *TemplateVariableService) saveVariablesToEnvironment(envName string, n
 // promptForMissingVariables interactively collects missing variables from user
 func (tvs *TemplateVariableService) promptForMissingVariables(missingVars []VariableInfo) (map[string]string, error) {
 	result := make(map[string]string)
-	
+
 	fmt.Printf("\n🔧 Missing Variables Detected\n")
 	fmt.Printf("The following variables need to be configured:\n\n")
-	
+
 	for _, variable := range missingVars {
 		var prompt string
 		if variable.Secret {
@@ -340,30 +340,30 @@ func (tvs *TemplateVariableService) promptForMissingVariables(missingVars []Vari
 		} else {
 			prompt = fmt.Sprintf("📝 %s: ", variable.Name)
 		}
-		
+
 		if variable.Description != "" {
 			fmt.Printf("   Description: %s\n", variable.Description)
 		}
-		
+
 		fmt.Print(prompt)
-		
+
 		var value string
 		if _, err := fmt.Scanln(&value); err != nil {
 			return nil, fmt.Errorf("failed to read variable %s: %w", variable.Name, err)
 		}
-		
+
 		if value == "" && variable.Default != "" {
 			value = variable.Default
 		}
-		
+
 		if value == "" && variable.Required {
 			return nil, fmt.Errorf("variable %s is required but no value provided", variable.Name)
 		}
-		
+
 		result[variable.Name] = value
 		fmt.Printf("   ✅ Set %s\n\n", variable.Name)
 	}
-	
+
 	return result, nil
 }
 
@@ -392,7 +392,7 @@ func (tvs *TemplateVariableService) isSystemEnvVar(name string) bool {
 		"SSH_", "GPG_", "XDG_",
 		"DEBIAN_", "UBUNTU_",
 		"GO", // Go-related variables (GOPATH, GOROOT, GOTOOLDIR, etc.)
-		"_", // Last command variable
+		"_",  // Last command variable
 	}
 
 	upperName := strings.ToUpper(name)

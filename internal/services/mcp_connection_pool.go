@@ -21,7 +21,7 @@ type MCPServerPool struct {
 	serverConfigs map[string]interface{}          // serverKey -> config for restart
 	tools         map[string][]ai.Tool            // serverKey -> cached tools
 	mutex         sync.RWMutex
-	initialized   bool                            // prevent multiple initializations
+	initialized   bool // prevent multiple initializations
 }
 
 // NewMCPServerPool creates a new server pool
@@ -46,23 +46,23 @@ func (mcm *MCPConnectionManager) startPooledServersParallel(ctx context.Context,
 	if len(servers) == 0 {
 		return nil
 	}
-	
+
 	// Create worker pool with configurable concurrency limit
 	maxWorkers := getEnvIntOrDefault("STATION_MCP_POOL_WORKERS", 5) // Default: 5 workers
 	if len(servers) < maxWorkers {
 		maxWorkers = len(servers)
 	}
-	
+
 	// Channel to send servers to workers
 	serverChan := make(chan serverDefinition, len(servers))
-	
+
 	// Channel to collect results
 	type serverResult struct {
 		server serverDefinition
 		err    error
 	}
 	resultChan := make(chan serverResult, len(servers))
-	
+
 	// Start worker goroutines
 	var wg sync.WaitGroup
 	for i := 0; i < maxWorkers; i++ {
@@ -76,23 +76,23 @@ func (mcm *MCPConnectionManager) startPooledServersParallel(ctx context.Context,
 			}
 		}(i)
 	}
-	
+
 	// Send all servers to workers
 	for _, server := range servers {
 		serverChan <- server
 	}
 	close(serverChan)
-	
+
 	// Wait for all workers to complete
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
-	
+
 	// Collect results and track any errors
 	var errorServers []string
 	successCount := 0
-	
+
 	for result := range resultChan {
 		if result.err != nil {
 			logging.Info("Warning: failed to start pooled server %s: %v", result.server.key, result.err)
@@ -101,18 +101,18 @@ func (mcm *MCPConnectionManager) startPooledServersParallel(ctx context.Context,
 			successCount++
 		}
 	}
-	
+
 	logging.Info("Parallel server startup completed: %d successful, %d failed", successCount, len(errorServers))
-	
+
 	if len(errorServers) > 0 {
 		logging.Info("Failed servers: %v", errorServers)
 	}
-	
+
 	// Return error if no servers started successfully
 	if successCount == 0 && len(servers) > 0 {
 		return fmt.Errorf("failed to start any pooled servers (%d failures)", len(errorServers))
 	}
-	
+
 	return nil
 }
 
@@ -127,18 +127,18 @@ func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server s
 		),
 	)
 	defer span.End()
-	
+
 	mcm.serverPool.mutex.Lock()
 	defer mcm.serverPool.mutex.Unlock()
-	
+
 	// Check if already started
 	if _, exists := mcm.serverPool.servers[server.key]; exists {
 		span.SetAttributes(attribute.Bool("mcp.server.already_running", true))
 		return nil
 	}
-	
+
 	logging.Info("Starting pooled MCP server: %s", server.key)
-	
+
 	// Create server client (same logic as connectToMCPServer)
 	client, tools, err := mcm.createServerClient(ctx, server.name, server.config)
 	if err != nil {
@@ -149,17 +149,17 @@ func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server s
 		)
 		return fmt.Errorf("failed to create server client for %s: %w", server.key, err)
 	}
-	
+
 	// Store in pool
 	mcm.serverPool.servers[server.key] = client
 	mcm.serverPool.serverConfigs[server.key] = server.config
 	mcm.serverPool.tools[server.key] = tools
-	
+
 	span.SetAttributes(
 		attribute.Bool("mcp.server.success", true),
 		attribute.Int("mcp.server.tools_count", len(tools)),
 	)
-	
+
 	logging.Info(" Pooled server %s started with %d tools", server.key, len(tools))
 	return nil
 }
@@ -175,14 +175,14 @@ func (mcm *MCPConnectionManager) generateServerKey(serverName string, serverConf
 func (mcm *MCPConnectionManager) deduplicateServers(servers []serverDefinition) []serverDefinition {
 	seen := make(map[string]bool)
 	var unique []serverDefinition
-	
+
 	for _, server := range servers {
 		if !seen[server.key] {
 			seen[server.key] = true
 			unique = append(unique, server)
 		}
 	}
-	
+
 	return unique
 }
 
@@ -195,10 +195,10 @@ func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Contex
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get file configs for environment %d: %w", environmentID, err)
 	}
-	
+
 	var allTools []ai.Tool
 	var allClients []*mcp.GenkitMCPClient
-	
+
 	// Find matching servers in the pool
 	mcm.serverPool.mutex.RLock()
 	defer mcm.serverPool.mutex.RUnlock()
@@ -208,7 +208,7 @@ func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Contex
 
 		for serverName, serverConfig := range serverConfigs {
 			serverKey := mcm.generateServerKey(serverName, serverConfig)
-			
+
 			// Check if server exists in pool
 			if pooledClient, exists := mcm.serverPool.servers[serverKey]; exists {
 				// Use cached tools from pool
@@ -230,10 +230,10 @@ func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Contex
 			}
 		}
 	}
-	
-	logging.Info("Pooled connection manager returned %d tools and %d clients for environment %d", 
+
+	logging.Info("Pooled connection manager returned %d tools and %d clients for environment %d",
 		len(allTools), len(allClients), environmentID)
-	
+
 	return allTools, allClients, nil
 }
 
@@ -242,23 +242,23 @@ func (mcm *MCPConnectionManager) ShutdownServerPool() {
 	if !mcm.poolingEnabled {
 		return
 	}
-	
+
 	mcm.serverPool.mutex.Lock()
 	defer mcm.serverPool.mutex.Unlock()
-	
+
 	logging.Info("Shutting down MCP server pool with %d servers", len(mcm.serverPool.servers))
-	
+
 	for serverKey, client := range mcm.serverPool.servers {
 		logging.Info("Disconnecting pooled server: %s", serverKey)
 		if client != nil {
 			client.Disconnect()
 		}
 	}
-	
+
 	// Clear pool
 	mcm.serverPool.servers = make(map[string]*mcp.GenkitMCPClient)
 	mcm.serverPool.serverConfigs = make(map[string]interface{})
 	mcm.serverPool.tools = make(map[string][]ai.Tool)
-	
+
 	logging.Info("MCP server pool shutdown complete")
 }

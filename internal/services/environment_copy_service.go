@@ -15,16 +15,16 @@ import (
 
 // EnvironmentCopyService handles copying environments with conflict detection
 type EnvironmentCopyService struct {
-	repos             *repositories.Repositories
-	envMgmtService    *EnvironmentManagementService
+	repos              *repositories.Repositories
+	envMgmtService     *EnvironmentManagementService
 	agentExportService *AgentExportService
 }
 
 // NewEnvironmentCopyService creates a new environment copy service
 func NewEnvironmentCopyService(repos *repositories.Repositories) *EnvironmentCopyService {
 	return &EnvironmentCopyService{
-		repos:             repos,
-		envMgmtService:    NewEnvironmentManagementService(repos),
+		repos:              repos,
+		envMgmtService:     NewEnvironmentManagementService(repos),
 		agentExportService: NewAgentExportService(repos),
 	}
 }
@@ -221,7 +221,6 @@ func (s *EnvironmentCopyService) copyAgent(source *models.Agent, targetEnv *mode
 	result.AgentsCopied++
 	return nil
 }
-
 
 // generateAgentPromptFile creates the .prompt file for an agent
 func (s *EnvironmentCopyService) generateAgentPromptFile(agent *models.Agent, env *models.Environment) error {

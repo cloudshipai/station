@@ -34,7 +34,7 @@ func displayBanner(themeManager *theme.ThemeManager) error {
 		"  ███████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║ ",
 		"  ╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ ",
 	}
-	
+
 	// Get banner colors based on theme
 	var colors []lipgloss.Color
 	if themeManager != nil {
@@ -42,7 +42,7 @@ func displayBanner(themeManager *theme.ThemeManager) error {
 		// Create a gradient using theme colors
 		colors = []lipgloss.Color{
 			lipgloss.Color(palette.Primary),
-			lipgloss.Color(palette.Secondary), 
+			lipgloss.Color(palette.Secondary),
 			lipgloss.Color(palette.Accent),
 			lipgloss.Color(palette.Info),
 			lipgloss.Color(palette.Highlight),
@@ -59,7 +59,7 @@ func displayBanner(themeManager *theme.ThemeManager) error {
 			lipgloss.Color("#00d4ff"), // Electric blue
 		}
 	}
-	
+
 	// Color the ASCII art with theme-based gradient
 	var coloredLines []string
 	for i, line := range asciiArt {
@@ -68,13 +68,13 @@ func displayBanner(themeManager *theme.ThemeManager) error {
 			Bold(true)
 		coloredLines = append(coloredLines, style.Render(line))
 	}
-	
+
 	// Print each line
 	fmt.Println()
 	for _, line := range coloredLines {
 		fmt.Println(line)
 	}
-	
+
 	// Add subtitle with theme-aware styling
 	fmt.Println()
 	var subtitleStyle lipgloss.Style
@@ -88,7 +88,7 @@ func displayBanner(themeManager *theme.ThemeManager) error {
 	}
 	subtitle := subtitleStyle.Render("🚂 Easiest way to build secure, intelligent, background, tool agents")
 	fmt.Println(subtitle)
-	
+
 	// Add author credit
 	var creditStyle lipgloss.Style
 	if themeManager != nil {
@@ -104,6 +104,6 @@ func displayBanner(themeManager *theme.ThemeManager) error {
 	credit := creditStyle.Render("by the CloudshipAI team")
 	fmt.Println(credit)
 	fmt.Println()
-	
+
 	return nil
 }

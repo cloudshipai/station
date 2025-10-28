@@ -12,7 +12,7 @@ func extractInt64FromTokenUsage(value interface{}) *int64 {
 	if value == nil {
 		return nil
 	}
-	
+
 	switch v := value.(type) {
 	case int64:
 		return &v
@@ -51,5 +51,3 @@ func (h *AgentHandler) loadVariablesFromFile(filePath string) (map[string]interf
 
 	return variables, nil
 }
-
-

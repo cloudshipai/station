@@ -31,7 +31,7 @@ func (m *MockAgentService) CreateAgent(ctx context.Context, config *services.Age
 	if m.shouldError {
 		return nil, assert.AnError
 	}
-	
+
 	agent := &models.Agent{
 		ID:            m.nextID,
 		Name:          config.Name,
@@ -50,7 +50,7 @@ func (m *MockAgentService) GetAgent(ctx context.Context, agentID int64) (*models
 	if m.shouldError {
 		return nil, assert.AnError
 	}
-	
+
 	agent, exists := m.agents[agentID]
 	if !exists {
 		return nil, assert.AnError
@@ -62,7 +62,7 @@ func (m *MockAgentService) ListAgentsByEnvironment(ctx context.Context, environm
 	if m.shouldError {
 		return nil, assert.AnError
 	}
-	
+
 	var result []*models.Agent
 	for _, agent := range m.agents {
 		if environmentID == 0 || agent.EnvironmentID == environmentID {
@@ -76,12 +76,12 @@ func (m *MockAgentService) UpdateAgent(ctx context.Context, agentID int64, confi
 	if m.shouldError {
 		return nil, assert.AnError
 	}
-	
+
 	agent, exists := m.agents[agentID]
 	if !exists {
 		return nil, assert.AnError
 	}
-	
+
 	// Update fields
 	if config.Name != "" {
 		agent.Name = config.Name
@@ -95,7 +95,7 @@ func (m *MockAgentService) UpdateAgent(ctx context.Context, agentID int64, confi
 	if config.MaxSteps > 0 {
 		agent.MaxSteps = config.MaxSteps
 	}
-	
+
 	return agent, nil
 }
 
@@ -103,11 +103,11 @@ func (m *MockAgentService) DeleteAgent(ctx context.Context, agentID int64) error
 	if m.shouldError {
 		return assert.AnError
 	}
-	
+
 	if _, exists := m.agents[agentID]; !exists {
 		return assert.AnError
 	}
-	
+
 	delete(m.agents, agentID)
 	return nil
 }
@@ -133,12 +133,12 @@ func (m *MockAgentService) UpdateAgentPrompt(ctx context.Context, agentID int64,
 	if m.shouldError {
 		return assert.AnError
 	}
-	
+
 	agent, exists := m.agents[agentID]
 	if !exists {
 		return assert.AnError
 	}
-	
+
 	agent.Prompt = prompt
 	return nil
 }
@@ -172,7 +172,7 @@ func (e *TestError) Error() string {
 
 func TestAPIHandlers_CreateAgent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	tests := []struct {
 		name           string
 		requestBody    map[string]interface{}
@@ -221,10 +221,10 @@ func TestAPIHandlers_CreateAgent(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.requestBody)
 			req := httptest.NewRequest("POST", "/agents", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
-			
+
 			// Create response recorder
 			w := httptest.NewRecorder()
-			
+
 			// Create Gin context
 			c, _ := gin.CreateTestContext(w)
 			c.Request = req
@@ -259,10 +259,10 @@ func TestAPIHandlers_CreateAgent(t *testing.T) {
 
 func TestAPIHandlers_GetAgent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	handlers := setupTestAPIHandlers()
 	mockService := handlers.agentService.(*MockAgentService)
-	
+
 	// Create a test agent first
 	testAgent := &models.Agent{
 		ID:            1,
@@ -308,10 +308,10 @@ func TestAPIHandlers_GetAgent(t *testing.T) {
 
 			// Create request
 			req := httptest.NewRequest("GET", "/agents/"+tt.agentID, nil)
-			
+
 			// Create response recorder
 			w := httptest.NewRecorder()
-			
+
 			// Create Gin context with URL parameter
 			c, _ := gin.CreateTestContext(w)
 			c.Request = req
@@ -355,15 +355,15 @@ func TestAPIHandlers_GetAgent(t *testing.T) {
 
 func TestAPIHandlers_ListAgents(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	handlers := setupTestAPIHandlers()
 	mockService := handlers.agentService.(*MockAgentService)
-	
+
 	// Create test agents in different environments
 	agent1 := &models.Agent{ID: 1, Name: "Agent 1", EnvironmentID: 1}
 	agent2 := &models.Agent{ID: 2, Name: "Agent 2", EnvironmentID: 1}
 	agent3 := &models.Agent{ID: 3, Name: "Agent 3", EnvironmentID: 2}
-	
+
 	mockService.agents[1] = agent1
 	mockService.agents[2] = agent2
 	mockService.agents[3] = agent3
@@ -387,7 +387,7 @@ func TestAPIHandlers_ListAgents(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "agents in environment 2", 
+			name:           "agents in environment 2",
 			environmentID:  "2",
 			expectedCount:  1,
 			expectedStatus: http.StatusOK,
@@ -408,10 +408,10 @@ func TestAPIHandlers_ListAgents(t *testing.T) {
 				url += "?environment_id=" + tt.environmentID
 			}
 			req := httptest.NewRequest("GET", url, nil)
-			
+
 			// Create response recorder
 			w := httptest.NewRecorder()
-			
+
 			// Create Gin context
 			c, _ := gin.CreateTestContext(w)
 			c.Request = req

@@ -27,11 +27,11 @@ func convertAgentToolFromSQLc(agentTool queries.AgentTool) *models.AgentTool {
 		AgentID: agentTool.AgentID,
 		ToolID:  agentTool.ToolID,
 	}
-	
+
 	if agentTool.CreatedAt.Valid {
 		result.CreatedAt = agentTool.CreatedAt.Time
 	}
-	
+
 	return result
 }
 
@@ -48,19 +48,19 @@ func convertAgentToolWithDetailsFromSQLc(row queries.ListAgentToolsRow) *models.
 		EnvironmentID:   row.EnvironmentID,
 		EnvironmentName: row.EnvironmentName,
 	}
-	
+
 	if row.CreatedAt.Valid {
 		result.CreatedAt = row.CreatedAt.Time
 	}
-	
+
 	if row.ToolDescription.Valid {
 		result.ToolDescription = row.ToolDescription.String
 	}
-	
+
 	if row.ToolSchema.Valid {
 		result.ToolSchema = row.ToolSchema.String
 	}
-	
+
 	return result
 }
 
@@ -72,23 +72,23 @@ func (r *AgentToolRepo) AddAgentTool(agentID int64, toolID int64) (*models.Agent
 	if err != nil {
 		return nil, fmt.Errorf("failed to check current tool count: %w", err)
 	}
-	
+
 	// Enforce 40-tool limit per agent
 	const MaxToolsPerAgent = 40
 	if len(currentTools) >= MaxToolsPerAgent {
 		return nil, fmt.Errorf("agent already has maximum allowed tools (%d). Cannot add more tools to prevent performance issues", MaxToolsPerAgent)
 	}
-	
+
 	params := queries.AddAgentToolParams{
 		AgentID: agentID,
 		ToolID:  toolID,
 	}
-	
+
 	created, err := r.queries.AddAgentTool(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return convertAgentToolFromSQLc(created), nil
 }
 
@@ -107,12 +107,12 @@ func (r *AgentToolRepo) ListAgentTools(agentID int64) ([]*models.AgentToolWithDe
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.AgentToolWithDetails
 	for _, row := range rows {
 		result = append(result, convertAgentToolWithDetailsFromSQLc(row))
 	}
-	
+
 	return result, nil
 }
 
@@ -122,31 +122,31 @@ func (r *AgentToolRepo) ListAvailableToolsForAgent(agentID int64, agentIDParam i
 		ID:      agentID,
 		AgentID: agentIDParam,
 	}
-	
+
 	rows, err := r.queries.ListAvailableToolsForAgent(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.AgentToolWithDetails
 	for _, row := range rows {
 		// Convert ListAvailableToolsForAgentRow to AgentToolWithDetails
 		tool := &models.AgentToolWithDetails{
-			ToolName:    row.ToolName,
-			ServerName:  row.ServerName,
+			ToolName:   row.ToolName,
+			ServerName: row.ServerName,
 		}
-		
+
 		if row.ToolDescription.Valid {
 			tool.ToolDescription = row.ToolDescription.String
 		}
-		
+
 		if row.ToolSchema.Valid {
 			tool.ToolSchema = row.ToolSchema.String
 		}
-		
+
 		result = append(result, tool)
 	}
-	
+
 	return result, nil
 }
 

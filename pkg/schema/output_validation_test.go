@@ -88,11 +88,11 @@ func TestValidateOutputSchema(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := helper.ValidateOutputSchema(tt.schema)
-			
+
 			if tt.shouldError && err == nil {
 				t.Errorf("Expected error for %s, but got none. %s", tt.name, tt.description)
 			}
-			
+
 			if !tt.shouldError && err != nil {
 				t.Errorf("Unexpected error for %s: %v. %s", tt.name, err, tt.description)
 			}
@@ -102,10 +102,10 @@ func TestValidateOutputSchema(t *testing.T) {
 
 func TestValidateOutputSchemaRejectsInvalidJSON(t *testing.T) {
 	helper := NewExportHelper()
-	
+
 	// Test with invalid JSON syntax
 	invalidJSON := `{"type": "object", "properties": {`
-	
+
 	err := helper.ValidateOutputSchema(invalidJSON)
 	if err == nil {
 		t.Error("Expected error for invalid JSON syntax, but got none")
@@ -114,7 +114,7 @@ func TestValidateOutputSchemaRejectsInvalidJSON(t *testing.T) {
 
 func TestValidateOutputSchemaMatchesInputValidation(t *testing.T) {
 	helper := NewExportHelper()
-	
+
 	// Same schema should be valid for both input and output validation
 	validSchema := `{
 		"type": "object",
@@ -124,18 +124,18 @@ func TestValidateOutputSchemaMatchesInputValidation(t *testing.T) {
 		},
 		"required": ["userInput"]
 	}`
-	
+
 	inputErr := helper.ValidateInputSchema(validSchema)
 	outputErr := helper.ValidateOutputSchema(validSchema)
-	
+
 	if inputErr != nil {
 		t.Errorf("Input validation failed: %v", inputErr)
 	}
-	
+
 	if outputErr != nil {
 		t.Errorf("Output validation failed: %v", outputErr)
 	}
-	
+
 	// Both should have same validation behavior
 	if (inputErr == nil) != (outputErr == nil) {
 		t.Error("Input and output validation should have consistent behavior for the same schema")

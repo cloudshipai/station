@@ -51,10 +51,10 @@ func ConvertToLighthouseRun(agent *models.Agent, task string, runID int64, resul
 			return ""
 		}(),
 		Metadata: map[string]string{
-			"source":          "mcp",
-			"mode":            "stdio",
-			"run_uuid":        runUUID,
-			"station_run_id":  fmt.Sprintf("%d", runID), // Keep local DB ID for correlation
+			"source":         "mcp",
+			"mode":           "stdio",
+			"run_uuid":       runUUID,
+			"station_run_id": fmt.Sprintf("%d", runID), // Keep local DB ID for correlation
 		},
 	}
 }

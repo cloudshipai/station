@@ -11,17 +11,17 @@ import (
 
 // DemoBundleInfo represents information about a demo bundle for the API
 type DemoBundleInfo struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Category     string   `json:"category"`
-	Size         int      `json:"size"`
-	AgentsCount  int      `json:"agents_count"`
-	MCPServersCount int   `json:"mcp_servers_count"`
-	Tags         []string `json:"tags"`
-	Agents       []AgentSummary `json:"agents"`
-	MCPServers   []MCPServerSummary `json:"mcp_servers"`
-	RequiredVars []string `json:"required_vars"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	Description     string             `json:"description"`
+	Category        string             `json:"category"`
+	Size            int                `json:"size"`
+	AgentsCount     int                `json:"agents_count"`
+	MCPServersCount int                `json:"mcp_servers_count"`
+	Tags            []string           `json:"tags"`
+	Agents          []AgentSummary     `json:"agents"`
+	MCPServers      []MCPServerSummary `json:"mcp_servers"`
+	RequiredVars    []string           `json:"required_vars"`
 }
 
 // AgentSummary provides basic agent information for bundle cards
@@ -69,14 +69,14 @@ func (h *APIHandlers) listDemoBundles(c *gin.Context) {
 
 	for _, bundle := range bundles {
 		bundleInfo := DemoBundleInfo{
-			ID:          bundle.ID,
-			Name:        bundle.Name,
-			Description: bundle.Description,
-			Category:    bundle.Category,
-			Size:        len(bundle.Data),
-			Agents:      []AgentSummary{},
-			MCPServers:  []MCPServerSummary{},
-			Tags:        []string{},
+			ID:           bundle.ID,
+			Name:         bundle.Name,
+			Description:  bundle.Description,
+			Category:     bundle.Category,
+			Size:         len(bundle.Data),
+			Agents:       []AgentSummary{},
+			MCPServers:   []MCPServerSummary{},
+			Tags:         []string{},
 			RequiredVars: []string{},
 		}
 

@@ -24,7 +24,7 @@ func TestSyncBasics(t *testing.T) {
 		envName := "test-env"
 		envDir := filepath.Join(testDir, "environments", envName)
 		agentsDir := filepath.Join(envDir, "agents")
-		
+
 		err := os.MkdirAll(agentsDir, 0755)
 		require.NoError(t, err)
 
@@ -61,7 +61,7 @@ You are a test agent.
 		// Test environment directory structure that sync expects
 		envName := "structure-test"
 		envDir := filepath.Join(testDir, "environments", envName)
-		
+
 		// Create standard environment structure
 		agentsDir := filepath.Join(envDir, "agents")
 		err := os.MkdirAll(agentsDir, 0755)
@@ -106,16 +106,16 @@ func TestSyncCommandValidation(t *testing.T) {
 	t.Run("SyncCommand_Flags", func(t *testing.T) {
 		// Test that sync command has expected flags
 		cmd := syncCmd
-		
+
 		// Check for key flags
 		dryRunFlag := cmd.Flags().Lookup("dry-run")
 		assert.NotNil(t, dryRunFlag)
 		assert.Equal(t, "bool", dryRunFlag.Value.Type())
-		
+
 		interactiveFlag := cmd.Flags().Lookup("interactive")
 		assert.NotNil(t, interactiveFlag)
 		assert.Equal(t, "bool", interactiveFlag.Value.Type())
-		
+
 		validateFlag := cmd.Flags().Lookup("validate")
 		assert.NotNil(t, validateFlag)
 		assert.Equal(t, "bool", validateFlag.Value.Type())

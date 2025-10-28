@@ -383,7 +383,7 @@ func (v *Validator) checkCommonIssues(fs afero.Fs, bundlePath string, result *bu
 func (v *Validator) extractTemplateVariables(templateStr string) []string {
 	// Extract variables from Go template patterns {{ .VAR }}
 	vars := make(map[string]bool)
-	
+
 	// Look for {{ .VARIABLE_NAME }} patterns
 	i := 0
 	for i < len(templateStr) {
@@ -392,13 +392,13 @@ func (v *Validator) extractTemplateVariables(templateStr string) []string {
 			break
 		}
 		start += i
-		
+
 		end := strings.Index(templateStr[start:], "}}")
 		if end == -1 {
 			break
 		}
 		end += start
-		
+
 		if end > start+2 {
 			content := strings.TrimSpace(templateStr[start+2 : end])
 			// Handle Go template syntax: {{ .VAR }} or {{.VAR}}
@@ -412,24 +412,24 @@ func (v *Validator) extractTemplateVariables(templateStr string) []string {
 				vars[content] = true
 			}
 		}
-		
+
 		i = end + 2
 	}
-	
+
 	result := make([]string, 0, len(vars))
 	for varName := range vars {
 		result = append(result, varName)
 	}
-	
+
 	return result
 }
 
 func (v *Validator) isValidSemver(version string) bool {
 	// Basic semver validation - should match X.Y.Z format
 	parts := strings.Split(version, ".")
-	return len(parts) == 3 && 
-		v.isNumeric(parts[0]) && 
-		v.isNumeric(parts[1]) && 
+	return len(parts) == 3 &&
+		v.isNumeric(parts[0]) &&
+		v.isNumeric(parts[1]) &&
 		v.isNumeric(parts[2])
 }
 
@@ -449,13 +449,13 @@ func (v *Validator) isValidVariableName(name string) bool {
 	if name == "" {
 		return false
 	}
-	
+
 	// Variable names should be uppercase letters, numbers, and underscores
 	for _, c := range name {
 		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
 			return false
 		}
 	}
-	
+
 	return true
 }

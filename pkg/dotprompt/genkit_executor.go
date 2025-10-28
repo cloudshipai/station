@@ -23,7 +23,7 @@ type ToolCallTracker struct {
 	MaxToolCalls        int
 	MaxConsecutive      int
 	LogCallback         func(map[string]interface{})
-	ToolFailures        int // Track number of tool failures
+	ToolFailures        int  // Track number of tool failures
 	HasToolFailures     bool // Track if any tool failures occurred
 }
 
@@ -32,8 +32,8 @@ type DotPromptMetadata struct {
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description"`
 	Tags        []string `yaml:"tags"`
-	App         string   `yaml:"app"`         // CloudShip data ingestion app classification (optional)
-	AppType     string   `yaml:"app_type"`   // CloudShip data ingestion app_type classification (optional)
+	App         string   `yaml:"app"`      // CloudShip data ingestion app classification (optional)
+	AppType     string   `yaml:"app_type"` // CloudShip data ingestion app_type classification (optional)
 }
 
 // DotPromptConfig represents the YAML frontmatter in a .prompt file
@@ -113,12 +113,11 @@ func (e *GenKitExecutor) extractDotPromptMetadata(promptPath string) (app, appTy
 	return app, appType
 }
 
-
 // ExecuteAgent executes an agent using dotprompt.Execute() with registered MCP tools
 func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{}), environmentName string) (*ExecutionResponse, error) {
 	startTime := time.Now()
 	e.logCallback = logCallback
-	
+
 	// Get agent's dotprompt file path using provided environment name
 	promptPath, err := e.getAgentPromptPath(agent, environmentName)
 	if err != nil {
@@ -152,31 +151,31 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 			Error:    fmt.Sprintf("failed to load prompt from: %s", promptPath),
 		}, nil
 	}
-	
+
 	// Register filtered MCP tools so dotprompt.Execute() can find them
 	for _, toolRef := range mcpTools {
 		if tool, ok := toolRef.(ai.Tool); ok {
 			genkit.RegisterAction(genkitApp, tool)
 		}
 	}
-	
+
 	// Get model configuration
 	modelName := e.getModelName()
-	
+
 	// Execute with dotprompt.Execute()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	
+
 	maxTurns := int(agent.MaxSteps)
 	if maxTurns <= 0 {
 		maxTurns = 25
 	}
-	
+
 	resp, err := agentPrompt.Execute(ctx,
 		ai.WithInput(map[string]any{"userInput": task}),
 		ai.WithMaxTurns(maxTurns),
 		ai.WithModelName(modelName))
-	
+
 	if err != nil {
 		return &ExecutionResponse{
 			Success:  false,
@@ -185,10 +184,10 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 			Error:    fmt.Sprintf("dotprompt.Execute() failed: %v", err),
 		}, nil
 	}
-	
+
 	// Extract response data (use working pattern from existing code)
 	finalResponse := resp.Text()
-	
+
 	// Extract token usage
 	tokenUsage := make(map[string]interface{})
 	if resp.Usage != nil {
@@ -199,7 +198,7 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 			tokenUsage["cached_tokens"] = resp.Usage.CachedContentTokens
 		}
 	}
-	
+
 	// Extract tool calls
 	toolRequests := resp.ToolRequests()
 	var toolCallsArray *models.JSONArray
@@ -214,7 +213,7 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 		}
 		toolCallsArray = &toolCallsInterface
 	}
-	
+
 	return &ExecutionResponse{
 		Success:    true,
 		Response:   finalResponse,
@@ -248,12 +247,12 @@ func (e *GenKitExecutor) getModelName() string {
 	if err != nil {
 		return "openai/gpt-4o-mini" // fallback
 	}
-	
+
 	baseModel := cfg.AIModel
 	if baseModel == "" {
 		baseModel = "gpt-4o-mini"
 	}
-	
+
 	switch cfg.AIProvider {
 	case "gemini", "googlegenai":
 		return fmt.Sprintf("googleai/%s", baseModel)
@@ -263,4 +262,3 @@ func (e *GenKitExecutor) getModelName() string {
 		return fmt.Sprintf("%s/%s", cfg.AIProvider, baseModel)
 	}
 }
-

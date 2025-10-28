@@ -9,6 +9,7 @@ import (
 )
 
 // Embed the UI build files when building with -tags ui
+//
 //go:embed static
 var uiFiles embed.FS
 

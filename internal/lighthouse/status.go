@@ -7,15 +7,15 @@ import (
 
 // LighthouseStatus represents the current status of lighthouse integration
 type LighthouseStatus struct {
-	Connected         bool      `json:"connected"`
-	Registered        bool      `json:"registered"`
-	LastError         string    `json:"last_error,omitempty"`
-	LastErrorTime     time.Time `json:"last_error_time,omitempty"`
-	LastSuccess       time.Time `json:"last_success,omitempty"`
-	RegistrationKey   string    `json:"registration_key,omitempty"`
-	TelemetrySent     int64     `json:"telemetry_sent"`
-	TelemetryFailed   int64     `json:"telemetry_failed"`
-	ServerURL         string    `json:"server_url,omitempty"`
+	Connected       bool      `json:"connected"`
+	Registered      bool      `json:"registered"`
+	LastError       string    `json:"last_error,omitempty"`
+	LastErrorTime   time.Time `json:"last_error_time,omitempty"`
+	LastSuccess     time.Time `json:"last_success,omitempty"`
+	RegistrationKey string    `json:"registration_key,omitempty"`
+	TelemetrySent   int64     `json:"telemetry_sent"`
+	TelemetryFailed int64     `json:"telemetry_failed"`
+	ServerURL       string    `json:"server_url,omitempty"`
 }
 
 // Global lighthouse status tracking

@@ -26,17 +26,17 @@ const (
 
 // TelemetryService manages OpenTelemetry initialization and instrumentation
 type TelemetryService struct {
-	tracer        trace.Tracer
-	meter         metric.Meter
-	shutdownFunc  func(context.Context) error
-	config        *TelemetryConfig
-	
+	tracer       trace.Tracer
+	meter        metric.Meter
+	shutdownFunc func(context.Context) error
+	config       *TelemetryConfig
+
 	// Business metrics
-	agentExecutionCounter    metric.Int64Counter
-	agentExecutionDuration  metric.Float64Histogram
-	tokenUsageCounter       metric.Int64Counter
-	toolCallCounter         metric.Int64Counter
-	errorCounter            metric.Int64Counter
+	agentExecutionCounter  metric.Int64Counter
+	agentExecutionDuration metric.Float64Histogram
+	tokenUsageCounter      metric.Int64Counter
+	toolCallCounter        metric.Int64Counter
+	errorCounter           metric.Int64Counter
 }
 
 // TelemetryConfig holds configuration for telemetry services
@@ -57,7 +57,7 @@ func NewTelemetryService(config *TelemetryConfig) *TelemetryService {
 			Environment: "development",
 		}
 	}
-	
+
 	return &TelemetryService{
 		config: config,
 	}
@@ -75,7 +75,7 @@ func (ts *TelemetryService) Initialize(ctx context.Context) error {
 	if serviceName == "" {
 		serviceName = "station"
 	}
-	
+
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
@@ -137,7 +137,7 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 			} else if strings.HasPrefix(endpoint, "https://") {
 				endpoint = strings.TrimPrefix(endpoint, "https://")
 			}
-			
+
 			exporter, err = otlptracehttp.New(ctx,
 				otlptracehttp.WithEndpoint(endpoint),
 				otlptracehttp.WithInsecure(), // Use HTTP instead of HTTPS for localhost

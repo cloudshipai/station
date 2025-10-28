@@ -130,7 +130,7 @@ func TestEnvironmentSpecificAgentDataIntegrity(t *testing.T) {
 		var envID int
 		err = rows.Scan(&toolName, &serverName, &envID)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "test-tool", toolName)
 		assert.Equal(t, "test-server", serverName)
 		assert.Equal(t, 1, envID)

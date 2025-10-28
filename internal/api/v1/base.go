@@ -12,15 +12,15 @@ import (
 
 // APIHandlers contains all the API handlers and their dependencies
 type APIHandlers struct {
-	repos                *repositories.Repositories
-	agentService         services.AgentServiceInterface
+	repos        *repositories.Repositories
+	agentService services.AgentServiceInterface
 	// mcpConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService // restored for lighthouse/API compatibility
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
-	agentExportService   *services.AgentExportService
-	telemetryService     *telemetry.TelemetryService
-	localMode            bool
+	agentExportService *services.AgentExportService
+	telemetryService   *telemetry.TelemetryService
+	localMode          bool
 }
 
 // NewAPIHandlers creates a new API handlers instance
@@ -60,15 +60,15 @@ func (h *APIHandlers) telemetryMiddleware() gin.HandlerFunc {
 func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Add telemetry middleware
 	router.Use(h.telemetryMiddleware())
-	
+
 	// Create auth middleware with local mode setting
 	authMiddleware := auth.NewAuthMiddlewareWithLocalMode(h.repos, h.localMode)
-	
+
 	// In server mode, all routes require authentication
 	if !h.localMode {
 		router.Use(authMiddleware.Authenticate())
 	}
-	
+
 	// Environment routes
 	envGroup := router.Group("/environments")
 	// In server mode, only admins can manage environments
@@ -87,30 +87,30 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	toolsGroup := envGroup.Group("/:env_id/tools")
 	// Inherits admin-only restriction from envGroup
 	h.registerToolsRoutes(toolsGroup)
-	
+
 	// MCP Servers routes - admin only in server mode
 	mcpServersGroup := router.Group("/mcp-servers")
 	if !h.localMode {
 		mcpServersGroup.Use(h.requireAdminInServerMode())
 	}
 	h.registerMCPServerRoutes(mcpServersGroup)
-	
+
 	// Agent routes - accessible to regular users in server mode
 	agentGroup := router.Group("/agents")
-	agentGroup.GET("", h.listAgents)           // Users can list agents
-	agentGroup.GET("/:id", h.getAgent)         // Users can view individual agents
+	agentGroup.GET("", h.listAgents)                    // Users can list agents
+	agentGroup.GET("/:id", h.getAgent)                  // Users can view individual agents
 	agentGroup.GET("/:id/details", h.getAgentWithTools) // Users can view agent details
-	agentGroup.GET("/:id/prompt", h.getAgentPrompt)    // Users can view agent prompts
-	agentGroup.PUT("/:id/prompt", h.updateAgentPrompt) // Users can update agent prompts
-	agentGroup.POST("/:id/execute", h.callAgent) // Users can execute agents (direct execution with async goroutine)
-	
+	agentGroup.GET("/:id/prompt", h.getAgentPrompt)     // Users can view agent prompts
+	agentGroup.PUT("/:id/prompt", h.updateAgentPrompt)  // Users can update agent prompts
+	agentGroup.POST("/:id/execute", h.callAgent)        // Users can execute agents (direct execution with async goroutine)
+
 	// Admin-only agent management routes
 	agentAdminGroup := router.Group("/admin/agents")
 	if !h.localMode {
 		agentAdminGroup.Use(h.requireAdminInServerMode())
 	}
 	h.registerAgentAdminRoutes(agentAdminGroup)
-	
+
 	// Agent runs routes - accessible to regular users in server mode
 	runsGroup := router.Group("/runs")
 	h.registerAgentRunRoutes(runsGroup)
@@ -121,7 +121,6 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 		settingsGroup.Use(h.requireAdminInServerMode())
 	}
 	h.registerSettingsRoutes(settingsGroup)
-
 
 	// Sync route - admin only in server mode
 	syncGroup := router.Group("/sync")
@@ -178,7 +177,7 @@ func (h *APIHandlers) requireAdminInServerMode() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		
+
 		// Get user from context (should be set by auth middleware)
 		user, exists := auth.GetUserFromContext(c)
 		if !exists {
@@ -186,14 +185,14 @@ func (h *APIHandlers) requireAdminInServerMode() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		
+
 		// Check if user is admin
 		if !user.IsAdmin {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Admin privileges required"})
 			c.Abort()
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -203,8 +202,8 @@ func (h *APIHandlers) syncConfigurations(c *gin.Context) {
 	// Import the os/exec package for running the stn sync command
 	// For now, return a success response - actual implementation would call stn sync
 	c.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"message": "Configuration sync triggered successfully",
+		"status":    "success",
+		"message":   "Configuration sync triggered successfully",
 		"timestamp": "2025-08-17T22:45:00Z",
 	})
 }

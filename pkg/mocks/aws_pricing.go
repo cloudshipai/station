@@ -93,17 +93,17 @@ func (m *AWSPricingMock) handleQueryProducts(ctx context.Context, request mcp.Ca
 			"product": map[string]interface{}{
 				"productFamily": "Compute Instance",
 				"attributes": map[string]interface{}{
-					"servicecode":      "AmazonEC2",
-					"location":         "US East (N. Virginia)",
-					"locationType":     "AWS Region",
-					"instanceType":     "t3.medium",
-					"currentGeneration": "Yes",
-					"vcpu":             "2",
-					"memory":           "4 GiB",
-					"storage":          "EBS only",
+					"servicecode":        "AmazonEC2",
+					"location":           "US East (N. Virginia)",
+					"locationType":       "AWS Region",
+					"instanceType":       "t3.medium",
+					"currentGeneration":  "Yes",
+					"vcpu":               "2",
+					"memory":             "4 GiB",
+					"storage":            "EBS only",
 					"networkPerformance": "Up to 5 Gigabit",
-					"operatingSystem":  "Linux",
-					"tenancy":          "Shared",
+					"operatingSystem":    "Linux",
+					"tenancy":            "Shared",
 				},
 			},
 			"serviceCode": "AmazonEC2",
@@ -111,7 +111,7 @@ func (m *AWSPricingMock) handleQueryProducts(ctx context.Context, request mcp.Ca
 				"OnDemand": map[string]interface{}{
 					"priceDimensions": map[string]interface{}{
 						"hourly": map[string]interface{}{
-							"unit":           "Hrs",
+							"unit": "Hrs",
 							"pricePerUnit": map[string]string{
 								"USD": "0.0416",
 							},
@@ -125,19 +125,19 @@ func (m *AWSPricingMock) handleQueryProducts(ctx context.Context, request mcp.Ca
 			"product": map[string]interface{}{
 				"productFamily": "Compute Instance",
 				"attributes": map[string]interface{}{
-					"servicecode":      "AmazonEC2",
-					"location":         "US East (N. Virginia)",
-					"instanceType":     "t3.large",
-					"vcpu":             "2",
-					"memory":           "8 GiB",
-					"operatingSystem":  "Linux",
+					"servicecode":     "AmazonEC2",
+					"location":        "US East (N. Virginia)",
+					"instanceType":    "t3.large",
+					"vcpu":            "2",
+					"memory":          "8 GiB",
+					"operatingSystem": "Linux",
 				},
 			},
 			"terms": map[string]interface{}{
 				"OnDemand": map[string]interface{}{
 					"priceDimensions": map[string]interface{}{
 						"hourly": map[string]interface{}{
-							"unit":           "Hrs",
+							"unit": "Hrs",
 							"pricePerUnit": map[string]string{
 								"USD": "0.0832",
 							},
@@ -150,19 +150,19 @@ func (m *AWSPricingMock) handleQueryProducts(ctx context.Context, request mcp.Ca
 			"product": map[string]interface{}{
 				"productFamily": "Compute Instance",
 				"attributes": map[string]interface{}{
-					"servicecode":      "AmazonEC2",
-					"location":         "US East (N. Virginia)",
-					"instanceType":     "t3.xlarge",
-					"vcpu":             "4",
-					"memory":           "16 GiB",
-					"operatingSystem":  "Linux",
+					"servicecode":     "AmazonEC2",
+					"location":        "US East (N. Virginia)",
+					"instanceType":    "t3.xlarge",
+					"vcpu":            "4",
+					"memory":          "16 GiB",
+					"operatingSystem": "Linux",
 				},
 			},
 			"terms": map[string]interface{}{
 				"OnDemand": map[string]interface{}{
 					"priceDimensions": map[string]interface{}{
 						"hourly": map[string]interface{}{
-							"unit":           "Hrs",
+							"unit": "Hrs",
 							"pricePerUnit": map[string]string{
 								"USD": "0.1664",
 							},
@@ -175,19 +175,19 @@ func (m *AWSPricingMock) handleQueryProducts(ctx context.Context, request mcp.Ca
 			"product": map[string]interface{}{
 				"productFamily": "Compute Instance",
 				"attributes": map[string]interface{}{
-					"servicecode":      "AmazonEC2",
-					"location":         "US East (N. Virginia)",
-					"instanceType":     "m5.large",
-					"vcpu":             "2",
-					"memory":           "8 GiB",
-					"operatingSystem":  "Linux",
+					"servicecode":     "AmazonEC2",
+					"location":        "US East (N. Virginia)",
+					"instanceType":    "m5.large",
+					"vcpu":            "2",
+					"memory":          "8 GiB",
+					"operatingSystem": "Linux",
 				},
 			},
 			"terms": map[string]interface{}{
 				"OnDemand": map[string]interface{}{
 					"priceDimensions": map[string]interface{}{
 						"hourly": map[string]interface{}{
-							"unit":           "Hrs",
+							"unit": "Hrs",
 							"pricePerUnit": map[string]string{
 								"USD": "0.096",
 							},
@@ -200,19 +200,19 @@ func (m *AWSPricingMock) handleQueryProducts(ctx context.Context, request mcp.Ca
 			"product": map[string]interface{}{
 				"productFamily": "Compute Instance",
 				"attributes": map[string]interface{}{
-					"servicecode":      "AmazonEC2",
-					"location":         "US East (N. Virginia)",
-					"instanceType":     "m5.xlarge",
-					"vcpu":             "4",
-					"memory":           "16 GiB",
-					"operatingSystem":  "Linux",
+					"servicecode":     "AmazonEC2",
+					"location":        "US East (N. Virginia)",
+					"instanceType":    "m5.xlarge",
+					"vcpu":            "4",
+					"memory":          "16 GiB",
+					"operatingSystem": "Linux",
 				},
 			},
 			"terms": map[string]interface{}{
 				"OnDemand": map[string]interface{}{
 					"priceDimensions": map[string]interface{}{
 						"hourly": map[string]interface{}{
-							"unit":           "Hrs",
+							"unit": "Hrs",
 							"pricePerUnit": map[string]string{
 								"USD": "0.192",
 							},
@@ -235,59 +235,59 @@ func (m *AWSPricingMock) handleGetPriceDimensions(ctx context.Context, request m
 	// Return detailed pricing for a specific instance type
 	instancePricing := map[string]map[string]interface{}{
 		"t3.medium": {
-			"hourly_usd": 0.0416,
-			"monthly_usd": 30.40,
-			"vcpu": 2,
-			"memory_gib": 4,
-			"storage": "EBS only",
+			"hourly_usd":          0.0416,
+			"monthly_usd":         30.40,
+			"vcpu":                2,
+			"memory_gib":          4,
+			"storage":             "EBS only",
 			"network_performance": "Up to 5 Gigabit",
 		},
 		"t3.large": {
-			"hourly_usd": 0.0832,
-			"monthly_usd": 60.80,
-			"vcpu": 2,
-			"memory_gib": 8,
-			"storage": "EBS only",
+			"hourly_usd":          0.0832,
+			"monthly_usd":         60.80,
+			"vcpu":                2,
+			"memory_gib":          8,
+			"storage":             "EBS only",
 			"network_performance": "Up to 5 Gigabit",
 		},
 		"t3.xlarge": {
-			"hourly_usd": 0.1664,
-			"monthly_usd": 121.60,
-			"vcpu": 4,
-			"memory_gib": 16,
-			"storage": "EBS only",
+			"hourly_usd":          0.1664,
+			"monthly_usd":         121.60,
+			"vcpu":                4,
+			"memory_gib":          16,
+			"storage":             "EBS only",
 			"network_performance": "Up to 5 Gigabit",
 		},
 		"m5.large": {
-			"hourly_usd": 0.096,
-			"monthly_usd": 70.08,
-			"vcpu": 2,
-			"memory_gib": 8,
-			"storage": "EBS only",
+			"hourly_usd":          0.096,
+			"monthly_usd":         70.08,
+			"vcpu":                2,
+			"memory_gib":          8,
+			"storage":             "EBS only",
 			"network_performance": "Up to 10 Gigabit",
 		},
 		"m5.xlarge": {
-			"hourly_usd": 0.192,
-			"monthly_usd": 140.16,
-			"vcpu": 4,
-			"memory_gib": 16,
-			"storage": "EBS only",
+			"hourly_usd":          0.192,
+			"monthly_usd":         140.16,
+			"vcpu":                4,
+			"memory_gib":          16,
+			"storage":             "EBS only",
 			"network_performance": "Up to 10 Gigabit",
 		},
 		"c5.large": {
-			"hourly_usd": 0.085,
-			"monthly_usd": 62.05,
-			"vcpu": 2,
-			"memory_gib": 4,
-			"storage": "EBS only",
+			"hourly_usd":          0.085,
+			"monthly_usd":         62.05,
+			"vcpu":                2,
+			"memory_gib":          4,
+			"storage":             "EBS only",
 			"network_performance": "Up to 10 Gigabit",
 		},
 		"r5.large": {
-			"hourly_usd": 0.126,
-			"monthly_usd": 91.98,
-			"vcpu": 2,
-			"memory_gib": 16,
-			"storage": "EBS only",
+			"hourly_usd":          0.126,
+			"monthly_usd":         91.98,
+			"vcpu":                2,
+			"memory_gib":          16,
+			"storage":             "EBS only",
 			"network_performance": "Up to 10 Gigabit",
 		},
 	}
@@ -300,16 +300,16 @@ func (m *AWSPricingMock) handleGetPriceDimensions(ctx context.Context, request m
 	}
 
 	response := map[string]interface{}{
-		"instance_type": instanceType,
-		"region": "us-east-1",
-		"pricing": pricing,
-		"currency": "USD",
-		"price_per_hour": fmt.Sprintf("%.4f", pricing["hourly_usd"]),
+		"instance_type":   instanceType,
+		"region":          "us-east-1",
+		"pricing":         pricing,
+		"currency":        "USD",
+		"price_per_hour":  fmt.Sprintf("%.4f", pricing["hourly_usd"]),
 		"price_per_month": fmt.Sprintf("%.2f", pricing["monthly_usd"]),
 		"specifications": map[string]interface{}{
-			"vcpu": pricing["vcpu"],
-			"memory_gib": pricing["memory_gib"],
-			"storage": pricing["storage"],
+			"vcpu":                pricing["vcpu"],
+			"memory_gib":          pricing["memory_gib"],
+			"storage":             pricing["storage"],
 			"network_performance": pricing["network_performance"],
 		},
 	}

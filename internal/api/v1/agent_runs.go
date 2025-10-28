@@ -9,9 +9,9 @@ import (
 
 // registerAgentRunRoutes registers agent run routes
 func (h *APIHandlers) registerAgentRunRoutes(group *gin.RouterGroup) {
-	group.GET("", h.listRuns)              // Users can list runs
-	group.GET("/:id", h.getRun)            // Users can get run details
-	group.GET("/:id/logs", h.getRunLogs)   // Users can get run debug logs
+	group.GET("", h.listRuns)                        // Users can list runs
+	group.GET("/:id", h.getRun)                      // Users can get run details
+	group.GET("/:id/logs", h.getRunLogs)             // Users can get run debug logs
 	group.GET("/agent/:agent_id", h.listRunsByAgent) // Users can list runs by agent
 }
 

@@ -103,22 +103,22 @@ func TestCreator_Create(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			
+
 			// Verify bundle structure
 			assertBundleStructure(t, fs, bundlePath)
-			
+
 			// Verify manifest content
 			assertManifestContent(t, fs, bundlePath, tt.opts)
-			
-			// Verify template content  
+
+			// Verify template content
 			assertTemplateContent(t, fs, bundlePath, tt.opts.Name)
-			
+
 			// Verify variables schema
 			assertVariablesSchema(t, fs, bundlePath, tt.opts.Variables)
-			
+
 			// Verify README
 			assertREADME(t, fs, bundlePath)
-			
+
 			// Verify examples
 			assertExamples(t, fs, bundlePath)
 		})
@@ -158,17 +158,17 @@ func assertManifestContent(t *testing.T, fs afero.Fs, bundlePath string, opts bu
 	assert.Equal(t, opts.Description, manifest.Description)
 	assert.Equal(t, "1.0.0", manifest.Version)
 	assert.Equal(t, ">=0.1.0", manifest.StationVersion)
-	
+
 	if opts.License != "" {
 		assert.Equal(t, opts.License, manifest.License)
 	} else {
 		assert.Equal(t, "MIT", manifest.License)
 	}
-	
+
 	if len(opts.Tags) > 0 {
 		assert.Equal(t, opts.Tags, manifest.Tags)
 	}
-	
+
 	assert.NotZero(t, manifest.CreatedAt)
 }
 
@@ -244,14 +244,14 @@ func TestCreator_CreateExistingDirectory(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	creator := NewCreator()
 	bundlePath := "/existing-bundle"
-	
+
 	// Create directory first
 	err := fs.MkdirAll(bundlePath, 0755)
 	require.NoError(t, err)
 
 	opts := bundle.CreateOptions{
 		Name:        "existing-bundle",
-		Author:      "Test Author", 
+		Author:      "Test Author",
 		Description: "Test bundle",
 	}
 

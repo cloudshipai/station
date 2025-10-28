@@ -35,7 +35,7 @@ func (s *ToolDiscoveryService) GetHybridToolsByEnvironment(environmentID int64) 
 	// This method is used by lighthouse service to get tools with server information
 	// For now, return an empty list with a log message indicating tools should be discovered by DeclarativeSync
 	log.Printf("GetHybridToolsByEnvironment called for environment %d - tools should be discovered via DeclarativeSync", environmentID)
-	
+
 	// TODO: Implement proper hybrid tool retrieval by joining MCP tools with their server configs
 	// This would require querying both MCPTools and FileMCPConfigs repositories
 	return []*models.MCPToolWithFileConfig{}, nil

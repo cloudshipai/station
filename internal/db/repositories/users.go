@@ -28,19 +28,19 @@ func convertUserFromSQLc(user queries.User) *models.User {
 		PublicKey: user.PublicKey,
 		IsAdmin:   user.IsAdmin,
 	}
-	
+
 	if user.ApiKey.Valid {
 		result.APIKey = &user.ApiKey.String
 	}
-	
+
 	if user.CreatedAt.Valid {
 		result.CreatedAt = user.CreatedAt.Time
 	}
-	
+
 	if user.UpdatedAt.Valid {
 		result.UpdatedAt = user.UpdatedAt.Time
 	}
-	
+
 	return result
 }
 
@@ -50,16 +50,16 @@ func (r *UserRepo) Create(username string, publicKey string, isAdmin bool, apiKe
 		PublicKey: publicKey,
 		IsAdmin:   isAdmin,
 	}
-	
+
 	if apiKey != nil {
 		params.ApiKey = sql.NullString{String: *apiKey, Valid: true}
 	}
-	
+
 	created, err := r.queries.CreateUser(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return convertUserFromSQLc(created), nil
 }
 
@@ -92,12 +92,12 @@ func (r *UserRepo) List() ([]*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.User
 	for _, user := range users {
 		result = append(result, convertUserFromSQLc(user))
 	}
-	
+
 	return result, nil
 }
 
@@ -114,11 +114,11 @@ func (r *UserRepo) UpdateAPIKey(id int64, apiKey *string) error {
 	params := queries.UpdateUserAPIKeyParams{
 		ID: id,
 	}
-	
+
 	if apiKey != nil {
 		params.ApiKey = sql.NullString{String: *apiKey, Valid: true}
 	}
-	
+
 	return r.queries.UpdateUserAPIKey(context.Background(), params)
 }
 
@@ -128,11 +128,11 @@ func (r *UserRepo) Delete(id int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
 	}
-	
+
 	// Prevent deletion of system users
 	if user.Username == "console" {
 		return fmt.Errorf("cannot delete system user '%s'", user.Username)
 	}
-	
+
 	return r.queries.DeleteUser(context.Background(), id)
 }

@@ -309,8 +309,8 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		existingAgent.ScheduleEnabled, // Keep existing schedule setting
 		outputSchema,
 		outputSchemaPreset,
-		app,        // CloudShip app classification
-		appType,    // CloudShip app_type classification
+		app,     // CloudShip app classification
+		appType, // CloudShip app_type classification
 	)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent: %v", err)), nil

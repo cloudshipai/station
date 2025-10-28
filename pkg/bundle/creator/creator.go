@@ -40,17 +40,17 @@ func (c *Creator) Create(fs afero.Fs, bundlePath string, opts bundle.CreateOptio
 
 	// Create manifest
 	manifest := bundle.BundleManifest{
-		Name:           opts.Name,
-		Version:        "1.0.0",
-		Description:    opts.Description,
-		Author:         opts.Author,
-		License:        opts.License,
-		Repository:     opts.Repository,
-		StationVersion: ">=0.1.0",
-		CreatedAt:      time.Now().UTC(),
-		Tags:           opts.Tags,
+		Name:              opts.Name,
+		Version:           "1.0.0",
+		Description:       opts.Description,
+		Author:            opts.Author,
+		License:           opts.License,
+		Repository:        opts.Repository,
+		StationVersion:    ">=0.1.0",
+		CreatedAt:         time.Now().UTC(),
+		Tags:              opts.Tags,
 		RequiredVariables: opts.Variables,
-		Dependencies:   opts.Dependencies,
+		Dependencies:      opts.Dependencies,
 	}
 
 	// Set defaults
@@ -104,7 +104,7 @@ func (c *Creator) Create(fs afero.Fs, bundlePath string, opts bundle.CreateOptio
 
 func (c *Creator) createManifest(fs afero.Fs, bundlePath string, manifest bundle.BundleManifest) error {
 	manifestPath := filepath.Join(bundlePath, "manifest.json")
-	
+
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func (c *Creator) createManifest(fs afero.Fs, bundlePath string, manifest bundle
 
 func (c *Creator) createTemplate(fs afero.Fs, bundlePath, bundleName string) error {
 	templatePath := filepath.Join(bundlePath, "template.json")
-	
+
 	template := map[string]interface{}{
 		"name":        bundleName,
 		"description": "Essential filesystem operations with MCP server integration",
@@ -139,13 +139,13 @@ func (c *Creator) createTemplate(fs afero.Fs, bundlePath, bundleName string) err
 
 func (c *Creator) createVariablesSchema(fs afero.Fs, bundlePath string, variables map[string]bundle.VariableSpec) error {
 	schemaPath := filepath.Join(bundlePath, "variables.schema.json")
-	
+
 	schema := map[string]interface{}{
-		"$schema": "https://json-schema.org/draft/2020-12/schema",
-		"type":    "object",
-		"title":   "Bundle Variables Schema",
+		"$schema":    "https://json-schema.org/draft/2020-12/schema",
+		"type":       "object",
+		"title":      "Bundle Variables Schema",
 		"properties": map[string]interface{}{},
-		"required": []string{},
+		"required":   []string{},
 	}
 
 	properties := schema["properties"].(map[string]interface{})
@@ -166,17 +166,17 @@ func (c *Creator) createVariablesSchema(fs afero.Fs, bundlePath string, variable
 				"type":        spec.Type,
 				"description": spec.Description,
 			}
-			
+
 			if spec.Default != nil {
 				prop["default"] = spec.Default
 			}
-			
+
 			if len(spec.Enum) > 0 {
 				prop["enum"] = spec.Enum
 			}
-			
+
 			properties[name] = prop
-			
+
 			if spec.Required {
 				required = append(required, name)
 			}
@@ -195,7 +195,7 @@ func (c *Creator) createVariablesSchema(fs afero.Fs, bundlePath string, variable
 
 func (c *Creator) createREADME(fs afero.Fs, bundlePath string, opts bundle.CreateOptions) error {
 	readmePath := filepath.Join(bundlePath, "README.md")
-	
+
 	readme := fmt.Sprintf("# %s\n\n%s\n\n## Installation\n\n```bash\nstn template install %s\n```\n\n## Usage\n\n```bash\n# Sync with your environment (will prompt for required variables)\nstn mcp sync development\n\n# Or provide variables via environment variables\nexport EXAMPLE_VAR=\"your-value\"\nstn mcp sync production\n```\n\n## Required Variables\n\n", opts.Name, opts.Description, opts.Name)
 
 	if len(opts.Variables) == 0 {
@@ -206,12 +206,12 @@ func (c *Creator) createREADME(fs afero.Fs, bundlePath string, opts bundle.Creat
 			if spec.Secret {
 				secretNote = " (secret)"
 			}
-			
+
 			defaultNote := ""
 			if spec.Default != nil {
 				defaultNote = fmt.Sprintf(" - default: `%v`", spec.Default)
 			}
-			
+
 			readme += fmt.Sprintf("- `%s`: %s%s%s\n", name, spec.Description, secretNote, defaultNote)
 		}
 	}
@@ -224,7 +224,7 @@ func (c *Creator) createREADME(fs afero.Fs, bundlePath string, opts bundle.Creat
 func (c *Creator) createExampleVariables(fs afero.Fs, examplesDir string, variables map[string]bundle.VariableSpec) error {
 	// Create development example
 	devVars := make(map[string]interface{})
-	
+
 	if len(variables) == 0 {
 		devVars["ROOT_PATH"] = "/tmp"
 	} else {

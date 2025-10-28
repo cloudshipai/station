@@ -28,15 +28,15 @@ func convertMCPToolFromSQLc(tool queries.McpTool) *models.MCPTool {
 		Name:        tool.Name,
 		Description: tool.Description.String,
 	}
-	
+
 	if tool.CreatedAt.Valid {
 		result.CreatedAt = tool.CreatedAt.Time
 	}
-	
+
 	if tool.InputSchema.Valid {
 		result.Schema = json.RawMessage(tool.InputSchema.String)
 	}
-	
+
 	return result
 }
 
@@ -47,11 +47,11 @@ func convertMCPToolToSQLc(tool *models.MCPTool) queries.CreateMCPToolParams {
 		Name:        tool.Name,
 		Description: sql.NullString{String: tool.Description, Valid: tool.Description != ""},
 	}
-	
+
 	if tool.Schema != nil {
 		params.InputSchema = sql.NullString{String: string(tool.Schema), Valid: true}
 	}
-	
+
 	return params
 }
 
@@ -87,12 +87,12 @@ func (r *MCPToolRepo) GetByServerID(serverID int64) ([]*models.MCPTool, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.MCPTool
 	for _, tool := range tools {
 		result = append(result, convertMCPToolFromSQLc(tool))
 	}
-	
+
 	return result, nil
 }
 
@@ -101,12 +101,12 @@ func (r *MCPToolRepo) GetByEnvironmentID(environmentID int64) ([]*models.MCPTool
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.MCPTool
 	for _, tool := range tools {
 		result = append(result, convertMCPToolFromSQLc(tool))
 	}
-	
+
 	return result, nil
 }
 
@@ -119,12 +119,12 @@ func (r *MCPToolRepo) GetByServerInEnvironment(environmentID int64, serverName s
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.MCPTool
 	for _, tool := range tools {
 		result = append(result, convertMCPToolFromSQLc(tool))
 	}
-	
+
 	return result, nil
 }
 
@@ -134,12 +134,12 @@ func (r *MCPToolRepo) FindByNameInEnvironment(environmentID int64, toolName stri
 		EnvironmentID: environmentID,
 		Name:          toolName,
 	}
-	
+
 	tool, err := r.queries.FindMCPToolByNameInEnvironment(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return convertMCPToolFromSQLc(tool), nil
 }
 
@@ -162,18 +162,18 @@ func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// If no servers exist, return empty slice
 	if serverCount == 0 {
 		return []*models.MCPToolWithDetails{}, nil
 	}
-	
+
 	// Use SQLC generated query and types directly
 	rows, err := r.queries.GetMCPToolsWithDetails(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert SQLC row type to domain model
 	var tools []*models.MCPToolWithDetails
 	for _, row := range rows {
@@ -191,20 +191,20 @@ func (r *MCPToolRepo) GetAllWithDetails() ([]*models.MCPToolWithDetails, error) 
 			EnvironmentID:   row.EnvironmentID,
 			EnvironmentName: row.EnvironmentName,
 		}
-		
+
 		if row.CreatedAt.Valid {
 			tool.CreatedAt = row.CreatedAt.Time
 		}
-		
+
 		if row.InputSchema.Valid && row.InputSchema.String != "" {
 			tool.Schema = json.RawMessage(row.InputSchema.String)
 		} else {
 			tool.Schema = json.RawMessage("null")
 		}
-		
+
 		tools = append(tools, tool)
 	}
-	
+
 	return tools, nil
 }
 

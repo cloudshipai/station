@@ -45,7 +45,7 @@ func (h *APIHandlers) listSettings(c *gin.Context) {
 
 func (h *APIHandlers) getSetting(c *gin.Context) {
 	key := c.Param("key")
-	
+
 	setting, err := h.repos.Settings.GetByKey(key)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Setting not found"})
@@ -57,7 +57,7 @@ func (h *APIHandlers) getSetting(c *gin.Context) {
 
 func (h *APIHandlers) updateSetting(c *gin.Context) {
 	key := c.Param("key")
-	
+
 	var req UpdateSettingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

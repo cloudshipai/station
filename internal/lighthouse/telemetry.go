@@ -3,11 +3,11 @@ package lighthouse
 import (
 	"context"
 	"fmt"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"station/internal/lighthouse/proto"
 	"station/internal/logging"
 	"station/pkg/types"
-	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // SendRun sends agent run data to CloudShip (async, buffered)
@@ -45,7 +45,6 @@ func (lc *LighthouseClient) SendRun(runData *types.AgentRun, environment string,
 		logging.Debug("Detected finops preset - structured data will be sent via regular lighthouse telemetry with preset metadata")
 	}
 }
-
 
 // SendEphemeralSnapshot sends CLI mode rich context snapshot
 func (lc *LighthouseClient) SendEphemeralSnapshot(runData *types.AgentRun, deploymentCtx *types.DeploymentContext, system *types.SystemSnapshot) error {
@@ -188,9 +187,9 @@ func (lc *LighthouseClient) IngestData(app, appType string, data map[string]inte
 		Metadata:        metadata,
 		Timestamp:       timestamppb.Now(),
 		CorrelationId:   correlationID,
-		RunId:           runID,       // UUID of StationRun for lineage tracing
-		AgentName:       agentName,   // Agent name for citation context
-		AgentId:         agentID,     // Agent ID for traceability
+		RunId:           runID,     // UUID of StationRun for lineage tracing
+		AgentName:       agentName, // Agent name for citation context
+		AgentId:         agentID,   // Agent ID for traceability
 	}
 
 	// Use DataIngestionServiceClient to send the data

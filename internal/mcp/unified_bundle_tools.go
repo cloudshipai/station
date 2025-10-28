@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"station/internal/services"
 	"station/cmd/main/handlers/common"
+	"station/internal/services"
 )
 
 // UnifiedBundleHandler provides MCP tools for the unified bundle system
@@ -29,13 +29,13 @@ func NewUnifiedBundleHandler() *UnifiedBundleHandler {
 
 // BundleResponse represents the response from bundle operations
 type BundleResponse struct {
-	Success         bool                      `json:"success"`
-	Message         string                    `json:"message"`
-	BundlePath      string                    `json:"bundlePath,omitempty"`
-	Size            int64                     `json:"size,omitempty"`
-	BundleInfo      *services.BundleInfo      `json:"bundleInfo,omitempty"`
-	InstallCommand  string                    `json:"installCommand,omitempty"`
-	Error           string                    `json:"error,omitempty"`
+	Success        bool                 `json:"success"`
+	Message        string               `json:"message"`
+	BundlePath     string               `json:"bundlePath,omitempty"`
+	Size           int64                `json:"size,omitempty"`
+	BundleInfo     *services.BundleInfo `json:"bundleInfo,omitempty"`
+	InstallCommand string               `json:"installCommand,omitempty"`
+	Error          string               `json:"error,omitempty"`
 }
 
 // CreateBundle creates an API-compatible bundle from an environment
@@ -54,7 +54,7 @@ func (h *UnifiedBundleHandler) CreateBundle(ctx context.Context, req BundleEnvir
 
 	// Environment directory path
 	envPath := filepath.Join(configRoot, "environments", req.EnvironmentName)
-	
+
 	// Validate environment exists and is bundleable
 	if err := h.bundleService.ValidateEnvironment(envPath); err != nil {
 		return &BundleResponse{
@@ -103,12 +103,12 @@ func (h *UnifiedBundleHandler) CreateBundle(ctx context.Context, req BundleEnvir
 	installCmd := fmt.Sprintf("curl -X POST http://localhost:8080/bundles/install -H \"Content-Type: application/json\" -d '{\"bundle_location\": \"%s\", \"environment_name\": \"new-env\", \"source\": \"file\"}'", outputPath)
 
 	return &BundleResponse{
-		Success:         true,
-		Message:         fmt.Sprintf("Successfully created bundle from environment '%s'", req.EnvironmentName),
-		BundlePath:      outputPath,
-		Size:            int64(len(tarData)),
-		BundleInfo:      bundleInfo,
-		InstallCommand:  installCmd,
+		Success:        true,
+		Message:        fmt.Sprintf("Successfully created bundle from environment '%s'", req.EnvironmentName),
+		BundlePath:     outputPath,
+		Size:           int64(len(tarData)),
+		BundleInfo:     bundleInfo,
+		InstallCommand: installCmd,
 	}, nil
 }
 

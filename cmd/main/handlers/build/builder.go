@@ -26,12 +26,12 @@ type EnvironmentBuilder struct {
 
 type BuildOptions struct {
 	Provider            string
-	Model              string
-	CloudShipAIKey     string
+	Model               string
+	CloudShipAIKey      string
 	CloudShipAIEndpoint string
-	InstallShip        bool
-	ImageName          string // Custom image name (optional)
-	Tag                string // Custom image tag (optional)
+	InstallShip         bool
+	ImageName           string // Custom image name (optional)
+	Tag                 string // Custom image tag (optional)
 }
 
 type EnvironmentConfig struct {
@@ -174,7 +174,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	if err := b.buildStationBinary(); err != nil {
 		return nil, "", fmt.Errorf("failed to build station binary: %w", err)
 	}
-	
+
 	stationBinary := client.Host().Directory(".").File("stn")
 	base = base.WithFile("/usr/local/bin/stn", stationBinary).
 		WithExec([]string{"chmod", "+x", "/usr/local/bin/stn"})
@@ -189,7 +189,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	base = base.WithDirectory("/root/.config/station/environments/default", envDir)
 
 	log.Printf("🔧 Copying environment '%s' content to container's default environment", b.environmentName)
-	
+
 	// Create workspace directory for CI/CD filesystem operations
 	base = base.WithExec([]string{"mkdir", "-p", "/workspace"})
 
@@ -200,12 +200,12 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get project root: %w", err)
 	}
-	
+
 	tempDBPath := filepath.Join(projectRoot, "station_build.db")
 	if err := b.createMinimalDatabase(tempDBPath); err != nil {
 		return nil, "", fmt.Errorf("failed to create database: %w", err)
 	}
-	
+
 	// Get relative path for Dagger
 	relDBPath := "station_build.db"
 	dbFile := client.Host().File(relDBPath)
@@ -215,23 +215,23 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 		WithEnvVariable("PATH", "/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/bin:/bin")
 
 	// Build stn init command with proper flags
-	initArgs := []string{"stn", "init", 
+	initArgs := []string{"stn", "init",
 		"--provider", b.buildOptions.Provider,
 		"--model", b.buildOptions.Model,
 		"--yes", // Skip interactive prompts
 	}
-	
+
 	// Add CloudShip AI configuration if provided
 	if b.buildOptions.CloudShipAIKey != "" {
-		initArgs = append(initArgs, 
+		initArgs = append(initArgs,
 			"--cloudshipai", b.buildOptions.CloudShipAIKey,
 			"--cloudshipai_endpoint", b.buildOptions.CloudShipAIEndpoint)
 	}
-	
+
 	// Ship CLI is installed directly in container build, no need for --ship flag
-	
+
 	base = base.WithExec(initArgs)
-	
+
 	// Pass through API keys for tool discovery during sync
 	if key := os.Getenv("STN_AI_API_KEY"); key != "" {
 		base = base.WithEnvVariable("STN_AI_API_KEY", key)
@@ -251,7 +251,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 	if key := os.Getenv("AI_API_KEY"); key != "" {
 		base = base.WithEnvVariable("AI_API_KEY", key)
 	}
-	
+
 	// Station's serve command will handle template variable processing with runtime environment variables
 
 	// Install Ship CLI before running sync to prevent MCP failures
@@ -292,14 +292,14 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 		echo "🔍 Checking final agent count..."
 		stn agent list --environment default | head -10
 	`})
-	
+
 	// Install Ship CLI and Docker CLI inside the container
 	if b.buildOptions.InstallShip {
 		log.Printf("🚢 Downloading Ship CLI inside container...")
-		
+
 		// Download and install Ship CLI inside the container
 		base = base.WithExec([]string{"bash", "-c", "curl -fsSL https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash"})
-		
+
 		dockerArch := getDockerArch()
 		log.Printf("🐳 Downloading Docker CLI inside container (architecture: %s)...", dockerArch)
 
@@ -311,7 +311,7 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 			chmod +x /usr/local/bin/docker
 		`, dockerArch)
 		base = base.WithExec([]string{"bash", "-c", dockerDownloadCmd})
-		
+
 		// The Ship CLI installs to ~/.local/bin by default, so ensure it's executable and in the right location
 		base = base.WithExec([]string{"bash", "-c", `
 			if [ -f /root/.local/bin/ship ]; then 
@@ -319,13 +319,13 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 				chmod +x /usr/local/bin/ship
 			fi
 		`})
-		
+
 		log.Printf("✅ Ship CLI and Docker CLI installed inside container")
 	}
-	
+
 	// Set environment variables that persist at runtime
 	base = base.WithEnvVariable("PATH", "/root/.local/bin:/root/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-	
+
 	// Set working directory to /workspace for CI/CD operations
 	base = base.WithWorkdir("/workspace")
 
@@ -333,23 +333,23 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 }
 
 func (b *EnvironmentBuilder) downloadShipCLI(ctx context.Context) (string, error) {
-	// Create temporary directory for Ship CLI installation  
+	// Create temporary directory for Ship CLI installation
 	tempInstallDir, err := os.MkdirTemp("", "ship-install-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp install dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tempInstallDir) }()
-	
+
 	// Create bin subdirectory for installation
 	installBinDir := filepath.Join(tempInstallDir, "bin")
 	if err := os.MkdirAll(installBinDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create install bin dir: %w", err)
 	}
-	
+
 	// Download Ship CLI installation script
 	log.Printf("Downloading Ship CLI installation script...")
 	scriptURL := "https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh"
-	
+
 	// Create a HOME environment that points to our temp directory
 	// This will make the installation script install to $HOME/.local/bin
 	tempHome := tempInstallDir
@@ -357,63 +357,63 @@ func (b *EnvironmentBuilder) downloadShipCLI(ctx context.Context) (string, error
 	if err := os.MkdirAll(tempLocalBin, 0755); err != nil {
 		return "", fmt.Errorf("failed to create temp local bin: %w", err)
 	}
-	
+
 	// Set environment variables for the installation
 	installEnv := []string{
 		fmt.Sprintf("HOME=%s", tempHome),
 		fmt.Sprintf("PATH=%s:%s", installBinDir, os.Getenv("PATH")),
 		"SHIP_NO_PATH_UPDATE=1", // Don't modify PATH during installation
 	}
-	
+
 	// Download and execute installation script
 	cmd := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("curl -fsSL %s | bash", scriptURL))
 	cmd.Env = installEnv
 	cmd.Dir = tempInstallDir
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to install Ship CLI: %w\nOutput: %s", err, string(output))
 	}
-	
+
 	// Ship CLI should now be installed in tempHome/.local/bin/ship
 	shipBinaryPath := filepath.Join(tempLocalBin, "ship")
 	if _, err := os.Stat(shipBinaryPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("Ship CLI binary not found at %s after installation\nOutput: %s", shipBinaryPath, string(output))
 	}
-	
-	// Create a temp file in the current working directory (project root)  
+
+	// Create a temp file in the current working directory (project root)
 	// This ensures Dagger can access it via client.Host().File()
 	workingDir, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("failed to get working directory: %w", err)
 	}
-	
+
 	finalTempFile := filepath.Join(workingDir, "ship-cli-temp")
-	
+
 	// Copy the binary to our final temp file location
 	sourceFile, err := os.Open(shipBinaryPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open source binary: %w", err)
 	}
 	defer func() { _ = sourceFile.Close() }()
-	
+
 	destFile, err := os.Create(finalTempFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to create dest binary: %w", err)
 	}
 	defer func() { _ = destFile.Close() }()
-	
+
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		os.Remove(finalTempFile)
 		return "", fmt.Errorf("failed to copy binary: %w", err)
 	}
-	
+
 	// Make executable
 	if err := os.Chmod(finalTempFile, 0755); err != nil {
 		os.Remove(finalTempFile)
 		return "", fmt.Errorf("failed to make binary executable: %w", err)
 	}
-	
+
 	log.Printf("Successfully downloaded Ship CLI to: %s", finalTempFile)
 	return finalTempFile, nil
 }
@@ -425,60 +425,60 @@ func (b *EnvironmentBuilder) downloadDockerCLI(ctx context.Context) (string, err
 	if err != nil {
 		return "", fmt.Errorf("failed to get working directory: %w", err)
 	}
-	
+
 	finalTempFile := filepath.Join(workingDir, "docker-cli-temp")
-	
+
 	// Download Docker CLI static binary directly (architecture-aware)
 	dockerArch := getDockerArch()
 	log.Printf("Downloading Docker CLI static binary (architecture: %s)...", dockerArch)
 	dockerURL := fmt.Sprintf("https://download.docker.com/linux/static/stable/%s/docker-27.1.1.tgz", dockerArch)
-	
+
 	// Create temporary directory for Docker CLI download
 	tempDir, err := os.MkdirTemp("", "docker-download-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	// Download and extract the Docker CLI binary in temp directory
 	cmd := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("curl -fsSL %s | tar -xz", dockerURL))
 	cmd.Dir = tempDir
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to download Docker CLI: %w\nOutput: %s", err, string(output))
 	}
-	
+
 	// The extracted binary should be at docker/docker in the temp directory
 	dockerBinaryPath := filepath.Join(tempDir, "docker", "docker")
 	if _, err := os.Stat(dockerBinaryPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("Docker CLI binary not found after download: %s", dockerBinaryPath)
 	}
-	
+
 	// Copy to our final temp file location
 	sourceFile, err := os.Open(dockerBinaryPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open source binary: %w", err)
 	}
 	defer func() { _ = sourceFile.Close() }()
-	
+
 	destFile, err := os.Create(finalTempFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to create dest binary: %w", err)
 	}
 	defer func() { _ = destFile.Close() }()
-	
+
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		os.Remove(finalTempFile)
 		return "", fmt.Errorf("failed to copy binary: %w", err)
 	}
-	
+
 	// Make executable
 	if err := os.Chmod(finalTempFile, 0755); err != nil {
 		os.Remove(finalTempFile)
 		return "", fmt.Errorf("failed to make Docker binary executable: %w", err)
 	}
-	
+
 	log.Printf("Successfully downloaded Docker CLI to: %s", finalTempFile)
 	return finalTempFile, nil
 }
@@ -504,7 +504,7 @@ func (b *EnvironmentBuilder) setupEnvironmentInDB(ctx context.Context, database 
 
 	// TODO: Implement database setup for environment and agents
 	log.Printf("Would setup environment '%s' with config: %+v", config.Name, config)
-	
+
 	agentsPath := filepath.Join(b.environmentPath, "agents")
 	if _, err := os.Stat(agentsPath); err == nil {
 		err := filepath.WalkDir(agentsPath, func(path string, d fs.DirEntry, err error) error {
@@ -543,26 +543,26 @@ func (b *EnvironmentBuilder) createMinimalDatabase(dbPath string) error {
 
 func (b *EnvironmentBuilder) loadImageToDocker(tarPath, imageName string) (string, error) {
 	log.Printf("Loading %s into Docker daemon as %s", tarPath, imageName)
-	
+
 	// Use docker load < tarfile to preserve full container structure
 	cmd := exec.Command("docker", "load")
-	
+
 	// Open tar file
 	tarFile, err := os.Open(tarPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open tar file: %w", err)
 	}
 	defer func() { _ = tarFile.Close() }()
-	
+
 	// Pipe tar content to docker load
 	cmd.Stdin = tarFile
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("docker load failed: %w, output: %s", err, output)
 	}
-	
+
 	log.Printf("Docker load output: %s", string(output))
-	
+
 	// Tag the loaded image with our desired name
 	loadedImageID := b.extractImageIDFromLoadOutput(string(output))
 	if loadedImageID != "" {
@@ -571,14 +571,14 @@ func (b *EnvironmentBuilder) loadImageToDocker(tarPath, imageName string) (strin
 			log.Printf("Warning: failed to tag image: %v", err)
 		}
 	}
-	
+
 	// Get the final image ID
 	inspectCmd := exec.Command("docker", "inspect", "--format={{.Id}}", imageName)
 	imageIDBytes, err := inspectCmd.Output()
 	if err != nil {
 		return loadedImageID, nil // Return what we have
 	}
-	
+
 	return strings.TrimSpace(string(imageIDBytes)), nil
 }
 
@@ -605,7 +605,7 @@ func (b *EnvironmentBuilder) extractImageIDFromLoadOutput(output string) string 
 
 func (b *EnvironmentBuilder) buildStationBinary() error {
 	log.Printf("Building station binary...")
-	
+
 	// First, try to use local stn binary from PATH (Linux systems only)
 	if runtime.GOOS == "linux" {
 		if stnPath, err := exec.LookPath("stn"); err == nil {
@@ -618,7 +618,7 @@ func (b *EnvironmentBuilder) buildStationBinary() error {
 			}
 		}
 	}
-	
+
 	// Second, download latest binary from install script
 	log.Printf("Downloading latest Station binary...")
 	if err := b.downloadStationBinary(); err != nil {
@@ -626,21 +626,21 @@ func (b *EnvironmentBuilder) buildStationBinary() error {
 	} else {
 		return nil
 	}
-	
+
 	// Last resort: try to build from source if available
 	if _, err := os.Stat("go.mod"); err == nil {
 		log.Printf("Building from source...")
 		cmd := exec.Command("go", "build", "-o", "stn", "./cmd/main")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		
+
 		if err := cmd.Run(); err == nil {
 			log.Printf("Successfully built station binary from source")
 			return nil
 		}
 		return fmt.Errorf("source build failed: %w", err)
 	}
-	
+
 	return fmt.Errorf("failed to obtain Station binary: no local binary, download failed, and no source available")
 }
 
@@ -675,37 +675,37 @@ func (b *EnvironmentBuilder) copyFile(src, dst string) error {
 // downloadStationBinary downloads the latest Station binary from the install script
 func (b *EnvironmentBuilder) downloadStationBinary() error {
 	log.Printf("Downloading latest Station binary from install script...")
-	
+
 	// Create temporary directory for installation
 	tempDir, err := os.MkdirTemp("", "station-install-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	// Download and execute install script
 	installURL := "https://raw.githubusercontent.com/cloudshipai/station/main/install.sh"
 	cmd := exec.Command("bash", "-c", fmt.Sprintf("curl -fsSL %s | bash", installURL))
-	
+
 	// Set environment to install to temp directory
-	cmd.Env = append(os.Environ(), 
+	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("HOME=%s", tempDir),
 		"STATION_NO_PATH_UPDATE=1", // Don't modify PATH during installation
 	)
 	cmd.Dir = tempDir
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to download Station binary: %w\nOutput: %s", err, string(output))
 	}
-	
+
 	// Station binary should be installed in temp directory
 	possiblePaths := []string{
 		filepath.Join(tempDir, ".local", "bin", "stn"),
 		filepath.Join(tempDir, "stn"),
 		filepath.Join(tempDir, "bin", "stn"),
 	}
-	
+
 	var stationPath string
 	for _, path := range possiblePaths {
 		if _, err := os.Stat(path); err == nil {
@@ -713,16 +713,16 @@ func (b *EnvironmentBuilder) downloadStationBinary() error {
 			break
 		}
 	}
-	
+
 	if stationPath == "" {
 		return fmt.Errorf("Station binary not found after installation\nOutput: %s", string(output))
 	}
-	
+
 	// Copy the downloaded binary to current directory
 	if err := b.copyFile(stationPath, "stn"); err != nil {
 		return fmt.Errorf("failed to copy downloaded binary: %w", err)
 	}
-	
+
 	log.Printf("Successfully downloaded and copied Station binary")
 	return nil
 }
@@ -762,7 +762,7 @@ func (b *EnvironmentBuilder) copyDatabase(source, dest *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("failed to get schema for table %s: %w", table, err)
 		}
-		
+
 		var createSQL string
 		if schemaRows.Next() {
 			if err := schemaRows.Scan(&createSQL); err != nil {
@@ -803,9 +803,9 @@ func (b *EnvironmentBuilder) copyDatabase(source, dest *sql.DB) error {
 		for i := range placeholders {
 			placeholders[i] = "?"
 		}
-		insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", 
-			table, 
-			strings.Join(columns, ","), 
+		insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+			table,
+			strings.Join(columns, ","),
 			strings.Join(placeholders, ","))
 
 		for dataRows.Next() {
@@ -825,7 +825,7 @@ func (b *EnvironmentBuilder) copyDatabase(source, dest *sql.DB) error {
 			}
 		}
 		dataRows.Close()
-		
+
 		log.Printf("Copied table: %s", table)
 	}
 
@@ -854,14 +854,14 @@ func (b *BaseBuilder) Build(ctx context.Context) (string, error) {
 
 	// Try to load image directly into local Docker daemon
 	imageName := "station-base:latest"
-	
+
 	// First export to tar
 	tarPath := "station-base.tar"
 	_, err = container.Export(ctx, tarPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to export base container: %w", err)
 	}
-	
+
 	// Load into Docker daemon
 	imageID, err := b.loadImageToDocker(tarPath, imageName)
 	if err != nil {
@@ -869,10 +869,10 @@ func (b *BaseBuilder) Build(ctx context.Context) (string, error) {
 		log.Printf("Successfully exported base container to: %s", tarPath)
 		return tarPath, nil
 	}
-	
+
 	// Clean up tar file since we have it in Docker now
 	os.Remove(tarPath)
-	
+
 	log.Printf("Successfully loaded Docker image: %s", imageName)
 	log.Printf("Image ID: %s", imageID)
 	log.Printf("Run with: docker run -it %s", imageName)
@@ -889,7 +889,7 @@ func (b *BaseBuilder) buildBaseContainer(ctx context.Context, client *dagger.Cli
 	if err := b.buildStationBinary(); err != nil {
 		return nil, "", fmt.Errorf("failed to build station binary: %w", err)
 	}
-	
+
 	stationBinary := client.Host().Directory(".").File("stn")
 	base = base.WithFile("/usr/local/bin/stn", stationBinary).
 		WithExec([]string{"chmod", "+x", "/usr/local/bin/stn"})
@@ -903,12 +903,12 @@ func (b *BaseBuilder) buildBaseContainer(ctx context.Context, client *dagger.Cli
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get project root: %w", err)
 	}
-	
+
 	tempDBPath := filepath.Join(projectRoot, "station_build.db")
 	if err := b.createMinimalDatabase(tempDBPath); err != nil {
 		return nil, "", fmt.Errorf("failed to create database: %w", err)
 	}
-	
+
 	// Get relative path for Dagger
 	relDBPath := "station_build.db"
 	dbFile := client.Host().File(relDBPath)
@@ -956,15 +956,15 @@ fi
 
 func (b *BaseBuilder) buildStationBinary() error {
 	log.Printf("Building station binary...")
-	
+
 	cmd := exec.Command("go", "build", "-o", "stn", "./cmd/main")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to build binary: %w", err)
 	}
-	
+
 	log.Printf("Successfully built station binary")
 	return nil
 }
@@ -988,26 +988,26 @@ func (b *BaseBuilder) createMinimalDatabase(dbPath string) error {
 
 func (b *BaseBuilder) loadImageToDocker(tarPath, imageName string) (string, error) {
 	log.Printf("Loading %s into Docker daemon as %s", tarPath, imageName)
-	
+
 	// Use docker load < tarfile to preserve full container structure
 	cmd := exec.Command("docker", "load")
-	
+
 	// Open tar file
 	tarFile, err := os.Open(tarPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open tar file: %w", err)
 	}
 	defer func() { _ = tarFile.Close() }()
-	
+
 	// Pipe tar content to docker load
 	cmd.Stdin = tarFile
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("docker load failed: %w, output: %s", err, output)
 	}
-	
+
 	log.Printf("Docker load output: %s", string(output))
-	
+
 	// Tag the loaded image with our desired name
 	loadedImageID := b.extractImageIDFromLoadOutput(string(output))
 	if loadedImageID != "" {
@@ -1016,14 +1016,14 @@ func (b *BaseBuilder) loadImageToDocker(tarPath, imageName string) (string, erro
 			log.Printf("Warning: failed to tag image: %v", err)
 		}
 	}
-	
+
 	// Get the final image ID
 	inspectCmd := exec.Command("docker", "inspect", "--format={{.Id}}", imageName)
 	imageIDBytes, err := inspectCmd.Output()
 	if err != nil {
 		return loadedImageID, nil // Return what we have
 	}
-	
+
 	return strings.TrimSpace(string(imageIDBytes)), nil
 }
 

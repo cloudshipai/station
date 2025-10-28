@@ -15,17 +15,17 @@ import (
 
 // SchedulerService manages cron-based agent scheduling
 type SchedulerService struct {
-	cron          *cron.Cron
-	db            db.Database
-	agents        map[int64]cron.EntryID // Track scheduled agents
-	agentService  AgentServiceInterface  // Direct agent execution (replaces queue)
+	cron         *cron.Cron
+	db           db.Database
+	agents       map[int64]cron.EntryID // Track scheduled agents
+	agentService AgentServiceInterface  // Direct agent execution (replaces queue)
 }
 
 // NewSchedulerService creates a new scheduler service
 func NewSchedulerService(database db.Database, agentService AgentServiceInterface) *SchedulerService {
 	// Create cron with seconds precision and logging
 	c := cron.New(cron.WithSeconds(), cron.WithLogger(cron.VerbosePrintfLogger(log.New(log.Writer(), "CRON: ", log.LstdFlags))))
-	
+
 	return &SchedulerService{
 		cron:         c,
 		db:           database,
@@ -37,34 +37,34 @@ func NewSchedulerService(database db.Database, agentService AgentServiceInterfac
 // Start starts the cron scheduler and loads existing scheduled agents
 func (s *SchedulerService) Start() error {
 	log.Println("Starting agent scheduler service...")
-	
+
 	// Load existing scheduled agents from database
 	if err := s.loadScheduledAgents(); err != nil {
 		return fmt.Errorf("failed to load scheduled agents: %w", err)
 	}
-	
+
 	// Start the cron scheduler
 	s.cron.Start()
 	log.Println("Agent scheduler service started successfully")
-	
+
 	return nil
 }
 
 // Stop stops the cron scheduler with timeout
 func (s *SchedulerService) Stop() {
 	log.Println("Stopping agent scheduler service...")
-	
+
 	// Create context with timeout for graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	
+
 	// Stop scheduler in goroutine
 	done := make(chan struct{})
 	go func() {
 		s.cron.Stop()
 		close(done)
 	}()
-	
+
 	// Wait for shutdown or timeout
 	select {
 	case <-done:
@@ -72,7 +72,7 @@ func (s *SchedulerService) Stop() {
 	case <-ctx.Done():
 		log.Println("Agent scheduler service stop timeout - forcing close")
 	}
-	
+
 	// Clear agent tracking
 	s.agents = make(map[int64]cron.EntryID)
 }
@@ -103,7 +103,7 @@ func (s *SchedulerService) ScheduleAgent(agent *models.Agent) error {
 
 	// Track the scheduled agent
 	s.agents[agent.ID] = entryID
-	
+
 	// Update next run time in database
 	if err := s.updateNextRunTime(agent.ID, schedule); err != nil {
 		log.Printf("Warning: failed to update next run time for agent %d: %v", agent.ID, err)
@@ -126,7 +126,7 @@ func (s *SchedulerService) UnscheduleAgent(agentID int64) {
 func (s *SchedulerService) loadScheduledAgents() error {
 	ctx := context.Background()
 	dbQueries := queries.New(s.db.Conn())
-	
+
 	agents, err := dbQueries.ListScheduledAgents(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query scheduled agents: %w", err)
@@ -167,11 +167,11 @@ func (s *SchedulerService) updateNextRunTime(agentID int64, cronExpr string) err
 
 	now := time.Now()
 	nextRun := schedule.Next(now)
-	
+
 	ctx := context.Background()
-	
+
 	// TODO: Fix struct reference issue - implement direct SQL for now
-	_, err = s.db.Conn().ExecContext(ctx, 
+	_, err = s.db.Conn().ExecContext(ctx,
 		"UPDATE agents SET next_scheduled_run = ? WHERE id = ?",
 		nextRun, agentID)
 	return err
@@ -180,10 +180,10 @@ func (s *SchedulerService) updateNextRunTime(agentID int64, cronExpr string) err
 // executeScheduledAgent executes a scheduled agent via the execution queue
 func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 	log.Printf("Executing scheduled agent %d", agentID)
-	
+
 	ctx := context.Background()
 	dbQueries := queries.New(s.db.Conn())
-	
+
 	// Get agent details
 	agent, err := dbQueries.GetAgentBySchedule(ctx, agentID)
 	if err != nil {
@@ -194,7 +194,7 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 	// Update last run time
 	now := time.Now()
 	nextRun := sql.NullTime{Valid: false}
-	
+
 	// Calculate next run time if schedule is still valid
 	if agent.CronSchedule.Valid {
 		parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
@@ -202,7 +202,7 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 			nextRun = sql.NullTime{Time: schedule.Next(now), Valid: true}
 		}
 	}
-	
+
 	// Update schedule times in database
 	if err := s.updateScheduleTimes(ctx, agentID, now, nextRun.Time); err != nil {
 		log.Printf("Warning: failed to update schedule times for agent %d: %v", agentID, err)
@@ -210,17 +210,17 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 
 	// Queue the agent execution
 	metadata := map[string]interface{}{
-		"source":      "cron_scheduler",
+		"source":        "cron_scheduler",
 		"cron_schedule": agent.CronSchedule.String,
-		"scheduled_at": now,
+		"scheduled_at":  now,
 	}
-	
+
 	// Use the agent's prompt as the task to execute
 	task := agent.Prompt
 	if task == "" {
 		task = "Execute scheduled agent task"
 	}
-	
+
 	// For scheduled agents, we use the console user since there's no specific user triggering this
 	// Look up console user ID dynamically
 	consoleUser, err := dbQueries.GetUserByUsername(context.Background(), "console")
@@ -231,12 +231,12 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 	consoleUserID := consoleUser.ID
 	_ = consoleUserID // Will be used when implementing proper scheduled execution
 	_ = metadata      // Will be used when implementing proper scheduled execution
-	
+
 	// For now, just log that we would execute the agent
 	// TODO: Implement proper scheduled execution once AgentService interface is updated
 	log.Printf("Scheduled execution triggered for agent %d (%s) with task: %s", agent.ID, agent.Name, task)
 	log.Printf("Note: Scheduled execution needs to be implemented after execution queue removal")
-	
+
 	log.Printf("Started execution for scheduled agent %d (%s)", agent.ID, agent.Name)
 }
 

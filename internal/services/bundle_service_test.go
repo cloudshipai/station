@@ -168,13 +168,13 @@ func TestGenerateManifest(t *testing.T) {
 	service := NewBundleService()
 
 	tests := []struct {
-		name              string
-		setupFunc         func(string)
-		expectAgents      int
-		expectMCPServers  int
-		expectTags        int
-		expectError       bool
-		description       string
+		name             string
+		setupFunc        func(string)
+		expectAgents     int
+		expectMCPServers int
+		expectTags       int
+		expectError      bool
+		description      string
 	}{
 		{
 			name: "Empty environment",
@@ -286,14 +286,14 @@ func TestParseAgentFile(t *testing.T) {
 	service := NewBundleService()
 
 	tests := []struct {
-		name            string
-		agentContent    string
-		expectError     bool
-		expectedName    string
-		expectedModel   string
-		expectedMaxSteps int
+		name              string
+		agentContent      string
+		expectError       bool
+		expectedName      string
+		expectedModel     string
+		expectedMaxSteps  int
 		expectedToolCount int
-		description     string
+		description       string
 	}{
 		{
 			name: "Valid agent file",
@@ -310,12 +310,12 @@ tools:
 ---
 Agent content here
 `,
-			expectError:      false,
-			expectedName:     "valid-agent",
-			expectedModel:    "gpt-4o-mini",
-			expectedMaxSteps: 5,
+			expectError:       false,
+			expectedName:      "valid-agent",
+			expectedModel:     "gpt-4o-mini",
+			expectedMaxSteps:  5,
 			expectedToolCount: 2,
-			description:      "Should parse valid agent file",
+			description:       "Should parse valid agent file",
 		},
 		{
 			name: "Agent with no tools",
@@ -330,20 +330,20 @@ tools: []
 ---
 Content
 `,
-			expectError:      false,
-			expectedName:     "no-tools-agent",
-			expectedModel:    "gpt-4o-mini",
-			expectedMaxSteps: 3,
+			expectError:       false,
+			expectedName:      "no-tools-agent",
+			expectedModel:     "gpt-4o-mini",
+			expectedMaxSteps:  3,
 			expectedToolCount: 0,
-			description:      "Should handle agent without tools",
+			description:       "Should handle agent without tools",
 		},
 		{
 			name: "Invalid format - no frontmatter",
 			agentContent: `Just plain text content
 without any YAML frontmatter
 `,
-			expectError:  true,
-			description:  "Should fail on invalid format",
+			expectError: true,
+			description: "Should fail on invalid format",
 		},
 		{
 			name: "Invalid YAML",
@@ -353,8 +353,8 @@ invalid: yaml: content: here
 ---
 Content
 `,
-			expectError:  true,
-			description:  "Should fail on invalid YAML",
+			expectError: true,
+			description: "Should fail on invalid YAML",
 		},
 	}
 
@@ -403,12 +403,12 @@ func TestParseMCPConfigFile(t *testing.T) {
 	service := NewBundleService()
 
 	tests := []struct {
-		name                string
-		configContent       string
-		expectError         bool
-		expectedServers     int
-		expectedVariables   int
-		description         string
+		name              string
+		configContent     string
+		expectError       bool
+		expectedServers   int
+		expectedVariables int
+		description       string
 	}{
 		{
 			name: "Valid MCP config",

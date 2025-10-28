@@ -2,7 +2,7 @@ package dotprompt
 
 import (
 	"time"
-	
+
 	"github.com/firebase/genkit/go/ai"
 	"station/pkg/models"
 )
@@ -11,11 +11,11 @@ import (
 type DotpromptConfig struct {
 	Model        string                 `yaml:"model"`
 	Config       GenerationConfig       `yaml:"config,omitempty"`
-	Input        InputConfig           `yaml:"input,omitempty"`
-	Output       OutputConfig          `yaml:"output,omitempty"`
-	Tools        []string              `yaml:"tools,omitempty"`
-	Metadata     AgentMetadata         `yaml:"metadata"`
-	Station      ExecutionMetadata     `yaml:"station,omitempty"`
+	Input        InputConfig            `yaml:"input,omitempty"`
+	Output       OutputConfig           `yaml:"output,omitempty"`
+	Tools        []string               `yaml:"tools,omitempty"`
+	Metadata     AgentMetadata          `yaml:"metadata"`
+	Station      ExecutionMetadata      `yaml:"station,omitempty"`
 	CustomFields map[string]interface{} `yaml:",inline"`
 }
 
@@ -93,24 +93,24 @@ type Message struct {
 
 // ParsedPrompt represents a parsed dotprompt with separated config and messages
 type ParsedPrompt struct {
-	Config   *DotpromptConfig `json:"config"`
-	Messages []*Message       `json:"messages"`
-	IsMultiRole bool          `json:"is_multi_role"`
+	Config      *DotpromptConfig `json:"config"`
+	Messages    []*Message       `json:"messages"`
+	IsMultiRole bool             `json:"is_multi_role"`
 }
 
 // RenderContext contains all variables available for template rendering
 type RenderContext struct {
-	UserInput    string                 `json:"user_input"`    // The task from user request
-	AgentName    string                 `json:"agent_name"`    // Agent name from database
-	Environment  string                 `json:"environment"`   // Environment name
+	UserInput     string                 `json:"user_input"`     // The task from user request
+	AgentName     string                 `json:"agent_name"`     // Agent name from database
+	Environment   string                 `json:"environment"`    // Environment name
 	UserVariables map[string]interface{} `json:"user_variables"` // Custom user-defined variables
 }
 
 // AutomaticVariable represents built-in variables always available
 type AutomaticVariable struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Type        string      `json:"type"`
+	Name         string      `json:"name"`
+	Description  string      `json:"description"`
+	Type         string      `json:"type"`
 	DefaultValue interface{} `json:"default_value,omitempty"`
 }
 
@@ -123,7 +123,7 @@ func GetAutomaticVariables() []AutomaticVariable {
 			Type:        "string",
 		},
 		{
-			Name:        "agentName", 
+			Name:        "agentName",
 			Description: "The name of the executing agent",
 			Type:        "string",
 		},

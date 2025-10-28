@@ -124,12 +124,12 @@ func TestAgentConfigJSONSerialization(t *testing.T) {
 // TestAgentConfigJSONDeserialization tests JSON unmarshaling
 func TestAgentConfigJSONDeserialization(t *testing.T) {
 	tests := []struct {
-		name        string
-		jsonStr     string
-		wantName    string
+		name         string
+		jsonStr      string
+		wantName     string
 		wantMaxSteps int64
-		wantErr     bool
-		description string
+		wantErr      bool
+		description  string
 	}{
 		{
 			name:         "Valid minimal JSON",
@@ -197,7 +197,7 @@ func TestAgentConfigOptionalFields(t *testing.T) {
 				MaxSteps:      5,
 				CreatedBy:     1,
 			},
-			expectOmit: []string{"input_schema", "output_schema", "cron_schedule"},
+			expectOmit:  []string{"input_schema", "output_schema", "cron_schedule"},
 			description: "Should omit all optional fields",
 		},
 		{

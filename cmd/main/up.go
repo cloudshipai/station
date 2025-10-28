@@ -308,7 +308,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Volume mounts
 	dockerArgs = append(dockerArgs,
 		"-v", fmt.Sprintf("%s:/workspace:rw", absWorkspace),
-		"-v", "station-config:/home/station/.config/station:rw",  // All Station data in volume (including config.yaml)
+		"-v", "station-config:/home/station/.config/station:rw", // All Station data in volume (including config.yaml)
 	)
 
 	// Pass the host workspace path so container knows the mapping
@@ -326,15 +326,15 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	// Port mappings
 	dockerArgs = append(dockerArgs,
-		"-p", "8586:8586",  // MCP
-		"-p", "3030:3030",  // Dynamic Agent MCP
-		"-p", "3002:3002",  // MCP Agents
-		"-p", "8585:8585",  // UI/API
+		"-p", "8586:8586", // MCP
+		"-p", "3030:3030", // Dynamic Agent MCP
+		"-p", "3002:3002", // MCP Agents
+		"-p", "8585:8585", // UI/API
 	)
 
 	// Add Genkit Developer UI port if --develop flag is set
 	if developMode {
-		dockerArgs = append(dockerArgs, "-p", "4000:4000")  // Genkit Developer UI
+		dockerArgs = append(dockerArgs, "-p", "4000:4000") // Genkit Developer UI
 	}
 
 	// Environment variables
@@ -381,7 +381,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		fmt.Printf(`  "station": {
     "url": "http://localhost:8586/mcp",
     "transport": "http"
-  }`+"\n")
+  }` + "\n")
 	}
 
 	fmt.Printf("\n✅ Station server started successfully!\n")
@@ -649,4 +649,3 @@ func updateMCPConfig(workspace string) error {
 	fmt.Printf("✅ Updated .mcp.json with Station server configuration\n")
 	return nil
 }
-

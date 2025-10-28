@@ -258,11 +258,11 @@ func TestProviderConfigurationChange(t *testing.T) {
 	provider.currentBaseURL = "https://api.openai.com/v1"
 
 	tests := []struct {
-		name           string
-		newProvider    string
-		newAPIKey      string
-		newBaseURL     string
-		expectChange   bool
+		name         string
+		newProvider  string
+		newAPIKey    string
+		newBaseURL   string
+		expectChange bool
 	}{
 		{
 			name:         "Same configuration",

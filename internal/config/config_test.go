@@ -80,7 +80,7 @@ func TestLoad_WithInvalidEncryptionKeyLength(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Config should load with any ENCRYPTION_KEY set, validation is in KeyManager: %v", err)
 	}
-	
+
 	if cfg == nil {
 		t.Error("Expected config to be returned")
 	}

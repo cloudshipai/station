@@ -25,11 +25,11 @@ func TestNewMCPConnectionManager(t *testing.T) {
 	genkitApp := genkit.Init(ctx)
 
 	tests := []struct {
-		name              string
-		repos             *repositories.Repositories
-		genkitApp         *genkit.Genkit
-		poolingEnv        string
-		expectPooling     bool
+		name          string
+		repos         *repositories.Repositories
+		genkitApp     *genkit.Genkit
+		poolingEnv    string
+		expectPooling bool
 	}{
 		{
 			name:          "Create with default pooling enabled",

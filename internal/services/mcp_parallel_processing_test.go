@@ -251,11 +251,11 @@ func TestGetEnvIntOrDefaultHelper(t *testing.T) {
 // TestWorkerPoolSizing tests worker pool size calculation
 func TestWorkerPoolSizing(t *testing.T) {
 	tests := []struct {
-		name          string
-		numConfigs    int
-		envWorkers    string
-		expectedMax   int
-		description   string
+		name        string
+		numConfigs  int
+		envWorkers  string
+		expectedMax int
+		description string
 	}{
 		{
 			name:        "More configs than workers",

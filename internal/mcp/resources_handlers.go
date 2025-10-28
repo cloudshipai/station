@@ -53,10 +53,10 @@ func (s *Server) handleAgentsResource(ctx context.Context, request mcp.ReadResou
 
 	// Format response optimized for LLM context loading
 	response := map[string]interface{}{
-		"total_count": len(agents),
-		"agents":      agents,
+		"total_count":  len(agents),
+		"agents":       agents,
 		"resource_uri": "station://agents",
-		"timestamp":   time.Now(),
+		"timestamp":    time.Now(),
 	}
 
 	jsonData, err := json.MarshalIndent(response, "", "  ")
@@ -78,7 +78,7 @@ func (s *Server) handleMCPConfigsResource(ctx context.Context, request mcp.ReadR
 	if err != nil {
 		return nil, fmt.Errorf("failed to list environments: %w", err)
 	}
-	
+
 	var allConfigs []interface{}
 	for _, env := range environments {
 		fileConfigs, err := s.repos.FileMCPConfigs.ListByEnvironment(env.ID)
@@ -100,10 +100,10 @@ func (s *Server) handleMCPConfigsResource(ctx context.Context, request mcp.ReadR
 
 	// Format response optimized for LLM context loading
 	response := map[string]interface{}{
-		"total_count": len(allConfigs),
-		"mcp_configs": allConfigs,
+		"total_count":  len(allConfigs),
+		"mcp_configs":  allConfigs,
 		"resource_uri": "station://mcp-configs",
-		"timestamp":   time.Now(),
+		"timestamp":    time.Now(),
 	}
 
 	jsonData, err := json.MarshalIndent(response, "", "  ")
@@ -172,10 +172,10 @@ func (s *Server) handleAgentDetailsResource(ctx context.Context, request mcp.Rea
 			"name":        environment.Name,
 			"description": environment.Description,
 		},
-		"tools":       tools,
-		"tools_count": len(tools),
+		"tools":        tools,
+		"tools_count":  len(tools),
 		"resource_uri": request.Params.URI,
-		"timestamp":   time.Now(),
+		"timestamp":    time.Now(),
 	}
 
 	jsonData, err := json.MarshalIndent(response, "", "  ")
@@ -228,10 +228,10 @@ func (s *Server) handleEnvironmentToolsResource(ctx context.Context, request mcp
 			"name":        environment.Name,
 			"description": environment.Description,
 		},
-		"tools":       envTools,
-		"tools_count": len(envTools),
+		"tools":        envTools,
+		"tools_count":  len(envTools),
 		"resource_uri": request.Params.URI,
-		"timestamp":   time.Now(),
+		"timestamp":    time.Now(),
 	}
 
 	jsonData, err := json.MarshalIndent(response, "", "  ")
@@ -263,7 +263,7 @@ func (s *Server) handleAgentRunsResource(ctx context.Context, request mcp.ReadRe
 	// Get recent runs for this agent
 	// Note: The repository interface might vary - this is a common pattern
 	var runs []interface{}
-	
+
 	// Try to get runs if a runs repository exists
 	// This would need to be implemented based on the actual repository structure
 	runsCount := 0
@@ -274,11 +274,11 @@ func (s *Server) handleAgentRunsResource(ctx context.Context, request mcp.ReadRe
 			"id":   agent.ID,
 			"name": agent.Name,
 		},
-		"runs":       runs,
-		"runs_count": runsCount,
+		"runs":         runs,
+		"runs_count":   runsCount,
 		"resource_uri": request.Params.URI,
-		"timestamp":  time.Now(),
-		"note":       "Run history integration pending - repository interface needed",
+		"timestamp":    time.Now(),
+		"note":         "Run history integration pending - repository interface needed",
 	}
 
 	jsonData, err := json.MarshalIndent(response, "", "  ")
@@ -301,11 +301,11 @@ func (s *Server) extractIDFromURI(uri, pattern string) (int64, error) {
 	if len(matches) < 2 {
 		return 0, fmt.Errorf("no ID found in URI: %s", uri)
 	}
-	
+
 	id, err := strconv.ParseInt(matches[1], 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid ID format: %s", matches[1])
 	}
-	
+
 	return id, nil
 }

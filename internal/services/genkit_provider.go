@@ -19,9 +19,9 @@ import (
 // GenKitProvider manages GenKit initialization and AI provider configuration
 type GenKitProvider struct {
 	genkitApp       *genkit.Genkit
-	currentProvider string // Track current AI provider to detect changes
-	currentAPIKey   string // Track current API key to detect changes
-	currentBaseURL  string // Track current base URL to detect changes
+	currentProvider string         // Track current AI provider to detect changes
+	currentAPIKey   string         // Track current API key to detect changes
+	currentBaseURL  string         // Track current base URL to detect changes
 	openaiPlugin    *openai.OpenAI // Official GenKit v1.0.1 OpenAI plugin
 	// Note: Station custom plugin code preserved in internal/genkit/ but not used in production
 }
@@ -49,7 +49,7 @@ func findAvailablePort(startPort int) (int, error) {
 func (gp *GenKitProvider) ensureGenkitReflectionPort() error {
 	currentEnv := os.Getenv("GENKIT_ENV")
 	logging.Debug("GenKit environment check - current GENKIT_ENV: '%s'", currentEnv)
-	
+
 	// Check if GENKIT_ENV is already set
 	if currentEnv != "" {
 		logging.Debug("GENKIT_ENV already set to '%s', not overriding", currentEnv)
@@ -60,7 +60,7 @@ func (gp *GenKitProvider) ensureGenkitReflectionPort() error {
 	// The reflection server only starts when GENKIT_ENV=dev
 	os.Setenv("GENKIT_ENV", "prod")
 	logging.Debug("GenKit environment set to prod to disable reflection server (was empty)")
-	
+
 	return nil
 }
 
@@ -92,7 +92,7 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 
 	// Configuration changed or first initialization - reinitialize GenKit
 	if configChanged && gp.genkitApp != nil {
-		logging.Info("AI provider configuration changed from %s to %s, reinitializing GenKit...", 
+		logging.Info("AI provider configuration changed from %s to %s, reinitializing GenKit...",
 			gp.currentProvider, strings.ToLower(cfg.AIProvider))
 		// Note: GenKit doesn't provide a clean shutdown method, so we'll just replace the instance
 		gp.genkitApp = nil
@@ -112,14 +112,14 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 	// Auto-detect provider based on model name if needed
 	detectedProvider := detectProviderFromModel(cfg.AIModel, cfg.AIProvider)
 	if detectedProvider != cfg.AIProvider {
-		logging.Info("Auto-detected provider '%s' for model '%s' (overriding configured provider '%s')", 
+		logging.Info("Auto-detected provider '%s' for model '%s' (overriding configured provider '%s')",
 			detectedProvider, cfg.AIModel, cfg.AIProvider)
 		cfg.AIProvider = detectedProvider
 	}
 
 	// Initialize Genkit with the configured AI provider
 	logging.Info("Initializing GenKit with provider: %s, model: %s", cfg.AIProvider, cfg.AIModel)
-	
+
 	// Disable telemetry by default to prevent "traces export" connection errors
 	// Only enable if explicitly requested via environment variable
 	if os.Getenv("GENKIT_ENABLE_TELEMETRY") == "" && !cfg.TelemetryEnabled {
@@ -127,54 +127,54 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		// Do NOT override GENKIT_ENV here - let ensureGenkitReflectionPort handle it
 		logging.Debug("Telemetry disabled by default (set GENKIT_ENABLE_TELEMETRY=true to enable)")
 	}
-	
+
 	var genkitApp *genkit.Genkit
 	switch strings.ToLower(cfg.AIProvider) {
 	case "openai":
 		logging.Debug("Setting up official GenKit v1.0.1 OpenAI plugin with model: %s", cfg.AIModel)
-		
+
 		// Build request options for official plugin
 		var opts []option.RequestOption
 		if cfg.AIBaseURL != "" {
 			logging.Debug("Using custom OpenAI base URL with official plugin: %s", cfg.AIBaseURL)
 			opts = append(opts, option.WithBaseURL(cfg.AIBaseURL))
 		}
-		
+
 		// Use official GenKit v1.0.1 OpenAI plugin (includes our tool_call_id fixes upstream)
 		openaiPlugin := &openai.OpenAI{
 			APIKey: cfg.AIAPIKey,
 			Opts:   opts,
 		}
-		
+
 		// Store reference for potential future use
 		gp.openaiPlugin = openaiPlugin
-		
+
 		// Create prompt directory for dotprompt support
 		promptDir := "/tmp/station-prompts"
 		_ = os.MkdirAll(promptDir, 0755)
 
 		logging.Debug("About to call genkit.Init for official OpenAI plugin with prompt directory support, GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
-		genkitApp = genkit.Init(ctx, 
+		genkitApp = genkit.Init(ctx,
 			genkit.WithPlugins(openaiPlugin),
 			genkit.WithPromptDir(promptDir))
 		err = nil // GenKit v1.0.1 Init doesn't return error
-		
+
 	case "googlegenai", "gemini":
 		logging.Debug("Setting up Google AI plugin with model: %s", cfg.AIModel)
 
 		// Create prompt directory for dotprompt support
 		promptDir := "/tmp/station-prompts"
 		_ = os.MkdirAll(promptDir, 0755)
-		
+
 		// Let GoogleAI plugin automatically pick up GEMINI_API_KEY or GOOGLE_API_KEY from environment
 		// This matches the official GenKit examples approach
 		geminiPlugin := &googlegenai.GoogleAI{}
-		
-		genkitApp = genkit.Init(ctx, 
+
+		genkitApp = genkit.Init(ctx,
 			genkit.WithPlugins(geminiPlugin),
 			genkit.WithPromptDir(promptDir))
 		err = nil // GenKit v1.0.1 Init doesn't return error
-		
+
 	default:
 		return fmt.Errorf("unsupported AI provider: %s\n\n"+
 			"Station automatically detects providers based on model names:\n"+
@@ -185,14 +185,14 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 			"  • Gemini models: Use any gemini-* model name with GEMINI_API_KEY or GOOGLE_API_KEY\n"+
 			"  • OpenAI-compatible APIs: Use any model name with ai_base_url configured\n"+
 			"    Examples: Anthropic, Ollama, Together AI, etc.\n\n"+
-			"Set ai_base_url in config.yml or use --base-url with 'stn init' for custom endpoints.", 
+			"Set ai_base_url in config.yml or use --base-url with 'stn init' for custom endpoints.",
 			cfg.AIProvider)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to initialize GenKit with provider %s: %w", cfg.AIProvider, err)
 	}
-	
+
 	gp.genkitApp = genkitApp
 	return nil
 }
@@ -217,12 +217,12 @@ func (gp *GenKitProvider) GetPluginInfo() map[string]interface{} {
 // detectProviderFromModel auto-detects the provider based on model name
 func detectProviderFromModel(modelName, configuredProvider string) string {
 	modelLower := strings.ToLower(modelName)
-	
+
 	// If model starts with gemini-, it's definitely a Gemini model
 	if strings.HasPrefix(modelLower, "gemini") {
 		return "gemini"
 	}
-	
+
 	// Known Gemini models
 	geminiModels := []string{
 		"gemini-pro", "gemini-pro-vision", "gemini-1.5-pro", "gemini-1.5-flash",
@@ -233,7 +233,7 @@ func detectProviderFromModel(modelName, configuredProvider string) string {
 			return "gemini"
 		}
 	}
-	
+
 	// For all other models (gpt-*, claude-*, llama*, etc.), use OpenAI-compatible
 	// This allows Station to work with:
 	// - OpenAI models (gpt-4, gpt-3.5-turbo, etc.)

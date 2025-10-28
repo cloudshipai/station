@@ -28,13 +28,13 @@ func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 func TestHTTPRegistry_List(t *testing.T) {
 	tests := []struct {
-		name           string
-		opts           bundle.ListOptions
-		mockResponse   *http.Response
-		mockError      error
-		expectedURL    string
+		name            string
+		opts            bundle.ListOptions
+		mockResponse    *http.Response
+		mockError       error
+		expectedURL     string
 		expectedBundles int
-		expectError    bool
+		expectError     bool
 	}{
 		{
 			name: "successful list with no filters",
@@ -49,7 +49,7 @@ func TestHTTPRegistry_List(t *testing.T) {
 					},
 					{
 						"name":        "github-tools",
-						"version":     "2.1.0", 
+						"version":     "2.1.0",
 						"description": "GitHub integration tools",
 						"author":      "Station Team",
 					},
@@ -97,11 +97,11 @@ func TestHTTPRegistry_List(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:         "network error",
-			opts:         bundle.ListOptions{},
-			mockError:    assert.AnError,
-			expectedURL:  "https://registry.example.com/bundles",
-			expectError:  true,
+			name:        "network error",
+			opts:        bundle.ListOptions{},
+			mockError:   assert.AnError,
+			expectedURL: "https://registry.example.com/bundles",
+			expectError: true,
 		},
 		{
 			name: "invalid JSON response",
@@ -392,8 +392,8 @@ func TestHTTPRegistry_GetVersions(t *testing.T) {
 
 func TestHTTPRegistry_Authentication(t *testing.T) {
 	tests := []struct {
-		name           string
-		auth           map[string]string
+		name            string
+		auth            map[string]string
 		checkAuthHeader func(t *testing.T, req *http.Request)
 	}{
 		{
@@ -444,11 +444,11 @@ func TestHTTPRegistry_Authentication(t *testing.T) {
 			mockClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
 				// Check authentication headers
 				tt.checkAuthHeader(t, req)
-				
+
 				// Check other headers
 				assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 				assert.Equal(t, "station-bundle-client/1.0", req.Header.Get("User-Agent"))
-				
+
 				return true
 			})).Return(mockResponse, nil)
 
@@ -473,7 +473,7 @@ func TestHTTPRegistry_ContextCancellation(t *testing.T) {
 
 	// Setup mock expectation for cancelled context
 	mockClient.On("Do", mock.AnythingOfType("*http.Request")).Return(
-		(*http.Response)(nil), 
+		(*http.Response)(nil),
 		context.Canceled,
 	)
 
@@ -481,7 +481,7 @@ func TestHTTPRegistry_ContextCancellation(t *testing.T) {
 	_, err := registry.List(ctx, bundle.ListOptions{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "context canceled")
-	
+
 	mockClient.AssertExpectations(t)
 }
 

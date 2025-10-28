@@ -32,15 +32,15 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 		IsScheduled:     agent.IsScheduled.Bool,
 		ScheduleEnabled: agent.ScheduleEnabled.Bool,
 	}
-	
+
 	if agent.InputSchema.Valid {
 		result.InputSchema = &agent.InputSchema.String
 	}
-	
+
 	if agent.OutputSchema.Valid {
 		result.OutputSchema = &agent.OutputSchema.String
 	}
-	
+
 	if agent.OutputSchemaPreset.Valid {
 		result.OutputSchemaPreset = &agent.OutputSchemaPreset.String
 	}
@@ -56,23 +56,23 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 	if agent.CronSchedule.Valid {
 		result.CronSchedule = &agent.CronSchedule.String
 	}
-	
+
 	if agent.LastScheduledRun.Valid {
 		result.LastScheduledRun = &agent.LastScheduledRun.Time
 	}
-	
+
 	if agent.NextScheduledRun.Valid {
 		result.NextScheduledRun = &agent.NextScheduledRun.Time
 	}
-	
+
 	if agent.CreatedAt.Valid {
 		result.CreatedAt = agent.CreatedAt.Time
 	}
-	
+
 	if agent.UpdatedAt.Valid {
 		result.UpdatedAt = agent.UpdatedAt.Time
 	}
-	
+
 	return result
 }
 
@@ -113,12 +113,12 @@ func (r *AgentRepo) Create(name, description, prompt string, maxSteps, environme
 	if appType != "" {
 		params.AppSubtype = sql.NullString{String: appType, Valid: true}
 	}
-	
+
 	created, err := r.queries.CreateAgent(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return convertAgentFromSQLc(created), nil
 }
 
@@ -155,12 +155,12 @@ func (r *AgentRepo) List() ([]*models.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.Agent
 	for _, agent := range agents {
 		result = append(result, convertAgentFromSQLc(agent))
 	}
-	
+
 	return result, nil
 }
 
@@ -174,12 +174,12 @@ func (r *AgentRepo) ListByEnvironment(environmentID int64) ([]*models.Agent, err
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.Agent
 	for _, agent := range agents {
 		result = append(result, convertAgentFromSQLc(agent))
 	}
-	
+
 	return result, nil
 }
 
@@ -188,12 +188,12 @@ func (r *AgentRepo) ListByUser(userID int64) ([]*models.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var result []*models.Agent
 	for _, agent := range agents {
 		result = append(result, convertAgentFromSQLc(agent))
 	}
-	
+
 	return result, nil
 }
 

@@ -64,13 +64,13 @@ func (e *EditorService) OpenEditor(initialContent string, extension string) (str
 
 	// Determine and validate editor to use
 	editor := e.getEditor()
-	
+
 	// Validate editor command against allowlist
 	baseEditor := filepath.Base(editor)
 	if !validEditors[baseEditor] {
 		return "", fmt.Errorf("editor not allowed: %s (allowed: vi, vim, nano, emacs, code, gedit, subl, atom, notepad)", baseEditor)
 	}
-	
+
 	// Open editor with validated command
 	cmd := exec.Command(editor, tmpFile.Name())
 	cmd.Stdin = os.Stdin
@@ -79,7 +79,7 @@ func (e *EditorService) OpenEditor(initialContent string, extension string) (str
 
 	fmt.Printf("📝 Opening editor: %s\n", editor)
 	fmt.Printf("💡 Paste your MCP configuration template and save to continue...\n")
-	
+
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("editor command failed: %w", err)
 	}
@@ -139,7 +139,7 @@ func (e *EditorService) getEditor() string {
 		os.Getenv("VISUAL"),
 		os.Getenv("EDITOR"),
 	}
-	
+
 	// Add common editors to try
 	commonEditors := []string{
 		"code",    // VS Code
@@ -150,21 +150,21 @@ func (e *EditorService) getEditor() string {
 		"vi",      // Vi
 		"notepad", // Windows Notepad
 	}
-	
+
 	editors = append(editors, commonEditors...)
-	
+
 	// Find the first available editor
 	for _, editor := range editors {
 		if editor == "" {
 			continue
 		}
-		
+
 		// Check if editor is available
 		if _, err := exec.LookPath(editor); err == nil {
 			return editor
 		}
 	}
-	
+
 	// Fallback to nano
 	return "nano"
 }
@@ -177,12 +177,12 @@ func (e *EditorService) ValidateJSON(content string) error {
 		return err
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	if _, err := tmpFile.WriteString(content); err != nil {
 		return err
 	}
 	tmpFile.Close()
-	
+
 	// Use jq to validate if available, otherwise basic checks
 	if _, err := exec.LookPath("jq"); err == nil {
 		cmd := exec.Command("jq", ".", tmpFile.Name())
@@ -190,6 +190,6 @@ func (e *EditorService) ValidateJSON(content string) error {
 			return fmt.Errorf("invalid JSON format")
 		}
 	}
-	
+
 	return nil
 }

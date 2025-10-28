@@ -108,7 +108,7 @@ func LoadConfigFromYAML(configContent string, envVarsContent string, environment
 		Debug:                fmt.Sprintf("%v", getConfigValue(config, "debug", false)),
 		TelemetryEnabled:     fmt.Sprintf("%v", getConfigValue(config, "telemetry_enabled", true)),
 		OpenAIAPIKey:         "<your-openai-api-key>", // Placeholder - user must replace
-		FlyRegion:            "ord", // Default to Chicago, user can change
+		FlyRegion:            "ord",                   // Default to Chicago, user can change
 		EnvironmentVariables: envVars,
 	}
 

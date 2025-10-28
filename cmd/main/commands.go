@@ -912,7 +912,6 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 
 	workspaceDir := getWorkspacePath()
 
-
 	// Step 1: Run stn init --ship --provider openai --model gpt-5
 	fmt.Printf("📦 Step 1/6: Initializing Station with OpenAI and Ship CLI...\n")
 	initCmd := exec.Command("stn", "init", "--ship", "--provider", "openai", "--model", "gpt-5", "--yes")

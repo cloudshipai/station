@@ -49,30 +49,30 @@ import (
 )
 
 type Server struct {
-	cfg                  *internalconfig.Config
-	db                   db.Database
-	httpServer           *http.Server
-	repos                *repositories.Repositories
+	cfg        *internalconfig.Config
+	db         db.Database
+	httpServer *http.Server
+	repos      *repositories.Repositories
 	// mcpConfigService removed - using file-based configs only
 	// FileConfigService removed - using DeclarativeSync directly
 	toolDiscoveryService *services.ToolDiscoveryService // restored for lighthouse/API compatibility
 	telemetryService     *telemetry.TelemetryService
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
-	localMode            bool
+	localMode bool
 }
 
 func New(cfg *internalconfig.Config, database db.Database, localMode bool, telemetryService *telemetry.TelemetryService) *Server {
 	repos := repositories.New(database)
 	// keyManager removed - no longer needed for file-based configs
-	
+
 	// Initialize services (MCPConfigService removed - using file-based configs only)
-	
+
 	// Initialize tool discovery service for lighthouse and API compatibility
 	toolDiscoveryService := services.NewToolDiscoveryService(repos)
-	
+
 	// FileConfigService and FileConfigManager removed - using DeclarativeSync directly when needed
-	
+
 	return &Server{
 		cfg:                  cfg,
 		db:                   database,
@@ -91,16 +91,16 @@ func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService
 func (s *Server) Start(ctx context.Context) error {
 	// Set Gin to release mode for production
 	gin.SetMode(gin.ReleaseMode)
-	
+
 	// Create Gin router with minimal middleware
 	router := gin.New()
 	router.Use(gin.Recovery())
-	
+
 	// Debug middleware to log all requests
 	router.Use(func(c *gin.Context) {
 		c.Next()
 	})
-	
+
 	// Enable CORS for API endpoints only
 	router.Use(func(c *gin.Context) {
 		// Skip CORS headers for UI routes
@@ -108,24 +108,24 @@ func (s *Server) Start(ctx context.Context) error {
 			c.Header("Access-Control-Allow-Origin", "*")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
-			
+
 			if c.Request.Method == "OPTIONS" {
 				c.AbortWithStatus(204)
 				return
 			}
 		}
-		
+
 		c.Next()
 	})
-	
+
 	// Health check endpoint
 	router.GET("/health", s.healthCheck)
-	
+
 	// Debug route
 	router.GET("/debug", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"debug": "working"})
 	})
-	
+
 	// API v1 routes
 	v1Group := router.Group("/api/v1")
 	apiHandlers := v1.NewAPIHandlers(
@@ -135,26 +135,26 @@ func (s *Server) Start(ctx context.Context) error {
 		s.localMode,
 	)
 	apiHandlers.RegisterRoutes(v1Group)
-	
+
 	// UI routes - serve embedded UI files when available
 	s.setupUIRoutes(router)
-	
+
 	// Create HTTP server
 	s.httpServer = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.cfg.APIPort),
 		Handler: router,
 	}
-	
+
 	// Start server in goroutine
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("API server error: %v\n", err)
 		}
 	}()
-	
+
 	// Wait for context cancellation
 	<-ctx.Done()
-	
+
 	// Graceful shutdown with aggressive timeout
 	fmt.Println("🛑 Shutting down API server...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -173,7 +173,7 @@ func (s *Server) healthCheck(c *gin.Context) {
 
 // setupUIRoutes configures routes for serving the embedded UI from root
 func (s *Server) setupUIRoutes(router *gin.Engine) {
-	
+
 	if !ui.IsEmbedded() {
 		log.Println("🔍 UI not embedded, skipping UI routes")
 		return
@@ -194,30 +194,30 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			filepath = filepath[1:]
 		}
 		actualPath := "assets/" + filepath
-		
+
 		file, err := uiFS.Open(actualPath)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Asset not found"})
 			return
 		}
 		defer func() { _ = file.Close() }()
-		
+
 		content, err := io.ReadAll(file)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read asset"})
 			return
 		}
-		
+
 		// Set appropriate content type
 		if strings.HasSuffix(actualPath, ".js") {
 			c.Header("Content-Type", "application/javascript")
 		} else if strings.HasSuffix(actualPath, ".css") {
 			c.Header("Content-Type", "text/css")
 		}
-		
+
 		c.Data(http.StatusOK, c.GetHeader("Content-Type"), content)
 	})
-	
+
 	// Handle vite.svg
 	router.GET("/vite.svg", func(c *gin.Context) {
 		file, err := uiFS.Open("vite.svg")
@@ -241,8 +241,8 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 	router.NoRoute(func(c *gin.Context) {
 		// Skip API routes
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") ||
-		   strings.HasPrefix(c.Request.URL.Path, "/health") ||
-		   strings.HasPrefix(c.Request.URL.Path, "/debug") {
+			strings.HasPrefix(c.Request.URL.Path, "/health") ||
+			strings.HasPrefix(c.Request.URL.Path, "/debug") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
 			return
 		}
@@ -268,8 +268,7 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			c.Data(http.StatusOK, "image/png", content)
 			return
 		}
-		
-		
+
 		// Read index.html manually to prevent redirect loops
 		file, err := uiFS.Open("index.html")
 		if err != nil {
@@ -277,13 +276,13 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 			return
 		}
 		defer func() { _ = file.Close() }()
-		
+
 		content, err := io.ReadAll(file)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read UI"})
 			return
 		}
-		
+
 		c.Header("Content-Type", "text/html; charset=utf-8")
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	})

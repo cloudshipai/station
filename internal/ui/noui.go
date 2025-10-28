@@ -3,8 +3,8 @@
 package ui
 
 import (
-	"net/http"
 	"fmt"
+	"net/http"
 )
 
 // GetFileSystem returns nil when UI is not embedded

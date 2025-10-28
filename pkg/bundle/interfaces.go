@@ -11,13 +11,13 @@ import (
 type BundleRegistry interface {
 	// List returns all available bundles in the registry
 	List(ctx context.Context, opts ListOptions) ([]BundleManifest, error)
-	
+
 	// Get returns metadata for a specific bundle
 	Get(ctx context.Context, name, version string) (*BundleManifest, error)
-	
+
 	// Download downloads a bundle and returns the zip file content
 	Download(ctx context.Context, name, version string) ([]byte, error)
-	
+
 	// GetVersions returns all available versions for a bundle
 	GetVersions(ctx context.Context, name string) ([]string, error)
 }
@@ -25,10 +25,10 @@ type BundleRegistry interface {
 // BundleUploader defines the interface for registries that support uploads
 type BundleUploader interface {
 	BundleRegistry
-	
+
 	// Upload uploads a bundle to the registry
 	Upload(ctx context.Context, bundleData []byte, manifest BundleManifest) error
-	
+
 	// Delete removes a bundle from the registry
 	Delete(ctx context.Context, name, version string) error
 }
@@ -57,18 +57,18 @@ type BundleManager interface {
 	Create(bundlePath string, opts CreateOptions) error
 	Validate(bundlePath string) (*ValidationResult, error)
 	Package(bundlePath string) (string, error) // returns path to zip file
-	
+
 	// Registry operations
 	List(opts ListOptions) ([]BundleManifest, error)
 	Install(ref string, opts InstallOptions) error
 	Update(name string) error
 	Remove(name string) error
 	Publish(bundlePath string, opts PublishOptions) error
-	
+
 	// Local bundle management
 	ListInstalled() ([]InstalledBundle, error)
 	GetInstalled(name string) (*InstalledBundle, error)
-	
+
 	// Registry management
 	AddRegistry(name string, config RegistryConfig) error
 	RemoveRegistry(name string) error
@@ -79,17 +79,17 @@ type BundleManager interface {
 type VariableResolver interface {
 	// ResolveVariables resolves variables using the configured hierarchy
 	ResolveVariables(ctx context.Context, bundleSchema *Bundle, environment string, templateVars []string) (*VariableResult, error)
-	
+
 	// SaveVariables saves variables to the environment configuration
 	SaveVariables(environment string, variables map[string]interface{}) error
 }
 
 // VariableResult contains the result of variable resolution
 type VariableResult struct {
-	Resolved         map[string]interface{} `json:"resolved"`
-	Missing          []string               `json:"missing,omitempty"`
-	PromptsRequired  []VariablePrompt       `json:"prompts_required,omitempty"`
-	Source           map[string]string      `json:"source,omitempty"` // variable -> source (bundle, env, system, prompt)
+	Resolved        map[string]interface{} `json:"resolved"`
+	Missing         []string               `json:"missing,omitempty"`
+	PromptsRequired []VariablePrompt       `json:"prompts_required,omitempty"`
+	Source          map[string]string      `json:"source,omitempty"` // variable -> source (bundle, env, system, prompt)
 }
 
 // VariablePrompt represents a variable that needs user input
@@ -107,7 +107,7 @@ type VariablePrompt struct {
 type BundleLoader interface {
 	// LoadBundle loads a bundle and prepares it for MCP processing
 	LoadBundle(ctx context.Context, bundleRef BundleReference, environment string) (*Bundle, *VariableResult, error)
-	
+
 	// ProcessTemplate processes a bundle template with resolved variables
 	ProcessTemplate(bundle *Bundle, variables map[string]interface{}) (map[string]interface{}, error)
 }
@@ -116,7 +116,7 @@ type BundleLoader interface {
 type FileSystemProvider interface {
 	// GetFS returns a file system for the given type and configuration
 	GetFS(fsType string, config map[string]interface{}) (afero.Fs, error)
-	
+
 	// CreateTempFS creates a temporary file system
 	CreateTempFS() (afero.Fs, func(), error) // fs, cleanup, error
 }

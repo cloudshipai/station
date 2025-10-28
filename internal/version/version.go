@@ -7,8 +7,8 @@ import (
 
 // Build-time variables injected by ldflags
 var (
-	Version   = "dev"      // Version of the application
-	BuildTime = "unknown"  // Build timestamp
+	Version   = "dev"     // Version of the application
+	BuildTime = "unknown" // Build timestamp
 )
 
 // BuildInfo contains comprehensive build information

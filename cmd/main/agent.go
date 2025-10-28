@@ -43,9 +43,6 @@ var (
 		Args:  cobra.ExactArgs(1),
 		RunE:  runAgentDelete,
 	}
-
-
-
 )
 
 // runAgentList lists all agents
@@ -71,5 +68,3 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 	agentHandler := agent.NewAgentHandler(nil, telemetryService)
 	return agentHandler.RunAgentDelete(cmd, args)
 }
-
-

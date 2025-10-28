@@ -19,13 +19,13 @@ import (
 type OTelConfig struct {
 	// Export telemetry even in dev environment
 	ForceExport bool
-	
+
 	// OTLP endpoint (e.g., http://jaeger:4318/v1/traces)
 	OTLPEndpoint string
-	
+
 	// Service name for traces
 	ServiceName string
-	
+
 	// Service version
 	ServiceVersion string
 }
@@ -34,7 +34,7 @@ type OTelConfig struct {
 func SetupOpenTelemetryWithGenkit(ctx context.Context, g *genkit.Genkit, cfg OTelConfig) error {
 	// Determine if we should export telemetry
 	shouldExport := cfg.ForceExport || os.Getenv("GENKIT_ENV") != "dev"
-	
+
 	if !shouldExport {
 		log.Printf("📊 Telemetry export disabled (GENKIT_ENV=dev, set ForceExport=true to override)")
 		return nil

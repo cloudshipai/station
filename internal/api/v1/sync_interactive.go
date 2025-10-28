@@ -23,15 +23,15 @@ type SyncRequest struct {
 
 // SyncStatus represents the current state of a sync operation
 type SyncStatus struct {
-	ID          string                 `json:"id"`
-	Status      string                 `json:"status"` // "running", "waiting_for_input", "completed", "failed"
-	Environment string                 `json:"environment"`
-	Progress    SyncProgress           `json:"progress"`
-	Variables   *VariableRequest       `json:"variables,omitempty"`
-	Result      *services.SyncResult   `json:"result,omitempty"`
-	Error       string                 `json:"error,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
+	ID          string               `json:"id"`
+	Status      string               `json:"status"` // "running", "waiting_for_input", "completed", "failed"
+	Environment string               `json:"environment"`
+	Progress    SyncProgress         `json:"progress"`
+	Variables   *VariableRequest     `json:"variables,omitempty"`
+	Result      *services.SyncResult `json:"result,omitempty"`
+	Error       string               `json:"error,omitempty"`
+	CreatedAt   time.Time            `json:"created_at"`
+	UpdatedAt   time.Time            `json:"updated_at"`
 }
 
 // SyncProgress tracks the progress of sync operations
@@ -44,9 +44,9 @@ type SyncProgress struct {
 
 // VariableRequest represents a request for missing variables
 type VariableRequest struct {
-	ConfigName  string          `json:"config_name"`
-	Variables   []VariableInput `json:"variables"`
-	Message     string          `json:"message"`
+	ConfigName string          `json:"config_name"`
+	Variables  []VariableInput `json:"variables"`
+	Message    string          `json:"message"`
 }
 
 // VariableInput represents a variable that needs user input
@@ -121,7 +121,7 @@ func (h *APIHandlers) startInteractiveSync(c *gin.Context) {
 // getSyncStatus returns the current status of a sync operation
 func (h *APIHandlers) getSyncStatus(c *gin.Context) {
 	syncID := c.Param("id")
-	
+
 	syncStatus, exists := activeSyncs[syncID]
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Sync operation not found"})
@@ -159,7 +159,7 @@ func (h *APIHandlers) submitVariables(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status": "variables_received",
+		"status":  "variables_received",
 		"message": "Variables submitted successfully, continuing sync...",
 	})
 }
@@ -167,7 +167,7 @@ func (h *APIHandlers) submitVariables(c *gin.Context) {
 // executeSyncWithVariablePrompts runs the sync operation with interactive variable prompting
 func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequest) {
 	variableChannel := variableChannels[syncID]
-	
+
 	// Cleanup channels when done - delay cleanup to allow final status polling
 	defer func() {
 		// Wait a bit before cleanup to allow final polling requests
@@ -178,7 +178,7 @@ func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequ
 			delete(activeSyncs, syncID)
 		}()
 	}()
-	
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -240,7 +240,7 @@ func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequ
 	// Use the existing DeclarativeSync service and inject the UI variable resolver
 	syncer := services.NewDeclarativeSync(repos, cfg)
 	syncer.SetVariableResolver(variableResolver)
-	
+
 	// Create sync options with interactive mode
 	syncOptions := services.SyncOptions{
 		DryRun:      req.DryRun,
