@@ -709,6 +709,142 @@ func TestReadTarGz(t *testing.T) {
 	}
 }
 
+// TestGenerateBundleNameFromURL tests bundle name generation from URLs
+func TestGenerateBundleNameFromURL(t *testing.T) {
+	service := NewBundleService()
+
+	tests := []struct {
+		name        string
+		url         string
+		expected    string
+		description string
+	}{
+		{
+			name:        "GitHub repo URL",
+			url:         "https://github.com/owner/repo/releases/latest/bundle.tar.gz",
+			expected:    "bundle.tar.gz",
+			description: "Should extract filename from GitHub release URL",
+		},
+		{
+			name:        "GitHub download URL with 'download' in path",
+			url:         "https://github.com/owner/repo/releases/download/v1.0/security-bundle.tar.gz",
+			expected:    "security-bundle.tar.gz",
+			description: "Should skip 'download' and get filename",
+		},
+		{
+			name:        "URL with 'latest' in path",
+			url:         "https://registry.station.dev/bundles/latest/finops-bundle.tar.gz",
+			expected:    "finops-bundle.tar.gz",
+			description: "Should skip 'latest' and get filename",
+		},
+		{
+			name:        "Simple filename URL",
+			url:         "https://example.com/my-bundle.tar.gz",
+			expected:    "my-bundle.tar.gz",
+			description: "Should extract simple filename",
+		},
+		{
+			name:        "URL with spaces in filename",
+			url:         "https://example.com/My Bundle Name.tar.gz",
+			expected:    "my-bundle-name.tar.gz",
+			description: "Should replace spaces with dashes and lowercase",
+		},
+		{
+			name:        "URL with mixed case",
+			url:         "https://example.com/MyBundle.TAR.GZ",
+			expected:    "mybundle.tar.gz",
+			description: "Should convert to lowercase",
+		},
+		{
+			name:        "URL ending with slash",
+			url:         "https://example.com/bundles/",
+			expected:    "bundles",
+			description: "Should handle trailing slash",
+		},
+		{
+			name:        "URL with only empty parts",
+			url:         "https://example.com///",
+			expected:    "example.com",
+			description: "Should extract domain when only slashes after it",
+		},
+		{
+			name:        "Complex GitHub URL",
+			url:         "https://github.com/cloudshipai/station-bundles/releases/download/v2.1.0/terraform-security.tar.gz",
+			expected:    "terraform-security.tar.gz",
+			description: "Should extract from complex GitHub URL",
+		},
+		{
+			name:        "URL with query parameters",
+			url:         "https://example.com/bundle.tar.gz?token=abc123",
+			expected:    "bundle.tar.gz?token=abc123",
+			description: "Should include query parameters in filename",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.generateBundleNameFromURL(tt.url)
+			if result != tt.expected {
+				t.Errorf("%s: got %q, want %q", tt.description, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGenerateBundleNameFromURLEdgeCases tests edge cases
+func TestGenerateBundleNameFromURLEdgeCases(t *testing.T) {
+	service := NewBundleService()
+
+	t.Run("Empty URL", func(t *testing.T) {
+		result := service.generateBundleNameFromURL("")
+		if result != "bundle" {
+			t.Errorf("Should return default for empty URL, got %q", result)
+		}
+	})
+
+	t.Run("Single slash", func(t *testing.T) {
+		result := service.generateBundleNameFromURL("/")
+		if result != "bundle" {
+			t.Errorf("Should return default for single slash, got %q", result)
+		}
+	})
+
+	t.Run("URL with 'download' and 'latest' both present", func(t *testing.T) {
+		result := service.generateBundleNameFromURL("https://example.com/download/latest/mybundle.tar.gz")
+		if result != "mybundle.tar.gz" {
+			t.Errorf("Should skip both 'download' and 'latest', got %q", result)
+		}
+	})
+
+	t.Run("URL with multiple spaces", func(t *testing.T) {
+		result := service.generateBundleNameFromURL("https://example.com/My   Bundle   Name.tar.gz")
+		if result != "my---bundle---name.tar.gz" {
+			t.Errorf("Should replace each space with dash, got %q", result)
+		}
+	})
+
+	t.Run("Filename is 'download'", func(t *testing.T) {
+		result := service.generateBundleNameFromURL("https://example.com/path/download")
+		if result != "path" {
+			t.Errorf("Should skip 'download' and use previous part, got %q", result)
+		}
+	})
+
+	t.Run("Filename is 'latest'", func(t *testing.T) {
+		result := service.generateBundleNameFromURL("https://example.com/bundles/latest")
+		if result != "bundles" {
+			t.Errorf("Should skip 'latest' and use previous part, got %q", result)
+		}
+	})
+
+	t.Run("All parts are 'download' or 'latest'", func(t *testing.T) {
+		result := service.generateBundleNameFromURL("download/latest/download/latest")
+		if result != "bundle" {
+			t.Errorf("Should return default when all parts filtered, got %q", result)
+		}
+	})
+}
+
 // Benchmark tests
 func BenchmarkCreateBundle(b *testing.B) {
 	service := NewBundleService()
