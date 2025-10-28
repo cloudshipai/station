@@ -218,6 +218,52 @@ func TestConvertExecutionSteps(t *testing.T) {
 			steps:     &models.JSONArray{},
 			wantCount: 0,
 		},
+		{
+			name: "Valid steps with all fields",
+			steps: &models.JSONArray{
+				map[string]interface{}{
+					"step_number":  float64(1),
+					"description":  "First step",
+					"type":         "tool_call",
+					"duration_ms":  float64(150),
+				},
+				map[string]interface{}{
+					"step_number":  float64(2),
+					"description":  "Second step",
+					"type":         "response",
+					"duration_ms":  float64(200),
+				},
+			},
+			wantCount: 2,
+		},
+		{
+			name: "Steps with partial fields",
+			steps: &models.JSONArray{
+				map[string]interface{}{
+					"step_number": float64(1),
+					"description": "Partial step",
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name: "Steps with invalid types",
+			steps: &models.JSONArray{
+				map[string]interface{}{
+					"step_number": "not a number",
+					"description": 123,
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name: "Steps with non-map items",
+			steps: &models.JSONArray{
+				"invalid item",
+				123,
+			},
+			wantCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -226,6 +272,22 @@ func TestConvertExecutionSteps(t *testing.T) {
 
 			if len(result) != tt.wantCount {
 				t.Errorf("convertExecutionSteps() count = %d, want %d", len(result), tt.wantCount)
+			}
+
+			// Verify valid steps have expected fields
+			if tt.name == "Valid steps with all fields" && len(result) == 2 {
+				if result[0].StepNumber != 1 {
+					t.Errorf("Step 0 StepNumber = %d, want 1", result[0].StepNumber)
+				}
+				if result[0].Description != "First step" {
+					t.Errorf("Step 0 Description = %s, want 'First step'", result[0].Description)
+				}
+				if result[0].Type != "tool_call" {
+					t.Errorf("Step 0 Type = %s, want 'tool_call'", result[0].Type)
+				}
+				if result[0].DurationMs != 150 {
+					t.Errorf("Step 0 DurationMs = %d, want 150", result[0].DurationMs)
+				}
 			}
 		})
 	}
@@ -247,6 +309,10 @@ func TestConvertTokenUsage(t *testing.T) {
 		name  string
 		usage map[string]interface{}
 		isNil bool
+		wantPromptTokens int
+		wantCompletionTokens int
+		wantTotalTokens int
+		wantCostUSD float64
 	}{
 		{
 			name:  "Nil usage",
@@ -259,10 +325,34 @@ func TestConvertTokenUsage(t *testing.T) {
 			isNil: false,
 		},
 		{
-			name: "Valid usage with input/output tokens",
+			name: "Valid usage with all fields",
 			usage: map[string]interface{}{
-				"inputTokens":  100,
-				"outputTokens": 50,
+				"prompt_tokens":     100,
+				"completion_tokens": 50,
+				"total_tokens":      150,
+				"cost_usd":          0.0025,
+			},
+			isNil: false,
+			wantPromptTokens: 100,
+			wantCompletionTokens: 50,
+			wantTotalTokens: 150,
+			wantCostUSD: 0.0025,
+		},
+		{
+			name: "Partial usage data",
+			usage: map[string]interface{}{
+				"prompt_tokens": 200,
+				"total_tokens":  250,
+			},
+			isNil: false,
+			wantPromptTokens: 200,
+			wantTotalTokens: 250,
+		},
+		{
+			name: "Usage with invalid types",
+			usage: map[string]interface{}{
+				"prompt_tokens": "not a number",
+				"cost_usd":      "invalid",
 			},
 			isNil: false,
 		},
@@ -279,6 +369,30 @@ func TestConvertTokenUsage(t *testing.T) {
 			} else {
 				if result == nil {
 					t.Error("convertTokenUsage() = nil, want non-nil")
+				} else {
+					// Verify specific values for valid test cases
+					if tt.name == "Valid usage with all fields" {
+						if result.PromptTokens != tt.wantPromptTokens {
+							t.Errorf("PromptTokens = %d, want %d", result.PromptTokens, tt.wantPromptTokens)
+						}
+						if result.CompletionTokens != tt.wantCompletionTokens {
+							t.Errorf("CompletionTokens = %d, want %d", result.CompletionTokens, tt.wantCompletionTokens)
+						}
+						if result.TotalTokens != tt.wantTotalTokens {
+							t.Errorf("TotalTokens = %d, want %d", result.TotalTokens, tt.wantTotalTokens)
+						}
+						if result.CostUSD != tt.wantCostUSD {
+							t.Errorf("CostUSD = %f, want %f", result.CostUSD, tt.wantCostUSD)
+						}
+					}
+					if tt.name == "Partial usage data" {
+						if result.PromptTokens != tt.wantPromptTokens {
+							t.Errorf("PromptTokens = %d, want %d", result.PromptTokens, tt.wantPromptTokens)
+						}
+						if result.TotalTokens != tt.wantTotalTokens {
+							t.Errorf("TotalTokens = %d, want %d", result.TotalTokens, tt.wantTotalTokens)
+						}
+					}
 				}
 			}
 		})
