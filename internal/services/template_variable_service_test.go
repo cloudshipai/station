@@ -519,3 +519,218 @@ func BenchmarkHasTemplateVariables(b *testing.B) {
 		_ = service.HasTemplateVariables(template)
 	}
 }
+
+// TestSaveVariablesToEnvironment tests saving variables to file
+func TestSaveVariablesToEnvironment(t *testing.T) {
+	tmpDir := t.TempDir()
+	service := NewTemplateVariableService(tmpDir, nil)
+
+	// Create environment directory
+	envDir := filepath.Join(tmpDir, "environments", "test-env")
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		t.Fatalf("Failed to create env dir: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		envName     string
+		newVars     map[string]string
+		setupFunc   func()
+		wantErr     bool
+		description string
+	}{
+		{
+			name:    "Save new variables to empty file",
+			envName: "test-env",
+			newVars: map[string]string{
+				"API_URL": "http://api.example.com",
+				"API_KEY": "secret123",
+			},
+			setupFunc:   func() {},
+			wantErr:     false,
+			description: "Should create new variables.yml with provided variables",
+		},
+		{
+			name:    "Merge with existing variables",
+			envName: "test-env",
+			newVars: map[string]string{
+				"NEW_VAR": "new_value",
+			},
+			setupFunc: func() {
+				// Create existing variables.yml
+				variablesFile := filepath.Join(envDir, "variables.yml")
+				variablesContent := `EXISTING_VAR: existing_value`
+				os.WriteFile(variablesFile, []byte(variablesContent), 0644)
+			},
+			wantErr:     false,
+			description: "Should merge new variables with existing ones",
+		},
+		{
+			name:    "Override existing variable",
+			envName: "test-env",
+			newVars: map[string]string{
+				"EXISTING_VAR": "updated_value",
+			},
+			setupFunc: func() {
+				// Create existing variables.yml
+				variablesFile := filepath.Join(envDir, "variables.yml")
+				variablesContent := `EXISTING_VAR: old_value`
+				os.WriteFile(variablesFile, []byte(variablesContent), 0644)
+			},
+			wantErr:     false,
+			description: "Should override existing variable with new value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupFunc != nil {
+				tt.setupFunc()
+			}
+
+			err := service.saveVariablesToEnvironment(tt.envName, tt.newVars)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("saveVariablesToEnvironment() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr {
+				// Verify variables were saved
+				variablesFile := filepath.Join(envDir, "variables.yml")
+				if _, err := os.Stat(variablesFile); os.IsNotExist(err) {
+					t.Error("variables.yml was not created")
+					return
+				}
+
+				// Load and verify saved variables
+				savedVars, err := service.loadEnvironmentVariables(tt.envName)
+				if err != nil {
+					t.Errorf("Failed to load saved variables: %v", err)
+					return
+				}
+
+				// Check that new variables were saved
+				for key, wantVal := range tt.newVars {
+					gotVal, ok := savedVars[key]
+					if !ok {
+						t.Errorf("saveVariablesToEnvironment() did not save key %q", key)
+					}
+					if gotVal != wantVal {
+						t.Errorf("saveVariablesToEnvironment()[%q] = %q, want %q", key, gotVal, wantVal)
+					}
+				}
+			}
+
+			t.Logf("%s", tt.description)
+		})
+	}
+}
+
+// TestGetVariableNames tests extracting variable names from VariableInfo slice
+func TestGetVariableNames(t *testing.T) {
+	service := NewTemplateVariableService("", nil)
+
+	tests := []struct {
+		name      string
+		variables []VariableInfo
+		want      []string
+	}{
+		{
+			name: "Multiple variables",
+			variables: []VariableInfo{
+				{Name: "API_URL", Description: "API endpoint"},
+				{Name: "API_KEY", Secret: true},
+				{Name: "REGION", Default: "us-east-1"},
+			},
+			want: []string{"API_URL", "API_KEY", "REGION"},
+		},
+		{
+			name:      "Empty slice",
+			variables: []VariableInfo{},
+			want:      []string{},
+		},
+		{
+			name: "Single variable",
+			variables: []VariableInfo{
+				{Name: "DATABASE_URL"},
+			},
+			want: []string{"DATABASE_URL"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := service.getVariableNames(tt.variables)
+
+			if len(got) != len(tt.want) {
+				t.Errorf("getVariableNames() returned %d names, want %d", len(got), len(tt.want))
+				return
+			}
+
+			for i, wantName := range tt.want {
+				if got[i] != wantName {
+					t.Errorf("getVariableNames()[%d] = %q, want %q", i, got[i], wantName)
+				}
+			}
+		})
+	}
+}
+
+// TestContainsString tests string slice contains check
+func TestContainsString(t *testing.T) {
+	service := NewTemplateVariableService("", nil)
+
+	tests := []struct {
+		name  string
+		slice []string
+		str   string
+		want  bool
+	}{
+		{
+			name:  "String exists in slice",
+			slice: []string{"apple", "banana", "cherry"},
+			str:   "banana",
+			want:  true,
+		},
+		{
+			name:  "String does not exist in slice",
+			slice: []string{"apple", "banana", "cherry"},
+			str:   "grape",
+			want:  false,
+		},
+		{
+			name:  "Empty slice",
+			slice: []string{},
+			str:   "test",
+			want:  false,
+		},
+		{
+			name:  "Empty string in slice",
+			slice: []string{"", "test"},
+			str:   "",
+			want:  true,
+		},
+		{
+			name:  "Single element match",
+			slice: []string{"only"},
+			str:   "only",
+			want:  true,
+		},
+		{
+			name:  "Case sensitive mismatch",
+			slice: []string{"Test"},
+			str:   "test",
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := service.containsString(tt.slice, tt.str)
+			if got != tt.want {
+				t.Errorf("containsString(%v, %q) = %v, want %v", tt.slice, tt.str, got, tt.want)
+			}
+		})
+	}
+}
