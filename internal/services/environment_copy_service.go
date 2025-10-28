@@ -386,6 +386,11 @@ func (s *EnvironmentCopyService) regenerateTemplateJSON(env *models.Environment)
 	envDir := filepath.Join(homeDir, ".config", "station", "environments", env.Name)
 	templatePath := filepath.Join(envDir, "template.json")
 
+	// Ensure the environment directory exists
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+
 	// Get all MCP servers for this environment
 	mcpServers, err := s.repos.MCPServers.GetByEnvironmentID(env.ID)
 	if err != nil {

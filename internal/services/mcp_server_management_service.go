@@ -112,6 +112,14 @@ func (s *MCPServerManagementService) GetMCPServersForEnvironment(environmentName
 
 // AddMCPServerToEnvironment adds an MCP server to an environment as a separate file
 func (s *MCPServerManagementService) AddMCPServerToEnvironment(environmentName, serverName string, serverConfig MCPServerConfig) *MCPServerOperationResult {
+	// Validate server name
+	if serverName == "" {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: "Server name cannot be empty",
+		}
+	}
+
 	// Use centralized path resolution for container/host compatibility
 	envDir := config.GetEnvironmentDir(environmentName)
 
@@ -280,6 +288,12 @@ func (s *MCPServerManagementService) DeleteMCPServerFromEnvironment(environmentN
 func (s *MCPServerManagementService) GetRawMCPConfig(environmentName string) (string, error) {
 	// Use centralized path resolution for container/host compatibility
 	envDir := config.GetEnvironmentDir(environmentName)
+
+	// Check if environment directory exists
+	if _, err := os.Stat(envDir); os.IsNotExist(err) {
+		return "", fmt.Errorf("environment '%s' not found", environmentName)
+	}
+
 	templatePath := filepath.Join(envDir, "template.json")
 
 	// Check if template.json exists

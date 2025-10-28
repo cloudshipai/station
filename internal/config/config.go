@@ -154,9 +154,14 @@ func GetStationConfigDir() string {
 func getXDGConfigDir() string {
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return filepath.Join(os.TempDir(), ".config", "station") // Fallback
+		// Respect HOME environment variable (important for tests)
+		homeDir := os.Getenv("HOME")
+		if homeDir == "" {
+			var err error
+			homeDir, err = os.UserHomeDir()
+			if err != nil {
+				return filepath.Join(os.TempDir(), ".config", "station") // Fallback
+			}
 		}
 		configHome = filepath.Join(homeDir, ".config")
 	}

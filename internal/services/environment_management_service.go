@@ -38,6 +38,14 @@ type EnvironmentOperationResult struct {
 
 // CreateEnvironment creates both database entry and file structure
 func (s *EnvironmentManagementService) CreateEnvironment(name string, description *string, createdByUserID int64) (*models.Environment, *EnvironmentOperationResult, error) {
+	// Validate environment name
+	if name == "" {
+		return nil, &EnvironmentOperationResult{
+			Success: false,
+			Message: "Environment name cannot be empty",
+		}, fmt.Errorf("environment name cannot be empty")
+	}
+
 	// Create database entry first
 	env, err := s.repos.Environments.Create(name, description, createdByUserID)
 	if err != nil {
@@ -48,17 +56,7 @@ func (s *EnvironmentManagementService) CreateEnvironment(name string, descriptio
 	}
 
 	// Create file-based environment directory structure
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		// Cleanup database entry if directory creation fails
-		s.repos.Environments.Delete(env.ID)
-		return nil, &EnvironmentOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to get user home directory: %v", err),
-		}, err
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", name)
+	envDir := config.GetEnvironmentDir(name)
 	agentsDir := filepath.Join(envDir, "agents")
 
 	// Create environment directory structure
@@ -116,15 +114,7 @@ func (s *EnvironmentManagementService) DeleteEnvironment(name string) *Environme
 	}
 
 	// Delete file-based configuration first
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return &EnvironmentOperationResult{
-			Success: false,
-			Message: fmt.Sprintf("Failed to get user home directory: %v", err),
-		}
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", name)
+	envDir := config.GetEnvironmentDir(name)
 
 	// Remove environment directory and all contents
 	var fileCleanupError error
