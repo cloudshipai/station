@@ -25,11 +25,37 @@ jobs:
       with:
         go-version: '1.23'
 
-    - name: Build Station binary
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: ui/package-lock.json
+
+    - name: Install UI dependencies
       run: |
-        # Build for both platforms
-        GOOS=linux GOARCH=amd64 go build -o dist/station_linux_amd64_v1/stn ./cmd/main
-        GOOS=linux GOARCH=arm64 go build -o dist/station_linux_arm64/stn ./cmd/main
+        cd ui
+        npm install
+
+    - name: Build UI
+      run: |
+        cd ui
+        npm run build
+
+    - name: Prepare UI assets for embedding
+      run: |
+        mkdir -p internal/ui/static
+        cp -r ui/dist/* internal/ui/static/
+
+    - name: Build Station binary with embedded UI
+      run: |
+        # Build for both platforms with UI embedded
+        VERSION="${GITHUB_REF_NAME#v}"
+        BUILD_TIME="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+        LDFLAGS="-X 'station/internal/version.Version=${VERSION}' -X 'station/internal/version.BuildTime=${BUILD_TIME}'"
+
+        GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -tags ui -o dist/station_linux_amd64_v1/stn ./cmd/main
+        GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -tags ui -o dist/station_linux_arm64/stn ./cmd/main
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
