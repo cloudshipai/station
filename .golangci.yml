@@ -1,12 +1,6 @@
 linters:
   disable-all: true
 
-linters-settings:
-  govet:
-    check-shadowing: true
-  staticcheck:
-    checks: ["all"]
-
 issues:
   exclude-use-default: false
   max-issues-per-linter: 0
@@ -14,6 +8,3 @@ issues:
 
 run:
   timeout: 5m
-  skip-dirs:
-    - vendor
-    - dev-workspace
