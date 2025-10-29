@@ -5,9 +5,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"station/internal/db"
@@ -888,5 +892,394 @@ Content`
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = service.parseAgentFile(tmpFile)
+	}
+}
+
+// TestDownloadBundle tests HTTP bundle downloading
+func TestDownloadBundle(t *testing.T) {
+	service := NewBundleService()
+
+	tests := []struct {
+		name        string
+		setupServer func() (string, func())
+		expectError bool
+		description string
+	}{
+		{
+			name: "Download valid tar.gz bundle",
+			setupServer: func() (string, func()) {
+				mux := http.NewServeMux()
+				mux.HandleFunc("/test-bundle.tar.gz", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/gzip")
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("fake-tar-gz-content"))
+				})
+				server := httptest.NewServer(mux)
+				return server.URL + "/test-bundle.tar.gz", server.Close
+			},
+			expectError: false,
+			description: "Should download bundle from HTTP server",
+		},
+		{
+			name: "Download fails with 404",
+			setupServer: func() (string, func()) {
+				mux := http.NewServeMux()
+				mux.HandleFunc("/missing.tar.gz", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNotFound)
+				})
+				server := httptest.NewServer(mux)
+				return server.URL + "/missing.tar.gz", server.Close
+			},
+			expectError: true,
+			description: "Should fail with 404 status",
+		},
+		{
+			name: "Download fails with 500",
+			setupServer: func() (string, func()) {
+				mux := http.NewServeMux()
+				mux.HandleFunc("/error.tar.gz", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusInternalServerError)
+				})
+				server := httptest.NewServer(mux)
+				return server.URL + "/error.tar.gz", server.Close
+			},
+			expectError: true,
+			description: "Should fail with 500 error",
+		},
+		{
+			name: "Generate filename from URL without .tar.gz",
+			setupServer: func() (string, func()) {
+				mux := http.NewServeMux()
+				mux.HandleFunc("/bundles/latest", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("bundle-content"))
+				})
+				server := httptest.NewServer(mux)
+				return server.URL + "/bundles/latest", server.Close
+			},
+			expectError: false,
+			description: "Should generate filename when URL doesn't end with .tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url, cleanup := tt.setupServer()
+			defer cleanup()
+
+			bundlesDir := t.TempDir()
+			destPath, err := service.downloadBundle(url, bundlesDir)
+
+			if (err != nil) != tt.expectError {
+				t.Errorf("downloadBundle() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+
+			if !tt.expectError {
+				if destPath == "" {
+					t.Error("downloadBundle() returned empty path")
+				}
+
+				// Verify file was created
+				if _, err := os.Stat(destPath); os.IsNotExist(err) {
+					t.Errorf("Downloaded file does not exist: %s", destPath)
+				}
+
+				// Verify file is in bundles directory
+				if !filepath.IsAbs(destPath) || !strings.HasPrefix(destPath, bundlesDir) {
+					t.Errorf("File path %s not in bundles directory %s", destPath, bundlesDir)
+				}
+			}
+		})
+	}
+}
+
+// TestCopyBundle tests bundle copying from filesystem
+func TestCopyBundle(t *testing.T) {
+	service := NewBundleService()
+
+	tests := []struct {
+		name        string
+		setupSource func(string) string
+		expectError bool
+		description string
+	}{
+		{
+			name: "Copy valid bundle file",
+			setupSource: func(dir string) string {
+				srcPath := filepath.Join(dir, "source-bundle.tar.gz")
+				os.WriteFile(srcPath, []byte("test bundle content"), 0644)
+				return srcPath
+			},
+			expectError: false,
+			description: "Should copy bundle from filesystem",
+		},
+		{
+			name: "Copy non-existent file",
+			setupSource: func(dir string) string {
+				return filepath.Join(dir, "nonexistent.tar.gz")
+			},
+			expectError: true,
+			description: "Should fail for non-existent source file",
+		},
+		{
+			name: "Copy file with spaces in name",
+			setupSource: func(dir string) string {
+				srcPath := filepath.Join(dir, "my bundle file.tar.gz")
+				os.WriteFile(srcPath, []byte("bundle with spaces"), 0644)
+				return srcPath
+			},
+			expectError: false,
+			description: "Should handle filenames with spaces",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sourceDir := t.TempDir()
+			bundlesDir := t.TempDir()
+			srcPath := tt.setupSource(sourceDir)
+
+			destPath, err := service.copyBundle(srcPath, bundlesDir)
+
+			if (err != nil) != tt.expectError {
+				t.Errorf("copyBundle() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+
+			if !tt.expectError {
+				if destPath == "" {
+					t.Error("copyBundle() returned empty path")
+				}
+
+				// Verify file was copied
+				if _, err := os.Stat(destPath); os.IsNotExist(err) {
+					t.Errorf("Copied file does not exist: %s", destPath)
+				}
+
+				// Verify content matches
+				srcContent, _ := os.ReadFile(srcPath)
+				destContent, _ := os.ReadFile(destPath)
+				if !bytes.Equal(srcContent, destContent) {
+					t.Error("Copied file content does not match source")
+				}
+
+				// Verify file is in bundles directory
+				if !strings.HasPrefix(destPath, bundlesDir) {
+					t.Errorf("File path %s not in bundles directory %s", destPath, bundlesDir)
+				}
+			}
+		})
+	}
+}
+
+// TestExtractBundle tests tar.gz bundle extraction
+func TestExtractBundle(t *testing.T) {
+	service := NewBundleService()
+
+	tests := []struct {
+		name              string
+		createBundle      func(string) string
+		expectError       bool
+		expectedAgents    int
+		expectedMCPs      int
+		validateExtracted func(*testing.T, string)
+		description       string
+	}{
+		{
+			name: "Extract bundle with agents and MCP config",
+			createBundle: func(dir string) string {
+				bundlePath := filepath.Join(dir, "test-bundle.tar.gz")
+
+				// Create tar.gz with agents and template.json
+				var buf bytes.Buffer
+				gw := gzip.NewWriter(&buf)
+				tw := tar.NewWriter(gw)
+
+				// Add agent file
+				agentContent := []byte(`---
+metadata:
+  name: "test-agent"
+model: gpt-4o-mini
+max_steps: 3
+tools: []
+---
+Content`)
+				agentHeader := &tar.Header{
+					Name: "agents/test-agent.prompt",
+					Mode: 0644,
+					Size: int64(len(agentContent)),
+				}
+				tw.WriteHeader(agentHeader)
+				tw.Write(agentContent)
+
+				// Add MCP config
+				mcpContent := []byte(`{"mcpServers": {}}`)
+				mcpHeader := &tar.Header{
+					Name: "template.json",
+					Mode: 0644,
+					Size: int64(len(mcpContent)),
+				}
+				tw.WriteHeader(mcpHeader)
+				tw.Write(mcpContent)
+
+				tw.Close()
+				gw.Close()
+
+				os.WriteFile(bundlePath, buf.Bytes(), 0644)
+				return bundlePath
+			},
+			expectError:    false,
+			expectedAgents: 1,
+			expectedMCPs:   1,
+			validateExtracted: func(t *testing.T, envDir string) {
+				// Verify agent file exists
+				agentPath := filepath.Join(envDir, "agents", "test-agent.prompt")
+				if _, err := os.Stat(agentPath); os.IsNotExist(err) {
+					t.Error("Agent file not extracted")
+				}
+
+				// Verify MCP config exists
+				mcpPath := filepath.Join(envDir, "template.json")
+				if _, err := os.Stat(mcpPath); os.IsNotExist(err) {
+					t.Error("MCP config not extracted")
+				}
+			},
+			description: "Should extract agents and MCP configs",
+		},
+		{
+			name: "Extract bundle with multiple agents",
+			createBundle: func(dir string) string {
+				bundlePath := filepath.Join(dir, "multi-agent.tar.gz")
+
+				var buf bytes.Buffer
+				gw := gzip.NewWriter(&buf)
+				tw := tar.NewWriter(gw)
+
+				// Add multiple agent files
+				for i := 1; i <= 3; i++ {
+					content := []byte("agent content")
+					header := &tar.Header{
+						Name: fmt.Sprintf("agents/agent%d.prompt", i),
+						Mode: 0644,
+						Size: int64(len(content)),
+					}
+					tw.WriteHeader(header)
+					tw.Write(content)
+				}
+
+				tw.Close()
+				gw.Close()
+
+				os.WriteFile(bundlePath, buf.Bytes(), 0644)
+				return bundlePath
+			},
+			expectError:    false,
+			expectedAgents: 3,
+			expectedMCPs:   0,
+			description:    "Should count multiple agent files",
+		},
+		{
+			name: "Extract bundle with directory entries",
+			createBundle: func(dir string) string {
+				bundlePath := filepath.Join(dir, "with-dirs.tar.gz")
+
+				var buf bytes.Buffer
+				gw := gzip.NewWriter(&buf)
+				tw := tar.NewWriter(gw)
+
+				// Add directory entry
+				dirHeader := &tar.Header{
+					Name:     "agents/",
+					Mode:     0755,
+					Typeflag: tar.TypeDir,
+				}
+				tw.WriteHeader(dirHeader)
+
+				// Add file in directory
+				content := []byte("content")
+				fileHeader := &tar.Header{
+					Name: "agents/test.prompt",
+					Mode: 0644,
+					Size: int64(len(content)),
+				}
+				tw.WriteHeader(fileHeader)
+				tw.Write(content)
+
+				tw.Close()
+				gw.Close()
+
+				os.WriteFile(bundlePath, buf.Bytes(), 0644)
+				return bundlePath
+			},
+			expectError:    false,
+			expectedAgents: 1,
+			expectedMCPs:   0,
+			description:    "Should handle directory entries in tar",
+		},
+		{
+			name: "Extract invalid gzip file",
+			createBundle: func(dir string) string {
+				bundlePath := filepath.Join(dir, "invalid.tar.gz")
+				os.WriteFile(bundlePath, []byte("not a valid gzip file"), 0644)
+				return bundlePath
+			},
+			expectError: true,
+			description: "Should fail on invalid gzip",
+		},
+		{
+			name: "Extract empty bundle",
+			createBundle: func(dir string) string {
+				bundlePath := filepath.Join(dir, "empty.tar.gz")
+
+				var buf bytes.Buffer
+				gw := gzip.NewWriter(&buf)
+				tw := tar.NewWriter(gw)
+				tw.Close()
+				gw.Close()
+
+				os.WriteFile(bundlePath, buf.Bytes(), 0644)
+				return bundlePath
+			},
+			expectError:    false,
+			expectedAgents: 0,
+			expectedMCPs:   0,
+			description:    "Should handle empty bundle",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			bundlePath := tt.createBundle(tmpDir)
+			envDir := filepath.Join(tmpDir, "test-env")
+
+			agentCount, mcpCount, err := service.extractBundle(bundlePath, envDir)
+
+			if (err != nil) != tt.expectError {
+				t.Errorf("extractBundle() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+
+			if !tt.expectError {
+				if agentCount != tt.expectedAgents {
+					t.Errorf("Agent count = %d, want %d", agentCount, tt.expectedAgents)
+				}
+
+				if mcpCount != tt.expectedMCPs {
+					t.Errorf("MCP count = %d, want %d", mcpCount, tt.expectedMCPs)
+				}
+
+				// Verify environment directory was created
+				if _, err := os.Stat(envDir); os.IsNotExist(err) {
+					t.Error("Environment directory not created")
+				}
+
+				// Run custom validation if provided
+				if tt.validateExtracted != nil {
+					tt.validateExtracted(t, envDir)
+				}
+			}
+		})
 	}
 }
