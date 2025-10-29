@@ -936,3 +936,350 @@ func TestConvertYAMLMapToJSONMapComplex(t *testing.T) {
 		assert.Len(t, tags, 2)
 	})
 }
+
+// TestFindAgentByName tests finding agents by name
+func TestFindAgentByName(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	// Create test environment
+	env, err := repos.Environments.Create("test-find-env", nil, 1)
+	require.NoError(t, err)
+
+	// Create test agent
+	agent, err := repos.Agents.Create(
+		"TestFindAgent",
+		"Test description",
+		"Test prompt",
+		5,
+		env.ID,
+		1,
+		nil,
+		nil,
+		true,
+		nil,
+		nil,
+		"",
+		"",
+	)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		agentName   string
+		envID       int64
+		expectFound bool
+		description string
+	}{
+		{
+			name:        "Find existing agent",
+			agentName:   "TestFindAgent",
+			envID:       env.ID,
+			expectFound: true,
+			description: "Should find agent that exists",
+		},
+		{
+			name:        "Agent not found",
+			agentName:   "NonexistentAgent",
+			envID:       env.ID,
+			expectFound: false,
+			description: "Should return error for nonexistent agent",
+		},
+		{
+			name:        "Wrong environment",
+			agentName:   "TestFindAgent",
+			envID:       9999,
+			expectFound: false,
+			description: "Should not find agent in wrong environment",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			foundAgent, err := service.findAgentByName(tt.agentName, tt.envID)
+
+			if tt.expectFound {
+				require.NoError(t, err, tt.description)
+				require.NotNil(t, foundAgent)
+				assert.Equal(t, agent.ID, foundAgent.ID)
+				assert.Equal(t, tt.agentName, foundAgent.Name)
+			} else {
+				require.Error(t, err, tt.description)
+				assert.Nil(t, foundAgent)
+			}
+		})
+	}
+}
+
+// TestExtractInputSchema tests input schema extraction from dotprompt config
+func TestExtractInputSchema(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	tests := []struct {
+		name         string
+		config       *DotPromptConfig
+		expectSchema bool
+		expectError  bool
+		description  string
+	}{
+		{
+			name: "No input schema",
+			config: &DotPromptConfig{
+				Model: "gpt-4o-mini",
+			},
+			expectSchema: false,
+			expectError:  false,
+			description:  "Should handle missing input schema",
+		},
+		{
+			name: "Picoschema format",
+			config: &DotPromptConfig{
+				Input: map[string]interface{}{
+					"schema": map[interface{}]interface{}{
+						"projectPath": "string, Path to project directory",
+						"scanDepth":   "number, Maximum scan depth",
+					},
+				},
+			},
+			expectSchema: true,
+			expectError:  false,
+			description:  "Should extract Picoschema format",
+		},
+		{
+			name: "Full JSON Schema format",
+			config: &DotPromptConfig{
+				Input: map[string]interface{}{
+					"schema": map[interface{}]interface{}{
+						"type": "object",
+						"properties": map[interface{}]interface{}{
+							"name": map[interface{}]interface{}{
+								"type": "string",
+							},
+						},
+						"required": []interface{}{"name"},
+					},
+				},
+			},
+			expectSchema: false,
+			expectError:  false,
+			description:  "Should skip full JSON Schema format",
+		},
+		{
+			name: "Schema with userInput field",
+			config: &DotPromptConfig{
+				Input: map[string]interface{}{
+					"schema": map[interface{}]interface{}{
+						"userInput":   "string, User input",
+						"projectPath": "string, Project path",
+					},
+				},
+			},
+			expectSchema: true,
+			expectError:  false,
+			description:  "Should exclude userInput from custom schema",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema, err := service.extractInputSchema(tt.config)
+
+			if tt.expectError {
+				require.Error(t, err, tt.description)
+			} else {
+				require.NoError(t, err, tt.description)
+
+				if tt.expectSchema {
+					require.NotNil(t, schema, "Schema should not be nil")
+					assert.NotEmpty(t, *schema, "Schema should not be empty")
+				} else {
+					assert.Nil(t, schema, "Schema should be nil")
+				}
+			}
+		})
+	}
+}
+
+// TestExtractOutputSchema tests output schema extraction
+func TestExtractOutputSchema(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	tests := []struct {
+		name          string
+		config        *DotPromptConfig
+		expectSchema  bool
+		expectPreset  bool
+		expectError   bool
+		description   string
+	}{
+		{
+			name: "No output schema",
+			config: &DotPromptConfig{
+				Model: "gpt-4o-mini",
+			},
+			expectSchema: false,
+			expectPreset: false,
+			expectError:  false,
+			description:  "Should handle missing output schema",
+		},
+		{
+			name: "Top-level output_schema field",
+			config: &DotPromptConfig{
+				OutputSchema: `{"type": "object", "properties": {"result": {"type": "string"}}}`,
+			},
+			expectSchema: true,
+			expectPreset: false,
+			expectError:  false,
+			description:  "Should extract top-level output_schema",
+		},
+		{
+			name: "Output preset field",
+			config: &DotPromptConfig{
+				Output: map[string]interface{}{
+					"preset": "finops-inventory",
+				},
+			},
+			expectSchema: false,
+			expectPreset: true,
+			expectError:  false,
+			description:  "Should extract output preset",
+		},
+		{
+			name: "Both schema and preset",
+			config: &DotPromptConfig{
+				Output: map[string]interface{}{
+					"schema": map[interface{}]interface{}{
+						"type": "object",
+						"properties": map[interface{}]interface{}{
+							"status": "string",
+						},
+					},
+					"preset": "security-investigations",
+				},
+			},
+			expectSchema: true,
+			expectPreset: true,
+			expectError:  false,
+			description:  "Should extract both schema and preset",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema, preset, err := service.extractOutputSchema(tt.config)
+
+			if tt.expectError {
+				require.Error(t, err, tt.description)
+			} else {
+				require.NoError(t, err, tt.description)
+
+				if tt.expectSchema {
+					require.NotNil(t, schema, "Schema should not be nil")
+					assert.NotEmpty(t, *schema, "Schema should not be empty")
+				} else {
+					assert.Nil(t, schema, "Schema should be nil")
+				}
+
+				if tt.expectPreset {
+					require.NotNil(t, preset, "Preset should not be nil")
+					assert.NotEmpty(t, *preset, "Preset should not be empty")
+				} else {
+					assert.Nil(t, preset, "Preset should be nil")
+				}
+			}
+		})
+	}
+}
+
+// TestParsePicoschemaField tests Picoschema field parsing
+func TestParsePicoschemaField(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	tests := []struct {
+		name        string
+		fieldName   string
+		value       interface{}
+		expectType  string
+		expectNil   bool
+		description string
+	}{
+		{
+			name:        "String type definition",
+			fieldName:   "username",
+			value:       "string, User name",
+			expectType:  "string",
+			expectNil:   false,
+			description: "Should parse string type",
+		},
+		{
+			name:        "Array format enum",
+			fieldName:   "status",
+			value:       []interface{}{"active", "inactive", "pending"},
+			expectType:  "string",
+			expectNil:   false,
+			description: "Should parse array format as enum",
+		},
+		{
+			name:      "Object format",
+			fieldName: "config",
+			value: map[interface{}]interface{}{
+				"type":        "object",
+				"description": "Configuration object",
+				"required":    true,
+			},
+			expectType:  "object",
+			expectNil:   false,
+			description: "Should parse object format",
+		},
+		{
+			name:        "Invalid format",
+			fieldName:   "invalid",
+			value:       123,
+			expectType:  "",
+			expectNil:   true,
+			description: "Should return nil for invalid format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.parsePicoschemaField(tt.fieldName, tt.value)
+
+			if tt.expectNil {
+				assert.Nil(t, result, tt.description)
+			} else {
+				require.NotNil(t, result, tt.description)
+				if tt.expectType != "" {
+					assert.Equal(t, tt.expectType, string(result.Type), "Type should match")
+				}
+			}
+		})
+	}
+}
