@@ -541,6 +541,56 @@ func BenchmarkNewDeclarativeSync(b *testing.B) {
 	}
 }
 
+func TestNormalizeConfigPath(t *testing.T) {
+	service := &DeclarativeSync{}
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "Path with environments in the middle",
+			path: "/home/user/.config/station/environments/default/config.json",
+			want: "environments/default/config.json",
+		},
+		{
+			name: "Different home directory",
+			path: "/root/.config/station/environments/prod/settings.json",
+			want: "environments/prod/settings.json",
+		},
+		{
+			name: "Path without environments",
+			path: "/some/other/path/file.json",
+			want: "/some/other/path/file.json",
+		},
+		{
+			name: "Empty path",
+			path: "",
+			want: "",
+		},
+		{
+			name: "Only environments directory",
+			path: "environments/",
+			want: "environments/",
+		},
+		{
+			name: "Environments at start",
+			path: "environments/default/config.json",
+			want: "environments/default/config.json",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := service.normalizeConfigPath(tt.path)
+			if got != tt.want {
+				t.Errorf("normalizeConfigPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func BenchmarkSyncOptions(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
