@@ -114,7 +114,7 @@ func (e *GenKitExecutor) extractDotPromptMetadata(promptPath string) (app, appTy
 }
 
 // ExecuteAgent executes an agent using dotprompt.Execute() with registered MCP tools
-func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{}), environmentName string) (*ExecutionResponse, error) {
+func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{}), environmentName string, userVariables map[string]interface{}) (*ExecutionResponse, error) {
 	startTime := time.Now()
 	e.logCallback = logCallback
 
@@ -171,8 +171,17 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 		maxTurns = 25
 	}
 
+	// Merge userVariables with userInput for dotprompt template rendering
+	// This allows agents with input schemas to receive structured parameters
+	inputMap := map[string]any{"userInput": task}
+	if userVariables != nil {
+		for k, v := range userVariables {
+			inputMap[k] = v
+		}
+	}
+
 	resp, err := agentPrompt.Execute(ctx,
-		ai.WithInput(map[string]any{"userInput": task}),
+		ai.WithInput(inputMap),
 		ai.WithMaxTurns(maxTurns),
 		ai.WithModelName(modelName))
 

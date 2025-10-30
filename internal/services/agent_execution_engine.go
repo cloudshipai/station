@@ -286,7 +286,7 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	}
 
 	// Use clean, unified dotprompt.Execute() execution path
-	response, err := executor.ExecuteAgent(*agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name)
+	response, err := executor.ExecuteAgent(*agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 
 	// Clean up MCP connections after execution is complete
 	aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
