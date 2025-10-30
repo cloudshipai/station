@@ -1283,3 +1283,45 @@ Content`)
 		})
 	}
 }
+
+func TestContains(t *testing.T) {
+	tests := []struct {
+		name  string
+		slice []string
+		item  string
+		want  bool
+	}{
+		{
+			name:  "Item exists in slice",
+			slice: []string{"apple", "banana", "cherry"},
+			item:  "banana",
+			want:  true,
+		},
+		{
+			name:  "Item does not exist in slice",
+			slice: []string{"apple", "banana", "cherry"},
+			item:  "grape",
+			want:  false,
+		},
+		{
+			name:  "Empty slice",
+			slice: []string{},
+			item:  "apple",
+			want:  false,
+		},
+		{
+			name:  "Item is empty string and exists",
+			slice: []string{"apple", "", "cherry"},
+			item:  "",
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := contains(tt.slice, tt.item); got != tt.want {
+				t.Errorf("contains() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
