@@ -421,6 +421,12 @@ func TestIndentLines(t *testing.T) {
 			prefix:     "  ",
 			wantPrefix: "",
 		},
+		{
+			name:       "Input with empty lines",
+			input:      "line1\n\nline3",
+			prefix:     "  ",
+			wantPrefix: "  line1\n\n  line3\n",
+		},
 	}
 
 	for _, tt := range tests {
@@ -581,6 +587,12 @@ func TestExtractCustomVariableNames(t *testing.T) {
 			wantVarCount: 0,
 			description:  "Should return empty array for invalid JSON",
 		},
+		{
+			name:         "Agent with custom variables",
+			inputSchema:  stringPtr(`{"customVar1":"value1","customVar2":"value2","userInput":"should be excluded"}`),
+			wantVarCount: 2,
+			description:  "Should extract variables excluding userInput",
+		},
 	}
 
 	for _, tt := range tests {
@@ -610,8 +622,6 @@ func TestExtractCustomVariableNames(t *testing.T) {
 		})
 	}
 }
-
-// Note: stringPtr helper function is defined in environment_management_service_test.go
 
 // Benchmark tests
 func BenchmarkNewAgentExportService(b *testing.B) {
