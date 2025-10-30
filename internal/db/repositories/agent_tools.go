@@ -154,3 +154,27 @@ func (r *AgentToolRepo) ListAvailableToolsForAgent(agentID int64, agentIDParam i
 func (r *AgentToolRepo) Clear(agentID int64) error {
 	return r.queries.ClearAgentTools(context.Background(), agentID)
 }
+
+// AddAgentToolTx adds a tool to agent within a transaction
+// Note: Does NOT enforce 40-tool limit since that requires a separate query
+// The limit should be checked before calling this method within the transaction
+func (r *AgentToolRepo) AddAgentToolTx(tx *sql.Tx, agentID int64, toolID int64) (*models.AgentTool, error) {
+	params := queries.AddAgentToolParams{
+		AgentID: agentID,
+		ToolID:  toolID,
+	}
+
+	txQueries := r.queries.WithTx(tx)
+	created, err := txQueries.AddAgentTool(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertAgentToolFromSQLc(created), nil
+}
+
+// ClearTx removes all tool assignments for an agent within a transaction
+func (r *AgentToolRepo) ClearTx(tx *sql.Tx, agentID int64) error {
+	txQueries := r.queries.WithTx(tx)
+	return txQueries.ClearAgentTools(context.Background(), agentID)
+}

@@ -247,3 +247,93 @@ func (r *AgentRepo) UpdatePrompt(id int64, prompt string) error {
 		Prompt: prompt,
 	})
 }
+
+// CreateTx creates agent within a transaction
+func (r *AgentRepo) CreateTx(tx *sql.Tx, name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string) (*models.Agent, error) {
+	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
+
+	params := queries.CreateAgentParams{
+		Name:            name,
+		Description:     description,
+		Prompt:          prompt,
+		MaxSteps:        maxSteps,
+		EnvironmentID:   environmentID,
+		CreatedBy:       createdBy,
+		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
+		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
+	}
+
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
+	}
+
+	if cronSchedule != nil {
+		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
+	}
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
+	txQueries := r.queries.WithTx(tx)
+	created, err := txQueries.CreateAgent(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertAgentFromSQLc(created), nil
+}
+
+// UpdateTx updates agent within a transaction
+func (r *AgentRepo) UpdateTx(tx *sql.Tx, id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string) error {
+	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
+
+	params := queries.UpdateAgentParams{
+		Name:            name,
+		Description:     description,
+		Prompt:          prompt,
+		MaxSteps:        maxSteps,
+		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
+		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
+		ID:              id,
+	}
+
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
+	}
+
+	if cronSchedule != nil {
+		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
+	}
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
+	txQueries := r.queries.WithTx(tx)
+	return txQueries.UpdateAgent(context.Background(), params)
+}

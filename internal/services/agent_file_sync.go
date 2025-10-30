@@ -261,8 +261,16 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		return nil, fmt.Errorf("failed to extract output schema: %w", err)
 	}
 
-	// Create agent using individual parameters
-	createdAgent, err := s.repos.Agents.Create(
+	// Start transaction for atomic agent creation + tool assignment
+	tx, err := s.repos.BeginTx()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Create agent using individual parameters within transaction
+	createdAgent, err := s.repos.Agents.CreateTx(
+		tx,
 		agentName,
 		description,
 		promptContent,
@@ -281,24 +289,26 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}
 
-	// Assign tools if specified
+	// Assign tools if specified - all within the same transaction
 	if len(config.Tools) > 0 {
 		for _, toolName := range config.Tools {
-
 			// Find tool by name in environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(env.ID, toolName)
 			if err != nil {
 				return nil, fmt.Errorf("tool %s not found in environment: %w", toolName, err)
 			}
 
-			// Assign tool to agent
-			_, err = s.repos.AgentTools.AddAgentTool(createdAgent.ID, tool.ID)
+			// Assign tool to agent within transaction
+			_, err = s.repos.AgentTools.AddAgentToolTx(tx, createdAgent.ID, tool.ID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
 			}
-
 		}
-	} else {
+	}
+
+	// Commit transaction - all-or-nothing
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	logging.Info("✅ Created agent: %s", agentName)
@@ -474,9 +484,17 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		}, nil
 	}
 
+	// Start transaction for atomic agent update + tool sync
+	tx, err := s.repos.BeginTx()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Update agent metadata if needed
 	if needsUpdate {
-		err = s.repos.Agents.Update(
+		err = s.repos.Agents.UpdateTx(
+			tx,
 			existingAgent.ID,
 			existingAgent.Name,
 			description,
@@ -495,7 +513,7 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		}
 	}
 
-	// Sync tool assignments if needed (independent of other updates)
+	// Sync tool assignments if needed (within same transaction)
 	if toolsNeedSync {
 		// Get current tool assignments
 		currentTools, err := s.repos.AgentTools.ListAgentTools(existingAgent.ID)
@@ -550,8 +568,8 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 					continue
 				}
 
-				// Assign tool to agent
-				_, err = s.repos.AgentTools.AddAgentTool(existingAgent.ID, tool.ID)
+				// Assign tool to agent within transaction
+				_, err = s.repos.AgentTools.AddAgentToolTx(tx, existingAgent.ID, tool.ID)
 				if err != nil {
 					return nil, fmt.Errorf("failed to assign tool %s to agent: %w", toolName, err)
 				}
@@ -568,6 +586,11 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		} else {
 			fmt.Printf("   🔧 No tools configured for agent\n")
 		}
+	}
+
+	// Commit transaction - all-or-nothing
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	updateType := OpTypeUpdate
