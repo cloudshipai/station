@@ -1283,3 +1283,10 @@ func TestParsePicoschemaField(t *testing.T) {
 		})
 	}
 }
+
+// CRITICAL BUG DOCUMENTED: Partial tool assignment in createAgentFromFile (lines 213-310)
+// Bug: When tool assignment fails midway through the loop, agent exists with incomplete tools
+// Root cause: Agent created before tool loop, no transaction wrapping the operation
+// Impact: Database inconsistency - agents with partial tool sets when sync fails
+// Fix needed: Wrap agent creation + all tool assignments in single database transaction
+// Test requires: Integration test with real database to verify transaction rollback behavior
