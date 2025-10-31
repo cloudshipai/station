@@ -114,7 +114,7 @@ func (e *GenKitExecutor) extractDotPromptMetadata(promptPath string) (app, appTy
 }
 
 // ExecuteAgent executes an agent using dotprompt.Execute() with registered MCP tools
-func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{}), environmentName string, userVariables map[string]interface{}) (*ExecutionResponse, error) {
+func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, agentTools []*models.AgentToolWithDetails, genkitApp *genkit.Genkit, mcpTools []ai.ToolRef, task string, logCallback func(map[string]interface{}), environmentName string, userVariables map[string]interface{}) (*ExecutionResponse, error) {
 	startTime := time.Now()
 	e.logCallback = logCallback
 
@@ -162,8 +162,8 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 	// Get model configuration
 	modelName := e.getModelName()
 
-	// Execute with dotprompt.Execute()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// Execute with dotprompt.Execute() - use parent context with 10-minute timeout
+	execCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
 	maxTurns := int(agent.MaxSteps)
@@ -180,7 +180,7 @@ func (e *GenKitExecutor) ExecuteAgent(agent models.Agent, agentTools []*models.A
 		}
 	}
 
-	resp, err := agentPrompt.Execute(ctx,
+	resp, err := agentPrompt.Execute(execCtx,
 		ai.WithInput(inputMap),
 		ai.WithMaxTurns(maxTurns),
 		ai.WithModelName(modelName))

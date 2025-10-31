@@ -285,8 +285,8 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		return nil, fmt.Errorf("failed to get environment (ID: %d) for agent %s: %w", agent.EnvironmentID, agent.Name, err)
 	}
 
-	// Use clean, unified dotprompt.Execute() execution path
-	response, err := executor.ExecuteAgent(*agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
+	// Use clean, unified dotprompt.Execute() execution path with context for timeout protection
+	response, err := executor.ExecuteAgent(ctx, *agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 
 	// Clean up MCP connections after execution is complete
 	aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)

@@ -1,5 +1,5 @@
 # Station Testing Progress Report
-*Generated: 2025-10-19 | Updated: 2025-10-28*
+*Generated: 2025-10-19 | Updated: 2025-10-31*
 
 ## Executive Summary
 
@@ -136,19 +136,20 @@ Successfully expanded comprehensive test suites across **25+ services**, improvi
 - 🐛 **BUG DISCOVERED**: AddMCPServerToEnvironment doesn't validate empty server names
 - 🐛 **BUG DISCOVERED**: GetMCPServersForEnvironment may not parse template.json correctly
 
-## Bugs Discovered
+## Bugs Discovered and Fixed
 
-### 1. Missing Agent Name Validation
-**Location**: `agent_service_impl.go:349` (`CreateAgent` method)
+### 1. Missing Agent Name Validation ✅ FIXED
+**Location**: `agent_service_impl.go:353-357` (`CreateAgent` method)
 **Severity**: Medium
-**Description**: CreateAgent method doesn't validate that agent name is non-empty, allowing creation of agents with empty string names which breaks filesystem exports.
+**Description**: CreateAgent method didn't validate that agent name is non-empty, allowing creation of agents with empty string names which breaks filesystem exports.
 **Evidence**: Test `TestCreateAgent/Create_agent_with_empty_name` expected error but creation succeeded.
-**Recommendation**: Add validation:
+**Fix Applied**: Added validation at line 355-357:
 ```go
 if config.Name == "" {
     return nil, fmt.Errorf("agent name cannot be empty")
 }
 ```
+**Status**: ✅ Fixed in commit (2025-10-31)
 
 ### 2. ExecuteAgent Nil Agent Panic
 **Location**: `agent_execution_engine.go:98`
@@ -267,6 +268,51 @@ The testing initiative has successfully:
 
 **Recommendation**: Continue testing initiative with focus on `declarative_sync` (872 lines) and `mcp_connection_manager` (535 lines) to reach 20% coverage target.
 
+## Recent Bug Fixes (2025-10-31)
+
+### Critical Execution Path Fixes
+
+#### 1. Variables Injection Bug Fix ✅
+**Files Modified**:
+- `pkg/dotprompt/genkit_executor.go:117, 174-181`
+- `internal/services/agent_execution_engine.go:289`
+
+**Problem**: MCP `call_agent` requests with `variables` parameter failed with "data did not match expected schema" errors because userVariables were extracted but not passed through to dotprompt template execution.
+
+**Solution**:
+- Added `userVariables map[string]interface{}` parameter to `ExecuteAgent` function
+- Merged userVariables into inputMap before passing to `dotprompt.Execute()`
+- Updated call site to pass userVariables parameter
+
+**Impact**: Agents with input schemas now work correctly with MCP call_agent requests.
+
+#### 2. Timeout Protection Fix ✅
+**Files Modified**:
+- `pkg/dotprompt/genkit_executor.go:117, 166`
+- `internal/services/agent_execution_engine.go:289`
+
+**Problem**: ExecuteAgent created new context with `context.Background()`, ignoring parent context timeouts and preventing proper cancellation handling.
+
+**Solution**:
+- Added `context.Context` parameter to `ExecuteAgent` function signature
+- Changed from `context.WithTimeout(context.Background(), 10*time.Minute)` to `context.WithTimeout(ctx, 10*time.Minute)`
+- Updated call site to pass context parameter
+
+**Impact**: Agent executions now respect parent context timeouts and cancellation signals properly.
+
+#### 3. Environment Validation Enhancement ✅
+**Files Modified**:
+- `internal/services/agent_service_impl.go:516-581`
+
+**Problem**: Tool assignment didn't validate that tools belong to the same environment as the agent, creating security and isolation risks.
+
+**Solution**:
+- Added `validateToolEnvironment` helper function that checks tool's MCP server environment
+- Updated `assignToolsToAgent` to validate each tool before assignment
+- Logs validation failures and continues processing other tools
+
+**Impact**: Enhanced security and proper tool isolation across environments (dev/staging/prod).
+
 ---
-*Last Updated: 2025-10-19*
+*Last Updated: 2025-10-31*
 *Continuous testing initiative for Station Platform*

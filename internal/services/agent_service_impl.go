@@ -514,11 +514,12 @@ func (s *AgentService) InitializeMCP(ctx context.Context) error {
 }
 
 // assignToolsToAgent assigns tools to an agent and returns the count of tools assigned
+// Environment validation ensures tools and agents exist in the same environment
 func (s *AgentService) assignToolsToAgent(agentID int64, toolNames []string, environmentID int64) int {
 	assignedCount := 0
 
 	for _, toolName := range toolNames {
-		// Try to find the tool in the MCP tools table
+		// Try to find the tool in the MCP tools table within the specified environment
 		tool, err := s.repos.MCPTools.FindByNameInEnvironment(environmentID, toolName)
 		if err != nil {
 			// Tool doesn't exist in MCP tools table, create it
@@ -535,6 +536,13 @@ func (s *AgentService) assignToolsToAgent(agentID int64, toolNames []string, env
 			tool = &models.MCPTool{ID: toolID, Name: toolName}
 		}
 
+		// Environment validation: Verify the tool belongs to the same environment as the agent
+		// This is critical for security and proper tool isolation across environments
+		if err := s.validateToolEnvironment(tool.ID, environmentID); err != nil {
+			log.Printf("Environment validation failed for tool %s (ID: %d): %v", toolName, tool.ID, err)
+			continue
+		}
+
 		// Assign the tool to the agent
 		_, err = s.repos.AgentTools.AddAgentTool(agentID, tool.ID)
 		if err != nil {
@@ -547,6 +555,29 @@ func (s *AgentService) assignToolsToAgent(agentID int64, toolNames []string, env
 	}
 
 	return assignedCount
+}
+
+// validateToolEnvironment verifies a tool belongs to the specified environment
+func (s *AgentService) validateToolEnvironment(toolID int64, expectedEnvironmentID int64) error {
+	// Get tool details to check its MCP server
+	tool, err := s.repos.MCPTools.GetByID(toolID)
+	if err != nil {
+		return fmt.Errorf("failed to get tool %d: %w", toolID, err)
+	}
+
+	// Get the MCP server for this tool to check its environment
+	server, err := s.repos.MCPServers.GetByID(tool.MCPServerID)
+	if err != nil {
+		return fmt.Errorf("failed to get MCP server %d for tool %d: %w", tool.MCPServerID, toolID, err)
+	}
+
+	// Validate environment matches
+	if server.EnvironmentID != expectedEnvironmentID {
+		return fmt.Errorf("tool %d belongs to environment %d but agent requires environment %d",
+			toolID, server.EnvironmentID, expectedEnvironmentID)
+	}
+
+	return nil
 }
 
 // GetExecutionEngine returns the execution engine for direct access (used by CLI)
