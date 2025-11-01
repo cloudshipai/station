@@ -436,6 +436,19 @@ Station automatically configures:
 
 ---
 
+## For Contributors
+
+If you're interested in contributing to Station or understanding the internals, comprehensive architecture documentation is available in the [`docs/architecture/`](./docs/architecture/) directory:
+
+- **[Architecture Index](./docs/architecture/ARCHITECTURE_INDEX.md)** - Quick navigation and key concepts reference
+- **[Architecture Diagrams](./docs/architecture/ARCHITECTURE_DIAGRAMS.md)** - Complete ASCII diagrams of all major systems and services
+- **[Architecture Analysis](./docs/architecture/ARCHITECTURE_ANALYSIS.md)** - Deep dive into design decisions and component organization
+- **[Component Interactions](./docs/architecture/COMPONENT_INTERACTIONS.md)** - Detailed sequence diagrams for key workflows
+
+These documents provide a complete understanding of Station's four-layer architecture, 43+ service modules, database schema, API endpoints, and execution flows.
+
+---
+
 ## License
 
 **Apache 2.0** - Free for all use, open source contributions welcome.
