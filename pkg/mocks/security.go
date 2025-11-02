@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -34,83 +35,74 @@ func NewGuardDutyMock() *MockServer {
 			},
 		},
 	}, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		entropy := NewEntropyHelper()
+
+		// Generate 2-4 random findings with variable data
+		numFindings := entropy.RandomInt(2, 5)
+		findings := make([]map[string]interface{}, numFindings)
+
+		findingTypes := []string{
+			"UnauthorizedAccess:EC2/SSHBruteForce",
+			"Recon:EC2/PortProbeUnprotectedPort",
+			"CryptoCurrency:EC2/BitcoinTool.B!DNS",
+			"Backdoor:EC2/C&CActivity.B!DNS",
+			"Trojan:EC2/BlackholeTraffic",
+			"UnauthorizedAccess:IAMUser/MaliciousIPCaller",
+		}
+
+		descriptions := []string{
+			"EC2 instance has been involved in SSH brute force attacks",
+			"EC2 instance is being probed on unprotected ports",
+			"EC2 instance is querying a domain associated with cryptocurrency mining",
+			"EC2 instance is attempting to communicate with C&C server",
+			"EC2 instance is attempting to communicate with a blackhole IP",
+			"IAM credentials are being used from a malicious IP address",
+		}
+
+		for i := 0; i < numFindings; i++ {
+			severity := entropy.RandomSeverity()
+			findingType := entropy.RandomChoice(findingTypes)
+			region := entropy.RandomAWSRegion()
+			instanceID := entropy.RandomInstanceID()
+			firstSeen := entropy.RandomDate(90)
+			lastSeen := entropy.RandomDate(7)
+
+			findings[i] = map[string]interface{}{
+				"finding_id": fmt.Sprintf("finding-%016x", entropy.RandomInt(1000000, 9999999)),
+				"type":       findingType,
+				"severity":   severity,
+				"region":     region,
+				"resource": map[string]interface{}{
+					"id":   instanceID,
+					"type": "Instance",
+					"tags": []map[string]string{
+						{"Key": "Environment", "Value": entropy.RandomChoice([]string{"production", "staging", "development"})},
+						{"Key": "Team", "Value": entropy.RandomChoice([]string{"platform", "backend", "infrastructure"})},
+					},
+				},
+				"service": map[string]interface{}{
+					"action": map[string]interface{}{
+						"action_type": entropy.RandomChoice([]string{"NETWORK_CONNECTION", "PORT_PROBE", "DNS_REQUEST"}),
+						"port_probe_action": map[string]interface{}{
+							"blocked": entropy.RandomBool(),
+							"port_probe_details": []map[string]interface{}{
+								{"local_port": entropy.RandomPort(), "remote_ip_details": map[string]interface{}{
+									"ip_address": entropy.RandomIP(),
+									"country":    entropy.RandomChoice([]string{"Unknown", "CN", "RU", "KP", "IR"}),
+								}},
+							},
+						},
+					},
+					"count": entropy.RandomInt(10, 2000),
+				},
+				"first_seen":  firstSeen.Format(time.RFC3339),
+				"last_seen":   lastSeen.Format(time.RFC3339),
+				"description": entropy.RandomChoice(descriptions) + ".",
+			}
+		}
+
 		data := map[string]interface{}{
-			"findings": []map[string]interface{}{
-				{
-					"finding_id": "finding-a1b2c3d4e5",
-					"type":       "UnauthorizedAccess:EC2/SSHBruteForce",
-					"severity":   "High",
-					"region":     "us-east-1",
-					"resource": map[string]interface{}{
-						"id":   "i-0123456789abcdef0",
-						"type": "Instance",
-						"tags": []map[string]string{
-							{"Key": "Environment", "Value": "production"},
-							{"Key": "Team", "Value": "platform"},
-						},
-					},
-					"service": map[string]interface{}{
-						"action": map[string]interface{}{
-							"action_type": "NETWORK_CONNECTION",
-							"port_probe_action": map[string]interface{}{
-								"blocked": false,
-								"port_probe_details": []map[string]interface{}{
-									{"local_port": 22, "remote_ip_details": map[string]interface{}{
-										"ip_address": "198.51.100.42",
-										"country":    "Unknown",
-									}},
-								},
-							},
-						},
-						"count": 127,
-					},
-					"first_seen":  time.Now().Add(-48 * time.Hour).Format(time.RFC3339),
-					"last_seen":   time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-					"description": "EC2 instance has been involved in SSH brute force attacks.",
-				},
-				{
-					"finding_id": "finding-f6g7h8i9j0",
-					"type":       "Recon:EC2/PortProbeUnprotectedPort",
-					"severity":   "Medium",
-					"region":     "us-west-2",
-					"resource": map[string]interface{}{
-						"id":   "i-9876543210fedcba0",
-						"type": "Instance",
-					},
-					"service": map[string]interface{}{
-						"action": map[string]interface{}{
-							"action_type": "PORT_PROBE",
-						},
-						"count": 43,
-					},
-					"first_seen":  time.Now().Add(-72 * time.Hour).Format(time.RFC3339),
-					"last_seen":   time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
-					"description": "EC2 instance is being probed on unprotected ports.",
-				},
-				{
-					"finding_id": "finding-k1l2m3n4o5",
-					"type":       "CryptoCurrency:EC2/BitcoinTool.B!DNS",
-					"severity":   "Critical",
-					"region":     "us-east-1",
-					"resource": map[string]interface{}{
-						"id":   "i-abcd1234efgh5678",
-						"type": "Instance",
-					},
-					"service": map[string]interface{}{
-						"action": map[string]interface{}{
-							"action_type": "DNS_REQUEST",
-							"dns_request_action": map[string]interface{}{
-								"domain":  "pool.minergate.com",
-								"blocked": false,
-							},
-						},
-						"count": 1523,
-					},
-					"first_seen":  time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
-					"last_seen":   time.Now().Add(-10 * time.Minute).Format(time.RFC3339),
-					"description": "EC2 instance is querying a domain associated with cryptocurrency mining.",
-				},
-			},
+			"findings": findings,
 		}
 		return SuccessResult(data)
 	})
