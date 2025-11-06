@@ -87,8 +87,11 @@ stn up --provider anthropic --api-key sk-ant-...
 # Google Gemini
 stn up --provider gemini --api-key your-key --model gemini-2.0-flash-exp
 
-# Custom provider (Ollama, etc.)
-stn up --provider custom --base-url http://localhost:11434/v1 --model llama3.2
+# Meta Llama (OpenAI-compatible endpoint)
+stn up --provider openai --api-key LLM-your-key --base-url https://api.llama.com/compat/v1 --model Llama-4-Maverick-17B-128E-Instruct-FP8
+
+# Ollama (local models)
+stn up --provider openai --base-url http://localhost:11434/v1 --model llama3.2
 
 # Alternative: Use environment variable instead of --api-key flag
 export OPENAI_API_KEY=sk-your-key-here
