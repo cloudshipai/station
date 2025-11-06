@@ -395,6 +395,63 @@ Station automatically configures:
 
 ---
 
+## Observability & Distributed Tracing
+
+Station includes built-in OpenTelemetry (OTEL) support for complete execution observability:
+
+**What Gets Traced:**
+- **Agent Executions**: Complete timeline from start to finish
+- **LLM Calls**: Every OpenAI/Anthropic/Gemini API call with latency
+- **MCP Tool Usage**: Individual tool calls to AWS, Stripe, GitHub, etc.
+- **Database Operations**: Query performance and data access patterns
+- **GenKit Native Spans**: Dotprompt execution, generation flow, model interactions
+
+**Quick Start with Jaeger:**
+```bash
+# Start Jaeger locally
+make jaeger
+
+# Configure Station
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+stn serve
+
+# Run agent and view traces
+stn agent run my-agent "Analyze costs"
+open http://localhost:16686
+```
+
+**Team Integration Examples:**
+- **Jaeger** - Open source tracing (local development)
+- **Grafana Tempo** - Scalable distributed tracing
+- **Datadog APM** - Full-stack observability platform
+- **Honeycomb** - Advanced trace analysis with BubbleUp
+- **New Relic** - Application performance monitoring
+- **AWS X-Ray** - AWS-native distributed tracing
+
+**Span Details Captured:**
+```
+aws-cost-spike-analyzer (18.2s)
+├─ generate (17ms)
+│  ├─ openai/gpt-4o-mini (11ms) - "Analyze cost data"
+│  └─ __get_cost_anomalies (0ms) - AWS Cost Explorer
+├─ generate (11ms)
+│  └─ __get_cost_and_usage_comparisons (0ms)
+└─ db.agent_runs.create (0.1ms)
+```
+
+**Configuration:**
+```bash
+# Environment variable (recommended)
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
+
+# Or config file
+otel_endpoint: "http://your-collector:4318"
+```
+
+[Complete OTEL Setup Guide →](./docs/OTEL_SETUP.md) - Includes Jaeger, Tempo, Datadog, Honeycomb, AWS X-Ray, New Relic, Azure Monitor examples
+
+---
+
 ## Use Cases
 
 **FinOps & Cost Optimization:**
