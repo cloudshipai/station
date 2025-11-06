@@ -154,6 +154,7 @@ require (
 
 require (
 	dagger.io/dagger v0.18.16
+	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0

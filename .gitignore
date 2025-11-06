@@ -1,3 +1,24 @@
+# ========================================
+# Repository Size Policy
+# ========================================
+# This repository enforces a 1MB file size limit to prevent bloat.
+#
+# History: In Nov 2024, we cleaned the repo from 240MB to 26MB by removing
+# accidentally committed node_modules (docs/site/node_modules/).
+#
+# Enforcement:
+# - Pre-commit hook blocks files >1MB locally (.git/hooks/pre-commit)
+# - GitHub Actions check blocks large files in PRs
+#
+# If you need to commit large files:
+# - Use .gitignore for build artifacts (node_modules, binaries, etc.)
+# - Use Git LFS for binary assets (images, videos, datasets)
+# - Host externally for very large files (S3, CDN, package registries)
+#
+# To bypass the pre-commit hook (NOT recommended):
+# git commit --no-verify
+# ========================================
+
 # Binaries for programs and plugins - NEVER commit binaries to git
 *.exe
 *.exe~

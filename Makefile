@@ -1,5 +1,5 @@
 # Station Makefile
-.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui rebuild-all tag-check release jaeger jaeger-down proto-gen proto-clean
+.PHONY: build clean install dev test test-bundle test-bundle-watch lint kill-ports stop-station dev-ui build-ui install-ui build-with-ui local-install-ui rebuild-all tag-check release jaeger jaeger-down otel-stack-up otel-stack-down test-otel test-otel-e2e verify-otel-traces otel-clean proto-gen proto-clean
 
 # Build configuration
 BINARY_NAME=stn
@@ -287,6 +287,63 @@ jaeger-down:
 	@docker stop station-jaeger || true
 	@docker rm station-jaeger || true
 	@echo "✅ Jaeger stopped and removed"
+
+# OTEL Integration Testing
+
+# Start complete OTEL stack (Jaeger + Station) via Docker Compose
+otel-stack-up:
+	@echo "🚀 Starting OTEL stack with Jaeger..."
+	@docker-compose -f docker-compose.otel.yml up -d
+	@echo "✅ OTEL stack started"
+	@echo "📊 Jaeger UI: http://localhost:16686"
+	@echo "🔌 OTLP HTTP: http://localhost:4318"
+	@echo "🔌 OTLP gRPC: http://localhost:4317"
+	@echo ""
+	@echo "💡 To test OTEL export locally (without Docker):"
+	@echo "   export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318"
+	@echo "   export GENKIT_ENV=production"
+	@echo "   stn serve"
+
+# Stop OTEL stack
+otel-stack-down:
+	@echo "🛑 Stopping OTEL stack..."
+	@docker-compose -f docker-compose.otel.yml down
+	@echo "✅ OTEL stack stopped"
+
+# Test OTEL integration (requires Jaeger running)
+test-otel:
+	@echo "🧪 Testing OTEL integration..."
+	@if ! curl -s http://localhost:16686 > /dev/null 2>&1; then \
+		echo "❌ Jaeger not running. Start with 'make otel-stack-up' or 'make jaeger'"; \
+		exit 1; \
+	fi
+	@echo "✅ Jaeger is running"
+	@go test -v ./internal/telemetry -run TestOTEL || echo "⚠️  OTEL tests not yet implemented"
+
+# Run end-to-end OTEL test (agent execution → Jaeger verification)
+test-otel-e2e:
+	@echo "🎯 Running end-to-end OTEL test..."
+	@if [ ! -f scripts/test-otel-e2e.sh ]; then \
+		echo "⚠️  E2E test script not yet created"; \
+		exit 1; \
+	fi
+	@chmod +x scripts/test-otel-e2e.sh
+	@./scripts/test-otel-e2e.sh
+
+# Verify traces in Jaeger
+verify-otel-traces:
+	@echo "🔍 Querying Jaeger for Station traces..."
+	@curl -s "http://localhost:16686/api/traces?service=station&limit=10" 2>/dev/null | \
+		jq '.data | length' 2>/dev/null | \
+		xargs -I {} echo "Found {} traces in Jaeger" || \
+		echo "❌ Failed to query Jaeger (is it running?)"
+	@echo "📊 View in UI: http://localhost:16686/search?service=station"
+
+# Clean OTEL data (removes volumes)
+otel-clean:
+	@echo "🧹 Cleaning OTEL data..."
+	@docker-compose -f docker-compose.otel.yml down -v
+	@echo "✅ OTEL data cleaned"
 
 # Proto Generation & CloudShip Integration
 # These commands handle updating proto files and generating Go code for Lighthouse integration

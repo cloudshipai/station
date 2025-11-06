@@ -77,7 +77,14 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		mcpConnManager:           mcpConnManager,
 		lighthouseClient:         lighthouseClient,
 		deploymentContextService: NewDeploymentContextService(),
+		telemetryService:         nil, // Set via SetTelemetryService() after construction
 	}
+}
+
+// SetTelemetryService sets the OTEL telemetry service for distributed tracing
+func (aee *AgentExecutionEngine) SetTelemetryService(ts *TelemetryService) {
+	aee.telemetryService = ts
+	logging.Debug("OTEL telemetry service configured for agent execution engine")
 }
 
 // ExecuteAgent executes an agent using the unified execution architecture

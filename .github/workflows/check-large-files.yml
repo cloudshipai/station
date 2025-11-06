@@ -1,0 +1,99 @@
+name: Check Large Files
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  check-file-sizes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for accurate size checking
+
+      - name: Check for large files
+        run: |
+          #!/bin/bash
+
+          # Maximum file size in bytes (1MB = 1048576 bytes)
+          MAX_SIZE=1048576
+
+          echo "🔍 Checking for large files (>1MB)..."
+          echo ""
+
+          # Get list of files changed in this PR/push
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # For PRs, check all files changed between base and head
+            files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          else
+            # For pushes, check files in the latest commit
+            files=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }})
+          fi
+
+          # Track if any large files found
+          large_files_found=0
+
+          for file in $files; do
+            # Skip if file doesn't exist (deleted files)
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+
+            # Get file size in bytes
+            file_size=$(stat -c%s "$file")
+
+            # Check if file exceeds size limit
+            if [ "$file_size" -gt "$MAX_SIZE" ]; then
+              large_files_found=1
+              file_size_mb=$(echo "scale=2; $file_size / 1048576" | bc)
+              echo "❌ ERROR: File exceeds 1MB limit: $file (${file_size_mb}MB)"
+            fi
+          done
+
+          # If large files found, fail the check
+          if [ "$large_files_found" -eq 1 ]; then
+            echo ""
+            echo "❌ Large files detected in this PR!"
+            echo ""
+            echo "Large files should be:"
+            echo "  • Added to .gitignore if they're build artifacts"
+            echo "  • Stored in Git LFS for binary assets"
+            echo "  • Hosted externally for very large files"
+            echo ""
+            echo "This prevents repository bloat and keeps clones fast."
+            exit 1
+          fi
+
+          echo "✅ All files are within size limits"
+          exit 0
+
+      - name: Comment on PR (if failed)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ⚠️ Large Files Detected
+
+This PR contains files larger than 1MB, which can cause repository bloat.
+
+**What to do:**
+- If these are build artifacts (node_modules, binaries, etc.), add them to \`.gitignore\`
+- If these are binary assets (images, videos, etc.), consider using [Git LFS](https://git-lfs.github.com/)
+- If these are large data files, host them externally or use a data storage service
+
+**Why this matters:**
+The station repository was recently cleaned from 240MB to 26MB by removing accidentally committed \`node_modules\`. This check prevents similar issues in the future.
+
+See the workflow run for details: ${context.payload.pull_request.html_url}/checks`
+            })

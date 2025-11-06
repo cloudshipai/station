@@ -8,6 +8,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/logging"
+	"station/internal/services"
 	"station/internal/telemetry"
 	"station/internal/theme"
 	"station/internal/version"
@@ -18,10 +19,11 @@ import (
 )
 
 var (
-	cfgFile          string
-	themeManager     *theme.ThemeManager
-	telemetryService *telemetry.TelemetryService
-	rootCmd          = &cobra.Command{
+	cfgFile              string
+	themeManager         *theme.ThemeManager
+	telemetryService     *telemetry.TelemetryService     // PostHog analytics
+	otelTelemetryService *services.TelemetryService      // OTEL distributed tracing
+	rootCmd              = &cobra.Command{
 		Use:   "stn",
 		Short: "Station - AI Agent Management Platform",
 		Long: `Station is a secure, self-hosted platform for managing AI agents with MCP tool integration.
@@ -35,6 +37,7 @@ func init() {
 	cobra.OnInitialize(initLogging)
 	cobra.OnInitialize(initTheme)
 	cobra.OnInitialize(initTelemetry)
+	cobra.OnInitialize(initOTELTelemetry)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/station/config.yaml)")
@@ -55,6 +58,7 @@ func init() {
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(mockCmd)
+	rootCmd.AddCommand(fakerCmd)
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 
@@ -270,6 +274,51 @@ func initTelemetry() {
 	telemetryService = telemetry.NewTelemetryService(cfg.TelemetryEnabled)
 }
 
+func initOTELTelemetry() {
+	// Load config to check OTEL settings
+	cfg, err := config.Load()
+	if err != nil {
+		logging.Debug("Failed to load config for OTEL telemetry: %v", err)
+		return
+	}
+
+	// Check if OTEL endpoint is configured
+	endpoint := cfg.OTELEndpoint
+	if endpoint == "" {
+		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
+
+	if endpoint == "" {
+		logging.Debug("OTEL not configured (no endpoint), skipping distributed tracing")
+		return
+	}
+
+	// Determine environment from config or default to development
+	environment := "development"
+	if cfg.CloudShip.RegistrationKey != "" {
+		environment = "production"
+	}
+
+	// Create OTEL telemetry configuration
+	otelConfig := &services.TelemetryConfig{
+		Enabled:      true,
+		OTLPEndpoint: endpoint,
+		ServiceName:  "station",
+		Environment:  environment,
+	}
+
+	// Initialize OTEL telemetry service
+	otelTelemetryService = services.NewTelemetryService(otelConfig)
+	err = otelTelemetryService.Initialize(context.Background())
+	if err != nil {
+		logging.Info("Failed to initialize OTEL telemetry: %v", err)
+		otelTelemetryService = nil
+		return
+	}
+
+	logging.Debug("OTEL telemetry initialized successfully (endpoint: %s, service: %s)", endpoint, otelConfig.ServiceName)
+}
+
 func getXDGConfigDir() string {
 	// Check for explicit STATION_CONFIG_DIR override first
 	// This should be the complete path including 'station' suffix
@@ -341,6 +390,15 @@ func main() {
 	// Cleanup telemetry
 	if telemetryService != nil {
 		telemetryService.Close()
+	}
+
+	// Cleanup OTEL telemetry
+	if otelTelemetryService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelTelemetryService.Shutdown(ctx); err != nil {
+			logging.Debug("Failed to shutdown OTEL telemetry: %v", err)
+		}
 	}
 
 	// CloudShip cleanup is now handled by individual command contexts
