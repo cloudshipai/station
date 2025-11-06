@@ -1,8 +1,8 @@
 # Station Zero-to-Hero Development PRD
 
-**Version**: 1.0
+**Version**: 1.1
 **Last Updated**: 2025-01-06
-**Status**: Draft
+**Status**: In Progress
 
 ---
 
@@ -99,7 +99,8 @@ func launchGenkitUI(port int) error {
 ### Acceptance Criteria
 
 - [ ] `stn develop` auto-launches GenKit UI at configurable port
-- [ ] OpenAI-compatible endpoints work with Llama/Ollama
+- [x] OpenAI-compatible endpoints work with Llama/Ollama (✅ Tested with Llama-4-Maverick)
+- [x] Multi-model support documented (✅ docs/MULTI_MODEL_SUPPORT.md)
 - [ ] All MCP tools appear in GenKit Developer UI
 - [ ] Agent schemas render correctly in UI
 - [ ] Hot-reload works for prompt file modifications
@@ -264,12 +265,15 @@ stn eval compare run-123 run-456
 
 ## Section 3: OpenTelemetry Tracing Integration
 
-### Current State
-- ✅ OTEL setup code exists (`internal/telemetry/otel_plugin.go`)
-- ✅ Genkit telemetry client exists (`internal/telemetry/genkit_telemetry_client.go`)
-- ⚠️ GenKit v1.0.1 removed `RegisterSpanProcessor` API
-- ❌ No working OTEL export to Jaeger/Grafana
-- ❌ No trace correlation between agent runs
+### Current State ✅ COMPLETED
+- ✅ OTEL telemetry service implemented (`internal/services/telemetry.go`)
+- ✅ Integration wired into main.go with global lifecycle management
+- ✅ Agent execution engine OTEL support with SetTelemetryService()
+- ✅ Jaeger integration working (localhost:16686)
+- ✅ Tests passing (6 OTEL tests including nil safety)
+- ✅ Documentation complete (`docs/OTEL_SETUP.md` - 640+ lines)
+- ✅ GenKit native spans + Station custom spans captured
+- ✅ Trace correlation across agent runs and MCP tool calls
 
 ### Goals
 
@@ -353,13 +357,14 @@ func (m *MCPConnectionManager) CallToolWithTracing(ctx context.Context, tool str
 
 ### Acceptance Criteria
 
-- [ ] `make jaeger` starts Jaeger with OTLP support
-- [ ] Agent executions appear in Jaeger UI
-- [ ] MCP tool calls shown as child spans
-- [ ] Trace search works by agent name
-- [ ] Span attributes include useful debugging info
-- [ ] No GenKit v1.0.1 compatibility errors
-- [ ] OTEL export works in `stn develop` mode
+- [x] `make jaeger` starts Jaeger with OTLP support
+- [x] Agent executions appear in Jaeger UI
+- [x] MCP tool calls shown as child spans
+- [x] Trace search works by agent name
+- [x] Span attributes include useful debugging info
+- [x] No GenKit v1.0.3 compatibility errors
+- [x] OTEL export works with `stn serve`
+- [x] Documentation covers Jaeger, Tempo, Datadog, Honeycomb, AWS X-Ray, New Relic, Azure Monitor
 
 ### Testability
 
@@ -391,31 +396,158 @@ func (m *MCPConnectionManager) CallToolWithTracing(ctx context.Context, tool str
 - ✅ Schema learning and caching
 - ✅ Enricher with pattern detection
 - ✅ CLI command `stn faker`
+- ✅ 50+ instruction templates for domain-specific scenarios
 - ⚠️ Limited to stdio mode
+- ⚠️ Hardcoded to Google GenAI (should use Station's multi-model system)
+- ❌ No testing with real MCP servers requiring credentials
+- ❌ No end-to-end validation with real agent execution
 - ❌ No per-tool schema tracking
 - ❌ No schema seeding capability
 
 ### Goals
 
-**G4.1: Per-Tool Schema Tracking**
+**G4.1: Multi-Model AI Provider Integration** 🔴 CRITICAL
+- Replace hardcoded Google GenAI with Station's GenKitProvider system
+- Support same AI providers as agent execution (OpenAI, Llama, Gemini, Ollama)
+- Use same config mechanism: AIProvider, AIBaseURL, AIAPIKey, AIModel
+- No separate AI configuration for faker
+
+**G4.2: Real MCP Server Testing** 🔴 CRITICAL
+- Test faker proxy with real MCP servers requiring credentials (AWS, Datadog, Stripe)
+- Verify schema learning from actual API responses
+- Validate AI enrichment produces structurally correct responses
+- Prove agent receives and processes enriched data correctly
+
+**G4.3: End-to-End Faker Workflow Validation** 🔴 CRITICAL
+- Full flow: agent calls tool → faker proxies to real MCP → captures schema → AI enriches → agent receives response
+- Verify enriched responses match real tool response structures
+- Enable realistic scenario testing: high traffic, alerts, security vulnerabilities, log analysis
+- Test agent behavior and tool selection with enriched data
+
+**G4.4: Per-Tool Schema Tracking**
 - Learn schemas per MCP tool (not generic)
 - Store tool-specific response patterns
 - Better mock data accuracy per tool
 
-**G4.2: Schema Seeding from JSON Schema**
+**G4.5: Schema Seeding from JSON Schema**
 - Import JSON Schema definitions
 - Seed faker cache without real API calls
 - Enable offline-first development
 
-**G4.3: Production-Grade Proxy Features**
-- Request/response logging
+**G4.6: Production-Grade Proxy Features**
+- Request/response logging with OTEL tracing
 - Error handling and retry logic
 - Schema versioning
 - Manual schema editing UI
 
 ### Technical Implementation
 
-**T4.1: Per-Tool Schema Storage**
+**T4.1: Multi-Model AI Provider Integration** 🔴 CRITICAL
+```go
+// pkg/faker/enricher.go - BEFORE (Hardcoded Google GenAI)
+client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: config.APIKey})
+
+// pkg/faker/enricher.go - AFTER (Use Station's GenKitProvider)
+import "github.com/cloudship-ai/station/internal/services"
+
+type Enricher struct {
+    config       *Config
+    genkitEngine *services.GenKitProvider  // Use Station's AI provider
+    schemaCache  *SchemaCache
+}
+
+func NewEnricher(cfg *Config, stationConfig *config.Config) (*Enricher, error) {
+    // Use Station's existing AI provider system
+    genkitProvider, err := services.NewGenKitProvider(stationConfig)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create GenKit provider: %w", err)
+    }
+
+    return &Enricher{
+        config:       cfg,
+        genkitEngine: genkitProvider,
+        schemaCache:  NewSchemaCache(cfg.CacheDir),
+    }, nil
+}
+
+// Enrichment now uses Station's multi-model system
+func (e *Enricher) EnrichWithAI(ctx context.Context, schema Schema, instruction string) (interface{}, error) {
+    prompt := e.buildPrompt(schema, instruction)
+    response, err := e.genkitEngine.Generate(ctx, prompt)
+    if err != nil {
+        return nil, err
+    }
+    return e.parseResponse(response)
+}
+```
+
+**T4.2: Real MCP Server Testing** 🔴 CRITICAL
+```bash
+# Test with AWS Cost Explorer MCP server
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+
+# Start faker proxy with real AWS MCP server
+stn faker \
+  --command "npx" \
+  --args "@aws-sdk/mcp-server-cost-explorer" \
+  --ai-enabled \
+  --ai-template "financial" \
+  --debug
+
+# Verify schema learning from real AWS responses
+cat ~/.cache/station/faker/aws_get_cost_and_usage.json
+
+# Test with Datadog MCP server
+export DD_API_KEY="..."
+export DD_APP_KEY="..."
+
+stn faker \
+  --command "datadog-mcp-server" \
+  --ai-enabled \
+  --ai-template "monitoring" \
+  --debug
+```
+
+**T4.3: End-to-End Faker Validation** 🔴 CRITICAL
+```go
+// Create test environment with faker proxy
+// ~/.config/station/environments/faker-test/template.json
+{
+  "mcpServers": {
+    "aws-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--command", "npx",
+        "--args", "@aws-sdk/mcp-server-cost-explorer",
+        "--ai-enabled",
+        "--ai-template", "financial"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}"
+      }
+    }
+  }
+}
+
+// Test agent execution with faker proxy
+stn agent call "AWS Cost Analyzer" \
+  "Analyze cost spike in production environment" \
+  --env faker-test \
+  --tail
+
+// Verification points:
+// 1. Agent calls aws_get_cost_and_usage tool
+// 2. Faker proxy forwards to real AWS API
+// 3. Faker captures real response schema
+// 4. AI enriches response with realistic data
+// 5. Agent receives structurally correct response
+// 6. Agent makes informed tool decisions based on enriched data
+```
+
+**T4.4: Per-Tool Schema Storage**
 ```go
 // pkg/faker/schema.go
 type ToolSchema struct {
@@ -452,6 +584,18 @@ func (e *Enricher) EnrichResponse(toolName string, response interface{}) interfa
 
 ### Acceptance Criteria
 
+**Critical (Must Have)**:
+- [ ] 🔴 Faker uses Station's GenKitProvider (supports OpenAI, Llama, Gemini, Ollama)
+- [ ] 🔴 No hardcoded AI provider dependencies
+- [ ] 🔴 Tested with real AWS Cost Explorer MCP server
+- [ ] 🔴 Tested with real Datadog MCP server
+- [ ] 🔴 Schema learning works from real API responses
+- [ ] 🔴 AI enrichment produces structurally correct responses
+- [ ] 🔴 End-to-end flow validated: agent → faker → real MCP → enriched response → agent
+- [ ] 🔴 Agent makes correct tool decisions with enriched data
+- [ ] 🔴 OTEL tracing captures faker proxy spans
+
+**Important (Should Have)**:
 - [ ] Faker proxy learns per-tool schemas
 - [ ] Schema cache organized by tool name
 - [ ] Schema seeding from JSON Schema works
@@ -459,25 +603,32 @@ func (e *Enricher) EnrichResponse(toolName string, response interface{}) interfa
 - [ ] Schema export for sharing/versioning
 - [ ] Debug mode shows schema learning in real-time
 
+**Nice to Have**:
+- [ ] Realistic scenario testing: high traffic, alerts, vulnerabilities
+- [ ] Schema versioning support
+- [ ] Manual schema editing UI
+
 ### Testability
 
 **Unit Tests**:
-- Test per-tool schema storage
-- Test schema seeding from JSON
-- Test enricher with tool-specific schemas
+- Test EvalRunner with mock scenarios
+- Test eval metric calculation
+- Test output validators
+- Test faker proxy integration
 
 **Integration Tests**:
 - Run `make local-install-ui && stn serve &`
-- Start faker proxy with real MCP server
-- Execute tool calls and verify schema learning
-- Seed schema from JSON and verify enrichment
-- Export schemas and reimport
+- Create test agent with eval scenarios
+- Run `stn eval run test-agent --mode mock`
+- Verify results stored in database
+- Verify faker proxy enriches responses
 
 **Manual UAT**:
-- Use faker with AWS Cost Explorer
-- Verify per-tool schemas learned correctly
-- Seed schemas for offline development
-- Test enriched responses match real patterns
+- Run evals with real AWS tools
+- Run evals with mocked AWS tools
+- Run evals with faker proxy
+- Compare results across modes
+- Verify metrics accuracy
 
 ---
 
@@ -717,41 +868,62 @@ git push origin main
 
 ## Implementation Roadmap
 
-### Phase 1: Core Development Experience (Week 1-2)
-- [ ] Fix GenKit v1.0.1 OTEL integration
-- [ ] Add OpenAI-compatible provider support
+### Phase 1: Faker Proxy Production Readiness 🔴 CRITICAL PRIORITY
+- [ ] 🔴 Replace Google GenAI with Station's GenKitProvider
+- [ ] 🔴 Test with real AWS Cost Explorer MCP server
+- [ ] 🔴 Test with real Datadog MCP server
+- [ ] 🔴 End-to-end validation: agent → faker → real MCP → enriched response
+- [ ] 🔴 OTEL tracing for faker proxy spans
+- [ ] Per-tool schema tracking
+- [ ] Schema seeding from JSON
+- [ ] Schema export/import
+
+### Phase 2: Development Experience (Week 2-3)
 - [ ] Implement `stn develop` auto-launch
 - [ ] Add hot-reload for prompt files
+- [ ] GenKit Developer UI integration
+- [ ] Enhanced debugging experience
 
-### Phase 2: Eval Framework (Week 3-4)
+### Phase 3: Eval Framework (Week 4-5)
 - [ ] Build eval runner service
 - [ ] Implement eval database schema
 - [ ] Create eval CLI commands
 - [ ] Integrate faker proxy with evals
+- [ ] LLM-as-judge for response quality
 
-### Phase 3: Observability (Week 5-6)
-- [ ] Fix OTEL span export
-- [ ] Add Jaeger integration
-- [ ] Implement agent execution tracing
-- [ ] Add MCP tool call tracing
-
-### Phase 4: Faker Proxy Enhancement (Week 7)
-- [ ] Per-tool schema tracking
-- [ ] Schema seeding from JSON
-- [ ] Enhanced enricher
-- [ ] Schema export/import
-
-### Phase 5: CICD Integration (Week 8)
+### Phase 4: CICD Integration (Week 6)
 - [ ] GitHub Actions eval workflow
 - [ ] Bundle testing workflow
 - [ ] PR comment integration
 - [ ] Performance tracking
 
-### Phase 6: Documentation & Onboarding (Week 9-10)
+### Phase 5: Benchmarking & Advanced Evals (Week 7-8)
+- [ ] Agent team benchmarking framework
+- [ ] Realistic scenario generators (high-traffic, security-vuln, alert-storm)
+- [ ] Comparative performance analysis
+- [ ] Multi-agent coordination testing
+
+### Phase 6: Documentation & Onboarding (Week 9)
 - [ ] Zero-to-hero tutorial
 - [ ] Video walkthroughs
 - [ ] Example agent bundles
 - [ ] Troubleshooting guides
+
+---
+
+## Completed Phases
+
+### ✅ Core Observability (COMPLETED)
+- [x] Fix GenKit v1.0.3 OTEL integration
+- [x] Add Jaeger integration
+- [x] Implement agent execution tracing
+- [x] Add MCP tool call tracing
+- [x] Documentation for Jaeger, Tempo, Datadog, Honeycomb, AWS X-Ray
+
+### ✅ Multi-Model Support (COMPLETED)
+- [x] Add OpenAI-compatible provider support (Llama, Ollama)
+- [x] Multi-model AI support documentation (340 lines)
+- [x] Tested with Llama-4-Maverick-17B-128E-Instruct-FP8
 
 ---
 
