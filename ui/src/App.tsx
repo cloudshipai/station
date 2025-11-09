@@ -39,6 +39,7 @@ import { CopyEnvironmentModal } from './components/modals/CopyEnvironmentModal';
 import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
 import { HierarchicalAgentNode } from './components/nodes/HierarchicalAgentNode';
 import { buildAgentHierarchyMap } from './utils/agentHierarchy';
+import { AgentsCanvas as AgentsCanvasComponent } from './components/agents/AgentsCanvas';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -362,7 +363,14 @@ const Layout = ({ children }: any) => {
   );
 };
 
+// Wrapper for modular AgentsCanvas component
 const AgentsCanvas = () => {
+  const environmentContext = React.useContext(EnvironmentContext);
+  return <AgentsCanvasComponent environmentContext={environmentContext} />;
+};
+
+// Old implementation (kept for reference, can be removed later)
+const AgentsCanvasOld = () => {
   const navigate = useNavigate();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
@@ -462,22 +470,56 @@ const AgentsCanvas = () => {
       const response = await agentsApi.getWithTools(agentId);
       const { agent, mcp_servers } = response.data;
 
+      // Fetch agent prompt to extract agent tools from YAML frontmatter
+      let agentToolsFromPrompt: string[] = [];
+      try {
+        const promptResponse = await agentsApi.getPrompt(agentId);
+        const promptContent = promptResponse.data.content;
+        
+        // Parse YAML frontmatter to extract tools list
+        const yamlMatch = promptContent.match(/^---\n([\s\S]*?)\n---/);
+        if (yamlMatch) {
+          const yamlContent = yamlMatch[1];
+          const toolsMatch = yamlContent.match(/tools:\s*\n((?:\s*-\s*"[^"]+"\s*\n)+)/);
+          if (toolsMatch) {
+            agentToolsFromPrompt = toolsMatch[1]
+              .split('\n')
+              .filter(line => line.trim().startsWith('-'))
+              .map(line => line.trim().replace(/^-\s*"/, '').replace(/"$/, ''))
+              .filter(name => name.length > 0);
+          }
+        }
+      } catch (error) {
+        console.warn('Could not parse agent tools from prompt:', error);
+      }
+
       // Build agent tools map and collect all tools for hierarchy detection
       const agentToolsMap = new Map();
       const allTools: any[] = [];
       
+      // Add tools from MCP servers
       mcp_servers.forEach((server: any) => {
         if (server.tools) {
           const existingTools = agentToolsMap.get(agent.id) || [];
           agentToolsMap.set(agent.id, [...existingTools, ...server.tools]);
-          // Collect all tools from this agent's MCP servers
           allTools.push(...server.tools);
         }
       });
 
+      // Add agent tools from prompt (for agent-to-agent calling)
+      if (agentToolsFromPrompt.length > 0) {
+        const existingTools = agentToolsMap.get(agent.id) || [];
+        const agentToolObjects = agentToolsFromPrompt.map(name => ({
+          id: 0, // Virtual tool, no real ID
+          name: name,
+          description: `Agent tool: ${name}`,
+          mcp_server_id: 0
+        }));
+        agentToolsMap.set(agent.id, [...existingTools, ...agentToolObjects]);
+        allTools.push(...agentToolObjects);
+      }
+
       // Build hierarchy map with all agents
-      // Note: This only detects hierarchies within current agent's tools
-      // For full cross-agent hierarchy, we'd need all tools from all agents
       const hierarchyMap = buildAgentHierarchyMap(agents, agentToolsMap, allTools);
       const hierarchyInfo = hierarchyMap.get(agent.id);
 
@@ -565,6 +607,46 @@ const AgentsCanvas = () => {
           });
         }
       });
+
+      // Add child agent nodes if this is an orchestrator
+      if (hierarchyInfo && hierarchyInfo.childAgents.length > 0) {
+        hierarchyInfo.childAgents.forEach((childAgentName) => {
+          // Find the child agent in the agents list
+          const childAgent = agents.find(a => 
+            normalizeAgentName(a.name) === childAgentName
+          );
+          
+          if (childAgent) {
+            // Create a node for the child agent
+            newNodes.push({
+              id: `child-agent-${childAgent.id}`,
+              type: 'agent',
+              position: { x: 0, y: 0 }, // ELK will position this
+              data: {
+                agent: childAgent,
+                hierarchyInfo: hierarchyMap.get(childAgent.id),
+                onOpenModal: openAgentModal,
+                onEditAgent: editAgent,
+              },
+            });
+
+            // Edge from orchestrator to child agent
+            newEdges.push({
+              id: `edge-agent-${agent.id}-to-child-${childAgent.id}`,
+              source: `agent-${agent.id}`,
+              target: `child-agent-${childAgent.id}`,
+              animated: true,
+              style: {
+                stroke: '#a855f7',
+                strokeWidth: 3,
+                filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.8))'
+              },
+              type: 'default',
+              className: 'neon-edge-agent',
+            });
+          }
+        });
+      }
 
       // Apply automatic layout using ELK.js
       const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
