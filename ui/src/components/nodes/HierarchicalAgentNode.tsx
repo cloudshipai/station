@@ -84,13 +84,15 @@ export const HierarchicalAgentNode: React.FC<HierarchicalAgentNodeProps> = ({ da
             )}
           />
         )}
-        {isOrchestrator && (
-          <Handle 
-            type="source" 
-            position={Position.Right} 
-            className="w-3 h-3 bg-tokyo-purple border-2 border-tokyo-bg"
-          />
-        )}
+        {/* Always show source handle for MCP server connections */}
+        <Handle 
+          type="source" 
+          position={Position.Right} 
+          className={cn(
+            "w-3 h-3 border-2 border-tokyo-bg",
+            isOrchestrator ? "bg-tokyo-purple" : "bg-tokyo-blue"
+          )}
+        />
 
         {/* Action Buttons - Top Right */}
         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
