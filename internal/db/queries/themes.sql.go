@@ -167,7 +167,7 @@ func (q *Queries) GetDefaultThemeWithColors(ctx context.Context) ([]GetDefaultTh
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []GetDefaultThemeWithColorsRow
 	for rows.Next() {
 		var i GetDefaultThemeWithColorsRow
@@ -268,7 +268,7 @@ func (q *Queries) GetThemeColors(ctx context.Context, themeID int64) ([]ThemeCol
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []ThemeColor
 	for rows.Next() {
 		var i ThemeColor
@@ -367,7 +367,7 @@ func (q *Queries) GetUserThemeWithColors(ctx context.Context, userID int64) ([]G
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []GetUserThemeWithColorsRow
 	for rows.Next() {
 		var i GetUserThemeWithColorsRow
@@ -405,7 +405,7 @@ func (q *Queries) ListBuiltInThemes(ctx context.Context) ([]Theme, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Theme
 	for rows.Next() {
 		var i Theme
@@ -442,7 +442,7 @@ func (q *Queries) ListThemes(ctx context.Context) ([]Theme, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Theme
 	for rows.Next() {
 		var i Theme

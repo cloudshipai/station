@@ -272,7 +272,6 @@ func runMainServer() error {
 	// Remove telemetry tracking
 
 	fmt.Printf("\n✅ Station is running!\n")
-	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
 	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)
 	fmt.Printf("🤖 Dynamic Agent MCP: http://localhost:%d/mcp (environment: %s)\n", cfg.MCPPort+1, environmentName)
 	fmt.Printf("🌐 API Server: http://localhost:%d\n", cfg.APIPort)

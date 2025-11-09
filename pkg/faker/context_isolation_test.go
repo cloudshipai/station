@@ -1,0 +1,168 @@
+package faker
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/firebase/genkit/go/ai"
+	"github.com/firebase/genkit/go/genkit"
+	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	"github.com/openai/openai-go/option"
+)
+
+func getAPIKey() string {
+	return os.Getenv("OPENAI_API_KEY")
+}
+
+// TestContextIsolation verifies that context.Background() properly isolates from parent timeout
+func TestContextIsolation(t *testing.T) {
+	// Create a parent context with very short timeout (should be ignored)
+	parentCtx, parentCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer parentCancel()
+
+	// Wait for parent to expire
+	time.Sleep(150 * time.Millisecond)
+
+	// Verify parent is canceled
+	if parentCtx.Err() == nil {
+		t.Fatal("Parent context should be canceled")
+	}
+	fmt.Println("✓ Parent context canceled as expected")
+
+	// Create child context from context.Background() (should be independent)
+	childCtx, childCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer childCancel()
+
+	// Child should still be valid
+	select {
+	case <-childCtx.Done():
+		t.Fatal("Child context should NOT be canceled - context.Background() should isolate")
+	default:
+		fmt.Println("✓ Child context isolated from parent - context.Background() works")
+	}
+
+	// Verify child has proper deadline
+	deadline, ok := childCtx.Deadline()
+	if !ok {
+		t.Fatal("Child should have deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining < 4*time.Second || remaining > 5*time.Second {
+		t.Fatalf("Child deadline incorrect: %v remaining", remaining)
+	}
+	fmt.Printf("✓ Child context has proper 5s timeout: %v remaining\n", remaining)
+}
+
+// TestGenKitWithIsolatedContext tests if GenKit respects isolated context timeout
+func TestGenKitWithIsolatedContext(t *testing.T) {
+	apiKey := getAPIKey()
+	if apiKey == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+
+	// Initialize GenKit with OpenAI plugin
+	plugin := &openai.OpenAI{
+		APIKey: apiKey,
+		Opts:   []option.RequestOption{},
+	}
+	app := genkit.Init(context.Background(), genkit.WithPlugins(plugin))
+
+	// Create parent context with very short timeout
+	parentCtx, parentCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer parentCancel()
+
+	// Wait for parent to expire
+	time.Sleep(150 * time.Millisecond)
+	if parentCtx.Err() == nil {
+		t.Fatal("Parent should be canceled")
+	}
+	fmt.Println("✓ Parent context canceled")
+
+	// Create isolated context with 30s timeout (like our fix)
+	isolatedCtx, isolatedCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer isolatedCancel()
+
+	// Try to call GenKit with isolated context
+	fmt.Println("Calling GenKit with isolated 30s context...")
+	start := time.Now()
+
+	resp, err := genkit.Generate(isolatedCtx, app,
+		ai.WithPrompt("Say 'test' - respond with exactly one word"),
+		ai.WithModelName("openai/gpt-4o-mini"))
+
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("GenKit call failed after %v: %v", duration, err)
+	}
+
+	fmt.Printf("✓ GenKit succeeded in %v\n", duration)
+	fmt.Printf("✓ Response: %s\n", resp.Text())
+
+	if duration < 500*time.Millisecond {
+		t.Fatalf("Call completed too quickly (%v) - likely didn't actually hit OpenAI", duration)
+	}
+}
+
+// TestGenKitWithCanceledParent tests if GenKit fails when parent is canceled (our bug scenario)
+func TestGenKitWithCanceledParent(t *testing.T) {
+	apiKey := getAPIKey()
+	if apiKey == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+
+	// Initialize GenKit with OpenAI plugin
+	plugin := &openai.OpenAI{
+		APIKey: apiKey,
+		Opts:   []option.RequestOption{},
+	}
+	app := genkit.Init(context.Background(), genkit.WithPlugins(plugin))
+
+	// Scenario 1: Pass canceled context directly to GenKit
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	fmt.Println("\n=== Test 1: Passing already-canceled context ===")
+	start := time.Now()
+	_, err = genkit.Generate(canceledCtx, app,
+		ai.WithPrompt("Say 'test'"),
+		ai.WithModelName("openai/gpt-4o-mini"))
+	duration := time.Since(start)
+
+	if err == nil {
+		t.Fatal("Expected error with canceled context")
+	}
+	fmt.Printf("✓ GenKit failed as expected with canceled context in %v: %v\n", duration, err)
+
+	// Scenario 2: Create child from canceled parent (simulates MCP SDK behavior)
+	fmt.Println("\n=== Test 2: Child from canceled parent ===")
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	parentCancel() // Cancel parent
+
+	// Create child with timeout from CANCELED parent (this might be the bug!)
+	childCtx, childCancel := context.WithTimeout(parentCtx, 30*time.Second)
+	defer childCancel()
+
+	// Check if child is also canceled
+	select {
+	case <-childCtx.Done():
+		fmt.Println("✗ Child context is ALREADY canceled even though we set 30s timeout!")
+		fmt.Println("  This is the BUG - child inherits parent cancellation")
+	default:
+		fmt.Println("✓ Child context is not canceled")
+	}
+
+	start = time.Now()
+	_, err = genkit.Generate(childCtx, app,
+		ai.WithPrompt("Say 'test'"),
+		ai.WithModelName("openai/gpt-4o-mini"))
+	duration = time.Since(start)
+
+	if err == nil {
+		t.Fatal("Expected error with child of canceled parent")
+	}
+	fmt.Printf("✗ GenKit failed (child inherits cancellation) in %v: %v\n", duration, err)
+}

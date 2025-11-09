@@ -143,6 +143,7 @@ type AgentRun struct {
 	ToolsUsed       *int64     `json:"tools_used,omitempty" db:"tools_used"`
 	DebugLogs       *JSONArray `json:"debug_logs,omitempty" db:"debug_logs"`
 	Error           *string    `json:"error,omitempty" db:"error"`
+	ParentRunID     *int64     `json:"parent_run_id,omitempty" db:"parent_run_id"` // Track parent run for hierarchical agent execution
 }
 
 type AgentRunWithDetails struct {

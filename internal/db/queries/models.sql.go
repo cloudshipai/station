@@ -161,7 +161,7 @@ func (q *Queries) ListEnabledModels(ctx context.Context) ([]ListEnabledModelsRow
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []ListEnabledModelsRow
 	for rows.Next() {
 		var i ListEnabledModelsRow
@@ -223,7 +223,7 @@ func (q *Queries) ListModels(ctx context.Context) ([]ListModelsRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []ListModelsRow
 	for rows.Next() {
 		var i ListModelsRow
@@ -265,7 +265,7 @@ func (q *Queries) ListModelsByProvider(ctx context.Context, providerID int64) ([
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Model
 	for rows.Next() {
 		var i Model
@@ -326,7 +326,7 @@ func (q *Queries) ListToolSupportingModels(ctx context.Context) ([]ListToolSuppo
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []ListToolSupportingModelsRow
 	for rows.Next() {
 		var i ListToolSupportingModelsRow

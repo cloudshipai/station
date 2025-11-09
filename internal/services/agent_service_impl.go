@@ -229,20 +229,33 @@ func (s *AgentService) ExecuteAgent(ctx context.Context, agentID int64, task str
 
 // ExecuteAgentWithRunID executes an agent with proper run ID for logging - used by ExecutionQueueService
 func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64, task string, runID int64, userVariables map[string]interface{}) (*Message, error) {
-	// Start telemetry span
+	// Start telemetry span with parent-child relationship tracking
 	startTime := time.Now()
+
+	// Get parent run ID from context for hierarchical tracing
+	parentRunID := GetParentRunIDFromContext(ctx)
+	spanAttributes := []attribute.KeyValue{
+		attribute.Int64("agent.id", agentID),
+		attribute.Int64("run.id", runID),
+		attribute.String("task.preview", func() string {
+			if len(task) > 100 {
+				return task[:100] + "..."
+			}
+			return task
+		}()),
+		attribute.Int("variables.count", len(userVariables)),
+	}
+
+	// Add parent run ID to span if available for hierarchical tracing
+	if parentRunID != nil {
+		spanAttributes = append(spanAttributes, attribute.Int64("run.parent_id", *parentRunID))
+		spanAttributes = append(spanAttributes, attribute.Bool("run.is_child", true))
+	} else {
+		spanAttributes = append(spanAttributes, attribute.Bool("run.is_child", false))
+	}
+
 	ctx, span := s.telemetry.StartSpan(ctx, "agent.execute_with_run_id",
-		trace.WithAttributes(
-			attribute.Int64("agent.id", agentID),
-			attribute.Int64("run.id", runID),
-			attribute.String("task.preview", func() string {
-				if len(task) > 100 {
-					return task[:100] + "..."
-				}
-				return task
-			}()),
-			attribute.Int("variables.count", len(userVariables)),
-		),
+		trace.WithAttributes(spanAttributes...),
 	)
 	defer span.End()
 
@@ -340,6 +353,23 @@ func (s *AgentService) ExecuteAgentWithRunID(ctx context.Context, agentID int64,
 
 	if result.ToolsUsed > 0 {
 		extra["tools_used"] = result.ToolsUsed
+	}
+
+	// Debug logging for child agent responses
+	log.Printf("🔍 AgentService.ExecuteAgentWithRunID: Returning Message for agent %d (%s), runID=%d",
+		agent.ID, agent.Name, runID)
+	log.Printf("  Response length: %d, Success: %v, Error: '%s'", len(result.Response), result.Success, result.Error)
+	log.Printf("  ToolCalls: %v, ExecutionSteps: %v", result.ToolCalls != nil, result.ExecutionSteps != nil)
+	log.Printf("  Steps taken: %d, Tools used: %d", result.StepsTaken, result.ToolsUsed)
+	log.Printf("  Extra fields: %d", len(extra))
+	if result.ToolCalls != nil {
+		log.Printf("  ToolCalls count: %d", len(*result.ToolCalls))
+	}
+	if result.ExecutionSteps != nil {
+		log.Printf("  ExecutionSteps count: %d", len(*result.ExecutionSteps))
+	}
+	if !result.Success {
+		log.Printf("  ⚠️  Agent execution NOT successful! Check error and debug logs")
 	}
 
 	return &Message{

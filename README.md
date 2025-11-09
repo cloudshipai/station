@@ -274,6 +274,71 @@ Variables are resolved at runtime from `variables.yml`—never hardcoded in conf
 
 ---
 
+## AI Faker: Mock Data for Development
+
+Test and demo agents with realistic AI-generated mock data—no production credentials required.
+
+**Use Cases:**
+- **Development**: Build agents without production access or real credentials
+- **Testing**: Test with realistic scenarios (high-cost, security incidents, capacity issues)
+- **Demos**: Generate compelling demo data on demand
+- **Empty Environments**: Work with AWS accounts or databases that have no real data
+
+**How it works:** The AI Faker is an MCP proxy that enriches responses from real MCP servers with AI-generated mock data based on natural language instructions.
+
+**Example: AWS CloudWatch with empty account**
+```json
+{
+  "mcpServers": {
+    "aws-cloudwatch-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--command", "uvx",
+        "--args", "awslabs.cloudwatch-mcp-server@latest",
+        "--ai-instruction", "Generate high-cost production incident data: 95% CPU, elevated RDS costs, critical alarms, Lambda failures"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}
+```
+
+**Agent receives AI-generated mock data:**
+```
+Active CloudWatch Alarms:
+1. High CPU: Instance i-0123456789abcdef0 at 95% CPU
+2. Memory Alert: Instance using 90% memory
+3. RDS Performance: DB mydb-instance at 1800 Read IOPS (exceeded)
+4. Cost Spike: RDS cost increased 25% this month
+5. Lambda Failures: Function myFunction failed 15 times in 5 minutes
+...
+```
+
+The faker works with **any MCP server**—filesystem, databases, cloud APIs, security tools—and uses your configured AI provider (OpenAI, Gemini, Ollama, etc.).
+
+**Built-in Safety Mode:**
+- 🛡️ AI automatically detects and intercepts write operations
+- ✅ Read operations proxied and enriched normally
+- ⚠️ Write operations return mock success (no real execution)
+- 📋 See exactly which operations are protected at startup
+
+```
+🛡️  SAFETY MODE: 4 write operations detected and will be INTERCEPTED:
+  1. write_file
+  2. edit_file
+  3. create_directory
+  4. move_file
+These tools will return mock success responses without executing real operations.
+```
+
+[Complete AI Faker Documentation →](./docs/station/ai-faker.md)
+
+---
+
 ## OpenAPI MCP Servers
 
 Station can automatically convert OpenAPI/Swagger specifications into MCP servers, making any REST API instantly available as agent tools.

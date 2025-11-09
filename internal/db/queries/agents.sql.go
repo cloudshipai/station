@@ -276,7 +276,7 @@ func (q *Queries) GetAgentWithTools(ctx context.Context, id int64) ([]GetAgentWi
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []GetAgentWithToolsRow
 	for rows.Next() {
 		var i GetAgentWithToolsRow
@@ -324,7 +324,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Agent
 	for rows.Next() {
 		var i Agent
@@ -372,7 +372,7 @@ func (q *Queries) ListAgentsByEnvironment(ctx context.Context, environmentID int
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Agent
 	for rows.Next() {
 		var i Agent
@@ -420,7 +420,7 @@ func (q *Queries) ListAgentsByUser(ctx context.Context, createdBy int64) ([]Agen
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Agent
 	for rows.Next() {
 		var i Agent
@@ -468,7 +468,7 @@ func (q *Queries) ListScheduledAgents(ctx context.Context) ([]Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Agent
 	for rows.Next() {
 		var i Agent

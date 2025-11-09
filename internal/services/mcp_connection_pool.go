@@ -17,11 +17,12 @@ import (
 
 // MCPServerPool represents a pool of persistent MCP server connections
 type MCPServerPool struct {
-	servers       map[string]*mcp.GenkitMCPClient // serverKey -> persistent client
-	serverConfigs map[string]interface{}          // serverKey -> config for restart
-	tools         map[string][]ai.Tool            // serverKey -> cached tools
-	mutex         sync.RWMutex
-	initialized   bool // prevent multiple initializations
+	servers         map[string]*mcp.GenkitMCPClient // serverKey -> persistent client
+	serverConfigs   map[string]interface{}          // serverKey -> config for restart
+	tools           map[string][]ai.Tool            // serverKey -> cached tools
+	mutex           sync.RWMutex
+	initialized     bool            // prevent multiple initializations (deprecated - use initializedEnvs)
+	initializedEnvs map[string]bool // track which environments have been initialized
 }
 
 // NewMCPServerPool creates a new server pool
@@ -230,6 +231,10 @@ func (mcm *MCPConnectionManager) getPooledEnvironmentMCPTools(ctx context.Contex
 			}
 		}
 	}
+
+	// Add agent tools to the mix
+	agentTools := mcm.getAgentToolsForEnvironment(ctx, environmentID, mcm.agentService)
+	allTools = append(allTools, agentTools...)
 
 	logging.Info("Pooled connection manager returned %d tools and %d clients for environment %d",
 		len(allTools), len(allClients), environmentID)

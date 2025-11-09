@@ -279,5 +279,17 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(installDemoBundleTool, s.handleInstallDemoBundle)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 33)
+	// Faker Management Tools
+	fakerCreateTool := mcp.NewTool("faker_create_from_mcp_server",
+		mcp.WithDescription("Create a faker-wrapped version of an existing MCP server in the same environment. This allows agents to create custom simulated MCP servers with tailored AI instructions for realistic data generation."),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment containing the MCP server")),
+		mcp.WithString("mcp_server_name", mcp.Required(), mcp.Description("Name of the existing MCP server to wrap with faker")),
+		mcp.WithString("ai_instruction", mcp.Required(), mcp.Description("Custom instruction for AI data generation (e.g., 'Generate realistic AWS cost data with proper spending patterns')")),
+		mcp.WithString("faker_name", mcp.Description("Name for the faker server (default: <mcp_server_name>-faker)")),
+		mcp.WithBoolean("debug", mcp.Description("Enable debug logging for faker (default: false)")),
+		mcp.WithBoolean("offline", mcp.Description("Offline mode - no real MCP server connection (default: false)")),
+	)
+	s.mcpServer.AddTool(fakerCreateTool, s.handleFakerCreateFromMCPServer)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 34)
 }

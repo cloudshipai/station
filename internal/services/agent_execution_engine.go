@@ -63,6 +63,8 @@ func NewAgentExecutionEngine(repos *repositories.Repositories, agentService Agen
 // NewAgentExecutionEngineWithLighthouse creates a new agent execution engine with optional Lighthouse integration
 func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, agentService AgentServiceInterface, lighthouseClient *lighthouse.LighthouseClient) *AgentExecutionEngine {
 	mcpConnManager := NewMCPConnectionManager(repos, nil)
+	// Store reference to agent service for agent tool integration
+	mcpConnManager.agentService = agentService
 
 	// Check environment variable for connection pooling
 	if os.Getenv("STATION_MCP_POOLING") == "true" {
@@ -106,21 +108,52 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		return nil, fmt.Errorf("agent cannot be nil")
 	}
 
+	// Add execution timeout at top level (15 minutes default)
+	// This ensures ALL agent executions have a maximum time limit
+	timeout := 15 * time.Minute
+
+	// Check if context already has a deadline and use the shorter timeout
+	if deadline, ok := ctx.Deadline(); ok {
+		remainingTime := time.Until(deadline)
+		if remainingTime > 0 && remainingTime < timeout {
+			timeout = remainingTime
+		}
+	}
+
+	// Create context with timeout for the entire execution
+	execCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	startTime := time.Now()
-	logging.Info("🎬 [EXECUTION TRACKER] ExecuteWithOptions STARTED - agent_id=%d agent_name='%s' station_run_id=%d skipLighthouse=%v", agent.ID, agent.Name, runID, skipLighthouse)
-	logging.Debug("Execute called for agent %s (ID: %d), skipLighthouse=%v", agent.Name, agent.ID, skipLighthouse)
+	logging.Info("🎬 [EXECUTION TRACKER] ExecuteWithOptions STARTED - agent_id=%d agent_name='%s' station_run_id=%d skipLighthouse=%v timeout=%v", agent.ID, agent.Name, runID, skipLighthouse, timeout)
+	logging.Debug("Execute called for agent %s (ID: %d), skipLighthouse=%v, timeout=%v", agent.Name, agent.ID, skipLighthouse, timeout)
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
+
+	// Use execCtx instead of ctx for all subsequent operations
+	ctx = execCtx
 
 	// Create telemetry span if telemetry service is available
 	var span trace.Span
 	if aee.telemetryService != nil {
+		// Get parent run ID from context for hierarchical tracing
+		parentRunID := GetParentRunIDFromContext(ctx)
+		spanAttributes := []attribute.KeyValue{
+			attribute.String("agent.name", agent.Name),
+			attribute.Int64("agent.id", agent.ID),
+			attribute.Int64("run.id", runID),
+			attribute.Int("user_variables.count", len(userVariables)),
+		}
+
+		// Add parent run ID to span if available for hierarchical tracing
+		if parentRunID != nil {
+			spanAttributes = append(spanAttributes, attribute.Int64("run.parent_id", *parentRunID))
+			spanAttributes = append(spanAttributes, attribute.Bool("run.is_child_execution", true))
+		} else {
+			spanAttributes = append(spanAttributes, attribute.Bool("run.is_child_execution", false))
+		}
+
 		ctx, span = aee.telemetryService.StartSpan(ctx, "agent_execution_engine.execute",
-			trace.WithAttributes(
-				attribute.String("agent.name", agent.Name),
-				attribute.Int64("agent.id", agent.ID),
-				attribute.Int64("run.id", runID),
-				attribute.Int("user_variables.count", len(userVariables)),
-			),
+			trace.WithAttributes(spanAttributes...),
 		)
 		defer span.End()
 	}
@@ -171,9 +204,10 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	// Update MCP connection manager with GenKit app (same as traditional)
 	aee.mcpConnManager.genkitApp = genkitApp
 
-	// Initialize server pool if pooling is enabled (same as traditional)
-	if err := aee.mcpConnManager.InitializeServerPool(ctx); err != nil {
-		logging.Info("Warning: Failed to initialize MCP server pool for dotprompt: %v", err)
+	// Initialize server pool for THIS environment only (performance fix)
+	// CRITICAL: Only load servers for agent's environment, not ALL environments
+	if err := aee.mcpConnManager.InitializeServerPool(ctx, agent.EnvironmentID); err != nil {
+		logging.Info("Warning: Failed to initialize MCP server pool for environment %d: %v", agent.EnvironmentID, err)
 	}
 
 	// Load MCP tools for dotprompt execution (reuse the same logic as traditional execution)
@@ -213,37 +247,49 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	// Store clients for cleanup after execution
 	aee.activeMCPClients = mcpClients
 
-	// Filter to only include tools assigned to this agent (same filtering logic as traditional)
+	// Filter to only include tools assigned to this agent
+	// Special handling: Include ALL agent tools since they're not stored in DB but created at runtime
+	fmt.Printf("DEBUG FILTER: Agent %s has %d assigned tools from DB, %d available MCP tools\n", agent.Name, len(agentTools), len(allMCPTools))
 	logging.Debug("Filtering %d assigned tools from %d available MCP tools", len(agentTools), len(allMCPTools))
 	var mcpTools []ai.ToolRef
-	logging.Debug("Starting tool filtering loop with %d assigned tools", len(agentTools))
-	for i, assignedTool := range agentTools {
-		logging.Debug("Processing assigned tool %d/%d: %s", i+1, len(agentTools), assignedTool.ToolName)
-		for j, mcpTool := range allMCPTools {
-			// Match by tool name - same method as traditional execution
-			var toolName string
-			if named, ok := mcpTool.(interface{ Name() string }); ok {
-				toolName = named.Name()
-			} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
-				toolName = stringer.String()
-			} else {
-				// Fallback: use the type name
-				toolName = fmt.Sprintf("%T", mcpTool)
-			}
 
-			if j < 5 || strings.Contains(toolName, "opencode") { // Log first 5 tools and any opencode tools
-				logging.Debug("Checking MCP tool %d: %s vs assigned %s", j, toolName, assignedTool.ToolName)
-			}
-
-			if toolName == assignedTool.ToolName {
-				logging.Debug("MATCHED! Adding tool %s", toolName)
-				mcpTools = append(mcpTools, mcpTool)
-				break
-			}
-		}
-		logging.Debug("Completed processing assigned tool %s", assignedTool.ToolName)
+	// Create a map of assigned tool names for quick lookup
+	assignedToolNames := make(map[string]bool)
+	for _, assignedTool := range agentTools {
+		assignedToolNames[assignedTool.ToolName] = true
+		fmt.Printf("DEBUG FILTER: Assigned tool from DB: %s\n", assignedTool.ToolName)
 	}
-	logging.Debug("Tool filtering loop completed - found %d matching tools", len(mcpTools))
+
+	logging.Debug("Starting tool filtering with %d assigned tools", len(agentTools))
+	for j, mcpTool := range allMCPTools {
+		// Get tool name
+		var toolName string
+		if named, ok := mcpTool.(interface{ Name() string }); ok {
+			toolName = named.Name()
+		} else if stringer, ok := mcpTool.(interface{ String() string }); ok {
+			toolName = stringer.String()
+		} else {
+			toolName = fmt.Sprintf("%T", mcpTool)
+		}
+
+		if j < 35 {
+			fmt.Printf("DEBUG FILTER: Checking tool[%d]: %s (is_agent_tool=%v)\n", j, toolName, strings.HasPrefix(toolName, "mcp__station__agent__"))
+		}
+
+		// Include tool if:
+		// 1. It's in the assigned tools list, OR
+		// 2. It's an agent tool (dynamic runtime tools) - prefixed with __agent_
+		isAssigned := assignedToolNames[toolName]
+		isAgentTool := strings.HasPrefix(toolName, "__agent_")
+
+		if isAssigned || isAgentTool {
+			fmt.Printf("DEBUG FILTER: MATCHED tool %s (assigned=%v, agent_tool=%v)\n", toolName, isAssigned, isAgentTool)
+			logging.Debug("MATCHED! Adding tool %s (assigned=%v, agent_tool=%v)", toolName, isAssigned, isAgentTool)
+			mcpTools = append(mcpTools, mcpTool)
+		}
+	}
+	fmt.Printf("DEBUG FILTER: Filtering complete - found %d matching tools\n", len(mcpTools))
+	logging.Debug("Tool filtering completed - found %d matching tools (from %d assigned + agent tools)", len(mcpTools), len(agentTools))
 
 	logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 
@@ -292,6 +338,9 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		return nil, fmt.Errorf("failed to get environment (ID: %d) for agent %s: %w", agent.EnvironmentID, agent.Name, err)
 	}
 
+	// Add parent run ID to context for hierarchical agent execution tracking
+	ctx = WithParentRunID(ctx, runID)
+
 	// Use clean, unified dotprompt.Execute() execution path with context for timeout protection
 	response, err := executor.ExecuteAgent(ctx, *agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 
@@ -300,6 +349,44 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	aee.activeMCPClients = nil
 
 	if err != nil {
+		// Check if this was a timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			timeoutErr := fmt.Errorf("agent execution timed out after %v: agent %s (ID: %d) exceeded maximum execution time",
+				timeout, agent.Name, agent.ID)
+			logging.Error("⏱️ TIMEOUT: %v", timeoutErr)
+
+			if execSpan != nil {
+				execSpan.RecordError(timeoutErr)
+				execSpan.SetStatus(codes.Error, "execution timeout")
+				execSpan.SetAttributes(
+					attribute.String("error.type", "timeout"),
+					attribute.Float64("timeout.duration_seconds", timeout.Seconds()),
+				)
+			}
+			if span != nil {
+				span.RecordError(timeoutErr)
+				span.SetStatus(codes.Error, "execution timeout")
+			}
+
+			// Log timeout for debugging
+			if logCallback != nil {
+				logCallback(map[string]interface{}{
+					"timestamp": time.Now().Format(time.RFC3339),
+					"level":     "error",
+					"message":   "Agent execution timed out",
+					"details": map[string]interface{}{
+						"error":           timeoutErr.Error(),
+						"timeout":         timeout.String(),
+						"duration":        time.Since(startTime).String(),
+						"steps_completed": 0, // Will be updated if we have step data
+					},
+				})
+			}
+
+			return nil, timeoutErr
+		}
+
+		// Regular execution error (not timeout)
 		// Record error in spans
 		if execSpan != nil {
 			execSpan.RecordError(err)

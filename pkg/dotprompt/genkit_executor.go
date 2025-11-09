@@ -141,29 +141,58 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}
 	}
 
-	// Load dotprompt file
-	agentPrompt := genkit.LoadPrompt(genkitApp, promptPath, "")
+	// Load or lookup dotprompt file
+	// For child agent executions, the prompt is already registered by the parent
+	// Try to lookup first, then load if not found (avoids re-registration panic)
+	agentPrompt := genkit.LookupPrompt(genkitApp, agent.Name)
+
 	if agentPrompt == nil {
-		return &ExecutionResponse{
-			Success:  false,
-			Response: "",
-			Duration: time.Since(startTime),
-			Error:    fmt.Sprintf("failed to load prompt from: %s", promptPath),
-		}, nil
+		// Prompt not registered yet - load it (this is the first execution)
+		fmt.Printf("DEBUG: Loading prompt for %s (first execution)\n", agent.Name)
+		agentPrompt = genkit.LoadPrompt(genkitApp, promptPath, "")
+
+		if agentPrompt == nil {
+			return &ExecutionResponse{
+				Success:  false,
+				Response: "",
+				Duration: time.Since(startTime),
+				Error:    fmt.Sprintf("failed to load prompt from: %s", promptPath),
+			}, nil
+		}
+	} else {
+		// Prompt already registered - reuse it (child agent execution)
+		fmt.Printf("DEBUG: Reusing already-registered prompt for %s (child agent)\n", agent.Name)
 	}
 
 	// Register filtered MCP tools so dotprompt.Execute() can find them
+	// Use panic recovery to skip already-registered tools (happens in child agent executions)
+	registeredCount := 0
+	skippedCount := 0
 	for _, toolRef := range mcpTools {
 		if tool, ok := toolRef.(ai.Tool); ok {
-			genkit.RegisterAction(genkitApp, tool)
+			// Wrap in anonymous function to use defer/recover for already-registered tools
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						// Tool already registered - this is normal for child agent executions
+						// where parent already registered the tools
+						skippedCount++
+						fmt.Printf("DEBUG: Tool %s already registered (skipped)\n", tool.Name())
+					}
+				}()
+				fmt.Printf("DEBUG: Registering tool: %s (type: %T)\n", tool.Name(), tool)
+				genkit.RegisterAction(genkitApp, tool)
+				registeredCount++
+			}()
 		}
 	}
+	fmt.Printf("DEBUG: Registered %d tools, skipped %d already-registered tools for agent %s\n", registeredCount, skippedCount, agent.Name)
 
 	// Get model configuration
 	modelName := e.getModelName()
 
-	// Execute with dotprompt.Execute() - use parent context with 10-minute timeout
-	execCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	// Execute with dotprompt.Execute() - use 5-minute timeout for tool execution
+	execCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
 	maxTurns := int(agent.MaxSteps)

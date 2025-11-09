@@ -71,6 +71,11 @@ Examples:
     --ai-enabled \
     --ai-template "monitoring-high-alert"
 
+  # View faker session history
+  stn faker sessions list
+  stn faker sessions view <session-id>
+  stn faker metrics
+
 Usage in template.json:
   {
     "mcpServers": {
@@ -87,11 +92,11 @@ Usage in template.json:
       }
     }
   }`,
-	Run: runFaker,
+	RunE: runFaker,
 }
 
 func init() {
-	fakerCmd.Flags().StringVar(&fakerCommand, "command", "", "Command to execute target MCP server (required)")
+	fakerCmd.Flags().StringVar(&fakerCommand, "command", "", "Command to execute target MCP server")
 	fakerCmd.Flags().StringVar(&fakerArgs, "args", "", "Comma-separated args for target (e.g., '-y,@aws/mcp')")
 	fakerCmd.Flags().StringSliceVar(&fakerEnvVars, "env", []string{}, "Environment variables (repeatable, format: KEY=VALUE)")
 	fakerCmd.Flags().StringVar(&fakerCacheDir, "cache-dir", "", "Directory for schema cache (default: ~/.cache/station/faker)")
@@ -99,33 +104,24 @@ func init() {
 	fakerCmd.Flags().BoolVar(&fakerPassthrough, "passthrough", false, "Disable enrichment (pure proxy mode)")
 	
 	// AI enrichment flags
-	fakerCmd.Flags().BoolVar(&fakerAIEnabled, "ai-enabled", false, "Enable AI-powered enrichment using Google Generative AI")
-	fakerCmd.Flags().StringVar(&fakerAIModel, "ai-model", "gemini-1.5-flash", "AI model for enrichment (gemini-1.5-flash, gemini-1.5-pro)")
+	fakerCmd.Flags().BoolVar(&fakerAIEnabled, "ai-enabled", false, "Enable AI-powered enrichment using Station's configured AI provider")
+	fakerCmd.Flags().StringVar(&fakerAIModel, "ai-model", "", "AI model for enrichment (overrides Station's configured model)")
 	fakerCmd.Flags().StringVar(&fakerAIInstruction, "ai-instruction", "", "Custom instruction for AI data generation (e.g., 'Generate high-alert monitoring data')")
 	fakerCmd.Flags().StringVar(&fakerAITemplate, "ai-template", "", "Predefined instruction template (use 'list' to see available templates)")
 
-	fakerCmd.MarkFlagRequired("command")
+	// Note: --command is required for the proxy mode, but not for subcommands like sessions/metrics
 }
 
-func runFaker(cmd *cobra.Command, args []string) {
-	// Handle template listing (before command validation)
+func runFaker(cmd *cobra.Command, args []string) error {
+	// Check if command flag is provided (required for proxy mode)
+	if fakerCommand == "" {
+		return fmt.Errorf("--command flag is required when running faker proxy\nUse 'stn faker sessions' or 'stn faker metrics' for session management")
+	}
+
+	// Template listing temporarily removed in refactor
 	if fakerAITemplate == "list" {
-		templates := faker.NewPredefinedInstructionTemplates()
-		fmt.Println("Available AI Instruction Templates:")
-		fmt.Println()
-		
-		categories := templates.GetCategories()
-		for _, category := range categories {
-			fmt.Printf("📂 %s:\n", category)
-			categoryTemplates := templates.GetTemplateByCategory(category)
-			for name, instruction := range categoryTemplates {
-				fmt.Printf("  • %s: %s\n", name, instruction)
-			}
-			fmt.Println()
-		}
-		
-		fmt.Printf("Total: %d templates in %d categories\n", len(templates.ListTemplates()), len(categories))
-		return
+		fmt.Println("Template listing not yet implemented in new faker")
+		return nil
 	}
 
 	// Parse environment variables
@@ -139,25 +135,6 @@ func runFaker(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Handle template listing
-	if fakerAITemplate == "list" {
-		templates := faker.NewPredefinedInstructionTemplates()
-		fmt.Println("Available AI Instruction Templates:")
-		fmt.Println()
-		
-		categories := templates.GetCategories()
-		for _, category := range categories {
-			fmt.Printf("📂 %s:\n", category)
-			categoryTemplates := templates.GetTemplateByCategory(category)
-			for name, instruction := range categoryTemplates {
-				fmt.Printf("  • %s: %s\n", name, instruction)
-			}
-			fmt.Println()
-		}
-		
-		fmt.Printf("Total: %d templates in %d categories\n", len(templates.ListTemplates()), len(categories))
-		return
-	}
 
 	// Parse args string into slice
 	var targetArgs []string
@@ -166,7 +143,7 @@ func runFaker(cmd *cobra.Command, args []string) {
 	}
 
 	// Parse environment variables
-	envVars := make(map[string]string)
+	envVars = make(map[string]string)
 	for _, envStr := range fakerEnvVars {
 		parts := strings.SplitN(envStr, "=", 2)
 		if len(parts) == 2 {
@@ -176,57 +153,18 @@ func runFaker(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Create AI enricher config if enabled
-	var aiConfig *faker.AIEnricherConfig
-	if fakerAIEnabled {
-		// Get API key from environment
-		apiKey := os.Getenv("GOOGLE_GENAI_API_KEY")
-		if apiKey == "" {
-			fmt.Fprintf(os.Stderr, "Error: AI enrichment enabled but GOOGLE_GENAI_API_KEY environment variable not set\n")
-			os.Exit(1)
-		}
-		
-		instruction := fakerAIInstruction
-		
-		// Use predefined template if specified
-		if fakerAITemplate != "" {
-			templates := faker.NewPredefinedInstructionTemplates()
-			templateInstruction, err := templates.GetTemplate(fakerAITemplate)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-			instruction = templateInstruction
-		}
-		
-		aiConfig = &faker.AIEnricherConfig{
-			Model:       fakerAIModel,
-			APIKey:      apiKey,
-			Instruction: instruction,
-			Enabled:     true,
-		}
-	}
+	// Build instruction
+	instruction := fakerAIInstruction
 
-	// Create faker config
-	config := faker.ProxyConfig{
-		TargetCommand: fakerCommand,
-		TargetArgs:    targetArgs,
-		TargetEnv:     envVars,
-		CacheDir:      fakerCacheDir,
-		Debug:         fakerDebug,
-		Passthrough:   fakerPassthrough,
-		AI:           aiConfig,
-	}
-
-	// Create and run proxy server
-	proxy, err := faker.NewProxy(config)
+	// Create and run MCP faker server
+	f, err := faker.NewMCPFaker(fakerCommand, targetArgs, envVars, instruction, fakerDebug)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to create faker proxy: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create faker: %w", err)
 	}
 
-	if err := proxy.Serve(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Faker proxy failed: %v\n", err)
-		os.Exit(1)
+	if err := f.Serve(); err != nil {
+		return fmt.Errorf("faker failed: %w", err)
 	}
+
+	return nil
 }

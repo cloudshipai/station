@@ -51,6 +51,7 @@ type AgentRun struct {
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
 	DebugLogs       sql.NullString  `json:"debug_logs"`
 	Error           sql.NullString  `json:"error"`
+	ParentRunID     sql.NullInt64   `json:"parent_run_id"`
 }
 
 type AgentTool struct {

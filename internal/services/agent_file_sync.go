@@ -23,6 +23,7 @@ type DotPromptConfig struct {
 	Model        string                 `yaml:"model"`
 	Config       map[string]interface{} `yaml:"config"`
 	Tools        []string               `yaml:"tools"`
+	Agents       []string               `yaml:"agents"` // Agent tool references for multi-agent hierarchy
 	Metadata     map[string]interface{} `yaml:"metadata"`
 	Station      map[string]interface{} `yaml:"station"`
 	Input        map[string]interface{} `yaml:"input"`
@@ -292,6 +293,13 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 	// Assign tools if specified - all within the same transaction
 	if len(config.Tools) > 0 {
 		for _, toolName := range config.Tools {
+			// Skip agent tools - they're created dynamically at runtime
+			// Support both __agent_ and mcp__station__agent__ prefixes
+			if strings.HasPrefix(toolName, "__agent_") || strings.HasPrefix(toolName, "mcp__station__agent__") {
+				logging.Debug("Skipping agent tool %s (will be created dynamically at runtime)", toolName)
+				continue
+			}
+
 			// Find tool by name in environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(env.ID, toolName)
 			if err != nil {
@@ -560,6 +568,12 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		// Add tools that are in config but not currently assigned
 		for _, toolName := range config.Tools {
 			if _, exists := currentToolMap[toolName]; !exists {
+				// Skip agent tools - they're created dynamically at runtime
+				if strings.HasPrefix(toolName, "mcp__station__agent__") {
+					logging.Debug("Skipping agent tool %s (will be created dynamically at runtime)", toolName)
+					continue
+				}
+
 				// Find tool by name in environment
 				tool, err := s.repos.MCPTools.FindByNameInEnvironment(existingAgent.EnvironmentID, toolName)
 				if err != nil {

@@ -271,7 +271,7 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 }
 
 // CreateWithMetadata creates a new agent run with response object metadata
-func (r *AgentRunRepo) CreateWithMetadata(ctx context.Context, agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64) (*models.AgentRun, error) {
+func (r *AgentRunRepo) CreateWithMetadata(ctx context.Context, agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64, parentRunID *int64) (*models.AgentRun, error) {
 	params := queries.CreateAgentRunParams{
 		AgentID:       agentID,
 		UserID:        userID,
@@ -325,6 +325,10 @@ func (r *AgentRunRepo) CreateWithMetadata(ctx context.Context, agentID, userID i
 
 	if toolsUsed != nil {
 		params.ToolsUsed = sql.NullInt64{Int64: *toolsUsed, Valid: true}
+	}
+
+	if parentRunID != nil {
+		params.ParentRunID = sql.NullInt64{Int64: *parentRunID, Valid: true}
 	}
 
 	sqlcRun, err := r.queries.CreateAgentRun(ctx, params)

@@ -321,9 +321,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if envMCPPort := os.Getenv("STATION_MCP_PORT"); envMCPPort != "" && viper.GetInt("mcp_port") == 0 {
 		viper.Set("mcp_port", envMCPPort)
 	}
-	if envSSHPort := os.Getenv("STATION_SSH_PORT"); envSSHPort != "" && viper.GetInt("ssh_port") == 0 {
-		viper.Set("ssh_port", envSSHPort)
-	}
 	if envLocalMode := os.Getenv("STATION_LOCAL_MODE"); envLocalMode != "" && !viper.IsSet("local_mode") {
 		viper.Set("local_mode", envLocalMode == "true")
 	}
@@ -351,14 +348,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 		viper.Set("cloudship.station_id", envCloudShipStationID)
 	}
 
-	fmt.Printf("SSH Port: %d\n", viper.GetInt("ssh_port"))
 	fmt.Printf("MCP Port: %d\n", viper.GetInt("mcp_port"))
 	fmt.Printf("API Port: %d\n", viper.GetInt("api_port"))
 	fmt.Printf("Database: %s\n", viper.GetString("database_url"))
 
 	// Set environment variables for the main application to use
 	os.Setenv("ENCRYPTION_KEY", encryptionKey)
-	os.Setenv("SSH_PORT", fmt.Sprintf("%d", viper.GetInt("ssh_port")))
 	os.Setenv("MCP_PORT", fmt.Sprintf("%d", viper.GetInt("mcp_port")))
 	os.Setenv("API_PORT", fmt.Sprintf("%d", viper.GetInt("api_port")))
 	os.Setenv("DATABASE_URL", viper.GetString("database_url"))
