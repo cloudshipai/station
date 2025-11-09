@@ -24,7 +24,7 @@ import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
 import Editor from '@monaco-editor/react';
 
-import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi, toolsApi } from './api/station';
+import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes, layoutElements } from './utils/layoutUtils';
 import CloudShipStatus from './components/CloudShipStatus';
@@ -462,20 +462,22 @@ const AgentsCanvas = () => {
       const response = await agentsApi.getWithTools(agentId);
       const { agent, mcp_servers } = response.data;
 
-      // Fetch all tools to build hierarchy map
-      const allToolsResponse = await toolsApi.getAll();
-      const allTools = Array.isArray(allToolsResponse.data) ? allToolsResponse.data : [];
-
-      // Build agent tools map for hierarchy detection
+      // Build agent tools map and collect all tools for hierarchy detection
       const agentToolsMap = new Map();
+      const allTools: any[] = [];
+      
       mcp_servers.forEach((server: any) => {
         if (server.tools) {
           const existingTools = agentToolsMap.get(agent.id) || [];
           agentToolsMap.set(agent.id, [...existingTools, ...server.tools]);
+          // Collect all tools from this agent's MCP servers
+          allTools.push(...server.tools);
         }
       });
 
       // Build hierarchy map with all agents
+      // Note: This only detects hierarchies within current agent's tools
+      // For full cross-agent hierarchy, we'd need all tools from all agents
       const hierarchyMap = buildAgentHierarchyMap(agents, agentToolsMap, allTools);
       const hierarchyInfo = hierarchyMap.get(agent.id);
 
