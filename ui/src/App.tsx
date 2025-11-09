@@ -24,7 +24,7 @@ import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
 import Editor from '@monaco-editor/react';
 
-import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
+import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi, toolsApi } from './api/station';
 import { apiClient } from './api/client';
 import { getLayoutedNodes, layoutElements } from './utils/layoutUtils';
 import CloudShipStatus from './components/CloudShipStatus';
@@ -463,8 +463,8 @@ const AgentsCanvas = () => {
       const { agent, mcp_servers } = response.data;
 
       // Fetch all tools to build hierarchy map
-      const allToolsResponse = await apiClient.get('/tools');
-      const allTools = allToolsResponse.data.tools || [];
+      const allToolsResponse = await toolsApi.getAll();
+      const allTools = Array.isArray(allToolsResponse.data) ? allToolsResponse.data : [];
 
       // Build agent tools map for hierarchy detection
       const agentToolsMap = new Map();
