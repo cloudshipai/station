@@ -15,7 +15,9 @@ import { Bot } from 'lucide-react';
 import { agentsApi } from '../../api/station';
 import { HierarchicalAgentNode } from '../nodes/HierarchicalAgentNode';
 import { buildAgentGraph } from '../../utils/agentGraphBuilder';
+import { buildAgentHierarchyMap } from '../../utils/agentHierarchy';
 import { MCPNode, ToolNode } from '../nodes/MCPNodes';
+import { AgentListSidebar } from './AgentListSidebar';
 
 interface EnvironmentContextType {
   selectedEnvironment: number | null;
@@ -39,6 +41,7 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hierarchyMap, setHierarchyMap] = useState<Map<number, any>>(new Map());
   const [modalAgentId, setModalAgentId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMCPServerId, setModalMCPServerId] = useState<number | null>(null);
@@ -105,7 +108,10 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
 
         setAgents(agentsList);
 
+        // Build hierarchy map for all agents
         if (agentsList.length > 0) {
+          // We'll update hierarchy map when we have full tool info
+          // For now, just select first agent
           setSelectedAgent(agentsList[0].id);
         } else {
           setSelectedAgent(null);
@@ -119,6 +125,28 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
     };
     fetchAgents();
   }, [environmentContext?.selectedEnvironment, environmentContext?.refreshTrigger]);
+
+  // Build hierarchy map when agents change
+  useEffect(() => {
+    const buildHierarchy = async () => {
+      if (agents.length === 0) return;
+
+      try {
+        // For now, build a simple hierarchy map from agent names
+        // In a full implementation, we'd need to fetch all agents' tools
+        const agentToolsMap = new Map();
+        const allTools: any[] = [];
+
+        // Build hierarchy map
+        const map = buildAgentHierarchyMap(agents, agentToolsMap, allTools);
+        setHierarchyMap(map);
+      } catch (error) {
+        console.error('Failed to build hierarchy map:', error);
+      }
+    };
+
+    buildHierarchy();
+  }, [agents]);
 
   // Function to regenerate graph with current expansion state
   const regenerateGraph = useCallback(async (agentId: number, expandedSet: Set<number>) => {
@@ -181,29 +209,15 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
   }
 
   return (
-    <div className="h-full flex flex-col bg-tokyo-bg">
-      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-mono font-semibold text-tokyo-blue">Station Agents</h1>
-          {agents.length > 0 && (
-            <div className="flex items-center gap-2 ml-4">
-              <label className="text-sm text-tokyo-comment font-mono">Agent:</label>
-              <select
-                value={selectedAgent || ''}
-                onChange={(e) => setSelectedAgent(Number(e.target.value))}
-                className="px-3 py-1 bg-tokyo-bg-dark border border-tokyo-blue7 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 transition-colors"
-              >
-                {agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+    <div className="h-full flex bg-tokyo-bg">
+      {/* Main Graph Area */}
+      <div className="flex-1 flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
+          <h1 className="text-xl font-mono font-semibold text-tokyo-blue">
+            {selectedAgent && agents.find(a => a.id === selectedAgent)?.name || 'Station Agents'}
+          </h1>
         </div>
-      </div>
-      <div className="flex-1 relative">
+        <div className="flex-1 relative">
         {agents.length === 0 ? (
           <div className="h-full flex items-center justify-center bg-tokyo-bg">
             <div className="text-center">
@@ -244,5 +258,16 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
         )}
       </div>
     </div>
+
+    {/* Right Sidebar with Agent List */}
+    {!loading && agents.length > 0 && (
+      <AgentListSidebar
+        agents={agents}
+        selectedAgentId={selectedAgent}
+        onSelectAgent={setSelectedAgent}
+        hierarchyMap={hierarchyMap}
+      />
+    )}
+  </div>
   );
 };
