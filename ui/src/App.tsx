@@ -37,6 +37,8 @@ import { InstallBundleModal } from './components/modals/InstallBundleModal';
 import DeployModal from './components/modals/DeployModal';
 import { CopyEnvironmentModal } from './components/modals/CopyEnvironmentModal';
 import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
+import { HierarchicalAgentNode } from './components/nodes/HierarchicalAgentNode';
+import { buildAgentHierarchyMap } from './utils/agentHierarchy';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -165,7 +167,7 @@ const ToolNode = ({ data }: any) => {
 };
 
 const agentPageNodeTypes = {
-  agent: AgentNode,
+  agent: HierarchicalAgentNode,
   mcp: MCPNode,
   tool: ToolNode,
 };
@@ -460,6 +462,23 @@ const AgentsCanvas = () => {
       const response = await agentsApi.getWithTools(agentId);
       const { agent, mcp_servers } = response.data;
 
+      // Fetch all tools to build hierarchy map
+      const allToolsResponse = await apiClient.get('/tools');
+      const allTools = allToolsResponse.data.tools || [];
+
+      // Build agent tools map for hierarchy detection
+      const agentToolsMap = new Map();
+      mcp_servers.forEach((server: any) => {
+        if (server.tools) {
+          const existingTools = agentToolsMap.get(agent.id) || [];
+          agentToolsMap.set(agent.id, [...existingTools, ...server.tools]);
+        }
+      });
+
+      // Build hierarchy map with all agents
+      const hierarchyMap = buildAgentHierarchyMap(agents, agentToolsMap, allTools);
+      const hierarchyInfo = hierarchyMap.get(agent.id);
+
       // Generate nodes and edges from the data
       const newNodes: Node[] = [];
       const newEdges: Edge[] = [];
@@ -470,10 +489,8 @@ const AgentsCanvas = () => {
         type: 'agent',
         position: { x: 0, y: 0 }, // ELK will position this
         data: {
-          label: agent.name,
-          description: agent.description,
-          status: agent.is_scheduled ? 'Scheduled' : 'Manual',
-          agentId: agent.id,
+          agent: agent,
+          hierarchyInfo: hierarchyInfo,
           onOpenModal: openAgentModal,
           onEditAgent: editAgent,
         },
