@@ -13,6 +13,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/pkg/faker/session"
+	"station/pkg/faker/toolcache"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -435,41 +436,108 @@ func (f *MCPFaker) Serve() error {
 	// Create MCP server
 	mcpServer := server.NewMCPServer("faker-mcp-server", "1.0.0")
 
-	if f.debug {
-		fmt.Fprintf(os.Stderr, "[FAKER] Listing tools from target...\n")
-	}
+	var tools []mcp.Tool
+	var err error
 
-	// CRITICAL FIX: Add timeout for tool discovery to prevent infinite hangs during stn sync
-	// If target MCP server is slow/hanging, faker will fail fast instead of blocking
-	discCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	// Get all tools from target server with timeout
-	toolsResult, err := f.targetClient.ListTools(discCtx, mcp.ListToolsRequest{})
-	if err != nil {
-		return fmt.Errorf("failed to list tools from target (timeout after 10s): %w", err)
-	}
-
-	if f.debug {
-		fmt.Fprintf(os.Stderr, "[FAKER] Found %d tools from target, registering...\n", len(toolsResult.Tools))
-	}
-
-	// Classify tools as read/write operations using AI
-	if f.safetyMode && f.genkitApp != nil {
+	if f.standaloneMode {
+		// Standalone mode: Generate tools via AI or load from cache
 		if f.debug {
-			fmt.Fprintf(os.Stderr, "[FAKER] Classifying tools for write operation detection...\n")
+			fmt.Fprintf(os.Stderr, "[FAKER] Standalone mode - checking tool cache for ID: %s\n", f.fakerID)
 		}
-		if err := f.classifyTools(ctx, toolsResult.Tools); err != nil {
-			if f.debug {
-				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Tool classification failed: %v\n", err)
+
+		// Try to load from cache first
+		if f.toolCache != nil {
+			if cache, ok := f.toolCache.(toolcache.Cache); ok {
+				cachedTools, cacheErr := cache.GetTools(ctx, f.fakerID)
+				if cacheErr == nil && len(cachedTools) > 0 {
+					if f.debug {
+						fmt.Fprintf(os.Stderr, "[FAKER] Loaded %d tools from cache\n", len(cachedTools))
+					}
+					tools = cachedTools
+				} else {
+					if f.debug {
+						fmt.Fprintf(os.Stderr, "[FAKER] Cache miss or error (%v), generating tools with AI...\n", cacheErr)
+					}
+
+					// Generate tools with AI
+					tools, err = f.generateToolsWithAI(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to generate tools with AI: %w", err)
+					}
+
+					// Cache the generated tools
+					if cacheErr := cache.SetTools(ctx, f.fakerID, tools); cacheErr != nil {
+						if f.debug {
+							fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to cache tools: %v\n", cacheErr)
+						}
+					} else if f.debug {
+						fmt.Fprintf(os.Stderr, "[FAKER] Cached %d tools for future use\n", len(tools))
+					}
+				}
+			} else {
+				// Type assertion failed, generate without cache
+				if f.debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Tool cache type assertion failed, generating with AI...\n")
+				}
+				tools, err = f.generateToolsWithAI(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to generate tools with AI: %w", err)
+				}
 			}
 		} else {
-			f.displayToolClassification()
+			// No cache available, generate with AI
+			if f.debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] No tool cache available, generating with AI...\n")
+			}
+			tools, err = f.generateToolsWithAI(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to generate tools with AI: %w", err)
+			}
 		}
+	} else {
+		// Proxy mode: List tools from target MCP server
+		if f.debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] Proxy mode - listing tools from target...\n")
+		}
+
+		// CRITICAL FIX: Add timeout for tool discovery to prevent infinite hangs during stn sync
+		// If target MCP server is slow/hanging, faker will fail fast instead of blocking
+		discCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		// Get all tools from target server with timeout
+		toolsResult, err := f.targetClient.ListTools(discCtx, mcp.ListToolsRequest{})
+		if err != nil {
+			return fmt.Errorf("failed to list tools from target (timeout after 10s): %w", err)
+		}
+
+		if f.debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] Found %d tools from target\n", len(toolsResult.Tools))
+		}
+
+		tools = toolsResult.Tools
+
+		// Classify tools as read/write operations using AI (proxy mode only)
+		if f.safetyMode && f.genkitApp != nil {
+			if f.debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Classifying tools for write operation detection...\n")
+			}
+			if err := f.classifyTools(ctx, tools); err != nil {
+				if f.debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Warning: Tool classification failed: %v\n", err)
+				}
+			} else {
+				f.displayToolClassification()
+			}
+		}
+	}
+
+	if f.debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] Registering %d tools...\n", len(tools))
 	}
 
 	// Register each tool with a proxy handler and store schemas
-	for _, tool := range toolsResult.Tools {
+	for _, tool := range tools {
 		// Store tool schema for response shape consistency
 		toolCopy := tool // Capture tool in closure
 		f.toolSchemas[tool.Name] = &toolCopy
@@ -600,7 +668,39 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 		}
 	}
 
-	// Call the real target server for read operations (no write history or synthesis failed)
+	// STANDALONE MODE: No target server, generate simulated response immediately
+	if f.standaloneMode {
+		span.SetAttributes(
+			attribute.Bool("faker.standalone_mode", true),
+			attribute.Bool("faker.real_mcp_used", false),
+		)
+
+		if f.debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] Standalone mode - generating simulated response for %s\n", request.Params.Name)
+		}
+
+		// Generate simulated response using AI instruction
+		simulatedResult, simErr := f.generateSimulatedResponse(ctx, request.Params.Name, args, nil)
+		if simErr != nil {
+			span.RecordError(simErr)
+			span.SetStatus(codes.Error, "standalone simulation failed")
+			return nil, fmt.Errorf("standalone mode simulation failed: %w", simErr)
+		}
+
+		// Record simulated read in session
+		if recErr := f.recordToolEvent(ctx, request.Params.Name, args, simulatedResult, "read"); recErr != nil {
+			if f.debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to record read event: %v\n", recErr)
+			}
+		}
+
+		// Record in callHistory for backward compatibility
+		f.recordToolCall(request.Params.Name, args, simulatedResult)
+
+		return simulatedResult, nil
+	}
+
+	// Call the real target server for read operations (proxy mode only)
 	result, err := f.targetClient.CallTool(ctx, request)
 
 	// ALWAYS log target call result for debugging (not just in debug mode)

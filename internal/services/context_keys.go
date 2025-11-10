@@ -24,3 +24,19 @@ func GetParentRunIDFromContext(ctx context.Context) *int64 {
 func WithParentRunID(ctx context.Context, runID int64) context.Context {
 	return context.WithValue(ctx, ContextKeyParentRunID, &runID)
 }
+
+// ContextKeyCurrentRunID is the context key for the current run ID
+const ContextKeyCurrentRunID contextKey = "current_run_id"
+
+// GetCurrentRunIDFromContext extracts the current run ID from context
+func GetCurrentRunIDFromContext(ctx context.Context) *int64 {
+	if runID, ok := ctx.Value(ContextKeyCurrentRunID).(*int64); ok {
+		return runID
+	}
+	return nil
+}
+
+// WithCurrentRunID adds the current run ID to context
+func WithCurrentRunID(ctx context.Context, runID int64) context.Context {
+	return context.WithValue(ctx, ContextKeyCurrentRunID, &runID)
+}

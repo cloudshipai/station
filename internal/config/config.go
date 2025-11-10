@@ -49,9 +49,9 @@ func Load() (*Config, error) {
 		SSHHostKeyPath:   getEnvOrDefault("SSH_HOST_KEY_PATH", "./ssh_host_key"),
 		AdminUsername:    getEnvOrDefault("ADMIN_USERNAME", "admin"),
 		Environment:      getEnvOrDefault("ENVIRONMENT", "development"),
-		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true),     // Default enabled with opt-out
-		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", ""), // Default empty (no export)
-		Debug:            getEnvBoolOrDefault("STN_DEBUG", false),            // Default to info level
+		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true),                          // Default enabled with opt-out
+		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"), // Default to local Jaeger
+		Debug:            getEnvBoolOrDefault("STN_DEBUG", false),                                 // Default to info level
 		// Workspace Configuration
 		Workspace: getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults

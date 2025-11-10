@@ -36,6 +36,12 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 
 	os.Setenv("GENKIT_ENV", "dev")
 
+	// Check if OTEL telemetry is enabled globally
+	if enableOTEL {
+		logging.Info("📊 OTEL telemetry enabled in develop mode - traces will export to Jaeger")
+		// OTEL is already initialized in initOTELTelemetry()
+	}
+
 	// Show banner
 	styles := getCLIStyles(themeManager)
 	banner := styles.Banner.Render("🧪 Station Development Playground")

@@ -341,6 +341,9 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	// Add parent run ID to context for hierarchical agent execution tracking
 	ctx = WithParentRunID(ctx, runID)
 
+	// Add current run ID to context for trace correlation
+	ctx = WithCurrentRunID(ctx, runID)
+
 	// Use clean, unified dotprompt.Execute() execution path with context for timeout protection
 	response, err := executor.ExecuteAgent(ctx, *agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 

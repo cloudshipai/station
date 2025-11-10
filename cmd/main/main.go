@@ -280,20 +280,21 @@ func initTelemetry() {
 }
 
 func initOTELTelemetry() {
-	// Check CLI flag first (highest priority)
-	if !enableOTEL {
-		logging.Debug("OTEL telemetry disabled (use --enable-telemetry to enable)")
-		return
-	}
-
-	// Load config to check OTEL settings
+	// Load config to check telemetry settings
 	cfg, err := config.Load()
 	if err != nil {
 		logging.Debug("Failed to load config for OTEL telemetry: %v", err)
 		return
 	}
 
-	// Check if OTEL endpoint is configured (priority: CLI flag > env var > config)
+	// Check if telemetry is enabled (priority: CLI flag > config file)
+	telemetryEnabled := enableOTEL || cfg.TelemetryEnabled
+	if !telemetryEnabled {
+		logging.Debug("OTEL telemetry disabled (use --enable-telemetry flag or set telemetry_enabled: true in config)")
+		return
+	}
+
+	// Check if OTEL endpoint is configured (priority: CLI flag > env var > config > default)
 	endpoint := otelEndpoint
 	if endpoint == "" {
 		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")

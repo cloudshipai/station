@@ -209,6 +209,11 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}
 	}
 
+	// Note: We intentionally do NOT create our own root span here because GenKit v1.0.1
+	// creates its own trace context that ignores our parent span. Creating a span here
+	// results in duplicate traces (our empty root + GenKit's generate traces).
+	// Instead, the agent_execution_engine creates a proper span with full metadata.
+
 	resp, err := agentPrompt.Execute(execCtx,
 		ai.WithInput(inputMap),
 		ai.WithMaxTurns(maxTurns),
