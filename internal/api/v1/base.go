@@ -80,6 +80,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// MCP server management routes (file-based configuration)
 	h.registerMCPManagementRoutes(envGroup)
 
+	// Faker routes (simulation tools)
+	h.registerFakerRoutes(envGroup)
+
 	// MCP Directory template routes
 	h.registerMCPDirectoryRoutes(router)
 

@@ -20,8 +20,8 @@ var (
 )
 
 var fakerCreateCmd = &cobra.Command{
-	Use:   "create <mcp-server-name>",
-	Short: "Create a faker version of an existing MCP server",
+	Use:   "wrap <mcp-server-name>",
+	Short: "Wrap an existing MCP server with faker proxy",
 	Long: `Create a faker-wrapped version of an existing MCP server in the same environment.
 
 This command reads the configuration of an existing MCP server from the environment's
@@ -31,13 +31,13 @@ same MCP server in the environment.
 
 Examples:
   # Create a faker from existing server
-  stn faker create aws-cloudwatch \
+  stn faker wrap aws-cloudwatch \
     --env production \
     --instruction "Simulate high-traffic production environment" \
     --name aws-cloudwatch-faker
 
   # Create a faker with debugging
-  stn faker create stripe-payments \
+  stn faker wrap stripe-payments \
     --env staging \
     --instruction "Simulate payment processing with various scenarios" \
     --name stripe-faker \

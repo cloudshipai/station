@@ -181,9 +181,6 @@ func runFaker(cmd *cobra.Command, args []string) error {
 
 	if fakerStandalone {
 		// Standalone mode - generate tools via AI, no target MCP server
-		if fakerDebug {
-			fmt.Fprintf(os.Stderr, "[FAKER CLI] Creating standalone faker with ID: %s\n", fakerID)
-		}
 
 		// Open database for tool cache
 		cfg, err := config.Load()
@@ -200,8 +197,24 @@ func runFaker(cmd *cobra.Command, args []string) error {
 		// Create tool cache
 		toolCache := toolcache.NewCache(database.Conn())
 
-		// Create standalone faker
-		f, err = faker.NewStandaloneFaker(fakerID, instruction, toolCache, fakerDebug)
+		// Generate deterministic config hash from faker configuration
+		// This ensures same config always uses same cache key
+		aiModel := fakerAIModel
+		if aiModel == "" {
+			// Use Station's configured model as default
+			aiModel = cfg.AIModel
+		}
+		configHash := toolcache.GenerateConfigHash(fakerID, instruction, aiModel)
+
+		if fakerDebug {
+			fmt.Fprintf(os.Stderr, "[FAKER CLI] Creating standalone faker\n")
+			fmt.Fprintf(os.Stderr, "[FAKER CLI]   User ID: %s\n", fakerID)
+			fmt.Fprintf(os.Stderr, "[FAKER CLI]   Config Hash: %s\n", configHash)
+			fmt.Fprintf(os.Stderr, "[FAKER CLI]   AI Model: %s\n", aiModel)
+		}
+
+		// Create standalone faker with config hash
+		f, err = faker.NewStandaloneFaker(configHash, instruction, toolCache, fakerDebug)
 		if err != nil {
 			return fmt.Errorf("failed to create standalone faker: %w", err)
 		}
