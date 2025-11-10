@@ -14,6 +14,14 @@ type Manager interface {
 	GetWriteHistory(ctx context.Context, sessionID string) ([]*Event, error)
 	GetAllEvents(ctx context.Context, sessionID string) ([]*Event, error)
 	BuildWriteHistoryPrompt(events []*Event) string
+
+	// CLI support methods
+	ListSessions(ctx context.Context) ([]*SessionListItem, error)
+	GetSessionCount(ctx context.Context) (int, error)
+	ClearAllSessions(ctx context.Context) (int, error)
+	GetSessionDetails(ctx context.Context, sessionID string) (*SessionDetails, error)
+	GetMetrics(ctx context.Context) (*SessionMetrics, error)
+	ExportReplayableSessionJSON(ctx context.Context, sessionID string) ([]byte, error)
 }
 
 // manager implements Manager interface
@@ -65,4 +73,34 @@ func (m *manager) GetAllEvents(ctx context.Context, sessionID string) ([]*Event,
 func (m *manager) BuildWriteHistoryPrompt(events []*Event) string {
 	builder := NewHistoryBuilder(events)
 	return builder.BuildWriteHistoryPrompt()
+}
+
+// ListSessions retrieves all sessions with aggregated stats
+func (m *manager) ListSessions(ctx context.Context) ([]*SessionListItem, error) {
+	return m.store.listSessions(ctx)
+}
+
+// GetSessionCount returns the total number of sessions
+func (m *manager) GetSessionCount(ctx context.Context) (int, error) {
+	return m.store.getSessionCount(ctx)
+}
+
+// ClearAllSessions deletes all sessions and returns the count deleted
+func (m *manager) ClearAllSessions(ctx context.Context) (int, error) {
+	return m.store.clearAllSessions(ctx, m.debug)
+}
+
+// GetSessionDetails retrieves complete session information with all tool calls and stats
+func (m *manager) GetSessionDetails(ctx context.Context, sessionID string) (*SessionDetails, error) {
+	return m.store.getSessionDetails(ctx, sessionID)
+}
+
+// GetMetrics retrieves aggregated metrics across all sessions
+func (m *manager) GetMetrics(ctx context.Context) (*SessionMetrics, error) {
+	return m.store.getMetrics(ctx)
+}
+
+// ExportReplayableSessionJSON exports a session in replayable JSON format
+func (m *manager) ExportReplayableSessionJSON(ctx context.Context, sessionID string) ([]byte, error) {
+	return m.store.exportReplayableSessionJSON(ctx, sessionID)
 }

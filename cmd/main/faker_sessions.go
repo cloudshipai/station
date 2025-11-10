@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"station/pkg/faker"
+	"station/pkg/faker/session"
 
 	"github.com/spf13/cobra"
 	_ "modernc.org/sqlite"
@@ -198,7 +198,7 @@ func runFakerSessionsList(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	svc := faker.NewSessionService(db)
+	svc := session.NewManager(db, false)
 	sessions, err := svc.ListSessions(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to list sessions: %w", err)
@@ -251,7 +251,7 @@ func runFakerSessionView(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	svc := faker.NewSessionService(db)
+	svc := session.NewManager(db, false)
 	details, err := svc.GetSessionDetails(context.Background(), sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to get session details: %w", err)
@@ -324,7 +324,7 @@ func runFakerSessionDelete(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	svc := faker.NewSessionService(db)
+	svc := session.NewManager(db, false)
 	err = svc.DeleteSession(context.Background(), sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
@@ -341,7 +341,7 @@ func runFakerSessionsClear(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	svc := faker.NewSessionService(db)
+	svc := session.NewManager(db, false)
 
 	// Get count before clearing
 	count, err := svc.GetSessionCount(context.Background())
@@ -383,7 +383,7 @@ func runFakerMetrics(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	svc := faker.NewSessionService(db)
+	svc := session.NewManager(db, false)
 	metrics, err := svc.GetMetrics(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to get metrics: %w", err)
@@ -458,7 +458,7 @@ func runFakerSessionReplay(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	svc := faker.NewSessionService(db)
+	svc := session.NewManager(db, false)
 
 	// Get replayable session
 	jsonData, err := svc.ExportReplayableSessionJSON(context.Background(), sessionID)
