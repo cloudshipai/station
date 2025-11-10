@@ -11,16 +11,18 @@ import (
 )
 
 var (
-	fakerCommand      string
-	fakerArgs         string
-	fakerEnvVars      []string
-	fakerCacheDir     string
-	fakerDebug        bool
-	fakerPassthrough  bool
-	fakerAIEnabled    bool
-	fakerAIModel      string
+	fakerCommand       string
+	fakerArgs          string
+	fakerEnvVars       []string
+	fakerCacheDir      string
+	fakerDebug         bool
+	fakerPassthrough   bool
+	fakerAIEnabled     bool
+	fakerAIModel       string
 	fakerAIInstruction string
-	fakerAITemplate   string
+	fakerAITemplate    string
+	fakerStandalone    bool
+	fakerID            string
 )
 
 var fakerCmd = &cobra.Command{
@@ -102,20 +104,35 @@ func init() {
 	fakerCmd.Flags().StringVar(&fakerCacheDir, "cache-dir", "", "Directory for schema cache (default: ~/.cache/station/faker)")
 	fakerCmd.Flags().BoolVar(&fakerDebug, "debug", false, "Enable debug logging")
 	fakerCmd.Flags().BoolVar(&fakerPassthrough, "passthrough", false, "Disable enrichment (pure proxy mode)")
-	
+
 	// AI enrichment flags
 	fakerCmd.Flags().BoolVar(&fakerAIEnabled, "ai-enabled", false, "Enable AI-powered enrichment using Station's configured AI provider")
 	fakerCmd.Flags().StringVar(&fakerAIModel, "ai-model", "", "AI model for enrichment (overrides Station's configured model)")
 	fakerCmd.Flags().StringVar(&fakerAIInstruction, "ai-instruction", "", "Custom instruction for AI data generation (e.g., 'Generate high-alert monitoring data')")
 	fakerCmd.Flags().StringVar(&fakerAITemplate, "ai-template", "", "Predefined instruction template (use 'list' to see available templates)")
 
-	// Note: --command is required for the proxy mode, but not for subcommands like sessions/metrics
+	// Standalone mode flags
+	fakerCmd.Flags().BoolVar(&fakerStandalone, "standalone", false, "Run in standalone mode (no target MCP server, AI-generated tools only)")
+	fakerCmd.Flags().StringVar(&fakerID, "faker-id", "", "Unique identifier for this faker instance (required for standalone mode, e.g., 'aws-cloudwatch-faker')")
+
+	// Note: --command is required for the proxy mode, but not for subcommands like sessions/metrics or standalone mode
 }
 
 func runFaker(cmd *cobra.Command, args []string) error {
-	// Check if command flag is provided (required for proxy mode)
-	if fakerCommand == "" {
-		return fmt.Errorf("--command flag is required when running faker proxy\nUse 'stn faker sessions' or 'stn faker metrics' for session management")
+	// Standalone mode validation
+	if fakerStandalone {
+		if fakerID == "" {
+			return fmt.Errorf("--faker-id is required when using --standalone mode")
+		}
+		if fakerAIInstruction == "" {
+			return fmt.Errorf("--ai-instruction is required when using --standalone mode")
+		}
+		// In standalone mode, --command is not required
+	} else {
+		// Check if command flag is provided (required for proxy mode)
+		if fakerCommand == "" {
+			return fmt.Errorf("--command flag is required when running faker proxy\nUse 'stn faker sessions' or 'stn faker metrics' for session management")
+		}
 	}
 
 	// Template listing temporarily removed in refactor
@@ -134,7 +151,6 @@ func runFaker(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "Warning: Invalid env var format '%s', expected KEY=VALUE\n", envStr)
 		}
 	}
-
 
 	// Parse args string into slice
 	var targetArgs []string
