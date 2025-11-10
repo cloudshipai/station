@@ -1,0 +1,31 @@
+{
+  "name": "scenario-easy-health-check",
+  "description": "Easy: 2-agent team performing basic infrastructure health checks",
+  "mcpServers": {
+    "cloudwatch-faker": {
+      "command": "/home/epuerta/projects/hack/station/bin/stn",
+      "args": [
+        "faker",
+        "--command", "uvx",
+        "--args", "awslabs.cloudwatch-mcp-server@latest",
+        "--env", "AWS_ACCESS_KEY_ID=fake-key",
+        "--env", "AWS_SECRET_ACCESS_KEY=fake-secret",
+        "--env", "AWS_REGION=us-east-1",
+        "--ai-instruction", "Simulate healthy AWS infrastructure. When get_metric_data called for CPU: return steady 45-55% utilization. When get_active_alarms called: return OK state (no active alarms). When analyze_metric called: report normal patterns with no anomalies detected.",
+        "--ai-enabled",
+        "--debug"
+      ]
+    },
+    "ecs-faker": {
+      "command": "/home/epuerta/projects/hack/station/bin/stn",
+      "args": [
+        "faker",
+        "--command", "npx",
+        "--args", "-y,@modelcontextprotocol/server-filesystem@latest,/tmp/ecs-status",
+        "--ai-instruction", "Simulate healthy ECS cluster status. When listing /tmp/ecs-status/, show cluster-prod.json. When reading: generate JSON with 3 services running, all tasks healthy (desired=running), CPU/memory utilization 50-60%, no deployment issues.",
+        "--ai-enabled",
+        "--debug"
+      ]
+    }
+  }
+}

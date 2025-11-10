@@ -1,0 +1,53 @@
+{
+  "name": "scenario-hard-incident-response",
+  "description": "Hard: 5-agent team responding to multi-layer production incident",
+  "mcpServers": {
+    "cloudwatch-faker": {
+      "command": "/home/epuerta/projects/hack/station/bin/stn",
+      "args": [
+        "faker",
+        "--command", "uvx",
+        "--args", "awslabs.cloudwatch-mcp-server@latest",
+        "--env", "AWS_ACCESS_KEY_ID=fake-key",
+        "--env", "AWS_SECRET_ACCESS_KEY=fake-secret",
+        "--env", "AWS_REGION=us-east-1",
+        "--ai-instruction", "Simulate cascading production failure. When get_metric_data: show RDS CPU 95%, connection pool exhausted (max_connections 500/500), query latency 5-15s. API Gateway 5xx errors 45%, p99 latency 8000ms. ECS tasks CrashLoopBackoff (5 restarts). When get_active_alarms: return ALARM for RDS CPU, API errors, ECS task health. When analyze_metric: detect anomaly started 14:30 UTC, correlates with deployment.",
+        "--ai-enabled",
+        "--debug"
+      ]
+    },
+    "logs-faker": {
+      "command": "/home/epuerta/projects/hack/station/bin/stn",
+      "args": [
+        "faker",
+        "--command", "npx",
+        "--args", "-y,@modelcontextprotocol/server-filesystem@latest,/tmp/app-logs",
+        "--ai-instruction", "Simulate application error logs during incident. When listing /tmp/app-logs/: show api-errors.log, database-errors.log, container-crashes.log. When reading api-errors.log: show 'OperationalError: Too many connections', 'TimeoutError: Query exceeded 30s', 'HTTPError: 503 Service Unavailable'. When reading database-errors.log: show 'ERROR: connection pool exhausted', 'FATAL: remaining connection slots reserved for superuser'. When reading container-crashes.log: show OOMKilled events, health check failures.",
+        "--ai-enabled",
+        "--debug"
+      ]
+    },
+    "cloudtrail-faker": {
+      "command": "/home/epuerta/projects/hack/station/bin/stn",
+      "args": [
+        "faker",
+        "--command", "npx",
+        "--args", "-y,@modelcontextprotocol/server-filesystem@latest,/tmp/deployments",
+        "--ai-instruction", "Simulate recent deployment events. When listing /tmp/deployments/: show deployment-history-2025-11-09.json. When reading: show ECS service update deployed v2.8.0 at 14:25 UTC by 'ci-cd-pipeline', changed environment variable 'DB_POOL_SIZE' from 50 to 500 (10x increase), new container image with database ORM update. Previous stable version: v2.7.5.",
+        "--ai-enabled",
+        "--debug"
+      ]
+    },
+    "terraform-faker": {
+      "command": "/home/epuerta/projects/hack/station/bin/stn",
+      "args": [
+        "faker",
+        "--command", "npx",
+        "--args", "-y,@modelcontextprotocol/server-filesystem@latest,/tmp/infrastructure",
+        "--ai-instruction", "Simulate infrastructure configuration. When listing /tmp/infrastructure/: show rds-config.tf, ecs-config.tf, security-groups.tf. When reading rds-config.tf: show RDS instance db.t3.medium (2 vCPU, 4GB RAM), max_connections=500, PostgreSQL 14. When reading ecs-config.tf: show task definition with 15 tasks, each allocated 512MB memory. Calculate: 15 tasks × 500 max_connections attempt = 7500 connections to 500-connection database.",
+        "--ai-enabled",
+        "--debug"
+      ]
+    }
+  }
+}
