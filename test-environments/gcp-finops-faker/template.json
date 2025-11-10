@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "gcp-billing-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id", "gcp-billing-faker",
+        "--ai-instruction", "Generate comprehensive GCP Cloud Billing and Cost Management API tools for FinOps investigations. Include tools for: 1) Querying billing data and export tables (query_billing_export, get_billing_account, list_projects_billing), 2) Analyzing cost trends and anomalies (analyze_cost_spike, get_cost_forecast, compare_period_costs, detect_cost_anomalies), 3) Resource cost attribution (get_service_costs, get_project_costs, get_sku_costs, get_label_costs), 4) Budget and alert management (list_budgets, get_budget_status, get_budget_alerts, analyze_budget_variance), 5) Recommendations and optimization (get_cost_recommendations, list_idle_resources, get_commitment_analysis, analyze_sustained_use_discount), 6) Cost allocation and reporting (get_cost_breakdown_by_service, get_cost_by_region, get_cost_by_label, generate_cost_report). Each tool should accept parameters like project_id, billing_account_id, time_range (start_date, end_date), granularity (daily, weekly, monthly), filters (service, sku, region, labels), and aggregation options. Tools should return realistic BigQuery-style cost data with detailed breakdowns.",
+        "--debug"
+      ]
+    },
+    "gcp-resources-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id", "gcp-resources-faker",
+        "--ai-instruction", "Generate GCP Resource Management and Asset Inventory API tools for DevOps cost investigations. Include tools for: 1) Resource inventory (list_compute_instances, list_gke_clusters, list_cloud_sql_instances, list_storage_buckets, list_bigquery_datasets), 2) Resource details and utilization (get_instance_details, get_instance_metrics, get_disk_usage, get_network_usage, get_cpu_utilization), 3) Resource tagging and organization (list_resources_by_label, get_resource_hierarchy, list_untagged_resources, validate_resource_tags), 4) Resource recommendations (get_rightsizing_recommendations, list_idle_vms, list_underutilized_disks, get_snapshot_recommendations), 5) Quota and limits (get_project_quotas, get_quota_usage, list_quota_exceeded_resources). Tools should accept project_id, resource_type, filters (region, zone, labels, state), and return detailed resource metadata including costs, utilization metrics, and optimization opportunities.",
+        "--debug"
+      ]
+    },
+    "gcp-monitoring-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id", "gcp-monitoring-faker",
+        "--ai-instruction", "Generate GCP Cloud Monitoring and Logging API tools for DevOps cost-related investigations. Include tools for: 1) Cost-related metrics (query_cost_metrics, get_billing_metric_data, list_cost_alerts, get_cost_alert_history), 2) Resource performance monitoring (get_vm_performance, get_database_performance, get_api_usage_metrics, get_storage_io_metrics), 3) Log analysis for cost events (search_cost_logs, get_billing_logs, find_resource_creation_events, find_resource_deletion_events, analyze_api_usage_patterns), 4) Custom metrics and dashboards (list_cost_dashboards, get_dashboard_data, create_cost_alert, get_slo_compliance), 5) Trace analysis for expensive operations (list_expensive_traces, analyze_api_cost_patterns, get_service_latency_cost_correlation). Tools should accept time_series queries, metric filters, log queries with FinOps context, and return time-series data, log entries, and correlation insights for cost optimization investigations.",
+        "--debug"
+      ]
+    }
+  }
+}
