@@ -20,6 +20,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/openai/openai-go/option"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ToolCallHistory represents a single tool call and response for context
@@ -32,17 +36,17 @@ type ToolCallHistory struct {
 
 // MCPFaker is an MCP server that proxies another MCP server and enriches responses
 type MCPFaker struct {
-	targetClient     *client.Client         // Client to the real MCP server
-	genkitApp        *genkit.Genkit
-	stationConfig    *config.Config
-	instruction      string
-	debug            bool
-	writeOperations  map[string]bool        // Tools classified as write operations
-	safetyMode       bool                   // If true, intercept write operations
-	callHistory      []ToolCallHistory      // Legacy: Message history for consistency (deprecated, use session)
-	sessionManager   *SessionManager        // Session-based state tracking
-	session          *FakerSession          // Current faker session
-	toolSchemas      map[string]*mcp.Tool   // Tool definitions for schema extraction
+	targetClient    *client.Client // Client to the real MCP server
+	genkitApp       *genkit.Genkit
+	stationConfig   *config.Config
+	instruction     string
+	debug           bool
+	writeOperations map[string]bool      // Tools classified as write operations
+	safetyMode      bool                 // If true, intercept write operations
+	callHistory     []ToolCallHistory    // Legacy: Message history for consistency (deprecated, use session)
+	sessionManager  *SessionManager      // Session-based state tracking
+	session         *FakerSession        // Current faker session
+	toolSchemas     map[string]*mcp.Tool // Tool definitions for schema extraction
 }
 
 // NewMCPFaker creates a new MCP faker server
@@ -51,9 +55,9 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 
 	if debug {
 		if deadline, ok := ctx.Deadline(); ok {
-			fmt.Printf("[FAKER DEBUG] NewMCPFaker context deadline: %v (timeout in %v)\n", deadline, time.Until(deadline))
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] NewMCPFaker context deadline: %v (timeout in %v)\n", deadline, time.Until(deadline))
 		} else {
-			fmt.Printf("[FAKER DEBUG] NewMCPFaker context has NO deadline (infinite timeout) ✓\n")
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] NewMCPFaker context has NO deadline (infinite timeout) ✓\n")
 		}
 	}
 
@@ -76,7 +80,7 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 
 		// Create a brand new GenKit app for the faker
 		if debug {
-			fmt.Printf("[FAKER] Initializing fresh GenKit with provider: %s, model: %s\n",
+			fmt.Fprintf(os.Stderr, "[FAKER] Initializing fresh GenKit with provider: %s, model: %s\n",
 				stationConfig.AIProvider, stationConfig.AIModel)
 		}
 
@@ -111,7 +115,7 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 		}
 
 		if debug {
-			fmt.Printf("[FAKER] GenKit initialized successfully\n")
+			fmt.Fprintf(os.Stderr, "[FAKER] GenKit initialized successfully\n")
 		}
 	}
 
@@ -123,7 +127,7 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 	}
 
 	if debug {
-		fmt.Printf("[FAKER] Creating MCP client to target: %s %v\n", targetCmd, targetArgs)
+		fmt.Fprintf(os.Stderr, "[FAKER] Creating MCP client to target: %s %v\n", targetCmd, targetArgs)
 	}
 
 	targetClient, err := client.NewStdioMCPClient(targetCmd, envSlice, targetArgs...)
@@ -132,7 +136,11 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 	}
 
 	if debug {
-		fmt.Printf("[FAKER] Initializing target client...\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] Target client initialized successfully\n")
+	}
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] Initializing target client...\n")
 	}
 
 	// Initialize target client
@@ -150,7 +158,7 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 	}
 
 	if debug {
-		fmt.Printf("[FAKER] Target client initialized successfully\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] Target client initialized successfully\n")
 	}
 
 	// Initialize session management (only if instruction provided for AI enrichment)
@@ -172,7 +180,7 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 		}
 
 		if debug {
-			fmt.Printf("[FAKER] Created session %s\n", session.ID)
+			fmt.Fprintf(os.Stderr, "[FAKER] Created session %s\n", session.ID)
 		}
 	}
 
@@ -196,14 +204,14 @@ func (f *MCPFaker) Serve() error {
 	ctx := context.Background()
 
 	if f.debug {
-		fmt.Printf("[FAKER] Starting MCP server...\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] Starting MCP server...\n")
 	}
 
 	// Create MCP server
 	mcpServer := server.NewMCPServer("faker-mcp-server", "1.0.0")
 
 	if f.debug {
-		fmt.Printf("[FAKER] Listing tools from target...\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] Listing tools from target...\n")
 	}
 
 	// Get all tools from target server
@@ -213,17 +221,17 @@ func (f *MCPFaker) Serve() error {
 	}
 
 	if f.debug {
-		fmt.Printf("[FAKER] Found %d tools from target, registering...\n", len(toolsResult.Tools))
+		fmt.Fprintf(os.Stderr, "[FAKER] Found %d tools from target, registering...\n", len(toolsResult.Tools))
 	}
 
 	// Classify tools as read/write operations using AI
 	if f.safetyMode && f.genkitApp != nil {
 		if f.debug {
-			fmt.Printf("[FAKER] Classifying tools for write operation detection...\n")
+			fmt.Fprintf(os.Stderr, "[FAKER] Classifying tools for write operation detection...\n")
 		}
 		if err := f.classifyTools(ctx, toolsResult.Tools); err != nil {
 			if f.debug {
-				fmt.Printf("[FAKER] Warning: Tool classification failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Tool classification failed: %v\n", err)
 			}
 		} else {
 			f.displayToolClassification()
@@ -242,7 +250,7 @@ func (f *MCPFaker) Serve() error {
 	}
 
 	if f.debug {
-		fmt.Printf("[FAKER] Starting stdio server...\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] Starting stdio server...\n")
 	}
 
 	// Serve on stdio
@@ -251,16 +259,33 @@ func (f *MCPFaker) Serve() error {
 
 // handleToolCall proxies a tool call to the target, enriches the response, and returns it
 func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Start OpenTelemetry span with station.faker label
+	tracer := otel.Tracer("station.faker")
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("faker.%s", request.Params.Name),
+		trace.WithAttributes(
+			attribute.String("faker.tool_name", request.Params.Name),
+			attribute.String("faker.ai_instruction", f.instruction),
+			attribute.Bool("faker.safety_mode", f.safetyMode),
+			attribute.Bool("faker.is_write_operation", f.writeOperations[request.Params.Name]),
+		),
+	)
+	defer span.End()
+
+	// Add session ID if available
+	if f.session != nil {
+		span.SetAttributes(attribute.String("faker.session_id", f.session.ID))
+	}
+
 	if f.debug {
-		fmt.Printf("[FAKER] Handling tool call: %s\n", request.Params.Name)
-		fmt.Printf("[FAKER DEBUG] safetyMode=%v, isWriteOp=%v, hasSession=%v\n",
+		fmt.Fprintf(os.Stderr, "[FAKER] Handling tool call: %s\n", request.Params.Name)
+		fmt.Fprintf(os.Stderr, "[FAKER DEBUG] safetyMode=%v, isWriteOp=%v, hasSession=%v\n",
 			f.safetyMode, f.writeOperations[request.Params.Name], f.session != nil)
 
 		// DEBUG: Check incoming context deadline
 		if deadline, ok := ctx.Deadline(); ok {
-			fmt.Printf("[FAKER DEBUG] handleToolCall INCOMING context deadline: %v (timeout in %v) ⚠️\n", deadline, time.Until(deadline))
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] handleToolCall INCOMING context deadline: %v (timeout in %v) ⚠️\n", deadline, time.Until(deadline))
 		} else {
-			fmt.Printf("[FAKER DEBUG] handleToolCall INCOMING context has NO deadline ✓\n")
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] handleToolCall INCOMING context has NO deadline ✓\n")
 		}
 	}
 
@@ -268,26 +293,33 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 
 	// Check if this is a write operation and intercept it
 	if f.safetyMode && f.writeOperations[request.Params.Name] {
+		span.SetAttributes(
+			attribute.Bool("faker.intercepted_write", true),
+			attribute.Bool("faker.real_mcp_used", false),
+		)
+
 		if f.debug {
-			fmt.Printf("[FAKER] ⚠️  INTERCEPTED write operation: %s (returning mock success)\n", request.Params.Name)
+			fmt.Fprintf(os.Stderr, "[FAKER] ⚠️  INTERCEPTED write operation: %s (returning mock success)\n", request.Params.Name)
 		}
 
 		mockResult, err := f.createMockSuccessResponse(request.Params.Name, args)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to create mock response")
 			return nil, err
 		}
 
 		// Record write operation in session for state tracking
 		if f.debug {
-			fmt.Printf("[FAKER DEBUG] About to record write event: sessionMgr=%v, session=%v\n",
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] About to record write event: sessionMgr=%v, session=%v\n",
 				f.sessionManager != nil, f.session != nil)
 		}
 		if err := f.recordToolEvent(ctx, request.Params.Name, args, mockResult, "write"); err != nil {
 			if f.debug {
-				fmt.Printf("[FAKER] Warning: Failed to record write event: %v\n", err)
+				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to record write event: %v\n", err)
 			}
 		} else if f.debug {
-			fmt.Printf("[FAKER DEBUG] ✅ Write event recorded successfully\n")
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] ✅ Write event recorded successfully\n")
 		}
 
 		// Legacy: Also record in callHistory for backward compatibility
@@ -298,21 +330,27 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 
 	// Read operation - check if we should synthesize based on write history
 	if f.shouldSynthesizeRead(ctx) {
+		span.SetAttributes(attribute.Bool("faker.synthesized_response", true))
+
 		if f.debug {
-			fmt.Printf("[FAKER] Read operation with write history - synthesizing response based on accumulated state\n")
+			fmt.Fprintf(os.Stderr, "[FAKER] Read operation with write history - synthesizing response based on accumulated state\n")
 		}
 
 		synthesizedResult, err := f.synthesizeReadResponse(ctx, request.Params.Name, args)
 		if err != nil {
+			span.AddEvent("synthesis_failed", trace.WithAttributes(
+				attribute.String("error", err.Error()),
+			))
 			if f.debug {
-				fmt.Printf("[FAKER] Synthesis failed: %v, falling back to real tool\n", err)
+				fmt.Fprintf(os.Stderr, "[FAKER] Synthesis failed: %v, falling back to real tool\n", err)
 			}
 			// Fall through to real tool call
 		} else {
+			span.SetAttributes(attribute.Bool("faker.real_mcp_used", false))
 			// Record synthesized read in session
 			if err := f.recordToolEvent(ctx, request.Params.Name, args, synthesizedResult, "read"); err != nil {
 				if f.debug {
-					fmt.Printf("[FAKER] Warning: Failed to record read event: %v\n", err)
+					fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to record read event: %v\n", err)
 				}
 			}
 			return synthesizedResult, nil
@@ -322,33 +360,38 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 	// Call the real target server for read operations (no write history or synthesis failed)
 	result, err := f.targetClient.CallTool(ctx, request)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "target tool call failed")
 		return nil, fmt.Errorf("target tool call failed: %w", err)
 	}
 
+	// Mark span as using real MCP server
+	span.SetAttributes(attribute.Bool("faker.real_mcp_used", true))
+
 	if f.debug {
-		fmt.Printf("[FAKER] Target returned result\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] Target returned result\n")
 	}
 
 	// Enrich the result
 	enrichedResult, err := f.enrichToolResult(ctx, request.Params.Name, result)
 	if err != nil {
 		if f.debug {
-			fmt.Printf("[FAKER] Enrichment failed: %v, returning original\n", err)
+			fmt.Fprintf(os.Stderr, "[FAKER] Enrichment failed: %v, returning original\n", err)
 		}
 		enrichedResult = result // Use original if enrichment fails
 	}
 
 	// Record read operation in session
 	if f.debug {
-		fmt.Printf("[FAKER DEBUG] About to record read event: sessionMgr=%v, session=%v\n",
+		fmt.Fprintf(os.Stderr, "[FAKER DEBUG] About to record read event: sessionMgr=%v, session=%v\n",
 			f.sessionManager != nil, f.session != nil)
 	}
 	if err := f.recordToolEvent(ctx, request.Params.Name, args, enrichedResult, "read"); err != nil {
 		if f.debug {
-			fmt.Printf("[FAKER] Warning: Failed to record read event: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to record read event: %v\n", err)
 		}
 	} else if f.debug {
-		fmt.Printf("[FAKER DEBUG] ✅ Read event recorded successfully\n")
+		fmt.Fprintf(os.Stderr, "[FAKER DEBUG] ✅ Read event recorded successfully\n")
 	}
 
 	// Legacy: Also record in callHistory for backward compatibility
@@ -359,13 +402,26 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 
 // enrichToolResult uses AI to enrich a tool result
 func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+	// Start enrichment span
+	tracer := otel.Tracer("station.faker")
+	ctx, span := tracer.Start(ctx, "faker.ai_enrichment",
+		trace.WithAttributes(
+			attribute.String("faker.tool_name", toolName),
+			attribute.String("faker.operation", "ai_enrichment"),
+		),
+	)
+	defer span.End()
+
 	// Skip enrichment if GenKit not initialized (passthrough mode)
 	if f.genkitApp == nil {
+		span.SetAttributes(attribute.Bool("faker.ai_enrichment_enabled", false))
 		if f.debug {
-			fmt.Printf("[FAKER] GenKit not initialized, skipping enrichment (passthrough mode)\n")
+			fmt.Fprintf(os.Stderr, "[FAKER] GenKit not initialized, skipping enrichment (passthrough mode)\n")
 		}
 		return result, nil
 	}
+
+	span.SetAttributes(attribute.Bool("faker.ai_enrichment_enabled", true))
 
 	// Extract content from result
 	if len(result.Content) == 0 {
@@ -373,15 +429,15 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 	}
 
 	if f.debug {
-		fmt.Printf("[FAKER] Starting enrichment for tool: %s\n", toolName)
+		fmt.Fprintf(os.Stderr, "[FAKER] Starting enrichment for tool: %s\n", toolName)
 		resultJSON, _ := json.Marshal(result.Content)
-		fmt.Printf("[FAKER] Original result content: %s\n", string(resultJSON))
+		fmt.Fprintf(os.Stderr, "[FAKER] Original result content: %s\n", string(resultJSON))
 
 		// DEBUG: Check context BEFORE creating new one
 		if deadline, ok := ctx.Deadline(); ok {
-			fmt.Printf("[FAKER DEBUG] enrichToolResult BEFORE new context: deadline=%v (timeout in %v) ⚠️\n", deadline, time.Until(deadline))
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] enrichToolResult BEFORE new context: deadline=%v (timeout in %v) ⚠️\n", deadline, time.Until(deadline))
 		} else {
-			fmt.Printf("[FAKER DEBUG] enrichToolResult BEFORE new context: NO deadline ✓\n")
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] enrichToolResult BEFORE new context: NO deadline ✓\n")
 		}
 	}
 
@@ -394,9 +450,9 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 	if f.debug {
 		// DEBUG: Check context AFTER creating new one
 		if deadline, ok := ctx.Deadline(); ok {
-			fmt.Printf("[FAKER DEBUG] enrichToolResult AFTER new context: deadline=%v (timeout in %v) ✓\n", deadline, time.Until(deadline))
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] enrichToolResult AFTER new context: deadline=%v (timeout in %v) ✓\n", deadline, time.Until(deadline))
 		} else {
-			fmt.Printf("[FAKER DEBUG] enrichToolResult AFTER new context: NO deadline?! ⚠️\n")
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] enrichToolResult AFTER new context: NO deadline?! ⚠️\n")
 		}
 	}
 
@@ -430,7 +486,7 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 	}
 
 	if f.debug {
-		fmt.Printf("[FAKER] Using instruction with %d history items\n", len(f.callHistory))
+		fmt.Fprintf(os.Stderr, "[FAKER] Using instruction with %d history items\n", len(f.callHistory))
 	}
 
 	// Define output schema matching MCP Content structure
@@ -446,13 +502,13 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 	modelName := f.getModelName()
 
 	if f.debug {
-		fmt.Printf("[FAKER] Calling GenKit with model: %s and output schema\n", modelName)
+		fmt.Fprintf(os.Stderr, "[FAKER] Calling GenKit with model: %s and output schema\n", modelName)
 
 		// DEBUG: Final context check RIGHT before calling GenKit
 		if deadline, ok := ctx.Deadline(); ok {
-			fmt.Printf("[FAKER DEBUG] RIGHT BEFORE GenKit.GenerateData: deadline=%v (timeout in %v)\n", deadline, time.Until(deadline))
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] RIGHT BEFORE GenKit.GenerateData: deadline=%v (timeout in %v)\n", deadline, time.Until(deadline))
 		} else {
-			fmt.Printf("[FAKER DEBUG] RIGHT BEFORE GenKit.GenerateData: NO deadline ⚠️\n")
+			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] RIGHT BEFORE GenKit.GenerateData: NO deadline ⚠️\n")
 		}
 	}
 
@@ -463,7 +519,7 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 
 	if err != nil {
 		if f.debug {
-			fmt.Printf("[FAKER] GenerateData failed: %v, trying Generate fallback\n", err)
+			fmt.Fprintf(os.Stderr, "[FAKER] GenerateData failed: %v, trying Generate fallback\n", err)
 		}
 		// Fallback to regular Generate if structured generation fails
 		resp, err := genkit.Generate(ctx, f.genkitApp,
@@ -488,7 +544,7 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 		var parsedOutput OutputSchema
 		if err := json.Unmarshal([]byte(text), &parsedOutput); err != nil {
 			if f.debug {
-				fmt.Printf("[FAKER] Text fallback also failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "[FAKER] Text fallback also failed: %v\n", err)
 			}
 			return result, nil
 		}
@@ -497,7 +553,7 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 
 	if f.debug {
 		outputJSON, _ := json.MarshalIndent(output, "", "  ")
-		fmt.Printf("[FAKER] GenKit structured response: %s\n", string(outputJSON))
+		fmt.Fprintf(os.Stderr, "[FAKER] GenKit structured response: %s\n", string(outputJSON))
 	}
 
 	// Convert to mcp.Content
@@ -511,13 +567,13 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 
 	if len(enrichedContent) == 0 {
 		if f.debug {
-			fmt.Printf("[FAKER] No valid content in AI response\n")
+			fmt.Fprintf(os.Stderr, "[FAKER] No valid content in AI response\n")
 		}
 		return result, nil
 	}
 
 	if f.debug {
-		fmt.Printf("[FAKER] Successfully enriched content with %d items\n", len(enrichedContent))
+		fmt.Fprintf(os.Stderr, "[FAKER] Successfully enriched content with %d items\n", len(enrichedContent))
 	}
 
 	// Return enriched result
@@ -579,7 +635,7 @@ Respond with your analysis.`, tool.Name, tool.Description)
 
 		if err != nil {
 			if f.debug {
-				fmt.Printf("[FAKER] AI classification failed for %s: %v, using heuristic fallback\n", tool.Name, err)
+				fmt.Fprintf(os.Stderr, "[FAKER] AI classification failed for %s: %v, using heuristic fallback\n", tool.Name, err)
 			}
 			// Use heuristic fallback when AI times out
 			isWrite := f.heuristicClassifyTool(tool.Name, tool.Description)
@@ -587,7 +643,7 @@ Respond with your analysis.`, tool.Name, tool.Description)
 				f.writeOperations[tool.Name] = true
 			}
 			if f.debug {
-				fmt.Printf("[FAKER] Tool %s: write=%v (heuristic classification)\n", tool.Name, isWrite)
+				fmt.Fprintf(os.Stderr, "[FAKER] Tool %s: write=%v (heuristic classification)\n", tool.Name, isWrite)
 			}
 			continue
 		}
@@ -598,7 +654,7 @@ Respond with your analysis.`, tool.Name, tool.Description)
 		}
 
 		if f.debug {
-			fmt.Printf("[FAKER] Tool %s: write=%v, risk=%s, reason=%s\n",
+			fmt.Fprintf(os.Stderr, "[FAKER] Tool %s: write=%v, risk=%s, reason=%s\n",
 				tool.Name, classification.IsWriteOperation, classification.RiskLevel, classification.Reason)
 		}
 	}
@@ -610,6 +666,21 @@ Respond with your analysis.`, tool.Name, tool.Description)
 func (f *MCPFaker) heuristicClassifyTool(toolName, description string) bool {
 	toolNameLower := strings.ToLower(toolName)
 	descLower := strings.ToLower(description)
+
+	// Read-only operation keywords (check FIRST to override write keywords)
+	readOnlyKeywords := []string{
+		"tree", "list", "read", "get", "search", "find", "stat", "info",
+		"query", "fetch", "retrieve", "show", "view", "display", "check",
+		"scan", "detect", "analyze", "inspect", "browse", "explore", "watch",
+		"describe", "explain", "count", "size", "exists", "compare",
+	}
+
+	// Check read-only keywords first - if found, it's definitely NOT a write operation
+	for _, keyword := range readOnlyKeywords {
+		if strings.Contains(toolNameLower, keyword) || strings.Contains(descLower, keyword) {
+			return false // Definitely a read operation
+		}
+	}
 
 	// Write operation keywords
 	writeKeywords := []string{
@@ -642,13 +713,13 @@ func (f *MCPFaker) displayToolClassification() {
 	}
 
 	if writeCount > 0 {
-		fmt.Printf("\n[FAKER] 🛡️  SAFETY MODE: %d write operations detected and will be INTERCEPTED:\n", writeCount)
+		fmt.Fprintf(os.Stderr, "\n[FAKER] 🛡️  SAFETY MODE: %d write operations detected and will be INTERCEPTED:\n", writeCount)
 		for i, toolName := range writeTools {
-			fmt.Printf("[FAKER]   %d. %s\n", i+1, toolName)
+			fmt.Fprintf(os.Stderr, "[FAKER]   %d. %s\n", i+1, toolName)
 		}
-		fmt.Printf("[FAKER] These tools will return mock success responses without executing real operations.\n\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] These tools will return mock success responses without executing real operations.\n\n")
 	} else {
-		fmt.Printf("[FAKER] ✅ No write operations detected - all tools are read-only\n")
+		fmt.Fprintf(os.Stderr, "[FAKER] ✅ No write operations detected - all tools are read-only\n")
 	}
 }
 
@@ -734,6 +805,6 @@ func (f *MCPFaker) recordToolCall(toolName string, arguments map[string]interfac
 	}
 
 	if f.debug {
-		fmt.Printf("[FAKER] Recorded tool call in history (total: %d)\n", len(f.callHistory))
+		fmt.Fprintf(os.Stderr, "[FAKER] Recorded tool call in history (total: %d)\n", len(f.callHistory))
 	}
 }
