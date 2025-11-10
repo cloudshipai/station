@@ -5,7 +5,10 @@ import (
 	"os"
 	"strings"
 
+	"station/internal/config"
+	"station/internal/db"
 	"station/pkg/faker"
+	"station/pkg/faker/toolcache"
 
 	"github.com/spf13/cobra"
 )
@@ -172,10 +175,42 @@ func runFaker(cmd *cobra.Command, args []string) error {
 	// Build instruction
 	instruction := fakerAIInstruction
 
-	// Create and run MCP faker server
-	f, err := faker.NewMCPFaker(fakerCommand, targetArgs, envVars, instruction, fakerDebug)
-	if err != nil {
-		return fmt.Errorf("failed to create faker: %w", err)
+	// Create and run MCP faker server based on mode
+	var f *faker.MCPFaker
+	var err error
+
+	if fakerStandalone {
+		// Standalone mode - generate tools via AI, no target MCP server
+		if fakerDebug {
+			fmt.Fprintf(os.Stderr, "[FAKER CLI] Creating standalone faker with ID: %s\n", fakerID)
+		}
+
+		// Open database for tool cache
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		database, err := db.New(cfg.DatabaseURL)
+		if err != nil {
+			return fmt.Errorf("failed to open database: %w", err)
+		}
+		defer database.Close()
+
+		// Create tool cache
+		toolCache := toolcache.NewCache(database.Conn())
+
+		// Create standalone faker
+		f, err = faker.NewStandaloneFaker(fakerID, instruction, toolCache, fakerDebug)
+		if err != nil {
+			return fmt.Errorf("failed to create standalone faker: %w", err)
+		}
+	} else {
+		// Proxy mode - connect to real MCP server
+		f, err = faker.NewMCPFaker(fakerCommand, targetArgs, envVars, instruction, fakerDebug)
+		if err != nil {
+			return fmt.Errorf("failed to create faker: %w", err)
+		}
 	}
 
 	if err := f.Serve(); err != nil {

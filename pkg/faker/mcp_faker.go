@@ -42,7 +42,7 @@ type ToolCallHistory struct {
 
 // MCPFaker is an MCP server that proxies another MCP server and enriches responses
 type MCPFaker struct {
-	targetClient      *client.Client // Client to the real MCP server
+	targetClient      *client.Client // Client to the real MCP server (nil in standalone mode)
 	genkitApp         *genkit.Genkit
 	stationConfig     *config.Config
 	instruction       string
@@ -56,6 +56,11 @@ type MCPFaker struct {
 	toolsDiscovered   bool                 // Flag to track if tools have been discovered
 	discoveredTools   []mcp.Tool           // Cached tools from target server
 	toolDiscoveryLock sync.Mutex           // Lock for lazy tool discovery
+
+	// Standalone mode fields
+	standaloneMode bool        // If true, no target MCP server (AI-generated tools only)
+	fakerID        string      // Unique identifier for tool caching in standalone mode
+	toolCache      interface{} // Tool cache for standalone mode (toolcache.Cache)
 }
 
 // Global log file for faker debugging (since stderr isn't captured by parent)
@@ -286,6 +291,136 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 		sessionManager:  sessionMgr,
 		session:         sess,
 		toolSchemas:     make(map[string]*mcp.Tool),
+		standaloneMode:  false,
+	}, nil
+}
+
+// NewStandaloneFaker creates a new standalone faker that generates tools via AI
+// without connecting to a real MCP server. Tools are cached in the database.
+func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{}, debug bool) (*MCPFaker, error) {
+	initFakerLogFile()
+	ctx := context.Background()
+
+	logFaker("[FAKER] 🚀 NewStandaloneFaker starting for ID: %s\n", fakerID)
+
+	if fakerID == "" {
+		return nil, fmt.Errorf("faker ID is required for standalone mode")
+	}
+
+	if instruction == "" {
+		return nil, fmt.Errorf("AI instruction is required for standalone mode")
+	}
+
+	// Load Station config
+	stationConfig, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load station config: %w", err)
+	}
+
+	// Set GenKit to production mode to prevent reflection server
+	if os.Getenv("GENKIT_ENV") == "" {
+		os.Setenv("GENKIT_ENV", "prod")
+	}
+
+	// Initialize GenKit for AI tool generation
+	var app *genkit.Genkit
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] Initializing GenKit for standalone mode with provider: %s\n",
+			stationConfig.AIProvider)
+	}
+
+	// Initialize the AI provider
+	switch strings.ToLower(stationConfig.AIProvider) {
+	case "openai":
+		httpClient := &http.Client{
+			Timeout: 120 * time.Second,
+		}
+
+		var opts []option.RequestOption
+		opts = append(opts, option.WithHTTPClient(httpClient))
+		if stationConfig.AIBaseURL != "" {
+			opts = append(opts, option.WithBaseURL(stationConfig.AIBaseURL))
+		}
+
+		plugin := &openai.OpenAI{
+			APIKey: stationConfig.AIAPIKey,
+			Opts:   opts,
+		}
+
+		app = genkit.Init(ctx, genkit.WithPlugins(plugin))
+
+	case "googlegenai", "gemini":
+		plugin := &googlegenai.GoogleAI{}
+		app = genkit.Init(ctx, genkit.WithPlugins(plugin))
+
+	default:
+		return nil, fmt.Errorf("unsupported AI provider: %s (use 'openai' or 'gemini')", stationConfig.AIProvider)
+	}
+
+	if app == nil {
+		return nil, fmt.Errorf("failed to initialize GenKit app")
+	}
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] GenKit initialized successfully\n")
+	}
+
+	// Initialize session management (for tracking tool calls even in standalone mode)
+	var sessionMgr session.Manager
+	var sess *session.Session
+	if instruction != "" {
+		dbCtx, dbCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer dbCancel()
+
+		dbChan := make(chan error, 1)
+		var database *db.DB
+
+		go func() {
+			var err error
+			database, err = db.New(stationConfig.DatabaseURL)
+			dbChan <- err
+		}()
+
+		select {
+		case err := <-dbChan:
+			if err != nil {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to open database (will work without session tracking): %v\n", err)
+				}
+			} else {
+				sessionMgr = session.NewManager(database.Conn(), debug)
+				sess, err = sessionMgr.CreateSession(ctx, instruction)
+				if err != nil {
+					if debug {
+						fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to create session: %v\n", err)
+					}
+				} else if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Created session %s\n", sess.ID)
+				}
+			}
+		case <-dbCtx.Done():
+			if debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Database connection timed out\n")
+			}
+		}
+	}
+
+	return &MCPFaker{
+		targetClient:    nil, // No target in standalone mode
+		genkitApp:       app,
+		stationConfig:   stationConfig,
+		instruction:     instruction,
+		debug:           debug,
+		writeOperations: make(map[string]bool),
+		safetyMode:      true,
+		callHistory:     make([]ToolCallHistory, 0),
+		sessionManager:  sessionMgr,
+		session:         sess,
+		toolSchemas:     make(map[string]*mcp.Tool),
+		standaloneMode:  true,
+		fakerID:         fakerID,
+		toolCache:       toolCache,
 	}, nil
 }
 
