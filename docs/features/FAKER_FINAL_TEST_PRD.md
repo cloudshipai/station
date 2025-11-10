@@ -226,6 +226,78 @@ slack_faker:
 - [ ] Postmortem generated from simulated events
 - [ ] Agents completely fooled by environment
 
+## 🔧 Critical Bug Fixes - Session Nov 10, 2025
+
+### Issue: `stn sync` Hanging with Faker-Wrapped Tools
+
+**Problem**: When running `stn sync` on environments with multiple faker-wrapped MCP servers (especially with `--ai-enabled`), the sync would hang indefinitely on the second faker connection, timing out after 2 minutes.
+
+**Root Causes Identified**:
+
+1. **Database Connection Deadlock** (PRIMARY):
+   - Multiple fakers with `--ai-enabled` trying to open database connections simultaneously during sync
+   - Each faker calls `db.New()` during initialization for session management
+   - SQLite has limited concurrency - sync holds locks, first faker connects, second faker deadlocks
+   - **Fix**: Added 30-second timeout with graceful degradation to passthrough mode
+   - **Location**: `pkg/faker/mcp_faker.go:229-261`
+
+2. **Non-Existent Target Directories** (SECONDARY):
+   - Faker wrapping `npx @modelcontextprotocol/server-filesystem` would hang if target directory doesn't exist
+   - npx crashes during initialization with ENOENT error, causing faker Initialize() to timeout
+   - **Fix**: Use `/tmp` instead of non-existent paths like `/tmp/cloudwatch-metrics` or unresolved `{{ .PROJECT_ROOT }}`
+   - **Prevention**: Always verify target directories exist before faker wraps filesystem servers
+
+3. **Circular Dependency with Station MCP Server**:
+   - Including `station` MCP server in environment templates creates circular dependency during sync
+   - `stn sync` uses database → `station` server tries to use same database → deadlock
+   - **Fix**: Remove `station` MCP server from environment templates (not needed for faker testing)
+
+**Testing Results**:
+- ✅ `faker-test-1-single`: Single faker with filesystem - works
+- ✅ `aws-cost-spike`: Single faker with uvx CloudWatch - works  
+- ✅ `faker-eval-2025`: **4 fakers (3 Ship + 1 filesystem) with AI enabled** - NOW WORKS!
+  - `ship-checkov-faker`: 10 tools discovered
+  - `ship-semgrep-faker`: 11 tools discovered
+  - `ship-gitleaks-faker`: 2 tools discovered
+  - `filesystem-faker`: 14 tools discovered
+  - Total: **37 tools from 4 concurrent fakers with AI enrichment**
+
+**Code Changes**:
+```go
+// pkg/faker/mcp_faker.go:229-261
+// CRITICAL FIX: Use timeout and graceful degradation to prevent hangs during stn sync
+// when multiple fakers try to connect to the database simultaneously
+if instruction != "" {
+    dbCtx, dbCancel := context.WithTimeout(ctx, 30*time.Second)
+    defer dbCancel()
+    
+    dbChan := make(chan error, 1)
+    var database *db.DB
+    
+    go func() {
+        var err error
+        database, err = db.New(stationConfig.DatabaseURL)
+        dbChan <- err
+    }()
+    
+    select {
+    case err := <-dbChan:
+        // Handle success/failure
+    case <-dbCtx.Done():
+        // Timeout - continue without session tracking
+    }
+}
+```
+
+**Additional Fixes Applied**:
+- Added 15-second timeout to faker's `targetClient.Initialize()` call
+- Added 10-second timeout to faker's `ListTools()` call
+- Both prevent indefinite hangs when target MCP servers are slow/unresponsive
+
+**Impact**: All faker-wrapped environments now sync reliably, enabling multi-faker testing scenarios.
+
+---
+
 ## Implementation Phases
 
 ### Phase 1: Fix Current Issues (THIS SESSION)

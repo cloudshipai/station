@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"station/internal/config"
@@ -40,17 +41,20 @@ type ToolCallHistory struct {
 
 // MCPFaker is an MCP server that proxies another MCP server and enriches responses
 type MCPFaker struct {
-	targetClient    *client.Client // Client to the real MCP server
-	genkitApp       *genkit.Genkit
-	stationConfig   *config.Config
-	instruction     string
-	debug           bool
-	writeOperations map[string]bool      // Tools classified as write operations
-	safetyMode      bool                 // If true, intercept write operations
-	callHistory     []ToolCallHistory    // Legacy: Message history for consistency (deprecated, use session)
-	sessionManager  *SessionManager      // Session-based state tracking
-	session         *FakerSession        // Current faker session
-	toolSchemas     map[string]*mcp.Tool // Tool definitions for schema extraction
+	targetClient      *client.Client // Client to the real MCP server
+	genkitApp         *genkit.Genkit
+	stationConfig     *config.Config
+	instruction       string
+	debug             bool
+	writeOperations   map[string]bool      // Tools classified as write operations
+	safetyMode        bool                 // If true, intercept write operations
+	callHistory       []ToolCallHistory    // Legacy: Message history for consistency (deprecated, use session)
+	sessionManager    *SessionManager      // Session-based state tracking
+	session           *FakerSession        // Current faker session
+	toolSchemas       map[string]*mcp.Tool // Tool definitions for schema extraction
+	toolsDiscovered   bool                 // Flag to track if tools have been discovered
+	discoveredTools   []mcp.Tool           // Cached tools from target server
+	toolDiscoveryLock sync.Mutex           // Lock for lazy tool discovery
 }
 
 // Global log file for faker debugging (since stderr isn't captured by parent)
@@ -197,7 +201,11 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 		fmt.Fprintf(os.Stderr, "[FAKER] Initializing target client...\n")
 	}
 
-	// Initialize target client
+	// Initialize target client with timeout to prevent hangs during stn sync
+	// CRITICAL FIX: If target MCP server hangs during initialization, faker will fail fast
+	initCtx, initCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer initCancel()
+
 	initReq := mcp.InitializeRequest{
 		Params: mcp.InitializeParams{
 			ProtocolVersion: "2024-11-05",
@@ -207,8 +215,8 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 			},
 		},
 	}
-	if _, err := targetClient.Initialize(ctx, initReq); err != nil {
-		return nil, fmt.Errorf("failed to initialize target client: %w", err)
+	if _, err := targetClient.Initialize(initCtx, initReq); err != nil {
+		return nil, fmt.Errorf("failed to initialize target client (timeout after 15s): %w", err)
 	}
 
 	if debug {
@@ -216,25 +224,52 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 	}
 
 	// Initialize session management (only if instruction provided for AI enrichment)
+	// CRITICAL FIX: Use timeout and graceful degradation to prevent hangs during stn sync
+	// when multiple fakers try to connect to the database simultaneously
 	var sessionMgr *SessionManager
 	var session *FakerSession
 	if instruction != "" {
-		// Open database connection
-		database, err := db.New(stationConfig.DatabaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open database for session management: %w", err)
-		}
+		// Try to open database with timeout - if it fails, faker still works in passthrough mode
+		// INCREASED to 30s to handle concurrent faker startups during stn sync
+		dbCtx, dbCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer dbCancel()
 
-		sessionMgr = NewSessionManager(database.Conn(), debug)
+		dbChan := make(chan error, 1)
+		var database *db.DB
 
-		// Create new session for this faker instance
-		session, err = sessionMgr.CreateSession(ctx, instruction)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create faker session: %w", err)
-		}
+		go func() {
+			var err error
+			database, err = db.New(stationConfig.DatabaseURL)
+			dbChan <- err
+		}()
 
-		if debug {
-			fmt.Fprintf(os.Stderr, "[FAKER] Created session %s\n", session.ID)
+		select {
+		case err := <-dbChan:
+			if err != nil {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to open database (will work without session tracking): %v\n", err)
+				}
+				// Continue without session management - faker will work in passthrough mode
+			} else {
+				// Database connection successful - initialize session
+				sessionMgr = NewSessionManager(database.Conn(), debug)
+
+				// Create new session for this faker instance
+				session, err = sessionMgr.CreateSession(ctx, instruction)
+				if err != nil {
+					if debug {
+						fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to create session (will work without session tracking): %v\n", err)
+					}
+					// Continue without session - faker will still work
+				} else if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Created session %s\n", session.ID)
+				}
+			}
+		case <-dbCtx.Done():
+			if debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Database connection timed out after 5s (will work without session tracking)\n")
+			}
+			// Continue without session management - faker will work in passthrough mode
 		}
 	}
 
@@ -268,10 +303,15 @@ func (f *MCPFaker) Serve() error {
 		fmt.Fprintf(os.Stderr, "[FAKER] Listing tools from target...\n")
 	}
 
-	// Get all tools from target server
-	toolsResult, err := f.targetClient.ListTools(ctx, mcp.ListToolsRequest{})
+	// CRITICAL FIX: Add timeout for tool discovery to prevent infinite hangs during stn sync
+	// If target MCP server is slow/hanging, faker will fail fast instead of blocking
+	discCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Get all tools from target server with timeout
+	toolsResult, err := f.targetClient.ListTools(discCtx, mcp.ListToolsRequest{})
 	if err != nil {
-		return fmt.Errorf("failed to list tools from target: %w", err)
+		return fmt.Errorf("failed to list tools from target (timeout after 10s): %w", err)
 	}
 
 	if f.debug {
