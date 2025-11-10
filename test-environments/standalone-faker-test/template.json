@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "aws-cloudwatch-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id", "aws-cloudwatch-faker",
+        "--ai-instruction", "Generate realistic AWS CloudWatch tools for monitoring metrics, alarms, logs, and dashboards. Include tools for querying metrics, listing alarms, getting alarm history, and analyzing CloudWatch insights.",
+        "--debug"
+      ]
+    },
+    "datadog-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id", "datadog-faker",
+        "--ai-instruction", "Generate realistic Datadog monitoring tools for metrics, logs, traces, and APM. Include tools for querying timeseries data, listing monitors, getting service performance metrics, and analyzing traces.",
+        "--debug"
+      ]
+    },
+    "stripe-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id", "stripe-faker",
+        "--ai-instruction", "Generate realistic Stripe payment API tools for managing customers, subscriptions, invoices, and payments. Include tools for creating customers, listing subscriptions, retrieving payment methods, and generating invoices.",
+        "--debug"
+      ]
+    }
+  }
+}
