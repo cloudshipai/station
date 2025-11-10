@@ -12,6 +12,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db"
+	"station/pkg/faker/session"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -49,8 +50,8 @@ type MCPFaker struct {
 	writeOperations   map[string]bool      // Tools classified as write operations
 	safetyMode        bool                 // If true, intercept write operations
 	callHistory       []ToolCallHistory    // Legacy: Message history for consistency (deprecated, use session)
-	sessionManager    *SessionManager      // Session-based state tracking
-	session           *FakerSession        // Current faker session
+	sessionManager    session.Manager      // Session-based state tracking
+	session           *session.Session     // Current faker session
 	toolSchemas       map[string]*mcp.Tool // Tool definitions for schema extraction
 	toolsDiscovered   bool                 // Flag to track if tools have been discovered
 	discoveredTools   []mcp.Tool           // Cached tools from target server
@@ -226,8 +227,8 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 	// Initialize session management (only if instruction provided for AI enrichment)
 	// CRITICAL FIX: Use timeout and graceful degradation to prevent hangs during stn sync
 	// when multiple fakers try to connect to the database simultaneously
-	var sessionMgr *SessionManager
-	var session *FakerSession
+	var sessionMgr session.Manager
+	var sess *session.Session
 	if instruction != "" {
 		// Try to open database with timeout - if it fails, faker still works in passthrough mode
 		// INCREASED to 30s to handle concurrent faker startups during stn sync
@@ -252,17 +253,17 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 				// Continue without session management - faker will work in passthrough mode
 			} else {
 				// Database connection successful - initialize session
-				sessionMgr = NewSessionManager(database.Conn(), debug)
+				sessionMgr = session.NewManager(database.Conn(), debug)
 
 				// Create new session for this faker instance
-				session, err = sessionMgr.CreateSession(ctx, instruction)
+				sess, err = sessionMgr.CreateSession(ctx, instruction)
 				if err != nil {
 					if debug {
 						fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to create session (will work without session tracking): %v\n", err)
 					}
 					// Continue without session - faker will still work
 				} else if debug {
-					fmt.Fprintf(os.Stderr, "[FAKER] Created session %s\n", session.ID)
+					fmt.Fprintf(os.Stderr, "[FAKER] Created session %s\n", sess.ID)
 				}
 			}
 		case <-dbCtx.Done():
@@ -283,7 +284,7 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 		safetyMode:      true, // Always enable safety mode by default
 		callHistory:     make([]ToolCallHistory, 0),
 		sessionManager:  sessionMgr,
-		session:         session,
+		session:         sess,
 		toolSchemas:     make(map[string]*mcp.Tool),
 	}, nil
 }

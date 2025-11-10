@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"station/pkg/faker/session"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -83,7 +85,7 @@ func (f *MCPFaker) synthesizeReadResponse(ctx context.Context, toolName string, 
 }
 
 // buildReadSynthesisPrompt creates an AI prompt for read synthesis
-func (f *MCPFaker) buildReadSynthesisPrompt(toolName string, arguments map[string]interface{}, writeHistory []*FakerEvent) string {
+func (f *MCPFaker) buildReadSynthesisPrompt(toolName string, arguments map[string]interface{}, writeHistory []*session.Event) string {
 	argsJSON, _ := json.MarshalIndent(arguments, "", "  ")
 
 	prompt := fmt.Sprintf(`You are simulating a consistent world state for an AI agent.
@@ -178,12 +180,12 @@ func (f *MCPFaker) recordToolEvent(ctx context.Context, toolName string, argumen
 		responseContent = contentArray
 	}
 
-	event := &FakerEvent{
+	event := &session.Event{
 		SessionID:     f.session.ID,
 		ToolName:      toolName,
 		Arguments:     arguments,
 		Response:      responseContent,
-		OperationType: operationType,
+		OperationType: session.OperationType(operationType),
 		Timestamp:     time.Now(),
 	}
 
