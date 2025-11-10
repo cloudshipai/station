@@ -11,6 +11,8 @@ interface BuildAgentGraphParams {
   editAgent: (id: number) => void;
   openMCPServerModal: (id: number) => void;
   toggleServerExpansion: (id: number) => void;
+  openScheduleModal: (id: number) => void;
+  openRunModal: (id: number) => void;
 }
 
 interface AgentGraphData {
@@ -57,6 +59,8 @@ export async function buildAgentGraph(params: BuildAgentGraphParams): Promise<Ag
     editAgent,
     openMCPServerModal,
     toggleServerExpansion,
+    openScheduleModal,
+    openRunModal,
   } = params;
 
   // Fetch agent details with MCP servers
@@ -116,6 +120,8 @@ export async function buildAgentGraph(params: BuildAgentGraphParams): Promise<Ag
       hierarchyInfo: hierarchyInfo,
       onOpenModal: openAgentModal,
       onEditAgent: editAgent,
+      onScheduleAgent: openScheduleModal,
+      onRunAgent: openRunModal,
     },
   });
 
@@ -206,6 +212,8 @@ export async function buildAgentGraph(params: BuildAgentGraphParams): Promise<Ag
             hierarchyInfo: hierarchyMap.get(childAgent.id),
             onOpenModal: openAgentModal,
             onEditAgent: editAgent,
+            onScheduleAgent: openScheduleModal,
+            onRunAgent: openRunModal,
           },
         });
 

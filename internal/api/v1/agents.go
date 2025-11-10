@@ -529,10 +529,13 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 	}
 
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Prompt      string `json:"prompt"`
-		MaxSteps    int64  `json:"max_steps"`
+		Name              string  `json:"name"`
+		Description       string  `json:"description"`
+		Prompt            string  `json:"prompt"`
+		MaxSteps          int64   `json:"max_steps"`
+		CronSchedule      *string `json:"cron_schedule"`
+		ScheduleEnabled   *bool   `json:"schedule_enabled"`
+		ScheduleVariables *string `json:"schedule_variables"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -540,14 +543,43 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 		return
 	}
 
-	// Update agent fields if provided
-	if req.Name != "" || req.Description != "" || req.Prompt != "" || req.MaxSteps > 0 {
-		config := &services.AgentConfig{
-			Name:        req.Name,
-			Description: req.Description,
-			Prompt:      req.Prompt,
-			MaxSteps:    req.MaxSteps,
-		}
+	// Fetch current agent to preserve fields not being updated
+	currentAgent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
+		return
+	}
+
+	// Build config with current values as defaults, overriding with provided values
+	config := &services.AgentConfig{
+		Name:              currentAgent.Name,
+		Description:       currentAgent.Description,
+		Prompt:            currentAgent.Prompt,
+		MaxSteps:          currentAgent.MaxSteps,
+		CronSchedule:      req.CronSchedule,
+		ScheduleEnabled:   currentAgent.ScheduleEnabled,
+		ScheduleVariables: req.ScheduleVariables,
+	}
+
+	// Override with provided values only if non-empty
+	if req.Name != "" {
+		config.Name = req.Name
+	}
+	if req.Description != "" {
+		config.Description = req.Description
+	}
+	if req.Prompt != "" {
+		config.Prompt = req.Prompt
+	}
+	if req.MaxSteps > 0 {
+		config.MaxSteps = req.MaxSteps
+	}
+	if req.ScheduleEnabled != nil {
+		config.ScheduleEnabled = *req.ScheduleEnabled
+	}
+
+	// Update agent fields if any changes were requested
+	if req.Name != "" || req.Description != "" || req.Prompt != "" || req.MaxSteps > 0 || req.CronSchedule != nil || req.ScheduleEnabled != nil || req.ScheduleVariables != nil {
 
 		_, err = h.agentService.UpdateAgent(c.Request.Context(), agentID, config)
 		if err != nil {

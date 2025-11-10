@@ -65,6 +65,10 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 		result.NextScheduledRun = &agent.NextScheduledRun.Time
 	}
 
+	if agent.ScheduleVariables.Valid {
+		result.ScheduleVariables = &agent.ScheduleVariables.String
+	}
+
 	if agent.CreatedAt.Valid {
 		result.CreatedAt = agent.CreatedAt.Time
 	}
@@ -197,7 +201,7 @@ func (r *AgentRepo) ListByUser(userID int64) ([]*models.Agent, error) {
 	return result, nil
 }
 
-func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string) error {
+func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, scheduleVariables *string, outputSchema *string, outputSchemaPreset *string, app, appType string) error {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 
 	params := queries.UpdateAgentParams{
@@ -216,6 +220,10 @@ func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps 
 
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if scheduleVariables != nil {
+		params.ScheduleVariables = sql.NullString{String: *scheduleVariables, Valid: true}
 	}
 
 	if outputSchema != nil {

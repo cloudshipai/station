@@ -23,6 +23,10 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -49,15 +53,50 @@ type MCPFaker struct {
 	toolSchemas     map[string]*mcp.Tool // Tool definitions for schema extraction
 }
 
+// Global log file for faker debugging (since stderr isn't captured by parent)
+var fakerLogFile *os.File
+
+func initFakerLogFile() {
+	// Create log file with absolute path
+	logPath := "/home/epuerta/projects/hack/station/dev-workspace/faker-debug.log"
+
+	var err error
+	fakerLogFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		// Log error to stderr and try fallback
+		fmt.Fprintf(os.Stderr, "[FAKER] ❌ Failed to open log file at %s: %v\n", logPath, err)
+		return
+	}
+	fmt.Fprintf(fakerLogFile, "\n\n=== New Faker Session Started at %s ===\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(fakerLogFile, "[FAKER] ✅ Log file initialized successfully\n")
+	fakerLogFile.Sync() // Flush to disk immediately
+}
+
+func logFaker(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	// Log to stderr
+	fmt.Fprint(os.Stderr, msg)
+	// Also log to file
+	if fakerLogFile != nil {
+		fmt.Fprint(fakerLogFile, msg)
+		fakerLogFile.Sync() // Flush immediately so we don't lose logs if process hangs
+	}
+}
+
 // NewMCPFaker creates a new MCP faker server
 func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]string, instruction string, debug bool) (*MCPFaker, error) {
+	// Initialize log file for debugging
+	initFakerLogFile()
+
 	ctx := context.Background()
+
+	logFaker("[FAKER] 🚀 NewMCPFaker starting at %s\n", time.Now().Format("15:04:05"))
 
 	if debug {
 		if deadline, ok := ctx.Deadline(); ok {
-			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] NewMCPFaker context deadline: %v (timeout in %v)\n", deadline, time.Until(deadline))
+			logFaker("[FAKER DEBUG] NewMCPFaker context deadline: %v (timeout in %v)\n", deadline, time.Until(deadline))
 		} else {
-			fmt.Fprintf(os.Stderr, "[FAKER DEBUG] NewMCPFaker context has NO deadline (infinite timeout) ✓\n")
+			logFaker("[FAKER DEBUG] NewMCPFaker context has NO deadline (infinite timeout) ✓\n")
 		}
 	}
 
@@ -65,6 +104,21 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 	stationConfig, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Initialize OpenTelemetry for faker span export
+	// Check if OTEL is enabled via environment variables
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otelEndpoint != "" {
+		// Initialize OTEL with same setup as main Station process
+		if err := initializeFakerOTEL(ctx, otelEndpoint, debug); err != nil {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to initialize OTEL: %v\n", err)
+			}
+			// Don't fail faker if OTEL setup fails - just warn
+		} else if debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] ✅ OpenTelemetry initialized - exporting to %s\n", otelEndpoint)
+		}
 	}
 
 	// Only initialize GenKit if AI enrichment is requested
@@ -75,8 +129,8 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 			os.Setenv("GENKIT_ENV", "prod")
 		}
 
-		// Disable telemetry
-		os.Setenv("OTEL_SDK_DISABLED", "true")
+		// Enable telemetry for faker traces (using station's OTEL endpoint)
+		// Note: Faker runs as subprocess, will inherit parent's OTEL config
 
 		// Create a brand new GenKit app for the faker
 		if debug {
@@ -249,16 +303,27 @@ func (f *MCPFaker) Serve() error {
 		})
 	}
 
-	if f.debug {
-		fmt.Fprintf(os.Stderr, "[FAKER] Starting stdio server...\n")
+	logFaker("[FAKER] 🚀 Starting stdio server...\n")
+
+	// Serve on stdio - this blocks until shutdown
+	err = server.ServeStdio(mcpServer)
+
+	logFaker("[FAKER] 🛑 ServeStdio returned: err=%v at %s\n", err, time.Now().Format("15:04:05"))
+
+	// Gracefully shutdown OTEL to flush remaining spans
+	if err := shutdownFakerOTEL(ctx); err != nil {
+		logFaker("[FAKER] ⚠️  OTEL shutdown error: %v\n", err)
 	}
 
-	// Serve on stdio
-	return server.ServeStdio(mcpServer)
+	logFaker("[FAKER] 👋 Faker shutting down\n")
+	return err
 }
 
 // handleToolCall proxies a tool call to the target, enriches the response, and returns it
 func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// CRITICAL DEBUG: Always log to stderr to confirm faker is invoked
+	fmt.Fprintf(os.Stderr, "\n🎯 [FAKER] ===== TOOL CALL INTERCEPTED: %s =====\n", request.Params.Name)
+
 	// Start OpenTelemetry span with station.faker label
 	tracer := otel.Tracer("station.faker")
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("faker.%s", request.Params.Name),
@@ -270,6 +335,8 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 		),
 	)
 	defer span.End()
+
+	fmt.Fprintf(os.Stderr, "🔭 [FAKER] OpenTelemetry span created for: %s\n", request.Params.Name)
 
 	// Add session ID if available
 	if f.session != nil {
@@ -359,6 +426,61 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 
 	// Call the real target server for read operations (no write history or synthesis failed)
 	result, err := f.targetClient.CallTool(ctx, request)
+
+	// ALWAYS log target call result for debugging (not just in debug mode)
+	fmt.Fprintf(os.Stderr, "[FAKER] Target call result: err=%v, result_exists=%v, has_genkit=%v, has_instruction=%v\n",
+		err != nil, result != nil, f.genkitApp != nil, f.instruction != "")
+	if result != nil {
+		fmt.Fprintf(os.Stderr, "[FAKER] Result content length: %d, IsError=%v\n", len(result.Content), result.IsError)
+		if len(result.Content) > 0 {
+			if tc, ok := result.Content[0].(*mcp.TextContent); ok {
+				preview := tc.Text
+				if len(preview) > 100 {
+					preview = preview[:100] + "..."
+				}
+				fmt.Fprintf(os.Stderr, "[FAKER] Content preview: %s\n", preview)
+			}
+		}
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[FAKER] Error details: %v\n", err)
+	}
+
+	// If AI enrichment is enabled and the real call failed, generate simulated data instead
+	if err != nil && f.genkitApp != nil && f.instruction != "" {
+		span.RecordError(err)
+		span.AddEvent("target_call_failed_generating_simulated_data", trace.WithAttributes(
+			attribute.String("error", err.Error()),
+		))
+		span.SetAttributes(
+			attribute.Bool("faker.real_mcp_used", false),
+			attribute.Bool("faker.synthesized_response", true),
+		)
+
+		if f.debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] ⚠️  Target call failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[FAKER] ✨ AI enrichment enabled - generating simulated data based on instruction\n")
+		}
+
+		// Generate simulated response using AI instruction
+		simulatedResult, simErr := f.generateSimulatedResponse(ctx, request.Params.Name, args, err)
+		if simErr != nil {
+			span.RecordError(simErr)
+			span.SetStatus(codes.Error, "simulation also failed")
+			return nil, fmt.Errorf("target call failed and simulation failed: target_err=%w, sim_err=%v", err, simErr)
+		}
+
+		// Record simulated read in session
+		if recErr := f.recordToolEvent(ctx, request.Params.Name, args, simulatedResult, "read"); recErr != nil {
+			if f.debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to record simulated read event: %v\n", recErr)
+			}
+		}
+
+		return simulatedResult, nil
+	}
+
+	// If no AI enrichment or real call succeeded, handle normally
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "target tool call failed")
@@ -373,7 +495,7 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 	}
 
 	// Enrich the result
-	enrichedResult, err := f.enrichToolResult(ctx, request.Params.Name, result)
+	enrichedResult, err := f.enrichToolResult(ctx, request.Params.Name, args, result)
 	if err != nil {
 		if f.debug {
 			fmt.Fprintf(os.Stderr, "[FAKER] Enrichment failed: %v, returning original\n", err)
@@ -400,8 +522,197 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 	return enrichedResult, nil
 }
 
+// generateSimulatedResponse creates a completely simulated response when the real MCP call fails
+func (f *MCPFaker) generateSimulatedResponse(ctx context.Context, toolName string, args map[string]interface{}, originalError error) (*mcp.CallToolResult, error) {
+	if f.debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] Generating fully simulated response for %s\n", toolName)
+	}
+
+	// Get tool schema for response structure
+	toolSchema, hasSchema := f.toolSchemas[toolName]
+	var schemaInfo string
+	if hasSchema {
+		schemaJSON, _ := json.Marshal(toolSchema.InputSchema)
+		schemaInfo = fmt.Sprintf("\nTool schema: %s", string(schemaJSON))
+	}
+
+	// Build comprehensive prompt for simulation
+	argsJSON, _ := json.Marshal(args)
+	prompt := fmt.Sprintf(`You are simulating a real AWS CloudWatch MCP tool response.
+
+Tool: %s
+Arguments: %s
+%s
+
+Original Error (IGNORE THIS): %v
+
+YOUR TASK: %s
+
+CRITICAL: Generate a realistic, successful response in proper AWS CloudWatch JSON format.
+Do NOT mention errors or authentication issues.
+Generate realistic data with proper structure, timestamps, metrics, and AWS-specific fields.
+
+Output ONLY valid JSON that matches AWS CloudWatch API responses.`,
+		toolName,
+		string(argsJSON),
+		schemaInfo,
+		originalError,
+		f.instruction,
+	)
+
+	if f.debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] Simulation prompt length: %d characters\n", len(prompt))
+	}
+
+	// Use provided context (caller should have set appropriate timeout)
+	// Generate simulated data with enforced timeout
+	modelName := f.getModelName()
+
+	logFaker("[FAKER] 📡 Calling OpenAI API with model %s at %s\n", modelName, time.Now().Format("15:04:05"))
+	apiStartTime := time.Now()
+
+	// Use channel to enforce timeout (GenKit sometimes doesn't respect context)
+	type genResult struct {
+		text string
+		err  error
+	}
+	resultChan := make(chan genResult, 1)
+
+	go func() {
+		r, e := genkit.Generate(ctx, f.genkitApp,
+			ai.WithPrompt(prompt),
+			ai.WithModelName(modelName))
+		if e != nil {
+			resultChan <- genResult{text: "", err: e}
+		} else {
+			resultChan <- genResult{text: r.Text(), err: nil}
+		}
+	}()
+
+	// Wait for result or timeout (90s from caller + 10s buffer = 100s max)
+	timeoutTimer := time.NewTimer(100 * time.Second)
+	defer timeoutTimer.Stop()
+
+	var text string
+	var err error
+	select {
+	case result := <-resultChan:
+		text = result.text
+		err = result.err
+		apiElapsed := time.Since(apiStartTime)
+		logFaker("[FAKER] 📡 OpenAI API call completed in %v at %s\n", apiElapsed, time.Now().Format("15:04:05"))
+	case <-timeoutTimer.C:
+		apiElapsed := time.Since(apiStartTime)
+		logFaker("[FAKER] ⏰ OpenAI API call TIMEOUT after %v at %s\n", apiElapsed, time.Now().Format("15:04:05"))
+		return nil, fmt.Errorf("AI generation timeout after %v (hard limit: 100s)", apiElapsed)
+	case <-ctx.Done():
+		apiElapsed := time.Since(apiStartTime)
+		logFaker("[FAKER] ⏰ Context cancelled after %v at %s\n", apiElapsed, time.Now().Format("15:04:05"))
+		return nil, fmt.Errorf("AI generation cancelled: %w", ctx.Err())
+	}
+
+	if err != nil {
+		logFaker("[FAKER] ❌ OpenAI API error: %v\n", err)
+		return nil, fmt.Errorf("AI generation failed: %w", err)
+	}
+
+	if text == "" {
+		logFaker("[FAKER] ⚠️  OpenAI returned empty text\n")
+		return nil, fmt.Errorf("AI generated empty response")
+	}
+
+	logFaker("[FAKER] ✅ Generated %d characters of response text\n", len(text))
+
+	// Clean markdown wrappers
+	text = strings.TrimPrefix(text, "```json\n")
+	text = strings.TrimPrefix(text, "```\n")
+	text = strings.TrimSuffix(text, "\n```")
+	text = strings.TrimSpace(text)
+
+	if f.debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] Generated simulated response: %s\n", text)
+	}
+
+	// Create MCP result with simulated content
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.NewTextContent(text),
+		},
+		IsError: false,
+	}, nil
+}
+
+// isEmptyOrTrivialResponse detects if a response is empty, contains no useful data, or contains an error
+func isEmptyOrTrivialResponse(result *mcp.CallToolResult) bool {
+	// No content at all
+	if len(result.Content) == 0 {
+		return true
+	}
+
+	// Check if result is marked as error
+	if result.IsError {
+		return true
+	}
+
+	// Check each content item for emptiness or error messages
+	for _, content := range result.Content {
+		if tc, ok := content.(*mcp.TextContent); ok {
+			text := strings.TrimSpace(tc.Text)
+
+			// Empty text
+			if text == "" {
+				continue
+			}
+
+			// Check for common error patterns (AWS auth errors, permission errors, etc.)
+			errorPatterns := []string{
+				"invalid security token",
+				"security token",
+				"access denied",
+				"unauthorized",
+				"authentication",
+				"credentials",
+				"permission denied",
+				"forbidden",
+				"error",
+			}
+			textLower := strings.ToLower(text)
+			for _, pattern := range errorPatterns {
+				if strings.Contains(textLower, pattern) {
+					return true // Treat error messages as empty/trivial
+				}
+			}
+
+			// Try parsing as JSON to check for empty arrays/objects
+			var jsonData interface{}
+			if err := json.Unmarshal([]byte(text), &jsonData); err == nil {
+				// Empty array []
+				if arr, ok := jsonData.([]interface{}); ok && len(arr) == 0 {
+					continue
+				}
+				// Empty object {}
+				if obj, ok := jsonData.(map[string]interface{}); ok && len(obj) == 0 {
+					continue
+				}
+				// Null value
+				if jsonData == nil {
+					continue
+				}
+			}
+
+			// Found non-trivial content that's not an error
+			return false
+		}
+	}
+
+	// All content was empty/trivial
+	return true
+}
+
 // enrichToolResult uses AI to enrich a tool result
-func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, args map[string]interface{}, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+	logFaker("[FAKER] 🔄 enrichToolResult called for %s at %s\n", toolName, time.Now().Format("15:04:05"))
+
 	// Start enrichment span
 	tracer := otel.Tracer("station.faker")
 	ctx, span := tracer.Start(ctx, "faker.ai_enrichment",
@@ -415,16 +726,36 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, result
 	// Skip enrichment if GenKit not initialized (passthrough mode)
 	if f.genkitApp == nil {
 		span.SetAttributes(attribute.Bool("faker.ai_enrichment_enabled", false))
-		if f.debug {
-			fmt.Fprintf(os.Stderr, "[FAKER] GenKit not initialized, skipping enrichment (passthrough mode)\n")
-		}
+		logFaker("[FAKER] ⚠️  GenKit not initialized, skipping enrichment\n")
 		return result, nil
 	}
 
 	span.SetAttributes(attribute.Bool("faker.ai_enrichment_enabled", true))
 
-	// Extract content from result
-	if len(result.Content) == 0 {
+	// Check if response is empty or trivial - if so, generate simulated data instead
+	logFaker("[FAKER] 🔍 Checking if response is empty/trivial...\n")
+	isEmpty := isEmptyOrTrivialResponse(result)
+	logFaker("[FAKER] 🔍 isEmpty=%v, content_len=%d\n", isEmpty, len(result.Content))
+
+	if isEmpty {
+		logFaker("[FAKER] 🔍 Detected empty/trivial response for %s - triggering simulation\n", toolName)
+
+		// Create fresh context for simulation to avoid deadline issues (35s timeout)
+		simCtx, simCancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer simCancel()
+
+		logFaker("[FAKER] ⏱️  Starting simulation with 35s timeout at %s\n", time.Now().Format("15:04:05"))
+		startTime := time.Now()
+
+		result, err := f.generateSimulatedResponse(simCtx, toolName, args, fmt.Errorf("empty response"))
+
+		elapsed := time.Since(startTime)
+		if err != nil {
+			logFaker("[FAKER] ❌ Simulation FAILED after %v: %v\n", elapsed, err)
+			return nil, err
+		}
+
+		logFaker("[FAKER] ✅ Simulation SUCCESS after %v\n", elapsed)
 		return result, nil
 	}
 
@@ -807,4 +1138,64 @@ func (f *MCPFaker) recordToolCall(toolName string, arguments map[string]interfac
 	if f.debug {
 		fmt.Fprintf(os.Stderr, "[FAKER] Recorded tool call in history (total: %d)\n", len(f.callHistory))
 	}
+}
+
+// globalTracerProvider stores the tracer provider for shutdown
+var globalTracerProvider *sdktrace.TracerProvider
+
+// initializeFakerOTEL sets up OpenTelemetry for faker span export
+func initializeFakerOTEL(ctx context.Context, endpoint string, debug bool) error {
+	// Parse endpoint to remove protocol - OTLP HTTP exporter expects host:port format
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[FAKER OTEL] Initializing with endpoint: %s\n", endpoint)
+	}
+
+	// Create OTLP HTTP trace exporter
+	exporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithInsecure(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create OTLP exporter: %w", err)
+	}
+
+	// Create resource for faker process without schema to avoid version conflicts
+	res := resource.NewSchemaless(
+		semconv.ServiceName("station"),
+		semconv.ServiceVersion("faker"),
+	)
+
+	// Use SimpleSpanProcessor for immediate export (better for short-lived MCP tool calls)
+	// BatchSpanProcessor can delay export up to 5 seconds, causing spans to be lost
+	// when faker subprocess completes before batch flush
+	spanProcessor := sdktrace.NewSimpleSpanProcessor(exporter)
+
+	// Create and set global tracer provider
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(spanProcessor),
+		sdktrace.WithResource(res),
+	)
+
+	// Store for shutdown
+	globalTracerProvider = tracerProvider
+
+	otel.SetTracerProvider(tracerProvider)
+
+	return nil
+}
+
+// shutdownFakerOTEL gracefully shuts down OTEL and flushes remaining spans
+func shutdownFakerOTEL(ctx context.Context) error {
+	if globalTracerProvider == nil {
+		return nil
+	}
+
+	// Create timeout context for shutdown
+	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	return globalTracerProvider.Shutdown(shutdownCtx)
 }

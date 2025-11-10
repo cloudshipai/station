@@ -78,6 +78,7 @@ type Agent struct {
 	LastScheduledRun   *time.Time `json:"last_scheduled_run,omitempty" db:"last_scheduled_run"`
 	NextScheduledRun   *time.Time `json:"next_scheduled_run,omitempty" db:"next_scheduled_run"`
 	ScheduleEnabled    bool       `json:"schedule_enabled" db:"schedule_enabled"`
+	ScheduleVariables  *string    `json:"schedule_variables,omitempty" db:"schedule_variables"`
 	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
 }

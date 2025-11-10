@@ -135,6 +135,7 @@ CREATE TABLE agents (
     last_scheduled_run DATETIME DEFAULT NULL,
     next_scheduled_run DATETIME DEFAULT NULL,
     schedule_enabled BOOLEAN DEFAULT FALSE,
+    schedule_variables TEXT DEFAULT NULL, -- JSON object of variables for scheduled execution
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (environment_id) REFERENCES environments (id),

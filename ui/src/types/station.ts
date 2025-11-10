@@ -19,6 +19,7 @@ export interface Agent {
   input_schema?: string;
   is_scheduled: boolean;
   schedule_enabled: boolean;
+  cron_schedule?: string;
   created_at: string;
   updated_at: string;
 }

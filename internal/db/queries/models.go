@@ -27,6 +27,7 @@ type Agent struct {
 	LastScheduledRun   sql.NullTime   `json:"last_scheduled_run"`
 	NextScheduledRun   sql.NullTime   `json:"next_scheduled_run"`
 	ScheduleEnabled    sql.NullBool   `json:"schedule_enabled"`
+	ScheduleVariables  sql.NullString `json:"schedule_variables"`
 	CreatedAt          sql.NullTime   `json:"created_at"`
 	UpdatedAt          sql.NullTime   `json:"updated_at"`
 }

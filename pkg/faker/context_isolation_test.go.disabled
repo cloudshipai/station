@@ -127,7 +127,7 @@ func TestGenKitWithCanceledParent(t *testing.T) {
 
 	fmt.Println("\n=== Test 1: Passing already-canceled context ===")
 	start := time.Now()
-	_, err = genkit.Generate(canceledCtx, app,
+	_, err := genkit.Generate(canceledCtx, app,
 		ai.WithPrompt("Say 'test'"),
 		ai.WithModelName("openai/gpt-4o-mini"))
 	duration := time.Since(start)

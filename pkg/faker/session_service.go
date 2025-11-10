@@ -11,11 +11,11 @@ import (
 
 // SessionListItem represents a session in list view
 type SessionListItem struct {
-	ID           string
-	Instruction  string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	Duration     time.Duration
+	ID            string
+	Instruction   string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Duration      time.Duration
 	ToolCallCount int
 }
 
@@ -37,22 +37,22 @@ type ToolCall struct {
 
 // SessionStats represents statistics for a session
 type SessionStats struct {
-	TotalToolCalls   int
-	ReadCalls        int
-	WriteCalls       int
-	UniqueTools      int
-	Duration         time.Duration
+	TotalToolCalls int
+	ReadCalls      int
+	WriteCalls     int
+	UniqueTools    int
+	Duration       time.Duration
 }
 
 // SessionMetrics represents aggregated metrics across sessions
 type SessionMetrics struct {
-	TotalSessions     int
-	SessionsLast24h   int
-	SessionsLast7d    int
-	TotalToolCalls    int
+	TotalSessions      int
+	SessionsLast24h    int
+	SessionsLast7d     int
+	TotalToolCalls     int
 	AvgCallsPerSession float64
-	TopTools          []ToolUsage
-	RecentSessions    []*SessionListItem
+	TopTools           []ToolUsage
+	RecentSessions     []*SessionListItem
 }
 
 // ToolUsage represents tool usage statistics
@@ -551,10 +551,10 @@ func (s *SessionService) SearchSessions(ctx context.Context, searchTerm string) 
 type SortBy string
 
 const (
-	SortByNewest     SortBy = "newest"
-	SortByOldest     SortBy = "oldest"
-	SortByDuration   SortBy = "duration"
-	SortByToolCalls  SortBy = "tool_calls"
+	SortByNewest    SortBy = "newest"
+	SortByOldest    SortBy = "oldest"
+	SortByDuration  SortBy = "duration"
+	SortByToolCalls SortBy = "tool_calls"
 )
 
 // SortSessions sorts sessions by criteria
@@ -577,4 +577,76 @@ func SortSessions(sessions []*SessionListItem, sortBy SortBy) {
 			return sessions[i].ToolCallCount > sessions[j].ToolCallCount
 		})
 	}
+}
+
+// ReplaySession returns a session with all tool calls that can be replayed
+// This allows debugging, testing, and sharing faker scenarios
+type ReplayableSession struct {
+	SessionID   string               `json:"session_id"`
+	Instruction string               `json:"instruction"`
+	CreatedAt   time.Time            `json:"created_at"`
+	ToolCalls   []ReplayableToolCall `json:"tool_calls"`
+	Stats       *SessionStats        `json:"stats"`
+}
+
+// ReplayableToolCall represents a tool call that can be replayed
+type ReplayableToolCall struct {
+	Sequence      int                    `json:"sequence"`
+	ToolName      string                 `json:"tool_name"`
+	Arguments     map[string]interface{} `json:"arguments"`
+	Response      interface{}            `json:"response"`
+	OperationType string                 `json:"operation_type"`
+	Timestamp     time.Time              `json:"timestamp"`
+	ElapsedMs     int64                  `json:"elapsed_ms"`
+}
+
+// GetReplayableSession retrieves a session with all details needed for replay
+func (s *SessionService) GetReplayableSession(ctx context.Context, sessionID string) (*ReplayableSession, error) {
+	// Get session details
+	details, err := s.GetSessionDetails(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session details: %w", err)
+	}
+
+	if details.Session == nil {
+		return nil, fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	// Build replayable tool calls with sequence and timing
+	replayableCalls := make([]ReplayableToolCall, len(details.ToolCalls))
+	var startTime time.Time
+	if len(details.ToolCalls) > 0 {
+		startTime = details.ToolCalls[0].Timestamp
+	}
+
+	for i, call := range details.ToolCalls {
+		elapsedMs := call.Timestamp.Sub(startTime).Milliseconds()
+		replayableCalls[i] = ReplayableToolCall{
+			Sequence:      i + 1,
+			ToolName:      call.ToolName,
+			Arguments:     call.Arguments,
+			Response:      call.Response,
+			OperationType: call.OperationType,
+			Timestamp:     call.Timestamp,
+			ElapsedMs:     elapsedMs,
+		}
+	}
+
+	return &ReplayableSession{
+		SessionID:   details.Session.ID,
+		Instruction: details.Session.Instruction,
+		CreatedAt:   details.Session.CreatedAt,
+		ToolCalls:   replayableCalls,
+		Stats:       details.Stats,
+	}, nil
+}
+
+// ExportReplayableSessionJSON exports a session in replayable JSON format
+func (s *SessionService) ExportReplayableSessionJSON(ctx context.Context, sessionID string) ([]byte, error) {
+	session, err := s.GetReplayableSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.MarshalIndent(session, "", "  ")
 }

@@ -1,9 +1,9 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Bot, Settings, Network, Users } from 'lucide-react';
+import { Bot, Settings, Network, Users, Clock, Play } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { Agent } from '../../types/station';
-import type { AgentHierarchyInfo } from '../../utils/agentHierarchy';
+import type { AgentHierarchyInfo} from '../../utils/agentHierarchy';
 
 interface HierarchicalAgentNodeData {
   agent: Agent;
@@ -11,6 +11,8 @@ interface HierarchicalAgentNodeData {
   isSelected?: boolean;
   onEditAgent?: (agentId: number) => void;
   onOpenModal?: (agentId: number) => void;
+  onScheduleAgent?: (agentId: number) => void;
+  onRunAgent?: (agentId: number) => void;
 }
 
 interface HierarchicalAgentNodeProps {
@@ -42,6 +44,20 @@ export const HierarchicalAgentNode: React.FC<HierarchicalAgentNodeProps> = ({ da
     }
   };
 
+  const handleScheduleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.onScheduleAgent) {
+      data.onScheduleAgent(agent.id);
+    }
+  };
+
+  const handleRunClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.onRunAgent) {
+      data.onRunAgent(agent.id);
+    }
+  };
+
   return (
     <div className={cn(
       "relative w-[280px] transition-all duration-200 group",
@@ -49,7 +65,7 @@ export const HierarchicalAgentNode: React.FC<HierarchicalAgentNodeProps> = ({ da
     )}>
       {/* Hierarchy Badge - Top Left */}
       {isInHierarchy && (
-        <div className="absolute -top-2 -left-2 z-10">
+        <div className="absolute -top-3 -left-3 z-10">
           {isOrchestrator ? (
             <div className="flex items-center gap-1 px-2 py-1 bg-tokyo-purple rounded-full border border-tokyo-purple text-xs font-mono">
               <Network className="w-3 h-3" />
@@ -95,20 +111,27 @@ export const HierarchicalAgentNode: React.FC<HierarchicalAgentNodeProps> = ({ da
         />
 
         {/* Action Buttons - Top Right */}
-        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
           <button
-            onClick={handleInfoClick}
-            className="p-1 rounded bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg"
-            title="View agent details"
+            onClick={handleRunClick}
+            className="p-1.5 rounded bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg shadow-lg"
+            title="Run agent"
           >
-            <Settings className="h-3 w-3" />
+            <Play className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={handleScheduleClick}
+            className="p-1.5 rounded bg-tokyo-green hover:bg-tokyo-green/80 text-tokyo-bg shadow-lg"
+            title="Schedule agent"
+          >
+            <Clock className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={handleEditClick}
-            className="p-1 rounded bg-tokyo-orange hover:bg-tokyo-orange text-tokyo-bg"
+            className="p-1.5 rounded bg-tokyo-orange hover:bg-tokyo-orange text-tokyo-bg shadow-lg"
             title="Edit agent configuration"
           >
-            <Settings className="h-3 w-3" />
+            <Settings className="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -133,27 +156,31 @@ export const HierarchicalAgentNode: React.FC<HierarchicalAgentNodeProps> = ({ da
           <div className="mt-2 pt-2 border-t border-tokyo-blue7/30 space-y-1">
             {hierarchyInfo.childAgents.length > 0 && (
               <div className="text-xs text-tokyo-purple font-mono">
-                → Calls: {hierarchyInfo.childAgents.slice(0, 2).join(', ')}
-                {hierarchyInfo.childAgents.length > 2 && ` +${hierarchyInfo.childAgents.length - 2} more`}
+                → Calls: {hierarchyInfo.childAgents.length <= 2 
+                  ? hierarchyInfo.childAgents.join(', ')
+                  : `${hierarchyInfo.childAgents.slice(0, 2).join(', ')} +${hierarchyInfo.childAgents.length - 2} more`
+                }
               </div>
             )}
             {hierarchyInfo.parentAgents.length > 0 && (
               <div className="text-xs text-tokyo-cyan font-mono">
-                ← Called by: {hierarchyInfo.parentAgents.slice(0, 2).join(', ')}
-                {hierarchyInfo.parentAgents.length > 2 && ` +${hierarchyInfo.parentAgents.length - 2} more`}
+                ← Called by: {hierarchyInfo.parentAgents.length <= 2
+                  ? hierarchyInfo.parentAgents.join(', ')
+                  : `${hierarchyInfo.parentAgents.slice(0, 2).join(', ')} +${hierarchyInfo.parentAgents.length - 2} more`
+                }
               </div>
             )}
           </div>
         )}
 
-        {/* Status Badge */}
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-tokyo-green font-mono">
+        {/* Status Info */}
+        <div className="mt-2 flex items-center justify-between text-xs">
+          <span className="text-tokyo-green font-mono">
             {agent.max_steps} steps
           </span>
-          {agent.is_scheduled && (
-            <span className="text-xs px-2 py-1 bg-tokyo-green/20 text-tokyo-green rounded font-mono">
-              Scheduled
+          {agent.is_scheduled && agent.cron_schedule && (
+            <span className="px-2 py-0.5 bg-tokyo-green/20 text-tokyo-green rounded font-mono" title={`Schedule: ${agent.cron_schedule}`}>
+              ⏰ {agent.cron_schedule}
             </span>
           )}
         </div>

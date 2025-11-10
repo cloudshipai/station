@@ -165,7 +165,7 @@ func runMainServer() error {
 	}
 
 	// Initialize scheduler service for cron-based agent execution (using direct execution)
-	schedulerSvc := services.NewSchedulerService(database, agentSvc)
+	schedulerSvc := services.NewSchedulerService(database, repos, agentSvc)
 
 	// Start scheduler service
 	if err := schedulerSvc.Start(); err != nil {

@@ -20,9 +20,11 @@ import (
 
 var (
 	cfgFile              string
+	enableOTEL           bool   // Global flag to enable OTEL telemetry
+	otelEndpoint         string // OTEL endpoint override
 	themeManager         *theme.ThemeManager
-	telemetryService     *telemetry.TelemetryService     // PostHog analytics
-	otelTelemetryService *services.TelemetryService      // OTEL distributed tracing
+	telemetryService     *telemetry.TelemetryService // PostHog analytics
+	otelTelemetryService *services.TelemetryService  // OTEL distributed tracing
 	rootCmd              = &cobra.Command{
 		Use:   "stn",
 		Short: "Station - AI Agent Management Platform",
@@ -41,6 +43,8 @@ func init() {
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/station/config.yaml)")
+	rootCmd.PersistentFlags().BoolVar(&enableOTEL, "enable-telemetry", false, "Enable OpenTelemetry distributed tracing (exports to Jaeger)")
+	rootCmd.PersistentFlags().StringVar(&otelEndpoint, "otel-endpoint", "", "OpenTelemetry OTLP endpoint (default: http://localhost:4318)")
 
 	// Add subcommands
 	rootCmd.AddCommand(serveCmd)
@@ -140,6 +144,7 @@ func init() {
 	developCmd.Flags().String("ai-model", "", "AI model to use (overrides Station config)")
 	developCmd.Flags().String("ai-provider", "", "AI provider to use (gemini, openai, anthropic)")
 	developCmd.Flags().Bool("verbose", false, "Enable verbose logging for debugging")
+	developCmd.Flags().Bool("auto-ui", true, "Auto-launch GenKit Developer UI (default: true)")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
@@ -275,6 +280,12 @@ func initTelemetry() {
 }
 
 func initOTELTelemetry() {
+	// Check CLI flag first (highest priority)
+	if !enableOTEL {
+		logging.Debug("OTEL telemetry disabled (use --enable-telemetry to enable)")
+		return
+	}
+
 	// Load config to check OTEL settings
 	cfg, err := config.Load()
 	if err != nil {
@@ -282,16 +293,19 @@ func initOTELTelemetry() {
 		return
 	}
 
-	// Check if OTEL endpoint is configured
-	endpoint := cfg.OTELEndpoint
+	// Check if OTEL endpoint is configured (priority: CLI flag > env var > config)
+	endpoint := otelEndpoint
 	if endpoint == "" {
 		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	}
-
 	if endpoint == "" {
-		logging.Debug("OTEL not configured (no endpoint), skipping distributed tracing")
-		return
+		endpoint = cfg.OTELEndpoint
 	}
+	if endpoint == "" {
+		endpoint = "http://localhost:4318" // Default to local Jaeger
+	}
+
+	logging.Info("🔭 OTEL telemetry enabled - exporting to %s", endpoint)
 
 	// Determine environment from config or default to development
 	environment := "development"

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"station/internal/db"
 	"station/internal/db/queries"
+	"station/internal/db/repositories"
 	"station/pkg/models"
 )
 
@@ -17,18 +19,20 @@ import (
 type SchedulerService struct {
 	cron         *cron.Cron
 	db           db.Database
+	repos        *repositories.Repositories
 	agents       map[int64]cron.EntryID // Track scheduled agents
 	agentService AgentServiceInterface  // Direct agent execution (replaces queue)
 }
 
 // NewSchedulerService creates a new scheduler service
-func NewSchedulerService(database db.Database, agentService AgentServiceInterface) *SchedulerService {
+func NewSchedulerService(database db.Database, repos *repositories.Repositories, agentService AgentServiceInterface) *SchedulerService {
 	// Create cron with seconds precision and logging
 	c := cron.New(cron.WithSeconds(), cron.WithLogger(cron.VerbosePrintfLogger(log.New(log.Writer(), "CRON: ", log.LstdFlags))))
 
 	return &SchedulerService{
 		cron:         c,
 		db:           database,
+		repos:        repos,
 		agents:       make(map[int64]cron.EntryID),
 		agentService: agentService,
 	}
@@ -208,34 +212,113 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 		log.Printf("Warning: failed to update schedule times for agent %d: %v", agentID, err)
 	}
 
-	// Queue the agent execution
-	metadata := map[string]interface{}{
+	// For scheduled execution, use a simple task description
+	// The actual prompt template will be loaded from the .prompt file
+	// and schedule_variables will be passed as input variables
+	task := "Scheduled execution"
+	if agent.Description != "" {
+		task = "Scheduled execution: " + agent.Description
+	}
+
+	// Parse schedule variables if available
+	var scheduleVars map[string]interface{}
+	if agent.ScheduleVariables.Valid && agent.ScheduleVariables.String != "" {
+		if err := json.Unmarshal([]byte(agent.ScheduleVariables.String), &scheduleVars); err != nil {
+			log.Printf("Warning: failed to parse schedule_variables for agent %d: %v", agent.ID, err)
+		}
+	}
+
+	log.Printf("🔔 Scheduled execution triggered for agent %d (%s) with task: %s", agent.ID, agent.Name, task)
+
+	// Merge schedule variables with metadata
+	execVars := map[string]interface{}{
 		"source":        "cron_scheduler",
 		"cron_schedule": agent.CronSchedule.String,
 		"scheduled_at":  now,
 	}
 
-	// Use the agent's prompt as the task to execute
-	task := agent.Prompt
-	if task == "" {
-		task = "Execute scheduled agent task"
+	// Add schedule variables to execution context
+	if scheduleVars != nil {
+		for k, v := range scheduleVars {
+			execVars[k] = v
+		}
+		log.Printf("Executing scheduled agent with variables: %v", scheduleVars)
 	}
 
-	// For scheduled agents, we use the console user since there's no specific user triggering this
-	// Look up console user ID dynamically
-	consoleUser, err := dbQueries.GetUserByUsername(context.Background(), "console")
-	if err != nil {
-		log.Printf("Error: failed to get console user for scheduled agent %d: %v", agentID, err)
-		return
-	}
-	consoleUserID := consoleUser.ID
-	_ = consoleUserID // Will be used when implementing proper scheduled execution
-	_ = metadata      // Will be used when implementing proper scheduled execution
+	// Execute agent in a goroutine to avoid blocking the scheduler
+	go func() {
+		execCtx := context.Background()
 
-	// For now, just log that we would execute the agent
-	// TODO: Implement proper scheduled execution once AgentService interface is updated
-	log.Printf("Scheduled execution triggered for agent %d (%s) with task: %s", agent.ID, agent.Name, task)
-	log.Printf("Note: Scheduled execution needs to be implemented after execution queue removal")
+		log.Printf("DEBUG: About to create run record, s.repos is nil: %v", s.repos == nil)
+
+		// Create run record first (using user ID 1 for scheduled/system runs)
+		run, err := s.repos.AgentRuns.Create(
+			execCtx,
+			agent.ID,
+			1, // Default console user for scheduled runs
+			task,
+			"",       // finalResponse empty initially
+			0,        // stepsTaken
+			nil, nil, // toolCalls, executionSteps
+			"running",
+			nil, // completedAt
+		)
+
+		if err != nil {
+			log.Printf("❌ Failed to create run record for scheduled agent %d (%s): %v", agent.ID, agent.Name, err)
+			return
+		}
+
+		log.Printf("Created run record %d for scheduled agent %d", run.ID, agent.ID)
+
+		// Execute agent with run ID
+		result, err := s.agentService.ExecuteAgentWithRunID(execCtx, agent.ID, task, run.ID, execVars)
+		if err != nil {
+			log.Printf("❌ Scheduled execution failed for agent %d (%s): %v", agent.ID, agent.Name, err)
+			// Update run status to failed with error message
+			errorMsg := err.Error()
+			_ = s.repos.AgentRuns.UpdateCompletionWithMetadata(
+				execCtx, run.ID, "", 0, nil, nil, "failed", &now,
+				nil, nil, nil, nil, nil, nil, &errorMsg,
+			)
+		} else {
+			log.Printf("✅ Scheduled execution completed for agent %d (%s). Result: %s", agent.ID, agent.Name, result.Content)
+
+			// Extract metadata from result.Extra
+			var stepsTaken int64
+			var toolsUsed *int64
+			if result.Extra != nil {
+				if steps, ok := result.Extra["steps_taken"].(int64); ok {
+					stepsTaken = steps
+				}
+				if tools, ok := result.Extra["tools_used"].(int); ok {
+					toolsUsedVal := int64(tools)
+					toolsUsed = &toolsUsedVal
+				}
+			}
+
+			// Update run with completion details
+			completedAt := time.Now()
+			updateErr := s.repos.AgentRuns.UpdateCompletionWithMetadata(
+				execCtx,
+				run.ID,
+				result.Content,
+				stepsTaken,
+				nil, nil, // toolCalls, executionSteps - not available in Message format
+				"completed",
+				&completedAt,
+				nil, nil, nil, // token usage not in Message format
+				nil, nil, // duration, modelName
+				toolsUsed,
+				nil, // error
+			)
+			if updateErr != nil {
+				log.Printf("Warning: Failed to update run completion for run %d: %v", run.ID, updateErr)
+			} else {
+				log.Printf("✅ Updated run %d with completion status", run.ID)
+			}
+		}
+	}()
 
 	log.Printf("Started execution for scheduled agent %d (%s)", agent.ID, agent.Name)
 }

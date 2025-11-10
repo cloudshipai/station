@@ -18,6 +18,9 @@ import { buildAgentGraph } from '../../utils/agentGraphBuilder';
 import { buildAgentHierarchyMap } from '../../utils/agentHierarchy';
 import { MCPNode, ToolNode } from '../nodes/MCPNodes';
 import { AgentListSidebar } from './AgentListSidebar';
+import { MCPServerDetailsModal } from '../modals/MCPServerDetailsModal';
+import { AgentScheduleModal } from '../modals/AgentScheduleModal';
+import { RunAgentModal } from '../modals/RunAgentModal';
 
 interface EnvironmentContextType {
   selectedEnvironment: number | null;
@@ -46,6 +49,10 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMCPServerId, setModalMCPServerId] = useState<number | null>(null);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
+  const [scheduleAgentId, setScheduleAgentId] = useState<number | null>(null);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [runAgentId, setRunAgentId] = useState<number | null>(null);
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set());
 
   const toggleServerExpansionRef = useRef<(serverId: number) => void>(() => {});
@@ -75,6 +82,51 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
   const closeMCPServerModal = () => {
     setIsMCPModalOpen(false);
     setModalMCPServerId(null);
+  };
+
+  // Function to open schedule modal
+  const openScheduleModal = (agentId: number) => {
+    setScheduleAgentId(agentId);
+    setIsScheduleModalOpen(true);
+  };
+
+  const closeScheduleModal = () => {
+    setIsScheduleModalOpen(false);
+    setScheduleAgentId(null);
+  };
+
+  const handleScheduleSuccess = async () => {
+    // Refresh agents list to get updated schedule
+    try {
+      const response = await agentsApi.getAll();
+      let agentsList = response.data.agents || [];
+
+      if (environmentContext?.selectedEnvironment) {
+        agentsList = agentsList.filter((agent: any) =>
+          agent.environment_id === environmentContext.selectedEnvironment
+        );
+      }
+
+      setAgents(agentsList);
+    } catch (error) {
+      console.error('Failed to refresh agents:', error);
+    }
+  };
+
+  // Function to open run agent modal
+  const openRunModal = (agentId: number) => {
+    setRunAgentId(agentId);
+    setIsRunModalOpen(true);
+  };
+
+  const closeRunModal = () => {
+    setIsRunModalOpen(false);
+    setRunAgentId(null);
+  };
+
+  const handleRunSuccess = (runId: number) => {
+    console.log('Agent execution started with run ID:', runId);
+    // Could navigate to runs page: navigate(`/runs/${runId}`);
   };
 
   // Function to toggle MCP server expansion
@@ -159,6 +211,8 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
         editAgent,
         openMCPServerModal,
         toggleServerExpansion: toggleServerExpansionRef.current,
+        openScheduleModal,
+        openRunModal,
       });
 
       setNodes(graphData.nodes);
@@ -266,6 +320,37 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
         selectedAgentId={selectedAgent}
         onSelectAgent={setSelectedAgent}
         hierarchyMap={hierarchyMap}
+      />
+    )}
+
+    {/* MCP Server Details Modal */}
+    <MCPServerDetailsModal
+      serverId={modalMCPServerId}
+      isOpen={isMCPModalOpen}
+      onClose={closeMCPServerModal}
+    />
+
+    {/* Agent Schedule Modal */}
+    {scheduleAgentId && (
+      <AgentScheduleModal
+        isOpen={isScheduleModalOpen}
+        onClose={closeScheduleModal}
+        agentId={scheduleAgentId}
+        agentName={agents.find(a => a.id === scheduleAgentId)?.name || 'Agent'}
+        currentSchedule={agents.find(a => a.id === scheduleAgentId)?.cron_schedule}
+        currentEnabled={agents.find(a => a.id === scheduleAgentId)?.schedule_enabled || false}
+        currentScheduleVariables={agents.find(a => a.id === scheduleAgentId)?.schedule_variables}
+        onSuccess={handleScheduleSuccess}
+      />
+    )}
+
+    {/* Run Agent Modal */}
+    {runAgentId && (
+      <RunAgentModal
+        isOpen={isRunModalOpen}
+        onClose={closeRunModal}
+        agent={agents.find(a => a.id === runAgentId)!}
+        onSuccess={handleRunSuccess}
       />
     )}
   </div>

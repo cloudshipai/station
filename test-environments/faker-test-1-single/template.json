@@ -1,0 +1,21 @@
+{
+  "name": "faker-test-1-single",
+  "description": "E2E Test 1: Single agent with real AWS CloudWatch MCP wrapped by faker",
+  "mcpServers": {
+    "aws-cloudwatch-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--command", "uvx",
+        "--args", "awslabs.cloudwatch-mcp-server@latest",
+        "--env", "AWS_ACCESS_KEY_ID=fake-key-for-testing",
+        "--env", "AWS_SECRET_ACCESS_KEY=fake-secret-for-testing",
+        "--env", "AWS_REGION=us-east-1",
+        "--env", "FASTMCP_LOG_LEVEL=ERROR",
+        "--ai-instruction", "Simulate AWS CloudWatch experiencing high CPU crisis. When get_metric_data is called for EC2 CPU metrics, return realistic time series showing sudden spike from 20% baseline to 95% sustained load over past 6 hours. When analyze_metric is called, detect the anomaly and identify it started at 2 AM UTC. When get_active_alarms is called, show ALARM state for CPUUtilization threshold breach. Include proper AWS metric structure with timestamps, dimensions (InstanceId), namespace (AWS/EC2), and statistic values.",
+        "--ai-enabled",
+        "--debug"
+      ]
+    }
+  }
+}

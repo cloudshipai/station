@@ -41,16 +41,64 @@ Enable developers to go from idea to production-ready agents in minutes with:
 - ✅ Loads agents from environment's `agents/` directory
 - ✅ Connects to MCP servers and registers tools
 - ✅ Initializes GenKit with OpenAI and GoogleAI plugins
+- ✅ **Interactive variable prompting via Station UI during sync** (COMPLETED v0.9.2)
+  - Real-time sync progress with modal UI
+  - Multi-variable detection and prompting in single interaction
+  - Monaco Editor integration with Tokyo Night theme
+  - Automatic UI refresh after completion
+  - Backend: Custom VariableResolver, enhanced DeclarativeSync service
 - ⚠️ GenKit Developer UI requires manual launch with `genkit start`
 - ⚠️ No built-in eval framework integration
+
+### Completed: Interactive Sync Flow ✅
+
+**What Was Implemented:**
+The Station UI now provides a complete interactive workflow for handling missing template variables during `stn sync`:
+
+1. **Backend Variable Resolution** (`internal/services/declarative_sync.go`):
+   - Custom `VariableResolver` detects missing variables in `template.json`
+   - Enhanced `DeclarativeSync` service coordinates UI-based variable prompting
+   - Graceful handling of 404 errors when template files don't exist
+
+2. **Frontend Sync Modal** (`ui/src/components/SyncModal.tsx`):
+   - Real-time sync progress tracking
+   - Dynamic form generation for missing variables
+   - Monaco Editor integration for `variables.yml` editing
+   - Tokyo Night theme for consistency
+   - Uncontrolled inputs for better performance
+
+3. **API Integration** (`internal/api/handlers/sync.go`):
+   - WebSocket-based progress updates
+   - Variable prompting endpoint
+   - Error handling with clear user feedback
+
+**User Experience:**
+```bash
+# Developer runs sync
+stn sync my-environment
+
+# If variables are missing:
+# 1. Station UI modal opens automatically
+# 2. Form shows all missing variables with descriptions
+# 3. Developer fills in values (e.g., PROJECT_ROOT=/workspace)
+# 4. Click "Save and Continue"
+# 5. Sync completes automatically
+# 6. UI refreshes to show synced agents
+```
+
+**Technical Achievement:**
+- No more manual `variables.yml` editing required
+- Handles multiple missing variables in single interaction
+- Seamless integration with existing sync workflow
+- Production-ready error handling and user feedback
 
 ### Goals
 
 **G1.1: One-Command Interactive Development**
 - `stn develop --env default` starts complete development environment
-- GenKit Developer UI auto-launches at `http://localhost:4000`
+- **TODO**: GenKit Developer UI auto-launches at `http://localhost:4000`
 - All agents and tools visible in UI for immediate testing
-- Hot-reload support for `.prompt` file changes
+- **TODO**: Hot-reload support for `.prompt` file changes
 
 **G1.2: Multi-Provider AI Support**
 - ✅ OpenAI (official plugin)
@@ -98,6 +146,7 @@ func launchGenkitUI(port int) error {
 
 ### Acceptance Criteria
 
+**Development Environment:**
 - [ ] `stn develop` auto-launches GenKit UI at configurable port
 - [x] OpenAI-compatible endpoints work with Llama/Ollama (✅ Tested with Llama-4-Maverick)
 - [x] Multi-model support documented (✅ docs/MULTI_MODEL_SUPPORT.md)
@@ -105,6 +154,14 @@ func launchGenkitUI(port int) error {
 - [ ] Agent schemas render correctly in UI
 - [ ] Hot-reload works for prompt file modifications
 - [ ] Clear error messages for misconfigured providers
+
+**Interactive Sync (COMPLETED v0.9.2):**
+- [x] ✅ UI-based variable prompting during `stn sync`
+- [x] ✅ Real-time sync progress with WebSocket updates
+- [x] ✅ Multi-variable detection and form generation
+- [x] ✅ Monaco Editor integration for `variables.yml`
+- [x] ✅ Automatic UI refresh after sync completion
+- [x] ✅ Graceful error handling with user feedback
 
 ### Testability
 

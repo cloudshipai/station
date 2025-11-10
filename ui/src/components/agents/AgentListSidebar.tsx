@@ -74,13 +74,13 @@ export const AgentListSidebar: React.FC<AgentListSidebarProps> = ({
               </div>
 
               {/* Agent Details */}
-              <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                 <span className="text-tokyo-green font-mono">
                   {agent.max_steps} steps
                 </span>
-                {agent.is_scheduled && (
-                  <span className="px-2 py-0.5 bg-tokyo-green/20 text-tokyo-green rounded font-mono">
-                    Scheduled
+                {agent.is_scheduled && agent.cron_schedule && (
+                  <span className="px-2 py-0.5 bg-tokyo-green/20 text-tokyo-green rounded font-mono" title={`Schedule: ${agent.cron_schedule}`}>
+                    ⏰ {agent.cron_schedule}
                   </span>
                 )}
               </div>
@@ -90,14 +90,18 @@ export const AgentListSidebar: React.FC<AgentListSidebarProps> = ({
                 <div className="mt-2 pt-2 border-t border-tokyo-blue7/30">
                   {hierarchyInfo.childAgents.length > 0 && (
                     <div className="text-xs text-tokyo-purple font-mono">
-                      → Calls: {hierarchyInfo.childAgents.slice(0, 2).join(', ')}
-                      {hierarchyInfo.childAgents.length > 2 && ` +${hierarchyInfo.childAgents.length - 2}`}
+                      → Calls: {hierarchyInfo.childAgents.length <= 2
+                        ? hierarchyInfo.childAgents.join(', ')
+                        : `${hierarchyInfo.childAgents.slice(0, 2).join(', ')} +${hierarchyInfo.childAgents.length - 2}`
+                      }
                     </div>
                   )}
                   {hierarchyInfo.parentAgents.length > 0 && (
                     <div className="text-xs text-tokyo-cyan font-mono mt-1">
-                      ← Called by: {hierarchyInfo.parentAgents.slice(0, 2).join(', ')}
-                      {hierarchyInfo.parentAgents.length > 2 && ` +${hierarchyInfo.parentAgents.length - 2}`}
+                      ← Called by: {hierarchyInfo.parentAgents.length <= 2
+                        ? hierarchyInfo.parentAgents.join(', ')
+                        : `${hierarchyInfo.parentAgents.slice(0, 2).join(', ')} +${hierarchyInfo.parentAgents.length - 2}`
+                      }
                     </div>
                   )}
                 </div>

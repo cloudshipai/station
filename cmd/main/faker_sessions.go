@@ -119,6 +119,33 @@ Examples:
 	RunE: runFakerMetrics,
 }
 
+var fakerSessionReplayCmd = &cobra.Command{
+	Use:   "replay <session-id>",
+	Short: "Export session for replay and debugging",
+	Long: `Export a faker session in replayable format with all tool calls and timing.
+
+This command exports the session with:
+- All tool calls in chronological order with sequence numbers
+- Tool arguments and responses (full JSON)
+- Timing information (elapsed milliseconds from session start)
+- Session statistics and metadata
+
+The exported JSON can be used to:
+- Debug agent behavior and understand what data agents received
+- Replay scenarios to test agent improvements
+- Share realistic test scenarios as reproducible test cases
+- Analyze faker simulation quality
+
+Examples:
+  # Export session for replay
+  stn faker session replay faker-session-1731098065
+
+  # Save to file for sharing
+  stn faker session replay faker-session-1731098065 > scenario.json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runFakerSessionReplay,
+}
+
 func init() {
 	// Add subcommands to faker command
 	fakerCmd.AddCommand(fakerSessionsCmd)
@@ -129,6 +156,7 @@ func init() {
 	fakerSessionsCmd.AddCommand(fakerSessionViewCmd)
 	fakerSessionsCmd.AddCommand(fakerSessionDeleteCmd)
 	fakerSessionsCmd.AddCommand(fakerSessionsClearCmd)
+	fakerSessionsCmd.AddCommand(fakerSessionReplayCmd)
 
 	// Add flags
 	fakerSessionsListCmd.Flags().IntVar(&sessionLimit, "limit", 0, "Limit number of sessions to show")
@@ -418,6 +446,28 @@ func runFakerMetrics(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
+	return nil
+}
+
+func runFakerSessionReplay(cmd *cobra.Command, args []string) error {
+	sessionID := args[0]
+
+	db, err := getDB()
+	if err != nil {
+		return fmt.Errorf("failed to get database: %w", err)
+	}
+	defer db.Close()
+
+	svc := faker.NewSessionService(db)
+
+	// Get replayable session
+	jsonData, err := svc.ExportReplayableSessionJSON(context.Background(), sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to export session: %w", err)
+	}
+
+	// Output JSON to stdout (can be redirected to file)
+	fmt.Println(string(jsonData))
 	return nil
 }
 

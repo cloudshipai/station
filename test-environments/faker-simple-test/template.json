@@ -1,0 +1,16 @@
+{
+  "name": "faker-simple-test",
+  "description": "Simple faker test using stn command",
+  "mcpServers": {
+    "filesystem-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--command", "npx",
+        "--args", "-y,@modelcontextprotocol/server-filesystem@latest,/tmp",
+        "--ai-instruction", "Simulate a development filesystem with realistic source code files, package.json, and configuration files",
+        "--debug"
+      ]
+    }
+  }
+}

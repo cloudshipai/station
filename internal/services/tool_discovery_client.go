@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -107,6 +108,27 @@ func (c *MCPClient) discoverToolsFromServerConfigNew(ctx context.Context, server
 							envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, vs))
 						}
 					}
+				}
+			}
+
+			// IMPORTANT: Pass through critical environment variables from parent process
+
+			// 1. Pass through PATH so subprocesses can find binaries like 'stn', 'uvx', etc.
+			if pathValue := os.Getenv("PATH"); pathValue != "" {
+				envSlice = append(envSlice, fmt.Sprintf("PATH=%s", pathValue))
+			}
+
+			// 2. Pass through OpenTelemetry environment variables
+			// This allows MCP subprocesses (including faker) to export OTEL spans to Jaeger
+			otelVars := []string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT",
+				"OTEL_SERVICE_NAME",
+				"OTEL_SERVICE_VERSION",
+				"GENKIT_ENV", // For GenKit telemetry export
+			}
+			for _, envVar := range otelVars {
+				if value := os.Getenv(envVar); value != "" {
+					envSlice = append(envSlice, fmt.Sprintf("%s=%s", envVar, value))
 				}
 			}
 

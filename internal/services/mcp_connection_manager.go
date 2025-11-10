@@ -1033,7 +1033,7 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 	var mcpClient *mcp.GenkitMCPClient
 
 	// Add timeout for MCP client creation to prevent freezing
-	clientCtx, clientCancel := context.WithTimeout(ctx, 30*time.Second)
+	clientCtx, clientCancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer clientCancel()
 
 	// Channel to receive client creation result

@@ -1,0 +1,3 @@
+AWS_ACCESS_KEY_ID: "fake-access-key-for-testing"
+AWS_SECRET_ACCESS_KEY: "fake-secret-key-for-testing"
+AWS_REGION: "us-east-1"

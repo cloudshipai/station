@@ -449,6 +449,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *A
 		nil, // input_schema - not set in basic config
 		config.CronSchedule,
 		config.ScheduleEnabled,
+		config.ScheduleVariables,
 		nil, // outputSchema - not supported in basic config yet
 		nil, // outputSchemaPreset - not supported in basic config yet
 		config.App,
