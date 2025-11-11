@@ -311,8 +311,80 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
 
       // Inject execution data if in execution view mode (micro-timelines only)
       if (isExecutionView && hasTraceData) {
+        const traceData = getTraceData();
+        
+        // Extract all agent IDs that executed in this trace
+        const executedAgentIds = new Set<number>();
+        if (traceData && traceData.spans) {
+          traceData.spans.forEach((span: any) => {
+            const agentIdTag = span.tags?.find((t: any) => t.key === 'agent.id');
+            if (agentIdTag && typeof agentIdTag.value === 'number') {
+              executedAgentIds.add(agentIdTag.value);
+            }
+          });
+        }
+        
+        // Find existing agent node IDs in the graph
+        const existingAgentIds = new Set(
+          graphData.nodes
+            .filter(n => n.type === 'agent')
+            .map(n => n.data.agent.id)
+        );
+        
+        // Add missing child agent nodes that executed but aren't in the static hierarchy
+        const additionalNodes: any[] = [];
+        const additionalEdges: any[] = [];
+        
+        executedAgentIds.forEach(executedAgentId => {
+          if (!existingAgentIds.has(executedAgentId) && executedAgentId !== agentId) {
+            // Find the agent in the agents list
+            const childAgent = agents.find(a => a.id === executedAgentId);
+            if (childAgent) {
+              // Get or create hierarchy info for dynamically added agent
+              const childHierarchyInfo = hierarchyMap.get(childAgent.id) || {
+                agent: childAgent,
+                childAgents: [],
+                isCallable: true, // Mark as callable since it was called during execution
+                parentAgents: [],
+              };
+              
+              additionalNodes.push({
+                id: `child-agent-${childAgent.id}`,
+                type: 'agent',
+                position: { x: 400, y: additionalNodes.length * 200 + 200 },
+                data: {
+                  agent: childAgent,
+                  hierarchyInfo: childHierarchyInfo,
+                  onOpenModal: openAgentModal,
+                  onEditAgent: editAgent,
+                  onScheduleAgent: openScheduleModal,
+                  onRunAgent: openRunModal,
+                },
+              });
+              
+              // Add edge from main agent to child
+              additionalEdges.push({
+                id: `edge-exec-agent-${agentId}-to-child-${childAgent.id}`,
+                source: `agent-${agentId}`,
+                target: `child-agent-${childAgent.id}`,
+                animated: true,
+                style: {
+                  stroke: '#10b981',
+                  strokeWidth: 3,
+                  strokeDasharray: '5,5',
+                  filter: 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.8))'
+                },
+                type: 'default',
+                label: 'executed',
+                labelStyle: { fill: '#10b981', fontSize: 10 },
+              });
+            }
+          }
+        });
+        
         // Enhance agent nodes with execution data (micro-timelines)
-        const enhancedNodes = graphData.nodes.map((node: any) => {
+        const allNodes = [...graphData.nodes, ...additionalNodes];
+        const enhancedNodes = allNodes.map((node: any) => {
           if (node.type === 'agent') {
             const processedTrace = processTraceForNode(node.data.agent.id);
             
@@ -347,11 +419,11 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
         });
         
         setNodes(enhancedNodes);
+        setEdges([...graphData.edges, ...additionalEdges]);
       } else {
         setNodes(graphData.nodes);
+        setEdges(graphData.edges);
       }
-      
-      setEdges(graphData.edges);
     } catch (error) {
       console.error('Failed to regenerate graph:', error);
     }

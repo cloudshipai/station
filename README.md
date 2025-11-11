@@ -65,40 +65,80 @@ That's it. Station handles:
 
 ## Quick Start
 
-### 1. Install Station
+### Fastest: One-Line Install & Run
+
+The absolute fastest way to get Station running:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+curl -fsSL https://get.station.dev | bash
 ```
 
-### 2. Start Station
+**What this does:**
+- ✅ Installs Station CLI
+- ✅ Prompts for AI provider setup
+- ✅ Starts Station with Web UI at `http://localhost:8585`
+- ✅ Opens browser automatically
+
+**Just need:** `curl` and your AI API key (OpenAI/Anthropic/Gemini/Ollama).
+
+---
+
+### Recommended: Docker Quick Deploy
+
+Best for production-like setups with bundles:
+
 ```bash
-# Start Station with your OpenAI API key (automatically configures .mcp.json for Claude Code/Cursor)
-stn up --provider openai --api-key sk-your-key-here
+# 1. Download quick-deploy script
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/scripts/quick-deploy.sh -o quick-deploy.sh
+chmod +x quick-deploy.sh
+
+# 2. Add bundles (optional)
+mkdir bundles
+# Place .tar.gz bundle files in bundles/ directory
+
+# 3. Deploy
+export OPENAI_API_KEY="sk-..."
+./quick-deploy.sh
+```
+
+**What you get:**
+- ✅ Station running in Docker with auto-restart
+- ✅ Web UI at `http://localhost:8585`
+- ✅ Auto-installs all bundles
+- ✅ Persistent data storage
+- ✅ Production-ready setup
+
+---
+
+### Manual: Traditional Install
+
+For full control over installation:
+
+```bash
+# 1. Install Station
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+
+# 2. Start Station
+export OPENAI_API_KEY=sk-your-key-here
+stn up --provider openai --model gpt-4o-mini
 ```
 
 **More provider options:**
 ```bash
-# OpenAI with specific model
-stn up --provider openai --api-key sk-your-key-here --model gpt-4o
-
 # Anthropic Claude
 stn up --provider anthropic --api-key sk-ant-...
 
 # Google Gemini
 stn up --provider gemini --api-key your-key --model gemini-2.0-flash-exp
 
-# Meta Llama (OpenAI-compatible endpoint)
-stn up --provider openai --api-key LLM-your-key --base-url https://api.llama.com/compat/v1 --model Llama-4-Maverick-17B-128E-Instruct-FP8
-
 # Ollama (local models)
 stn up --provider openai --base-url http://localhost:11434/v1 --model llama3.2
 
-# Alternative: Use environment variable instead of --api-key flag
-export OPENAI_API_KEY=sk-your-key-here
-stn up --provider openai
+# Meta Llama (OpenAI-compatible endpoint)
+stn up --provider openai --api-key LLM-your-key --base-url https://api.llama.com/compat/v1 --model Llama-4-Maverick
 
-# With CloudShip registration for centralized management
-stn up --provider openai --api-key sk-your-key-here --cloudshipai-registration-key your-registration-key
+# With CloudShip registration
+stn up --provider openai --api-key sk-... --cloudshipai-registration-key your-key
 ```
 
 **Stop Station:**
@@ -112,7 +152,7 @@ stn down
 - ✅ Dynamic Agent MCP at `http://localhost:3030/mcp`
 - ✅ `.mcp.json` automatically created for seamless Claude integration
 
-[Full installation guide →](./docs/station/installation.md)
+**Next:** [Complete Quick Start Guide →](./docs/deployment/QUICK_START.md) | [Full Installation Guide →](./docs/station/installation.md)
 
 ---
 

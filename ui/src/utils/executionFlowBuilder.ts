@@ -24,11 +24,35 @@ export const buildExecutionFlowGraph = ({
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
-  // Filter and sort spans by start time
+  // Filter spans to only meaningful tool calls (matching ToolCallsView logic)
+  // This captures: __agent_*, __read_file, faker.*, generate, etc.
+  // EXCLUDES: agent.execute_with_run_id and other low-level wrappers
   const relevantSpans = traceData.spans
     .filter((span: JaegerSpan) => {
       const op = span.operationName;
-      return op.startsWith('__') || op.startsWith('faker.') || op === 'generate';
+      
+      // INCLUDE: Actual tool calls with __ prefix (including __agent_*)
+      if (op.startsWith('__')) {
+        return true;
+      }
+      
+      // INCLUDE: Faker tool calls
+      if (op.startsWith('faker.')) {
+        return true;
+      }
+      
+      // INCLUDE: LLM generate calls
+      if (op === 'generate') {
+        return true;
+      }
+      
+      // INCLUDE: Tool operations (but not agent.execute_with_run_id wrappers)
+      if (op.includes('tool.') && !op.includes('agent.')) {
+        return true;
+      }
+      
+      // EXCLUDE: Low-level agent execution wrappers
+      return false;
     })
     .sort((a, b) => a.startTime - b.startTime);
 
@@ -116,10 +140,20 @@ export const buildExecutionFlowGraph = ({
       });
     }
 
-    // Create a friendly label
+    // Create a friendly label - prefer tool.name tag over operation name
     let label = span.operationName;
-    if (label.startsWith('__')) {
-      label = label.substring(2); // Remove __ prefix
+    
+    // Check for tool.name tag (captures agent delegations like __agent_math_calculator)
+    const toolNameTag = span.tags?.find(t => t.key === 'tool.name' || t.key === 'tool');
+    if (toolNameTag && String(toolNameTag.value).startsWith('__agent_')) {
+      label = String(toolNameTag.value);
+    }
+    
+    // Clean up label
+    if (label.startsWith('__agent_')) {
+      label = label.replace('__agent_', ''); // Show "math_calculator" instead of "__agent_math_calculator"
+    } else if (label.startsWith('__')) {
+      label = label.substring(2); // Remove __ prefix for regular tools
     }
     if (label.startsWith('faker.')) {
       label = label.replace('faker.', ''); // Remove faker. prefix

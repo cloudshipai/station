@@ -93,6 +93,19 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Initialize Jaeger if enabled
+	var jaegerSvc *services.JaegerService
+	enableJaeger := viper.GetBool("jaeger") || os.Getenv("STATION_AUTO_JAEGER") == "true"
+	if enableJaeger {
+		jaegerSvc = services.NewJaegerService(&services.JaegerConfig{})
+		if err := jaegerSvc.Start(ctx); err != nil {
+			log.Printf("Warning: Failed to start Jaeger: %v", err)
+		} else {
+			// Set OTEL endpoint for automatic trace export
+			os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", jaegerSvc.GetOTLPEndpoint())
+		}
+	}
+
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
@@ -303,6 +316,13 @@ func runMainServer() error {
 	if lighthouseClient != nil {
 		if err := lighthouseClient.Close(); err != nil {
 			log.Printf("Error stopping Lighthouse client: %v", err)
+		}
+	}
+
+	// Stop Jaeger if running
+	if jaegerSvc != nil && jaegerSvc.IsRunning() {
+		if err := jaegerSvc.Stop(shutdownCtx); err != nil {
+			log.Printf("Error stopping Jaeger: %v", err)
 		}
 	}
 

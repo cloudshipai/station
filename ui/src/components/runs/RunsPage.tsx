@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Play, BarChart3, List } from 'lucide-react';
+import { Play, BarChart3, List, GitBranch } from 'lucide-react';
 import { RunsList } from './RunsList';
 import { Pagination } from './Pagination';
 import { StatsTab } from './StatsTab';
+import { SwimlanePage } from './SwimlanePage';
 import { agentRunsApi } from '../../api/station';
+import type { TimelineRun } from '../../utils/timelineLayout';
 
 interface Run {
   id: number;
+  agent_id: number;
   agent_name: string;
   status: 'completed' | 'running' | 'failed';
   duration_seconds?: number;
@@ -14,8 +17,11 @@ interface Run {
   total_tokens?: number;
   input_tokens?: number;
   output_tokens?: number;
+  cost?: number;
   tools_used?: number;
   steps_taken?: number;
+  parent_run_id?: number;
+  error?: string;
 }
 
 interface RunsPageProps {
@@ -25,7 +31,7 @@ interface RunsPageProps {
 
 export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }) => {
   const [runs, setRuns] = useState<Run[]>([]);
-  const [activeTab, setActiveTab] = useState<'runs' | 'stats'>('runs');
+  const [activeTab, setActiveTab] = useState<'list' | 'timeline' | 'stats'>('list');
   const [currentPage, setCurrentPage] = useState(1);
   const runsPerPage = 20;
 
@@ -60,15 +66,26 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
         <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
         <div className="flex bg-tokyo-bg rounded-lg p-1">
           <button
-            onClick={() => setActiveTab('runs')}
+            onClick={() => setActiveTab('list')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
-              activeTab === 'runs'
+              activeTab === 'list'
                 ? 'bg-tokyo-blue text-tokyo-bg'
                 : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
             }`}
           >
             <List className="h-4 w-4" />
-            Runs
+            List
+          </button>
+          <button
+            onClick={() => setActiveTab('timeline')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+              activeTab === 'timeline'
+                ? 'bg-tokyo-blue text-tokyo-bg'
+                : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+            }`}
+          >
+            <GitBranch className="h-4 w-4" />
+            Timeline
           </button>
           <button
             onClick={() => setActiveTab('stats')}
@@ -85,30 +102,39 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 overflow-y-auto">
-        {activeTab === 'runs' ? (
-          runs.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <Play className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-                <div className="text-tokyo-fg font-mono text-lg mb-2">No agent runs found</div>
-                <div className="text-tokyo-comment font-mono text-sm">
-                  Agent executions will appear here when agents are run
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'list' ? (
+          <div className="h-full p-4 overflow-y-auto">
+            {runs.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Play className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
+                  <div className="text-tokyo-fg font-mono text-lg mb-2">No agent runs found</div>
+                  <div className="text-tokyo-comment font-mono text-sm">
+                    Agent executions will appear here when agents are run
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <>
-              <RunsList runs={currentRuns} onRunClick={onRunClick} />
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-              />
-            </>
-          )
+            ) : (
+              <>
+                <RunsList runs={currentRuns} onRunClick={onRunClick} />
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={handlePageChange}
+                />
+              </>
+            )}
+          </div>
+        ) : activeTab === 'timeline' ? (
+          <SwimlanePage 
+            runs={runs as TimelineRun[]} 
+            onRunClick={onRunClick} 
+          />
         ) : (
-          <StatsTab runs={runs} />
+          <div className="h-full p-4 overflow-y-auto">
+            <StatsTab runs={runs} />
+          </div>
         )}
       </div>
     </div>

@@ -77,6 +77,7 @@ func init() {
 	upCmd.Flags().String("base-url", "", "Custom base URL for OpenAI-compatible endpoints")
 	upCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
 	upCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
+	upCmd.Flags().Bool("jaeger", true, "Auto-launch Jaeger for distributed tracing (default: true)")
 
 	rootCmd.AddCommand(upCmd)
 }
@@ -337,6 +338,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 		dockerArgs = append(dockerArgs, "-p", "4000:4000") // Genkit Developer UI
 	}
 
+	// Add Jaeger UI port if --jaeger flag is set (default: true)
+	enableJaegerPort, _ := cmd.Flags().GetBool("jaeger")
+	if enableJaegerPort {
+		dockerArgs = append(dockerArgs, "-p", "16686:16686") // Jaeger UI
+	}
+
 	// Environment variables
 	if err := addEnvironmentVariables(&dockerArgs, cmd); err != nil {
 		log.Printf("Warning: Some environment variables may not be set: %v", err)
@@ -358,7 +365,13 @@ func runUp(cmd *cobra.Command, args []string) error {
 		environment, _ := cmd.Flags().GetString("environment")
 		dockerArgs = append(dockerArgs, imageName, "genkit", "start", "--non-interactive", "--", "stn", "develop", "--env", environment)
 	} else {
-		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586")
+		// Check if Jaeger should be enabled (default: true)
+		enableJaeger, _ := cmd.Flags().GetBool("jaeger")
+		if enableJaeger {
+			dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586", "--jaeger")
+		} else {
+			dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586")
+		}
 	}
 
 	// Run the container
@@ -389,6 +402,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3030/mcp\n")
 	fmt.Printf("🔗 UI:  http://localhost:8585\n")
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
+
+	// Show Jaeger URL if enabled
+	jaegerEnabled, _ := cmd.Flags().GetBool("jaeger")
+	if jaegerEnabled {
+		fmt.Printf("🔍 Jaeger UI: http://localhost:16686 (tracing enabled)\n")
+	}
 
 	if developMode {
 		environment, _ := cmd.Flags().GetString("environment")

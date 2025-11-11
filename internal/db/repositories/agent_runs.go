@@ -626,3 +626,30 @@ func (r *AgentRunRepo) AppendDebugLog(ctx context.Context, id int64, logEntry ma
 	debugLogs = append(debugLogs, logEntry)
 	return r.UpdateDebugLogs(ctx, id, &debugLogs)
 }
+
+// GetRecentByAgent gets recent runs for a specific agent with limit
+func (r *AgentRunRepo) GetRecentByAgent(ctx context.Context, agentID int64, limit int64) ([]queries.AgentRun, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.get_recent_by_agent",
+		trace.WithAttributes(
+			attribute.Int64("agent.id", agentID),
+			attribute.Int64("limit", limit),
+		),
+	)
+	defer span.End()
+
+	runs, err := r.queries.GetRecentRunsByAgent(ctx, queries.GetRecentRunsByAgentParams{
+		AgentID: agentID,
+		Limit:   limit,
+	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return nil, err
+	}
+
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int("runs.count", len(runs)),
+	)
+	return runs, nil
+}

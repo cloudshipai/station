@@ -22,6 +22,8 @@ import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
+import { ReportsPage } from './components/pages/ReportsPage';
+import { ReportDetailPage } from './components/pages/ReportDetailPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -239,7 +241,22 @@ const Layout = ({ children }: any) => {
 
   // Extract environment from URL path since useParams doesn't work in Layout
   const pathParts = location.pathname.split('/').filter(Boolean);
-  const currentEnvironmentName = pathParts.length >= 2 ? pathParts[1] : null;
+  
+  // Special handling for /agent/:id route (agent detail page)
+  const isAgentDetailPage = pathParts[0] === 'agent' && pathParts.length === 2;
+  
+  // For agent detail pages, use environment from context; otherwise extract from URL
+  let currentEnvironmentName = null;
+  if (isAgentDetailPage) {
+    // Get environment name from context for agent detail pages
+    const selectedEnv = environmentContext?.environments?.find((env: any) => 
+      env.id === environmentContext?.selectedEnvironment
+    );
+    currentEnvironmentName = selectedEnv?.name.toLowerCase() || null;
+  } else {
+    // Normal path: /agents/:env or /mcps/:env
+    currentEnvironmentName = pathParts.length >= 2 ? pathParts[1] : null;
+  }
 
   // Get current environment object from name
   const getCurrentEnvironment = () => {
@@ -259,6 +276,7 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/mcps')) return 'mcps';
     if (path.startsWith('/mcp-directory')) return 'mcp-directory';
     if (path.startsWith('/runs')) return 'runs';
+    if (path.startsWith('/reports')) return 'reports';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
     if (path.startsWith('/live-demo')) return 'live-demo';
@@ -298,6 +316,7 @@ const Layout = ({ children }: any) => {
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
     { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
+    { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
     { id: 'live-demo', label: 'Live Demo', icon: Play, path: '/live-demo' },
@@ -1272,6 +1291,17 @@ const RunsPage = () => {
       />
     </div>
   );
+};
+
+// Reports Page Wrapper
+const ReportsPageWrapper = () => {
+  const environmentContext = React.useContext(EnvironmentContext);
+  return <ReportsPage environmentContext={environmentContext} />;
+};
+
+// Report Detail Page Wrapper
+const ReportDetailPageWrapper = () => {
+  return <ReportDetailPage />;
 };
 
 // Environment-specific Node Components
@@ -2834,6 +2864,8 @@ function App() {
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
                   <Route path="/runs" element={<RunsPage />} />
+                  <Route path="/reports" element={<ReportsPageWrapper />} />
+                  <Route path="/reports/:reportId" element={<ReportDetailPageWrapper />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />
                   <Route path="/live-demo" element={<LiveDemoPage />} />

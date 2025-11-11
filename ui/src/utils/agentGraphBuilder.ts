@@ -31,15 +31,20 @@ function parseAgentToolsFromPrompt(promptContent: string): string[] {
 
     const yamlContent = yamlMatch[1];
     
-    // Extract tools list from YAML
-    const toolsMatch = yamlContent.match(/tools:\s*\n((?:\s*-\s*"[^"]+"\s*\n)+)/);
+    // Extract tools list from YAML (with or without quotes)
+    const toolsMatch = yamlContent.match(/tools:\s*\n((?:\s*-\s*"?[^"\n]+"?\s*\n)+)/);
     if (!toolsMatch) return [];
 
-    // Parse individual tool names
+    // Parse individual tool names (handle both quoted and unquoted)
     return toolsMatch[1]
       .split('\n')
       .filter(line => line.trim().startsWith('-'))
-      .map(line => line.trim().replace(/^-\s*"/, '').replace(/"$/, ''))
+      .map(line => {
+        // Remove leading dash and whitespace
+        const cleaned = line.trim().replace(/^-\s*/, '');
+        // Remove quotes if present
+        return cleaned.replace(/^"(.+)"$/, '$1').trim();
+      })
       .filter(name => name.length > 0);
   } catch (error) {
     console.warn('Failed to parse agent tools from prompt:', error);

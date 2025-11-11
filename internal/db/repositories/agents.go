@@ -179,11 +179,26 @@ func (r *AgentRepo) ListByEnvironment(environmentID int64) ([]*models.Agent, err
 		return nil, err
 	}
 
-	var result []*models.Agent
-	for _, agent := range agents {
-		result = append(result, convertAgentFromSQLc(agent))
+	result := make([]*models.Agent, len(agents))
+	for i, agent := range agents {
+		result[i] = convertAgentFromSQLc(agent)
+	}
+	return result, nil
+}
+
+// GetByEnvironment gets agents for an environment with context support
+func (r *AgentRepo) GetByEnvironment(ctx context.Context, environmentID int64) ([]models.Agent, error) {
+	agents, err := r.queries.ListAgentsByEnvironment(ctx, environmentID)
+	if err != nil {
+		return nil, err
 	}
 
+	// Return as []models.Agent (not pointers) for compatibility
+	result := make([]models.Agent, len(agents))
+	for i, agent := range agents {
+		converted := convertAgentFromSQLc(agent)
+		result[i] = *converted
+	}
 	return result, nil
 }
 

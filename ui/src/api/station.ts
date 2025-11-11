@@ -8,7 +8,10 @@ import type {
   User, 
   AgentRun,
   AgentRunWithDetails,
-  JaegerTrace
+  JaegerTrace,
+  Report,
+  ReportWithDetails,
+  CreateReportRequest
 } from '../types/station';
 
 // Environment API
@@ -128,4 +131,33 @@ export const tracesApi = {
     apiClient.get<{run_id: number, trace: JaegerTrace, error?: string, suggestion?: string}>(`/traces/run/${runId}`),
   getByTraceId: (traceId: string) =>
     apiClient.get<{trace_id: string, trace: JaegerTrace, error?: string}>(`/traces/trace/${traceId}`),
+};
+
+// Reports API
+export const reportsApi = {
+  getAll: (params?: { environment_id?: number; limit?: number; offset?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.environment_id) queryParams.append('environment_id', params.environment_id.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    
+    const queryString = queryParams.toString();
+    return apiClient.get<{ reports: Report[], count: number }>(
+      `/reports${queryString ? `?${queryString}` : ''}`
+    );
+  },
+  
+  getById: (id: number) => 
+    apiClient.get<ReportWithDetails>(`/reports/${id}`),
+  
+  create: (request: CreateReportRequest) => 
+    apiClient.post<{ report: Report; message: string }>('/reports', request),
+  
+  generate: (id: number) => 
+    apiClient.post<{ message: string; report_id: number; status: string }>(
+      `/reports/${id}/generate`
+    ),
+  
+  delete: (id: number) => 
+    apiClient.delete<{ message: string }>(`/reports/${id}`),
 };

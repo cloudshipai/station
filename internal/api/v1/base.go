@@ -121,6 +121,10 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	runsGroup := router.Group("/runs")
 	h.registerAgentRunRoutes(runsGroup)
 
+	// Report routes - accessible to regular users in server mode
+	reportsGroup := router.Group("/reports")
+	h.registerReportRoutes(reportsGroup)
+
 	// Settings routes - admin only
 	settingsGroup := router.Group("/settings")
 	if !h.localMode {

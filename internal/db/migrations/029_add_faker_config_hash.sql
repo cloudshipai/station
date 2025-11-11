@@ -3,6 +3,20 @@
 -- Hash is computed from: faker_name + ai_instruction + ai_model
 
 -- +goose Up
+-- Create faker_tool_cache table if it doesn't exist (idempotent)
+CREATE TABLE IF NOT EXISTS faker_tool_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    faker_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    tool_schema TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(faker_id, tool_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_faker_tool_cache_faker_id ON faker_tool_cache(faker_id);
+
+-- Add config_hash column if it doesn't exist
 ALTER TABLE faker_tool_cache ADD COLUMN config_hash TEXT;
 
 -- Create index on config_hash for efficient lookups

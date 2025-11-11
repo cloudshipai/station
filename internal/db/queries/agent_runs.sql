@@ -17,6 +17,9 @@ SELECT * FROM agent_runs ORDER BY started_at DESC;
 -- name: ListAgentRunsByAgent :many
 SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC;
 
+-- name: GetRecentRunsByAgent :many
+SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC LIMIT ?;
+
 -- name: ListAgentRunsByUser :many
 SELECT * FROM agent_runs WHERE user_id = ? ORDER BY started_at DESC;
 

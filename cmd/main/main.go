@@ -56,6 +56,8 @@ func init() {
 	rootCmd.AddCommand(bundleCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(runsCmd)
+	rootCmd.AddCommand(reportCmd)
+	rootCmd.AddCommand(benchmarkCmd)
 	rootCmd.AddCommand(settingsCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(developCmd)
@@ -83,8 +85,17 @@ func init() {
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentDeleteCmd)
 
+	reportCmd.AddCommand(reportCreateCmd)
+	reportCmd.AddCommand(reportGenerateCmd)
+	reportCmd.AddCommand(reportListCmd)
+	reportCmd.AddCommand(reportShowCmd)
+
 	runsCmd.AddCommand(runsListCmd)
 	runsCmd.AddCommand(runsInspectCmd)
+
+	benchmarkCmd.AddCommand(benchmarkEvaluateCmd)
+	benchmarkCmd.AddCommand(benchmarkListCmd)
+	benchmarkCmd.AddCommand(benchmarkTasksCmd)
 
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
@@ -112,6 +123,7 @@ func init() {
 	serveCmd.Flags().Bool("debug", false, "Enable debug logging")
 	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
 	serveCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
+	serveCmd.Flags().Bool("jaeger", false, "Auto-launch Jaeger for distributed tracing (UI at http://localhost:16686)")
 
 	// MCP Add command flags
 	mcpAddCmd.Flags().StringP("environment", "e", "default", "Environment to add configuration to")
@@ -185,6 +197,18 @@ func init() {
 	runsInspectCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	runsInspectCmd.Flags().BoolP("verbose", "v", false, "Show detailed run information including tool calls, execution steps, and metadata")
 
+	// Benchmark command flags
+	benchmarkEvaluateCmd.Flags().BoolP("verbose", "v", false, "Show detailed metric analysis and evidence")
+
+	// Report command flags
+	reportCreateCmd.Flags().StringP("environment", "e", "", "Environment name (required)")
+	reportCreateCmd.Flags().StringP("name", "n", "", "Report name (required)")
+	reportCreateCmd.Flags().StringP("description", "d", "", "Report description")
+	reportGenerateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	reportListCmd.Flags().StringP("environment", "e", "", "Filter reports by environment name")
+	reportListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	reportShowCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+
 	// Settings command flags
 	settingsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	settingsGetCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
@@ -198,6 +222,12 @@ func init() {
 	viper.BindPFlag("database_url", serveCmd.Flags().Lookup("database"))
 	viper.BindPFlag("debug", serveCmd.Flags().Lookup("debug"))
 	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
+	viper.BindPFlag("jaeger", serveCmd.Flags().Lookup("jaeger"))
+
+	// Bind stdio command flags
+	if stdioCmd.Flags().Lookup("jaeger") != nil {
+		viper.BindPFlag("jaeger_stdio", stdioCmd.Flags().Lookup("jaeger"))
+	}
 
 	// Set default values
 	viper.SetDefault("telemetry_enabled", false)

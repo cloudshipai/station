@@ -52,19 +52,30 @@ export const useExecutionTrace = () => {
   const processTraceForNode = useCallback((agentId: number): ProcessedTraceData | null => {
     if (!traceData || !traceData.spans) return null;
     
-    // CRITICAL: Only show trace data if it belongs to this agent
-    if (traceAgentId !== agentId) return null;
-
-    // Filter spans relevant to this agent (tool calls, LLM calls)
-    const relevantSpans = traceData.spans.filter((span: JaegerSpan) => {
-      const op = span.operationName;
-      return op.startsWith('__') || op.startsWith('faker.') || op === 'generate';
+    // Filter spans that belong to this specific agent (check agent.id tag)
+    const agentSpans = traceData.spans.filter((span: JaegerSpan) => {
+      const agentIdTag = span.tags?.find(t => t.key === 'agent.id');
+      return agentIdTag && agentIdTag.value === agentId;
     });
 
+    if (agentSpans.length === 0) return null;
+
+    // Filter spans relevant to this agent (tool calls, LLM calls, agent execution)
+    const relevantSpans = agentSpans.filter((span: JaegerSpan) => {
+      const op = span.operationName;
+      return op.startsWith('__') || 
+             op.startsWith('faker.') || 
+             op === 'generate' ||
+             op === 'agent_execution_engine.execute' ||
+             op === 'agent.execute_with_run_id';
+    });
+
+    // Show execution data even if only agent execution spans exist (no tool calls)
     if (relevantSpans.length === 0) return null;
 
-    const runStartTime = traceData.spans[0]?.startTime || 0;
-    const runEndTime = Math.max(...traceData.spans.map((s: JaegerSpan) => s.startTime + s.duration));
+    // Calculate start/end times based on this agent's spans only
+    const runStartTime = Math.min(...agentSpans.map((s: JaegerSpan) => s.startTime));
+    const runEndTime = Math.max(...agentSpans.map((s: JaegerSpan) => s.startTime + s.duration));
     const runDuration = runEndTime - runStartTime;
 
     const executionSpans: ExecutionSpanData[] = relevantSpans.map((span: JaegerSpan) => {
