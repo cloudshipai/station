@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -453,6 +455,17 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 
 	repos := repositories.New(database)
 
+	// Setup signal handling to update run status on interruption (Ctrl+C, timeout, etc.)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Track whether execution completed normally
+	executionCompleted := false
+	defer func() {
+		signal.Stop(sigChan)
+		close(sigChan)
+	}()
+
 	// Use the config passed to the function (includes environment variables)
 	// No need to reload - cfg already contains CloudShip settings from environment variables
 
@@ -499,6 +512,42 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	if err != nil {
 		return fmt.Errorf("failed to create agent run record: %w", err)
 	}
+
+	// Handle interruption signals in goroutine
+	go func() {
+		sig := <-sigChan
+		if !executionCompleted {
+			fmt.Printf("\n\n⚠️  Received signal %v - updating run status to cancelled\n", sig)
+
+			// Update run status to cancelled
+			completedAt := time.Now()
+			errorMsg := fmt.Sprintf("Execution interrupted by signal: %v", sig)
+
+			// Create fresh database connection to update status
+			updateDB, err := db.New(cfg.DatabaseURL)
+			if err != nil {
+				fmt.Printf("❌ Failed to update run status on interruption: %v\n", err)
+				return
+			}
+			defer updateDB.Close()
+
+			updateRepos := repositories.New(updateDB)
+			updateRepos.AgentRuns.UpdateCompletionWithMetadata(
+				context.Background(),
+				agentRun.ID,
+				errorMsg,
+				0,
+				nil,
+				nil,
+				"cancelled",
+				&completedAt,
+				nil, nil, nil, nil, nil, nil,
+				&errorMsg,
+			)
+
+			fmt.Printf("✅ Run %d marked as cancelled\n", agentRun.ID)
+		}
+	}()
 
 	fmt.Printf("🔗 Connecting to Station's stdio MCP server...\n")
 
@@ -802,6 +851,9 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 			fmt.Printf("Warning: Error stopping Lighthouse client: %v\n", err)
 		}
 	}
+
+	// Mark execution as completed to prevent signal handler from updating status
+	executionCompleted = true
 
 	fmt.Printf("✅ Agent execution completed via stdio MCP!\n")
 	return h.displayExecutionResults(updatedRun)
