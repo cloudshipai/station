@@ -130,6 +130,7 @@ func (s *Server) Start(ctx context.Context) error {
 	v1Group := router.Group("/api/v1")
 	apiHandlers := v1.NewAPIHandlers(
 		s.repos,
+		s.db.Conn(),
 		s.toolDiscoveryService,
 		s.telemetryService,
 		s.localMode,

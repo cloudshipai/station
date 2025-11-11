@@ -49,7 +49,7 @@ func (h *APIHandlers) evaluateRun(c *gin.Context) {
 		return
 	}
 
-	analyzer := pkgbenchmark.NewAnalyzer(h.repos.BeginTx, judge)
+	analyzer := pkgbenchmark.NewAnalyzer(h.db, judge)
 
 	// Evaluate the run
 	result, err := analyzer.EvaluateRun(c.Request.Context(), runID)

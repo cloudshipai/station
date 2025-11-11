@@ -79,6 +79,14 @@ export const agentRunsApi = {
     apiClient.get<{runs: AgentRun[], count: number, agent_id: number}>(`/agents/${agentId}/runs`),
 };
 
+// Benchmark API
+export const benchmarksApi = {
+  evaluate: (runId: number) => apiClient.post(`/benchmarks/${runId}/evaluate`),
+  getMetrics: (runId: number) => apiClient.get(`/benchmarks/${runId}/metrics`),
+  listTasks: () => apiClient.get('/benchmarks/tasks'),
+  listRecent: (limit?: number) => apiClient.get(`/benchmarks/metrics${limit ? `?limit=${limit}` : ''}`),
+};
+
 // Sync API
 export const syncApi = {
   trigger: () => apiClient.post('/sync'),

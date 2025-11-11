@@ -255,3 +255,55 @@ export interface CreateReportRequest {
   agent_criteria?: Record<string, any>;
   judge_model?: string;
 }
+
+// Benchmark Types
+export interface BenchmarkMetric {
+  id: number;
+  run_id: number;
+  metric_name: string;
+  score: number;
+  threshold: number;
+  passed: boolean;
+  reason: string;
+  created_at: string;
+}
+
+export interface BenchmarkTask {
+  id: number;
+  name: string;
+  category: string;
+  description: string;
+  expected_output_example: string;
+  evaluation_criteria: string;
+  task_completion_weight: number;
+  relevancy_weight: number;
+  hallucination_weight: number;
+  faithfulness_weight: number;
+  toxicity_weight: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BenchmarkResult {
+  run_id: number;
+  agent_id: number;
+  task: string;
+  quality_score: number;
+  production_ready: boolean;
+  recommendation: string;
+  metrics: Record<string, MetricResult>;
+  total_judge_tokens: number;
+  total_judge_cost: number;
+  evaluation_time_ms: number;
+}
+
+export interface MetricResult {
+  metric_type: string;
+  score: number;
+  threshold: number;
+  passed: boolean;
+  reason?: string;
+  judge_tokens: number;
+  judge_cost: number;
+  evaluation_duration_ms: number;
+}

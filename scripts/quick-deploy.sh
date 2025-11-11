@@ -261,13 +261,18 @@ deploy_local() {
         exit 0
     fi
     
-    # Start Station
+    # Start Station with stn up (which handles initialization and serves)
+    # Note: stn up doesn't support custom ports, uses defaults 8585/8586
     log_info "Running: stn up --provider ${PROVIDER} --model ${MODEL}"
-    stn up --provider "${PROVIDER}" --model "${MODEL}" --port "${PORT}" --mcp-port "${MCP_PORT}" &
+    stn up --provider "${PROVIDER}" --model "${MODEL}" &
     
     local pid=$!
     log_success "Station started (PID: $pid)"
     log_info "Stop with: stn down"
+    
+    if [ "$PORT" != "8585" ] || [ "$MCP_PORT" != "8586" ]; then
+        log_warning "Custom ports not supported in local mode. Using defaults: 8585, 8586"
+    fi
 }
 
 # Print deployment summary

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, Clock, Wrench, BarChart, Terminal, ChevronDown, ChevronUp, Copy, CheckCircle, Loader } from 'lucide-react';
+import { X, FileText, Clock, Wrench, BarChart, Terminal, ChevronDown, ChevronUp, Copy, CheckCircle, Loader, Sparkles } from 'lucide-react';
 import { agentRunsApi, tracesApi } from '../../api/station';
 import type { AgentRunWithDetails, JaegerSpan } from '../../types/station';
 import { ToolCallsView } from './ToolCallsView';
+import { BenchmarkTab } from './BenchmarkTab';
 
 interface TimelineViewProps {
   runId: number;
@@ -188,7 +189,7 @@ interface RunDetailsModalProps {
   onClose: () => void;
 }
 
-type TabType = 'overview' | 'timeline' | 'tools' | 'metrics' | 'debug';
+type TabType = 'overview' | 'timeline' | 'tools' | 'metrics' | 'benchmark' | 'debug';
 
 interface ToolCall {
   toolName: string;
@@ -295,6 +296,7 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
     { id: 'timeline', label: 'Timeline', icon: Clock },
     { id: 'tools', label: 'Tool Calls', icon: Wrench },
     { id: 'metrics', label: 'Performance', icon: BarChart },
+    { id: 'benchmark', label: 'Quality', icon: Sparkles },
     { id: 'debug', label: 'Debug', icon: Terminal },
   ];
 
@@ -489,6 +491,11 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* Benchmark Tab */}
+              {activeTab === 'benchmark' && (
+                <BenchmarkTab runId={runId} />
               )}
 
               {/* Debug Tab */}
