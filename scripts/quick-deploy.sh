@@ -141,9 +141,7 @@ deploy_docker_compose() {
     log_info "Deploying with Docker Compose..."
     
     # Create docker-compose.yml
-    cat > docker-compose.yml << EOF
-version: '3.8'
-
+    cat > docker-compose.yml << COMPOSE_EOF
 services:
   station:
     image: ghcr.io/cloudshipai/station:latest
@@ -161,31 +159,32 @@ services:
     volumes:
       - ./bundles:/bundles:ro
       - station-data:/root/.config/station
-    command: >
-      sh -c "
-        echo '🚀 Station Quick Deploy Starting...' &&
+    command:
+      - sh
+      - -c
+      - |
+        echo '🚀 Station Quick Deploy Starting...'
         
         if [ ! -f /root/.config/station/config.yaml ]; then
-          echo '📦 Initializing Station...' &&
-          stn init --provider ${PROVIDER} --model ${MODEL} --yes
-        fi &&
+          echo '📦 Initializing Station...'
+          stn init --provider openai --model gpt-4o-mini --yes
+        fi
         
-        if [ -d /bundles ] && [ \"\\\$(ls -A /bundles/*.tar.gz 2>/dev/null)\" ]; then
-          echo '📦 Installing bundles...' &&
+        if [ -d /bundles ] && [ "$(ls -A /bundles/*.tar.gz 2>/dev/null)" ]; then
+          echo '📦 Installing bundles...'
           for bundle in /bundles/*.tar.gz; do
-            bundle_name=\\\$(basename \"\\\$bundle\" .tar.gz) &&
-            echo \"  ✓ Installing: \\\$bundle_name\" &&
-            stn bundle install \"\\\$bundle\" \"\\\$bundle_name\" &&
-            stn sync \"\\\$bundle_name\" -i=false || true
-          done &&
+            bundle_name=$(basename "$bundle" .tar.gz)
+            echo "  ✓ Installing: $bundle_name"
+            stn bundle install "$bundle" "$bundle_name"
+            stn sync "$bundle_name" -i=false || true
+          done
           echo '✅ Bundles installed!'
-        fi &&
+        fi
         
-        echo '🌐 Starting Station server...' &&
-        echo '   Web UI: http://localhost:${PORT}' &&
-        echo '   MCP Server: http://localhost:${MCP_PORT}/mcp' &&
+        echo '🌐 Starting Station server...'
+        echo '   Web UI: http://localhost:8585'
+        echo '   MCP Server: http://localhost:8586/mcp'
         stn serve
-      "
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8585/health"]
@@ -197,7 +196,7 @@ services:
 volumes:
   station-data:
     driver: local
-EOF
+COMPOSE_EOF
     
     log_success "Created docker-compose.yml"
     
