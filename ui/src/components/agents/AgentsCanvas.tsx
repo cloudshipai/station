@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,16 +11,27 @@ import {
   type OnConnect,
   type NodeTypes,
 } from '@xyflow/react';
-import { Bot } from 'lucide-react';
+import { Bot, Eye, EyeOff, Zap } from 'lucide-react';
 import { agentsApi } from '../../api/station';
 import { HierarchicalAgentNode } from '../nodes/HierarchicalAgentNode';
+import { ExecutionOverlayNode } from '../nodes/ExecutionOverlayNode';
+import { ExecutionFlowNode } from '../nodes/ExecutionFlowNode';
 import { buildAgentGraph } from '../../utils/agentGraphBuilder';
 import { buildAgentHierarchyMap } from '../../utils/agentHierarchy';
+import { buildExecutionFlowGraph } from '../../utils/executionFlowBuilder';
 import { MCPNode, ToolNode } from '../nodes/MCPNodes';
 import { AgentListSidebar } from './AgentListSidebar';
+import { AgentRunsPanel } from './AgentRunsPanel';
 import { MCPServerDetailsModal } from '../modals/MCPServerDetailsModal';
 import { AgentScheduleModal } from '../modals/AgentScheduleModal';
 import { RunAgentModal } from '../modals/RunAgentModal';
+import { RunDetailsModal } from '../modals/RunDetailsModal';
+import { ExecutionViewToggle } from './ExecutionViewToggle';
+import { ExecutionFlowPanel } from '../execution/ExecutionFlowPanel';
+import { ExecutionStatsHUD } from '../execution/ExecutionStatsHUD';
+import { useExecutionTrace } from '../../hooks/useExecutionTrace';
+import { usePlayback } from '../../hooks/usePlayback';
+import { TimelineScrubber } from '../execution/TimelineScrubber';
 
 interface EnvironmentContextType {
   selectedEnvironment: number | null;
@@ -32,16 +43,20 @@ interface AgentsCanvasProps {
 }
 
 const agentPageNodeTypes: NodeTypes = {
-  agent: HierarchicalAgentNode,
+  agent: ExecutionOverlayNode, // Use execution-aware node
   mcp: MCPNode,
   tool: ToolNode,
+  executionFlow: ExecutionFlowNode, // Execution flow nodes
 };
 
 export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }) => {
   const navigate = useNavigate();
+  const { agentId } = useParams<{ agentId?: string }>();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
-  const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<number | null>(
+    agentId ? parseInt(agentId, 10) : null
+  );
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hierarchyMap, setHierarchyMap] = useState<Map<number, any>>(new Map());
@@ -54,6 +69,40 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
   const [runAgentId, setRunAgentId] = useState<number | null>(null);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set());
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [isRunDetailsOpen, setIsRunDetailsOpen] = useState(false);
+  const [activeSpanIds, setActiveSpanIds] = useState<string[]>([]);
+  
+  // Use execution trace hook
+  const { 
+    isExecutionView, 
+    fetchTrace,
+    clearTrace,
+    toggleExecutionView, 
+    processTraceForNode,
+    hasTraceData,
+    getTotalDuration,
+    getActiveSpansAt,
+    getTraceData
+  } = useExecutionTrace();
+
+  // Use playback hook for scrubber
+  const totalDuration = getTotalDuration();
+  const {
+    currentTime,
+    isPlaying,
+    playbackSpeed,
+    handleTimeChange,
+    handlePlayPause,
+    handleSpeedChange,
+  } = usePlayback({
+    totalDuration,
+    onTimeUpdate: (time) => {
+      // Highlight active spans at current time
+      const activeSpans = getActiveSpansAt(time);
+      setActiveSpanIds(activeSpans);
+    },
+  });
 
   const toggleServerExpansionRef = useRef<(serverId: number) => void>(() => {});
 
@@ -126,7 +175,33 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
 
   const handleRunSuccess = (runId: number) => {
     console.log('Agent execution started with run ID:', runId);
-    // Could navigate to runs page: navigate(`/runs/${runId}`);
+    // Open the run details modal
+    setSelectedRunId(runId);
+    setIsRunDetailsOpen(true);
+  };
+
+  const handleRunClick = async (runId: number, agentId: number) => {
+    setSelectedRunId(runId);
+    setIsRunDetailsOpen(true);
+  };
+
+  const handleExecutionViewClick = async (runId: number, agentId: number) => {
+    // Close modal if open
+    setIsRunDetailsOpen(false);
+    
+    // Set selected run for highlighting
+    setSelectedRunId(runId);
+    
+    // Fetch trace data and enable execution view - only if it belongs to currently selected agent
+    if (selectedAgent === agentId) {
+      await fetchTrace(runId, agentId);
+      // Execution view will be auto-enabled by fetchTrace
+    }
+  };
+
+  const closeRunDetails = () => {
+    setIsRunDetailsOpen(false);
+    setSelectedRunId(null);
   };
 
   // Function to toggle MCP server expansion
@@ -143,6 +218,24 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
   }, []);
 
   toggleServerExpansionRef.current = toggleServerExpansion;
+
+  // Sync URL agentId param to selectedAgent state
+  useEffect(() => {
+    if (agentId) {
+      const parsedId = parseInt(agentId, 10);
+      if (parsedId !== selectedAgent) {
+        setSelectedAgent(parsedId);
+      }
+    }
+  }, [agentId]);
+
+  // Update URL when selectedAgent changes
+  useEffect(() => {
+    if (selectedAgent) {
+      // Update URL without full page reload
+      navigate(`/agent/${selectedAgent}`, { replace: true });
+    }
+  }, [selectedAgent, navigate]);
 
   // Fetch agents list (filtered by environment if selected)
   useEffect(() => {
@@ -162,9 +255,10 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
 
         // Build hierarchy map for all agents
         if (agentsList.length > 0) {
-          // We'll update hierarchy map when we have full tool info
-          // For now, just select first agent
-          setSelectedAgent(agentsList[0].id);
+          // Only auto-select first agent if no agent is selected from URL
+          if (!agentId && !selectedAgent) {
+            setSelectedAgent(agentsList[0].id);
+          }
         } else {
           setSelectedAgent(null);
         }
@@ -215,19 +309,62 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
         openRunModal,
       });
 
-      setNodes(graphData.nodes);
+      // Inject execution data if in execution view mode (micro-timelines only)
+      if (isExecutionView && hasTraceData) {
+        // Enhance agent nodes with execution data (micro-timelines)
+        const enhancedNodes = graphData.nodes.map((node: any) => {
+          if (node.type === 'agent') {
+            const processedTrace = processTraceForNode(node.data.agent.id);
+            
+            if (processedTrace) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  executionSpans: processedTrace.spans,
+                  runStartTime: processedTrace.runStartTime,
+                  runDuration: processedTrace.runDuration,
+                  isExecutionView: true,
+                  currentPlaybackTime: currentTime,
+                  activeSpanIds,
+                },
+              };
+            }
+            
+            // No trace data for this node - ghost mode
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                isExecutionView: true,
+                executionSpans: [],
+                currentPlaybackTime: currentTime,
+                activeSpanIds: [],
+              },
+            };
+          }
+          return node;
+        });
+        
+        setNodes(enhancedNodes);
+      } else {
+        setNodes(graphData.nodes);
+      }
+      
       setEdges(graphData.edges);
     } catch (error) {
       console.error('Failed to regenerate graph:', error);
     }
-  }, [agents, setNodes, setEdges]);
+  }, [agents, setNodes, setEdges, isExecutionView, hasTraceData, processTraceForNode, currentTime, activeSpanIds]);
 
-  // Reset expansion state when switching agents
+  // Reset expansion state and clear trace when switching agents
   useEffect(() => {
     if (selectedAgent) {
       setExpandedServers(new Set());
+      clearTrace(); // Clear trace data when switching to a different agent
+      setSelectedRunId(null); // Clear selected run when switching agents
     }
-  }, [selectedAgent]);
+  }, [selectedAgent, clearTrace]);
 
   // Regenerate graph when agent or expansion state changes
   useEffect(() => {
@@ -270,8 +407,16 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
           <h1 className="text-xl font-mono font-semibold text-tokyo-blue">
             {selectedAgent && agents.find(a => a.id === selectedAgent)?.name || 'Station Agents'}
           </h1>
+          
+          {/* Execution View Toggle */}
+          <ExecutionViewToggle
+            isExecutionView={isExecutionView}
+            hasTraceData={hasTraceData}
+            onToggle={toggleExecutionView}
+          />
         </div>
-        <div className="flex-1 relative">
+        {/* Main Canvas Area */}
+        <div className="flex-1 relative overflow-hidden">
         {agents.length === 0 ? (
           <div className="h-full flex items-center justify-center bg-tokyo-bg">
             <div className="text-center">
@@ -286,7 +431,7 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
             </div>
           </div>
         ) : (
-          <div className="flex-1 h-full">
+          <div className="h-full w-full relative">
             <ReactFlowProvider>
               <ReactFlow
                 nodes={nodes}
@@ -307,20 +452,56 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
                   }
                 }}
               />
+              
+              {/* Stats HUD - Shows when execution view is active */}
+              {isExecutionView && hasTraceData && (
+                <ExecutionStatsHUD traceData={getTraceData()} />
+              )}
             </ReactFlowProvider>
           </div>
         )}
-      </div>
-    </div>
+        </div>
+        
+        {/* Timeline Scrubber - TEMPORARILY HIDDEN - needs redesign */}
+        {false && isExecutionView && (
+          <TimelineScrubber
+            totalDuration={totalDuration || 1000000}
+            currentTime={currentTime}
+            onTimeChange={handleTimeChange}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            playbackSpeed={playbackSpeed}
+            onSpeedChange={handleSpeedChange}
+          />
+        )}
 
-    {/* Right Sidebar with Agent List */}
+        {/* Execution Flow Panel - Bottom horizontal scrolling panel */}
+        <ExecutionFlowPanel
+          traceData={getTraceData()}
+          activeSpanIds={activeSpanIds}
+          isVisible={isExecutionView && hasTraceData}
+        />
+      </div>
+
+      {/* Right Sidebar with Agent List */}
     {!loading && agents.length > 0 && (
-      <AgentListSidebar
-        agents={agents}
-        selectedAgentId={selectedAgent}
-        onSelectAgent={setSelectedAgent}
-        hierarchyMap={hierarchyMap}
-      />
+      <>
+        <AgentListSidebar
+          agents={agents}
+          selectedAgentId={selectedAgent}
+          onSelectAgent={setSelectedAgent}
+          hierarchyMap={hierarchyMap}
+        />
+        
+        {/* Runs Panel */}
+        <AgentRunsPanel
+          agentId={selectedAgent}
+          agentName={agents.find(a => a.id === selectedAgent)?.name || ''}
+          onRunClick={handleRunClick}
+          onExecutionViewClick={handleExecutionViewClick}
+          selectedRunId={selectedRunId}
+        />
+      </>
     )}
 
     {/* MCP Server Details Modal */}
@@ -353,6 +534,13 @@ export const AgentsCanvas: React.FC<AgentsCanvasProps> = ({ environmentContext }
         onSuccess={handleRunSuccess}
       />
     )}
+
+    {/* Run Details Modal */}
+    <RunDetailsModal
+      runId={selectedRunId}
+      isOpen={isRunDetailsOpen}
+      onClose={closeRunDetails}
+    />
   </div>
   );
 };

@@ -40,6 +40,7 @@ import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
 import { HierarchicalAgentNode } from './components/nodes/HierarchicalAgentNode';
 import { buildAgentHierarchyMap } from './utils/agentHierarchy';
 import { AgentsCanvas as AgentsCanvasComponent } from './components/agents/AgentsCanvas';
+import { RunDetailsModal } from './components/modals/RunDetailsModal';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -1241,178 +1242,7 @@ const MCPServersPage = () => {
   );
 };
 
-// Run Details Modal Component
-const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isOpen: boolean, onClose: () => void }) => {
-  const [runDetails, setRunDetails] = useState<AgentRunWithDetails | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (isOpen && runId) {
-      const fetchRunDetails = async () => {
-        setLoading(true);
-        try {
-          const response = await agentRunsApi.getById(runId);
-          setRunDetails(response.data.run);
-        } catch (error) {
-          console.error('Failed to fetch run details:', error);
-          setRunDetails(null);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchRunDetails();
-    }
-  }, [isOpen, runId]);
-
-  if (!isOpen || !runId) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
-            Run Details #{runId}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
-          >
-            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="text-tokyo-fg font-mono">Loading run details...</div>
-          </div>
-        ) : runDetails ? (
-          <div className="space-y-6">
-            {/* Run Overview */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-blue mb-3">Overview</h3>
-              <div className="grid gap-3">
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Agent:</span>
-                  <span className="font-mono text-tokyo-fg">{runDetails.agent_name}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">User:</span>
-                  <span className="font-mono text-tokyo-fg">{runDetails.username}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Status:</span>
-                  <span className={`font-mono px-2 py-1 rounded text-xs ${
-                    runDetails.status === 'completed' ? 'bg-tokyo-green text-tokyo-bg' :
-                    runDetails.status === 'failed' ? 'bg-tokyo-red text-tokyo-bg' :
-                    runDetails.status === 'running' ? 'bg-tokyo-yellow text-tokyo-bg' :
-                    'bg-tokyo-comment text-tokyo-bg'
-                  }`}>
-                    {runDetails.status.toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Duration:</span>
-                  <span className="font-mono text-tokyo-fg">
-                    {runDetails.duration_seconds ? `${runDetails.duration_seconds}s` : 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Model:</span>
-                  <span className="font-mono text-tokyo-fg">{runDetails.model_name || 'N/A'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Token Usage */}
-            {(runDetails.input_tokens || runDetails.output_tokens) && (
-              <div>
-                <h3 className="text-lg font-mono font-medium text-tokyo-green mb-3">Token Usage</h3>
-                <div className="grid gap-3">
-                  {runDetails.input_tokens && (
-                    <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <span className="font-mono text-tokyo-comment">Input Tokens:</span>
-                      <span className="font-mono text-tokyo-fg">{runDetails.input_tokens}</span>
-                    </div>
-                  )}
-                  {runDetails.output_tokens && (
-                    <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <span className="font-mono text-tokyo-comment">Output Tokens:</span>
-                      <span className="font-mono text-tokyo-fg">{runDetails.output_tokens}</span>
-                    </div>
-                  )}
-                  {runDetails.total_tokens && (
-                    <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <span className="font-mono text-tokyo-comment">Total Tokens:</span>
-                      <span className="font-mono text-tokyo-fg">{runDetails.total_tokens}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Task */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-blue mb-3">Task</h3>
-              <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                <pre className="text-sm text-tokyo-fg font-mono whitespace-pre-wrap">{runDetails.task}</pre>
-              </div>
-            </div>
-
-            {/* Response */}
-            {runDetails.final_response && (
-              <div>
-                <h3 className="text-lg font-mono font-medium text-tokyo-cyan mb-3">Final Response</h3>
-                <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <pre className="text-sm text-tokyo-fg font-mono whitespace-pre-wrap">{runDetails.final_response}</pre>
-                </div>
-              </div>
-            )}
-
-            {/* Execution Steps */}
-            {runDetails.execution_steps && runDetails.execution_steps.length > 0 && (
-              <div>
-                <h3 className="text-lg font-mono font-medium text-tokyo-purple mb-3">
-                  Execution Steps ({runDetails.execution_steps.length})
-                </h3>
-                <div className="space-y-3">
-                  {runDetails.execution_steps.map((step, index) => (
-                    <div key={index} className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <div className="text-sm font-mono text-tokyo-purple mb-2">Step {index + 1}</div>
-                      <pre className="text-xs text-tokyo-fg font-mono whitespace-pre-wrap overflow-x-auto">
-                        {typeof step === 'string' ? step : JSON.stringify(step, null, 2)}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Timing Information */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-comment mb-3">Timing</h3>
-              <div className="grid gap-3">
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Started:</span>
-                  <span className="font-mono text-tokyo-fg">{new Date(runDetails.started_at).toLocaleString()}</span>
-                </div>
-                {runDetails.completed_at && (
-                  <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                    <span className="font-mono text-tokyo-comment">Completed:</span>
-                    <span className="font-mono text-tokyo-fg">{new Date(runDetails.completed_at).toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <div className="text-tokyo-red font-mono">Failed to load run details</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+// RunDetailsModal is now imported from ./components/modals/RunDetailsModal.tsx
 
 // Runs Page with Modal Support
 const RunsPage = () => {
@@ -2999,6 +2829,7 @@ function App() {
                   <Route path="/getting-started" element={<GettingStartedPage />} />
                   <Route path="/agents" element={<AgentsCanvas />} />
                   <Route path="/agents/:env" element={<AgentsCanvas />} />
+                  <Route path="/agent/:agentId" element={<AgentsCanvas />} />
                   <Route path="/mcps" element={<MCPServersPage />} />
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />

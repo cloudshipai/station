@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink } from 'lucide-react';
+import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink, Wand2 } from 'lucide-react';
 import { SyncModal } from '../sync/SyncModal';
+import { FakerBuilderModal } from '../modals/FakerBuilderModal';
 
 interface MCPServer {
   id: string;
@@ -390,6 +391,8 @@ export const MCPDirectoryPage: React.FC = () => {
   const [checkingShip, setCheckingShip] = useState(true);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [syncEnvironment, setSyncEnvironment] = useState<string>('');
+  const [fakerModalOpen, setFakerModalOpen] = useState(false);
+  const [selectedEnvironmentForFaker, setSelectedEnvironmentForFaker] = useState<number>(0);
 
   // Build categories from servers, excluding Ship Security Tools
   const serverCategories = Array.from(new Set(mcpServers.map(s => s.category)))
@@ -537,6 +540,22 @@ export const MCPDirectoryPage: React.FC = () => {
     fetchEnvironments();
   };
 
+  const handleFakerCreated = (fakerName: string, envName: string) => {
+    // Trigger sync automatically
+    setSyncEnvironment(envName);
+    setSyncModalOpen(true);
+  };
+
+  const handleOpenFakerBuilder = () => {
+    if (environments.length === 0) {
+      alert('No environments available. Please create an environment first.');
+      return;
+    }
+    // Default to first environment
+    setSelectedEnvironmentForFaker(environments[0].id);
+    setFakerModalOpen(true);
+  };
+
   const filteredServers = servers.filter(server => {
     const matchesSearch = server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          server.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -563,14 +582,21 @@ export const MCPDirectoryPage: React.FC = () => {
           <p className="text-gray-400">Discover and install MCP servers to extend your Station capabilities</p>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-6 flex items-center gap-4">
           <input
             type="text"
             placeholder="Search servers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           />
+          <button
+            onClick={handleOpenFakerBuilder}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
+          >
+            <Wand2 className="h-5 w-5" />
+            Create Faker
+          </button>
         </div>
 
         {/* Category Tabs */}
@@ -649,6 +675,14 @@ export const MCPDirectoryPage: React.FC = () => {
         onClose={() => setSyncModalOpen(false)}
         environment={syncEnvironment}
         onSyncComplete={handleSyncComplete}
+      />
+
+      <FakerBuilderModal
+        isOpen={fakerModalOpen}
+        onClose={() => setFakerModalOpen(false)}
+        environmentName={environments.find(e => e.id === selectedEnvironmentForFaker)?.name || 'default'}
+        environmentId={selectedEnvironmentForFaker}
+        onSuccess={handleFakerCreated}
       />
     </div>
   );

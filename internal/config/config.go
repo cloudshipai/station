@@ -18,6 +18,7 @@ type Config struct {
 	Environment      string
 	TelemetryEnabled bool
 	OTELEndpoint     string // OpenTelemetry OTLP endpoint for exporting traces
+	JaegerQueryURL   string // Jaeger Query API endpoint for fetching traces
 	Debug            bool   // Debug mode enables verbose logging
 	// Workspace Configuration
 	Workspace string // Custom workspace path (overrides XDG paths)
@@ -61,6 +62,7 @@ func Load() (*Config, error) {
 		Environment:      getEnvOrDefault("ENVIRONMENT", "development"),
 		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true),                          // Default enabled with opt-out
 		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"), // Default to local Jaeger
+		JaegerQueryURL:   getEnvOrDefault("JAEGER_QUERY_URL", "http://localhost:16686"),           // Default to local Jaeger Query
 		Debug:            getEnvBoolOrDefault("STN_DEBUG", false),                                 // Default to info level
 		// Workspace Configuration
 		Workspace: getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
@@ -100,6 +102,9 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("otel_endpoint") {
 		cfg.OTELEndpoint = viper.GetString("otel_endpoint")
+	}
+	if viper.IsSet("jaeger_query_url") {
+		cfg.JaegerQueryURL = viper.GetString("jaeger_query_url")
 	}
 	if viper.IsSet("debug") {
 		cfg.Debug = viper.GetBool("debug")

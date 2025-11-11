@@ -7,7 +7,8 @@ import type {
   AgentTool, 
   User, 
   AgentRun,
-  AgentRunWithDetails 
+  AgentRunWithDetails,
+  JaegerTrace
 } from '../types/station';
 
 // Environment API
@@ -119,4 +120,12 @@ export const bundlesApi = {
       environment_name: environmentName,
       source
     }),
+};
+
+// Traces API
+export const tracesApi = {
+  getByRunId: (runId: number) => 
+    apiClient.get<{run_id: number, trace: JaegerTrace, error?: string, suggestion?: string}>(`/traces/run/${runId}`),
+  getByTraceId: (traceId: string) =>
+    apiClient.get<{trace_id: string, trace: JaegerTrace, error?: string}>(`/traces/trace/${traceId}`),
 };

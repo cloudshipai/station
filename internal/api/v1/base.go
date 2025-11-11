@@ -83,6 +83,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Faker routes (simulation tools)
 	h.registerFakerRoutes(envGroup)
 
+	// Traces routes (OTEL/Jaeger integration)
+	h.registerTracesRoutes(router)
+
 	// MCP Directory template routes
 	h.registerMCPDirectoryRoutes(router)
 

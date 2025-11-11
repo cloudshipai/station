@@ -47,6 +47,49 @@ export interface Tool {
   updated_at: string;
 }
 
+// Jaeger Trace Types
+export interface JaegerTag {
+  key: string;
+  type: 'string' | 'bool' | 'int64' | 'float64';
+  value: string | boolean | number;
+}
+
+export interface JaegerReference {
+  refType: 'CHILD_OF' | 'FOLLOWS_FROM';
+  traceID: string;
+  spanID: string;
+}
+
+export interface JaegerLog {
+  timestamp: number; // microseconds
+  fields: JaegerTag[];
+}
+
+export interface JaegerSpan {
+  traceID: string;
+  spanID: string;
+  operationName: string;
+  references: JaegerReference[];
+  startTime: number; // microseconds
+  duration: number; // microseconds
+  tags: JaegerTag[];
+  logs: JaegerLog[];
+  processID: string;
+  warnings?: string[];
+}
+
+export interface JaegerProcess {
+  serviceName: string;
+  tags: JaegerTag[];
+}
+
+export interface JaegerTrace {
+  traceID: string;
+  spans: JaegerSpan[];
+  processes: Record<string, JaegerProcess>;
+  warnings?: string[];
+}
+
 export interface AgentTool {
   agent_id: number;
   tool_id: number;

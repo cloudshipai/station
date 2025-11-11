@@ -42,7 +42,7 @@ export const AgentListSidebar: React.FC<AgentListSidebarProps> = ({
                 'w-full text-left p-3 rounded-lg border transition-all duration-200',
                 'hover:border-tokyo-blue5 hover:bg-tokyo-dark2',
                 isSelected
-                  ? 'border-tokyo-blue bg-tokyo-dark2 shadow-lg'
+                  ? 'border-tokyo-blue bg-tokyo-dark2 shadow-lg ring-2 ring-tokyo-blue/50'
                   : 'border-tokyo-blue7 bg-tokyo-bg'
               )}
             >
