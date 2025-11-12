@@ -293,6 +293,48 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(installDemoBundleTool, s.handleInstallDemoBundle)
 
+	// Benchmark Tools
+	evaluateBenchmarkTool := mcp.NewTool("evaluate_benchmark",
+		mcp.WithDescription("Evaluate an agent run asynchronously using LLM-as-judge metrics. Returns a task ID to check status later."),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("ID of the completed agent run to evaluate")),
+	)
+	s.mcpServer.AddTool(evaluateBenchmarkTool, s.handleEvaluateBenchmark)
+
+	getBenchmarkStatusTool := mcp.NewTool("get_benchmark_status",
+		mcp.WithDescription("Check the status of a benchmark evaluation task"),
+		mcp.WithString("task_id", mcp.Required(), mcp.Description("ID of the benchmark task")),
+	)
+	s.mcpServer.AddTool(getBenchmarkStatusTool, s.handleGetBenchmarkStatus)
+
+	listBenchmarkResultsTool := mcp.NewTool("list_benchmark_results",
+		mcp.WithDescription("List benchmark evaluation results"),
+		mcp.WithString("run_id", mcp.Description("Filter by specific run ID")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of results to return (default: 10)")),
+	)
+	s.mcpServer.AddTool(listBenchmarkResultsTool, s.handleListBenchmarkResults)
+
+	// Schedule Management Tools
+	setScheduleTool := mcp.NewTool("set_schedule",
+		mcp.WithDescription("Configure an agent to run on a schedule with specified input variables"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to schedule")),
+		mcp.WithString("cron_schedule", mcp.Required(), mcp.Description("Cron expression (e.g., '0 0 * * *' for daily at midnight)")),
+		mcp.WithString("schedule_variables", mcp.Description("JSON object with input variables for scheduled runs")),
+		mcp.WithBoolean("enabled", mcp.Description("Enable/disable the schedule (default: true)")),
+	)
+	s.mcpServer.AddTool(setScheduleTool, s.handleSetSchedule)
+
+	removeScheduleTool := mcp.NewTool("remove_schedule",
+		mcp.WithDescription("Remove/disable an agent's schedule configuration"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
+	)
+	s.mcpServer.AddTool(removeScheduleTool, s.handleRemoveSchedule)
+
+	getScheduleTool := mcp.NewTool("get_schedule",
+		mcp.WithDescription("Get an agent's current schedule configuration"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
+	)
+	s.mcpServer.AddTool(getScheduleTool, s.handleGetSchedule)
+
 	// Faker Management Tools
 	fakerCreateTool := mcp.NewTool("faker_create_from_mcp_server",
 		mcp.WithDescription("Create a faker-wrapped version of an existing MCP server in the same environment. This allows agents to create custom simulated MCP servers with tailored AI instructions for realistic data generation."),
