@@ -8,14 +8,18 @@ import (
 )
 
 type BenchmarkMetric struct {
-	ID         int64
-	RunID      int64
-	MetricName string
-	Score      float64
-	Threshold  float64
-	Passed     bool
-	Reason     string
-	CreatedAt  time.Time
+	ID                   int64     `json:"id"`
+	RunID                int64     `json:"run_id"`
+	MetricName           string    `json:"metric_name"`
+	Score                float64   `json:"score"`
+	Threshold            float64   `json:"threshold"`
+	Passed               bool      `json:"passed"`
+	Reason               string    `json:"reason"`
+	JudgeModel           string    `json:"judge_model,omitempty"`
+	JudgeTokens          int       `json:"judge_tokens"`
+	JudgeCost            float64   `json:"judge_cost"`
+	EvaluationDurationMS int       `json:"evaluation_duration_ms"`
+	CreatedAt            time.Time `json:"created_at"`
 }
 
 type BenchmarkMetricsRepo struct {
@@ -29,7 +33,9 @@ func NewBenchmarkMetricsRepo(db *sql.DB) *BenchmarkMetricsRepo {
 // GetByRunID retrieves all metrics for a specific run
 func (r *BenchmarkMetricsRepo) GetByRunID(ctx context.Context, runID int64) ([]BenchmarkMetric, error) {
 	query := `
-		SELECT id, run_id, metric_name, score, threshold, passed, reason, created_at
+		SELECT id, run_id, metric_type, score, threshold, passed, reason, 
+		       COALESCE(judge_model, ''), COALESCE(judge_tokens, 0), 
+		       COALESCE(judge_cost, 0.0), COALESCE(evaluation_duration_ms, 0), created_at
 		FROM benchmark_metrics
 		WHERE run_id = ?
 		ORDER BY created_at DESC
@@ -52,6 +58,10 @@ func (r *BenchmarkMetricsRepo) GetByRunID(ctx context.Context, runID int64) ([]B
 			&m.Threshold,
 			&m.Passed,
 			&m.Reason,
+			&m.JudgeModel,
+			&m.JudgeTokens,
+			&m.JudgeCost,
+			&m.EvaluationDurationMS,
 			&m.CreatedAt,
 		)
 		if err != nil {
@@ -70,7 +80,9 @@ func (r *BenchmarkMetricsRepo) GetByRunID(ctx context.Context, runID int64) ([]B
 // ListRecent retrieves recent benchmark metrics across all runs
 func (r *BenchmarkMetricsRepo) ListRecent(ctx context.Context, limit int) ([]BenchmarkMetric, error) {
 	query := `
-		SELECT id, run_id, metric_name, score, threshold, passed, reason, created_at
+		SELECT id, run_id, metric_type, score, threshold, passed, reason,
+		       COALESCE(judge_model, ''), COALESCE(judge_tokens, 0), 
+		       COALESCE(judge_cost, 0.0), COALESCE(evaluation_duration_ms, 0), created_at
 		FROM benchmark_metrics
 		ORDER BY created_at DESC
 		LIMIT ?
@@ -93,6 +105,10 @@ func (r *BenchmarkMetricsRepo) ListRecent(ctx context.Context, limit int) ([]Ben
 			&m.Threshold,
 			&m.Passed,
 			&m.Reason,
+			&m.JudgeModel,
+			&m.JudgeTokens,
+			&m.JudgeCost,
+			&m.EvaluationDurationMS,
 			&m.CreatedAt,
 		)
 		if err != nil {
