@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -269,85 +268,23 @@ func (s *Server) handleAddAgentAsTool(ctx context.Context, request mcp.CallToolR
 		return mcp.NewToolResultError(fmt.Sprintf("Agents must be in the same environment. Parent is in environment %d, child is in environment %d", parentAgent.EnvironmentID, childAgent.EnvironmentID)), nil
 	}
 
-	// Create agent tool name with __agent_ prefix
-	// CRITICAL: Normalize name same way as mcp_connection_manager.go:getAgentToolsForEnvironment
-	normalizedName := strings.ToLower(childAgent.Name)
-	// Replace all special characters with underscores (same normalization as agent tool creation)
-	replacements := []string{" ", "-", ".", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "+", "=", "[", "]", "{", "}", "|", "\\", ":", ";", "\"", "'", "<", ">", ",", "?", "/"}
-	for _, char := range replacements {
-		normalizedName = strings.ReplaceAll(normalizedName, char, "_")
-	}
-	// Remove multiple consecutive underscores
-	for strings.Contains(normalizedName, "__") {
-		normalizedName = strings.ReplaceAll(normalizedName, "__", "_")
-	}
-	// Trim leading/trailing underscores
-	normalizedName = strings.Trim(normalizedName, "_")
-
-	agentToolName := fmt.Sprintf("__agent_%s", normalizedName)
-
-	// Get environment to build file path
-	env, err := s.repos.Environments.GetByID(parentAgent.EnvironmentID)
+	// Add relationship to database
+	_, err = s.repos.AgentAgents.AddChildAgent(parentAgentID, childAgentID)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to get environment: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to add child agent: %v", err)), nil
 	}
 
-	// Build path to agent .prompt file
-	promptFilePath := fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt",
-		os.Getenv("HOME"), env.Name, parentAgent.Name)
-
-	// Check if file exists, if not export it first
-	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {
-		if s.agentExportService == nil {
-			return mcp.NewToolResultError("Agent export service not available"), nil
-		}
+	// Export agent to update .prompt file with agents: section
+	if s.agentExportService != nil {
 		if err := s.agentExportService.ExportAgentAfterSave(parentAgentID); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to export agent: %v", err)), nil
 		}
 	}
 
-	// Read current file content
-	content, err := os.ReadFile(promptFilePath)
+	// Get environment for sync
+	env, err := s.repos.Environments.GetByID(parentAgent.EnvironmentID)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to read agent file: %v", err)), nil
-	}
-
-	// Parse YAML frontmatter to add tools
-	contentStr := string(content)
-
-	// Find the tools: section or add it after max_steps
-	if !strings.Contains(contentStr, "tools:") {
-		// Add tools section after max_steps line
-		contentStr = strings.Replace(contentStr,
-			fmt.Sprintf("max_steps: %d\n", parentAgent.MaxSteps),
-			fmt.Sprintf("max_steps: %d\ntools:\n  - \"%s\"\n", parentAgent.MaxSteps, agentToolName),
-			1)
-	} else {
-		// Append to existing tools list
-		lines := strings.Split(contentStr, "\n")
-		newLines := make([]string, 0, len(lines)+1)
-		for i, line := range lines {
-			newLines = append(newLines, line)
-			if strings.HasPrefix(strings.TrimSpace(line), "tools:") {
-				// Found tools section, now find where it ends
-				j := i + 1
-				for j < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[j]), "-") {
-					newLines = append(newLines, lines[j])
-					j++
-				}
-				// Add new tool after last tool item
-				newLines = append(newLines, fmt.Sprintf("  - \"%s\"", agentToolName))
-				// Append rest of file
-				newLines = append(newLines, lines[j:]...)
-				break
-			}
-		}
-		contentStr = strings.Join(newLines, "\n")
-	}
-
-	// Write modified content back
-	if err := os.WriteFile(promptFilePath, []byte(contentStr), 0644); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to write agent file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get environment: %v", err)), nil
 	}
 
 	// Run sync to apply changes immediately
@@ -356,6 +293,18 @@ func (s *Server) handleAddAgentAsTool(ctx context.Context, request mcp.CallToolR
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to sync environment: %v\nOutput: %s", err, string(syncOutput))), nil
 	}
+
+	// Create normalized tool name for response (same logic as runtime)
+	normalizedName := strings.ToLower(childAgent.Name)
+	replacements := []string{" ", "-", ".", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "+", "=", "[", "]", "{", "}", "|", "\\", ":", ";", "\"", "'", "<", ">", ",", "?", "/"}
+	for _, char := range replacements {
+		normalizedName = strings.ReplaceAll(normalizedName, char, "_")
+	}
+	for strings.Contains(normalizedName, "__") {
+		normalizedName = strings.ReplaceAll(normalizedName, "__", "_")
+	}
+	normalizedName = strings.Trim(normalizedName, "_")
+	agentToolName := fmt.Sprintf("__agent_%s", normalizedName)
 
 	response := map[string]interface{}{
 		"success": true,
@@ -369,7 +318,7 @@ func (s *Server) handleAddAgentAsTool(ctx context.Context, request mcp.CallToolR
 			"name": childAgent.Name,
 		},
 		"tool_name": agentToolName,
-		"note":      "Agent tools are created dynamically at runtime. Run 'stn sync' to apply changes.",
+		"note":      "Child agent added to database and exported to agents: section in .prompt file",
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")

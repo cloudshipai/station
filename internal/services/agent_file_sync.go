@@ -602,6 +602,69 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		}
 	}
 
+	// Sync child agents (agents: section in frontmatter)
+	agentsNeedSync := len(config.Agents) > 0
+	if agentsNeedSync {
+		// Get current child agent assignments
+		currentChildAgents, err := s.repos.AgentAgents.ListChildAgents(existingAgent.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current child agents: %w", err)
+		}
+
+		// Create maps for efficient lookup
+		currentChildMap := make(map[string]int64) // childName -> childID
+		for _, childRel := range currentChildAgents {
+			currentChildMap[childRel.ChildAgent.Name] = childRel.ChildAgentID
+		}
+
+		configChildSet := make(map[string]bool)
+		for _, childName := range config.Agents {
+			configChildSet[childName] = true
+		}
+
+		// Track changes
+		agentsAdded := 0
+		agentsRemoved := 0
+
+		// Remove child agents no longer in config
+		for childName, childID := range currentChildMap {
+			if !configChildSet[childName] {
+				err = s.repos.AgentAgents.RemoveChildAgent(existingAgent.ID, childID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to remove child agent %s: %w", childName, err)
+				}
+				agentsRemoved++
+			}
+		}
+
+		// Add child agents from config that aren't assigned
+		for _, childName := range config.Agents {
+			if _, exists := currentChildMap[childName]; !exists {
+				// Find child agent by name in same environment
+				childAgent, err := s.repos.Agents.GetByNameAndEnvironment(childName, existingAgent.EnvironmentID)
+				if err != nil {
+					fmt.Printf("   ⚠️  Child agent '%s' not found in environment (will retry on next sync)\n", childName)
+					continue
+				}
+
+				// Add child agent relationship
+				_, err = s.repos.AgentAgents.AddChildAgent(existingAgent.ID, childAgent.ID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to add child agent %s: %w", childName, err)
+				}
+				agentsAdded++
+			}
+		}
+
+		// Log changes
+		if agentsAdded > 0 || agentsRemoved > 0 {
+			fmt.Printf("   🤖 Child agents sync: +%d added, -%d removed (total: %d)\n",
+				agentsAdded, agentsRemoved, len(config.Agents))
+		} else if len(config.Agents) > 0 {
+			fmt.Printf("   ✅ Child agents already in sync (%d agents)\n", len(config.Agents))
+		}
+	}
+
 	// Commit transaction - all-or-nothing
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
