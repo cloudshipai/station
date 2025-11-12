@@ -65,9 +65,30 @@ That's it. Station handles:
 
 ## Quick Start
 
-### Fastest: One-Line Install & Run
+### 🚀 Super Quick: Docker One-Liner (Recommended)
 
-The absolute fastest way to get Station running:
+Get Station running in Docker with zero setup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/scripts/quick-deploy.sh | bash
+```
+
+**What this does:**
+- ✅ Prompts for your OpenAI API key
+- ✅ Creates docker-compose.yml automatically
+- ✅ Starts Station in Docker (production-ready)
+- ✅ Opens browser to Web UI at `http://localhost:8585`
+- ✅ Auto-installs bundles from `bundles/` directory
+
+**Just need:** Docker and your OpenAI API key.
+
+**Stop Station:** `docker compose down`
+
+---
+
+### ⚡ Fastest: Local Install & Run
+
+For local development without Docker:
 
 ```bash
 curl -fsSL https://get.station.dev | bash
@@ -76,10 +97,12 @@ curl -fsSL https://get.station.dev | bash
 **What this does:**
 - ✅ Installs Station CLI
 - ✅ Prompts for AI provider setup
-- ✅ Starts Station with Web UI at `http://localhost:8585`
+- ✅ Starts Station locally
 - ✅ Opens browser automatically
 
 **Just need:** `curl` and your AI API key (OpenAI/Anthropic/Gemini/Ollama).
+
+**Stop Station:** `stn down`
 
 ---
 
@@ -581,6 +604,91 @@ otel_endpoint: "http://your-collector:4318"
 - Change impact analysis
 
 [See Example Agents →](./docs/station/examples.md)
+
+---
+
+## Database Persistence & Replication
+
+Station uses SQLite by default, with support for cloud databases and continuous backup for production deployments.
+
+### Local Development (Default)
+```bash
+# Station uses local SQLite file
+stn stdio
+```
+Perfect for local development, zero configuration required.
+
+### Cloud Database (libsql)
+For multi-instance deployments or team collaboration, use a libsql-compatible cloud database:
+
+```bash
+# Connect to cloud database
+export DATABASE_URL="libsql://your-db.example.com?authToken=your-token"
+stn stdio
+```
+
+**Benefits:**
+- State persists across multiple deployments
+- Team collaboration with shared database
+- Multi-region replication
+- Automatic backups
+
+### Continuous Backup (Litestream)
+For single-instance production deployments with disaster recovery:
+
+```bash
+# Docker deployment with automatic S3 backup
+docker run \
+  -e LITESTREAM_S3_BUCKET=my-backups \
+  -e LITESTREAM_S3_ACCESS_KEY_ID=xxx \
+  -e LITESTREAM_S3_SECRET_ACCESS_KEY=yyy \
+  ghcr.io/cloudshipai/station:production
+```
+
+**Benefits:**
+- Continuous replication to S3/GCS/Azure
+- Automatic restore on startup
+- Point-in-time recovery
+- Zero data loss on server failures
+
+[Database Replication Guide →](./docs/station/DATABASE_REPLICATION.md)
+
+---
+
+## GitOps Workflow
+
+Version control your agent configurations, MCP templates, and variables in Git:
+
+```bash
+# Create a Git repository for your Station config
+mkdir my-station-config
+cd my-station-config
+
+# Initialize Station in this directory
+export STATION_WORKSPACE=$(pwd)
+stn init
+
+# Your agents are now in ./environments/default/agents/
+# Commit to Git and share with your team!
+git init
+git add .
+git commit -m "Initial Station configuration"
+```
+
+**Team Workflow:**
+```bash
+# Clone team repository
+git clone git@github.com:your-team/station-config.git
+cd station-config
+
+# Run Station with this workspace
+export STATION_WORKSPACE=$(pwd)
+stn stdio
+```
+
+All agent `.prompt` files, MCP `template.json` configs, and `variables.yml` are version-controlled and reviewable in Pull Requests.
+
+[GitOps Workflow Guide →](./docs/station/GITOPS_WORKFLOW.md)
 
 ---
 
