@@ -313,16 +313,17 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		}
 
 		if j < 35 {
-			fmt.Printf("DEBUG FILTER: Checking tool[%d]: %s (is_agent_tool=%v)\n", j, toolName, strings.HasPrefix(toolName, "mcp__station__agent__"))
+			isAgentTool := strings.HasPrefix(toolName, "__agent_")
+			fmt.Printf("DEBUG FILTER: Checking tool[%d]: %s (is_agent_tool=%v)\n", j, toolName, isAgentTool)
 		}
 
-		// Include tool if:
-		// 1. It's in the assigned tools list, OR
-		// 2. It's an agent tool (dynamic runtime tools) - prefixed with __agent_
+		// Include tool ONLY if it's in the assigned tools list
+		// Child agent tools are already added to assignedToolNames map (lines 280-301)
+		// so we don't need a separate check for agent tools
 		isAssigned := assignedToolNames[toolName]
-		isAgentTool := strings.HasPrefix(toolName, "__agent_")
 
-		if isAssigned || isAgentTool {
+		if isAssigned {
+			isAgentTool := strings.HasPrefix(toolName, "__agent_")
 			fmt.Printf("DEBUG FILTER: MATCHED tool %s (assigned=%v, agent_tool=%v)\n", toolName, isAssigned, isAgentTool)
 			logging.Debug("MATCHED! Adding tool %s (assigned=%v, agent_tool=%v)", toolName, isAssigned, isAgentTool)
 			mcpTools = append(mcpTools, mcpTool)
