@@ -133,11 +133,18 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(updateAgentPromptTool, s.handleUpdateAgentPrompt)
 
 	addToolTool := mcp.NewTool("add_tool",
-		mcp.WithDescription("Add a tool to an agent"),
+		mcp.WithDescription("Add a tool to an agent. For MCP tools from servers, use tool name directly (e.g., '__get_cost_and_usage'). For agent tools, use format '__agent_<agent-name>' (e.g., '__agent_finops-analyst' to add the finops-analyst agent as a callable tool)."),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
 		mcp.WithString("tool_name", mcp.Required(), mcp.Description("Name of the tool to add")),
 	)
 	s.mcpServer.AddTool(addToolTool, s.handleAddTool)
+
+	addAgentTool := mcp.NewTool("add_agent_as_tool",
+		mcp.WithDescription("Add another agent as a callable tool to create multi-agent hierarchies. The child agent will be available as '__agent_<name>' tool."),
+		mcp.WithString("parent_agent_id", mcp.Required(), mcp.Description("ID of the parent agent that will call the child")),
+		mcp.WithString("child_agent_id", mcp.Required(), mcp.Description("ID of the child agent to add as a tool")),
+	)
+	s.mcpServer.AddTool(addAgentTool, s.handleAddAgentAsTool)
 
 	removeToolTool := mcp.NewTool("remove_tool",
 		mcp.WithDescription("Remove a tool from an agent"),
@@ -291,5 +298,5 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(fakerCreateTool, s.handleFakerCreateFromMCPServer)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 34)
+	log.Printf("MCP tools setup complete - %d tools registered", 35)
 }
