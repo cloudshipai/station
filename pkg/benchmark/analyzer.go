@@ -41,6 +41,18 @@ func (a *Analyzer) SetThreshold(metricType string, threshold float64) {
 func (a *Analyzer) EvaluateRun(ctx context.Context, runID int64) (*BenchmarkResult, error) {
 	startTime := time.Now()
 
+	// 0. Check if metrics already exist for this run
+	existingCount := 0
+	err := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM benchmark_metrics WHERE run_id = ?", runID).Scan(&existingCount)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to check existing metrics: %w", err)
+	}
+
+	// If metrics already exist, return existing results instead of re-evaluating
+	if existingCount > 0 {
+		return a.loadExistingResults(ctx, runID)
+	}
+
 	// 1. Load run data from database
 	input, err := a.loadRunData(ctx, runID)
 	if err != nil {
@@ -83,17 +95,15 @@ func (a *Analyzer) loadRunData(ctx context.Context, runID int64) (*EvaluationInp
 			ar.final_response,
 			ar.tool_calls,
 			ar.execution_steps,
-			ar.trace_id,
-			ar.duration,
-			ar.total_tokens,
-			ar.total_cost,
+			COALESCE(ar.duration_seconds, 0.0),
+			COALESCE(ar.total_tokens, 0),
 			ar.status
 		FROM agent_runs ar
 		WHERE ar.id = ?
 	`
 
 	var input EvaluationInput
-	var toolCallsJSON, executionStepsJSON, traceID sql.NullString
+	var toolCallsJSON, executionStepsJSON sql.NullString
 
 	err := a.db.QueryRowContext(ctx, query, runID).Scan(
 		&input.RunID,
@@ -102,21 +112,19 @@ func (a *Analyzer) loadRunData(ctx context.Context, runID int64) (*EvaluationInp
 		&input.FinalResponse,
 		&toolCallsJSON,
 		&executionStepsJSON,
-		&traceID,
 		&input.Duration,
 		&input.Tokens,
-		&input.Cost,
 		&input.Status,
 	)
+
+	// Cost not tracked in current schema
+	input.Cost = 0.0
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to query run: %w", err)
 	}
 
-	// Handle nullable trace_id
-	if traceID.Valid {
-		input.TraceID = traceID.String
-	}
+	// Note: trace_id column not available in current schema
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to query run: %w", err)
@@ -432,4 +440,24 @@ func (a *Analyzer) GetRunMetrics(ctx context.Context, runID int64) (map[string]M
 	}
 
 	return metrics, rows.Err()
+}
+
+// loadExistingResults loads pre-existing benchmark results for a run
+func (a *Analyzer) loadExistingResults(ctx context.Context, runID int64) (*BenchmarkResult, error) {
+	// Load run data
+	input, err := a.loadRunData(ctx, runID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load run data: %w", err)
+	}
+
+	// Load existing metrics
+	metrics, err := a.GetRunMetrics(ctx, runID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load existing metrics: %w", err)
+	}
+
+	// Calculate aggregate scores from existing metrics
+	result := a.calculateAggregateScores(input, metrics)
+
+	return result, nil
 }

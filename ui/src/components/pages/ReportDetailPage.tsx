@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, CheckCircle, XCircle, AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { reportsApi } from '../../api/station';
+import { ArrowLeft, Download, CheckCircle, XCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react';
+import { reportsApi, benchmarksApi } from '../../api/station';
 import type { Report, AgentReportDetail, CriterionScore } from '../../types/station';
 
 interface TeamCriteria {
@@ -25,6 +25,10 @@ export const ReportDetailPage: React.FC = () => {
   // Parsed data
   const [teamCriteria, setTeamCriteria] = useState<TeamCriteria | null>(null);
   const [teamCriteriaScores, setTeamCriteriaScores] = useState<Record<string, CriterionScore> | null>(null);
+  
+  // Detailed test results
+  const [expandedRun, setExpandedRun] = useState<number | null>(null);
+  const [runMetrics, setRunMetrics] = useState<Record<number, any[]>>({});
 
   // Helper to safely extract values from SQL null types
   const getSqlValue = (field: any): any => {
@@ -106,6 +110,27 @@ export const ReportDetailPage: React.FC = () => {
     return date.toLocaleString();
   };
 
+  // Export PDF handler
+  const handleExportPDF = () => {
+    window.print();
+  };
+
+  // Fetch detailed metrics for a run
+  const fetchRunMetrics = async (runId: number) => {
+    if (runMetrics[runId]) {
+      setExpandedRun(expandedRun === runId ? null : runId);
+      return;
+    }
+    
+    try {
+      const response = await benchmarksApi.getMetrics(runId);
+      setRunMetrics(prev => ({ ...prev, [runId]: response.data.metrics || [] }));
+      setExpandedRun(runId);
+    } catch (err) {
+      console.error(`Failed to fetch metrics for run ${runId}:`, err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-tokyo-bg">
@@ -137,7 +162,20 @@ export const ReportDetailPage: React.FC = () => {
   const failedAgents = agentDetails.length - passedAgents;
 
   return (
-    <div className="h-full flex flex-col bg-tokyo-bg overflow-y-auto">
+    <>
+      <style>{`
+        @media print {
+          body { background: white !important; color: black !important; }
+          .no-print { display: none !important; }
+          h1, h2, h3 { color: #1a1b26 !important; }
+          .tokyo-bg, .tokyo-bg-dark { background: white !important; }
+          .tokyo-fg, .tokyo-cyan { color: #1a1b26 !important; }
+          .border-tokyo-blue7 { border-color: #ccc !important; }
+          button { display: none !important; }
+        }
+      `}</style>
+      
+      <div className="h-full flex flex-col bg-tokyo-bg overflow-y-auto">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-tokyo-bg-dark border-b border-tokyo-dark3">
         <div className="p-6">
@@ -180,7 +218,10 @@ export const ReportDetailPage: React.FC = () => {
               </div>
             </div>
             
-            <button className="flex items-center gap-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm">
+            <button 
+              onClick={handleExportPDF}
+              className="flex items-center gap-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors"
+            >
               <Download className="h-4 w-4" />
               Export PDF
             </button>
@@ -245,6 +286,55 @@ export const ReportDetailPage: React.FC = () => {
             <h2 className="text-2xl font-semibold text-tokyo-cyan mb-6">
               Benchmark Results
             </h2>
+            
+            {/* Quality Metrics Info */}
+            <div className="mb-6 p-4 bg-tokyo-blue/10 border border-tokyo-blue/30 rounded">
+              <h3 className="text-sm font-mono font-semibold text-tokyo-blue mb-3 uppercase tracking-wide">
+                🔬 Quality Metrics Evaluated
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-2 h-2 rounded-full bg-tokyo-green mt-1.5" />
+                  <div>
+                    <div className="text-xs font-mono font-semibold text-tokyo-fg">Hallucination</div>
+                    <div className="text-xs text-tokyo-comment">Detects fabricated information (≤10%)</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-2 h-2 rounded-full bg-tokyo-cyan mt-1.5" />
+                  <div>
+                    <div className="text-xs font-mono font-semibold text-tokyo-fg">Relevancy</div>
+                    <div className="text-xs text-tokyo-comment">Response addresses task (≥80%)</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-2 h-2 rounded-full bg-tokyo-purple mt-1.5" />
+                  <div>
+                    <div className="text-xs font-mono font-semibold text-tokyo-fg">Task Completion</div>
+                    <div className="text-xs text-tokyo-comment">Fully completes request (≥85%)</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-2 h-2 rounded-full bg-tokyo-yellow mt-1.5" />
+                  <div>
+                    <div className="text-xs font-mono font-semibold text-tokyo-fg">Faithfulness</div>
+                    <div className="text-xs text-tokyo-comment">Grounded in context (≤10% drift)</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-2 h-2 rounded-full bg-tokyo-red mt-1.5" />
+                  <div>
+                    <div className="text-xs font-mono font-semibold text-tokyo-fg">Toxicity</div>
+                    <div className="text-xs text-tokyo-comment">No harmful content (≤5%)</div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-tokyo-comment font-mono">
+                ⚡ Judge Model: {getSqlValue(report.judge_model) || 'gpt-4o-mini'} | 
+                💰 Total Cost: ${getSqlValue(report.total_llm_cost)?.toFixed(4) || '0.0000'} | 
+                🔄 Runs Analyzed: {getSqlValue(report.total_runs_analyzed) || 0}
+              </div>
+            </div>
             
             {/* Overall Score */}
             {(() => {
@@ -486,7 +576,212 @@ export const ReportDetailPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Detailed Test Results Breakdown - Grouped by Agent */}
+        {agentDetails.length > 0 && (
+          <div className="p-6 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg">
+            <h2 className="text-xl font-mono font-semibold text-tokyo-cyan mb-4">
+              🔬 Detailed Test Results by Agent
+            </h2>
+            <p className="text-sm text-tokyo-comment font-mono mb-6">
+              Expand any agent to see all runs and their complete quality metric breakdowns
+            </p>
+
+            <div className="space-y-6">
+              {agentDetails
+                .filter(agent => getSqlValue(agent.runs_analyzed) > 0)
+                .map((agent) => {
+                  const runIdsStr = getSqlValue(agent.run_ids);
+                  if (!runIdsStr) return null;
+                  
+                  // Parse run IDs
+                  let runIds: number[] = [];
+                  try {
+                    if (runIdsStr.startsWith('[')) {
+                      runIds = runIdsStr
+                        .replace(/[\[\]]/g, '')
+                        .split(' ')
+                        .map((id: string) => parseInt(id.trim()))
+                        .filter((id: number) => !isNaN(id));
+                    } else {
+                      runIds = JSON.parse(runIdsStr);
+                    }
+                  } catch (e) {
+                    console.error('Failed to parse run IDs:', e);
+                    return null;
+                  }
+
+                  return (
+                    <div key={agent.id} className="border-2 border-tokyo-blue/30 rounded-lg bg-tokyo-bg">
+                      {/* Agent Header */}
+                      <div className="p-4 bg-tokyo-blue/10 border-b border-tokyo-blue/30">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-mono font-bold text-tokyo-cyan">
+                              {agent.agent_name}
+                            </h3>
+                            <div className="text-sm font-mono text-tokyo-comment mt-1">
+                              {runIds.length} runs evaluated • Overall Score: {agent.score.toFixed(1)}/10
+                            </div>
+                          </div>
+                          <div className={`px-4 py-2 rounded ${agent.passed ? 'bg-tokyo-green/20 text-tokyo-green' : 'bg-tokyo-red/20 text-tokyo-red'}`}>
+                            <div className="text-xs font-mono font-semibold">
+                              {agent.passed ? '✓ PASSED' : '✗ FAILED'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Runs List */}
+                      <div className="p-4 space-y-2">
+                        {runIds.map((runId) => {
+                          const isExpanded = expandedRun === runId;
+                          const metrics = runMetrics[runId] || [];
+
+                          return (
+                            <div key={runId} className="border border-tokyo-dark3 rounded bg-tokyo-bg-dark/30">
+                              <button
+                                onClick={() => fetchRunMetrics(runId)}
+                                className="w-full p-3 flex items-center justify-between hover:bg-tokyo-bg-highlight transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-tokyo-cyan" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-tokyo-comment" />
+                                  )}
+                                  <div className="text-left">
+                                    <div className="text-sm font-mono font-semibold text-tokyo-fg">
+                                      Run #{runId}
+                                    </div>
+                                    <div className="text-xs font-mono text-tokyo-comment mt-0.5">
+                                      {metrics.length > 0 ? (
+                                        <>
+                                          {metrics.filter((m: any) => m.passed).length}/{metrics.length} tests passed •
+                                          ${metrics.reduce((sum: number, m: any) => sum + (m.judge_cost || 0), 0).toFixed(6)} cost
+                                        </>
+                                      ) : (
+                                        'Click to load 5 quality metrics'
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-xs font-mono text-tokyo-cyan">
+                                  {isExpanded ? 'Hide' : 'Show Tests'}
+                                </div>
+                              </button>
+
+                        {isExpanded && metrics.length > 0 && (
+                          <div className="p-4 border-t border-tokyo-dark3 bg-tokyo-bg-dark/50">
+                            <div className="grid grid-cols-1 gap-4">
+                              {metrics.map((metric: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className={`p-4 rounded border-2 ${
+                                    metric.passed
+                                      ? 'bg-tokyo-green/10 border-tokyo-green/30'
+                                      : 'bg-tokyo-red/10 border-tokyo-red/30'
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                      {metric.passed ? (
+                                        <CheckCircle className="h-6 w-6 text-tokyo-green flex-shrink-0" />
+                                      ) : (
+                                        <XCircle className="h-6 w-6 text-tokyo-red flex-shrink-0" />
+                                      )}
+                                      <div>
+                                        <h4 className="text-base font-mono font-bold text-tokyo-fg uppercase">
+                                          {metric.metric_name}
+                                        </h4>
+                                        <div className="text-xs text-tokyo-comment font-mono mt-1">
+                                          {metric.metric_name === 'hallucination' && 'Detects fabricated information not grounded in context'}
+                                          {metric.metric_name === 'relevancy' && 'Measures how directly response addresses the task'}
+                                          {metric.metric_name === 'task_completion' && 'Evaluates if agent fully completed the request'}
+                                          {metric.metric_name === 'faithfulness' && 'Ensures responses grounded in available context'}
+                                          {metric.metric_name === 'toxicity' && 'Detects harmful, offensive, or inappropriate content'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className={`text-3xl font-mono font-bold ${metric.passed ? 'text-tokyo-green' : 'text-tokyo-red'}`}>
+                                        {(metric.score * 100).toFixed(0)}%
+                                      </div>
+                                      <div className="text-xs font-mono text-tokyo-comment mt-1">
+                                        Threshold: {(metric.threshold * 100).toFixed(0)}%
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-tokyo-bg/50 rounded p-3 mb-3">
+                                    <div className="text-xs font-mono text-tokyo-comment uppercase tracking-wide mb-2">
+                                      LLM Judge Reasoning:
+                                    </div>
+                                    <div className="text-sm text-tokyo-fg font-mono leading-relaxed">
+                                      {metric.reason || 'No reason provided'}
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 gap-3 text-xs font-mono">
+                                    <div className="bg-tokyo-bg/30 rounded p-2">
+                                      <div className="text-tokyo-comment mb-1">Judge Tokens</div>
+                                      <div className="text-tokyo-fg font-semibold">
+                                        {metric.judge_tokens || 0}
+                                        {metric.judge_tokens === 0 && (
+                                          <span className="text-tokyo-comment text-xs ml-1">*</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="bg-tokyo-bg/30 rounded p-2">
+                                      <div className="text-tokyo-comment mb-1">Judge Cost</div>
+                                      <div className="text-tokyo-fg font-semibold">
+                                        ${(metric.judge_cost || 0).toFixed(6)}
+                                        {metric.judge_cost === 0 && (
+                                          <span className="text-tokyo-comment text-xs ml-1">*</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="bg-tokyo-bg/30 rounded p-2">
+                                      <div className="text-tokyo-comment mb-1">Status</div>
+                                      <div className={`font-semibold ${metric.passed ? 'text-tokyo-green' : 'text-tokyo-red'}`}>
+                                        {metric.passed ? 'PASSED ✓' : 'FAILED ✗'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {(metric.judge_tokens === 0 || metric.judge_cost === 0) && (
+                                    <div className="mt-2 text-xs text-tokyo-comment font-mono italic">
+                                      * Zero cost: No LLM evaluation needed (no tool outputs to analyze for hallucination/faithfulness)
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="mt-4 p-3 bg-tokyo-blue/10 border border-tokyo-blue/30 rounded">
+                              <div className="text-xs font-mono text-tokyo-comment">
+                                💡 <strong>Summary:</strong> This run was evaluated across {metrics.length} quality dimensions. 
+                                {metrics.filter((m: any) => m.passed).length === metrics.length
+                                  ? ' All tests passed! ✅'
+                                  : ` ${metrics.filter((m: any) => !m.passed).length} test(s) failed. ⚠️`}
+                                {' '}
+                                Total cost: ${metrics.reduce((sum: number, m: any) => sum + (m.judge_cost || 0), 0).toFixed(6)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
       </div>
     </div>
+    </>
   );
 };

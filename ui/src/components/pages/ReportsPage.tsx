@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Plus, Download, AlertTriangle, CheckCircle, Clock, XCircle, Loader } from 'lucide-react';
+import { FileText, Plus, Download, AlertTriangle, CheckCircle, Clock, XCircle, Loader, Zap } from 'lucide-react';
 import { reportsApi } from '../../api/station';
 import type { Report } from '../../types/station';
 import { CreateReportModal } from '../modals/CreateReportModal';
+import { BenchmarkExperimentModal } from '../modals/BenchmarkExperimentModal';
 
 interface ReportsPageProps {
   environmentContext?: any;
@@ -16,6 +17,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = useState(false);
+  const [generatingReports, setGeneratingReports] = useState<Set<number>>(new Set());
 
   // Helper to safely extract values from SQL null types
   const getSqlValue = (field: any): any => {
@@ -36,26 +39,43 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
   };
 
   // Fetch reports
-  useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        setLoading(true);
-        const params = environmentContext?.selectedEnvironment
-          ? { environment_id: environmentContext.selectedEnvironment }
-          : {};
-        
-        const response = await reportsApi.getAll(params);
-        setReports(response.data.reports || []);
-      } catch (err) {
-        console.error('Failed to fetch reports:', err);
-        setError('Failed to load reports');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchReports = async () => {
+    try {
+      if (reports.length === 0) setLoading(true);
+      const params = environmentContext?.selectedEnvironment
+        ? { environment_id: environmentContext.selectedEnvironment }
+        : {};
+      
+      const response = await reportsApi.getAll(params);
+      setReports(response.data.reports || []);
+    } catch (err) {
+      console.error('Failed to fetch reports:', err);
+      setError('Failed to load reports');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchReports();
   }, [environmentContext?.selectedEnvironment, environmentContext?.refreshTrigger]);
+
+  // Poll for generating reports
+  useEffect(() => {
+    const hasGenerating = reports.some(r => 
+      r.status === 'generating_team' || 
+      r.status === 'generating_agents' || 
+      generatingReports.has(r.id)
+    );
+
+    if (!hasGenerating) return;
+
+    const interval = setInterval(() => {
+      fetchReports();
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [reports, generatingReports]);
 
   // Filter reports by status
   const filteredReports = reports.filter(report => {
@@ -166,16 +186,25 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
         <div>
           <h1 className="text-2xl font-mono font-semibold text-tokyo-cyan">Reports</h1>
           <p className="text-sm text-tokyo-comment mt-1">
-            LLM-based agent performance evaluation
+            LLM-based agent performance evaluation & benchmark experiments
           </p>
         </div>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Create Report
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsBenchmarkModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+          >
+            <Zap className="h-4 w-4" />
+            Run Experiment
+          </button>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Create Report
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -345,26 +374,35 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
                     </>
                   )}
                   
-                  {report.status === 'pending' && (
+                  {(report.status === 'pending' || report.status === 'failed') && (
                     <button
                       onClick={async () => {
                         try {
+                          setGeneratingReports(prev => new Set(prev).add(report.id));
                           await reportsApi.generate(report.id);
-                          // Refresh reports list
-                          const response = await reportsApi.getAll(
-                            environmentContext?.selectedEnvironment
-                              ? { environment_id: environmentContext.selectedEnvironment }
-                              : {}
-                          );
-                          setReports(response.data.reports || []);
+                          // Immediately refresh to show new status
+                          await fetchReports();
                         } catch (err) {
                           console.error('Failed to generate report:', err);
+                          setGeneratingReports(prev => {
+                            const next = new Set(prev);
+                            next.delete(report.id);
+                            return next;
+                          });
                           alert('Failed to start report generation');
                         }
                       }}
-                      className="px-3 py-1 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-xs transition-colors"
+                      disabled={generatingReports.has(report.id)}
+                      className="px-3 py-1 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Generate Now
+                      {generatingReports.has(report.id) ? (
+                        <>
+                          <Loader className="h-3 w-3 inline mr-1 animate-spin" />
+                          Starting...
+                        </>
+                      ) : (
+                        report.status === 'failed' ? 'Retry' : 'Generate Now'
+                      )}
                     </button>
                   )}
 
@@ -408,6 +446,17 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
           navigate(`/reports/${reportId}`);
         }}
         defaultEnvironmentId={environmentContext?.selectedEnvironment}
+      />
+
+      {/* Benchmark Experiment Modal */}
+      <BenchmarkExperimentModal
+        isOpen={isBenchmarkModalOpen}
+        onClose={() => setIsBenchmarkModalOpen(false)}
+        environmentId={environmentContext?.selectedEnvironment}
+        onComplete={(results) => {
+          console.log('Experiment complete:', results);
+          // Could show a success toast or refresh reports
+        }}
       />
     </div>
   );

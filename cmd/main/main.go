@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"station/cmd/main/handlers"
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/logging"
@@ -65,6 +66,7 @@ func init() {
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(mockCmd)
 	rootCmd.AddCommand(fakerCmd)
+	rootCmd.AddCommand(handlers.NewJaegerCleanCmd())
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 

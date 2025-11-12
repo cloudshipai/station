@@ -80,11 +80,41 @@ export const agentRunsApi = {
 };
 
 // Benchmark API
+export interface BulkEvaluationRequest {
+  run_ids: number[];
+  concurrency?: number;
+}
+
+export interface BulkEvaluationProgress {
+  run_id: number;
+  status: 'pending' | 'evaluating' | 'completed' | 'failed';
+  quality_score?: number;
+  production_ready?: boolean;
+  error?: string;
+  evaluated_at?: string;
+}
+
+export interface BulkEvaluationResult {
+  total_runs: number;
+  completed: number;
+  failed: number;
+  duration_seconds: number;
+  results: BulkEvaluationProgress[];
+  summary: {
+    avg_quality_score: number;
+    production_ready_pct: number;
+    total_judge_tokens?: number;
+    total_judge_cost?: number;
+  };
+}
+
 export const benchmarksApi = {
   evaluate: (runId: number) => apiClient.post(`/benchmarks/${runId}/evaluate`),
   getMetrics: (runId: number) => apiClient.get(`/benchmarks/${runId}/metrics`),
   listTasks: () => apiClient.get('/benchmarks/tasks'),
   listRecent: (limit?: number) => apiClient.get(`/benchmarks/metrics${limit ? `?limit=${limit}` : ''}`),
+  evaluateBulk: (request: BulkEvaluationRequest) => 
+    apiClient.post<BulkEvaluationResult>('/benchmarks/evaluate-bulk', request),
 };
 
 // Sync API

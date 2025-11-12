@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -211,9 +212,10 @@ func (h *APIHandlers) generateReport(c *gin.Context) {
 	// Create report generator
 	reportGenerator := services.NewReportGenerator(h.repos, nil)
 
-	// Start generation in background
+	// Start generation in background with independent context
 	go func() {
-		_ = reportGenerator.GenerateReport(ctx, reportID)
+		// Use background context since request context will be cancelled
+		_ = reportGenerator.GenerateReport(context.Background(), reportID)
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{

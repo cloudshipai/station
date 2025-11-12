@@ -32,7 +32,7 @@ stn-ui
 stn-*
 station-*
 !docs/station/
-
+prds/
 # All binaries and archives
 *.tar.gz
 *.zip

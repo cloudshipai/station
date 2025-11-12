@@ -159,14 +159,102 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 			)
 		} else {
 			log.Printf("✅ Agent execution completed successfully for run ID: %d", agentRun.ID)
-			// Update run with completion response and status
+
+			// Extract metadata from response.Extra (matches CLI pattern in cmd/main/handlers/agent/local.go:594-663)
 			finalResponse := ""
 			if response != nil {
 				finalResponse = response.Content
 			}
-			// Mark run as completed with final response
+
 			completedAt := time.Now()
-			h.repos.AgentRuns.UpdateCompletion(ctx, agentRun.ID, finalResponse, 0, nil, nil, "completed", &completedAt)
+
+			// Extract execution metadata from Extra field
+			var inputTokens, outputTokens, totalTokens *int64
+			var durationSeconds *float64
+			var modelName *string
+			var toolCalls, executionSteps *models.JSONArray
+			var stepsTaken int64
+			var toolsUsed *int64
+
+			if response != nil && response.Extra != nil {
+				log.Printf("DEBUG API: response.Extra keys: %+v", response.Extra)
+				log.Printf("DEBUG API: token_usage type: %T, value: %+v", response.Extra["token_usage"], response.Extra["token_usage"])
+
+				// Extract token usage
+				if tokenUsage, ok := response.Extra["token_usage"].(map[string]interface{}); ok {
+					log.Printf("DEBUG API: Successfully cast token_usage to map[string]interface{}")
+					log.Printf("DEBUG API: input_tokens type: %T, value: %v", tokenUsage["input_tokens"], tokenUsage["input_tokens"])
+
+					// Try int first, then float64
+					if val, ok := tokenUsage["input_tokens"].(int); ok {
+						v := int64(val)
+						inputTokens = &v
+						log.Printf("DEBUG API: Set input_tokens from int: %d", v)
+					} else if val, ok := tokenUsage["input_tokens"].(float64); ok {
+						v := int64(val)
+						inputTokens = &v
+						log.Printf("DEBUG API: Set input_tokens from float64: %d", v)
+					} else {
+						log.Printf("DEBUG API: Failed to extract input_tokens, type was: %T", tokenUsage["input_tokens"])
+					}
+					if val, ok := tokenUsage["output_tokens"].(int); ok {
+						v := int64(val)
+						outputTokens = &v
+					} else if val, ok := tokenUsage["output_tokens"].(float64); ok {
+						v := int64(val)
+						outputTokens = &v
+					}
+					if val, ok := tokenUsage["total_tokens"].(int); ok {
+						v := int64(val)
+						totalTokens = &v
+					} else if val, ok := tokenUsage["total_tokens"].(float64); ok {
+						v := int64(val)
+						totalTokens = &v
+					}
+				}
+
+				// Extract duration
+				if val, ok := response.Extra["duration"].(float64); ok {
+					durationSeconds = &val
+				}
+
+				// Extract model name
+				if val, ok := response.Extra["model_name"].(string); ok {
+					modelName = &val
+				}
+
+				// Extract tool calls
+				if val, ok := response.Extra["tool_calls"].(*models.JSONArray); ok {
+					toolCalls = val
+				}
+
+				// Extract execution steps
+				if val, ok := response.Extra["execution_steps"].(*models.JSONArray); ok {
+					executionSteps = val
+				}
+
+				// Extract steps taken
+				if val, ok := response.Extra["steps_taken"].(int64); ok {
+					stepsTaken = val
+				} else if val, ok := response.Extra["steps_taken"].(float64); ok {
+					stepsTaken = int64(val)
+				}
+
+				// Extract tools used count
+				if val, ok := response.Extra["tools_used"].(int); ok {
+					v := int64(val)
+					toolsUsed = &v
+				} else if val, ok := response.Extra["tools_used"].(int64); ok {
+					toolsUsed = &val
+				}
+			}
+
+			// Update run with all metadata (matches CLI pattern)
+			h.repos.AgentRuns.UpdateCompletionWithMetadata(
+				ctx, agentRun.ID, finalResponse, stepsTaken, toolCalls, executionSteps,
+				"completed", &completedAt,
+				inputTokens, outputTokens, totalTokens, durationSeconds, modelName, toolsUsed, nil,
+			)
 		}
 	}()
 

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { AlertCircle, X, Pin } from 'lucide-react';
+import { AlertCircle, X, Pin, List, GitBranch, BarChart3 } from 'lucide-react';
 import { TimelineControls } from './TimelineControls';
 import { TimelineLane } from './TimelineLane';
 import type { TimelineRun, TimeRangePreset } from '../../utils/timelineLayout';
@@ -16,9 +16,11 @@ import {
 interface SwimlanePageProps {
   runs: TimelineRun[];
   onRunClick: (runId: number) => void;
+  activeView?: 'list' | 'timeline' | 'stats';
+  onViewChange?: (view: 'list' | 'timeline' | 'stats') => void;
 }
 
-export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick }) => {
+export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, activeView = 'timeline', onViewChange }) => {
   const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRangePreset>(TIME_RANGE_PRESETS[1]); // Last Day
   const [densityMetric, setDensityMetric] = useState<'tokens' | 'cost'>('tokens');
   const [showP95, setShowP95] = useState(false);
@@ -128,12 +130,55 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick }) 
 
   if (runs.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center bg-tokyo-bg">
-        <div className="text-center">
-          <AlertCircle className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-          <div className="text-tokyo-fg font-mono text-lg mb-2">No runs to display</div>
-          <div className="text-tokyo-comment font-mono text-sm">
-            Agent execution runs will appear here in a timeline view
+      <div className="h-full flex flex-col bg-tokyo-bg">
+        {/* Header with view tabs */}
+        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
+          <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
+          {onViewChange && (
+            <div className="flex bg-tokyo-bg rounded-lg p-1">
+              <button
+                onClick={() => onViewChange('list')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  activeView === 'list'
+                    ? 'bg-tokyo-blue text-tokyo-bg'
+                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                }`}
+              >
+                <List className="h-4 w-4" />
+                List
+              </button>
+              <button
+                onClick={() => onViewChange('timeline')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  activeView === 'timeline'
+                    ? 'bg-tokyo-blue text-tokyo-bg'
+                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                }`}
+              >
+                <GitBranch className="h-4 w-4" />
+                Timeline
+              </button>
+              <button
+                onClick={() => onViewChange('stats')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  activeView === 'stats'
+                    ? 'bg-tokyo-blue text-tokyo-bg'
+                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                Stats
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <AlertCircle className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
+            <div className="text-tokyo-fg font-mono text-lg mb-2">No runs to display</div>
+            <div className="text-tokyo-comment font-mono text-sm">
+              Agent execution runs will appear here in a timeline view
+            </div>
           </div>
         </div>
       </div>
@@ -143,6 +188,47 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick }) 
   if (filteredRuns.length === 0) {
     return (
       <div className="h-full flex flex-col bg-tokyo-bg">
+        {/* Header with view tabs */}
+        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
+          <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
+          {onViewChange && (
+            <div className="flex bg-tokyo-bg rounded-lg p-1">
+              <button
+                onClick={() => onViewChange('list')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  activeView === 'list'
+                    ? 'bg-tokyo-blue text-tokyo-bg'
+                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                }`}
+              >
+                <List className="h-4 w-4" />
+                List
+              </button>
+              <button
+                onClick={() => onViewChange('timeline')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  activeView === 'timeline'
+                    ? 'bg-tokyo-blue text-tokyo-bg'
+                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                }`}
+              >
+                <GitBranch className="h-4 w-4" />
+                Timeline
+              </button>
+              <button
+                onClick={() => onViewChange('stats')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  activeView === 'stats'
+                    ? 'bg-tokyo-blue text-tokyo-bg'
+                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                Stats
+              </button>
+            </div>
+          )}
+        </div>
         <TimelineControls
           selectedTimeRange={selectedTimeRange}
           onTimeRangeChange={setSelectedTimeRange}
@@ -183,18 +269,62 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick }) 
   };
 
   return (
-    <div className="h-full flex bg-tokyo-bg relative">
-      {/* Main content - always has space for right panel */}
-      <div className="flex-1 flex flex-col mr-80">
-        {/* Controls */}
-        <TimelineControls
-        selectedTimeRange={selectedTimeRange}
-        onTimeRangeChange={setSelectedTimeRange}
-        densityMetric={densityMetric}
-        onDensityMetricChange={setDensityMetric}
-        showP95={showP95}
-        onShowP95Change={setShowP95}
-      />
+    <div className="h-full flex flex-col bg-tokyo-bg">
+      {/* Header with view tabs */}
+      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
+        <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
+        {onViewChange && (
+          <div className="flex bg-tokyo-bg rounded-lg p-1">
+            <button
+              onClick={() => onViewChange('list')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                activeView === 'list'
+                  ? 'bg-tokyo-blue text-tokyo-bg'
+                  : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+              }`}
+            >
+              <List className="h-4 w-4" />
+              List
+            </button>
+            <button
+              onClick={() => onViewChange('timeline')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                activeView === 'timeline'
+                  ? 'bg-tokyo-blue text-tokyo-bg'
+                  : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+              }`}
+            >
+              <GitBranch className="h-4 w-4" />
+              Timeline
+            </button>
+            <button
+              onClick={() => onViewChange('stats')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                activeView === 'stats'
+                  ? 'bg-tokyo-blue text-tokyo-bg'
+                  : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Stats
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Main timeline content area */}
+      <div className="flex-1 flex bg-tokyo-bg relative overflow-hidden">
+        {/* Main content - always has space for right panel */}
+        <div className="flex-1 flex flex-col mr-80">
+          {/* Controls */}
+          <TimelineControls
+          selectedTimeRange={selectedTimeRange}
+          onTimeRangeChange={setSelectedTimeRange}
+          densityMetric={densityMetric}
+          onDensityMetricChange={setDensityMetric}
+          showP95={showP95}
+          onShowP95Change={setShowP95}
+        />
 
       {/* Time Axis */}
       <div className="flex items-center gap-4 px-4 py-2 bg-tokyo-bg-dark border-b border-tokyo-blue7">
@@ -372,6 +502,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick }) 
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
