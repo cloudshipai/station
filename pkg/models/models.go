@@ -255,3 +255,20 @@ type WebhookDelivery struct {
 	DeliveredAt     *time.Time `json:"delivered_at,omitempty" db:"delivered_at"`
 	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
 }
+
+// AgentAgent represents a parent-child agent relationship for hierarchical orchestration
+type AgentAgent struct {
+	ID            int64     `json:"id" db:"id"`
+	ParentAgentID int64     `json:"parent_agent_id" db:"parent_agent_id"`
+	ChildAgentID  int64     `json:"child_agent_id" db:"child_agent_id"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+}
+
+// ChildAgent includes the child agent details with the relationship information
+type ChildAgent struct {
+	RelationshipID int64     `json:"relationship_id"`
+	ParentAgentID  int64     `json:"parent_agent_id"`
+	ChildAgentID   int64     `json:"child_agent_id"`
+	ChildAgent     Agent     `json:"child_agent"`
+	CreatedAt      time.Time `json:"created_at"`
+}

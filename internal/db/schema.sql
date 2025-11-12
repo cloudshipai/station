@@ -153,6 +153,21 @@ CREATE TABLE agent_tools (
     UNIQUE(agent_id, tool_id)
 );
 
+-- Agent to agent relationships (hierarchical agent orchestration)
+CREATE TABLE agent_agents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_agent_id INTEGER NOT NULL,
+    child_agent_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+    FOREIGN KEY (child_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+    UNIQUE(parent_agent_id, child_agent_id),
+    CHECK(parent_agent_id != child_agent_id)
+);
+
+CREATE INDEX idx_agent_agents_parent ON agent_agents(parent_agent_id);
+CREATE INDEX idx_agent_agents_child ON agent_agents(child_agent_id);
+
 -- Agent execution runs
 CREATE TABLE agent_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

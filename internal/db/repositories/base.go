@@ -16,6 +16,7 @@ type Repositories struct {
 	Agents           *AgentRepo
 	AgentTools       *AgentToolRepo
 	AgentRuns        *AgentRunRepo
+	AgentAgents      *AgentAgentRepo
 	Settings         *SettingsRepo
 	Reports          *ReportRepo
 	BenchmarkMetrics *BenchmarkMetricsRepo
@@ -36,6 +37,7 @@ func New(database db.Database) *Repositories {
 		Models:           NewModelRepository(conn),
 		Agents:           NewAgentRepo(conn),
 		AgentTools:       NewAgentToolRepo(conn),
+		AgentAgents:      NewAgentAgentRepo(conn),
 		AgentRuns:        NewAgentRunRepo(conn),
 		Settings:         NewSettingsRepo(conn),
 		Reports:          NewReportRepo(conn),

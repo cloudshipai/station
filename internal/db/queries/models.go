@@ -32,6 +32,13 @@ type Agent struct {
 	UpdatedAt          sql.NullTime   `json:"updated_at"`
 }
 
+type AgentAgent struct {
+	ID            int64        `json:"id"`
+	ParentAgentID int64        `json:"parent_agent_id"`
+	ChildAgentID  int64        `json:"child_agent_id"`
+	CreatedAt     sql.NullTime `json:"created_at"`
+}
+
 type AgentReportDetail struct {
 	ID                 int64           `json:"id"`
 	ReportID           int64           `json:"report_id"`
