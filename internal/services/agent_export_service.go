@@ -67,16 +67,16 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 
 	// Get agent tools with details
 	toolsWithDetails, err := s.repos.AgentTools.ListAgentTools(agentID)
+	if err != nil {
+		return fmt.Errorf("failed to get agent tools: %v", err)
+	}
+
 
 	// Get child agents (for agents: section in frontmatter)
 	childAgents, err := s.repos.AgentAgents.ListChildAgents(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get child agents: %v", err)
 	}
-	if err != nil {
-		return fmt.Errorf("failed to get agent tools: %v", err)
-	}
-
 	// Generate dotprompt content using the same logic as MCP handler
 	dotpromptContent := s.generateDotpromptContent(agent, toolsWithDetails, childAgents, environment.Name, app, appType)
 
@@ -128,50 +128,18 @@ metadata:
 
 	// Add tools if any
 	if len(toolNames) > 0 {
-
-	// Add child agents if any
-	if len(childAgents) > 0 {
-		content += "agents:\n"
-		for _, childRel := range childAgents {
-			content += fmt.Sprintf("  - \"%s\"\n", childRel.ChildAgent.Name)
-		}
-	}
 		content += "\ntools:\n"
-
-	// Add child agents if any
-	if len(childAgents) > 0 {
-		content += "agents:\n"
-		for _, childRel := range childAgents {
-			content += fmt.Sprintf("  - \"%s\"\n", childRel.ChildAgent.Name)
-		}
-	}
 		for _, toolName := range toolNames {
-
-	// Add child agents if any
-	if len(childAgents) > 0 {
-		content += "agents:\n"
-		for _, childRel := range childAgents {
-			content += fmt.Sprintf("  - \"%s\"\n", childRel.ChildAgent.Name)
-		}
-	}
 			content += fmt.Sprintf("  - \"%s\"\n", toolName)
+		}
+	}
 
 	// Add child agents if any
 	if len(childAgents) > 0 {
-		content += "agents:\n"
+		content += "\nagents:\n"
 		for _, childRel := range childAgents {
 			content += fmt.Sprintf("  - \"%s\"\n", childRel.ChildAgent.Name)
 		}
-	}
-		}
-
-	// Add child agents if any
-	if len(childAgents) > 0 {
-		content += "agents:\n"
-		for _, childRel := range childAgents {
-			content += fmt.Sprintf("  - \"%s\"\n", childRel.ChildAgent.Name)
-		}
-	}
 	}
 
 	// Add input schema (always include - contains at minimum userInput)
