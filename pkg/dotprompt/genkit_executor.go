@@ -141,30 +141,9 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}
 	}
 
-	// Load or lookup dotprompt file
-	// For child agent executions, the prompt is already registered by the parent
-	// Try to lookup first, then load if not found (avoids re-registration panic)
-	agentPrompt := genkit.LookupPrompt(genkitApp, agent.Name)
-
-	if agentPrompt == nil {
-		// Prompt not registered yet - load it (this is the first execution)
-		fmt.Printf("DEBUG: Loading prompt for %s (first execution)\n", agent.Name)
-		agentPrompt = genkit.LoadPrompt(genkitApp, promptPath, "")
-
-		if agentPrompt == nil {
-			return &ExecutionResponse{
-				Success:  false,
-				Response: "",
-				Duration: time.Since(startTime),
-				Error:    fmt.Sprintf("failed to load prompt from: %s", promptPath),
-			}, nil
-		}
-	} else {
-		// Prompt already registered - reuse it (child agent execution)
-		fmt.Printf("DEBUG: Reusing already-registered prompt for %s (child agent)\n", agent.Name)
-	}
-
-	// Register filtered MCP tools so dotprompt.Execute() can find them
+	// CRITICAL: Register filtered MCP tools BEFORE loading the prompt
+	// The prompt's frontmatter may reference tools in its `tools:` section
+	// and GenKit requires those tools to already be registered actions
 	// Use panic recovery to skip already-registered tools (happens in child agent executions)
 	registeredCount := 0
 	skippedCount := 0
@@ -187,6 +166,29 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}
 	}
 	fmt.Printf("DEBUG: Registered %d tools, skipped %d already-registered tools for agent %s\n", registeredCount, skippedCount, agent.Name)
+
+	// Load or lookup dotprompt file AFTER registering tools
+	// For child agent executions, the prompt is already registered by the parent
+	// Try to lookup first, then load if not found (avoids re-registration panic)
+	agentPrompt := genkit.LookupPrompt(genkitApp, agent.Name)
+
+	if agentPrompt == nil {
+		// Prompt not registered yet - load it (this is the first execution)
+		fmt.Printf("DEBUG: Loading prompt for %s (first execution)\n", agent.Name)
+		agentPrompt = genkit.LoadPrompt(genkitApp, promptPath, "")
+
+		if agentPrompt == nil {
+			return &ExecutionResponse{
+				Success:  false,
+				Response: "",
+				Duration: time.Since(startTime),
+				Error:    fmt.Sprintf("failed to load prompt from: %s", promptPath),
+			}, nil
+		}
+	} else {
+		// Prompt already registered - reuse it (child agent execution)
+		fmt.Printf("DEBUG: Reusing already-registered prompt for %s (child agent)\n", agent.Name)
+	}
 
 	// Get model configuration
 	modelName := e.getModelName()
@@ -214,20 +216,13 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 	// results in duplicate traces (our empty root + GenKit's generate traces).
 	// Instead, the agent_execution_engine creates a proper span with full metadata.
 
-	// Tools are registered globally with GenKit (lines 184 above)
-	// Do NOT pass via ai.WithTools() - that prevents tool discovery
-	// GenKit/OpenAI will discover globally registered tools automatically
-	fmt.Printf("DEBUG EXECUTE: %d tools registered globally for agent %s\n", len(mcpTools), agent.Name)
-	for i, toolRef := range mcpTools {
-		if tool, ok := toolRef.(interface{ Name() string }); ok {
-			fmt.Printf("  Tool %d: %s\n", i+1, tool.Name())
-		}
-	}
-
+	// Pass tools to Execute - this is CRITICAL for function calling to work
+	// Tools must be explicitly passed via ai.WithTools()
 	resp, err := agentPrompt.Execute(execCtx,
 		ai.WithInput(inputMap),
 		ai.WithMaxTurns(maxTurns),
-		ai.WithModelName(modelName))
+		ai.WithModelName(modelName),
+		ai.WithTools(mcpTools...))
 
 	if err != nil {
 		return &ExecutionResponse{
@@ -252,20 +247,38 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}
 	}
 
-	// Extract tool calls
-	toolRequests := resp.ToolRequests()
+	// Extract tool calls from conversation history
+	// resp.ToolRequests() only returns PENDING requests, not completed ones
+	// We need to count tool calls in the conversation history
+	history := resp.History()
 	var toolCallsArray *models.JSONArray
-	if len(toolRequests) > 0 {
-		toolCallsInterface := make(models.JSONArray, len(toolRequests))
-		for i, req := range toolRequests {
-			toolCallsInterface[i] = map[string]interface{}{
-				"tool_name":    req.Name,
-				"parameters":   req.Input,
-				"tool_call_id": req.Ref,
+	var toolCallsInterface models.JSONArray
+
+	fmt.Printf("DEBUG: History has %d messages\n", len(history))
+	for i, msg := range history {
+		fmt.Printf("DEBUG: Message %d: Role=%v, ContentParts=%d\n", i, msg.Role, len(msg.Content))
+		// Check message content for tool requests
+		if msg.Content != nil && len(msg.Content) > 0 {
+			for j, part := range msg.Content {
+				fmt.Printf("DEBUG:   Part %d: IsToolRequest=%v, IsToolResponse=%v\n", j, part.IsToolRequest(), part.IsToolResponse())
+				if part.IsToolRequest() {
+					toolReq := part.ToolRequest
+					fmt.Printf("DEBUG:     ToolRequest: %s\n", toolReq.Name)
+					toolCallsInterface = append(toolCallsInterface, map[string]interface{}{
+						"tool_name":    toolReq.Name,
+						"parameters":   toolReq.Input,
+						"tool_call_id": toolReq.Ref,
+					})
+				}
 			}
 		}
+	}
+
+	if len(toolCallsInterface) > 0 {
 		toolCallsArray = &toolCallsInterface
 	}
+
+	fmt.Printf("DEBUG: Found %d tool calls in %d history messages\n", len(toolCallsInterface), len(history))
 
 	return &ExecutionResponse{
 		Success:    true,
@@ -273,8 +286,8 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		ToolCalls:  toolCallsArray,
 		Duration:   time.Since(startTime),
 		ModelName:  modelName,
-		StepsUsed:  len(resp.ToolRequests()),
-		ToolsUsed:  len(resp.ToolRequests()),
+		StepsUsed:  len(toolCallsInterface),
+		ToolsUsed:  len(toolCallsInterface),
 		TokenUsage: tokenUsage,
 		App:        app,     // CloudShip data ingestion app classification
 		AppType:    appType, // CloudShip data ingestion app_type classification
