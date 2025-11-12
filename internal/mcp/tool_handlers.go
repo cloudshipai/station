@@ -324,3 +324,92 @@ func (s *Server) handleAddAgentAsTool(ctx context.Context, request mcp.CallToolR
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
+
+func (s *Server) handleRemoveAgentAsTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	parentAgentIDStr, err := request.RequireString("parent_agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'parent_agent_id' parameter: %v", err)), nil
+	}
+
+	childAgentIDStr, err := request.RequireString("child_agent_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'child_agent_id' parameter: %v", err)), nil
+	}
+
+	parentAgentID, err := strconv.ParseInt(parentAgentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid parent_agent_id format: %v", err)), nil
+	}
+
+	childAgentID, err := strconv.ParseInt(childAgentIDStr, 10, 64)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid child_agent_id format: %v", err)), nil
+	}
+
+	// Get both agents to verify they exist
+	parentAgent, err := s.repos.Agents.GetByID(parentAgentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Parent agent not found: %v", err)), nil
+	}
+
+	childAgent, err := s.repos.Agents.GetByID(childAgentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Child agent not found: %v", err)), nil
+	}
+
+	// Remove relationship from database
+	err = s.repos.AgentAgents.RemoveChildAgent(parentAgentID, childAgentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to remove child agent: %v", err)), nil
+	}
+
+	// Export agent to update .prompt file (removes from agents: section)
+	if s.agentExportService != nil {
+		if err := s.agentExportService.ExportAgentAfterSave(parentAgentID); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to export agent: %v", err)), nil
+		}
+	}
+
+	// Get environment for sync
+	env, err := s.repos.Environments.GetByID(parentAgent.EnvironmentID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to get environment: %v", err)), nil
+	}
+
+	// Run sync to apply changes immediately
+	syncCmd := exec.CommandContext(ctx, "stn", "sync", env.Name)
+	syncOutput, err := syncCmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to sync environment: %v\nOutput: %s", err, string(syncOutput))), nil
+	}
+
+	// Create normalized tool name for response
+	normalizedName := strings.ToLower(childAgent.Name)
+	replacements := []string{" ", "-", ".", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "+", "=", "[", "]", "{", "}", "|", "\\", ":", ";", "\"", "'", "<", ">", ",", "?", "/"}
+	for _, char := range replacements {
+		normalizedName = strings.ReplaceAll(normalizedName, char, "_")
+	}
+	for strings.Contains(normalizedName, "__") {
+		normalizedName = strings.ReplaceAll(normalizedName, "__", "_")
+	}
+	normalizedName = strings.Trim(normalizedName, "_")
+	agentToolName := fmt.Sprintf("__agent_%s", normalizedName)
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Successfully removed agent '%s' (tool '%s') from agent '%s'", childAgent.Name, agentToolName, parentAgent.Name),
+		"parent_agent": map[string]interface{}{
+			"id":   parentAgent.ID,
+			"name": parentAgent.Name,
+		},
+		"child_agent": map[string]interface{}{
+			"id":   childAgent.ID,
+			"name": childAgent.Name,
+		},
+		"tool_name": agentToolName,
+		"note":      "Child agent removed from database and agents: section in .prompt file",
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}

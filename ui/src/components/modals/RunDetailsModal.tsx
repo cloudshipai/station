@@ -300,7 +300,7 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
     { id: 'debug', label: 'Debug', icon: Terminal },
   ];
 
-  const toolCalls = runDetails?.execution_steps || [];
+  const toolCalls = runDetails?.tool_calls || [];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

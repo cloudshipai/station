@@ -146,6 +146,13 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(addAgentTool, s.handleAddAgentAsTool)
 
+	removeAgentTool := mcp.NewTool("remove_agent_as_tool",
+		mcp.WithDescription("Remove a child agent from a parent agent's callable tools, breaking the multi-agent hierarchy link."),
+		mcp.WithString("parent_agent_id", mcp.Required(), mcp.Description("ID of the parent agent")),
+		mcp.WithString("child_agent_id", mcp.Required(), mcp.Description("ID of the child agent to remove")),
+	)
+	s.mcpServer.AddTool(removeAgentTool, s.handleRemoveAgentAsTool)
+
 	removeToolTool := mcp.NewTool("remove_tool",
 		mcp.WithDescription("Remove a tool from an agent"),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
