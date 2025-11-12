@@ -689,7 +689,7 @@ func (mcm *MCPConnectionManager) getAgentToolsForEnvironment(ctx context.Context
 			toolFunc,
 		)
 
-		logging.Debug("Created GenKit tool for agent '%s' as '%s'", agentName, toolName)
+		logging.Info("🔧 Created agent tool: name='%s', desc='%s', schema=%+v", toolName, agentDesc, inputSchema)
 		agentTools = append(agentTools, tool)
 	}
 

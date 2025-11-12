@@ -214,13 +214,20 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 	// results in duplicate traces (our empty root + GenKit's generate traces).
 	// Instead, the agent_execution_engine creates a proper span with full metadata.
 
-	// Pass tools to Execute - this is CRITICAL for function calling to work
-	// Tools must be explicitly passed via ai.WithTools()
+	// Tools are registered globally with GenKit (lines 184 above)
+	// Do NOT pass via ai.WithTools() - that prevents tool discovery
+	// GenKit/OpenAI will discover globally registered tools automatically
+	fmt.Printf("DEBUG EXECUTE: %d tools registered globally for agent %s\n", len(mcpTools), agent.Name)
+	for i, toolRef := range mcpTools {
+		if tool, ok := toolRef.(interface{ Name() string }); ok {
+			fmt.Printf("  Tool %d: %s\n", i+1, tool.Name())
+		}
+	}
+
 	resp, err := agentPrompt.Execute(execCtx,
 		ai.WithInput(inputMap),
 		ai.WithMaxTurns(maxTurns),
-		ai.WithModelName(modelName),
-		ai.WithTools(mcpTools...))
+		ai.WithModelName(modelName))
 
 	if err != nil {
 		return &ExecutionResponse{
