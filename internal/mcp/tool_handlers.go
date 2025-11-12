@@ -582,6 +582,41 @@ func (s *Server) handleSetSchedule(ctx context.Context, request mcp.CallToolRequ
 		enabled = false
 	}
 
+	// Validate schedule variables against agent schema
+	var warnings []string
+	if scheduleVars != "" {
+		// Parse schedule variables
+		var scheduleVarsMap map[string]interface{}
+		if err := json.Unmarshal([]byte(scheduleVars), &scheduleVarsMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid schedule_variables JSON: %v", err)), nil
+		}
+
+		// Get agent's expected variables from schema
+		expectedVars := []string{"userInput"} // Default variable always available
+		if agent.InputSchema != nil && *agent.InputSchema != "" {
+			// Parse custom schema to get additional variable names
+			var customSchema map[string]interface{}
+			if err := json.Unmarshal([]byte(*agent.InputSchema), &customSchema); err == nil {
+				for varName := range customSchema {
+					expectedVars = append(expectedVars, varName)
+				}
+			}
+		}
+
+		// Check if schedule variables contain at least one expected variable
+		foundMatch := false
+		for _, expectedVar := range expectedVars {
+			if _, exists := scheduleVarsMap[expectedVar]; exists {
+				foundMatch = true
+				break
+			}
+		}
+
+		if !foundMatch {
+			warnings = append(warnings, fmt.Sprintf("WARNING: Schedule variables don't contain any expected fields. Agent expects: %v", expectedVars))
+		}
+	}
+
 	// Update agent schedule in database
 	// TODO: Use proper repository method when available
 	_, err = s.db.Conn().Exec(
@@ -619,6 +654,11 @@ func (s *Server) handleSetSchedule(ctx context.Context, request mcp.CallToolRequ
 			"enabled":            enabled,
 			"schedule_variables": scheduleVars,
 		},
+	}
+
+	// Add warnings if any
+	if len(warnings) > 0 {
+		response["warnings"] = warnings
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
