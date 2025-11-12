@@ -315,12 +315,12 @@ func (s *Server) setupTools() {
 
 	// Report Management Tools
 	createReportTool := mcp.NewTool("create_report",
-		mcp.WithDescription("Create a new report for environment-wide agent evaluation"),
+		mcp.WithDescription("Create a new report to evaluate how well the agent team achieves its business purpose"),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the report")),
 		mcp.WithString("description", mcp.Description("Description of the report")),
 		mcp.WithString("environment_id", mcp.Required(), mcp.Description("Environment ID to evaluate")),
-		mcp.WithString("team_criteria", mcp.Required(), mcp.Description("JSON string with team evaluation criteria")),
-		mcp.WithString("agent_criteria", mcp.Description("JSON string with agent-specific criteria (optional)")),
+		mcp.WithString("team_criteria", mcp.Required(), mcp.Description("JSON defining team's business goals and success criteria. Measure against the PURPOSE of this agent team. Examples: FinOps team → cost_reduction, forecasting_accuracy; DevOps team → deployment_insights, failure_prediction; Security team → vulnerability_detection, compliance_coverage. Format: {\"goal\": \"team's purpose\", \"criteria\": {\"business_metric\": {\"weight\": 0.4, \"description\": \"what success looks like\", \"threshold\": 0.8}}}")),
+		mcp.WithString("agent_criteria", mcp.Description("JSON defining how individual agents contribute to team goals. Examples: cost analyzer → savings_identified, execution_cost; PR reviewer → bugs_caught, review_speed, false_positive_rate. Measures agent's VALUE vs LABOR COST. Same format as team_criteria (optional)")),
 	)
 	s.mcpServer.AddTool(createReportTool, s.handleCreateReport)
 

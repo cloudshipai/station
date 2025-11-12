@@ -103,6 +103,12 @@ func (s *Server) handleGenerateReport(ctx context.Context, request mcp.CallToolR
 
 	// Start async report generation
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("PANIC in report generation: %v\n", r)
+			}
+		}()
+
 		genCtx := context.Background()
 
 		// Create report generator
@@ -110,8 +116,9 @@ func (s *Server) handleGenerateReport(ctx context.Context, request mcp.CallToolR
 
 		// Generate report (this runs benchmarks on all matching runs)
 		if err := generator.GenerateReport(genCtx, reportID); err != nil {
-			// Report will be marked as failed in the database
-			fmt.Printf("Report generation failed: %v\n", err)
+			fmt.Printf("❌ Report generation failed for report %d: %v\n", reportID, err)
+		} else {
+			fmt.Printf("✅ Report generation completed successfully for report %d\n", reportID)
 		}
 	}()
 
