@@ -429,11 +429,18 @@ func (s *Server) handleEvaluateBenchmark(ctx context.Context, request mcp.CallTo
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid run_id format: %v", err)), nil
 	}
 
-	// Create benchmark task in database
+	// Create benchmark task ID
 	taskID := fmt.Sprintf("bench_%d_%d", runID, time.Now().Unix())
 
-	// TODO: Start async benchmark evaluation
-	// For now, return task ID immediately
+	// Start async benchmark evaluation
+	if s.benchmarkService == nil {
+		return mcp.NewToolResultError("Benchmark service not available"), nil
+	}
+
+	if err := s.benchmarkService.EvaluateAsync(ctx, runID, taskID); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to start benchmark: %v", err)), nil
+	}
+
 	response := map[string]interface{}{
 		"success": true,
 		"message": "Benchmark evaluation started",
@@ -453,12 +460,35 @@ func (s *Server) handleGetBenchmarkStatus(ctx context.Context, request mcp.CallT
 		return mcp.NewToolResultError(fmt.Sprintf("Missing 'task_id' parameter: %v", err)), nil
 	}
 
-	// TODO: Query benchmark task status from database
+	if s.benchmarkService == nil {
+		return mcp.NewToolResultError("Benchmark service not available"), nil
+	}
+
+	// Query benchmark task status
+	task, err := s.benchmarkService.GetTaskStatus(taskID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Task not found: %v", err)), nil
+	}
+
 	response := map[string]interface{}{
 		"success": true,
 		"task_id": taskID,
-		"status":  "completed",
-		"message": "Benchmark evaluation completed",
+		"run_id":  task.RunID,
+		"status":  task.Status,
+	}
+
+	if task.Status == "completed" && task.Result != nil {
+		response["message"] = "Benchmark evaluation completed"
+		response["result"] = task.Result
+	} else if task.Status == "failed" {
+		response["message"] = "Benchmark evaluation failed"
+		if task.Error != nil {
+			response["error"] = task.Error.Error()
+		}
+	} else if task.Status == "running" {
+		response["message"] = "Benchmark evaluation in progress"
+	} else {
+		response["message"] = "Benchmark evaluation pending"
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
@@ -482,13 +512,38 @@ func (s *Server) handleListBenchmarkResults(ctx context.Context, request mcp.Cal
 		}
 	}
 
-	// TODO: Query benchmark results from database
+	if s.benchmarkService == nil {
+		return mcp.NewToolResultError("Benchmark service not available"), nil
+	}
+
+	// Query benchmark results
+	tasks, err := s.benchmarkService.ListResults(int(limit), runID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to list results: %v", err)), nil
+	}
+
+	// Convert tasks to response format
+	results := make([]map[string]interface{}, 0, len(tasks))
+	for _, task := range tasks {
+		result := map[string]interface{}{
+			"task_id": task.TaskID,
+			"run_id":  task.RunID,
+			"status":  task.Status,
+		}
+		if task.Result != nil {
+			result["result"] = task.Result
+		}
+		results = append(results, result)
+	}
+
 	response := map[string]interface{}{
 		"success": true,
-		"results": []map[string]interface{}{},
-		"count":   0,
+		"results": results,
+		"count":   len(results),
 		"limit":   limit,
-		"run_id":  runID,
+	}
+	if runID != nil {
+		response["run_id"] = *runID
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")

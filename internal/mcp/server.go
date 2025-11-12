@@ -34,6 +34,7 @@ type Server struct {
 	lighthouseClient   *lighthouse.LighthouseClient // For surgical telemetry integration
 	schemaRegistry     *schemas.SchemaRegistry
 	schedulerService   *services.SchedulerService // Cron-based agent scheduler
+	benchmarkService   *services.BenchmarkService // Async benchmark evaluation
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -57,6 +58,13 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 	// Initialize scheduler service
 	schedulerService := services.NewSchedulerService(database, repos, agentService)
 
+	// Initialize benchmark service
+	benchmarkService, err := services.NewBenchmarkService(database.Conn(), cfg)
+	if err != nil {
+		log.Printf("Warning: failed to initialize benchmark service: %v", err)
+		benchmarkService = nil
+	}
+
 	server := &Server{
 		mcpServer:          mcpServer,
 		httpServer:         httpServer,
@@ -71,6 +79,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		bundleHandler:      NewUnifiedBundleHandler(),
 		schemaRegistry:     schemas.NewSchemaRegistry(),
 		schedulerService:   schedulerService,
+		benchmarkService:   benchmarkService,
 	}
 
 	// Setup the server capabilities
