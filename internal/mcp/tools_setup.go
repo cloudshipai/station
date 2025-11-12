@@ -313,6 +313,37 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(listBenchmarkResultsTool, s.handleListBenchmarkResults)
 
+	// Report Management Tools
+	createReportTool := mcp.NewTool("create_report",
+		mcp.WithDescription("Create a new report for environment-wide agent evaluation"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the report")),
+		mcp.WithString("description", mcp.Description("Description of the report")),
+		mcp.WithString("environment_id", mcp.Required(), mcp.Description("Environment ID to evaluate")),
+		mcp.WithString("team_criteria", mcp.Required(), mcp.Description("JSON string with team evaluation criteria")),
+		mcp.WithString("agent_criteria", mcp.Description("JSON string with agent-specific criteria (optional)")),
+	)
+	s.mcpServer.AddTool(createReportTool, s.handleCreateReport)
+
+	generateReportTool := mcp.NewTool("generate_report",
+		mcp.WithDescription("Generate a report by running benchmarks and LLM-as-judge evaluation on all agents"),
+		mcp.WithString("report_id", mcp.Required(), mcp.Description("ID of the report to generate")),
+	)
+	s.mcpServer.AddTool(generateReportTool, s.handleGenerateReport)
+
+	listReportsTool := mcp.NewTool("list_reports",
+		mcp.WithDescription("List all reports"),
+		mcp.WithString("environment_id", mcp.Description("Filter by environment ID")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of reports to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of reports to skip for pagination (default: 0)")),
+	)
+	s.mcpServer.AddTool(listReportsTool, s.handleListReports)
+
+	getReportTool := mcp.NewTool("get_report",
+		mcp.WithDescription("Get detailed information about a specific report"),
+		mcp.WithString("report_id", mcp.Required(), mcp.Description("ID of the report")),
+	)
+	s.mcpServer.AddTool(getReportTool, s.handleGetReport)
+
 	// Schedule Management Tools
 	setScheduleTool := mcp.NewTool("set_schedule",
 		mcp.WithDescription("Configure an agent to run on a schedule with specified input variables"),
@@ -347,5 +378,5 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(fakerCreateTool, s.handleFakerCreateFromMCPServer)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 35)
+	log.Printf("MCP tools setup complete - %d tools registered", 46)
 }
