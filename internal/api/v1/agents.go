@@ -551,10 +551,12 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 		return nil, fmt.Errorf("failed to read prompt file: %w", err)
 	}
 
-	// Parse YAML frontmatter to extract tools
+	// Parse YAML frontmatter to extract tools and child agents
 	lines := strings.Split(string(content), "\n")
 	inFrontmatter := false
 	var tools []string
+	inToolsSection := false
+	inAgentsSection := false
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -572,25 +574,51 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 			continue
 		}
 
-		// Look for tools section
+		// Check for section headers
 		if strings.HasPrefix(line, "tools:") {
+			inToolsSection = true
+			inAgentsSection = false
+			continue
+		} else if strings.HasPrefix(line, "agents:") {
+			inAgentsSection = true
+			inToolsSection = false
+			continue
+		} else if strings.HasSuffix(line, ":") && !strings.HasPrefix(line, "-") {
+			// New section started, exit both
+			inToolsSection = false
+			inAgentsSection = false
 			continue
 		}
 
-		// Parse tool entries (- "toolname" or - "__toolname")
-		if strings.HasPrefix(line, "- \"") && strings.HasSuffix(line, "\"") {
-			tool := strings.Trim(line[2:], "\"")
-			tools = append(tools, tool)
-		} else if strings.HasPrefix(line, "- \"__") && strings.HasSuffix(line, "\"") {
-			tool := strings.Trim(line[2:], "\"")
-			tools = append(tools, tool)
-		} else if strings.HasPrefix(line, "- __") {
-			// Handle unquoted tool names like: - "__toolname"
-			tool := strings.TrimSpace(line[2:])
-			if strings.HasPrefix(tool, "\"") && strings.HasSuffix(tool, "\"") {
-				tool = strings.Trim(tool, "\"")
+		// Parse tool entries from tools: section
+		if inToolsSection && strings.HasPrefix(line, "-") {
+			// Extract tool name (handle quoted and unquoted)
+			tool := strings.TrimSpace(line[1:]) // Remove leading dash
+			tool = strings.Trim(tool, "\"")     // Remove quotes if present
+			if tool != "" {
+				tools = append(tools, tool)
 			}
-			tools = append(tools, tool)
+		}
+
+		// Parse agent entries from agents: section and convert to __agent_* format
+		if inAgentsSection && strings.HasPrefix(line, "-") {
+			// Extract agent name
+			agentName := strings.TrimSpace(line[1:])  // Remove leading dash
+			agentName = strings.Trim(agentName, "\"") // Remove quotes if present
+			if agentName != "" {
+				// Normalize agent name to tool name format (same as runtime)
+				normalizedName := strings.ToLower(agentName)
+				replacements := []string{" ", "-", ".", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "+", "=", "[", "]", "{", "}", "|", "\\", ":", ";", "\"", "'", "<", ">", ",", "?", "/"}
+				for _, char := range replacements {
+					normalizedName = strings.ReplaceAll(normalizedName, char, "_")
+				}
+				for strings.Contains(normalizedName, "__") {
+					normalizedName = strings.ReplaceAll(normalizedName, "__", "_")
+				}
+				normalizedName = strings.Trim(normalizedName, "_")
+				agentToolName := fmt.Sprintf("__agent_%s", normalizedName)
+				tools = append(tools, agentToolName)
+			}
 		}
 	}
 

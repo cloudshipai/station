@@ -53,6 +53,39 @@ function parseAgentToolsFromPrompt(promptContent: string): string[] {
 }
 
 /**
+ * Parse YAML frontmatter from agent prompt to extract child agent names from agents: section
+ */
+function parseChildAgentsFromPrompt(promptContent: string): string[] {
+  try {
+    // Extract YAML frontmatter
+    const yamlMatch = promptContent.match(/^---\n([\s\S]*?)\n---/);
+    if (!yamlMatch) return [];
+
+    const yamlContent = yamlMatch[1];
+    
+    // Extract agents list from YAML (with or without quotes)
+    const agentsMatch = yamlContent.match(/agents:\s*\n((?:\s*-\s*"?[^"\n]+"?\s*\n)+)/);
+    if (!agentsMatch) return [];
+
+    // Parse individual agent names (handle both quoted and unquoted)
+    return agentsMatch[1]
+      .split('\n')
+      .filter(line => line.trim().startsWith('-'))
+      .map(line => {
+        // Remove leading dash and whitespace
+        const cleaned = line.trim().replace(/^-\s*/, '');
+        // Remove quotes if present
+        return cleaned.replace(/^"(.+)"$/, '$1').trim();
+      })
+      .filter(name => name.length > 0)
+      .map(name => `__agent_${name.toLowerCase().replace(/[\s\-\.!@#$%^&*()+={}\[\]|\\:;"'<>,?\/]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')}`); // Normalize to tool name format
+  } catch (error) {
+    console.warn('Failed to parse child agents from prompt:', error);
+    return [];
+  }
+}
+
+/**
  * Build the complete agent graph including MCP servers, tools, and child agents
  */
 export async function buildAgentGraph(params: BuildAgentGraphParams): Promise<AgentGraphData> {
@@ -72,11 +105,13 @@ export async function buildAgentGraph(params: BuildAgentGraphParams): Promise<Ag
   const response = await agentsApi.getWithTools(agentId);
   const { agent, mcp_servers } = response.data;
 
-  // Fetch agent prompt to extract agent tools from YAML frontmatter
+  // Fetch agent prompt to extract agent tools and child agents from YAML frontmatter
   let agentToolsFromPrompt: string[] = [];
+  let childAgentsFromPrompt: string[] = [];
   try {
     const promptResponse = await agentsApi.getPrompt(agentId);
     agentToolsFromPrompt = parseAgentToolsFromPrompt(promptResponse.data.content);
+    childAgentsFromPrompt = parseChildAgentsFromPrompt(promptResponse.data.content);
   } catch (error) {
     console.warn('Could not fetch agent prompt:', error);
   }
@@ -95,12 +130,14 @@ export async function buildAgentGraph(params: BuildAgentGraphParams): Promise<Ag
   });
 
   // Add agent tools from prompt (for agent-to-agent calling)
-  if (agentToolsFromPrompt.length > 0) {
+  // This includes both tools: section and agents: section (converted to __agent_* format)
+  const allAgentTools = [...agentToolsFromPrompt, ...childAgentsFromPrompt];
+  if (allAgentTools.length > 0) {
     const existingTools = agentToolsMap.get(agent.id) || [];
-    const agentToolObjects = agentToolsFromPrompt.map(name => ({
+    const agentToolObjects = allAgentTools.map(name => ({
       id: 0, // Virtual tool, no real ID
       name: name,
-      description: `Agent tool: ${name}`,
+      description: name.startsWith('__agent_') ? `Child agent: ${name.replace('__agent_', '')}` : `Agent tool: ${name}`,
       mcp_server_id: 0
     }));
     agentToolsMap.set(agent.id, [...existingTools, ...agentToolObjects]);

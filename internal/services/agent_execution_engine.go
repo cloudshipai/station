@@ -187,8 +187,25 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		return nil, fmt.Errorf("failed to get agent tools for dotprompt execution: %w", err)
 	}
 
+	// Get child agents from agent_agents table (for agents: frontmatter section)
+	childAgents, err := aee.repos.AgentAgents.ListChildAgents(agent.ID)
+	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to get child agents")
+		}
+		return nil, fmt.Errorf("failed to get child agents for dotprompt execution: %w", err)
+	}
+	logging.Info("🔍 [CHILD AGENTS] Loaded %d child agents for agent %s (ID: %d)", len(childAgents), agent.Name, agent.ID)
+	for _, ca := range childAgents {
+		logging.Info("   - Child: %s (ID: %d)", ca.ChildAgent.Name, ca.ChildAgentID)
+	}
+
 	if span != nil {
-		span.SetAttributes(attribute.Int("agent.tools_count", len(agentTools)))
+		span.SetAttributes(
+			attribute.Int("agent.tools_count", len(agentTools)),
+			attribute.Int("agent.child_agents_count", len(childAgents)),
+		)
 	}
 
 	// Get GenKit app for dotprompt execution
@@ -258,6 +275,29 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	for _, assignedTool := range agentTools {
 		assignedToolNames[assignedTool.ToolName] = true
 		fmt.Printf("DEBUG FILTER: Assigned tool from DB: %s\n", assignedTool.ToolName)
+	}
+
+	// Add child agents as tool names (convert agent name to __agent_* format)
+	// This matches the naming convention in mcp_connection_manager.go:getAgentToolsForEnvironment
+	for _, childAgent := range childAgents {
+		// Normalize agent name to tool name format
+		normalizedName := strings.ToLower(childAgent.ChildAgent.Name)
+		// Replace all special characters with underscores
+		replacements := []string{" ", "-", ".", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "+", "=", "[", "]", "{", "}", "|", "\\", ":", ";", "\"", "'", "<", ">", ",", "?", "/"}
+		for _, char := range replacements {
+			normalizedName = strings.ReplaceAll(normalizedName, char, "_")
+		}
+		// Remove multiple consecutive underscores
+		for strings.Contains(normalizedName, "__") {
+			normalizedName = strings.ReplaceAll(normalizedName, "__", "_")
+		}
+		// Trim leading/trailing underscores
+		normalizedName = strings.Trim(normalizedName, "_")
+
+		childToolName := fmt.Sprintf("__agent_%s", normalizedName)
+		assignedToolNames[childToolName] = true
+		fmt.Printf("DEBUG FILTER: Assigned child agent tool: %s (from agent: %s)\n", childToolName, childAgent.ChildAgent.Name)
+		logging.Debug("Added child agent as tool: %s (agent: %s, id: %d)", childToolName, childAgent.ChildAgent.Name, childAgent.ChildAgentID)
 	}
 
 	logging.Debug("Starting tool filtering with %d assigned tools", len(agentTools))

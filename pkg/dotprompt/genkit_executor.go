@@ -214,10 +214,13 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 	// results in duplicate traces (our empty root + GenKit's generate traces).
 	// Instead, the agent_execution_engine creates a proper span with full metadata.
 
+	// Pass tools to Execute - this is CRITICAL for function calling to work
+	// Tools must be explicitly passed via ai.WithTools()
 	resp, err := agentPrompt.Execute(execCtx,
 		ai.WithInput(inputMap),
 		ai.WithMaxTurns(maxTurns),
-		ai.WithModelName(modelName))
+		ai.WithModelName(modelName),
+		ai.WithTools(mcpTools...))
 
 	if err != nil {
 		return &ExecutionResponse{
