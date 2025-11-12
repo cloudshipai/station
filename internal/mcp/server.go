@@ -33,6 +33,7 @@ type Server struct {
 	telemetryService   *telemetry.TelemetryService
 	lighthouseClient   *lighthouse.LighthouseClient // For surgical telemetry integration
 	schemaRegistry     *schemas.SchemaRegistry
+	schedulerService   *services.SchedulerService // Cron-based agent scheduler
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -53,6 +54,9 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 
 	log.Printf("MCP Server configured with streamable HTTP transport")
 
+	// Initialize scheduler service
+	schedulerService := services.NewSchedulerService(database, repos, agentService)
+
 	server := &Server{
 		mcpServer:          mcpServer,
 		httpServer:         httpServer,
@@ -66,6 +70,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		agentExportService: services.NewAgentExportService(repos),
 		bundleHandler:      NewUnifiedBundleHandler(),
 		schemaRegistry:     schemas.NewSchemaRegistry(),
+		schedulerService:   schedulerService,
 	}
 
 	// Setup the server capabilities
@@ -88,6 +93,13 @@ func (s *Server) Start(ctx context.Context, port int) error {
 	log.Printf("Starting MCP server using streamable HTTP transport on %s", addr)
 	log.Printf("MCP endpoint will be available at http://localhost:%d/mcp", port)
 
+	// Start scheduler service for cron-based agent execution
+	if s.schedulerService != nil {
+		if err := s.schedulerService.Start(); err != nil {
+			return fmt.Errorf("failed to start scheduler service: %w", err)
+		}
+	}
+
 	if err := s.httpServer.Start(addr); err != nil {
 		return fmt.Errorf("MCP server error: %w", err)
 	}
@@ -98,6 +110,13 @@ func (s *Server) Start(ctx context.Context, port int) error {
 // StartStdio starts the MCP server using stdio transport
 func (s *Server) StartStdio(ctx context.Context) error {
 	log.Printf("Starting MCP server using stdio transport")
+
+	// Start scheduler service for cron-based agent execution
+	if s.schedulerService != nil {
+		if err := s.schedulerService.Start(); err != nil {
+			return fmt.Errorf("failed to start scheduler service: %w", err)
+		}
+	}
 
 	// Use the mcp-go ServeStdio convenience function
 	if err := server.ServeStdio(s.mcpServer); err != nil {
@@ -114,6 +133,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
+	}
+
+	// Stop scheduler service
+	if s.schedulerService != nil {
+		s.schedulerService.Stop()
 	}
 
 	if s.httpServer != nil {

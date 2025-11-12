@@ -537,9 +537,24 @@ func (s *Server) handleSetSchedule(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to set schedule: %v", err)), nil
 	}
 
+	// Update the agent object with new schedule
+	agent.CronSchedule = &cronSchedule
+	agent.ScheduleEnabled = enabled
+	agent.IsScheduled = enabled
+
+	// Add/update schedule in the running scheduler service
+	if s.schedulerService != nil && enabled {
+		if err := s.schedulerService.ScheduleAgent(agent); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to activate schedule in scheduler: %v", err)), nil
+		}
+	} else if s.schedulerService != nil && !enabled {
+		// If disabled, remove from scheduler
+		s.schedulerService.UnscheduleAgent(agentID)
+	}
+
 	response := map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("Schedule set for agent '%s'", agent.Name),
+		"message": fmt.Sprintf("Schedule set for agent '%s' and activated in scheduler", agent.Name),
 		"agent": map[string]interface{}{
 			"id":   agent.ID,
 			"name": agent.Name,
@@ -581,9 +596,14 @@ func (s *Server) handleRemoveSchedule(ctx context.Context, request mcp.CallToolR
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to remove schedule: %v", err)), nil
 	}
 
+	// Remove from the running scheduler service
+	if s.schedulerService != nil {
+		s.schedulerService.UnscheduleAgent(agentID)
+	}
+
 	response := map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("Schedule removed from agent '%s'", agent.Name),
+		"message": fmt.Sprintf("Schedule removed from agent '%s' and deactivated in scheduler", agent.Name),
 		"agent": map[string]interface{}{
 			"id":   agent.ID,
 			"name": agent.Name,
