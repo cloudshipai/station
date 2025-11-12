@@ -767,3 +767,14 @@ This integration represents a complete end-to-end security scanning solution tha
 ---
 *Last updated: 2025-08-27 by Claude Agent*  
 *Key focus: Complete CICD Security Integration with Ship + Station*
+- **Scheduler Service Integration**: ✅ Complete integration with MCP Server lifecycle (Nov 2024)
+  - **Initialization**: SchedulerService created in `NewServer()` constructor
+  - **Startup**: Scheduler starts automatically in both HTTP and stdio transport modes
+  - **Shutdown**: Scheduler stops gracefully during server shutdown
+  - **Live Activation**: `set_schedule` MCP tool now activates schedules in running scheduler
+  - **Live Deactivation**: `remove_schedule` MCP tool removes schedules from running scheduler
+  - **Auto-Loading**: Scheduler loads enabled schedules from database on server boot
+  - **Execution**: Scheduled agents execute via AgentService with full run metadata capture
+  - **Cron Format**: Uses 6-field cron expressions with seconds (e.g., `0 * * * * *` for every minute)
+  - **Location**: `internal/mcp/server.go:60-70,93-100,111-118,138-142`, `internal/mcp/tool_handlers.go:540-552,599-606`
+  - **Commit**: `5497ea9` - Wire up SchedulerService to MCP Server lifecycle
