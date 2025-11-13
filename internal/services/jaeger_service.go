@@ -96,6 +96,11 @@ func (j *JaegerService) Start(ctx context.Context) error {
 
 	// Start the service with a background context
 	// This creates long-lived tunnel processes that forward ports to localhost
+	logging.Info("   Starting Jaeger container and port forwarding...")
+
+	// Channel to signal when Up() completes or times out
+	upDone := make(chan error, 1)
+
 	go func() {
 		// Up() with port forwarding - this blocks while tunnels are active
 		err := service.Up(ctx, dagger.ServiceUpOpts{Ports: []dagger.PortForward{
@@ -104,16 +109,25 @@ func (j *JaegerService) Start(ctx context.Context) error {
 			{Frontend: j.otlpPort, Backend: j.otlpPort},
 			{Frontend: 4317, Backend: 4317},
 		}})
-		if err != nil {
-			logging.Error("Jaeger port forwarding ended: %v", err)
-		}
+		upDone <- err
 	}()
 
-	// Give the tunnels a moment to establish
-	time.Sleep(3 * time.Second)
+	// Wait for Up() to complete with a generous timeout (2 minutes for first start)
+	select {
+	case err := <-upDone:
+		if err != nil {
+			return fmt.Errorf("Jaeger service.Up() failed: %w", err)
+		}
+		logging.Info("   ✅ Jaeger port forwarding established")
+	case <-time.After(120 * time.Second):
+		logging.Info("   ⚠️  Jaeger startup taking longer than expected, continuing in background...")
+	}
+
+	// Give Jaeger process itself time to start
+	time.Sleep(5 * time.Second)
 
 	// Check if Jaeger is ready (with timeout)
-	readyCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	readyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := j.waitForReady(readyCtx); err != nil {
