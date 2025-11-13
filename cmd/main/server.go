@@ -93,9 +93,26 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize Jaeger if enabled
+	// Initialize Jaeger if enabled (default: FALSE for serve, use --jaeger flag to enable)
 	var jaegerSvc *services.JaegerService
-	enableJaeger := viper.GetBool("jaeger") || os.Getenv("STATION_AUTO_JAEGER") == "true"
+	enableJaeger := false // Default to disabled for serve mode
+
+	// Check if explicitly enabled via flag
+	if viper.IsSet("jaeger") {
+		enableJaeger = viper.GetBool("jaeger")
+		log.Printf("🔍 Jaeger flag explicitly set to: %v", enableJaeger)
+	}
+
+	// Environment variable override
+	if os.Getenv("STATION_AUTO_JAEGER") == "true" {
+		enableJaeger = true
+		log.Printf("🔍 STATION_AUTO_JAEGER=true, enabling Jaeger")
+	} else if os.Getenv("STATION_AUTO_JAEGER") == "false" {
+		enableJaeger = false
+		log.Printf("🔍 STATION_AUTO_JAEGER=false, disabling Jaeger")
+	}
+
+	log.Printf("🔍 Jaeger enabled for serve mode: %v", enableJaeger)
 	if enableJaeger {
 		jaegerSvc = services.NewJaegerService(&services.JaegerConfig{})
 		if err := jaegerSvc.Start(ctx); err != nil {

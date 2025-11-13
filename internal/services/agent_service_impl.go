@@ -41,17 +41,26 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
 	}
 
+	// Check for runtime OTEL endpoint (set by Jaeger service after startup)
+	otelEndpoint := cfg.OTELEndpoint
+	if runtimeEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); runtimeEndpoint != "" {
+		otelEndpoint = runtimeEndpoint
+		log.Printf("🔍 Using runtime OTEL endpoint: %s", otelEndpoint)
+	}
+
 	telemetryConfig := &TelemetryConfig{
 		Enabled:      cfg.TelemetryEnabled,
-		OTLPEndpoint: cfg.OTELEndpoint,
+		OTLPEndpoint: otelEndpoint,
 		ServiceName:  "station",
 		Environment:  cfg.Environment,
 	}
 
 	service.telemetry = NewTelemetryService(telemetryConfig)
 	if err := service.telemetry.Initialize(context.Background()); err != nil {
-		log.Printf("Warning: Failed to initialize telemetry: %v", err)
+		log.Printf("⚠️  Warning: Failed to initialize telemetry: %v", err)
 		// Continue without telemetry rather than failing
+	} else {
+		log.Printf("✅ Telemetry service initialized (enabled=%v, endpoint=%s)", telemetryConfig.Enabled, telemetryConfig.OTLPEndpoint)
 	}
 
 	// Create execution engine with self-reference and optional lighthouse client
@@ -65,6 +74,7 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 
 	// Pass telemetry service to execution engine for span creation
 	service.executionEngine.telemetryService = service.telemetry
+	log.Printf("✅ Telemetry service assigned to execution engine (nil=%v)", service.telemetry == nil)
 
 	return service
 }
@@ -84,17 +94,26 @@ func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseC
 		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
 	}
 
+	// Check for runtime OTEL endpoint (set by Jaeger service after startup)
+	otelEndpoint := cfg.OTELEndpoint
+	if runtimeEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); runtimeEndpoint != "" {
+		otelEndpoint = runtimeEndpoint
+		log.Printf("🔍 Using runtime OTEL endpoint: %s", otelEndpoint)
+	}
+
 	telemetryConfig := &TelemetryConfig{
 		Enabled:      cfg.TelemetryEnabled,
-		OTLPEndpoint: cfg.OTELEndpoint,
+		OTLPEndpoint: otelEndpoint,
 		ServiceName:  "station",
 		Environment:  cfg.Environment,
 	}
 
 	service.telemetry = NewTelemetryService(telemetryConfig)
 	if err := service.telemetry.Initialize(context.Background()); err != nil {
-		log.Printf("Warning: Failed to initialize telemetry: %v", err)
+		log.Printf("⚠️  Warning: Failed to initialize telemetry: %v", err)
 		// Continue without telemetry rather than failing
+	} else {
+		log.Printf("✅ Telemetry service initialized (enabled=%v, endpoint=%s)", telemetryConfig.Enabled, telemetryConfig.OTLPEndpoint)
 	}
 
 	// Create execution engine with Lighthouse client integration
@@ -102,6 +121,7 @@ func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseC
 
 	// Pass telemetry service to execution engine for span creation
 	service.executionEngine.telemetryService = service.telemetry
+	log.Printf("✅ Telemetry service assigned to execution engine (nil=%v)", service.telemetry == nil)
 
 	return service
 }

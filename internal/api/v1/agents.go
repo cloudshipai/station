@@ -97,9 +97,48 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 		agents = filteredAgents
 	}
 
+	// Enrich agents with child agent relationships
+	enrichedAgents := make([]map[string]interface{}, len(agents))
+	for i, agent := range agents {
+		agentMap := map[string]interface{}{
+			"id":               agent.ID,
+			"name":             agent.Name,
+			"description":      agent.Description,
+			"environment_id":   agent.EnvironmentID,
+			"max_steps":        agent.MaxSteps,
+			"created_at":       agent.CreatedAt,
+			"updated_at":       agent.UpdatedAt,
+			"prompt":           agent.Prompt,
+			"schedule_enabled": agent.ScheduleEnabled,
+			"cron_schedule":    agent.CronSchedule,
+			"is_scheduled":     agent.IsScheduled,
+		}
+
+		// Add child agents if any exist
+		if h.repos != nil && h.repos.AgentAgents != nil {
+			childAgents, err := h.repos.AgentAgents.ListChildAgents(agent.ID)
+			if err == nil && len(childAgents) > 0 {
+				// Convert to simple format for UI
+				children := make([]map[string]interface{}, len(childAgents))
+				for j, child := range childAgents {
+					children[j] = map[string]interface{}{
+						"id":          child.ChildAgentID,
+						"name":        child.ChildAgent.Name,
+						"description": child.ChildAgent.Description,
+					}
+				}
+				agentMap["child_agents"] = children
+			} else {
+				agentMap["child_agents"] = []interface{}{} // Empty array if no children
+			}
+		}
+
+		enrichedAgents[i] = agentMap
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"agents": agents,
-		"count":  len(agents),
+		"agents": enrichedAgents,
+		"count":  len(enrichedAgents),
 	})
 }
 

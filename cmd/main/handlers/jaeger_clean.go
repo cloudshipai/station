@@ -1,14 +1,10 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
-	"dagger.io/dagger"
 	"github.com/spf13/cobra"
 	"station/internal/logging"
 )
@@ -18,63 +14,63 @@ func NewJaegerCleanCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "clean-jaeger",
 		Short: "Clean Jaeger telemetry data",
-		Long:  "Removes Jaeger cache volume and local data directory to start fresh",
+		Long:  "Stops Jaeger container and removes its data volume to start fresh",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
-
 			logging.Info("🧹 Cleaning Jaeger data...")
 
-			// Clean Dagger cache volume (this is where the actual data lives)
-			client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stderr))
-			if err != nil {
-				logging.Error("Failed to connect to Dagger: %v", err)
-			} else {
-				defer client.Close()
-			}
+			containerName := "station-jaeger"
+			volumeName := "jaeger-badger-data"
 
-			// Try to remove the Docker volume directly
-			logging.Info("   🗑️  Removing Dagger cache volume 'station-dagger-cache'...")
-			
-			// Check if volume exists
-			checkCmd := exec.Command("docker", "volume", "inspect", "station-dagger-cache")
-			if err := checkCmd.Run(); err == nil {
-				// Volume exists, try to remove it
-				rmCmd := exec.Command("docker", "volume", "rm", "station-dagger-cache")
-				output, err := rmCmd.CombinedOutput()
-				if err != nil {
-					// If removal fails, it's likely because Jaeger is running
-					if strings.Contains(string(output), "in use") || strings.Contains(string(output), "is in use") {
-						logging.Info("   ⚠️  Volume is in use (Jaeger may be running)")
-						logging.Info("   💡 Stop Jaeger first with: docker stop jaeger")
-						logging.Info("   💡 Or restart OpenCode to disconnect Station MCP")
-					} else {
-						logging.Error("   ❌ Failed to remove volume: %v", err)
-					}
+			// Stop Jaeger container if running
+			logging.Info("   🛑 Stopping Jaeger container...")
+			stopCmd := exec.Command("docker", "stop", containerName)
+			if output, err := stopCmd.CombinedOutput(); err != nil {
+				if strings.Contains(string(output), "No such container") {
+					logging.Info("   ℹ️  Jaeger container not running")
 				} else {
-					logging.Info("   ✅ Removed Dagger cache volume")
+					logging.Error("   ⚠️  Failed to stop container: %v", err)
 				}
 			} else {
-				logging.Info("   ℹ️  No Dagger cache volume found")
+				logging.Info("   ✅ Stopped Jaeger container")
 			}
 
-			// Clean local data directory (probably doesn't exist but check anyway)
-			homeDir, err := os.UserHomeDir()
+			// Remove Jaeger container
+			logging.Info("   🗑️  Removing Jaeger container...")
+			rmCmd := exec.Command("docker", "rm", containerName)
+			if output, err := rmCmd.CombinedOutput(); err != nil {
+				if strings.Contains(string(output), "No such container") {
+					logging.Info("   ℹ️  Jaeger container already removed")
+				} else {
+					logging.Error("   ⚠️  Failed to remove container: %v", err)
+				}
+			} else {
+				logging.Info("   ✅ Removed Jaeger container")
+			}
+
+			// Remove Jaeger data volume
+			logging.Info("   🗑️  Removing Jaeger data volume...")
+			rmVolCmd := exec.Command("docker", "volume", "rm", volumeName)
+			output, err := rmVolCmd.CombinedOutput()
 			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-
-			dataDir := filepath.Join(homeDir, ".local", "share", "station", "jaeger-data")
-			if _, err := os.Stat(dataDir); err == nil {
-				if err := os.RemoveAll(dataDir); err != nil {
-					return fmt.Errorf("failed to remove Jaeger data directory: %w", err)
+				if strings.Contains(string(output), "no such volume") {
+					logging.Info("   ℹ️  Jaeger volume already removed")
+				} else if strings.Contains(string(output), "volume is in use") {
+					logging.Error("   ❌ Volume is in use - please stop Station first")
+					return fmt.Errorf("Jaeger volume is in use")
+				} else {
+					logging.Error("   ❌ Failed to remove volume: %v\n%s", err, string(output))
+					return fmt.Errorf("failed to remove Jaeger volume: %w", err)
 				}
-				logging.Info("   ✅ Removed local Jaeger data: %s", dataDir)
 			} else {
-				logging.Info("   ℹ️  No local Jaeger data directory found")
+				logging.Info("   ✅ Removed Jaeger data volume: %s", volumeName)
 			}
 
-			logging.Info("✨ Jaeger data cleaned!")
-			logging.Info("   📝 Jaeger will start fresh on next `stn stdio` or `stn up`")
+			logging.Info("✨ Jaeger cleaned!")
+			logging.Info("   📝 Next time you run Station with Jaeger, it will start fresh")
+			logging.Info("")
+			logging.Info("   💡 Jaeger startup:")
+			logging.Info("      • stn stdio → Enabled by default (use --jaeger=false to disable)")
+			logging.Info("      • stn serve → Disabled by default (use --jaeger to enable)")
 
 			return nil
 		},

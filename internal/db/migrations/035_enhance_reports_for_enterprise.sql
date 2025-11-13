@@ -1,6 +1,7 @@
 -- Migration: Enhance reports system for enterprise-grade evaluation
 -- This enables companies to make data-driven decisions about agent team performance
 
+-- +goose Up
 -- Add detailed run examples and analysis to agent_report_details
 ALTER TABLE agent_report_details ADD COLUMN best_run_example TEXT;      -- JSON: {run_id, input, output, tool_calls, duration, why_successful}
 ALTER TABLE agent_report_details ADD COLUMN worst_run_example TEXT;     -- JSON: {run_id, input, output, tool_calls, duration, why_failed}

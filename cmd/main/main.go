@@ -125,7 +125,7 @@ func init() {
 	serveCmd.Flags().Bool("debug", false, "Enable debug logging")
 	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
 	serveCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
-	serveCmd.Flags().Bool("jaeger", false, "Auto-launch Jaeger for distributed tracing (UI at http://localhost:16686)")
+	serveCmd.Flags().Bool("jaeger", true, "Auto-launch Jaeger for distributed tracing (UI at http://localhost:16686)")
 
 	// MCP Add command flags
 	mcpAddCmd.Flags().StringP("environment", "e", "default", "Environment to add configuration to")

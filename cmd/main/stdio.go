@@ -6,7 +6,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"station/internal/api"
@@ -106,7 +108,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Initialize minimal services for API server only
 	// Use separate contexts: one for long-lived services (management channel), one for MCP server
 	longLivedCtx := context.Background()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)
@@ -206,9 +209,16 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	_, _ = fmt.Fprintf(os.Stderr, "🌐 Management channel active - Station remains available for CloudShip control\n")
 	_, _ = fmt.Fprintf(os.Stderr, "📡 Station will continue running until terminated (Ctrl+C)\n")
 
-	// Block forever to keep management channel alive - only exit on signal
-	<-ctx.Done()
-	_, _ = fmt.Fprintf(os.Stderr, "🛑 Received termination signal, shutting down...\n")
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Block until signal received
+	<-sigChan
+	_, _ = fmt.Fprintf(os.Stderr, "\n🛑 Received termination signal, shutting down...\n")
+
+	// Cancel context to trigger cleanup
+	cancel()
 
 	// Clean shutdown of services when terminating
 	if apiCancel != nil {

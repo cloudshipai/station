@@ -405,11 +405,19 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Check OTEL configuration
 	otelEndpoint, _ := cmd.Flags().GetString("otel-endpoint")
-	telemetryEnabled, _ := cmd.Flags().GetBool("telemetry")
+	// Default telemetry to TRUE (we ship with Jaeger integration)
+	telemetryEnabled := true
+	if cmd.Flags().Changed("telemetry") {
+		telemetryEnabled, _ = cmd.Flags().GetBool("telemetry")
+	}
 
 	// Check environment variable if flag not provided
 	if otelEndpoint == "" {
 		otelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
+	// Default to local Jaeger endpoint if not specified
+	if otelEndpoint == "" {
+		otelEndpoint = "http://localhost:4318"
 	}
 
 	// Check existing config to avoid interactive mode

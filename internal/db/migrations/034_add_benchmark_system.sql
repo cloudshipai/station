@@ -3,6 +3,7 @@
 -- Date: 2025-11-11
 -- Context: Transform abstract scores into evidence-based production readiness assessments
 
+-- +goose Up
 -- ============================================================================
 -- BENCHMARK TASKS: Concrete evaluation tasks with measurable success criteria
 -- ============================================================================
@@ -193,23 +194,29 @@ CREATE INDEX IF NOT EXISTS idx_production_readiness_recommendation ON production
 -- TRIGGERS: Auto-update timestamps
 -- ============================================================================
 
+-- +goose StatementBegin
 CREATE TRIGGER IF NOT EXISTS update_benchmark_tasks_timestamp 
 AFTER UPDATE ON benchmark_tasks
 BEGIN
     UPDATE benchmark_tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+-- +goose StatementEnd
 
+-- +goose StatementBegin
 CREATE TRIGGER IF NOT EXISTS update_task_evaluations_timestamp 
 AFTER UPDATE ON task_evaluations
 BEGIN
     UPDATE task_evaluations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+-- +goose StatementEnd
 
+-- +goose StatementBegin
 CREATE TRIGGER IF NOT EXISTS update_production_readiness_timestamp 
 AFTER UPDATE ON production_readiness
 BEGIN
     UPDATE production_readiness SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+-- +goose StatementEnd
 
 -- ============================================================================
 -- SEED DATA: Common benchmark tasks
@@ -344,6 +351,30 @@ LEFT JOIN production_readiness pr ON r.id = pr.report_id
 WHERE r.status = 'completed'
 ORDER BY r.created_at DESC;
 
--- ============================================================================
--- END MIGRATION
--- ============================================================================
+-- +goose Down
+DROP VIEW IF EXISTS v_production_readiness_dashboard;
+DROP VIEW IF EXISTS v_run_quality_metrics;
+DROP VIEW IF EXISTS v_agent_rankings;
+DROP TRIGGER IF EXISTS update_production_readiness_timestamp;
+DROP TRIGGER IF EXISTS update_task_evaluations_timestamp;
+DROP TRIGGER IF EXISTS update_benchmark_tasks_timestamp;
+DROP INDEX IF EXISTS idx_production_readiness_recommendation;
+DROP INDEX IF EXISTS idx_production_readiness_score;
+DROP INDEX IF EXISTS idx_production_readiness_report;
+DROP TABLE IF EXISTS production_readiness;
+DROP INDEX IF EXISTS idx_task_evaluations_rank;
+DROP INDEX IF EXISTS idx_task_evaluations_champion;
+DROP INDEX IF EXISTS idx_task_evaluations_score;
+DROP INDEX IF EXISTS idx_task_evaluations_report;
+DROP INDEX IF EXISTS idx_task_evaluations_agent;
+DROP INDEX IF EXISTS idx_task_evaluations_task;
+DROP TABLE IF EXISTS task_evaluations;
+DROP INDEX IF EXISTS idx_benchmark_metrics_score;
+DROP INDEX IF EXISTS idx_benchmark_metrics_passed;
+DROP INDEX IF EXISTS idx_benchmark_metrics_type;
+DROP INDEX IF EXISTS idx_benchmark_metrics_run;
+DROP TABLE IF EXISTS benchmark_metrics;
+DROP INDEX IF EXISTS idx_benchmark_tasks_active;
+DROP INDEX IF EXISTS idx_benchmark_tasks_environment;
+DROP INDEX IF EXISTS idx_benchmark_tasks_category;
+DROP TABLE IF EXISTS benchmark_tasks;

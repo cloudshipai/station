@@ -4,30 +4,26 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
+	"os/exec"
+	"strings"
 	"time"
 
-	"dagger.io/dagger"
 	"station/internal/logging"
 )
 
-// JaegerService manages Jaeger all-in-one as a background service using Dagger
+// JaegerService manages Jaeger all-in-one as a Docker container
 type JaegerService struct {
-	client    *dagger.Client
-	container *dagger.Container
-	service   *dagger.Service
-	dataDir   string
-	uiPort    int
-	otlpPort  int
-	isRunning bool
+	containerName string
+	volumeName    string
+	uiPort        int
+	otlpPort      int
+	isRunning     bool
 }
 
 // JaegerConfig holds Jaeger service configuration
 type JaegerConfig struct {
-	UIPort   int    // Default: 16686
-	OTLPPort int    // Default: 4318
-	DataDir  string // Default: ~/.local/share/station/jaeger-data
+	UIPort   int // Default: 16686
+	OTLPPort int // Default: 4318
 }
 
 // NewJaegerService creates a new Jaeger service manager
@@ -39,19 +35,16 @@ func NewJaegerService(cfg *JaegerConfig) *JaegerService {
 	if cfg.OTLPPort == 0 {
 		cfg.OTLPPort = 4318
 	}
-	if cfg.DataDir == "" {
-		homeDir, _ := os.UserHomeDir()
-		cfg.DataDir = filepath.Join(homeDir, ".local", "share", "station", "jaeger-data")
-	}
 
 	return &JaegerService{
-		dataDir:  cfg.DataDir,
-		uiPort:   cfg.UIPort,
-		otlpPort: cfg.OTLPPort,
+		containerName: "station-jaeger",
+		volumeName:    "jaeger-badger-data",
+		uiPort:        cfg.UIPort,
+		otlpPort:      cfg.OTLPPort,
 	}
 }
 
-// Start launches Jaeger as a Dagger service
+// Start launches Jaeger as a Docker container
 func (j *JaegerService) Start(ctx context.Context) error {
 	// Check if Jaeger already running
 	if j.isAlreadyRunning() {
@@ -60,81 +53,83 @@ func (j *JaegerService) Start(ctx context.Context) error {
 		return nil
 	}
 
-	logging.Info("🔍 Launching Jaeger (background service)...")
+	logging.Info("🔍 Launching Jaeger (Docker container)...")
 
-	// Initialize Dagger client
-	client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stderr))
-	if err != nil {
-		return fmt.Errorf("failed to create Dagger client: %w", err)
+	// Create volume if it doesn't exist
+	createVolumeCmd := exec.Command("docker", "volume", "create", j.volumeName)
+	if output, err := createVolumeCmd.CombinedOutput(); err != nil {
+		// Volume might already exist, which is fine
+		if !strings.Contains(string(output), "already exists") {
+			logging.Error("Failed to create Jaeger volume: %v\n%s", err, string(output))
+		}
 	}
-	j.client = client
 
-	// Create Jaeger container with in-memory storage
-	// Note: Using BADGER_EPHEMERAL=true to avoid permission issues with persistent volumes
-	// Traces will be lost on restart, but this is acceptable for development
-	container := client.Container().
-		From("jaegertracing/all-in-one:latest").
-		WithEnvVariable("COLLECTOR_OTLP_ENABLED", "true").
-		WithEnvVariable("SPAN_STORAGE_TYPE", "badger").
-		WithEnvVariable("BADGER_EPHEMERAL", "true").
-		WithExposedPort(j.uiPort).   // Jaeger UI
-		WithExposedPort(14268).      // Jaeger collector HTTP
-		WithExposedPort(j.otlpPort). // OTLP HTTP
-		WithExposedPort(4317)        // OTLP gRPC
+	// Fix volume permissions - Jaeger runs as UID 10001
+	// Run a temporary container to set ownership on the volume
+	logging.Info("   Setting volume permissions for Jaeger user (UID 10001)...")
+	chownCmd := exec.Command("docker", "run", "--rm",
+		"-v", fmt.Sprintf("%s:/badger", j.volumeName),
+		"busybox", "chown", "-R", "10001:10001", "/badger")
+	if output, err := chownCmd.CombinedOutput(); err != nil {
+		logging.Error("Failed to set volume permissions: %v\n%s", err, string(output))
+	}
 
-	// Convert to service
-	service := container.AsService()
+	// Stop and remove old container if it exists
+	stopCmd := exec.Command("docker", "stop", j.containerName)
+	stopCmd.Run() // Ignore error if container doesn't exist
 
-	j.container = container
-	j.service = service
+	rmCmd := exec.Command("docker", "rm", j.containerName)
+	rmCmd.Run() // Ignore error if container doesn't exist
 
-	// Start the service completely async - don't block Station startup
-	// This creates long-lived tunnel processes that forward ports to localhost
-	logging.Info("   Starting Jaeger container in background...")
+	// Start Jaeger container with persistent volume
+	dockerArgs := []string{
+		"run",
+		"-d",
+		"--name", j.containerName,
+		"-e", "COLLECTOR_OTLP_ENABLED=true",
+		"-e", "SPAN_STORAGE_TYPE=badger",
+		"-e", "BADGER_EPHEMERAL=false",
+		"-e", "BADGER_DIRECTORY_VALUE=/badger/data",
+		"-e", "BADGER_DIRECTORY_KEY=/badger/key",
+		"-v", fmt.Sprintf("%s:/badger", j.volumeName),
+		"-p", fmt.Sprintf("%d:16686", j.uiPort), // Jaeger UI
+		"-p", fmt.Sprintf("%d:4318", j.otlpPort), // OTLP HTTP
+		"-p", "4317:4317", // OTLP gRPC
+		"-p", "14268:14268", // Jaeger collector HTTP
+		"jaegertracing/all-in-one:latest",
+	}
 
-	go func() {
-		// Up() with port forwarding - this blocks until service stops
-		err := service.Up(ctx, dagger.ServiceUpOpts{Ports: []dagger.PortForward{
-			{Frontend: j.uiPort, Backend: j.uiPort},
-			{Frontend: 14268, Backend: 14268},
-			{Frontend: j.otlpPort, Backend: j.otlpPort},
-			{Frontend: 4317, Backend: 4317},
-		}})
-		if err != nil {
-			logging.Error("Jaeger service.Up() error: %v", err)
-			j.isRunning = false
-			return
+	startCmd := exec.Command("docker", dockerArgs...)
+	output, err := startCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to start Jaeger container: %w\n%s", err, string(output))
+	}
+
+	logging.Info("   ✅ Jaeger container started: %s", j.containerName)
+
+	// Wait for Jaeger to be accessible
+	logging.Info("   Waiting for Jaeger to be ready...")
+
+	deadline := time.Now().Add(30 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for time.Now().Before(deadline) {
+		<-ticker.C
+		if j.isAlreadyRunning() {
+			logging.Info("   ✅ Jaeger UI ready: http://localhost:%d", j.uiPort)
+			logging.Info("   ✅ OTLP endpoint: http://localhost:%d", j.otlpPort)
+			logging.Info("   ✅ Traces persisted in volume: %s", j.volumeName)
+			j.isRunning = true
+			return nil
 		}
-		logging.Info("   ✅ Jaeger port forwarding established")
-	}()
+	}
 
-	// Launch background health checker that polls until Jaeger is ready
-	go func() {
-		// Give container time to start before checking
-		time.Sleep(3 * time.Second)
-
-		// Poll for up to 2 minutes
-		deadline := time.Now().Add(120 * time.Second)
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-
-		for time.Now().Before(deadline) {
-			<-ticker.C
-			if j.isAlreadyRunning() {
-				logging.Info("   ✅ Jaeger UI ready: http://localhost:%d", j.uiPort)
-				logging.Info("   ✅ OTLP endpoint: http://localhost:%d", j.otlpPort)
-				logging.Info("   ✅ Traces persisted in Docker volume: jaeger-badger-data")
-				return
-			}
-		}
-
-		// If we get here, Jaeger didn't start in time
-		logging.Info("   ⚠️  Jaeger startup taking longer than expected")
-		logging.Info("   💡 Traces will be buffered until Jaeger becomes available")
-	}()
-
+	// If we timeout, still mark as running
+	logging.Info("   ⚠️  Jaeger startup taking longer than expected")
+	logging.Info("   💡 Jaeger will continue starting in background")
+	logging.Info("   💡 UI will be available at http://localhost:%d", j.uiPort)
 	j.isRunning = true
-	logging.Info("   Jaeger starting in background (UI at http://localhost:%d)", j.uiPort)
 
 	return nil
 }
@@ -145,21 +140,18 @@ func (j *JaegerService) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	logging.Info("🧹 Stopping Jaeger service...")
+	logging.Info("🧹 Stopping Jaeger container...")
 
-	// Stop service
-	if j.service != nil {
-		_, err := j.service.Stop(ctx)
-		if err != nil {
-			logging.Error("Failed to stop Jaeger service: %v", err)
-		}
+	// Stop container
+	stopCmd := exec.Command("docker", "stop", j.containerName)
+	if output, err := stopCmd.CombinedOutput(); err != nil {
+		logging.Error("Failed to stop Jaeger container: %v\n%s", err, string(output))
 	}
 
-	// Close Dagger client
-	if j.client != nil {
-		if err := j.client.Close(); err != nil {
-			logging.Error("Failed to close Dagger client: %v", err)
-		}
+	// Remove container
+	rmCmd := exec.Command("docker", "rm", j.containerName)
+	if output, err := rmCmd.CombinedOutput(); err != nil {
+		logging.Error("Failed to remove Jaeger container: %v\n%s", err, string(output))
 	}
 
 	j.isRunning = false
@@ -192,24 +184,4 @@ func (j *JaegerService) isAlreadyRunning() bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == 200
-}
-
-// waitForReady waits for Jaeger UI to be accessible
-func (j *JaegerService) waitForReady(ctx context.Context) error {
-	timeout := time.After(30 * time.Second)
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeout:
-			return fmt.Errorf("Jaeger did not start within 30 seconds")
-		case <-ticker.C:
-			if j.isAlreadyRunning() {
-				return nil
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
 }

@@ -1,3 +1,4 @@
+-- +goose Up
 -- Migration: Add agent_agents table for agent-to-agent relationships
 -- Description: Stores hierarchical relationships where parent agents can call child agents as tools
 -- Date: 2025-11-12
@@ -19,3 +20,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_agents_parent ON agent_agents(parent_agent_
 
 -- Create index for child lookups (to find which agents use a specific agent)
 CREATE INDEX IF NOT EXISTS idx_agent_agents_child ON agent_agents(child_agent_id);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_agent_agents_child;
+DROP INDEX IF EXISTS idx_agent_agents_parent;
+DROP TABLE IF EXISTS agent_agents;

@@ -107,6 +107,12 @@ station-mcp.json
 test-*.sh
 test_*.sh
 
+# Backup files from editors and manual edits
+*.bak
+*.bak2
+*.backup
+*~
+
 # Development workspace for temporary artifacts
 dev-workspace/
 temp/

@@ -1,3 +1,4 @@
+-- +goose Up
 -- Migration: Add Reports System
 -- Description: Environment-wide report generation with LLM evaluation
 -- Date: 2025-01-11
@@ -98,8 +99,21 @@ CREATE INDEX IF NOT EXISTS idx_agent_report_details_agent ON agent_report_detail
 CREATE INDEX IF NOT EXISTS idx_agent_report_details_score ON agent_report_details(score DESC);
 
 -- Trigger to update reports.updated_at
+-- +goose StatementBegin
 CREATE TRIGGER IF NOT EXISTS update_reports_timestamp 
 AFTER UPDATE ON reports
 BEGIN
     UPDATE reports SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+-- +goose StatementEnd
+
+-- +goose Down
+DROP TRIGGER IF EXISTS update_reports_timestamp;
+DROP INDEX IF EXISTS idx_agent_report_details_score;
+DROP INDEX IF EXISTS idx_agent_report_details_agent;
+DROP INDEX IF EXISTS idx_agent_report_details_report;
+DROP TABLE IF EXISTS agent_report_details;
+DROP INDEX IF EXISTS idx_reports_created_at;
+DROP INDEX IF EXISTS idx_reports_status;
+DROP INDEX IF EXISTS idx_reports_environment;
+DROP TABLE IF EXISTS reports;

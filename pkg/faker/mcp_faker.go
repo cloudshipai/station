@@ -429,53 +429,72 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 func (f *MCPFaker) Serve() error {
 	ctx := context.Background()
 
+	logFaker("[FAKER] 🚀 Serve() called at %s\n", time.Now().Format("15:04:05"))
+	logFaker("[FAKER] Standalone mode: %v, Debug: %v, FakerID: %s\n", f.standaloneMode, f.debug, f.fakerID)
+
 	if f.debug {
 		fmt.Fprintf(os.Stderr, "[FAKER] Starting MCP server...\n")
 	}
 
 	// Create MCP server
+	logFaker("[FAKER] Creating MCP server...\n")
 	mcpServer := server.NewMCPServer("faker-mcp-server", "1.0.0")
+	logFaker("[FAKER] ✅ MCP server created\n")
 
 	var tools []mcp.Tool
 	var err error
 
 	if f.standaloneMode {
 		// Standalone mode: Generate tools via AI or load from cache
+		logFaker("[FAKER] 🔍 Standalone mode - checking tool cache for ID: %s\n", f.fakerID)
 		if f.debug {
 			fmt.Fprintf(os.Stderr, "[FAKER] Standalone mode - checking tool cache for ID: %s\n", f.fakerID)
 		}
 
 		// Try to load from cache first
 		if f.toolCache != nil {
+			logFaker("[FAKER] Tool cache exists, attempting type assertion...\n")
 			if cache, ok := f.toolCache.(toolcache.Cache); ok {
+				logFaker("[FAKER] Cache type assertion successful, calling GetTools...\n")
 				cachedTools, cacheErr := cache.GetTools(ctx, f.fakerID)
+				logFaker("[FAKER] GetTools returned: %d tools, error: %v\n", len(cachedTools), cacheErr)
 				if cacheErr == nil && len(cachedTools) > 0 {
 					if f.debug {
 						fmt.Fprintf(os.Stderr, "[FAKER] Loaded %d tools from cache\n", len(cachedTools))
 					}
+					logFaker("[FAKER] ✅ Using %d cached tools\n", len(cachedTools))
 					tools = cachedTools
 				} else {
+					logFaker("[FAKER] Cache miss or error (%v), generating tools with AI...\n", cacheErr)
 					if f.debug {
 						fmt.Fprintf(os.Stderr, "[FAKER] Cache miss or error (%v), generating tools with AI...\n", cacheErr)
 					}
 
 					// Generate tools with AI
+					logFaker("[FAKER] 🤖 Calling generateToolsWithAI...\n")
 					tools, err = f.generateToolsWithAI(ctx)
+					logFaker("[FAKER] generateToolsWithAI returned: %d tools, error: %v\n", len(tools), err)
 					if err != nil {
 						return fmt.Errorf("failed to generate tools with AI: %w", err)
 					}
 
 					// Cache the generated tools
+					logFaker("[FAKER] 💾 Caching %d generated tools...\n", len(tools))
 					if cacheErr := cache.SetTools(ctx, f.fakerID, tools); cacheErr != nil {
+						logFaker("[FAKER] ⚠️  Failed to cache tools: %v\n", cacheErr)
 						if f.debug {
 							fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to cache tools: %v\n", cacheErr)
 						}
-					} else if f.debug {
-						fmt.Fprintf(os.Stderr, "[FAKER] Cached %d tools for future use\n", len(tools))
+					} else {
+						logFaker("[FAKER] ✅ Cached %d tools for future use\n", len(tools))
+						if f.debug {
+							fmt.Fprintf(os.Stderr, "[FAKER] Cached %d tools for future use\n", len(tools))
+						}
 					}
 				}
 			} else {
 				// Type assertion failed, generate without cache
+				logFaker("[FAKER] ⚠️  Tool cache type assertion failed, generating with AI...\n")
 				if f.debug {
 					fmt.Fprintf(os.Stderr, "[FAKER] Tool cache type assertion failed, generating with AI...\n")
 				}
@@ -486,6 +505,7 @@ func (f *MCPFaker) Serve() error {
 			}
 		} else {
 			// No cache available, generate with AI
+			logFaker("[FAKER] ⚠️  No tool cache available, generating with AI...\n")
 			if f.debug {
 				fmt.Fprintf(os.Stderr, "[FAKER] No tool cache available, generating with AI...\n")
 			}
@@ -496,6 +516,7 @@ func (f *MCPFaker) Serve() error {
 		}
 	} else {
 		// Proxy mode: List tools from target MCP server
+		logFaker("[FAKER] 🔄 Proxy mode - listing tools from target...\n")
 		if f.debug {
 			fmt.Fprintf(os.Stderr, "[FAKER] Proxy mode - listing tools from target...\n")
 		}
@@ -506,7 +527,9 @@ func (f *MCPFaker) Serve() error {
 		defer cancel()
 
 		// Get all tools from target server with timeout
+		logFaker("[FAKER] Calling targetClient.ListTools with 10s timeout...\n")
 		toolsResult, err := f.targetClient.ListTools(discCtx, mcp.ListToolsRequest{})
+		logFaker("[FAKER] ListTools returned: error=%v\n", err)
 		if err != nil {
 			return fmt.Errorf("failed to list tools from target (timeout after 10s): %w", err)
 		}
@@ -514,11 +537,13 @@ func (f *MCPFaker) Serve() error {
 		if f.debug {
 			fmt.Fprintf(os.Stderr, "[FAKER] Found %d tools from target\n", len(toolsResult.Tools))
 		}
+		logFaker("[FAKER] ✅ Found %d tools from target\n", len(toolsResult.Tools))
 
 		tools = toolsResult.Tools
 
 		// Classify tools as read/write operations using AI (proxy mode only)
 		if f.safetyMode && f.genkitApp != nil {
+			logFaker("[FAKER] Classifying tools for write operation detection...\n")
 			if f.debug {
 				fmt.Fprintf(os.Stderr, "[FAKER] Classifying tools for write operation detection...\n")
 			}
