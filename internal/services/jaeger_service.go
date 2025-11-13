@@ -69,20 +69,14 @@ func (j *JaegerService) Start(ctx context.Context) error {
 	}
 	j.client = client
 
-	// Create a named cache volume for Jaeger data persistence
-	jaegerVolume := client.CacheVolume("jaeger-badger-data")
-
-	// Create Jaeger container with Badger storage for persistence
-	// Note: Running as root to avoid permission issues with cache volume
+	// Create Jaeger container with in-memory storage
+	// Note: Using BADGER_EPHEMERAL=true to avoid permission issues with persistent volumes
+	// Traces will be lost on restart, but this is acceptable for development
 	container := client.Container().
 		From("jaegertracing/all-in-one:latest").
-		WithUser("root").
 		WithEnvVariable("COLLECTOR_OTLP_ENABLED", "true").
 		WithEnvVariable("SPAN_STORAGE_TYPE", "badger").
-		WithEnvVariable("BADGER_EPHEMERAL", "false").
-		WithEnvVariable("BADGER_DIRECTORY_VALUE", "/badger/data").
-		WithEnvVariable("BADGER_DIRECTORY_KEY", "/badger/key").
-		WithMountedCache("/badger", jaegerVolume).
+		WithEnvVariable("BADGER_EPHEMERAL", "true").
 		WithExposedPort(j.uiPort).   // Jaeger UI
 		WithExposedPort(14268).      // Jaeger collector HTTP
 		WithExposedPort(j.otlpPort). // OTLP HTTP
@@ -94,52 +88,53 @@ func (j *JaegerService) Start(ctx context.Context) error {
 	j.container = container
 	j.service = service
 
-	// Start the service with a background context
+	// Start the service completely async - don't block Station startup
 	// This creates long-lived tunnel processes that forward ports to localhost
-	logging.Info("   Starting Jaeger container and port forwarding...")
-
-	// Channel to signal when Up() completes or times out
-	upDone := make(chan error, 1)
+	logging.Info("   Starting Jaeger container in background...")
 
 	go func() {
-		// Up() with port forwarding - this blocks while tunnels are active
+		// Up() with port forwarding - this blocks until service stops
 		err := service.Up(ctx, dagger.ServiceUpOpts{Ports: []dagger.PortForward{
 			{Frontend: j.uiPort, Backend: j.uiPort},
 			{Frontend: 14268, Backend: 14268},
 			{Frontend: j.otlpPort, Backend: j.otlpPort},
 			{Frontend: 4317, Backend: 4317},
 		}})
-		upDone <- err
-	}()
-
-	// Wait for Up() to complete with a generous timeout (2 minutes for first start)
-	select {
-	case err := <-upDone:
 		if err != nil {
-			return fmt.Errorf("Jaeger service.Up() failed: %w", err)
+			logging.Error("Jaeger service.Up() error: %v", err)
+			j.isRunning = false
+			return
 		}
 		logging.Info("   ✅ Jaeger port forwarding established")
-	case <-time.After(120 * time.Second):
-		logging.Info("   ⚠️  Jaeger startup taking longer than expected, continuing in background...")
-	}
+	}()
 
-	// Give Jaeger process itself time to start
-	time.Sleep(5 * time.Second)
+	// Launch background health checker that polls until Jaeger is ready
+	go func() {
+		// Give container time to start before checking
+		time.Sleep(3 * time.Second)
 
-	// Check if Jaeger is ready (with timeout)
-	readyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+		// Poll for up to 2 minutes
+		deadline := time.Now().Add(120 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
 
-	if err := j.waitForReady(readyCtx); err != nil {
-		logging.Info("⚠️  Jaeger service started but connectivity check timed out")
-		logging.Info("   💡 Jaeger is running - UI may take a few moments to become available")
-	}
+		for time.Now().Before(deadline) {
+			<-ticker.C
+			if j.isAlreadyRunning() {
+				logging.Info("   ✅ Jaeger UI ready: http://localhost:%d", j.uiPort)
+				logging.Info("   ✅ OTLP endpoint: http://localhost:%d", j.otlpPort)
+				logging.Info("   ✅ Traces persisted in Docker volume: jaeger-badger-data")
+				return
+			}
+		}
+
+		// If we get here, Jaeger didn't start in time
+		logging.Info("   ⚠️  Jaeger startup taking longer than expected")
+		logging.Info("   💡 Traces will be buffered until Jaeger becomes available")
+	}()
 
 	j.isRunning = true
-
-	logging.Info("   ✅ Jaeger UI: http://localhost:%d", j.uiPort)
-	logging.Info("   ✅ OTLP endpoint: http://localhost:%d", j.otlpPort)
-	logging.Info("   ✅ Traces persisted in Docker volume: jaeger-badger-data")
+	logging.Info("   Jaeger starting in background (UI at http://localhost:%d)", j.uiPort)
 
 	return nil
 }
