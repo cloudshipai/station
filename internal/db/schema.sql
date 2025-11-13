@@ -364,6 +364,13 @@ CREATE TABLE IF NOT EXISTS agent_report_details (
     -- Telemetry insights (stored as JSON)
     telemetry_summary TEXT,                 -- JSON: {avg_spans, tool_usage, etc}
     
+    -- Enterprise enhancements (added 2025-11-12)
+    best_run_example TEXT,                  -- JSON: {run_id, input, output, tool_calls, duration, why_successful}
+    worst_run_example TEXT,                 -- JSON: {run_id, input, output, tool_calls, duration, why_failed}
+    tool_usage_analysis TEXT,               -- JSON: [{tool_name, use_count, success_rate, avg_duration}]
+    failure_patterns TEXT,                  -- JSON: [{pattern, frequency, examples, impact}]
+    improvement_plan TEXT,                  -- JSON: [{issue, recommendation, priority, expected_impact, concrete_example}]
+    
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     

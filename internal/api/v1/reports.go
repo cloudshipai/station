@@ -210,7 +210,7 @@ func (h *APIHandlers) generateReport(c *gin.Context) {
 	}
 
 	// Create report generator
-	reportGenerator := services.NewReportGenerator(h.repos, nil)
+	reportGenerator := services.NewReportGenerator(h.repos, h.db, nil)
 
 	// Start generation in background with independent context
 	go func() {

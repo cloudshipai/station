@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, CheckCircle, XCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle, XCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { reportsApi, benchmarksApi } from '../../api/station';
 import type { Report, AgentReportDetail, CriterionScore } from '../../types/station';
+import { EnterpriseAgentAnalysis } from '../reports/EnterpriseAgentAnalysis';
 
 interface TeamCriteria {
+  goal: string;
+  criteria: Record<string, {
+    weight: number;
+    threshold: number;
+    description: string;
+  }>;
+}
+
+interface AgentCriteria {
   goal: string;
   criteria: Record<string, {
     weight: number;
@@ -25,10 +35,17 @@ export const ReportDetailPage: React.FC = () => {
   // Parsed data
   const [teamCriteria, setTeamCriteria] = useState<TeamCriteria | null>(null);
   const [teamCriteriaScores, setTeamCriteriaScores] = useState<Record<string, CriterionScore> | null>(null);
+  const [agentCriteria, setAgentCriteria] = useState<AgentCriteria | null>(null);
+  
+  // UI state
+  const [showFullCriteria, setShowFullCriteria] = useState(false);
+  const [showAgentCriteria, setShowAgentCriteria] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
   
   // Detailed test results
   const [expandedRun, setExpandedRun] = useState<number | null>(null);
   const [runMetrics, setRunMetrics] = useState<Record<number, any[]>>({});
+  const [loadingMetrics, setLoadingMetrics] = useState<Set<number>>(new Set());
 
   // Helper to safely extract values from SQL null types
   const getSqlValue = (field: any): any => {
@@ -71,6 +88,11 @@ export const ReportDetailPage: React.FC = () => {
           if (teamCriteriaScoresStr) {
             setTeamCriteriaScores(JSON.parse(teamCriteriaScoresStr));
           }
+          
+          const agentCriteriaStr = getSqlValue(reportData.agent_criteria);
+          if (agentCriteriaStr) {
+            setAgentCriteria(JSON.parse(agentCriteriaStr));
+          }
         } catch (parseErr) {
           console.error('Failed to parse JSON fields:', parseErr);
         }
@@ -110,9 +132,43 @@ export const ReportDetailPage: React.FC = () => {
     return date.toLocaleString();
   };
 
-  // Export PDF handler
-  const handleExportPDF = () => {
-    window.print();
+  // Export PDF handler with react-pdf (dynamic import)
+  const handleExportPDF = async () => {
+    if (!report) return;
+    
+    try {
+      setExportingPDF(true);
+      
+      // Dynamically import PDF dependencies
+      const { pdf } = await import('@react-pdf/renderer');
+      const { EnterpriseReportPDF } = await import('../reports/EnterpriseReportPDF');
+      
+      // Generate PDF blob
+      const blob = await pdf(
+        React.createElement(EnterpriseReportPDF, {
+          report,
+          agentDetails,
+          teamCriteria,
+          teamCriteriaScores,
+          agentCriteria,
+        })
+      ).toBlob();
+      
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${report.name.replace(/\s+/g, '_')}_Report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
   // Fetch detailed metrics for a run
@@ -123,11 +179,32 @@ export const ReportDetailPage: React.FC = () => {
     }
     
     try {
+      setLoadingMetrics(prev => new Set(prev).add(runId));
+      console.log(`Fetching metrics for run ${runId}...`);
+      
       const response = await benchmarksApi.getMetrics(runId);
-      setRunMetrics(prev => ({ ...prev, [runId]: response.data.metrics || [] }));
+      console.log(`Received metrics for run ${runId}:`, response.data);
+      
+      const metrics = response.data.metrics || [];
+      console.log(`Storing ${metrics.length} metrics for run ${runId}`);
+      
+      setRunMetrics(prev => ({ ...prev, [runId]: metrics }));
       setExpandedRun(runId);
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Failed to fetch metrics for run ${runId}:`, err);
+      
+      // Store empty array to indicate no metrics available
+      setRunMetrics(prev => ({ ...prev, [runId]: [] }));
+      
+      // Show user-friendly message
+      const errorMsg = err?.response?.data?.error || 'This run has not been individually benchmarked yet. Individual run metrics are created when you run "stn benchmark evaluate <run_id>".';
+      alert(`Run #${runId}: ${errorMsg}`);
+    } finally {
+      setLoadingMetrics(prev => {
+        const next = new Set(prev);
+        next.delete(runId);
+        return next;
+      });
     }
   };
 
@@ -220,10 +297,20 @@ export const ReportDetailPage: React.FC = () => {
             
             <button 
               onClick={handleExportPDF}
-              className="flex items-center gap-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors"
+              disabled={exportingPDF}
+              className="flex items-center gap-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors disabled:opacity-50 disabled:cursor-wait"
             >
-              <Download className="h-4 w-4" />
-              Export PDF
+              {exportingPDF ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-tokyo-bg border-t-transparent rounded-full animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Export PDF
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -240,39 +327,208 @@ export const ReportDetailPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex-1">
-                <h2 className="text-xl font-semibold text-tokyo-cyan mb-2">
-                  Benchmark Goal
-                </h2>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-semibold text-tokyo-cyan">
+                    Team Benchmark Criteria
+                  </h2>
+                  <button
+                    onClick={() => setShowFullCriteria(!showFullCriteria)}
+                    className="flex items-center gap-2 px-3 py-1 text-sm font-mono text-tokyo-blue hover:text-tokyo-blue5 transition-colors"
+                  >
+                    {showFullCriteria ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Hide Details
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Show Details
+                      </>
+                    )}
+                  </button>
+                </div>
                 <p className="text-base text-tokyo-fg leading-relaxed mb-4">
                   {teamCriteria.goal}
                 </p>
                 
-                <div className="bg-tokyo-bg/50 rounded-lg p-4 border border-tokyo-dark3">
-                  <h3 className="text-sm font-semibold text-tokyo-comment mb-3 uppercase tracking-wide">
-                    Success Criteria
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {Object.entries(teamCriteria.criteria).map(([name, config]) => (
-                      <div key={name} className="flex items-center gap-3 bg-tokyo-bg-dark/50 rounded p-3 border border-tokyo-dark3">
-                        <div className="flex-shrink-0">
-                          <div className="h-10 w-10 rounded bg-tokyo-blue/20 flex items-center justify-center">
-                            <span className="text-lg font-bold text-tokyo-blue">
-                              {(config.weight * 100).toFixed(0)}%
-                            </span>
+                {/* Compact View */}
+                {!showFullCriteria && (
+                  <div className="bg-tokyo-bg/50 rounded-lg p-4 border border-tokyo-dark3">
+                    <h3 className="text-sm font-semibold text-tokyo-comment mb-3 uppercase tracking-wide">
+                      Success Criteria Summary
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {Object.entries(teamCriteria.criteria).map(([name, config]) => {
+                        const score = teamCriteriaScores?.[name]?.score || 0;
+                        const passed = score >= config.threshold;
+                        
+                        return (
+                          <div key={name} className="flex items-center gap-3 bg-tokyo-bg-dark/50 rounded p-3 border border-tokyo-dark3">
+                            <div className="flex-shrink-0">
+                              <div className="h-10 w-10 rounded bg-tokyo-blue/20 flex items-center justify-center">
+                                <span className="text-lg font-bold text-tokyo-blue">
+                                  {(config.weight * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold text-tokyo-fg capitalize truncate">
+                                {name.replace(/_/g, ' ')}
+                              </div>
+                              <div className="text-xs text-tokyo-comment flex items-center gap-2">
+                                <span>Target: {config.threshold.toFixed(1)}</span>
+                                {passed ? (
+                                  <CheckCircle className="h-3 w-3 text-tokyo-green" />
+                                ) : (
+                                  <XCircle className="h-3 w-3 text-tokyo-red" />
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-tokyo-fg capitalize truncate">
-                            {name.replace(/_/g, ' ')}
-                          </div>
-                          <div className="text-xs text-tokyo-comment">
-                            Threshold: {config.threshold.toFixed(1)}/10
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
+                    </div>
                   </div>
+                )}
+
+                {/* Expanded View */}
+                {showFullCriteria && (
+                  <div className="space-y-3">
+                    {Object.entries(teamCriteria.criteria).map(([name, config]) => {
+                      const score = teamCriteriaScores?.[name]?.score || 0;
+                      const passed = score >= config.threshold;
+                      const reasoning = teamCriteriaScores?.[name]?.reasoning;
+                      
+                      return (
+                        <div key={name} className="bg-tokyo-bg/50 rounded-lg p-4 border-2 border-tokyo-dark3">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <h4 className="text-base font-mono font-bold text-tokyo-fg capitalize">
+                                  {name.replace(/_/g, ' ')}
+                                </h4>
+                                {passed ? (
+                                  <CheckCircle className="h-5 w-5 text-tokyo-green" />
+                                ) : (
+                                  <XCircle className="h-5 w-5 text-tokyo-red" />
+                                )}
+                              </div>
+                              <p className="text-sm text-tokyo-comment mb-2">
+                                {config.description}
+                              </p>
+                              <div className="flex items-center gap-4 text-xs font-mono">
+                                <span className="text-tokyo-blue">
+                                  Weight: {(config.weight * 100).toFixed(0)}%
+                                </span>
+                                <span className="text-tokyo-comment">
+                                  Threshold: {config.threshold.toFixed(1)}/10
+                                </span>
+                                <span className={passed ? 'text-tokyo-green' : 'text-tokyo-red'}>
+                                  Score: {score.toFixed(1)}/10
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`text-3xl font-mono font-bold ${score >= 9 ? 'text-tokyo-green' : score >= 7 ? 'text-tokyo-yellow' : 'text-tokyo-red'}`}>
+                                {score.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-tokyo-comment mt-1">
+                                / 10
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Progress bar */}
+                          <div className="relative w-full h-2 bg-tokyo-dark3 rounded-full overflow-hidden mb-3">
+                            <div
+                              className={`h-full ${score >= 9 ? 'bg-tokyo-green' : score >= 7 ? 'bg-tokyo-yellow' : 'bg-tokyo-red'}`}
+                              style={{ width: `${(score / 10) * 100}%` }}
+                            />
+                          </div>
+
+                          {reasoning && (
+                            <div className="mt-3 p-3 bg-tokyo-bg-dark/30 rounded border border-tokyo-dark3">
+                              <p className="text-xs font-mono text-tokyo-comment leading-relaxed">
+                                <span className="font-bold text-tokyo-fg">Reasoning: </span>
+                                {reasoning}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Agent Criteria Section (if exists) */}
+        {agentCriteria && (
+          <div className="p-6 bg-gradient-to-r from-tokyo-purple/10 to-tokyo-pink/10 border-2 border-tokyo-purple rounded-lg">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="h-12 w-12 rounded-lg bg-tokyo-purple/20 flex items-center justify-center">
+                  <span className="text-2xl">🤖</span>
                 </div>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-semibold text-tokyo-purple">
+                    Agent Performance Criteria
+                  </h2>
+                  <button
+                    onClick={() => setShowAgentCriteria(!showAgentCriteria)}
+                    className="flex items-center gap-2 px-3 py-1 text-sm font-mono text-tokyo-purple hover:opacity-80 transition-colors"
+                  >
+                    {showAgentCriteria ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Hide Details
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Show Details
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-base text-tokyo-fg leading-relaxed mb-4">
+                  {agentCriteria.goal}
+                </p>
+                
+                {showAgentCriteria && (
+                  <div className="bg-tokyo-bg/50 rounded-lg p-4 border border-tokyo-dark3">
+                    <h3 className="text-sm font-semibold text-tokyo-comment mb-3 uppercase tracking-wide">
+                      Individual Agent Evaluation Criteria
+                    </h3>
+                    <div className="space-y-2">
+                      {Object.entries(agentCriteria.criteria).map(([name, config]) => (
+                        <div key={name} className="flex items-center justify-between p-3 bg-tokyo-bg-dark/50 rounded border border-tokyo-dark3">
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold text-tokyo-fg capitalize">
+                              {name.replace(/_/g, ' ')}
+                            </div>
+                            <div className="text-xs text-tokyo-comment mt-1">
+                              {config.description}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs font-mono">
+                              <span className="text-tokyo-purple">
+                                Weight: {(config.weight * 100).toFixed(0)}%
+                              </span>
+                              <span className="text-tokyo-comment">
+                                Threshold: {config.threshold.toFixed(1)}/10
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -577,6 +833,31 @@ export const ReportDetailPage: React.FC = () => {
           </div>
         )}
 
+        {/* Enterprise Agent Analysis - Temporarily disabled to isolate PDF issue */}
+        {agentDetails.length > 0 && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-mono font-bold text-tokyo-cyan flex items-center gap-3">
+              <span>📊</span>
+              <span>Enterprise Performance Analysis</span>
+            </h2>
+            <div className="p-6 bg-tokyo-bg-dark border border-tokyo-blue rounded-lg">
+              <p className="text-tokyo-fg text-lg mb-4">📄 Enterprise Analysis Available in PDF Export</p>
+              <p className="text-tokyo-comment">
+                The detailed enterprise analysis section is being optimized. 
+                Click the <span className="text-tokyo-green font-bold">"Export PDF"</span> button above to view the complete report with:
+              </p>
+              <ul className="list-disc list-inside mt-4 space-y-2 text-tokyo-comment">
+                <li>Cost projection charts across multiple frequencies</li>
+                <li>Agent performance comparison charts</li>
+                <li>Best vs worst run examples with full details</li>
+                <li>Tool usage statistics and success rates</li>
+                <li>Failure pattern analysis</li>
+                <li>Actionable improvement recommendations</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
         {/* Detailed Test Results Breakdown - Grouped by Agent */}
         {agentDetails.length > 0 && (
           <div className="p-6 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg">
@@ -637,15 +918,19 @@ export const ReportDetailPage: React.FC = () => {
                         {runIds.map((runId) => {
                           const isExpanded = expandedRun === runId;
                           const metrics = runMetrics[runId] || [];
+                          const isLoading = loadingMetrics.has(runId);
 
                           return (
                             <div key={runId} className="border border-tokyo-dark3 rounded bg-tokyo-bg-dark/30">
                               <button
                                 onClick={() => fetchRunMetrics(runId)}
-                                className="w-full p-3 flex items-center justify-between hover:bg-tokyo-bg-highlight transition-colors"
+                                disabled={isLoading}
+                                className="w-full p-3 flex items-center justify-between hover:bg-tokyo-bg-highlight transition-colors disabled:opacity-50 disabled:cursor-wait"
                               >
                                 <div className="flex items-center gap-3">
-                                  {isExpanded ? (
+                                  {isLoading ? (
+                                    <div className="h-4 w-4 border-2 border-tokyo-cyan border-t-transparent rounded-full animate-spin" />
+                                  ) : isExpanded ? (
                                     <ChevronDown className="h-4 w-4 text-tokyo-cyan" />
                                   ) : (
                                     <ChevronRight className="h-4 w-4 text-tokyo-comment" />
@@ -655,7 +940,9 @@ export const ReportDetailPage: React.FC = () => {
                                       Run #{runId}
                                     </div>
                                     <div className="text-xs font-mono text-tokyo-comment mt-0.5">
-                                      {metrics.length > 0 ? (
+                                      {isLoading ? (
+                                        'Loading quality metrics...'
+                                      ) : metrics.length > 0 ? (
                                         <>
                                           {metrics.filter((m: any) => m.passed).length}/{metrics.length} tests passed •
                                           ${metrics.reduce((sum: number, m: any) => sum + (m.judge_cost || 0), 0).toFixed(6)} cost
@@ -667,12 +954,23 @@ export const ReportDetailPage: React.FC = () => {
                                   </div>
                                 </div>
                                 <div className="text-xs font-mono text-tokyo-cyan">
-                                  {isExpanded ? 'Hide' : 'Show Tests'}
+                                  {isLoading ? 'Loading...' : isExpanded ? 'Hide' : 'Show Tests'}
                                 </div>
                               </button>
 
-                        {isExpanded && metrics.length > 0 && (
+                        {isExpanded && (
                           <div className="p-4 border-t border-tokyo-dark3 bg-tokyo-bg-dark/50">
+                            {metrics.length === 0 ? (
+                              <div className="text-center py-8">
+                                <div className="text-tokyo-comment mb-2">
+                                  ℹ️ No individual benchmark metrics available for this run
+                                </div>
+                                <div className="text-xs text-tokyo-comment">
+                                  To evaluate this run individually, use: <code className="bg-tokyo-bg px-2 py-1 rounded">stn benchmark evaluate {runId}</code>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
                             <div className="grid grid-cols-1 gap-4">
                               {metrics.map((metric: any, idx: number) => (
                                 <div
@@ -768,18 +1066,20 @@ export const ReportDetailPage: React.FC = () => {
                                 Total cost: ${metrics.reduce((sum: number, m: any) => sum + (m.judge_cost || 0), 0).toFixed(6)}
                               </div>
                             </div>
+                              </>
+                            )}
                           </div>
                         )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      </div>
-    )}
+            </div>
+          )}
       </div>
     </div>
     </>

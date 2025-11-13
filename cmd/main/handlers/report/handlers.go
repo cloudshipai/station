@@ -232,7 +232,7 @@ func (h *ReportHandler) generateReport(reportID int64) error {
 	}
 
 	// Create report generator service
-	reportGenerator := services.NewReportGenerator(repos, nil) // Uses default config
+	reportGenerator := services.NewReportGenerator(repos, database.Conn(), nil) // Uses default config
 
 	// Generate report
 	styles := common.GetCLIStyles(h.themeManager)

@@ -287,6 +287,10 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 			// Extract metadata from result.Extra
 			var stepsTaken int64
 			var toolsUsed *int64
+			var inputTokens, outputTokens, totalTokens *int64
+			var duration *float64
+			var modelName *string
+
 			if result.Extra != nil {
 				if steps, ok := result.Extra["steps_taken"].(int64); ok {
 					stepsTaken = steps
@@ -295,9 +299,32 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 					toolsUsedVal := int64(tools)
 					toolsUsed = &toolsUsedVal
 				}
+
+				// Extract token usage
+				if tokenUsage, ok := result.Extra["token_usage"].(map[string]interface{}); ok {
+					if input, ok := tokenUsage["input_tokens"].(int64); ok {
+						inputTokens = &input
+					}
+					if output, ok := tokenUsage["output_tokens"].(int64); ok {
+						outputTokens = &output
+					}
+					if total, ok := tokenUsage["total_tokens"].(int64); ok {
+						totalTokens = &total
+					}
+				}
+
+				// Extract duration
+				if dur, ok := result.Extra["duration"].(float64); ok {
+					duration = &dur
+				}
+
+				// Extract model name
+				if model, ok := result.Extra["model_name"].(string); ok {
+					modelName = &model
+				}
 			}
 
-			// Update run with completion details
+			// Update run with completion details including token usage
 			completedAt := time.Now()
 			updateErr := s.repos.AgentRuns.UpdateCompletionWithMetadata(
 				execCtx,
@@ -307,8 +334,8 @@ func (s *SchedulerService) executeScheduledAgent(agentID int64) {
 				nil, nil, // toolCalls, executionSteps - not available in Message format
 				"completed",
 				&completedAt,
-				nil, nil, nil, // token usage not in Message format
-				nil, nil, // duration, modelName
+				inputTokens, outputTokens, totalTokens,
+				duration, modelName,
 				toolsUsed,
 				nil, // error
 			)

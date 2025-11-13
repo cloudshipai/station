@@ -84,8 +84,13 @@ INSERT INTO agent_report_details (
     strengths,
     weaknesses,
     recommendations,
-    telemetry_summary
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    telemetry_summary,
+    best_run_example,
+    worst_run_example,
+    tool_usage_analysis,
+    failure_patterns,
+    improvement_plan
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetAgentReportDetails :many

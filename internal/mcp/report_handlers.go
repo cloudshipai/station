@@ -112,7 +112,7 @@ func (s *Server) handleGenerateReport(ctx context.Context, request mcp.CallToolR
 		genCtx := context.Background()
 
 		// Create report generator
-		generator := services.NewReportGenerator(s.repos, nil)
+		generator := services.NewReportGenerator(s.repos, s.db.Conn(), nil)
 
 		// Generate report (this runs benchmarks on all matching runs)
 		if err := generator.GenerateReport(genCtx, reportID); err != nil {

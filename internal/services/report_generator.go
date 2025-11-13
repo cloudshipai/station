@@ -9,9 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"station/internal/config"
 	"station/internal/db/queries"
 	"station/internal/db/repositories"
 	"station/internal/logging"
+	"station/pkg/benchmark"
 	"station/pkg/models"
 
 	"github.com/firebase/genkit/go/ai"
@@ -24,6 +26,7 @@ type ReportGenerator struct {
 	genkitProvider     *GenKitProvider
 	judgeModel         string
 	maxConcurrentEvals int
+	db                 *sql.DB // Database connection for benchmark evaluations
 }
 
 // ReportGeneratorConfig configures the report generator
@@ -33,7 +36,7 @@ type ReportGeneratorConfig struct {
 }
 
 // NewReportGenerator creates a new report generator
-func NewReportGenerator(repos *repositories.Repositories, config *ReportGeneratorConfig) *ReportGenerator {
+func NewReportGenerator(repos *repositories.Repositories, db *sql.DB, config *ReportGeneratorConfig) *ReportGenerator {
 	if config == nil {
 		config = &ReportGeneratorConfig{
 			JudgeModel:         "gpt-4o-mini",
@@ -53,6 +56,7 @@ func NewReportGenerator(repos *repositories.Repositories, config *ReportGenerato
 		genkitProvider:     NewGenKitProvider(),
 		judgeModel:         config.JudgeModel,
 		maxConcurrentEvals: config.MaxConcurrentEvals,
+		db:                 db,
 	}
 }
 
@@ -82,6 +86,73 @@ type TeamEvaluation struct {
 	Reasoning      string                    `json:"reasoning"`
 	Summary        string                    `json:"summary"`
 	CriteriaScores map[string]CriterionScore `json:"criteria_scores"`
+	CostAnalysis   *TeamCostAnalysis         `json:"cost_analysis,omitempty"`
+}
+
+// RunExample represents a detailed example of a single run
+type RunExample struct {
+	RunID       int64    `json:"run_id"`
+	Input       string   `json:"input"`
+	Output      string   `json:"output"`
+	ToolCalls   []string `json:"tool_calls"`
+	Duration    float64  `json:"duration"`
+	TokenCount  int64    `json:"token_count"`
+	Status      string   `json:"status"`
+	Explanation string   `json:"explanation"` // Why this run succeeded/failed
+}
+
+// ToolUsageStats represents usage statistics for a single tool
+type ToolUsageStats struct {
+	ToolName    string  `json:"tool_name"`
+	UseCount    int     `json:"use_count"`
+	SuccessRate float64 `json:"success_rate"`
+	AvgDuration float64 `json:"avg_duration"`
+}
+
+// FailurePattern represents a recurring failure pattern
+type FailurePattern struct {
+	Pattern   string   `json:"pattern"`
+	Frequency int      `json:"frequency"`
+	Examples  []string `json:"examples"` // Run IDs
+	Impact    string   `json:"impact"`   // High/Medium/Low
+}
+
+// ImprovementAction represents a specific, actionable improvement
+type ImprovementAction struct {
+	Issue           string `json:"issue"`
+	Recommendation  string `json:"recommendation"`
+	Priority        string `json:"priority"`         // High/Medium/Low
+	ExpectedImpact  string `json:"expected_impact"`  // e.g., "+15% success rate"
+	ConcreteExample string `json:"concrete_example"` // Actual run showing the issue
+}
+
+// CostProjection represents cost estimates at different execution frequencies
+type CostProjection struct {
+	Frequency       string  `json:"frequency"`         // "every_5_minutes", "hourly", "daily", "weekly", "monthly"
+	RunsPerPeriod   int     `json:"runs_per_period"`   // How many runs in the period
+	CostPerRun      float64 `json:"cost_per_run"`      // Average cost per agent run
+	TotalCost       float64 `json:"total_cost"`        // Total cost for the period
+	TokensPerPeriod int64   `json:"tokens_per_period"` // Total tokens consumed
+}
+
+// TeamCostAnalysis represents comprehensive cost analysis for the entire team
+type TeamCostAnalysis struct {
+	CurrentAvgCostPerRun   float64 `json:"current_avg_cost_per_run"`
+	CurrentAvgTokensPerRun int64   `json:"current_avg_tokens_per_run"`
+	CurrentAvgDuration     float64 `json:"current_avg_duration"`
+	TotalTeamAgents        int     `json:"total_team_agents"`
+
+	// Per-agent breakdown
+	AgentCosts         map[string]float64 `json:"agent_costs"` // agent_name -> avg_cost
+	MostExpensiveAgent string             `json:"most_expensive_agent"`
+	MostEfficientAgent string             `json:"most_efficient_agent"` // Best cost/performance ratio
+
+	// Projections at different frequencies
+	Projections []CostProjection `json:"projections"`
+
+	// ROI and value analysis
+	EstimatedValuePerRun float64 `json:"estimated_value_per_run"` // If calculable from criteria
+	ROIRatio             float64 `json:"roi_ratio"`               // Value / Cost
 }
 
 // AgentEvaluation represents the agent-level evaluation result
@@ -101,7 +172,15 @@ type AgentEvaluation struct {
 	AvgTokens       int64
 	AvgCost         float64
 	SuccessRate     float64
-	Error           error
+
+	// Enhanced enterprise data
+	BestRunExample    *RunExample         `json:"best_run_example,omitempty"`
+	WorstRunExample   *RunExample         `json:"worst_run_example,omitempty"`
+	ToolUsageAnalysis []ToolUsageStats    `json:"tool_usage_analysis,omitempty"`
+	FailurePatterns   []FailurePattern    `json:"failure_patterns,omitempty"`
+	ImprovementPlan   []ImprovementAction `json:"improvement_plan,omitempty"`
+
+	Error error
 }
 
 // GenerateReport generates a complete report with team and agent evaluations
@@ -151,6 +230,16 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		return rg.failReport(ctx, reportID, fmt.Errorf("no runs found to analyze"))
 	}
 
+	// 5.5. Run benchmark evaluations on all runs to populate individual quality metrics
+	if err := rg.updateReportStatus(ctx, reportID, "evaluating_benchmarks", 15, "Running quality benchmarks on all runs..."); err != nil {
+		logging.Info("Failed to update report status: %v", err)
+	}
+
+	if err := rg.evaluateBenchmarksForRuns(ctx, allRuns); err != nil {
+		// Don't fail the report - just log the error and continue
+		logging.Info("Warning: benchmark evaluation failed (continuing with report): %v", err)
+	}
+
 	// 6. Evaluate team performance
 	teamEval, err := rg.evaluateTeamPerformance(ctx, teamCriteria, allRuns, agents)
 	if err != nil {
@@ -192,6 +281,16 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 	// 10. Evaluate agents in parallel
 	agentEvals := rg.evaluateAgentsParallel(ctx, reportID, agents, agentCriteria)
 
+	// 10.5. Calculate comprehensive team cost analysis
+	costAnalysis := rg.calculateTeamCostAnalysis(agentEvals, agents)
+	teamEval.CostAnalysis = costAnalysis
+
+	// Log cost analysis summary
+	_ = costAnalysis // Use the cost analysis in teamEval
+	logging.Info("Team cost analysis: Avg cost/run $%.4f, Monthly projection (daily runs): $%.2f",
+		costAnalysis.CurrentAvgCostPerRun,
+		costAnalysis.CurrentAvgCostPerRun*float64(len(agents))*30)
+
 	// 11. Save agent evaluation results
 	totalLLMTokens := int64(0)
 	totalLLMCost := float64(0)
@@ -209,6 +308,13 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		weaknessesJSON, _ := json.Marshal(eval.Weaknesses)
 		recommendationsJSON, _ := json.Marshal(eval.Recommendations)
 		runIDsStr := fmt.Sprintf("%v", eval.RunIDs)
+
+		// Marshal enhanced enterprise data
+		bestRunJSON, _ := json.Marshal(eval.BestRunExample)
+		worstRunJSON, _ := json.Marshal(eval.WorstRunExample)
+		toolUsageJSON, _ := json.Marshal(eval.ToolUsageAnalysis)
+		failurePatternsJSON, _ := json.Marshal(eval.FailurePatterns)
+		improvementPlanJSON, _ := json.Marshal(eval.ImprovementPlan)
 
 		if _, err := rg.repos.Reports.CreateAgentReportDetail(ctx, queries.CreateAgentReportDetailParams{
 			ReportID:           reportID,
@@ -228,6 +334,12 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 			Weaknesses:         sql.NullString{String: string(weaknessesJSON), Valid: true},
 			Recommendations:    sql.NullString{String: string(recommendationsJSON), Valid: true},
 			TelemetrySummary:   sql.NullString{},
+			// Enterprise enhancements
+			BestRunExample:    sql.NullString{String: string(bestRunJSON), Valid: len(bestRunJSON) > 2},
+			WorstRunExample:   sql.NullString{String: string(worstRunJSON), Valid: len(worstRunJSON) > 2},
+			ToolUsageAnalysis: sql.NullString{String: string(toolUsageJSON), Valid: len(toolUsageJSON) > 2},
+			FailurePatterns:   sql.NullString{String: string(failurePatternsJSON), Valid: len(failurePatternsJSON) > 2},
+			ImprovementPlan:   sql.NullString{String: string(improvementPlanJSON), Valid: len(improvementPlanJSON) > 2},
 		}); err != nil {
 			logging.Info("Failed to save agent report detail for %s: %v", eval.AgentName, err)
 			continue
@@ -315,13 +427,16 @@ func (rg *ReportGenerator) evaluateTeamPerformance(ctx context.Context, criteria
 
 	var teamEval TeamEvaluation
 	if err := json.Unmarshal([]byte(cleanedResponse), &teamEval); err != nil {
+		logging.Info("ERROR: Failed to parse LLM response. Raw response length: %d", len(response))
+		logging.Info("ERROR: Cleaned response length: %d", len(cleanedResponse))
+		logging.Info("ERROR: First 500 chars of cleaned response: %s", cleanedResponse[:min(500, len(cleanedResponse))])
 		return nil, fmt.Errorf("failed to parse team evaluation response: %w", err)
 	}
 
 	return &teamEval, nil
 }
 
-// stripMarkdownCodeBlocks removes markdown code block delimiters (```json or ``` )
+// stripMarkdownCodeBlocks removes markdown code block delimiters and fixes common JSON issues
 func stripMarkdownCodeBlocks(response string) string {
 	// Remove opening code block with optional language identifier
 	response = strings.TrimSpace(response)
@@ -336,7 +451,24 @@ func stripMarkdownCodeBlocks(response string) string {
 		response = strings.TrimSuffix(response, "```")
 	}
 
-	return strings.TrimSpace(response)
+	response = strings.TrimSpace(response)
+
+	// Try to fix common JSON formatting issues by doing a best-effort parse and re-encode
+	// This handles cases where the LLM returns valid-looking JSON with unescaped newlines
+	var rawJSON interface{}
+	decoder := json.NewDecoder(strings.NewReader(response))
+	decoder.UseNumber() // Preserve number precision
+
+	if err := decoder.Decode(&rawJSON); err == nil {
+		// Successfully parsed, re-encode cleanly
+		if cleanBytes, err := json.Marshal(rawJSON); err == nil {
+			return string(cleanBytes)
+		}
+	}
+
+	// If parsing failed, return the cleaned response as-is
+	// The caller will handle the error
+	return response
 }
 
 func (rg *ReportGenerator) evaluateAgentsParallel(ctx context.Context, reportID int64, agents []models.Agent, agentCriteria map[int64]map[string]EvaluationCriterion) []AgentEvaluation {
@@ -394,6 +526,16 @@ func (rg *ReportGenerator) evaluateAgent(ctx context.Context, agent models.Agent
 	}
 
 	metrics := rg.calculateAgentMetrics(runs)
+
+	// Extract best and worst run examples
+	bestRun, worstRun := rg.findBestAndWorstRuns(runs)
+
+	// Analyze tool usage patterns
+	toolUsage := rg.analyzeToolUsage(runs)
+
+	// Identify failure patterns
+	failurePatterns := rg.identifyFailurePatterns(runs)
+
 	prompt := rg.buildAgentEvaluationPrompt(agent, runs, criteria, metrics)
 
 	response, err := rg.callLLMJudge(ctx, prompt)
@@ -431,6 +573,9 @@ func (rg *ReportGenerator) evaluateAgent(ctx context.Context, agent models.Agent
 		runIDs[i] = run.ID
 	}
 
+	// Build improvement plan based on failures and weaknesses
+	improvementPlan := rg.buildImprovementPlan(runs, failurePatterns, judgeResult.Weaknesses)
+
 	return AgentEvaluation{
 		AgentID:         agent.ID,
 		AgentName:       agent.Name,
@@ -447,6 +592,13 @@ func (rg *ReportGenerator) evaluateAgent(ctx context.Context, agent models.Agent
 		AvgTokens:       metrics.AvgTokens,
 		AvgCost:         metrics.AvgCost,
 		SuccessRate:     metrics.SuccessRate,
+
+		// Enterprise enhancements
+		BestRunExample:    bestRun,
+		WorstRunExample:   worstRun,
+		ToolUsageAnalysis: toolUsage,
+		FailurePatterns:   failurePatterns,
+		ImprovementPlan:   improvementPlan,
 	}
 }
 
@@ -636,4 +788,437 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// findBestAndWorstRuns identifies the best and worst performing runs
+func (rg *ReportGenerator) findBestAndWorstRuns(runs []queries.AgentRun) (*RunExample, *RunExample) {
+	if len(runs) == 0 {
+		return nil, nil
+	}
+
+	var bestRun, worstRun *queries.AgentRun
+	bestScore := -1.0
+	worstScore := 999999.0
+
+	for i := range runs {
+		run := &runs[i]
+
+		// Score calculation: prioritize completed runs, then by duration and tokens
+		score := 0.0
+		if run.Status == "completed" {
+			score = 100.0
+			// Prefer faster, more efficient runs
+			if run.DurationSeconds.Valid && run.DurationSeconds.Float64 > 0 {
+				score -= run.DurationSeconds.Float64 / 10.0
+			}
+			if run.TotalTokens.Valid && run.TotalTokens.Int64 > 0 {
+				score -= float64(run.TotalTokens.Int64) / 1000.0
+			}
+		} else {
+			score = 0.0 // Failed runs
+		}
+
+		if score > bestScore {
+			bestScore = score
+			bestRun = run
+		}
+		if score < worstScore {
+			worstScore = score
+			worstRun = run
+		}
+	}
+
+	var best, worst *RunExample
+	if bestRun != nil {
+		best = &RunExample{
+			RunID:       bestRun.ID,
+			Input:       bestRun.Task,
+			Output:      bestRun.FinalResponse,
+			Status:      bestRun.Status,
+			Explanation: "This run completed successfully with good efficiency",
+		}
+		if bestRun.ToolCalls.Valid {
+			tools := []string{}
+			var toolCalls []map[string]interface{}
+			if err := json.Unmarshal([]byte(bestRun.ToolCalls.String), &toolCalls); err == nil {
+				for _, tc := range toolCalls {
+					if name, ok := tc["tool_name"].(string); ok {
+						tools = append(tools, name)
+					}
+				}
+			}
+			best.ToolCalls = tools
+		}
+		if bestRun.DurationSeconds.Valid {
+			best.Duration = bestRun.DurationSeconds.Float64
+		}
+		if bestRun.TotalTokens.Valid {
+			best.TokenCount = bestRun.TotalTokens.Int64
+		}
+	}
+
+	if worstRun != nil && worstRun.ID != bestRun.ID {
+		worst = &RunExample{
+			RunID:  worstRun.ID,
+			Input:  worstRun.Task,
+			Output: worstRun.FinalResponse,
+			Status: worstRun.Status,
+		}
+		if worstRun.Status != "completed" {
+			worst.Explanation = fmt.Sprintf("Run failed with status: %s", worstRun.Status)
+			if worstRun.Error.Valid {
+				worst.Explanation += fmt.Sprintf(" - Error: %s", worstRun.Error.String)
+			}
+		} else {
+			worst.Explanation = "This run completed but was slower or less efficient than others"
+		}
+		if worstRun.ToolCalls.Valid {
+			tools := []string{}
+			var toolCalls []map[string]interface{}
+			if err := json.Unmarshal([]byte(worstRun.ToolCalls.String), &toolCalls); err == nil {
+				for _, tc := range toolCalls {
+					if name, ok := tc["tool_name"].(string); ok {
+						tools = append(tools, name)
+					}
+				}
+			}
+			worst.ToolCalls = tools
+		}
+		if worstRun.DurationSeconds.Valid {
+			worst.Duration = worstRun.DurationSeconds.Float64
+		}
+		if worstRun.TotalTokens.Valid {
+			worst.TokenCount = worstRun.TotalTokens.Int64
+		}
+	}
+
+	return best, worst
+}
+
+// analyzeToolUsage analyzes tool usage patterns across runs
+func (rg *ReportGenerator) analyzeToolUsage(runs []queries.AgentRun) []ToolUsageStats {
+	toolStats := make(map[string]*ToolUsageStats)
+
+	for _, run := range runs {
+		if !run.ToolCalls.Valid {
+			continue
+		}
+
+		var toolCalls []map[string]interface{}
+		if err := json.Unmarshal([]byte(run.ToolCalls.String), &toolCalls); err != nil {
+			continue
+		}
+
+		for _, tc := range toolCalls {
+			toolName, ok := tc["tool_name"].(string)
+			if !ok {
+				continue
+			}
+
+			if _, exists := toolStats[toolName]; !exists {
+				toolStats[toolName] = &ToolUsageStats{
+					ToolName: toolName,
+				}
+			}
+
+			toolStats[toolName].UseCount++
+			if run.Status == "completed" {
+				toolStats[toolName].SuccessRate++
+			}
+		}
+	}
+
+	// Calculate final success rates and convert to slice
+	result := []ToolUsageStats{}
+	for _, stats := range toolStats {
+		if stats.UseCount > 0 {
+			stats.SuccessRate = stats.SuccessRate / float64(stats.UseCount)
+		}
+		result = append(result, *stats)
+	}
+
+	return result
+}
+
+// identifyFailurePatterns identifies common failure patterns
+func (rg *ReportGenerator) identifyFailurePatterns(runs []queries.AgentRun) []FailurePattern {
+	errorCounts := make(map[string]*FailurePattern)
+
+	for _, run := range runs {
+		if run.Status == "completed" {
+			continue
+		}
+
+		errorKey := run.Status
+		if run.Error.Valid && run.Error.String != "" {
+			errorKey = run.Error.String
+		}
+
+		if _, exists := errorCounts[errorKey]; !exists {
+			errorCounts[errorKey] = &FailurePattern{
+				Pattern:  errorKey,
+				Examples: []string{},
+				Impact:   "Medium",
+			}
+		}
+
+		errorCounts[errorKey].Frequency++
+		if len(errorCounts[errorKey].Examples) < 3 {
+			errorCounts[errorKey].Examples = append(errorCounts[errorKey].Examples, fmt.Sprintf("%d", run.ID))
+		}
+	}
+
+	// Determine impact based on frequency
+	result := []FailurePattern{}
+	for _, pattern := range errorCounts {
+		if pattern.Frequency >= 5 {
+			pattern.Impact = "High"
+		} else if pattern.Frequency >= 2 {
+			pattern.Impact = "Medium"
+		} else {
+			pattern.Impact = "Low"
+		}
+		result = append(result, *pattern)
+	}
+
+	return result
+}
+
+// buildImprovementPlan creates actionable improvement recommendations
+func (rg *ReportGenerator) buildImprovementPlan(runs []queries.AgentRun, patterns []FailurePattern, weaknesses []string) []ImprovementAction {
+	plan := []ImprovementAction{}
+
+	// Address high-impact failure patterns first
+	for _, pattern := range patterns {
+		if pattern.Impact == "High" {
+			plan = append(plan, ImprovementAction{
+				Issue:           fmt.Sprintf("Recurring failure: %s", pattern.Pattern),
+				Recommendation:  "Investigate root cause and implement error handling",
+				Priority:        "High",
+				ExpectedImpact:  fmt.Sprintf("Reduce failures by %d%%", pattern.Frequency*10),
+				ConcreteExample: fmt.Sprintf("See run IDs: %v", pattern.Examples),
+			})
+		}
+	}
+
+	// Address weaknesses identified by LLM judge
+	for i, weakness := range weaknesses {
+		priority := "Medium"
+		if i == 0 {
+			priority = "High" // First weakness is typically most critical
+		}
+
+		plan = append(plan, ImprovementAction{
+			Issue:           weakness,
+			Recommendation:  "Review agent prompt and tool selection to address this weakness",
+			Priority:        priority,
+			ExpectedImpact:  "+10-15% performance improvement",
+			ConcreteExample: "Review failed runs for specific examples",
+		})
+	}
+
+	// Check for efficiency issues
+	totalDuration := 0.0
+	slowRuns := 0
+	for _, run := range runs {
+		if run.DurationSeconds.Valid {
+			totalDuration += run.DurationSeconds.Float64
+			if run.DurationSeconds.Float64 > 60.0 {
+				slowRuns++
+			}
+		}
+	}
+
+	if slowRuns > len(runs)/3 {
+		plan = append(plan, ImprovementAction{
+			Issue:           fmt.Sprintf("%d runs exceeded 60 seconds", slowRuns),
+			Recommendation:  "Optimize tool calls and reduce unnecessary processing",
+			Priority:        "Medium",
+			ExpectedImpact:  "-20-30% execution time",
+			ConcreteExample: "Review slow runs for optimization opportunities",
+		})
+	}
+
+	return plan
+}
+
+// calculateTeamCostAnalysis creates comprehensive cost analysis with projections
+func (rg *ReportGenerator) calculateTeamCostAnalysis(agentEvals []AgentEvaluation, agents []models.Agent) *TeamCostAnalysis {
+	analysis := &TeamCostAnalysis{
+		TotalTeamAgents: len(agents),
+		AgentCosts:      make(map[string]float64),
+	}
+
+	totalCost := 0.0
+	totalTokens := int64(0)
+	totalDuration := 0.0
+	totalRuns := 0
+
+	mostExpensiveCost := 0.0
+	mostExpensiveName := ""
+	bestEfficiencyRatio := 999999.0
+	mostEfficientName := ""
+
+	// Aggregate data from all agents
+	for _, eval := range agentEvals {
+		if eval.Error != nil || eval.RunsAnalyzed == 0 {
+			continue
+		}
+
+		agentTotalCost := eval.AvgCost * float64(eval.RunsAnalyzed)
+		totalCost += agentTotalCost
+		totalTokens += eval.AvgTokens * int64(eval.RunsAnalyzed)
+		totalDuration += eval.AvgDuration * float64(eval.RunsAnalyzed)
+		totalRuns += eval.RunsAnalyzed
+
+		// Track per-agent costs
+		analysis.AgentCosts[eval.AgentName] = eval.AvgCost
+
+		// Find most expensive
+		if eval.AvgCost > mostExpensiveCost {
+			mostExpensiveCost = eval.AvgCost
+			mostExpensiveName = eval.AgentName
+		}
+
+		// Find most efficient (best score per dollar)
+		if eval.AvgCost > 0 {
+			efficiencyRatio := eval.AvgCost / eval.Score
+			if efficiencyRatio < bestEfficiencyRatio {
+				bestEfficiencyRatio = efficiencyRatio
+				mostEfficientName = eval.AgentName
+			}
+		}
+	}
+
+	if totalRuns > 0 {
+		analysis.CurrentAvgCostPerRun = totalCost / float64(totalRuns)
+		analysis.CurrentAvgTokensPerRun = totalTokens / int64(totalRuns)
+		analysis.CurrentAvgDuration = totalDuration / float64(totalRuns)
+	}
+
+	analysis.MostExpensiveAgent = mostExpensiveName
+	analysis.MostEfficientAgent = mostEfficientName
+
+	// Calculate ROI if we have cost data
+	// Assuming $100 value per successful agent execution (configurable)
+	estimatedValuePerRun := 100.0
+	if analysis.CurrentAvgCostPerRun > 0 {
+		analysis.EstimatedValuePerRun = estimatedValuePerRun
+		analysis.ROIRatio = estimatedValuePerRun / analysis.CurrentAvgCostPerRun
+	}
+
+	// Generate projections for different frequencies
+	analysis.Projections = rg.generateCostProjections(
+		len(agents),
+		analysis.CurrentAvgCostPerRun,
+		float64(analysis.CurrentAvgTokensPerRun),
+		analysis.CurrentAvgTokensPerRun,
+	)
+
+	return analysis
+}
+
+// generateCostProjections creates cost estimates for different execution schedules
+func (rg *ReportGenerator) generateCostProjections(teamSize int, avgCostPerRun, avgTokensPerRun float64, avgTokens int64) []CostProjection {
+	// Define frequency scenarios
+	scenarios := []struct {
+		name         string
+		runsPerMonth int
+		description  string
+	}{
+		{"Every 5 Minutes", 8640 * teamSize, "24/7 continuous monitoring (288 runs/day per agent)"},
+		{"Every 15 Minutes", 2880 * teamSize, "High-frequency monitoring (96 runs/day per agent)"},
+		{"Hourly", 720 * teamSize, "24/7 hourly execution (24 runs/day per agent)"},
+		{"Every 4 Hours", 180 * teamSize, "Regular monitoring (6 runs/day per agent)"},
+		{"Daily (Business Hours)", 22 * teamSize, "Once per business day (22 working days)"},
+		{"Daily (24/7)", 30 * teamSize, "Once per day, every day"},
+		{"Weekly", 4 * teamSize, "Once per week per agent"},
+		{"Monthly", 1 * teamSize, "Once per month per agent"},
+	}
+
+	projections := []CostProjection{}
+	for _, scenario := range scenarios {
+		totalCost := avgCostPerRun * float64(scenario.runsPerMonth)
+		totalTokens := avgTokens * int64(scenario.runsPerMonth)
+
+		projections = append(projections, CostProjection{
+			Frequency:       scenario.name,
+			RunsPerPeriod:   scenario.runsPerMonth,
+			CostPerRun:      avgCostPerRun,
+			TotalCost:       totalCost,
+			TokensPerPeriod: totalTokens,
+		})
+	}
+
+	return projections
+}
+
+// evaluateBenchmarksForRuns runs individual benchmark evaluations on all runs
+// This populates the 5 quality metrics: hallucination, relevancy, task_completion, faithfulness, toxicity
+func (rg *ReportGenerator) evaluateBenchmarksForRuns(ctx context.Context, runs []queries.AgentRun) error {
+	if rg.db == nil {
+		logging.Info("Skipping benchmark evaluation: database connection not available")
+		return nil
+	}
+
+	// Load config to get AI provider settings for the judge
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Create benchmark judge and analyzer
+	judge, err := benchmark.NewJudge(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create benchmark judge: %w", err)
+	}
+
+	analyzer := benchmark.NewAnalyzer(rg.db, judge)
+
+	logging.Info("Running benchmark evaluations on %d runs using model %s...", len(runs), judge.GetModelName())
+
+	// Evaluate runs in parallel with limited concurrency
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, rg.maxConcurrentEvals)
+	errorsMu := sync.Mutex{}
+	var errors []error
+
+	successCount := 0
+
+	for _, run := range runs {
+		wg.Add(1)
+
+		go func(r queries.AgentRun) {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// Evaluate the run (analyzer will skip if already evaluated)
+			_, err := analyzer.EvaluateRun(ctx, r.ID)
+			if err != nil {
+				errorsMu.Lock()
+				errors = append(errors, fmt.Errorf("run %d: %w", r.ID, err))
+				errorsMu.Unlock()
+			} else {
+				errorsMu.Lock()
+				successCount++
+				errorsMu.Unlock()
+			}
+		}(run)
+	}
+
+	wg.Wait()
+
+	logging.Info("Benchmark evaluation complete: %d successful, %d errors", successCount, len(errors))
+
+	// Log errors but don't fail the report generation
+	if len(errors) > 0 {
+		logging.Info("Benchmark evaluation errors (non-fatal):")
+		for _, err := range errors {
+			logging.Info("  - %v", err)
+		}
+	}
+
+	return nil
 }
