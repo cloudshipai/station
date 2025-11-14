@@ -121,12 +121,13 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 	// Get agent's dotprompt file path using provided environment name
 	promptPath, err := e.getAgentPromptPath(agent, environmentName)
 	if err != nil {
+		promptPathError := fmt.Errorf("failed to get agent prompt path: %w", err)
 		return &ExecutionResponse{
 			Success:  false,
 			Response: "",
 			Duration: time.Since(startTime),
-			Error:    fmt.Sprintf("failed to get agent prompt path: %v", err),
-		}, nil
+			Error:    promptPathError.Error(),
+		}, promptPathError
 	}
 
 	// Extract metadata from dotprompt file (app/app_type for data ingestion)
@@ -178,12 +179,13 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		agentPrompt = genkit.LoadPrompt(genkitApp, promptPath, "")
 
 		if agentPrompt == nil {
+			promptLoadError := fmt.Errorf("failed to load prompt from: %s", promptPath)
 			return &ExecutionResponse{
 				Success:  false,
 				Response: "",
 				Duration: time.Since(startTime),
-				Error:    fmt.Sprintf("failed to load prompt from: %s", promptPath),
-			}, nil
+				Error:    promptLoadError.Error(),
+			}, promptLoadError
 		}
 	} else {
 		// Prompt already registered - reuse it (child agent execution)
@@ -225,12 +227,13 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		ai.WithTools(mcpTools...))
 
 	if err != nil {
+		execError := fmt.Errorf("dotprompt.Execute() failed: %w", err)
 		return &ExecutionResponse{
 			Success:  false,
 			Response: "",
 			Duration: time.Since(startTime),
-			Error:    fmt.Sprintf("dotprompt.Execute() failed: %v", err),
-		}, nil
+			Error:    execError.Error(),
+		}, execError
 	}
 
 	// Extract response data (use working pattern from existing code)
