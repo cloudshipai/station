@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	_ "modernc.org/sqlite"
 )
 
@@ -15,6 +17,33 @@ type DB struct {
 }
 
 func New(databaseURL string) (*DB, error) {
+	// Detect database type from URL scheme
+	var conn *sql.DB
+	var err error
+	isLibSQL := strings.HasPrefix(databaseURL, "libsql://") || strings.HasPrefix(databaseURL, "http://") || strings.HasPrefix(databaseURL, "https://")
+
+	if isLibSQL {
+		// Turso/libsql connection - expects URL format: libsql://host?authToken=token
+		// or can be constructed from separate URL and token
+		conn, err = sql.Open("libsql", databaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open libsql database: %w", err)
+		}
+
+		// Configure connection pool for cloud database
+		conn.SetMaxOpenConns(25) // Higher limit for remote connections
+		conn.SetMaxIdleConns(10)
+		conn.SetConnMaxLifetime(5 * time.Minute)
+
+		// Test connection
+		if err := conn.Ping(); err != nil {
+			return nil, fmt.Errorf("failed to connect to libsql database: %w", err)
+		}
+
+		return &DB{conn: conn}, nil
+	}
+
+	// Local SQLite file connection
 	// Ensure the directory exists before creating the database
 	dbDir := filepath.Dir(databaseURL)
 	if dbDir != "." && dbDir != "" {
@@ -24,8 +53,6 @@ func New(databaseURL string) (*DB, error) {
 	}
 
 	// Retry connection with exponential backoff for concurrent access
-	var conn *sql.DB
-	var err error
 	maxRetries := 5
 	baseDelay := 100 * time.Millisecond
 

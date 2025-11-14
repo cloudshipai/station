@@ -90,7 +90,7 @@ func (q *Queries) ListEnvironments(ctx context.Context) ([]Environment, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []Environment
 	for rows.Next() {
 		var i Environment

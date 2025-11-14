@@ -97,9 +97,48 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 		agents = filteredAgents
 	}
 
+	// Enrich agents with child agent relationships
+	enrichedAgents := make([]map[string]interface{}, len(agents))
+	for i, agent := range agents {
+		agentMap := map[string]interface{}{
+			"id":               agent.ID,
+			"name":             agent.Name,
+			"description":      agent.Description,
+			"environment_id":   agent.EnvironmentID,
+			"max_steps":        agent.MaxSteps,
+			"created_at":       agent.CreatedAt,
+			"updated_at":       agent.UpdatedAt,
+			"prompt":           agent.Prompt,
+			"schedule_enabled": agent.ScheduleEnabled,
+			"cron_schedule":    agent.CronSchedule,
+			"is_scheduled":     agent.IsScheduled,
+		}
+
+		// Add child agents if any exist
+		if h.repos != nil && h.repos.AgentAgents != nil {
+			childAgents, err := h.repos.AgentAgents.ListChildAgents(agent.ID)
+			if err == nil && len(childAgents) > 0 {
+				// Convert to simple format for UI
+				children := make([]map[string]interface{}, len(childAgents))
+				for j, child := range childAgents {
+					children[j] = map[string]interface{}{
+						"id":          child.ChildAgentID,
+						"name":        child.ChildAgent.Name,
+						"description": child.ChildAgent.Description,
+					}
+				}
+				agentMap["child_agents"] = children
+			} else {
+				agentMap["child_agents"] = []interface{}{} // Empty array if no children
+			}
+		}
+
+		enrichedAgents[i] = agentMap
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"agents": agents,
-		"count":  len(agents),
+		"agents": enrichedAgents,
+		"count":  len(enrichedAgents),
 	})
 }
 
@@ -159,14 +198,102 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 			)
 		} else {
 			log.Printf("✅ Agent execution completed successfully for run ID: %d", agentRun.ID)
-			// Update run with completion response and status
+
+			// Extract metadata from response.Extra (matches CLI pattern in cmd/main/handlers/agent/local.go:594-663)
 			finalResponse := ""
 			if response != nil {
 				finalResponse = response.Content
 			}
-			// Mark run as completed with final response
+
 			completedAt := time.Now()
-			h.repos.AgentRuns.UpdateCompletion(ctx, agentRun.ID, finalResponse, 0, nil, nil, "completed", &completedAt)
+
+			// Extract execution metadata from Extra field
+			var inputTokens, outputTokens, totalTokens *int64
+			var durationSeconds *float64
+			var modelName *string
+			var toolCalls, executionSteps *models.JSONArray
+			var stepsTaken int64
+			var toolsUsed *int64
+
+			if response != nil && response.Extra != nil {
+				log.Printf("DEBUG API: response.Extra keys: %+v", response.Extra)
+				log.Printf("DEBUG API: token_usage type: %T, value: %+v", response.Extra["token_usage"], response.Extra["token_usage"])
+
+				// Extract token usage
+				if tokenUsage, ok := response.Extra["token_usage"].(map[string]interface{}); ok {
+					log.Printf("DEBUG API: Successfully cast token_usage to map[string]interface{}")
+					log.Printf("DEBUG API: input_tokens type: %T, value: %v", tokenUsage["input_tokens"], tokenUsage["input_tokens"])
+
+					// Try int first, then float64
+					if val, ok := tokenUsage["input_tokens"].(int); ok {
+						v := int64(val)
+						inputTokens = &v
+						log.Printf("DEBUG API: Set input_tokens from int: %d", v)
+					} else if val, ok := tokenUsage["input_tokens"].(float64); ok {
+						v := int64(val)
+						inputTokens = &v
+						log.Printf("DEBUG API: Set input_tokens from float64: %d", v)
+					} else {
+						log.Printf("DEBUG API: Failed to extract input_tokens, type was: %T", tokenUsage["input_tokens"])
+					}
+					if val, ok := tokenUsage["output_tokens"].(int); ok {
+						v := int64(val)
+						outputTokens = &v
+					} else if val, ok := tokenUsage["output_tokens"].(float64); ok {
+						v := int64(val)
+						outputTokens = &v
+					}
+					if val, ok := tokenUsage["total_tokens"].(int); ok {
+						v := int64(val)
+						totalTokens = &v
+					} else if val, ok := tokenUsage["total_tokens"].(float64); ok {
+						v := int64(val)
+						totalTokens = &v
+					}
+				}
+
+				// Extract duration
+				if val, ok := response.Extra["duration"].(float64); ok {
+					durationSeconds = &val
+				}
+
+				// Extract model name
+				if val, ok := response.Extra["model_name"].(string); ok {
+					modelName = &val
+				}
+
+				// Extract tool calls
+				if val, ok := response.Extra["tool_calls"].(*models.JSONArray); ok {
+					toolCalls = val
+				}
+
+				// Extract execution steps
+				if val, ok := response.Extra["execution_steps"].(*models.JSONArray); ok {
+					executionSteps = val
+				}
+
+				// Extract steps taken
+				if val, ok := response.Extra["steps_taken"].(int64); ok {
+					stepsTaken = val
+				} else if val, ok := response.Extra["steps_taken"].(float64); ok {
+					stepsTaken = int64(val)
+				}
+
+				// Extract tools used count
+				if val, ok := response.Extra["tools_used"].(int); ok {
+					v := int64(val)
+					toolsUsed = &v
+				} else if val, ok := response.Extra["tools_used"].(int64); ok {
+					toolsUsed = &val
+				}
+			}
+
+			// Update run with all metadata (matches CLI pattern)
+			h.repos.AgentRuns.UpdateCompletionWithMetadata(
+				ctx, agentRun.ID, finalResponse, stepsTaken, toolCalls, executionSteps,
+				"completed", &completedAt,
+				inputTokens, outputTokens, totalTokens, durationSeconds, modelName, toolsUsed, nil,
+			)
 		}
 	}()
 
@@ -463,10 +590,12 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 		return nil, fmt.Errorf("failed to read prompt file: %w", err)
 	}
 
-	// Parse YAML frontmatter to extract tools
+	// Parse YAML frontmatter to extract tools and child agents
 	lines := strings.Split(string(content), "\n")
 	inFrontmatter := false
 	var tools []string
+	inToolsSection := false
+	inAgentsSection := false
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -484,25 +613,51 @@ func (h *APIHandlers) getAgentToolsFromPrompt(agent *models.Agent, environmentNa
 			continue
 		}
 
-		// Look for tools section
+		// Check for section headers
 		if strings.HasPrefix(line, "tools:") {
+			inToolsSection = true
+			inAgentsSection = false
+			continue
+		} else if strings.HasPrefix(line, "agents:") {
+			inAgentsSection = true
+			inToolsSection = false
+			continue
+		} else if strings.HasSuffix(line, ":") && !strings.HasPrefix(line, "-") {
+			// New section started, exit both
+			inToolsSection = false
+			inAgentsSection = false
 			continue
 		}
 
-		// Parse tool entries (- "toolname" or - "__toolname")
-		if strings.HasPrefix(line, "- \"") && strings.HasSuffix(line, "\"") {
-			tool := strings.Trim(line[2:], "\"")
-			tools = append(tools, tool)
-		} else if strings.HasPrefix(line, "- \"__") && strings.HasSuffix(line, "\"") {
-			tool := strings.Trim(line[2:], "\"")
-			tools = append(tools, tool)
-		} else if strings.HasPrefix(line, "- __") {
-			// Handle unquoted tool names like: - "__toolname"
-			tool := strings.TrimSpace(line[2:])
-			if strings.HasPrefix(tool, "\"") && strings.HasSuffix(tool, "\"") {
-				tool = strings.Trim(tool, "\"")
+		// Parse tool entries from tools: section
+		if inToolsSection && strings.HasPrefix(line, "-") {
+			// Extract tool name (handle quoted and unquoted)
+			tool := strings.TrimSpace(line[1:]) // Remove leading dash
+			tool = strings.Trim(tool, "\"")     // Remove quotes if present
+			if tool != "" {
+				tools = append(tools, tool)
 			}
-			tools = append(tools, tool)
+		}
+
+		// Parse agent entries from agents: section and convert to __agent_* format
+		if inAgentsSection && strings.HasPrefix(line, "-") {
+			// Extract agent name
+			agentName := strings.TrimSpace(line[1:])  // Remove leading dash
+			agentName = strings.Trim(agentName, "\"") // Remove quotes if present
+			if agentName != "" {
+				// Normalize agent name to tool name format (same as runtime)
+				normalizedName := strings.ToLower(agentName)
+				replacements := []string{" ", "-", ".", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "+", "=", "[", "]", "{", "}", "|", "\\", ":", ";", "\"", "'", "<", ">", ",", "?", "/"}
+				for _, char := range replacements {
+					normalizedName = strings.ReplaceAll(normalizedName, char, "_")
+				}
+				for strings.Contains(normalizedName, "__") {
+					normalizedName = strings.ReplaceAll(normalizedName, "__", "_")
+				}
+				normalizedName = strings.Trim(normalizedName, "_")
+				agentToolName := fmt.Sprintf("__agent_%s", normalizedName)
+				tools = append(tools, agentToolName)
+			}
 		}
 	}
 
@@ -529,10 +684,13 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 	}
 
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Prompt      string `json:"prompt"`
-		MaxSteps    int64  `json:"max_steps"`
+		Name              string  `json:"name"`
+		Description       string  `json:"description"`
+		Prompt            string  `json:"prompt"`
+		MaxSteps          int64   `json:"max_steps"`
+		CronSchedule      *string `json:"cron_schedule"`
+		ScheduleEnabled   *bool   `json:"schedule_enabled"`
+		ScheduleVariables *string `json:"schedule_variables"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -540,14 +698,43 @@ func (h *APIHandlers) updateAgent(c *gin.Context) {
 		return
 	}
 
-	// Update agent fields if provided
-	if req.Name != "" || req.Description != "" || req.Prompt != "" || req.MaxSteps > 0 {
-		config := &services.AgentConfig{
-			Name:        req.Name,
-			Description: req.Description,
-			Prompt:      req.Prompt,
-			MaxSteps:    req.MaxSteps,
-		}
+	// Fetch current agent to preserve fields not being updated
+	currentAgent, err := h.agentService.GetAgent(c.Request.Context(), agentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
+		return
+	}
+
+	// Build config with current values as defaults, overriding with provided values
+	config := &services.AgentConfig{
+		Name:              currentAgent.Name,
+		Description:       currentAgent.Description,
+		Prompt:            currentAgent.Prompt,
+		MaxSteps:          currentAgent.MaxSteps,
+		CronSchedule:      req.CronSchedule,
+		ScheduleEnabled:   currentAgent.ScheduleEnabled,
+		ScheduleVariables: req.ScheduleVariables,
+	}
+
+	// Override with provided values only if non-empty
+	if req.Name != "" {
+		config.Name = req.Name
+	}
+	if req.Description != "" {
+		config.Description = req.Description
+	}
+	if req.Prompt != "" {
+		config.Prompt = req.Prompt
+	}
+	if req.MaxSteps > 0 {
+		config.MaxSteps = req.MaxSteps
+	}
+	if req.ScheduleEnabled != nil {
+		config.ScheduleEnabled = *req.ScheduleEnabled
+	}
+
+	// Update agent fields if any changes were requested
+	if req.Name != "" || req.Description != "" || req.Prompt != "" || req.MaxSteps > 0 || req.CronSchedule != nil || req.ScheduleEnabled != nil || req.ScheduleVariables != nil {
 
 		_, err = h.agentService.UpdateAgent(c.Request.Context(), agentID, config)
 		if err != nil {

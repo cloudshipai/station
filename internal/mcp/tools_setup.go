@@ -133,11 +133,25 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(updateAgentPromptTool, s.handleUpdateAgentPrompt)
 
 	addToolTool := mcp.NewTool("add_tool",
-		mcp.WithDescription("Add a tool to an agent"),
+		mcp.WithDescription("Add a tool to an agent. For MCP tools from servers, use tool name directly (e.g., '__get_cost_and_usage'). For agent tools, use format '__agent_<agent-name>' (e.g., '__agent_finops-analyst' to add the finops-analyst agent as a callable tool)."),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
 		mcp.WithString("tool_name", mcp.Required(), mcp.Description("Name of the tool to add")),
 	)
 	s.mcpServer.AddTool(addToolTool, s.handleAddTool)
+
+	addAgentTool := mcp.NewTool("add_agent_as_tool",
+		mcp.WithDescription("Add another agent as a callable tool to create multi-agent hierarchies. The child agent will be available as '__agent_<name>' tool."),
+		mcp.WithString("parent_agent_id", mcp.Required(), mcp.Description("ID of the parent agent that will call the child")),
+		mcp.WithString("child_agent_id", mcp.Required(), mcp.Description("ID of the child agent to add as a tool")),
+	)
+	s.mcpServer.AddTool(addAgentTool, s.handleAddAgentAsTool)
+
+	removeAgentTool := mcp.NewTool("remove_agent_as_tool",
+		mcp.WithDescription("Remove a child agent from a parent agent's callable tools, breaking the multi-agent hierarchy link."),
+		mcp.WithString("parent_agent_id", mcp.Required(), mcp.Description("ID of the parent agent")),
+		mcp.WithString("child_agent_id", mcp.Required(), mcp.Description("ID of the child agent to remove")),
+	)
+	s.mcpServer.AddTool(removeAgentTool, s.handleRemoveAgentAsTool)
 
 	removeToolTool := mcp.NewTool("remove_tool",
 		mcp.WithDescription("Remove a tool from an agent"),
@@ -279,5 +293,105 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(installDemoBundleTool, s.handleInstallDemoBundle)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 33)
+	// Benchmark Tools
+	evaluateBenchmarkTool := mcp.NewTool("evaluate_benchmark",
+		mcp.WithDescription("Evaluate an agent run asynchronously using LLM-as-judge metrics. Returns a task ID to check status later."),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("ID of the completed agent run to evaluate")),
+	)
+	s.mcpServer.AddTool(evaluateBenchmarkTool, s.handleEvaluateBenchmark)
+
+	getBenchmarkStatusTool := mcp.NewTool("get_benchmark_status",
+		mcp.WithDescription("Check the status of a benchmark evaluation task"),
+		mcp.WithString("task_id", mcp.Required(), mcp.Description("ID of the benchmark task")),
+	)
+	s.mcpServer.AddTool(getBenchmarkStatusTool, s.handleGetBenchmarkStatus)
+
+	listBenchmarkResultsTool := mcp.NewTool("list_benchmark_results",
+		mcp.WithDescription("List benchmark evaluation results"),
+		mcp.WithString("run_id", mcp.Description("Filter by specific run ID")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of results to return (default: 10)")),
+	)
+	s.mcpServer.AddTool(listBenchmarkResultsTool, s.handleListBenchmarkResults)
+
+	// Report Management Tools
+	createReportTool := mcp.NewTool("create_report",
+		mcp.WithDescription("Create a new report to evaluate how well the agent team achieves its business purpose"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the report")),
+		mcp.WithString("description", mcp.Description("Description of the report")),
+		mcp.WithString("environment_id", mcp.Required(), mcp.Description("Environment ID to evaluate")),
+		mcp.WithString("team_criteria", mcp.Required(), mcp.Description("JSON defining team's business goals and success criteria. Measure against the PURPOSE of this agent team. Examples: FinOps team → cost_reduction, forecasting_accuracy; DevOps team → deployment_insights, failure_prediction; Security team → vulnerability_detection, compliance_coverage. Format: {\"goal\": \"team's purpose\", \"criteria\": {\"business_metric\": {\"weight\": 0.4, \"description\": \"what success looks like\", \"threshold\": 0.8}}}")),
+		mcp.WithString("agent_criteria", mcp.Description("JSON defining how individual agents contribute to team goals. Examples: cost analyzer → savings_identified, execution_cost; PR reviewer → bugs_caught, review_speed, false_positive_rate. Measures agent's VALUE vs LABOR COST. Same format as team_criteria (optional)")),
+		mcp.WithString("filter_model", mcp.Description("Filter agent runs by model name (e.g., 'openai/gpt-4o-mini', 'openai/gpt-4o'). Use list_models tool to see available models. Allows comparing performance across different models.")),
+	)
+	s.mcpServer.AddTool(createReportTool, s.handleCreateReport)
+
+	generateReportTool := mcp.NewTool("generate_report",
+		mcp.WithDescription("Generate a report by running benchmarks and LLM-as-judge evaluation on all agents"),
+		mcp.WithString("report_id", mcp.Required(), mcp.Description("ID of the report to generate")),
+	)
+	s.mcpServer.AddTool(generateReportTool, s.handleGenerateReport)
+
+	listReportsTool := mcp.NewTool("list_reports",
+		mcp.WithDescription("List all reports"),
+		mcp.WithString("environment_id", mcp.Description("Filter by environment ID")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of reports to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of reports to skip for pagination (default: 0)")),
+	)
+	s.mcpServer.AddTool(listReportsTool, s.handleListReports)
+
+	getReportTool := mcp.NewTool("get_report",
+		mcp.WithDescription("Get detailed information about a specific report"),
+		mcp.WithString("report_id", mcp.Required(), mcp.Description("ID of the report")),
+	)
+	s.mcpServer.AddTool(getReportTool, s.handleGetReport)
+
+	// Model Filtering Tools
+	listModelsTool := mcp.NewTool("list_models",
+		mcp.WithDescription("List all AI models used in agent runs with their counts. Useful for identifying which models to filter by when creating reports."),
+	)
+	s.mcpServer.AddTool(listModelsTool, s.handleListModels)
+
+	listRunsByModelTool := mcp.NewTool("list_runs_by_model",
+		mcp.WithDescription("List agent runs filtered by AI model name with pagination"),
+		mcp.WithString("model_name", mcp.Required(), mcp.Description("Model name to filter by (e.g., 'openai/gpt-4o-mini')")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of runs to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of runs to skip for pagination (default: 0)")),
+	)
+	s.mcpServer.AddTool(listRunsByModelTool, s.handleListRunsByModel)
+
+	// Schedule Management Tools
+	setScheduleTool := mcp.NewTool("set_schedule",
+		mcp.WithDescription("Configure an agent to run on a schedule with specified input variables"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to schedule")),
+		mcp.WithString("cron_schedule", mcp.Required(), mcp.Description("Cron expression (e.g., '0 0 * * *' for daily at midnight)")),
+		mcp.WithString("schedule_variables", mcp.Description("JSON object with input variables for scheduled runs")),
+		mcp.WithBoolean("enabled", mcp.Description("Enable/disable the schedule (default: true)")),
+	)
+	s.mcpServer.AddTool(setScheduleTool, s.handleSetSchedule)
+
+	removeScheduleTool := mcp.NewTool("remove_schedule",
+		mcp.WithDescription("Remove/disable an agent's schedule configuration"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
+	)
+	s.mcpServer.AddTool(removeScheduleTool, s.handleRemoveSchedule)
+
+	getScheduleTool := mcp.NewTool("get_schedule",
+		mcp.WithDescription("Get an agent's current schedule configuration"),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent")),
+	)
+	s.mcpServer.AddTool(getScheduleTool, s.handleGetSchedule)
+
+	// Faker Management Tools
+	fakerCreateTool := mcp.NewTool("faker_create_from_mcp_server",
+		mcp.WithDescription("Create a faker-wrapped version of an existing MCP server in the same environment. This allows agents to create custom simulated MCP servers with tailored AI instructions for realistic data generation."),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment containing the MCP server")),
+		mcp.WithString("mcp_server_name", mcp.Required(), mcp.Description("Name of the existing MCP server to wrap with faker")),
+		mcp.WithString("ai_instruction", mcp.Required(), mcp.Description("Custom instruction for AI data generation (e.g., 'Generate realistic AWS cost data with proper spending patterns')")),
+		mcp.WithString("faker_name", mcp.Description("Name for the faker server (default: <mcp_server_name>-faker)")),
+		mcp.WithBoolean("debug", mcp.Description("Enable debug logging for faker (default: false)")),
+		mcp.WithBoolean("offline", mcp.Description("Offline mode - no real MCP server connection (default: false)")),
+	)
+	s.mcpServer.AddTool(fakerCreateTool, s.handleFakerCreateFromMCPServer)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 46)
 }

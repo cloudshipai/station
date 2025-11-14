@@ -23,6 +23,7 @@ type DotPromptConfig struct {
 	Model        string                 `yaml:"model"`
 	Config       map[string]interface{} `yaml:"config"`
 	Tools        []string               `yaml:"tools"`
+	Agents       []string               `yaml:"agents"` // Agent tool references for multi-agent hierarchy
 	Metadata     map[string]interface{} `yaml:"metadata"`
 	Station      map[string]interface{} `yaml:"station"`
 	Input        map[string]interface{} `yaml:"input"`
@@ -292,6 +293,13 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 	// Assign tools if specified - all within the same transaction
 	if len(config.Tools) > 0 {
 		for _, toolName := range config.Tools {
+			// Skip agent tools - they're created dynamically at runtime
+			// Support both __agent_ and mcp__station__agent__ prefixes
+			if strings.HasPrefix(toolName, "__agent_") || strings.HasPrefix(toolName, "mcp__station__agent__") {
+				logging.Debug("Skipping agent tool %s (will be created dynamically at runtime)", toolName)
+				continue
+			}
+
 			// Find tool by name in environment
 			tool, err := s.repos.MCPTools.FindByNameInEnvironment(env.ID, toolName)
 			if err != nil {
@@ -560,6 +568,12 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		// Add tools that are in config but not currently assigned
 		for _, toolName := range config.Tools {
 			if _, exists := currentToolMap[toolName]; !exists {
+				// Skip agent tools - they're created dynamically at runtime
+				if strings.HasPrefix(toolName, "mcp__station__agent__") {
+					logging.Debug("Skipping agent tool %s (will be created dynamically at runtime)", toolName)
+					continue
+				}
+
 				// Find tool by name in environment
 				tool, err := s.repos.MCPTools.FindByNameInEnvironment(existingAgent.EnvironmentID, toolName)
 				if err != nil {
@@ -585,6 +599,69 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			fmt.Printf("   ✅ Tools already in sync (%d tools)\n", len(config.Tools))
 		} else {
 			fmt.Printf("   🔧 No tools configured for agent\n")
+		}
+	}
+
+	// Sync child agents (agents: section in frontmatter)
+	agentsNeedSync := len(config.Agents) > 0
+	if agentsNeedSync {
+		// Get current child agent assignments
+		currentChildAgents, err := s.repos.AgentAgents.ListChildAgents(existingAgent.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current child agents: %w", err)
+		}
+
+		// Create maps for efficient lookup
+		currentChildMap := make(map[string]int64) // childName -> childID
+		for _, childRel := range currentChildAgents {
+			currentChildMap[childRel.ChildAgent.Name] = childRel.ChildAgentID
+		}
+
+		configChildSet := make(map[string]bool)
+		for _, childName := range config.Agents {
+			configChildSet[childName] = true
+		}
+
+		// Track changes
+		agentsAdded := 0
+		agentsRemoved := 0
+
+		// Remove child agents no longer in config
+		for childName, childID := range currentChildMap {
+			if !configChildSet[childName] {
+				err = s.repos.AgentAgents.RemoveChildAgent(existingAgent.ID, childID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to remove child agent %s: %w", childName, err)
+				}
+				agentsRemoved++
+			}
+		}
+
+		// Add child agents from config that aren't assigned
+		for _, childName := range config.Agents {
+			if _, exists := currentChildMap[childName]; !exists {
+				// Find child agent by name in same environment
+				childAgent, err := s.repos.Agents.GetByNameAndEnvironment(childName, existingAgent.EnvironmentID)
+				if err != nil {
+					fmt.Printf("   ⚠️  Child agent '%s' not found in environment (will retry on next sync)\n", childName)
+					continue
+				}
+
+				// Add child agent relationship
+				_, err = s.repos.AgentAgents.AddChildAgent(existingAgent.ID, childAgent.ID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to add child agent %s: %w", childName, err)
+				}
+				agentsAdded++
+			}
+		}
+
+		// Log changes
+		if agentsAdded > 0 || agentsRemoved > 0 {
+			fmt.Printf("   🤖 Child agents sync: +%d added, -%d removed (total: %d)\n",
+				agentsAdded, agentsRemoved, len(config.Agents))
+		} else if len(config.Agents) > 0 {
+			fmt.Printf("   ✅ Child agents already in sync (%d agents)\n", len(config.Agents))
 		}
 	}
 

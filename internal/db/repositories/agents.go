@@ -65,6 +65,10 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 		result.NextScheduledRun = &agent.NextScheduledRun.Time
 	}
 
+	if agent.ScheduleVariables.Valid {
+		result.ScheduleVariables = &agent.ScheduleVariables.String
+	}
+
 	if agent.CreatedAt.Valid {
 		result.CreatedAt = agent.CreatedAt.Time
 	}
@@ -175,11 +179,26 @@ func (r *AgentRepo) ListByEnvironment(environmentID int64) ([]*models.Agent, err
 		return nil, err
 	}
 
-	var result []*models.Agent
-	for _, agent := range agents {
-		result = append(result, convertAgentFromSQLc(agent))
+	result := make([]*models.Agent, len(agents))
+	for i, agent := range agents {
+		result[i] = convertAgentFromSQLc(agent)
+	}
+	return result, nil
+}
+
+// GetByEnvironment gets agents for an environment with context support
+func (r *AgentRepo) GetByEnvironment(ctx context.Context, environmentID int64) ([]models.Agent, error) {
+	agents, err := r.queries.ListAgentsByEnvironment(ctx, environmentID)
+	if err != nil {
+		return nil, err
 	}
 
+	// Return as []models.Agent (not pointers) for compatibility
+	result := make([]models.Agent, len(agents))
+	for i, agent := range agents {
+		converted := convertAgentFromSQLc(agent)
+		result[i] = *converted
+	}
 	return result, nil
 }
 
@@ -197,7 +216,7 @@ func (r *AgentRepo) ListByUser(userID int64) ([]*models.Agent, error) {
 	return result, nil
 }
 
-func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string) error {
+func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, scheduleVariables *string, outputSchema *string, outputSchemaPreset *string, app, appType string) error {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 
 	params := queries.UpdateAgentParams{
@@ -216,6 +235,10 @@ func (r *AgentRepo) Update(id int64, name, description, prompt string, maxSteps 
 
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if scheduleVariables != nil {
+		params.ScheduleVariables = sql.NullString{String: *scheduleVariables, Valid: true}
 	}
 
 	if outputSchema != nil {

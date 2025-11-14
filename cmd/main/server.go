@@ -93,6 +93,36 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Initialize Jaeger if enabled (default: FALSE for serve, use --jaeger flag to enable)
+	var jaegerSvc *services.JaegerService
+	enableJaeger := false // Default to disabled for serve mode
+
+	// Check if explicitly enabled via flag
+	if viper.IsSet("jaeger") {
+		enableJaeger = viper.GetBool("jaeger")
+		log.Printf("🔍 Jaeger flag explicitly set to: %v", enableJaeger)
+	}
+
+	// Environment variable override
+	if os.Getenv("STATION_AUTO_JAEGER") == "true" {
+		enableJaeger = true
+		log.Printf("🔍 STATION_AUTO_JAEGER=true, enabling Jaeger")
+	} else if os.Getenv("STATION_AUTO_JAEGER") == "false" {
+		enableJaeger = false
+		log.Printf("🔍 STATION_AUTO_JAEGER=false, disabling Jaeger")
+	}
+
+	log.Printf("🔍 Jaeger enabled for serve mode: %v", enableJaeger)
+	if enableJaeger {
+		jaegerSvc = services.NewJaegerService(&services.JaegerConfig{})
+		if err := jaegerSvc.Start(ctx); err != nil {
+			log.Printf("Warning: Failed to start Jaeger: %v", err)
+		} else {
+			// Set OTEL endpoint for automatic trace export
+			os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", jaegerSvc.GetOTLPEndpoint())
+		}
+	}
+
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
@@ -165,7 +195,7 @@ func runMainServer() error {
 	}
 
 	// Initialize scheduler service for cron-based agent execution (using direct execution)
-	schedulerSvc := services.NewSchedulerService(database, agentSvc)
+	schedulerSvc := services.NewSchedulerService(database, repos, agentSvc)
 
 	// Start scheduler service
 	if err := schedulerSvc.Start(); err != nil {
@@ -272,7 +302,6 @@ func runMainServer() error {
 	// Remove telemetry tracking
 
 	fmt.Printf("\n✅ Station is running!\n")
-	fmt.Printf("🔗 SSH Admin: ssh admin@localhost -p %d\n", cfg.SSHPort)
 	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)
 	fmt.Printf("🤖 Dynamic Agent MCP: http://localhost:%d/mcp (environment: %s)\n", cfg.MCPPort+1, environmentName)
 	fmt.Printf("🌐 API Server: http://localhost:%d\n", cfg.APIPort)
@@ -304,6 +333,13 @@ func runMainServer() error {
 	if lighthouseClient != nil {
 		if err := lighthouseClient.Close(); err != nil {
 			log.Printf("Error stopping Lighthouse client: %v", err)
+		}
+	}
+
+	// Stop Jaeger if running
+	if jaegerSvc != nil && jaegerSvc.IsRunning() {
+		if err := jaegerSvc.Stop(shutdownCtx); err != nil {
+			log.Printf("Error stopping Jaeger: %v", err)
 		}
 	}
 

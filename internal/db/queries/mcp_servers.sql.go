@@ -144,7 +144,7 @@ func (q *Queries) ListAllMCPServers(ctx context.Context) ([]McpServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []McpServer
 	for rows.Next() {
 		var i McpServer
@@ -183,7 +183,7 @@ func (q *Queries) ListMCPServersByEnvironment(ctx context.Context, environmentID
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []McpServer
 	for rows.Next() {
 		var i McpServer

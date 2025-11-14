@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,12 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	os.Setenv("GENKIT_ENV", "dev")
+
+	// Check if OTEL telemetry is enabled globally
+	if enableOTEL {
+		logging.Info("📊 OTEL telemetry enabled in develop mode - traces will export to Jaeger")
+		// OTEL is already initialized in initOTELTelemetry()
+	}
 
 	// Show banner
 	styles := getCLIStyles(themeManager)
@@ -99,9 +106,10 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🤖 Agent prompts automatically loaded from: %s\n", agentsDir)
 
 	// Register MCP tools as GenKit actions so they appear in Developer UI
-	fmt.Println("🔧 Registering MCP tools as GenKit actions...")
+	fmt.Println("🔧 Registering MCP tools and agent tools as GenKit actions...")
 	registeredCount := 0
 	skippedDuplicates := 0
+	agentToolCount := 0
 	seenTools := make(map[string]bool)
 
 	for _, toolRef := range mcpTools {
@@ -116,20 +124,60 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 			seenTools[toolName] = true
 			genkit.RegisterAction(genkitApp, tool)
 			registeredCount++
-			fmt.Printf("   ✅ Registered: %s\n", toolName)
+
+			// Track agent tools separately
+			if strings.HasPrefix(toolName, "__agent_") {
+				agentToolCount++
+				fmt.Printf("   🤖 Registered agent tool: %s\n", toolName)
+			} else {
+				fmt.Printf("   ✅ Registered: %s\n", toolName)
+			}
 		} else {
 			fmt.Printf("   ⚠️  Skipped: %s (not ai.Tool)\n", toolRef.Name())
 		}
 	}
 
 	fmt.Println()
-	fmt.Println("🎉 Station Development Playground is ready!")
-	fmt.Printf("📖 To start the Genkit developer UI, run:\n")
-	fmt.Printf("   genkit start -o -- stn develop --env %s --port %d\n", environment, port)
+	if agentToolCount > 0 {
+		fmt.Printf("📊 Registered %d MCP tools + %d agent tools (total: %d)\n", registeredCount-agentToolCount, agentToolCount, registeredCount)
+		fmt.Println("✨ Multi-agent hierarchy is enabled - agents can call other agents as tools!")
+	} else {
+		fmt.Printf("📊 Registered %d MCP tools\n", registeredCount)
+	}
+
 	fmt.Println()
-	fmt.Println("🧪 This will start the interactive testing UI at http://localhost:4000")
-	fmt.Println("🔧 All your agents and MCP tools will be available for testing")
-	fmt.Println("✨ Agent input schemas from .prompt files will be properly loaded")
+	fmt.Println("🎉 Station Development Playground is ready!")
+
+	// Auto-launch GenKit UI if requested
+	autoLaunchUI, _ := cmd.Flags().GetBool("auto-ui")
+	if autoLaunchUI {
+		fmt.Println()
+		fmt.Println("🚀 Launching GenKit Developer UI...")
+		if err := launchGenkitUI(port, true); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to auto-launch GenKit UI: %v\n", err)
+			fmt.Printf("📖 You can manually start it with:\n")
+			fmt.Printf("   genkit start -o --port %d\n", port)
+		} else {
+			fmt.Printf("✅ GenKit Developer UI is starting at http://localhost:%d\n", port)
+			fmt.Println("🔧 All your agents and MCP tools are available for testing")
+			fmt.Println("✨ Agent input schemas from .prompt files are properly loaded")
+			if agentToolCount > 0 {
+				fmt.Println("🤖 Agent tools are available - you can test multi-agent workflows!")
+			}
+		}
+	} else {
+		fmt.Println()
+		fmt.Printf("📖 To start the Genkit developer UI, run:\n")
+		fmt.Printf("   genkit start -o --port %d\n", port)
+		fmt.Println()
+		fmt.Println("🧪 This will start the interactive testing UI")
+		fmt.Println("🔧 All your agents and MCP tools will be available for testing")
+		fmt.Println("✨ Agent input schemas from .prompt files will be properly loaded")
+		if agentToolCount > 0 {
+			fmt.Println("🤖 Agent tools are available - you can test multi-agent workflows!")
+		}
+	}
+
 	fmt.Println()
 	fmt.Println("For now, Station development playground setup is complete.")
 	fmt.Println("Your agents and tools are loaded in Genkit and ready to use.")
@@ -207,4 +255,30 @@ func initializeGenKitWithPromptDir(ctx context.Context, promptDir string) (*genk
 	logging.Info("Prompts automatically loaded from directory: %s", promptDir)
 
 	return genkitApp, nil
+}
+
+// launchGenkitUI launches the GenKit Developer UI in the background
+func launchGenkitUI(port int, openBrowser bool) error {
+	// Check if genkit CLI is available
+	if _, err := exec.LookPath("genkit"); err != nil {
+		return fmt.Errorf("genkit CLI not found - install with: npm install -g genkit")
+	}
+
+	// Build genkit start command
+	args := []string{"start", "--port", fmt.Sprintf("%d", port)}
+	if openBrowser {
+		args = append(args, "-o")
+	}
+
+	// Start genkit in background
+	cmd := exec.Command("genkit", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start genkit UI: %w", err)
+	}
+
+	logging.Info("GenKit Developer UI launched with PID %d on port %d", cmd.Process.Pid, port)
+	return nil
 }

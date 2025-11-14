@@ -1,19 +1,35 @@
 # Station Zero-Config Deployment
 
-Deploy Station with pre-configured agent bundles using Docker Compose. This example demonstrates how to use Station's zero-config deployment feature to quickly spin up agent environments without manual configuration.
+Deploy Station with Docker Compose and auto-install agent bundles. This example provides a production-ready docker-compose configuration that automatically discovers and installs bundles on startup.
 
-## Quick Start
+## Quickest Start (Automated)
 
-1. **Copy the demo bundle**:
+Use our deployment script for one-command setup:
+
 ```bash
-mkdir bundles
-cp /tmp/station-bundle-test/demo-finops-investigations.tar.gz bundles/
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/scripts/quick-deploy.sh | bash -s -- --mode docker-compose
 ```
 
-2. **Configure environment variables**:
+The script handles everything: API key prompts, file creation, health checks.
+
+**See [QUICKSTART.md](./QUICKSTART.md) for detailed steps.**
+
+---
+
+## Manual Setup (3 Steps)
+
+1. **Create directory and download files**:
 ```bash
+mkdir -p station-deploy/bundles && cd station-deploy
+curl -o docker-compose.yml https://raw.githubusercontent.com/cloudshipai/station/main/examples/zero-config-deploy/docker-compose.yml
+curl -o .env.example https://raw.githubusercontent.com/cloudshipai/station/main/examples/zero-config-deploy/.env.example
 cp .env.example .env
-# Edit .env with your API keys
+```
+
+2. **Configure API key**:
+```bash
+# Edit .env with your OpenAI API key
+nano .env
 ```
 
 3. **Start Station**:
@@ -21,9 +37,9 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-4. **Access Station**:
+**Access Station:**
 - UI: http://localhost:8585
-- MCP: http://localhost:8586
+- MCP: http://localhost:8586/mcp
 
 ## How It Works
 

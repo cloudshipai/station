@@ -640,6 +640,158 @@ Another section`,
 	}
 }
 
+// TestDotPromptConfig_AgentsField tests the new agents field in dotprompt frontmatter
+func TestDotPromptConfig_AgentsField(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	tests := []struct {
+		name     string
+		yaml     string
+		expected []string
+	}{
+		{
+			name: "agents field with multiple agents",
+			yaml: `model: gpt-4o-mini
+max_steps: 10
+agents:
+  - CodeAnalyzer
+  - SecurityScanner
+  - DocumentationGenerator
+tools:
+  - __filesystem_read
+  - __filesystem_write`,
+			expected: []string{"CodeAnalyzer", "SecurityScanner", "DocumentationGenerator"},
+		},
+		{
+			name: "agents field with single agent",
+			yaml: `model: gpt-4o-mini
+agents:
+  - CodeAnalyzer
+tools:
+  - __filesystem_read`,
+			expected: []string{"CodeAnalyzer"},
+		},
+		{
+			name: "empty agents field",
+			yaml: `model: gpt-4o-mini
+agents: []
+tools:
+  - __filesystem_read`,
+			expected: []string{},
+		},
+		{
+			name: "no agents field",
+			yaml: `model: gpt-4o-mini
+tools:
+  - __filesystem_read`,
+			expected: nil,
+		},
+		{
+			name: "agents field with complex names",
+			yaml: `model: gpt-4o-mini
+agents:
+  - terraform-security-scanner
+  - docker-container-analyzer
+  - k8s-manifest-validator`,
+			expected: []string{"terraform-security-scanner", "docker-container-analyzer", "k8s-manifest-validator"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := "---\n" + tt.yaml + "\n---\nPrompt content"
+			config, _, err := service.parseDotPrompt(content)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, config.Agents)
+		})
+	}
+}
+
+// TestDotPromptConfig_BackwardCompatibility ensures existing agents still work
+func TestDotPromptConfig_BackwardCompatibility(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	// Test that existing agents without agents field still work
+	yaml := `model: gpt-4o-mini
+max_steps: 10
+tools:
+  - __filesystem_read
+  - __filesystem_write
+metadata:
+  name: "Test Agent"
+  description: "A test agent"`
+
+	config, prompt, err := service.parseDotPrompt("---\n" + yaml + "\n---\nTest prompt content")
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-4o-mini", config.Model)
+	assert.Equal(t, int64(10), config.MaxSteps)
+	assert.Equal(t, []string{"__filesystem_read", "__filesystem_write"}, config.Tools)
+	assert.Nil(t, config.Agents) // Should be nil, not empty slice
+	assert.Equal(t, "Test prompt content", prompt)
+}
+
+// TestDotPromptConfig_FullExample tests complete frontmatter with both tools and agents
+func TestDotPromptConfig_FullExample(t *testing.T) {
+	testDB, err := db.NewTest(t)
+	require.NoError(t, err)
+	defer func() { _ = testDB.Close() }()
+
+	repos := repositories.New(testDB)
+	cfg := &config.Config{}
+	service := NewDeclarativeSync(repos, cfg)
+
+	// Test a complete example with both tools and agents
+	yaml := `model: gpt-4o-mini
+max_steps: 15
+agents:
+  - CodeAnalyzer
+  - SecurityScanner
+tools:
+  - __filesystem_read
+  - __filesystem_write
+  - __search_files
+metadata:
+  name: "Orchestrator Agent"
+  description: "Coordinates multiple specialized agents"
+input:
+  repository_path: "string, Path to the repository to analyze"
+  analysis_depth: "string, Level of analysis (shallow, deep)"
+output:
+  type: object
+  properties:
+    summary:
+      type: string
+    issues:
+      type: array
+      items:
+        type: string`
+
+	config, _, err := service.parseDotPrompt("---\n" + yaml + "\n---\nOrchestrator prompt content")
+	require.NoError(t, err)
+
+	// Verify all fields are parsed correctly
+	assert.Equal(t, "gpt-4o-mini", config.Model)
+	assert.Equal(t, int64(15), config.MaxSteps)
+	assert.Equal(t, []string{"CodeAnalyzer", "SecurityScanner"}, config.Agents)
+	assert.Equal(t, []string{"__filesystem_read", "__filesystem_write", "__search_files"}, config.Tools)
+	assert.Equal(t, "Orchestrator Agent", config.Metadata["name"])
+	assert.Equal(t, "Coordinates multiple specialized agents", config.Metadata["description"])
+	assert.NotNil(t, config.Input)
+	assert.NotNil(t, config.Output)
+}
+
 // TestCalculateFileChecksum tests MD5 checksum calculation
 func TestCalculateFileChecksum(t *testing.T) {
 	testDB, err := db.NewTest(t)
@@ -651,10 +803,10 @@ func TestCalculateFileChecksum(t *testing.T) {
 	service := NewDeclarativeSync(repos, cfg)
 
 	tests := []struct {
-		name         string
-		content      string
-		expectError  bool
-		description  string
+		name        string
+		content     string
+		expectError bool
+		description string
 	}{
 		{
 			name:        "Simple text file",
@@ -697,7 +849,7 @@ func TestCalculateFileChecksum(t *testing.T) {
 				require.NoError(t, err, tt.description)
 				assert.NotEmpty(t, checksum, "Checksum should not be empty")
 				assert.Len(t, checksum, 32, "MD5 checksum should be 32 hex characters")
-				
+
 				// Verify checksum is deterministic
 				checksum2, err := service.calculateFileChecksum(tmpFile)
 				require.NoError(t, err)
@@ -735,13 +887,13 @@ func TestParsePicoschemaString(t *testing.T) {
 	service := NewDeclarativeSync(repos, cfg)
 
 	tests := []struct {
-		name         string
-		fieldName    string
-		definition   string
-		expectType   string
-		expectDesc   string
-		expectReq    bool
-		description  string
+		name        string
+		fieldName   string
+		definition  string
+		expectType  string
+		expectDesc  string
+		expectReq   bool
+		description string
 	}{
 		{
 			name:        "Simple type",
@@ -823,8 +975,8 @@ func TestConvertYAMLMapToJSONMap(t *testing.T) {
 		{
 			name: "Already string keys",
 			input: map[string]interface{}{
-				"name":  "Jane",
-				"age":   25,
+				"name": "Jane",
+				"age":  25,
 			},
 			expectType:  "map[string]interface {}",
 			description: "Should handle already correct format",
@@ -1126,12 +1278,12 @@ func TestExtractOutputSchema(t *testing.T) {
 	service := NewDeclarativeSync(repos, cfg)
 
 	tests := []struct {
-		name          string
-		config        *DotPromptConfig
-		expectSchema  bool
-		expectPreset  bool
-		expectError   bool
-		description   string
+		name         string
+		config       *DotPromptConfig
+		expectSchema bool
+		expectPreset bool
+		expectError  bool
+		description  string
 	}{
 		{
 			name: "No output schema",

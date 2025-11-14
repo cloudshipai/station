@@ -7,7 +7,11 @@ import type {
   AgentTool, 
   User, 
   AgentRun,
-  AgentRunWithDetails 
+  AgentRunWithDetails,
+  JaegerTrace,
+  Report,
+  ReportWithDetails,
+  CreateReportRequest
 } from '../types/station';
 
 // Environment API
@@ -75,6 +79,44 @@ export const agentRunsApi = {
     apiClient.get<{runs: AgentRun[], count: number, agent_id: number}>(`/agents/${agentId}/runs`),
 };
 
+// Benchmark API
+export interface BulkEvaluationRequest {
+  run_ids: number[];
+  concurrency?: number;
+}
+
+export interface BulkEvaluationProgress {
+  run_id: number;
+  status: 'pending' | 'evaluating' | 'completed' | 'failed';
+  quality_score?: number;
+  production_ready?: boolean;
+  error?: string;
+  evaluated_at?: string;
+}
+
+export interface BulkEvaluationResult {
+  total_runs: number;
+  completed: number;
+  failed: number;
+  duration_seconds: number;
+  results: BulkEvaluationProgress[];
+  summary: {
+    avg_quality_score: number;
+    production_ready_pct: number;
+    total_judge_tokens?: number;
+    total_judge_cost?: number;
+  };
+}
+
+export const benchmarksApi = {
+  evaluate: (runId: number) => apiClient.post(`/benchmarks/${runId}/evaluate`),
+  getMetrics: (runId: number) => apiClient.get(`/benchmarks/${runId}/metrics`),
+  listTasks: () => apiClient.get('/benchmarks/tasks'),
+  listRecent: (limit?: number) => apiClient.get(`/benchmarks/metrics${limit ? `?limit=${limit}` : ''}`),
+  evaluateBulk: (request: BulkEvaluationRequest) => 
+    apiClient.post<BulkEvaluationResult>('/benchmarks/evaluate-bulk', request),
+};
+
 // Sync API
 export const syncApi = {
   trigger: () => apiClient.post('/sync'),
@@ -119,4 +161,41 @@ export const bundlesApi = {
       environment_name: environmentName,
       source
     }),
+};
+
+// Traces API
+export const tracesApi = {
+  getByRunId: (runId: number) => 
+    apiClient.get<{run_id: number, trace: JaegerTrace, error?: string, suggestion?: string}>(`/traces/run/${runId}`),
+  getByTraceId: (traceId: string) =>
+    apiClient.get<{trace_id: string, trace: JaegerTrace, error?: string}>(`/traces/trace/${traceId}`),
+};
+
+// Reports API
+export const reportsApi = {
+  getAll: (params?: { environment_id?: number; limit?: number; offset?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.environment_id) queryParams.append('environment_id', params.environment_id.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    
+    const queryString = queryParams.toString();
+    return apiClient.get<{ reports: Report[], count: number }>(
+      `/reports${queryString ? `?${queryString}` : ''}`
+    );
+  },
+  
+  getById: (id: number) => 
+    apiClient.get<ReportWithDetails>(`/reports/${id}`),
+  
+  create: (request: CreateReportRequest) => 
+    apiClient.post<{ report: Report; message: string }>('/reports', request),
+  
+  generate: (id: number) => 
+    apiClient.post<{ message: string; report_id: number; status: string }>(
+      `/reports/${id}/generate`
+    ),
+  
+  delete: (id: number) => 
+    apiClient.delete<{ message: string }>(`/reports/${id}`),
 };

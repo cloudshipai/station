@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "is_array": false,
+  "array_min": 0,
+  "array_max": 0,
+  "children": {
+    "content": {
+      "type": "unknown",
+      "is_array": false,
+      "array_min": 0,
+      "array_max": 0,
+      "children": null,
+      "item_type": null,
+      "samples": null
+    }
+  },
+  "item_type": null,
+  "samples": null
+}

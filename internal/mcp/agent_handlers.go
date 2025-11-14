@@ -304,9 +304,10 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		description,
 		prompt,
 		maxSteps,
-		existingAgent.InputSchema,     // Keep existing input schema for now
-		existingAgent.CronSchedule,    // Keep existing schedule
-		existingAgent.ScheduleEnabled, // Keep existing schedule setting
+		existingAgent.InputSchema,       // Keep existing input schema for now
+		existingAgent.CronSchedule,      // Keep existing schedule
+		existingAgent.ScheduleEnabled,   // Keep existing schedule setting
+		existingAgent.ScheduleVariables, // Keep existing schedule variables
 		outputSchema,
 		outputSchemaPreset,
 		app,     // CloudShip app classification

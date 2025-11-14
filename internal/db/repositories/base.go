@@ -6,36 +6,44 @@ import (
 )
 
 type Repositories struct {
-	Environments   *EnvironmentRepo
-	Users          *UserRepo
-	FileMCPConfigs *FileMCPConfigRepo
-	MCPServers     *MCPServerRepo
-	MCPTools       *MCPToolRepo
-	ModelProviders *ModelProviderRepository
-	Models         *ModelRepository
-	Agents         *AgentRepo
-	AgentTools     *AgentToolRepo
-	AgentRuns      *AgentRunRepo
-	Settings       *SettingsRepo
-	db             db.Database // Store reference to database for transactions
+	Environments     *EnvironmentRepo
+	Users            *UserRepo
+	FileMCPConfigs   *FileMCPConfigRepo
+	MCPServers       *MCPServerRepo
+	MCPTools         *MCPToolRepo
+	ModelProviders   *ModelProviderRepository
+	Models           *ModelRepository
+	Agents           *AgentRepo
+	AgentTools       *AgentToolRepo
+	AgentRuns        *AgentRunRepo
+	AgentAgents      *AgentAgentRepo
+	Settings         *SettingsRepo
+	Reports          *ReportRepo
+	BenchmarkMetrics *BenchmarkMetricsRepo
+	BenchmarkTasks   *BenchmarkTasksRepo
+	db               db.Database // Store reference to database for transactions
 }
 
 func New(database db.Database) *Repositories {
 	conn := database.Conn()
 
 	return &Repositories{
-		Environments:   NewEnvironmentRepo(conn),
-		Users:          NewUserRepo(conn),
-		FileMCPConfigs: NewFileMCPConfigRepo(conn),
-		MCPServers:     NewMCPServerRepo(conn),
-		MCPTools:       NewMCPToolRepo(conn),
-		ModelProviders: NewModelProviderRepository(conn),
-		Models:         NewModelRepository(conn),
-		Agents:         NewAgentRepo(conn),
-		AgentTools:     NewAgentToolRepo(conn),
-		AgentRuns:      NewAgentRunRepo(conn),
-		Settings:       NewSettingsRepo(conn),
-		db:             database,
+		Environments:     NewEnvironmentRepo(conn),
+		Users:            NewUserRepo(conn),
+		FileMCPConfigs:   NewFileMCPConfigRepo(conn),
+		MCPServers:       NewMCPServerRepo(conn),
+		MCPTools:         NewMCPToolRepo(conn),
+		ModelProviders:   NewModelProviderRepository(conn),
+		Models:           NewModelRepository(conn),
+		Agents:           NewAgentRepo(conn),
+		AgentTools:       NewAgentToolRepo(conn),
+		AgentAgents:      NewAgentAgentRepo(conn),
+		AgentRuns:        NewAgentRunRepo(conn),
+		Settings:         NewSettingsRepo(conn),
+		Reports:          NewReportRepo(conn),
+		BenchmarkMetrics: NewBenchmarkMetricsRepo(conn),
+		BenchmarkTasks:   NewBenchmarkTasksRepo(conn),
+		db:               database,
 	}
 }
 

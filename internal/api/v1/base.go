@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +14,7 @@ import (
 // APIHandlers contains all the API handlers and their dependencies
 type APIHandlers struct {
 	repos        *repositories.Repositories
+	db           *sql.DB // Database connection for benchmark analyzer
 	agentService services.AgentServiceInterface
 	// mcpConfigService removed - using file-based configs only
 	toolDiscoveryService *services.ToolDiscoveryService // restored for lighthouse/API compatibility
@@ -26,12 +28,14 @@ type APIHandlers struct {
 // NewAPIHandlers creates a new API handlers instance
 func NewAPIHandlers(
 	repos *repositories.Repositories,
+	db *sql.DB,
 	toolDiscoveryService *services.ToolDiscoveryService,
 	telemetryService *telemetry.TelemetryService,
 	localMode bool,
 ) *APIHandlers {
 	return &APIHandlers{
 		repos:                repos,
+		db:                   db,
 		agentService:         services.NewAgentService(repos),
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
@@ -80,6 +84,12 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// MCP server management routes (file-based configuration)
 	h.registerMCPManagementRoutes(envGroup)
 
+	// Faker routes (simulation tools)
+	h.registerFakerRoutes(envGroup)
+
+	// Traces routes (OTEL/Jaeger integration)
+	h.registerTracesRoutes(router)
+
 	// MCP Directory template routes
 	h.registerMCPDirectoryRoutes(router)
 
@@ -114,6 +124,14 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Agent runs routes - accessible to regular users in server mode
 	runsGroup := router.Group("/runs")
 	h.registerAgentRunRoutes(runsGroup)
+
+	// Benchmark routes - accessible to regular users in server mode
+	benchmarksGroup := router.Group("/benchmarks")
+	h.registerBenchmarkRoutes(benchmarksGroup)
+
+	// Report routes - accessible to regular users in server mode
+	reportsGroup := router.Group("/reports")
+	h.registerReportRoutes(reportsGroup)
 
 	// Settings routes - admin only
 	settingsGroup := router.Group("/settings")

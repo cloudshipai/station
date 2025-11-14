@@ -18,6 +18,7 @@ type Config struct {
 	Environment      string
 	TelemetryEnabled bool
 	OTELEndpoint     string // OpenTelemetry OTLP endpoint for exporting traces
+	JaegerQueryURL   string // Jaeger Query API endpoint for fetching traces
 	Debug            bool   // Debug mode enables verbose logging
 	// Workspace Configuration
 	Workspace string // Custom workspace path (overrides XDG paths)
@@ -28,7 +29,17 @@ type Config struct {
 	AIBaseURL  string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
 	// CloudShip Integration
 	CloudShip CloudShipConfig
+	// Faker Templates (for local development)
+	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
+}
+
+// FakerTemplate defines a reusable faker configuration
+type FakerTemplate struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	Instruction string `yaml:"instruction"`
+	Model       string `yaml:"model"`
 }
 
 // CloudShipConfig holds CloudShip Lighthouse integration settings
@@ -49,9 +60,10 @@ func Load() (*Config, error) {
 		SSHHostKeyPath:   getEnvOrDefault("SSH_HOST_KEY_PATH", "./ssh_host_key"),
 		AdminUsername:    getEnvOrDefault("ADMIN_USERNAME", "admin"),
 		Environment:      getEnvOrDefault("ENVIRONMENT", "development"),
-		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true),     // Default enabled with opt-out
-		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", ""), // Default empty (no export)
-		Debug:            getEnvBoolOrDefault("STN_DEBUG", false),            // Default to info level
+		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true),                          // Default enabled with opt-out
+		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"), // Default to local Jaeger
+		JaegerQueryURL:   getEnvOrDefault("JAEGER_QUERY_URL", "http://localhost:16686"),           // Default to local Jaeger Query
+		Debug:            getEnvBoolOrDefault("STN_DEBUG", false),                                 // Default to info level
 		// Workspace Configuration
 		Workspace: getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults
@@ -90,6 +102,9 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("otel_endpoint") {
 		cfg.OTELEndpoint = viper.GetString("otel_endpoint")
+	}
+	if viper.IsSet("jaeger_query_url") {
+		cfg.JaegerQueryURL = viper.GetString("jaeger_query_url")
 	}
 	if viper.IsSet("debug") {
 		cfg.Debug = viper.GetBool("debug")
@@ -135,7 +150,64 @@ func Load() (*Config, error) {
 		cfg.CloudShip.BundleRegistryURL = viper.GetString("cloudship.bundle_registry_url")
 	}
 
+	// Load faker templates from config file
+	cfg.FakerTemplates = loadFakerTemplates()
+
 	return cfg, nil
+}
+
+// loadFakerTemplates loads faker templates from config file and merges with built-in templates
+func loadFakerTemplates() map[string]FakerTemplate {
+	templates := getBuiltInFakerTemplates()
+
+	// Load custom templates from config file if present
+	if viper.IsSet("faker_templates") {
+		var customTemplates map[string]FakerTemplate
+		if err := viper.UnmarshalKey("faker_templates", &customTemplates); err == nil {
+			// Merge custom templates (override built-in if same key)
+			for key, template := range customTemplates {
+				templates[key] = template
+			}
+		}
+	}
+
+	return templates
+}
+
+// getBuiltInFakerTemplates returns the default faker templates
+func getBuiltInFakerTemplates() map[string]FakerTemplate {
+	return map[string]FakerTemplate{
+		"aws-finops": {
+			Name:        "AWS FinOps",
+			Description: "Complete AWS cost management and optimization tools",
+			Instruction: "Generate comprehensive AWS Cost Explorer and Billing API tools for FinOps investigations. Include tools for: 1) Cost queries (get_cost_and_usage, get_cost_forecast, get_cost_categories, get_dimension_values), 2) Cost anomaly detection (get_anomalies, get_anomaly_monitors, get_anomaly_subscriptions, detect_cost_spikes), 3) Service-level cost analysis (get_ec2_costs, get_rds_costs, get_s3_costs, get_lambda_costs, get_cloudfront_costs, get_data_transfer_costs), 4) Reserved Instances and Savings Plans (get_ri_utilization, get_ri_coverage, get_savings_plans_utilization, get_ri_recommendations, get_savings_plans_purchase_recommendation), 5) Cost allocation and tagging (get_cost_by_tag, get_cost_by_account, get_cost_by_region, get_untagged_resources, validate_cost_allocation_tags), 6) Budget management (list_budgets, get_budget_performance, get_budget_forecast, analyze_budget_variance, get_budget_alerts). Tools should accept parameters like time_period (start/end dates), granularity (daily/monthly), filters (service, region, tag, account), group_by dimensions, and return realistic AWS Cost Explorer JSON responses with detailed cost breakdowns, usage quantities, and trending data.",
+			Model:       "gpt-4o-mini",
+		},
+		"gcp-finops": {
+			Name:        "GCP FinOps",
+			Description: "GCP cloud billing and cost optimization tools",
+			Instruction: "Generate comprehensive GCP Cloud Billing and Cost Management API tools for FinOps investigations. Include tools for: 1) Querying billing data and export tables (query_billing_export, get_billing_account, list_projects_billing), 2) Analyzing cost trends and anomalies (analyze_cost_spike, get_cost_forecast, compare_period_costs, detect_cost_anomalies), 3) Resource cost attribution (get_service_costs, get_project_costs, get_sku_costs, get_label_costs), 4) Budget and alert management (list_budgets, get_budget_status, get_budget_alerts, analyze_budget_variance), 5) Recommendations and optimization (get_cost_recommendations, list_idle_resources, get_commitment_analysis, analyze_sustained_use_discount), 6) Cost allocation and reporting (get_cost_breakdown_by_service, get_cost_by_region, get_cost_by_label, generate_cost_report). Each tool should accept parameters like project_id, billing_account_id, time_range (start_date, end_date), granularity (daily, weekly, monthly), filters (service, sku, region, labels), and aggregation options.",
+			Model:       "gpt-4o-mini",
+		},
+		"azure-finops": {
+			Name:        "Azure FinOps",
+			Description: "Azure cost management and optimization tools",
+			Instruction: "Generate comprehensive Azure Cost Management API tools for FinOps investigations. Include tools for: 1) Cost queries (get_cost_and_usage, get_cost_forecast, query_cost_management), 2) Cost anomaly detection (detect_cost_anomalies, get_anomaly_alerts), 3) Resource-level analysis (get_resource_costs, get_subscription_costs, get_resource_group_costs), 4) Budget management (list_budgets, get_budget_alerts, analyze_budget_variance), 5) Recommendations (get_advisor_recommendations, get_rightsizing_recommendations, get_reserved_instance_recommendations), 6) Cost allocation (get_cost_by_tag, get_cost_by_department, get_cost_by_service). Tools should work with Azure Cost Management REST API patterns and return realistic Azure billing data.",
+			Model:       "gpt-4o-mini",
+		},
+		"datadog-monitoring": {
+			Name:        "Datadog Monitoring",
+			Description: "Datadog metrics, logs, and monitoring tools",
+			Instruction: "Generate Datadog monitoring API tools for DevOps and observability. Include tools for: 1) Metrics queries (query_metrics, get_metric_metadata, list_active_metrics), 2) Log analysis (search_logs, get_log_aggregates, analyze_log_patterns), 3) APM traces (search_traces, get_service_performance, analyze_trace_latency), 4) Monitors and alerts (list_monitors, get_monitor_status, get_alert_history), 5) Dashboards (get_dashboard_data, query_dashboard_widgets), 6) Infrastructure monitoring (get_host_metrics, get_container_metrics, get_process_metrics). Tools should return realistic Datadog API responses with time-series data, log entries, and monitoring insights.",
+			Model:       "gpt-4o-mini",
+		},
+		"stripe-payments": {
+			Name:        "Stripe Payments",
+			Description: "Stripe payment and subscription API tools",
+			Instruction: "Generate Stripe payment API tools for payment processing and subscription management. Include tools for: 1) Payment operations (create_payment_intent, capture_payment, refund_payment, list_payments), 2) Customer management (create_customer, update_customer, list_customers, get_customer_payment_methods), 3) Subscription handling (create_subscription, update_subscription, cancel_subscription, list_subscriptions), 4) Invoice operations (create_invoice, finalize_invoice, list_invoices, get_invoice_status), 5) Product and pricing (list_products, get_product_details, list_prices, create_price), 6) Payment analytics (get_payment_analytics, get_mrr_metrics, get_churn_analysis). Tools should return realistic Stripe API response formats with proper object structures.",
+			Model:       "gpt-4o-mini",
+		},
+	}
 }
 
 // GetStationConfigDir returns the station configuration directory path

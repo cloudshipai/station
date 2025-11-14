@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "station": {
+      "enabled": true,
+      "type": "local",
+      "command": ["stn", "stdio"],
+        "environment": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    },
+  },
+}

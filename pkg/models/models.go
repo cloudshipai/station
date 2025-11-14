@@ -78,6 +78,7 @@ type Agent struct {
 	LastScheduledRun   *time.Time `json:"last_scheduled_run,omitempty" db:"last_scheduled_run"`
 	NextScheduledRun   *time.Time `json:"next_scheduled_run,omitempty" db:"next_scheduled_run"`
 	ScheduleEnabled    bool       `json:"schedule_enabled" db:"schedule_enabled"`
+	ScheduleVariables  *string    `json:"schedule_variables,omitempty" db:"schedule_variables"`
 	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
 }
@@ -143,6 +144,7 @@ type AgentRun struct {
 	ToolsUsed       *int64     `json:"tools_used,omitempty" db:"tools_used"`
 	DebugLogs       *JSONArray `json:"debug_logs,omitempty" db:"debug_logs"`
 	Error           *string    `json:"error,omitempty" db:"error"`
+	ParentRunID     *int64     `json:"parent_run_id,omitempty" db:"parent_run_id"` // Track parent run for hierarchical agent execution
 }
 
 type AgentRunWithDetails struct {
@@ -252,4 +254,21 @@ type WebhookDelivery struct {
 	NextRetryAt     *time.Time `json:"next_retry_at,omitempty" db:"next_retry_at"`
 	DeliveredAt     *time.Time `json:"delivered_at,omitempty" db:"delivered_at"`
 	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+}
+
+// AgentAgent represents a parent-child agent relationship for hierarchical orchestration
+type AgentAgent struct {
+	ID            int64     `json:"id" db:"id"`
+	ParentAgentID int64     `json:"parent_agent_id" db:"parent_agent_id"`
+	ChildAgentID  int64     `json:"child_agent_id" db:"child_agent_id"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+}
+
+// ChildAgent includes the child agent details with the relationship information
+type ChildAgent struct {
+	RelationshipID int64     `json:"relationship_id"`
+	ParentAgentID  int64     `json:"parent_agent_id"`
+	ChildAgentID   int64     `json:"child_agent_id"`
+	ChildAgent     Agent     `json:"child_agent"`
+	CreatedAt      time.Time `json:"created_at"`
 }

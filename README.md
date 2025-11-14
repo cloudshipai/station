@@ -65,37 +65,103 @@ That's it. Station handles:
 
 ## Quick Start
 
-### 1. Install Station
+### 🚀 Super Quick: Docker One-Liner (Recommended)
+
+Get Station running in Docker with zero setup:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/scripts/quick-deploy.sh | bash
 ```
 
-### 2. Start Station
+**What this does:**
+- ✅ Prompts for your OpenAI API key
+- ✅ Creates docker-compose.yml automatically
+- ✅ Starts Station in Docker (production-ready)
+- ✅ Opens browser to Web UI at `http://localhost:8585`
+- ✅ Auto-installs bundles from `bundles/` directory
+
+**Just need:** Docker and your OpenAI API key.
+
+**Stop Station:** `docker compose down`
+
+---
+
+### ⚡ Fastest: Local Install & Run
+
+For local development without Docker:
+
 ```bash
-# Start Station with your OpenAI API key (automatically configures .mcp.json for Claude Code/Cursor)
-stn up --provider openai --api-key sk-your-key-here
+curl -fsSL https://get.station.dev | bash
+```
+
+**What this does:**
+- ✅ Installs Station CLI
+- ✅ Prompts for AI provider setup
+- ✅ Starts Station locally
+- ✅ Opens browser automatically
+
+**Just need:** `curl` and your AI API key (OpenAI/Anthropic/Gemini/Ollama).
+
+**Stop Station:** `stn down`
+
+---
+
+### Recommended: Docker Quick Deploy
+
+Best for production-like setups with bundles:
+
+```bash
+# 1. Download quick-deploy script
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/scripts/quick-deploy.sh -o quick-deploy.sh
+chmod +x quick-deploy.sh
+
+# 2. Add bundles (optional)
+mkdir bundles
+# Place .tar.gz bundle files in bundles/ directory
+
+# 3. Deploy
+export OPENAI_API_KEY="sk-..."
+./quick-deploy.sh
+```
+
+**What you get:**
+- ✅ Station running in Docker with auto-restart
+- ✅ Web UI at `http://localhost:8585`
+- ✅ Auto-installs all bundles
+- ✅ Persistent data storage
+- ✅ Production-ready setup
+
+---
+
+### Manual: Traditional Install
+
+For full control over installation:
+
+```bash
+# 1. Install Station
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+
+# 2. Start Station
+export OPENAI_API_KEY=sk-your-key-here
+stn up --provider openai --model gpt-4o-mini
 ```
 
 **More provider options:**
 ```bash
-# OpenAI with specific model
-stn up --provider openai --api-key sk-your-key-here --model gpt-4o
-
 # Anthropic Claude
 stn up --provider anthropic --api-key sk-ant-...
 
 # Google Gemini
 stn up --provider gemini --api-key your-key --model gemini-2.0-flash-exp
 
-# Custom provider (Ollama, etc.)
-stn up --provider custom --base-url http://localhost:11434/v1 --model llama3.2
+# Ollama (local models)
+stn up --provider openai --base-url http://localhost:11434/v1 --model llama3.2
 
-# Alternative: Use environment variable instead of --api-key flag
-export OPENAI_API_KEY=sk-your-key-here
-stn up --provider openai
+# Meta Llama (OpenAI-compatible endpoint)
+stn up --provider openai --api-key LLM-your-key --base-url https://api.llama.com/compat/v1 --model Llama-4-Maverick
 
-# With CloudShip registration for centralized management
-stn up --provider openai --api-key sk-your-key-here --cloudshipai-registration-key your-registration-key
+# With CloudShip registration
+stn up --provider openai --api-key sk-... --cloudshipai-registration-key your-key
 ```
 
 **Stop Station:**
@@ -109,7 +175,7 @@ stn down
 - ✅ Dynamic Agent MCP at `http://localhost:3030/mcp`
 - ✅ `.mcp.json` automatically created for seamless Claude integration
 
-[Full installation guide →](./docs/station/installation.md)
+**Next:** [Complete Quick Start Guide →](./docs/deployment/QUICK_START.md) | [Full Installation Guide →](./docs/station/installation.md)
 
 ---
 
@@ -271,6 +337,71 @@ Variables are resolved at runtime from `variables.yml`—never hardcoded in conf
 
 ---
 
+## AI Faker: Mock Data for Development
+
+Test and demo agents with realistic AI-generated mock data—no production credentials required.
+
+**Use Cases:**
+- **Development**: Build agents without production access or real credentials
+- **Testing**: Test with realistic scenarios (high-cost, security incidents, capacity issues)
+- **Demos**: Generate compelling demo data on demand
+- **Empty Environments**: Work with AWS accounts or databases that have no real data
+
+**How it works:** The AI Faker is an MCP proxy that enriches responses from real MCP servers with AI-generated mock data based on natural language instructions.
+
+**Example: AWS CloudWatch with empty account**
+```json
+{
+  "mcpServers": {
+    "aws-cloudwatch-faker": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--command", "uvx",
+        "--args", "awslabs.cloudwatch-mcp-server@latest",
+        "--ai-instruction", "Generate high-cost production incident data: 95% CPU, elevated RDS costs, critical alarms, Lambda failures"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}
+```
+
+**Agent receives AI-generated mock data:**
+```
+Active CloudWatch Alarms:
+1. High CPU: Instance i-0123456789abcdef0 at 95% CPU
+2. Memory Alert: Instance using 90% memory
+3. RDS Performance: DB mydb-instance at 1800 Read IOPS (exceeded)
+4. Cost Spike: RDS cost increased 25% this month
+5. Lambda Failures: Function myFunction failed 15 times in 5 minutes
+...
+```
+
+The faker works with **any MCP server**—filesystem, databases, cloud APIs, security tools—and uses your configured AI provider (OpenAI, Gemini, Ollama, etc.).
+
+**Built-in Safety Mode:**
+- 🛡️ AI automatically detects and intercepts write operations
+- ✅ Read operations proxied and enriched normally
+- ⚠️ Write operations return mock success (no real execution)
+- 📋 See exactly which operations are protected at startup
+
+```
+🛡️  SAFETY MODE: 4 write operations detected and will be INTERCEPTED:
+  1. write_file
+  2. edit_file
+  3. create_directory
+  4. move_file
+These tools will return mock success responses without executing real operations.
+```
+
+[Complete AI Faker Documentation →](./docs/station/ai-faker.md)
+
+---
+
 ## OpenAPI MCP Servers
 
 Station can automatically convert OpenAPI/Swagger specifications into MCP servers, making any REST API instantly available as agent tools.
@@ -395,6 +526,63 @@ Station automatically configures:
 
 ---
 
+## Observability & Distributed Tracing
+
+Station includes built-in OpenTelemetry (OTEL) support for complete execution observability:
+
+**What Gets Traced:**
+- **Agent Executions**: Complete timeline from start to finish
+- **LLM Calls**: Every OpenAI/Anthropic/Gemini API call with latency
+- **MCP Tool Usage**: Individual tool calls to AWS, Stripe, GitHub, etc.
+- **Database Operations**: Query performance and data access patterns
+- **GenKit Native Spans**: Dotprompt execution, generation flow, model interactions
+
+**Quick Start with Jaeger:**
+```bash
+# Start Jaeger locally
+make jaeger
+
+# Configure Station
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+stn serve
+
+# Run agent and view traces
+stn agent run my-agent "Analyze costs"
+open http://localhost:16686
+```
+
+**Team Integration Examples:**
+- **Jaeger** - Open source tracing (local development)
+- **Grafana Tempo** - Scalable distributed tracing
+- **Datadog APM** - Full-stack observability platform
+- **Honeycomb** - Advanced trace analysis with BubbleUp
+- **New Relic** - Application performance monitoring
+- **AWS X-Ray** - AWS-native distributed tracing
+
+**Span Details Captured:**
+```
+aws-cost-spike-analyzer (18.2s)
+├─ generate (17ms)
+│  ├─ openai/gpt-4o-mini (11ms) - "Analyze cost data"
+│  └─ __get_cost_anomalies (0ms) - AWS Cost Explorer
+├─ generate (11ms)
+│  └─ __get_cost_and_usage_comparisons (0ms)
+└─ db.agent_runs.create (0.1ms)
+```
+
+**Configuration:**
+```bash
+# Environment variable (recommended)
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
+
+# Or config file
+otel_endpoint: "http://your-collector:4318"
+```
+
+[Complete OTEL Setup Guide →](./docs/OTEL_SETUP.md) - Includes Jaeger, Tempo, Datadog, Honeycomb, AWS X-Ray, New Relic, Azure Monitor examples
+
+---
+
 ## Use Cases
 
 **FinOps & Cost Optimization:**
@@ -416,6 +604,91 @@ Station automatically configures:
 - Change impact analysis
 
 [See Example Agents →](./docs/station/examples.md)
+
+---
+
+## Database Persistence & Replication
+
+Station uses SQLite by default, with support for cloud databases and continuous backup for production deployments.
+
+### Local Development (Default)
+```bash
+# Station uses local SQLite file
+stn stdio
+```
+Perfect for local development, zero configuration required.
+
+### Cloud Database (libsql)
+For multi-instance deployments or team collaboration, use a libsql-compatible cloud database:
+
+```bash
+# Connect to cloud database
+export DATABASE_URL="libsql://your-db.example.com?authToken=your-token"
+stn stdio
+```
+
+**Benefits:**
+- State persists across multiple deployments
+- Team collaboration with shared database
+- Multi-region replication
+- Automatic backups
+
+### Continuous Backup (Litestream)
+For single-instance production deployments with disaster recovery:
+
+```bash
+# Docker deployment with automatic S3 backup
+docker run \
+  -e LITESTREAM_S3_BUCKET=my-backups \
+  -e LITESTREAM_S3_ACCESS_KEY_ID=xxx \
+  -e LITESTREAM_S3_SECRET_ACCESS_KEY=yyy \
+  ghcr.io/cloudshipai/station:production
+```
+
+**Benefits:**
+- Continuous replication to S3/GCS/Azure
+- Automatic restore on startup
+- Point-in-time recovery
+- Zero data loss on server failures
+
+[Database Replication Guide →](./docs/station/DATABASE_REPLICATION.md)
+
+---
+
+## GitOps Workflow
+
+Version control your agent configurations, MCP templates, and variables in Git:
+
+```bash
+# Create a Git repository for your Station config
+mkdir my-station-config
+cd my-station-config
+
+# Initialize Station in this directory
+export STATION_WORKSPACE=$(pwd)
+stn init
+
+# Your agents are now in ./environments/default/agents/
+# Commit to Git and share with your team!
+git init
+git add .
+git commit -m "Initial Station configuration"
+```
+
+**Team Workflow:**
+```bash
+# Clone team repository
+git clone git@github.com:your-team/station-config.git
+cd station-config
+
+# Run Station with this workspace
+export STATION_WORKSPACE=$(pwd)
+stn stdio
+```
+
+All agent `.prompt` files, MCP `template.json` configs, and `variables.yml` are version-controlled and reviewable in Pull Requests.
+
+[GitOps Workflow Guide →](./docs/station/GITOPS_WORKFLOW.md)
 
 ---
 

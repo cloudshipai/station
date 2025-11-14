@@ -19,7 +19,7 @@ func TestNewSchedulerService(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	if scheduler == nil {
 		t.Fatal("NewSchedulerService() returned nil")
@@ -52,7 +52,7 @@ func TestSchedulerStartStop(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	tests := []struct {
 		name        string
@@ -102,7 +102,7 @@ func TestScheduleAgent(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	// Start scheduler
 	err = scheduler.Start()
@@ -205,7 +205,7 @@ func TestUnscheduleAgent(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	// Start scheduler
 	err = scheduler.Start()
@@ -267,7 +267,7 @@ func TestRescheduleAgent(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	// Start scheduler
 	err = scheduler.Start()
@@ -329,7 +329,7 @@ func TestGetScheduledAgents(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	// Start scheduler
 	err = scheduler.Start()
@@ -395,7 +395,7 @@ func TestSchedulerWithNilSchedule(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	// Start scheduler
 	err = scheduler.Start()
@@ -438,7 +438,7 @@ func TestCronExpressionValidation(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	err = scheduler.Start()
 	if err != nil {
@@ -501,7 +501,7 @@ func TestSchedulerGracefulShutdown(t *testing.T) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	// Start and stop multiple times
 	for i := 0; i < 3; i++ {
@@ -533,7 +533,7 @@ func BenchmarkScheduleAgent(b *testing.B) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -565,7 +565,7 @@ func BenchmarkUnscheduleAgent(b *testing.B) {
 
 	repos := repositories.New(testDB)
 	agentService := NewAgentService(repos)
-	scheduler := NewSchedulerService(testDB, agentService)
+	scheduler := NewSchedulerService(testDB, repos, agentService)
 
 	scheduler.Start()
 	defer scheduler.Stop()

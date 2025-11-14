@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # Jaeger all-in-one (collector + UI + storage)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: station-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
+    networks:
+      - station-otel
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Station server with OTEL enabled
+  station:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: station-server
+    depends_on:
+      jaeger:
+        condition: service_healthy
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=station
+      - OTEL_SERVICE_VERSION=dev
+      - GENKIT_ENV=production  # Enable OTEL export (disabled in dev mode)
+      - STN_DEBUG=true
+    ports:
+      - "8080:8080"  # Station API
+      - "2222:2222"  # Station SSH
+    networks:
+      - station-otel
+    volumes:
+      - station-data:/data
+      - ./test-configs:/configs:ro
+
+volumes:
+  station-data:
+
+networks:
+  station-otel:
+    driver: bridge

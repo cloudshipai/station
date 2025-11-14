@@ -22,6 +22,8 @@ import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
 import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
+import { ReportsPage } from './components/pages/ReportsPage';
+import { ReportDetailPage } from './components/pages/ReportDetailPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -37,6 +39,10 @@ import { InstallBundleModal } from './components/modals/InstallBundleModal';
 import DeployModal from './components/modals/DeployModal';
 import { CopyEnvironmentModal } from './components/modals/CopyEnvironmentModal';
 import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
+import { HierarchicalAgentNode } from './components/nodes/HierarchicalAgentNode';
+import { buildAgentHierarchyMap } from './utils/agentHierarchy';
+import { AgentsCanvas as AgentsCanvasComponent } from './components/agents/AgentsCanvas';
+import { RunDetailsModal } from './components/modals/RunDetailsModal';
 import type { AgentRunWithDetails } from './types/station';
 
 const queryClient = new QueryClient();
@@ -165,7 +171,7 @@ const ToolNode = ({ data }: any) => {
 };
 
 const agentPageNodeTypes = {
-  agent: AgentNode,
+  agent: HierarchicalAgentNode,
   mcp: MCPNode,
   tool: ToolNode,
 };
@@ -235,7 +241,22 @@ const Layout = ({ children }: any) => {
 
   // Extract environment from URL path since useParams doesn't work in Layout
   const pathParts = location.pathname.split('/').filter(Boolean);
-  const currentEnvironmentName = pathParts.length >= 2 ? pathParts[1] : null;
+  
+  // Special handling for /agent/:id route (agent detail page)
+  const isAgentDetailPage = pathParts[0] === 'agent' && pathParts.length === 2;
+  
+  // For agent detail pages, use environment from context; otherwise extract from URL
+  let currentEnvironmentName = null;
+  if (isAgentDetailPage) {
+    // Get environment name from context for agent detail pages
+    const selectedEnv = environmentContext?.environments?.find((env: any) => 
+      env.id === environmentContext?.selectedEnvironment
+    );
+    currentEnvironmentName = selectedEnv?.name.toLowerCase() || null;
+  } else {
+    // Normal path: /agents/:env or /mcps/:env
+    currentEnvironmentName = pathParts.length >= 2 ? pathParts[1] : null;
+  }
 
   // Get current environment object from name
   const getCurrentEnvironment = () => {
@@ -255,6 +276,7 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/mcps')) return 'mcps';
     if (path.startsWith('/mcp-directory')) return 'mcp-directory';
     if (path.startsWith('/runs')) return 'runs';
+    if (path.startsWith('/reports')) return 'reports';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
     if (path.startsWith('/live-demo')) return 'live-demo';
@@ -294,6 +316,7 @@ const Layout = ({ children }: any) => {
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
     { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
+    { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
     { id: 'live-demo', label: 'Live Demo', icon: Play, path: '/live-demo' },
@@ -360,7 +383,14 @@ const Layout = ({ children }: any) => {
   );
 };
 
+// Wrapper for modular AgentsCanvas component
 const AgentsCanvas = () => {
+  const environmentContext = React.useContext(EnvironmentContext);
+  return <AgentsCanvasComponent environmentContext={environmentContext} />;
+};
+
+// Old implementation (kept for reference, can be removed later)
+const AgentsCanvasOld = () => {
   const navigate = useNavigate();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
@@ -460,6 +490,59 @@ const AgentsCanvas = () => {
       const response = await agentsApi.getWithTools(agentId);
       const { agent, mcp_servers } = response.data;
 
+      // Fetch agent prompt to extract agent tools from YAML frontmatter
+      let agentToolsFromPrompt: string[] = [];
+      try {
+        const promptResponse = await agentsApi.getPrompt(agentId);
+        const promptContent = promptResponse.data.content;
+        
+        // Parse YAML frontmatter to extract tools list
+        const yamlMatch = promptContent.match(/^---\n([\s\S]*?)\n---/);
+        if (yamlMatch) {
+          const yamlContent = yamlMatch[1];
+          const toolsMatch = yamlContent.match(/tools:\s*\n((?:\s*-\s*"[^"]+"\s*\n)+)/);
+          if (toolsMatch) {
+            agentToolsFromPrompt = toolsMatch[1]
+              .split('\n')
+              .filter(line => line.trim().startsWith('-'))
+              .map(line => line.trim().replace(/^-\s*"/, '').replace(/"$/, ''))
+              .filter(name => name.length > 0);
+          }
+        }
+      } catch (error) {
+        console.warn('Could not parse agent tools from prompt:', error);
+      }
+
+      // Build agent tools map and collect all tools for hierarchy detection
+      const agentToolsMap = new Map();
+      const allTools: any[] = [];
+      
+      // Add tools from MCP servers
+      mcp_servers.forEach((server: any) => {
+        if (server.tools) {
+          const existingTools = agentToolsMap.get(agent.id) || [];
+          agentToolsMap.set(agent.id, [...existingTools, ...server.tools]);
+          allTools.push(...server.tools);
+        }
+      });
+
+      // Add agent tools from prompt (for agent-to-agent calling)
+      if (agentToolsFromPrompt.length > 0) {
+        const existingTools = agentToolsMap.get(agent.id) || [];
+        const agentToolObjects = agentToolsFromPrompt.map(name => ({
+          id: 0, // Virtual tool, no real ID
+          name: name,
+          description: `Agent tool: ${name}`,
+          mcp_server_id: 0
+        }));
+        agentToolsMap.set(agent.id, [...existingTools, ...agentToolObjects]);
+        allTools.push(...agentToolObjects);
+      }
+
+      // Build hierarchy map with all agents
+      const hierarchyMap = buildAgentHierarchyMap(agents, agentToolsMap, allTools);
+      const hierarchyInfo = hierarchyMap.get(agent.id);
+
       // Generate nodes and edges from the data
       const newNodes: Node[] = [];
       const newEdges: Edge[] = [];
@@ -470,10 +553,8 @@ const AgentsCanvas = () => {
         type: 'agent',
         position: { x: 0, y: 0 }, // ELK will position this
         data: {
-          label: agent.name,
-          description: agent.description,
-          status: agent.is_scheduled ? 'Scheduled' : 'Manual',
-          agentId: agent.id,
+          agent: agent,
+          hierarchyInfo: hierarchyInfo,
           onOpenModal: openAgentModal,
           onEditAgent: editAgent,
         },
@@ -546,6 +627,46 @@ const AgentsCanvas = () => {
           });
         }
       });
+
+      // Add child agent nodes if this is an orchestrator
+      if (hierarchyInfo && hierarchyInfo.childAgents.length > 0) {
+        hierarchyInfo.childAgents.forEach((childAgentName) => {
+          // Find the child agent in the agents list
+          const childAgent = agents.find(a => 
+            normalizeAgentName(a.name) === childAgentName
+          );
+          
+          if (childAgent) {
+            // Create a node for the child agent
+            newNodes.push({
+              id: `child-agent-${childAgent.id}`,
+              type: 'agent',
+              position: { x: 0, y: 0 }, // ELK will position this
+              data: {
+                agent: childAgent,
+                hierarchyInfo: hierarchyMap.get(childAgent.id),
+                onOpenModal: openAgentModal,
+                onEditAgent: editAgent,
+              },
+            });
+
+            // Edge from orchestrator to child agent
+            newEdges.push({
+              id: `edge-agent-${agent.id}-to-child-${childAgent.id}`,
+              source: `agent-${agent.id}`,
+              target: `child-agent-${childAgent.id}`,
+              animated: true,
+              style: {
+                stroke: '#a855f7',
+                strokeWidth: 3,
+                filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.8))'
+              },
+              type: 'default',
+              className: 'neon-edge-agent',
+            });
+          }
+        });
+      }
 
       // Apply automatic layout using ELK.js
       const layoutedNodes = await getLayoutedNodes(newNodes, newEdges);
@@ -1140,178 +1261,7 @@ const MCPServersPage = () => {
   );
 };
 
-// Run Details Modal Component
-const RunDetailsModal = ({ runId, isOpen, onClose }: { runId: number | null, isOpen: boolean, onClose: () => void }) => {
-  const [runDetails, setRunDetails] = useState<AgentRunWithDetails | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (isOpen && runId) {
-      const fetchRunDetails = async () => {
-        setLoading(true);
-        try {
-          const response = await agentRunsApi.getById(runId);
-          setRunDetails(response.data.run);
-        } catch (error) {
-          console.error('Failed to fetch run details:', error);
-          setRunDetails(null);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchRunDetails();
-    }
-  }, [isOpen, runId]);
-
-  if (!isOpen || !runId) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
-            Run Details #{runId}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
-          >
-            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="text-tokyo-fg font-mono">Loading run details...</div>
-          </div>
-        ) : runDetails ? (
-          <div className="space-y-6">
-            {/* Run Overview */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-blue mb-3">Overview</h3>
-              <div className="grid gap-3">
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Agent:</span>
-                  <span className="font-mono text-tokyo-fg">{runDetails.agent_name}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">User:</span>
-                  <span className="font-mono text-tokyo-fg">{runDetails.username}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Status:</span>
-                  <span className={`font-mono px-2 py-1 rounded text-xs ${
-                    runDetails.status === 'completed' ? 'bg-tokyo-green text-tokyo-bg' :
-                    runDetails.status === 'failed' ? 'bg-tokyo-red text-tokyo-bg' :
-                    runDetails.status === 'running' ? 'bg-tokyo-yellow text-tokyo-bg' :
-                    'bg-tokyo-comment text-tokyo-bg'
-                  }`}>
-                    {runDetails.status.toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Duration:</span>
-                  <span className="font-mono text-tokyo-fg">
-                    {runDetails.duration_seconds ? `${runDetails.duration_seconds}s` : 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Model:</span>
-                  <span className="font-mono text-tokyo-fg">{runDetails.model_name || 'N/A'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Token Usage */}
-            {(runDetails.input_tokens || runDetails.output_tokens) && (
-              <div>
-                <h3 className="text-lg font-mono font-medium text-tokyo-green mb-3">Token Usage</h3>
-                <div className="grid gap-3">
-                  {runDetails.input_tokens && (
-                    <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <span className="font-mono text-tokyo-comment">Input Tokens:</span>
-                      <span className="font-mono text-tokyo-fg">{runDetails.input_tokens}</span>
-                    </div>
-                  )}
-                  {runDetails.output_tokens && (
-                    <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <span className="font-mono text-tokyo-comment">Output Tokens:</span>
-                      <span className="font-mono text-tokyo-fg">{runDetails.output_tokens}</span>
-                    </div>
-                  )}
-                  {runDetails.total_tokens && (
-                    <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <span className="font-mono text-tokyo-comment">Total Tokens:</span>
-                      <span className="font-mono text-tokyo-fg">{runDetails.total_tokens}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Task */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-blue mb-3">Task</h3>
-              <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                <pre className="text-sm text-tokyo-fg font-mono whitespace-pre-wrap">{runDetails.task}</pre>
-              </div>
-            </div>
-
-            {/* Response */}
-            {runDetails.final_response && (
-              <div>
-                <h3 className="text-lg font-mono font-medium text-tokyo-cyan mb-3">Final Response</h3>
-                <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <pre className="text-sm text-tokyo-fg font-mono whitespace-pre-wrap">{runDetails.final_response}</pre>
-                </div>
-              </div>
-            )}
-
-            {/* Execution Steps */}
-            {runDetails.execution_steps && runDetails.execution_steps.length > 0 && (
-              <div>
-                <h3 className="text-lg font-mono font-medium text-tokyo-purple mb-3">
-                  Execution Steps ({runDetails.execution_steps.length})
-                </h3>
-                <div className="space-y-3">
-                  {runDetails.execution_steps.map((step, index) => (
-                    <div key={index} className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <div className="text-sm font-mono text-tokyo-purple mb-2">Step {index + 1}</div>
-                      <pre className="text-xs text-tokyo-fg font-mono whitespace-pre-wrap overflow-x-auto">
-                        {typeof step === 'string' ? step : JSON.stringify(step, null, 2)}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Timing Information */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-comment mb-3">Timing</h3>
-              <div className="grid gap-3">
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Started:</span>
-                  <span className="font-mono text-tokyo-fg">{new Date(runDetails.started_at).toLocaleString()}</span>
-                </div>
-                {runDetails.completed_at && (
-                  <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                    <span className="font-mono text-tokyo-comment">Completed:</span>
-                    <span className="font-mono text-tokyo-fg">{new Date(runDetails.completed_at).toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <div className="text-tokyo-red font-mono">Failed to load run details</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+// RunDetailsModal is now imported from ./components/modals/RunDetailsModal.tsx
 
 // Runs Page with Modal Support
 const RunsPage = () => {
@@ -1341,6 +1291,17 @@ const RunsPage = () => {
       />
     </div>
   );
+};
+
+// Reports Page Wrapper
+const ReportsPageWrapper = () => {
+  const environmentContext = React.useContext(EnvironmentContext);
+  return <ReportsPage environmentContext={environmentContext} />;
+};
+
+// Report Detail Page Wrapper
+const ReportDetailPageWrapper = () => {
+  return <ReportDetailPage />;
 };
 
 // Environment-specific Node Components
@@ -2898,10 +2859,13 @@ function App() {
                   <Route path="/getting-started" element={<GettingStartedPage />} />
                   <Route path="/agents" element={<AgentsCanvas />} />
                   <Route path="/agents/:env" element={<AgentsCanvas />} />
+                  <Route path="/agent/:agentId" element={<AgentsCanvas />} />
                   <Route path="/mcps" element={<MCPServersPage />} />
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
                   <Route path="/runs" element={<RunsPage />} />
+                  <Route path="/reports" element={<ReportsPageWrapper />} />
+                  <Route path="/reports/:reportId" element={<ReportDetailPageWrapper />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
                   <Route path="/bundles" element={<BundlesPage />} />
                   <Route path="/live-demo" element={<LiveDemoPage />} />

@@ -71,8 +71,14 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 		return fmt.Errorf("failed to get agent tools: %v", err)
 	}
 
+
+	// Get child agents (for agents: section in frontmatter)
+	childAgents, err := s.repos.AgentAgents.ListChildAgents(agentID)
+	if err != nil {
+		return fmt.Errorf("failed to get child agents: %v", err)
+	}
 	// Generate dotprompt content using the same logic as MCP handler
-	dotpromptContent := s.generateDotpromptContent(agent, toolsWithDetails, environment.Name, app, appType)
+	dotpromptContent := s.generateDotpromptContent(agent, toolsWithDetails, childAgents, environment.Name, app, appType)
 
 	// Determine output file path using centralized path resolution
 	outputPath := config.GetAgentPromptPath(environment.Name, agent.Name)
@@ -93,7 +99,7 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 }
 
 // generateDotpromptContent generates the dotprompt file content with proper role structure
-func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, environmentName, app, appType string) string {
+func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType string) string {
 	// Build tools list
 	var toolNames []string
 	for _, tool := range tools {
@@ -125,6 +131,14 @@ metadata:
 		content += "\ntools:\n"
 		for _, toolName := range toolNames {
 			content += fmt.Sprintf("  - \"%s\"\n", toolName)
+		}
+	}
+
+	// Add child agents if any
+	if len(childAgents) > 0 {
+		content += "\nagents:\n"
+		for _, childRel := range childAgents {
+			content += fmt.Sprintf("  - \"%s\"\n", childRel.ChildAgent.Name)
 		}
 	}
 

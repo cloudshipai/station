@@ -6,7 +6,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
+	"time"
 
 	"station/internal/api"
 	"station/internal/config"
@@ -37,6 +40,7 @@ including agent management, file operations, and system resources.`,
 func init() {
 	stdioCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
 	stdioCmd.Flags().Bool("core", false, "Run in core mode - MCP server only, no API server or ports (ideal for containers)")
+	stdioCmd.Flags().Bool("jaeger", true, "Auto-launch Jaeger for distributed tracing (default: true)")
 	rootCmd.AddCommand(stdioCmd)
 }
 
@@ -52,6 +56,22 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Initialize Jaeger if enabled (default: true)
+	jaegerCtx := context.Background()
+	var jaegerSvc *services.JaegerService
+	enableJaeger, _ := cmd.Flags().GetBool("jaeger")
+	if enableJaeger || os.Getenv("STATION_AUTO_JAEGER") == "true" {
+		jaegerSvc = services.NewJaegerService(&services.JaegerConfig{})
+		if err := jaegerSvc.Start(jaegerCtx); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to start Jaeger: %v\n", err)
+		} else {
+			// Set OTEL endpoint for automatic trace export
+			os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", jaegerSvc.GetOTLPEndpoint())
+			_, _ = fmt.Fprintf(os.Stderr, "🔍 Jaeger UI: %s\n", jaegerSvc.GetUIURL())
+			_, _ = fmt.Fprintf(os.Stderr, "🔍 OTLP endpoint: %s\n", jaegerSvc.GetOTLPEndpoint())
+		}
 	}
 
 	// Setup debug logging to file if in dev mode
@@ -88,7 +108,8 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Initialize minimal services for API server only
 	// Use separate contexts: one for long-lived services (management channel), one for MCP server
 	longLivedCtx := context.Background()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Initialize Genkit with configured AI provider
 	_, err = initializeGenkit(ctx, cfg)
@@ -148,7 +169,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	if !coreMode && isPortAvailable(cfg.APIPort) {
 		_, _ = fmt.Fprintf(os.Stderr, "🚀 Starting API server on port %d in stdio mode\n", cfg.APIPort)
 
-		apiServer = api.New(cfg, database, localMode, telemetryService)
+		apiServer = api.New(cfg, database, localMode, nil)
 		apiCtx, apiCancel = context.WithCancel(ctx)
 
 		wg.Add(1)
@@ -162,11 +183,6 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(os.Stderr, "⚙️  Core mode: running MCP server only (no API server)\n")
 	} else {
 		_, _ = fmt.Fprintf(os.Stderr, "⚠️  Port %d already in use, skipping API server (another Station instance running?)\n", cfg.APIPort)
-	}
-
-	// Track stdio mode startup telemetry
-	if telemetryService != nil {
-		telemetryService.TrackStdioModeStarted(apiServer != nil)
 	}
 
 	// Log startup message to stderr (so it doesn't interfere with stdio protocol)
@@ -193,9 +209,16 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	_, _ = fmt.Fprintf(os.Stderr, "🌐 Management channel active - Station remains available for CloudShip control\n")
 	_, _ = fmt.Fprintf(os.Stderr, "📡 Station will continue running until terminated (Ctrl+C)\n")
 
-	// Block forever to keep management channel alive - only exit on signal
-	<-ctx.Done()
-	_, _ = fmt.Fprintf(os.Stderr, "🛑 Received termination signal, shutting down...\n")
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Block until signal received
+	<-sigChan
+	_, _ = fmt.Fprintf(os.Stderr, "\n🛑 Received termination signal, shutting down...\n")
+
+	// Cancel context to trigger cleanup
+	cancel()
 
 	// Clean shutdown of services when terminating
 	if apiCancel != nil {
@@ -211,6 +234,16 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
 		if err := remoteControlSvc.Stop(); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Error stopping remote control service: %v\n", err)
+		}
+	}
+
+	// Stop Jaeger if running
+	if jaegerSvc != nil && jaegerSvc.IsRunning() {
+		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down Jaeger...\n")
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer shutdownCancel()
+		if err := jaegerSvc.Stop(shutdownCtx); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Error stopping Jaeger: %v\n", err)
 		}
 	}
 

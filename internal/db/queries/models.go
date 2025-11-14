@@ -27,8 +27,43 @@ type Agent struct {
 	LastScheduledRun   sql.NullTime   `json:"last_scheduled_run"`
 	NextScheduledRun   sql.NullTime   `json:"next_scheduled_run"`
 	ScheduleEnabled    sql.NullBool   `json:"schedule_enabled"`
+	ScheduleVariables  sql.NullString `json:"schedule_variables"`
 	CreatedAt          sql.NullTime   `json:"created_at"`
 	UpdatedAt          sql.NullTime   `json:"updated_at"`
+}
+
+type AgentAgent struct {
+	ID            int64        `json:"id"`
+	ParentAgentID int64        `json:"parent_agent_id"`
+	ChildAgentID  int64        `json:"child_agent_id"`
+	CreatedAt     sql.NullTime `json:"created_at"`
+}
+
+type AgentReportDetail struct {
+	ID                 int64           `json:"id"`
+	ReportID           int64           `json:"report_id"`
+	AgentID            int64           `json:"agent_id"`
+	AgentName          string          `json:"agent_name"`
+	Score              float64         `json:"score"`
+	Passed             bool            `json:"passed"`
+	Reasoning          sql.NullString  `json:"reasoning"`
+	CriteriaScores     sql.NullString  `json:"criteria_scores"`
+	RunsAnalyzed       sql.NullInt64   `json:"runs_analyzed"`
+	RunIds             sql.NullString  `json:"run_ids"`
+	AvgDurationSeconds sql.NullFloat64 `json:"avg_duration_seconds"`
+	AvgTokens          sql.NullInt64   `json:"avg_tokens"`
+	AvgCost            sql.NullFloat64 `json:"avg_cost"`
+	SuccessRate        sql.NullFloat64 `json:"success_rate"`
+	Strengths          sql.NullString  `json:"strengths"`
+	Weaknesses         sql.NullString  `json:"weaknesses"`
+	Recommendations    sql.NullString  `json:"recommendations"`
+	TelemetrySummary   sql.NullString  `json:"telemetry_summary"`
+	BestRunExample     sql.NullString  `json:"best_run_example"`
+	WorstRunExample    sql.NullString  `json:"worst_run_example"`
+	ToolUsageAnalysis  sql.NullString  `json:"tool_usage_analysis"`
+	FailurePatterns    sql.NullString  `json:"failure_patterns"`
+	ImprovementPlan    sql.NullString  `json:"improvement_plan"`
+	CreatedAt          sql.NullTime    `json:"created_at"`
 }
 
 type AgentRun struct {
@@ -51,6 +86,7 @@ type AgentRun struct {
 	ToolsUsed       sql.NullInt64   `json:"tools_used"`
 	DebugLogs       sql.NullString  `json:"debug_logs"`
 	Error           sql.NullString  `json:"error"`
+	ParentRunID     sql.NullInt64   `json:"parent_run_id"`
 }
 
 type AgentTool struct {
@@ -147,6 +183,35 @@ type ModelProvider struct {
 	IsDefault   sql.NullBool   `json:"is_default"`
 	CreatedAt   sql.NullTime   `json:"created_at"`
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+type Report struct {
+	ID                        int64           `json:"id"`
+	Name                      string          `json:"name"`
+	Description               sql.NullString  `json:"description"`
+	EnvironmentID             int64           `json:"environment_id"`
+	TeamCriteria              string          `json:"team_criteria"`
+	AgentCriteria             sql.NullString  `json:"agent_criteria"`
+	Status                    string          `json:"status"`
+	Progress                  sql.NullInt64   `json:"progress"`
+	CurrentStep               sql.NullString  `json:"current_step"`
+	ExecutiveSummary          sql.NullString  `json:"executive_summary"`
+	TeamScore                 sql.NullFloat64 `json:"team_score"`
+	TeamReasoning             sql.NullString  `json:"team_reasoning"`
+	TeamCriteriaScores        sql.NullString  `json:"team_criteria_scores"`
+	AgentReports              sql.NullString  `json:"agent_reports"`
+	TotalRunsAnalyzed         sql.NullInt64   `json:"total_runs_analyzed"`
+	TotalAgentsAnalyzed       sql.NullInt64   `json:"total_agents_analyzed"`
+	GenerationDurationSeconds sql.NullFloat64 `json:"generation_duration_seconds"`
+	GenerationStartedAt       sql.NullTime    `json:"generation_started_at"`
+	GenerationCompletedAt     sql.NullTime    `json:"generation_completed_at"`
+	TotalLlmTokens            sql.NullInt64   `json:"total_llm_tokens"`
+	TotalLlmCost              sql.NullFloat64 `json:"total_llm_cost"`
+	JudgeModel                sql.NullString  `json:"judge_model"`
+	FilterModel               sql.NullString  `json:"filter_model"`
+	ErrorMessage              sql.NullString  `json:"error_message"`
+	CreatedAt                 sql.NullTime    `json:"created_at"`
+	UpdatedAt                 sql.NullTime    `json:"updated_at"`
 }
 
 type Setting struct {

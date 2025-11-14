@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"station/cmd/main/handlers"
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/logging"
+	"station/internal/services"
 	"station/internal/telemetry"
 	"station/internal/theme"
 	"station/internal/version"
@@ -18,10 +20,13 @@ import (
 )
 
 var (
-	cfgFile          string
-	themeManager     *theme.ThemeManager
-	telemetryService *telemetry.TelemetryService
-	rootCmd          = &cobra.Command{
+	cfgFile              string
+	enableOTEL           bool   // Global flag to enable OTEL telemetry
+	otelEndpoint         string // OTEL endpoint override
+	themeManager         *theme.ThemeManager
+	telemetryService     *telemetry.TelemetryService // PostHog analytics
+	otelTelemetryService *services.TelemetryService  // OTEL distributed tracing
+	rootCmd              = &cobra.Command{
 		Use:   "stn",
 		Short: "Station - AI Agent Management Platform",
 		Long: `Station is a secure, self-hosted platform for managing AI agents with MCP tool integration.
@@ -35,9 +40,12 @@ func init() {
 	cobra.OnInitialize(initLogging)
 	cobra.OnInitialize(initTheme)
 	cobra.OnInitialize(initTelemetry)
+	cobra.OnInitialize(initOTELTelemetry)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/station/config.yaml)")
+	rootCmd.PersistentFlags().BoolVar(&enableOTEL, "enable-telemetry", false, "Enable OpenTelemetry distributed tracing (exports to Jaeger)")
+	rootCmd.PersistentFlags().StringVar(&otelEndpoint, "otel-endpoint", "", "OpenTelemetry OTLP endpoint (default: http://localhost:4318)")
 
 	// Add subcommands
 	rootCmd.AddCommand(serveCmd)
@@ -49,12 +57,16 @@ func init() {
 	rootCmd.AddCommand(bundleCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(runsCmd)
+	rootCmd.AddCommand(reportCmd)
+	rootCmd.AddCommand(benchmarkCmd)
 	rootCmd.AddCommand(settingsCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(developCmd)
 	rootCmd.AddCommand(blastoffCmd)
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(mockCmd)
+	rootCmd.AddCommand(fakerCmd)
+	rootCmd.AddCommand(handlers.NewJaegerCleanCmd())
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 
@@ -75,8 +87,17 @@ func init() {
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentDeleteCmd)
 
+	reportCmd.AddCommand(reportCreateCmd)
+	reportCmd.AddCommand(reportGenerateCmd)
+	reportCmd.AddCommand(reportListCmd)
+	reportCmd.AddCommand(reportShowCmd)
+
 	runsCmd.AddCommand(runsListCmd)
 	runsCmd.AddCommand(runsInspectCmd)
+
+	benchmarkCmd.AddCommand(benchmarkEvaluateCmd)
+	benchmarkCmd.AddCommand(benchmarkListCmd)
+	benchmarkCmd.AddCommand(benchmarkTasksCmd)
 
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
@@ -104,6 +125,7 @@ func init() {
 	serveCmd.Flags().Bool("debug", false, "Enable debug logging")
 	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
 	serveCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
+	serveCmd.Flags().Bool("jaeger", true, "Auto-launch Jaeger for distributed tracing (UI at http://localhost:16686)")
 
 	// MCP Add command flags
 	mcpAddCmd.Flags().StringP("environment", "e", "default", "Environment to add configuration to")
@@ -136,6 +158,7 @@ func init() {
 	developCmd.Flags().String("ai-model", "", "AI model to use (overrides Station config)")
 	developCmd.Flags().String("ai-provider", "", "AI provider to use (gemini, openai, anthropic)")
 	developCmd.Flags().Bool("verbose", false, "Enable verbose logging for debugging")
+	developCmd.Flags().Bool("auto-ui", true, "Auto-launch GenKit Developer UI (default: true)")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
@@ -176,6 +199,18 @@ func init() {
 	runsInspectCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	runsInspectCmd.Flags().BoolP("verbose", "v", false, "Show detailed run information including tool calls, execution steps, and metadata")
 
+	// Benchmark command flags
+	benchmarkEvaluateCmd.Flags().BoolP("verbose", "v", false, "Show detailed metric analysis and evidence")
+
+	// Report command flags
+	reportCreateCmd.Flags().StringP("environment", "e", "", "Environment name (required)")
+	reportCreateCmd.Flags().StringP("name", "n", "", "Report name (required)")
+	reportCreateCmd.Flags().StringP("description", "d", "", "Report description")
+	reportGenerateCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	reportListCmd.Flags().StringP("environment", "e", "", "Filter reports by environment name")
+	reportListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+	reportShowCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+
 	// Settings command flags
 	settingsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	settingsGetCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
@@ -189,6 +224,12 @@ func init() {
 	viper.BindPFlag("database_url", serveCmd.Flags().Lookup("database"))
 	viper.BindPFlag("debug", serveCmd.Flags().Lookup("debug"))
 	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
+	viper.BindPFlag("jaeger", serveCmd.Flags().Lookup("jaeger"))
+
+	// Bind stdio command flags
+	if stdioCmd.Flags().Lookup("jaeger") != nil {
+		viper.BindPFlag("jaeger_stdio", stdioCmd.Flags().Lookup("jaeger"))
+	}
 
 	// Set default values
 	viper.SetDefault("telemetry_enabled", false)
@@ -270,6 +311,61 @@ func initTelemetry() {
 	telemetryService = telemetry.NewTelemetryService(cfg.TelemetryEnabled)
 }
 
+func initOTELTelemetry() {
+	// Load config to check telemetry settings
+	cfg, err := config.Load()
+	if err != nil {
+		logging.Debug("Failed to load config for OTEL telemetry: %v", err)
+		return
+	}
+
+	// Check if telemetry is enabled (priority: CLI flag > config file)
+	telemetryEnabled := enableOTEL || cfg.TelemetryEnabled
+	if !telemetryEnabled {
+		logging.Debug("OTEL telemetry disabled (use --enable-telemetry flag or set telemetry_enabled: true in config)")
+		return
+	}
+
+	// Check if OTEL endpoint is configured (priority: CLI flag > env var > config > default)
+	endpoint := otelEndpoint
+	if endpoint == "" {
+		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
+	if endpoint == "" {
+		endpoint = cfg.OTELEndpoint
+	}
+	if endpoint == "" {
+		endpoint = "http://localhost:4318" // Default to local Jaeger
+	}
+
+	logging.Info("🔭 OTEL telemetry enabled - exporting to %s", endpoint)
+
+	// Determine environment from config or default to development
+	environment := "development"
+	if cfg.CloudShip.RegistrationKey != "" {
+		environment = "production"
+	}
+
+	// Create OTEL telemetry configuration
+	otelConfig := &services.TelemetryConfig{
+		Enabled:      true,
+		OTLPEndpoint: endpoint,
+		ServiceName:  "station",
+		Environment:  environment,
+	}
+
+	// Initialize OTEL telemetry service
+	otelTelemetryService = services.NewTelemetryService(otelConfig)
+	err = otelTelemetryService.Initialize(context.Background())
+	if err != nil {
+		logging.Info("Failed to initialize OTEL telemetry: %v", err)
+		otelTelemetryService = nil
+		return
+	}
+
+	logging.Debug("OTEL telemetry initialized successfully (endpoint: %s, service: %s)", endpoint, otelConfig.ServiceName)
+}
+
 func getXDGConfigDir() string {
 	// Check for explicit STATION_CONFIG_DIR override first
 	// This should be the complete path including 'station' suffix
@@ -341,6 +437,15 @@ func main() {
 	// Cleanup telemetry
 	if telemetryService != nil {
 		telemetryService.Close()
+	}
+
+	// Cleanup OTEL telemetry
+	if otelTelemetryService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelTelemetryService.Shutdown(ctx); err != nil {
+			logging.Debug("Failed to shutdown OTEL telemetry: %v", err)
+		}
 	}
 
 	// CloudShip cleanup is now handled by individual command contexts

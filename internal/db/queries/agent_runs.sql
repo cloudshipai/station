@@ -1,11 +1,11 @@
 -- name: CreateAgentRun :one
-INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error, parent_run_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: CreateAgentRunBasic :one
-INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at, parent_run_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetAgentRun :one
@@ -16,6 +16,21 @@ SELECT * FROM agent_runs ORDER BY started_at DESC;
 
 -- name: ListAgentRunsByAgent :many
 SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC;
+
+-- name: GetRecentRunsByAgent :many
+SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC LIMIT ?;
+
+-- name: GetRecentRunsByAgentAndModel :many
+SELECT * FROM agent_runs WHERE agent_id = ? AND model_name = ? ORDER BY started_at DESC LIMIT ?;
+
+-- name: ListRunsByModel :many
+SELECT ar.*, a.name as agent_name, u.username
+FROM agent_runs ar
+JOIN agents a ON ar.agent_id = a.id
+JOIN users u ON ar.user_id = u.id
+WHERE ar.model_name = ?
+ORDER BY ar.started_at DESC
+LIMIT ? OFFSET ?;
 
 -- name: ListAgentRunsByUser :many
 SELECT * FROM agent_runs WHERE user_id = ? ORDER BY started_at DESC;

@@ -71,7 +71,7 @@ func (q *Queries) GetAllLatestMCPConfigs(ctx context.Context) ([]McpConfig, erro
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []McpConfig
 	for rows.Next() {
 		var i McpConfig
@@ -166,7 +166,7 @@ func (q *Queries) GetLatestMCPConfigs(ctx context.Context, environmentID int64) 
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []McpConfig
 	for rows.Next() {
 		var i McpConfig
@@ -280,7 +280,7 @@ func (q *Queries) GetMCPConfigsForRotation(ctx context.Context, encryptionKeyID 
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []GetMCPConfigsForRotationRow
 	for rows.Next() {
 		var i GetMCPConfigsForRotationRow
@@ -337,7 +337,7 @@ func (q *Queries) ListAllMCPConfigs(ctx context.Context) ([]McpConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []McpConfig
 	for rows.Next() {
 		var i McpConfig
@@ -380,7 +380,7 @@ func (q *Queries) ListMCPConfigsByConfigName(ctx context.Context, arg ListMCPCon
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []McpConfig
 	for rows.Next() {
 		var i McpConfig
@@ -418,7 +418,7 @@ func (q *Queries) ListMCPConfigsByEnvironment(ctx context.Context, environmentID
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var items []McpConfig
 	for rows.Next() {
 		var i McpConfig
