@@ -44,6 +44,7 @@ func (s *Server) handleCreateReport(ctx context.Context, request mcp.CallToolReq
 
 	description := request.GetString("description", "")
 	agentCriteria := request.GetString("agent_criteria", "")
+	filterModel := request.GetString("filter_model", "")
 
 	// Create report in database
 	var descSQL sql.NullString
@@ -56,6 +57,11 @@ func (s *Server) handleCreateReport(ctx context.Context, request mcp.CallToolReq
 		agentCriteriaSQL = sql.NullString{String: agentCriteria, Valid: true}
 	}
 
+	var filterModelSQL sql.NullString
+	if filterModel != "" {
+		filterModelSQL = sql.NullString{String: filterModel, Valid: true}
+	}
+
 	report, err := s.repos.Reports.CreateReport(ctx, queries.CreateReportParams{
 		Name:          name,
 		Description:   descSQL,
@@ -63,6 +69,7 @@ func (s *Server) handleCreateReport(ctx context.Context, request mcp.CallToolReq
 		TeamCriteria:  teamCriteria,
 		AgentCriteria: agentCriteriaSQL,
 		JudgeModel:    sql.NullString{String: "gpt-4o-mini", Valid: true},
+		FilterModel:   filterModelSQL,
 	})
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create report: %v", err)), nil
@@ -226,6 +233,70 @@ func (s *Server) handleGetReport(ctx context.Context, request mcp.CallToolReques
 		"success":       true,
 		"report":        report,
 		"agent_details": agentDetails,
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+// Model Filtering Handlers
+
+func (s *Server) handleListModels(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	models, err := s.repos.AgentRuns.ListDistinctModels(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to list models: %v", err)), nil
+	}
+
+	if len(models) == 0 {
+		return mcp.NewToolResultText("No models found. Create some agent runs first."), nil
+	}
+
+	// Convert to sorted list for better presentation
+	type modelInfo struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+
+	modelList := make([]modelInfo, 0, len(models))
+	for name, count := range models {
+		modelList = append(modelList, modelInfo{Name: name, Count: count})
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Found %d distinct models", len(models)),
+		"models":  modelList,
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleListRunsByModel(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	modelName, err := request.RequireString("model_name")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'model_name' parameter: %v", err)), nil
+	}
+
+	limit := int64(request.GetInt("limit", 50))
+	offset := int64(request.GetInt("offset", 0))
+
+	runs, err := s.repos.AgentRuns.ListByModel(ctx, modelName, limit, offset)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to list runs: %v", err)), nil
+	}
+
+	if len(runs) == 0 {
+		return mcp.NewToolResultText(fmt.Sprintf("No runs found for model: %s", modelName)), nil
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Found %d runs for model: %s", len(runs), modelName),
+		"model":   modelName,
+		"runs":    runs,
+		"limit":   limit,
+		"offset":  offset,
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")

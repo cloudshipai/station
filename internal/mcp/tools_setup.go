@@ -321,6 +321,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("environment_id", mcp.Required(), mcp.Description("Environment ID to evaluate")),
 		mcp.WithString("team_criteria", mcp.Required(), mcp.Description("JSON defining team's business goals and success criteria. Measure against the PURPOSE of this agent team. Examples: FinOps team → cost_reduction, forecasting_accuracy; DevOps team → deployment_insights, failure_prediction; Security team → vulnerability_detection, compliance_coverage. Format: {\"goal\": \"team's purpose\", \"criteria\": {\"business_metric\": {\"weight\": 0.4, \"description\": \"what success looks like\", \"threshold\": 0.8}}}")),
 		mcp.WithString("agent_criteria", mcp.Description("JSON defining how individual agents contribute to team goals. Examples: cost analyzer → savings_identified, execution_cost; PR reviewer → bugs_caught, review_speed, false_positive_rate. Measures agent's VALUE vs LABOR COST. Same format as team_criteria (optional)")),
+		mcp.WithString("filter_model", mcp.Description("Filter agent runs by model name (e.g., 'openai/gpt-4o-mini', 'openai/gpt-4o'). Use list_models tool to see available models. Allows comparing performance across different models.")),
 	)
 	s.mcpServer.AddTool(createReportTool, s.handleCreateReport)
 
@@ -343,6 +344,20 @@ func (s *Server) setupTools() {
 		mcp.WithString("report_id", mcp.Required(), mcp.Description("ID of the report")),
 	)
 	s.mcpServer.AddTool(getReportTool, s.handleGetReport)
+
+	// Model Filtering Tools
+	listModelsTool := mcp.NewTool("list_models",
+		mcp.WithDescription("List all AI models used in agent runs with their counts. Useful for identifying which models to filter by when creating reports."),
+	)
+	s.mcpServer.AddTool(listModelsTool, s.handleListModels)
+
+	listRunsByModelTool := mcp.NewTool("list_runs_by_model",
+		mcp.WithDescription("List agent runs filtered by AI model name with pagination"),
+		mcp.WithString("model_name", mcp.Required(), mcp.Description("Model name to filter by (e.g., 'openai/gpt-4o-mini')")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of runs to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of runs to skip for pagination (default: 0)")),
+	)
+	s.mcpServer.AddTool(listRunsByModelTool, s.handleListRunsByModel)
 
 	// Schedule Management Tools
 	setScheduleTool := mcp.NewTool("set_schedule",
