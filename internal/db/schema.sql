@@ -317,6 +317,9 @@ CREATE TABLE IF NOT EXISTS reports (
     total_llm_cost REAL DEFAULT 0.0,
     judge_model TEXT DEFAULT 'gpt-4o-mini', -- Which LLM used as judge
     
+    -- Model filtering
+    filter_model TEXT DEFAULT NULL,         -- Filter runs by model (e.g., 'gpt-4o', 'gpt-4o-mini')
+    
     -- Error handling
     error_message TEXT,                     -- Error if generation failed
     

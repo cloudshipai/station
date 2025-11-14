@@ -109,8 +109,87 @@ func convertAgentRunFromSQLc(run queries.AgentRun) *models.AgentRun {
 func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDetails {
 	var result *models.AgentRunWithDetails
 
-	// Handle both ListRecentAgentRunsRow and GetAgentRunWithDetailsRow
+	// Handle ListRecentAgentRunsRow, GetAgentRunWithDetailsRow, and ListRunsByModelRow
 	switch r := row.(type) {
+	case queries.ListRunsByModelRow:
+		result = &models.AgentRunWithDetails{
+			AgentRun: models.AgentRun{
+				ID:            r.ID,
+				AgentID:       r.AgentID,
+				UserID:        r.UserID,
+				Task:          r.Task,
+				FinalResponse: r.FinalResponse,
+				StepsTaken:    r.StepsTaken,
+				Status:        r.Status,
+			},
+			AgentName: r.AgentName,
+			Username:  r.Username,
+		}
+
+		if r.ToolCalls.Valid {
+			var toolCalls models.JSONArray
+			if err := (&toolCalls).Scan(r.ToolCalls.String); err == nil {
+				result.ToolCalls = &toolCalls
+			}
+		}
+
+		if r.ExecutionSteps.Valid {
+			var executionSteps models.JSONArray
+			if err := (&executionSteps).Scan(r.ExecutionSteps.String); err == nil {
+				result.ExecutionSteps = &executionSteps
+			}
+		}
+
+		if r.StartedAt.Valid {
+			result.StartedAt = r.StartedAt.Time
+		}
+
+		if r.CompletedAt.Valid {
+			result.CompletedAt = &r.CompletedAt.Time
+		}
+
+		if r.InputTokens.Valid {
+			inputTokens := r.InputTokens.Int64
+			result.InputTokens = &inputTokens
+		}
+
+		if r.OutputTokens.Valid {
+			outputTokens := r.OutputTokens.Int64
+			result.OutputTokens = &outputTokens
+		}
+
+		if r.TotalTokens.Valid {
+			totalTokens := r.TotalTokens.Int64
+			result.TotalTokens = &totalTokens
+		}
+
+		if r.DurationSeconds.Valid {
+			durationSeconds := r.DurationSeconds.Float64
+			result.DurationSeconds = &durationSeconds
+		}
+
+		if r.ModelName.Valid {
+			modelName := r.ModelName.String
+			result.ModelName = &modelName
+		}
+
+		if r.ToolsUsed.Valid {
+			toolsUsed := r.ToolsUsed.Int64
+			result.ToolsUsed = &toolsUsed
+		}
+
+		if r.DebugLogs.Valid {
+			var debugLogs models.JSONArray
+			if err := (&debugLogs).Scan(r.DebugLogs.String); err == nil {
+				result.DebugLogs = &debugLogs
+			}
+		}
+
+		if r.Error.Valid {
+			errorMsg := r.Error.String
+			result.Error = &errorMsg
+		}
+
 	case queries.ListRecentAgentRunsRow:
 		result = &models.AgentRunWithDetails{
 			AgentRun: models.AgentRun{
@@ -652,4 +731,112 @@ func (r *AgentRunRepo) GetRecentByAgent(ctx context.Context, agentID int64, limi
 		attribute.Int("runs.count", len(runs)),
 	)
 	return runs, nil
+}
+
+// GetRecentByAgentAndModel gets recent runs for a specific agent filtered by model
+func (r *AgentRunRepo) GetRecentByAgentAndModel(ctx context.Context, agentID int64, modelName string, limit int64) ([]queries.AgentRun, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.get_recent_by_agent_and_model",
+		trace.WithAttributes(
+			attribute.Int64("agent.id", agentID),
+			attribute.String("model.name", modelName),
+			attribute.Int64("limit", limit),
+		),
+	)
+	defer span.End()
+
+	runs, err := r.queries.GetRecentRunsByAgentAndModel(ctx, queries.GetRecentRunsByAgentAndModelParams{
+		AgentID:   agentID,
+		ModelName: sql.NullString{String: modelName, Valid: true},
+		Limit:     limit,
+	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return nil, err
+	}
+
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int("runs.count", len(runs)),
+	)
+	return runs, nil
+}
+
+// ListByModel gets runs filtered by model name with pagination
+func (r *AgentRunRepo) ListByModel(ctx context.Context, modelName string, limit, offset int64) ([]*models.AgentRunWithDetails, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.list_by_model",
+		trace.WithAttributes(
+			attribute.String("model.name", modelName),
+			attribute.Int64("limit", limit),
+			attribute.Int64("offset", offset),
+		),
+	)
+	defer span.End()
+
+	rows, err := r.queries.ListRunsByModel(ctx, queries.ListRunsByModelParams{
+		ModelName: sql.NullString{String: modelName, Valid: true},
+		Limit:     limit,
+		Offset:    offset,
+	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return nil, err
+	}
+
+	var result []*models.AgentRunWithDetails
+	for _, row := range rows {
+		result = append(result, convertAgentRunWithDetailsFromSQLc(row))
+	}
+
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int("runs.count", len(result)),
+	)
+	return result, nil
+}
+
+// ListDistinctModels returns all unique model names used in runs with their counts
+func (r *AgentRunRepo) ListDistinctModels(ctx context.Context) (map[string]int, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.list_distinct_models")
+	defer span.End()
+
+	query := `
+		SELECT model_name, COUNT(*) as count
+		FROM agent_runs
+		WHERE model_name IS NOT NULL AND model_name != ''
+		GROUP BY model_name
+		ORDER BY count DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return nil, err
+	}
+	defer rows.Close()
+
+	models := make(map[string]int)
+	for rows.Next() {
+		var modelName string
+		var count int
+		if err := rows.Scan(&modelName, &count); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		models[modelName] = count
+	}
+
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return nil, err
+	}
+
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int("models.count", len(models)),
+	)
+	return models, nil
 }

@@ -220,13 +220,22 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		logging.Info("Failed to update report status: %v", err)
 	}
 
-	// 5. Fetch all runs for all agents
-	allRuns, err := rg.fetchAllRuns(ctx, agents)
+	// 5. Fetch all runs for all agents (with optional model filtering)
+	filterModel := ""
+	if report.FilterModel.Valid && report.FilterModel.String != "" {
+		filterModel = report.FilterModel.String
+		logging.Info("Report configured to filter runs by model: %s", filterModel)
+	}
+
+	allRuns, err := rg.fetchAllRuns(ctx, agents, filterModel)
 	if err != nil {
 		return rg.failReport(ctx, reportID, fmt.Errorf("failed to fetch runs: %w", err))
 	}
 
 	if len(allRuns) == 0 {
+		if filterModel != "" {
+			return rg.failReport(ctx, reportID, fmt.Errorf("no runs found to analyze for model: %s", filterModel))
+		}
 		return rg.failReport(ctx, reportID, fmt.Errorf("no runs found to analyze"))
 	}
 
@@ -399,16 +408,34 @@ func (rg *ReportGenerator) updateReportStatus(ctx context.Context, reportID int6
 	})
 }
 
-func (rg *ReportGenerator) fetchAllRuns(ctx context.Context, agents []models.Agent) ([]queries.AgentRun, error) {
+func (rg *ReportGenerator) fetchAllRuns(ctx context.Context, agents []models.Agent, filterModel string) ([]queries.AgentRun, error) {
 	allRuns := make([]queries.AgentRun, 0)
 
 	for _, agent := range agents {
-		runs, err := rg.repos.AgentRuns.GetRecentByAgent(ctx, agent.ID, 20)
+		var runs []queries.AgentRun
+		var err error
+
+		if filterModel != "" {
+			// Filter runs by specific model
+			logging.Info("Fetching runs for agent %s filtered by model: %s", agent.Name, filterModel)
+			runs, err = rg.repos.AgentRuns.GetRecentByAgentAndModel(ctx, agent.ID, filterModel, 20)
+		} else {
+			// Fetch all runs regardless of model
+			logging.Info("Fetching all runs for agent %s", agent.Name)
+			runs, err = rg.repos.AgentRuns.GetRecentByAgent(ctx, agent.ID, 20)
+		}
+
 		if err != nil {
 			logging.Info("Failed to fetch runs for agent %s: %v", agent.Name, err)
 			continue
 		}
 		allRuns = append(allRuns, runs...)
+	}
+
+	if filterModel != "" {
+		logging.Info("Fetched %d runs total (filtered by model: %s)", len(allRuns), filterModel)
+	} else {
+		logging.Info("Fetched %d runs total (all models)", len(allRuns))
 	}
 
 	return allRuns, nil

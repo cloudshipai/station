@@ -208,6 +208,7 @@ type Report struct {
 	TotalLlmTokens            sql.NullInt64   `json:"total_llm_tokens"`
 	TotalLlmCost              sql.NullFloat64 `json:"total_llm_cost"`
 	JudgeModel                sql.NullString  `json:"judge_model"`
+	FilterModel               sql.NullString  `json:"filter_model"`
 	ErrorMessage              sql.NullString  `json:"error_message"`
 	CreatedAt                 sql.NullTime    `json:"created_at"`
 	UpdatedAt                 sql.NullTime    `json:"updated_at"`

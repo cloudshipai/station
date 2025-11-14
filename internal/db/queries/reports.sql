@@ -5,8 +5,9 @@ INSERT INTO reports (
     environment_id,
     team_criteria,
     agent_criteria,
-    judge_model
-) VALUES (?, ?, ?, ?, ?, ?)
+    judge_model,
+    filter_model
+) VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetReport :one

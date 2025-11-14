@@ -20,6 +20,18 @@ SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC;
 -- name: GetRecentRunsByAgent :many
 SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC LIMIT ?;
 
+-- name: GetRecentRunsByAgentAndModel :many
+SELECT * FROM agent_runs WHERE agent_id = ? AND model_name = ? ORDER BY started_at DESC LIMIT ?;
+
+-- name: ListRunsByModel :many
+SELECT ar.*, a.name as agent_name, u.username
+FROM agent_runs ar
+JOIN agents a ON ar.agent_id = a.id
+JOIN users u ON ar.user_id = u.id
+WHERE ar.model_name = ?
+ORDER BY ar.started_at DESC
+LIMIT ? OFFSET ?;
+
 -- name: ListAgentRunsByUser :many
 SELECT * FROM agent_runs WHERE user_id = ? ORDER BY started_at DESC;
 

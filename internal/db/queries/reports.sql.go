@@ -174,9 +174,10 @@ INSERT INTO reports (
     environment_id,
     team_criteria,
     agent_criteria,
-    judge_model
-) VALUES (?, ?, ?, ?, ?, ?)
-RETURNING id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, error_message, created_at, updated_at
+    judge_model,
+    filter_model
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, filter_model, error_message, created_at, updated_at
 `
 
 type CreateReportParams struct {
@@ -186,6 +187,7 @@ type CreateReportParams struct {
 	TeamCriteria  string         `json:"team_criteria"`
 	AgentCriteria sql.NullString `json:"agent_criteria"`
 	JudgeModel    sql.NullString `json:"judge_model"`
+	FilterModel   sql.NullString `json:"filter_model"`
 }
 
 func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Report, error) {
@@ -196,6 +198,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Rep
 		arg.TeamCriteria,
 		arg.AgentCriteria,
 		arg.JudgeModel,
+		arg.FilterModel,
 	)
 	var i Report
 	err := row.Scan(
@@ -221,6 +224,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Rep
 		&i.TotalLlmTokens,
 		&i.TotalLlmCost,
 		&i.JudgeModel,
+		&i.FilterModel,
 		&i.ErrorMessage,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -395,7 +399,7 @@ func (q *Queries) GetAgentReportDetails(ctx context.Context, reportID int64) ([]
 }
 
 const getLatestReportByEnvironment = `-- name: GetLatestReportByEnvironment :one
-SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, error_message, created_at, updated_at FROM reports 
+SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, filter_model, error_message, created_at, updated_at FROM reports 
 WHERE environment_id = ? 
 ORDER BY created_at DESC 
 LIMIT 1
@@ -427,6 +431,7 @@ func (q *Queries) GetLatestReportByEnvironment(ctx context.Context, environmentI
 		&i.TotalLlmTokens,
 		&i.TotalLlmCost,
 		&i.JudgeModel,
+		&i.FilterModel,
 		&i.ErrorMessage,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -435,7 +440,7 @@ func (q *Queries) GetLatestReportByEnvironment(ctx context.Context, environmentI
 }
 
 const getReport = `-- name: GetReport :one
-SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, error_message, created_at, updated_at FROM reports WHERE id = ?
+SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, filter_model, error_message, created_at, updated_at FROM reports WHERE id = ?
 `
 
 func (q *Queries) GetReport(ctx context.Context, id int64) (Report, error) {
@@ -464,6 +469,7 @@ func (q *Queries) GetReport(ctx context.Context, id int64) (Report, error) {
 		&i.TotalLlmTokens,
 		&i.TotalLlmCost,
 		&i.JudgeModel,
+		&i.FilterModel,
 		&i.ErrorMessage,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -472,7 +478,7 @@ func (q *Queries) GetReport(ctx context.Context, id int64) (Report, error) {
 }
 
 const listReports = `-- name: ListReports :many
-SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, error_message, created_at, updated_at FROM reports ORDER BY created_at DESC LIMIT ? OFFSET ?
+SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, filter_model, error_message, created_at, updated_at FROM reports ORDER BY created_at DESC LIMIT ? OFFSET ?
 `
 
 type ListReportsParams struct {
@@ -512,6 +518,7 @@ func (q *Queries) ListReports(ctx context.Context, arg ListReportsParams) ([]Rep
 			&i.TotalLlmTokens,
 			&i.TotalLlmCost,
 			&i.JudgeModel,
+			&i.FilterModel,
 			&i.ErrorMessage,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -530,7 +537,7 @@ func (q *Queries) ListReports(ctx context.Context, arg ListReportsParams) ([]Rep
 }
 
 const listReportsByEnvironment = `-- name: ListReportsByEnvironment :many
-SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, error_message, created_at, updated_at FROM reports WHERE environment_id = ? ORDER BY created_at DESC
+SELECT id, name, description, environment_id, team_criteria, agent_criteria, status, progress, current_step, executive_summary, team_score, team_reasoning, team_criteria_scores, agent_reports, total_runs_analyzed, total_agents_analyzed, generation_duration_seconds, generation_started_at, generation_completed_at, total_llm_tokens, total_llm_cost, judge_model, filter_model, error_message, created_at, updated_at FROM reports WHERE environment_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListReportsByEnvironment(ctx context.Context, environmentID int64) ([]Report, error) {
@@ -565,6 +572,7 @@ func (q *Queries) ListReportsByEnvironment(ctx context.Context, environmentID in
 			&i.TotalLlmTokens,
 			&i.TotalLlmCost,
 			&i.JudgeModel,
+			&i.FilterModel,
 			&i.ErrorMessage,
 			&i.CreatedAt,
 			&i.UpdatedAt,
