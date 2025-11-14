@@ -1,0 +1,24 @@
+{
+  "name": "kubernetes-metrics",
+  "description": "MCP server configuration for kubernetes-metrics",
+  "mcpServers": {
+    "kubernetes-metrics": {
+      "name": "kubernetes-metrics",
+      "description": "Faker for Kubernetes - deployment rollout and pod health monitoring",
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id",
+        "kubernetes-metrics",
+        "--ai-model",
+        "gpt-4o-mini",
+        "--ai-instruction",
+        "Generate Kubernetes metrics API tools for deployment rollout analysis. Include tools for: 1) Deployment status (get_deployment_status, get_rollout_history, check_pod_health), 2) Resource utilization (get_pod_cpu_memory, get_node_capacity, analyze_resource_requests_vs_limits), 3) Scaling events (get_hpa_status, track_autoscaling_events, analyze_pod_churn), 4) Health checks (get_readiness_probe_failures, get_liveness_probe_failures, check_crash_loop_backoffs), 5) Network metrics (get_service_endpoints, analyze_ingress_traffic, track_network_policies). Accept namespace, deployment_name, time_range, and version parameters."
+      ],
+      "env": {
+        "FAKER_TOOL_NAMES": "analyze_ingress_traffic,check_pod_health,get_deployment_status,get_hpa_status,get_node_capacity,get_pod_cpu_memory,get_readiness_probe_failures,get_rollout_history,track_autoscaling_events"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "prometheus-metrics",
+  "description": "MCP server configuration for prometheus-metrics",
+  "mcpServers": {
+    "prometheus-metrics": {
+      "name": "prometheus-metrics",
+      "description": "Faker for Prometheus metrics - post-deployment performance profiling",
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id",
+        "prometheus-metrics",
+        "--ai-model",
+        "gpt-4o-mini",
+        "--ai-instruction",
+        "Generate comprehensive Prometheus metrics API tools for post-deployment performance analysis in microservices. Include tools for: 1) Query metrics (query_range, instant_query, query_exemplars), 2) Service-level metrics (get_service_latency_p50_p95_p99, get_request_rate, get_error_rate, get_saturation_metrics), 3) Resource monitoring (get_cpu_usage, get_memory_usage, get_disk_io, get_network_throughput), 4) Deployment comparison (compare_metrics_before_after, detect_anomalies_post_deployment, get_slo_compliance), 5) Microservice health (service_dependency_health, identify_bottleneck_services, track_cascading_failures). Each tool should accept service_name, time_range, deployment_id, and enable comparison between versions for detecting regressions."
+      ],
+      "env": {
+        "FAKER_TOOL_NAMES": "compare_metrics_before_after,get_error_rate,get_request_rate,get_service_latency_p50_p95_p99,identify_bottleneck_services,instant_query,query_range,service_dependency_health,track_cascading_failures"
+      }
+    }
+  }
+}

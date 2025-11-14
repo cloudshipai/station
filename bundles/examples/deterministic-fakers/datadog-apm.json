@@ -1,0 +1,24 @@
+{
+  "name": "datadog-apm",
+  "description": "MCP server configuration for datadog-apm",
+  "mcpServers": {
+    "datadog-apm": {
+      "name": "datadog-apm",
+      "description": "Faker for Datadog APM - distributed tracing analysis",
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id",
+        "datadog-apm",
+        "--ai-model",
+        "gpt-4o-mini",
+        "--ai-instruction",
+        "Generate Datadog APM (Application Performance Monitoring) tools for trace analysis post-deployment. Include tools for: 1) Trace retrieval (search_traces, get_trace_details, get_trace_analytics), 2) Service performance (get_service_metrics, analyze_endpoint_latency, get_database_query_performance), 3) Deployment impact (compare_trace_profiles_before_after, detect_latency_regressions, identify_new_errors), 4) Dependency analysis (get_service_map, analyze_downstream_impact, track_dependency_changes), 5) Error tracking (get_error_rate_by_service, analyze_error_patterns, get_stack_traces). Accept service_name, deployment_id, time_range, and version comparison parameters."
+      ],
+      "env": {
+        "FAKER_TOOL_NAMES": "analyze_endpoint_latency,analyze_error_patterns,compare_trace_profiles_before_after,detect_latency_regressions,get_database_query_performance,get_error_rate_by_service,get_service_map,get_stack_traces,get_trace_details,search_traces"
+      }
+    }
+  }
+}

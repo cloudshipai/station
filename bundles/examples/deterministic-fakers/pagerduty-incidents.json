@@ -1,0 +1,24 @@
+{
+  "name": "pagerduty-incidents",
+  "description": "MCP server configuration for pagerduty-incidents",
+  "mcpServers": {
+    "pagerduty-incidents": {
+      "name": "pagerduty-incidents",
+      "description": "Faker for PagerDuty - incident correlation with deployments",
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id",
+        "pagerduty-incidents",
+        "--ai-model",
+        "gpt-4o-mini",
+        "--ai-instruction",
+        "Generate PagerDuty incident API tools for correlating deployments with incidents. Include tools for: 1) Incident retrieval (list_incidents, get_incident_details, search_incidents_by_service), 2) Deployment correlation (find_incidents_after_deployment, calculate_mttr_for_release, track_incident_frequency_by_version), 3) Alert analysis (get_alert_volume, analyze_alert_patterns, identify_alert_storms), 4) On-call impact (get_escalation_count, track_pages_triggered, analyze_time_to_acknowledge), 5) Post-mortem data (get_incident_timeline, extract_root_causes, track_similar_incidents). Accept deployment_timestamp, service_name, time_window, and severity filters."
+      ],
+      "env": {
+        "FAKER_TOOL_NAMES": "analyze_alert_patterns,calculate_mttr_for_release,extract_root_causes,find_incidents_after_deployment,get_alert_volume,get_escalation_count,get_incident_details,get_incident_timeline,identify_alert_storms,list_incidents,search_incidents_by_service,track_incident_frequency_by_version,track_similar_incidents"
+      }
+    }
+  }
+}

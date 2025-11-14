@@ -1,0 +1,24 @@
+{
+  "name": "grafana-dashboards",
+  "description": "MCP server configuration for grafana-dashboards",
+  "mcpServers": {
+    "grafana-dashboards": {
+      "name": "grafana-dashboards",
+      "description": "Faker for Grafana dashboards - deployment visualization",
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id",
+        "grafana-dashboards",
+        "--ai-model",
+        "gpt-4o-mini",
+        "--ai-instruction",
+        "Generate Grafana dashboard API tools for visualizing deployment performance. Include tools for: 1) Dashboard management (get_dashboard, list_dashboards, search_dashboards), 2) Panel queries (get_panel_data, query_time_series, get_annotations), 3) Deployment tracking (get_deployment_dashboard, compare_release_dashboards, get_change_markers), 4) Alerting (list_active_alerts, get_alert_history, check_alert_status_for_deployment), 5) Visualization (create_snapshot, export_dashboard_data, get_dashboard_metrics_summary). Tools should accept dashboard_id, deployment_version, time_range, and panel filters."
+      ],
+      "env": {
+        "FAKER_TOOL_NAMES": "compare_release_dashboards,create_snapshot,get_alert_history,get_dashboard,get_dashboard_metrics_summary,get_deployment_dashboard,get_panel_data,list_active_alerts,list_dashboards,search_dashboards"
+      }
+    }
+  }
+}

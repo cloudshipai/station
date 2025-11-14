@@ -1,0 +1,24 @@
+{
+  "name": "elasticsearch-logs",
+  "description": "MCP server configuration for elasticsearch-logs",
+  "mcpServers": {
+    "elasticsearch-logs": {
+      "name": "elasticsearch-logs",
+      "description": "Faker for Elasticsearch - log analysis and anomaly detection",
+      "command": "stn",
+      "args": [
+        "faker",
+        "--standalone",
+        "--faker-id",
+        "elasticsearch-logs",
+        "--ai-model",
+        "gpt-4o-mini",
+        "--ai-instruction",
+        "Generate Elasticsearch log analysis tools for post-deployment log investigation. Include tools for: 1) Log search (search_logs, aggregate_logs, get_log_patterns), 2) Error detection (find_new_errors_post_deployment, analyze_error_frequency, get_error_context), 3) Performance indicators (analyze_slow_query_logs, detect_timeout_increases, track_gc_activity), 4) Anomaly detection (detect_log_volume_spikes, identify_unusual_patterns, find_missing_expected_logs), 5) Correlation (correlate_errors_with_deployment, track_error_propagation_across_services). Accept index_pattern, deployment_timestamp, service_filter, log_level, and time_range."
+      ],
+      "env": {
+        "FAKER_TOOL_NAMES": "aggregate_logs,analyze_error_frequency,analyze_slow_query_logs,correlate_errors_with_deployment,detect_log_volume_spikes,find_new_errors_post_deployment,search_logs,track_gc_activity"
+      }
+    }
+  }
+}
