@@ -1,0 +1,342 @@
+{
+  "fakers": {
+    "prometheus-metrics": {
+      "description": "Prometheus metrics API tools for post-deployment performance analysis in microservices",
+      "ai_model": "gpt-4o-mini",
+      "instruction": "Generate realistic Prometheus metrics data for microservices performance monitoring. Include service-level indicators, resource utilization, and deployment comparison metrics.",
+      "tools": [
+        {
+          "name": "query_range",
+          "description": "Query time-series metrics over a specified time range using PromQL",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "PromQL query expression (e.g., rate(http_requests_total[5m]))"
+              },
+              "start": {
+                "type": "string",
+                "description": "Start time (RFC3339 or Unix timestamp)"
+              },
+              "end": {
+                "type": "string",
+                "description": "End time (RFC3339 or Unix timestamp)"
+              },
+              "step": {
+                "type": "string",
+                "description": "Query resolution step (e.g., '15s', '1m', '5m')"
+              }
+            },
+            "required": ["query", "start", "end"]
+          }
+        },
+        {
+          "name": "instant_query",
+          "description": "Execute an instant PromQL query at a single point in time",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "PromQL query expression"
+              },
+              "time": {
+                "type": "string",
+                "description": "Evaluation timestamp (RFC3339 or Unix timestamp)"
+              }
+            },
+            "required": ["query"]
+          }
+        },
+        {
+          "name": "get_service_latency_p50_p95_p99",
+          "description": "Get p50, p95, and p99 latency percentiles for a specific service",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "service_name": {
+                "type": "string",
+                "description": "Name of the service to query"
+              },
+              "time_range": {
+                "type": "string",
+                "description": "Time range for the query (e.g., '1h', '24h', '7d')"
+              },
+              "deployment_id": {
+                "type": "string",
+                "description": "Optional deployment ID to filter metrics"
+              }
+            },
+            "required": ["service_name", "time_range"]
+          }
+        },
+        {
+          "name": "get_request_rate",
+          "description": "Get request rate metrics for a service",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "service_name": {
+                "type": "string",
+                "description": "Service name"
+              },
+              "time_range": {
+                "type": "string",
+                "description": "Time range"
+              }
+            },
+            "required": ["service_name", "time_range"]
+          }
+        },
+        {
+          "name": "get_error_rate",
+          "description": "Get error rate metrics for a service",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "service_name": {
+                "type": "string",
+                "description": "Service name"
+              },
+              "time_range": {
+                "type": "string",
+                "description": "Time range"
+              }
+            },
+            "required": ["service_name", "time_range"]
+          }
+        },
+        {
+          "name": "compare_metrics_before_after",
+          "description": "Compare metrics before and after a deployment",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "service_name": {
+                "type": "string",
+                "description": "Service name"
+              },
+              "deployment_timestamp": {
+                "type": "string",
+                "description": "Deployment timestamp"
+              },
+              "metric_name": {
+                "type": "string",
+                "description": "Metric to compare"
+              }
+            },
+            "required": ["service_name", "deployment_timestamp", "metric_name"]
+          }
+        }
+      ],
+      "metadata": {
+        "version": "1.0.0",
+        "author": "station-team",
+        "tags": ["monitoring", "prometheus", "metrics", "cicd"]
+      }
+    },
+    "datadog-apm": {
+      "description": "Datadog APM tools for trace analysis post-deployment",
+      "ai_model": "gpt-4o-mini",
+      "instruction": "Generate realistic Datadog APM trace data for distributed systems. Include trace retrieval, service performance metrics, and deployment impact analysis.",
+      "tools": [
+        {
+          "name": "search_traces",
+          "description": "Search for traces matching specified criteria",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "service": {
+                "type": "string",
+                "description": "Service name to filter traces"
+              },
+              "start": {
+                "type": "integer",
+                "description": "Start timestamp (Unix epoch)"
+              },
+              "end": {
+                "type": "integer",
+                "description": "End timestamp (Unix epoch)"
+              },
+              "env": {
+                "type": "string",
+                "description": "Environment filter (production, staging, development)"
+              },
+              "status": {
+                "type": "string",
+                "description": "Status filter (ok, error)"
+              }
+            },
+            "required": ["service", "start", "end"]
+          }
+        },
+        {
+          "name": "get_trace_details",
+          "description": "Get detailed information about a specific trace including all spans",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "trace_id": {
+                "type": "string",
+                "description": "Unique trace identifier"
+              }
+            },
+            "required": ["trace_id"]
+          }
+        },
+        {
+          "name": "analyze_endpoint_latency",
+          "description": "Analyze latency distribution for specific API endpoints",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "service_name": {
+                "type": "string",
+                "description": "Service name"
+              },
+              "endpoint": {
+                "type": "string",
+                "description": "API endpoint path"
+              },
+              "time_range": {
+                "type": "string",
+                "description": "Time range for analysis"
+              }
+            },
+            "required": ["service_name", "endpoint", "time_range"]
+          }
+        },
+        {
+          "name": "compare_trace_profiles_before_after",
+          "description": "Compare trace profiles before and after a deployment",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "service_name": {
+                "type": "string",
+                "description": "Service name"
+              },
+              "deployment_id": {
+                "type": "string",
+                "description": "Deployment identifier"
+              },
+              "time_range": {
+                "type": "string",
+                "description": "Time range to compare"
+              }
+            },
+            "required": ["service_name", "deployment_id", "time_range"]
+          }
+        },
+        {
+          "name": "get_error_rate_by_service",
+          "description": "Get error rate broken down by service",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "time_range": {
+                "type": "string",
+                "description": "Time range"
+              }
+            },
+            "required": ["time_range"]
+          }
+        }
+      ],
+      "metadata": {
+        "version": "1.0.0",
+        "author": "station-team",
+        "tags": ["apm", "tracing", "datadog", "cicd"]
+      }
+    },
+    "kubernetes-metrics": {
+      "description": "Kubernetes metrics API tools for deployment rollout analysis",
+      "ai_model": "gpt-4o-mini",
+      "instruction": "Generate realistic Kubernetes deployment and pod metrics for rollout analysis. Include deployment status, resource utilization, scaling events, and health checks.",
+      "tools": [
+        {
+          "name": "get_deployment_status",
+          "description": "Get current status of a Kubernetes deployment",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "namespace": {
+                "type": "string",
+                "description": "Kubernetes namespace"
+              },
+              "deployment_name": {
+                "type": "string",
+                "description": "Deployment name"
+              }
+            },
+            "required": ["namespace", "deployment_name"]
+          }
+        },
+        {
+          "name": "get_pod_cpu_memory",
+          "description": "Get CPU and memory usage for pods in a deployment",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "namespace": {
+                "type": "string",
+                "description": "Kubernetes namespace"
+              },
+              "deployment_name": {
+                "type": "string",
+                "description": "Deployment name"
+              },
+              "time_range": {
+                "type": "string",
+                "description": "Time range for metrics"
+              }
+            },
+            "required": ["namespace", "deployment_name"]
+          }
+        },
+        {
+          "name": "check_pod_health",
+          "description": "Check health status of pods in a deployment",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "namespace": {
+                "type": "string",
+                "description": "Kubernetes namespace"
+              },
+              "deployment_name": {
+                "type": "string",
+                "description": "Deployment name"
+              }
+            },
+            "required": ["namespace", "deployment_name"]
+          }
+        },
+        {
+          "name": "get_rollout_history",
+          "description": "Get deployment rollout history",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "namespace": {
+                "type": "string",
+                "description": "Kubernetes namespace"
+              },
+              "deployment_name": {
+                "type": "string",
+                "description": "Deployment name"
+              }
+            },
+            "required": ["namespace", "deployment_name"]
+          }
+        }
+      ],
+      "metadata": {
+        "version": "1.0.0",
+        "author": "station-team",
+        "tags": ["kubernetes", "k8s", "deployment", "cicd"]
+      }
+    }
+  }
+}

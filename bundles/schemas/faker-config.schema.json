@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Station Faker Configuration",
+  "description": "Declarative configuration for Station faker tool definitions",
+  "type": "object",
+  "properties": {
+    "fakers": {
+      "type": "object",
+      "description": "Map of faker ID to faker definition",
+      "patternProperties": {
+        "^[a-z0-9-]+$": {
+          "$ref": "#/definitions/FakerDefinition"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["fakers"],
+  "definitions": {
+    "FakerDefinition": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this faker provides"
+        },
+        "ai_model": {
+          "type": "string",
+          "description": "AI model to use for generating fake responses (e.g., gpt-4o-mini, gemini-pro)",
+          "default": "gpt-4o-mini"
+        },
+        "instruction": {
+          "type": "string",
+          "description": "AI instruction for generating realistic responses (optional if tools are predefined)"
+        },
+        "tools": {
+          "type": "array",
+          "description": "List of tools this faker provides",
+          "items": {
+            "$ref": "#/definitions/ToolDefinition"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional metadata for the faker",
+          "properties": {
+            "version": {
+              "type": "string",
+              "description": "Semantic version of this faker configuration"
+            },
+            "author": {
+              "type": "string",
+              "description": "Author of this faker configuration"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Tags for categorization"
+            }
+          }
+        }
+      },
+      "required": ["description", "tools"]
+    },
+    "ToolDefinition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Tool name (must be unique within faker)",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this tool does"
+        },
+        "input_schema": {
+          "type": "object",
+          "description": "JSON Schema defining the tool's input parameters",
+          "properties": {
+            "type": {
+              "const": "object"
+            },
+            "properties": {
+              "type": "object"
+            },
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["type", "properties"]
+        },
+        "example_response": {
+          "type": "string",
+          "description": "Example response for documentation purposes (optional)"
+        }
+      },
+      "required": ["name", "description", "input_schema"]
+    }
+  }
+}
