@@ -362,7 +362,11 @@ func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig)
 		secrets[k] = v
 	}
 
+	// Production deployment settings
 	// STN_DEV_MODE is NOT set (defaults to false, disables port 8585)
+	// STATION_SKIP_SYNC_ON_STARTUP skips sync on startup (MCP configs already in database from volume)
+	secrets["STATION_SKIP_SYNC_ON_STARTUP"] = "true"
+
 	return secrets, nil
 }
 

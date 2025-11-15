@@ -1,0 +1,16 @@
+{
+  "name": "filesystem",
+  "description": "MCP server configuration for filesystem",
+  "mcpServers": {
+    "filesystem": {
+      "name": "filesystem",
+      "description": "Filesystem access for reading project files",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/workspace"
+      ]
+    }
+  }
+}

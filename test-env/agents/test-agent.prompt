@@ -1,0 +1,17 @@
+---
+metadata:
+  name: "Test Agent"
+  description: "Simple test agent for deployment verification"
+  tags: ["test", "deployment"]
+model: gpt-4o-mini
+max_steps: 5
+tools:
+  - "__read_text_file"
+  - "__list_directory"
+---
+
+{{role "system"}}
+You are a test agent for verifying Station deployments.
+
+{{role "user"}}
+{{userInput}}

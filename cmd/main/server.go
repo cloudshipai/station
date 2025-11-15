@@ -152,25 +152,32 @@ func runMainServer() error {
 	}
 
 	// Automatic DeclarativeSync on startup for Docker container deployment
-	log.Printf("🔄 Running automatic sync for environment: %s", environmentName)
-	syncer := services.NewDeclarativeSync(repos, cfg)
-	syncResult, err := syncer.SyncEnvironment(ctx, environmentName, services.SyncOptions{
-		DryRun:      false,
-		Validate:    false,
-		Interactive: false, // Non-interactive for Docker containers
-		Verbose:     true,  // Verbose for debugging
-		Confirm:     false,
-	})
-	if err != nil {
-		// Log sync failure but don't crash the server - cleanup already ran
-		// This allows the server to start even if MCP configs are broken
-		log.Printf("⚠️  WARNING: Environment sync failed for '%s': %v", environmentName, err)
-		log.Printf("⚠️  Broken MCP servers have been cleaned up from database")
-		log.Printf("⚠️  Please fix or remove broken config files and re-sync via UI or CLI")
-		log.Printf("⚠️  Server will continue starting with no MCP tools available")
+	// Skip sync if STATION_SKIP_SYNC_ON_STARTUP=true (useful for production with pre-synced configs)
+	skipSync := os.Getenv("STATION_SKIP_SYNC_ON_STARTUP") == "true"
+	if skipSync {
+		log.Printf("⏭️  Skipping automatic sync (STATION_SKIP_SYNC_ON_STARTUP=true)")
+		log.Printf("💡 Expecting pre-synced MCP configs and agents in database")
 	} else {
-		log.Printf("✅ Sync completed - Agents: %d processed, %d synced | MCP Servers: %d processed, %d connected",
-			syncResult.AgentsProcessed, syncResult.AgentsSynced, syncResult.MCPServersProcessed, syncResult.MCPServersConnected)
+		log.Printf("🔄 Running automatic sync for environment: %s", environmentName)
+		syncer := services.NewDeclarativeSync(repos, cfg)
+		syncResult, err := syncer.SyncEnvironment(ctx, environmentName, services.SyncOptions{
+			DryRun:      false,
+			Validate:    false,
+			Interactive: false, // Non-interactive for Docker containers
+			Verbose:     true,  // Verbose for debugging
+			Confirm:     false,
+		})
+		if err != nil {
+			// Log sync failure but don't crash the server - cleanup already ran
+			// This allows the server to start even if MCP configs are broken
+			log.Printf("⚠️  WARNING: Environment sync failed for '%s': %v", environmentName, err)
+			log.Printf("⚠️  Broken MCP servers have been cleaned up from database")
+			log.Printf("⚠️  Please fix or remove broken config files and re-sync via UI or CLI")
+			log.Printf("⚠️  Server will continue starting with no MCP tools available")
+		} else {
+			log.Printf("✅ Sync completed - Agents: %d processed, %d synced | MCP Servers: %d processed, %d connected",
+				syncResult.AgentsProcessed, syncResult.AgentsSynced, syncResult.MCPServersProcessed, syncResult.MCPServersConnected)
+		}
 	}
 
 	// Initialize Genkit with configured AI provider

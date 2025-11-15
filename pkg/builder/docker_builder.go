@@ -27,7 +27,9 @@ type DockerBuilder struct {
 func NewDockerBuilder(opts BuildOptions) *DockerBuilder {
 	// Set defaults
 	if opts.BaseImage == "" {
-		opts.BaseImage = "ghcr.io/cloudshipai/station:latest"
+		// Use local base image by default (built with Dockerfile.local)
+		// Contains all latest code including faker command
+		opts.BaseImage = "station:local"
 	}
 	if opts.ImageTag == "" {
 		opts.ImageTag = "latest"
@@ -64,6 +66,8 @@ func (b *DockerBuilder) Build(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to copy environment files: %w", err)
 	}
 
+	// Note: No need to copy binary - base image (station:local) already has latest stn binary
+
 	// Build Docker image
 	fullImageName := fmt.Sprintf("%s:%s", b.opts.ImageName, b.opts.ImageTag)
 	buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", fullImageName, tmpDir)
@@ -95,13 +99,13 @@ RUN echo "admin_username: admin" > /home/station/.config/station/config.yaml && 
     echo "telemetry_enabled: true" >> /home/station/.config/station/config.yaml && \
     chown station:station /home/station/.config/station/config.yaml
 
-# Database is on persistent volume at /data/station.db
-ENV DATABASE_URL=/data/station.db
-
 # Override default ports to match deployment configuration
 ENV STATION_MCP_PORT=8586
 ENV STATION_API_PORT=8585
 ENV STATION_SSH_PORT=2222
+
+# Database is on persistent volume at /data/station.db
+ENV DATABASE_URL=/data/station.db
 
 WORKDIR /workspace
 `, b.opts.BaseImage)
@@ -141,6 +145,15 @@ func (b *DockerBuilder) copyEnvironmentFiles(destDir string) error {
 	}
 
 	return nil
+}
+
+// copyFile copies a single file
+func (b *DockerBuilder) copyFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0755) // Executable permissions for binary
 }
 
 // copyDirRecursive recursively copies a directory

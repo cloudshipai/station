@@ -1,0 +1,112 @@
+# Local Station Base Image
+# Build with: docker build -f Dockerfile.local -t station:local .
+
+FROM ubuntu:22.04
+
+# Install essential packages
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    git \
+    sqlite3 \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20 and genkit CLI
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g genkit-cli
+
+# Install Docker CLI
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz | tar -xz \
+    && mv docker/docker /usr/local/bin/docker \
+    && rm -rf docker \
+    && chmod +x /usr/local/bin/docker
+
+# Create station user
+RUN groupadd -g 1000 station && \
+    useradd -m -u 1000 -g station -s /bin/bash station && \
+    apt-get update && apt-get install -y sudo gosu && rm -rf /var/lib/apt/lists/* && \
+    usermod -aG sudo station && \
+    echo "station ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Set up directories
+RUN mkdir -p /home/station/.local/bin /home/station/.cargo/bin \
+    /home/station/.config/station /home/station/.cache \
+    /home/station/.npm /home/station/.local/share && \
+    chown -R station:station /home/station
+
+# Install uv as station user
+USER station
+WORKDIR /home/station
+ENV HOME=/home/station
+ENV PATH="/home/station/.local/bin:/home/station/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Ship CLI
+RUN timeout 300 bash -c 'curl -fsSL --max-time 60 https://raw.githubusercontent.com/cloudshipai/ship/main/install.sh | bash' || \
+    echo 'Ship CLI installation failed or timed out'
+
+# Switch back to root for binary installation
+USER root
+
+# Copy locally built Station binary
+COPY ./bin/stn /usr/local/bin/stn
+RUN chmod +x /usr/local/bin/stn
+
+# Copy MCP server templates
+COPY mcp-servers/ /usr/share/station/mcp-servers/
+RUN chown -R station:station /usr/share/station
+
+# Create directories and symlink for compatibility
+RUN mkdir -p /workspace /var/log/station /root && \
+    ln -s /home/station/.config /root/.config && \
+    chown -R station:station /workspace /var/log/station /home/station && \
+    chmod 755 /root
+
+# Entrypoint script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+if [ "$(id -u)" != "0" ] && [ "$(id -u)" != "1000" ]; then\n\
+    exec "$@"\n\
+fi\n\
+\n\
+if [ "$(id -u)" = "0" ]; then\n\
+    if [ -d /workspace ]; then\n\
+        chown station:station /workspace 2>/dev/null || true\n\
+    fi\n\
+    export HOME=/home/station\n\
+    export USER=station\n\
+    exec gosu station "$@"\n\
+fi\n\
+\n\
+exec "$@"' > /usr/local/bin/docker-entrypoint.sh && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Switch to station user
+USER station
+
+# Environment variables
+ENV PATH="/home/station/.local/bin:/home/station/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV HOME="/home/station"
+ENV STATION_RUNTIME="docker"
+ENV STATION_CONFIG_DIR="/home/station/.config/station"
+ENV STATION_MCP_POOLING="false"
+
+WORKDIR /workspace
+
+# Expose ports
+EXPOSE 3000 3030 3002 4000 8585 8586
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["stn", "serve"]
+
+LABEL org.opencontainers.image.source="https://github.com/cloudshipai/station"
+LABEL org.opencontainers.image.description="Station - Local Development Base Image"
