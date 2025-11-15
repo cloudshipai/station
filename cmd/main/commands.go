@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"station/cmd/main/handlers"
 	"station/internal/auth"
 	"station/internal/config"
 	"station/internal/db"
@@ -276,6 +277,28 @@ and makes them available in the Genkit developer UI for interactive testing.`,
   stn develop --port 4000        # Start on custom port
   stn develop --ai-model gemini-2.5-flash      # Override AI model`,
 		RunE: runDevelop,
+	}
+
+	// Deploy command
+	deployCmd = &cobra.Command{
+		Use:   "deploy <environment-name>",
+		Short: "Deploy Station environment to cloud platform",
+		Long: `Deploy a Station environment to a cloud platform with agents and MCP tools.
+
+This command builds a Docker image with the specified environment embedded and deploys
+it to the target platform (currently supports Fly.io). The deployment includes:
+• All agents from the environment
+• All MCP server configurations
+• Template variables as environment secrets
+• Auto-configured AI provider settings
+
+The deployed instance exposes agents via MCP on port 3030 for public access.
+The management UI (port 8585) is disabled by default for security.`,
+		Example: `  stn deploy my-env --target fly                    # Deploy to Fly.io
+  stn deploy security-bundle --region ord           # Deploy to specific region
+  stn deploy production --target fly --region syd   # Full deployment example`,
+		Args: cobra.ExactArgs(1),
+		RunE: runDeploy,
 	}
 )
 
@@ -1223,4 +1246,13 @@ func runSettingsSet(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func runDeploy(cmd *cobra.Command, args []string) error {
+	envName := args[0]
+	target, _ := cmd.Flags().GetString("target")
+	region, _ := cmd.Flags().GetString("region")
+
+	ctx := context.Background()
+	return handlers.HandleDeploy(ctx, envName, target, region)
 }

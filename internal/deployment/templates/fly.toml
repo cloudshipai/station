@@ -20,7 +20,7 @@ primary_region = "{{.FlyRegion}}"
 {{end}}
 
 [http_service]
-  internal_port = {{.APIPort}}
+  internal_port = {{.MCPPort}}
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
@@ -43,7 +43,7 @@ primary_region = "{{.FlyRegion}}"
 
 [[mounts]]
   source = "station_data"
-  destination = "/root/.config/station"
+  destination = "/data"
 
 # Deployment instructions:
 #

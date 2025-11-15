@@ -243,7 +243,15 @@ func runMainServer() error {
 	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService)
 
-	wg.Add(4) // MCP, Dynamic Agent MCP, API, and webhook retry processor
+	// Check if dev mode is enabled (default: false for production deployments)
+	devMode := os.Getenv("STN_DEV_MODE") == "true"
+
+	// Conditional goroutine count based on dev mode
+	if devMode {
+		wg.Add(4) // MCP, Dynamic Agent MCP, API, and webhook retry processor
+	} else {
+		wg.Add(3) // MCP, Dynamic Agent MCP, and webhook retry processor (no API)
+	}
 
 	// SSH server removed - not needed
 
@@ -292,19 +300,29 @@ func runMainServer() error {
 		}
 	}()
 
-	go func() {
-		defer wg.Done()
-		if err := apiServer.Start(ctx); err != nil {
-			log.Printf("API server error: %v", err)
-		}
-	}()
+	// Only start API/UI server in dev mode
+	if devMode {
+		go func() {
+			defer wg.Done()
+			if err := apiServer.Start(ctx); err != nil {
+				log.Printf("API server error: %v", err)
+			}
+		}()
+	}
 
 	// Remove telemetry tracking
 
 	fmt.Printf("\n✅ Station is running!\n")
 	fmt.Printf("🔧 MCP Server: http://localhost:%d/mcp\n", cfg.MCPPort)
 	fmt.Printf("🤖 Dynamic Agent MCP: http://localhost:%d/mcp (environment: %s)\n", cfg.MCPPort+1, environmentName)
-	fmt.Printf("🌐 API Server: http://localhost:%d\n", cfg.APIPort)
+
+	if devMode {
+		fmt.Printf("🌐 API Server: http://localhost:%d (DEV MODE)\n", cfg.APIPort)
+	} else {
+		fmt.Printf("🔒 API Server: Disabled (production mode)\n")
+		fmt.Printf("💡 Set STN_DEV_MODE=true to enable management UI\n")
+	}
+
 	fmt.Printf("\nPress Ctrl+C to stop\n\n")
 
 	c := make(chan os.Signal, 1)

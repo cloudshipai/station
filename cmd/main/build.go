@@ -35,16 +35,31 @@ Examples:
 		Use:   "env [environment]",
 		Short: "Build a specific environment container",
 		Long: `Build a Docker container for a specific Station environment.
-Packages all MCP configurations, agents, and dependencies into a portable container.
+
+Two build modes:
+  1. Fast deployment builds (--skip-sync): 0.1s builds, sync at runtime
+  2. Full builds: Complete with sync, 15-20 min (for local development)
 
 Examples:
-  stn build env default          # Build default environment container
-  stn build env production       # Build production environment container
-  stn build env                  # Build default environment container
+  # Fast deployment build (recommended for Fly.io/K8s/etc)
+  stn build env default --skip-sync
 
-For staging/production deployments, consider using 'stn build base' and injecting configs at runtime:
-  docker run -v ./staging/variables.yml:/app/environment/variables.yml \\
-             -e OPENAI_API_KEY=$STAGING_KEY station-base:latest`,
+  # Full build with sync during build
+  stn build env default --provider openai --model gpt-4o-mini
+
+  # Custom image name for registry
+  stn build env myenv --skip-sync --image myorg/station-myenv --tag v1.0.0
+
+Fast builds:
+  - Uses production base image (ghcr.io/cloudshipai/station:latest)
+  - Copies environment files only
+  - Syncs agents/MCP at runtime using environment secrets
+  - Perfect for deployment to Fly.io, K8s, Cloud Run, etc.
+
+Full builds:
+  - Runs sync during build with AI provider
+  - Includes all tools and dependencies
+  - Suitable for local development/testing`,
 		Args: cobra.RangeArgs(0, 1),
 		RunE: runBuildEnvironment,
 	}
@@ -73,15 +88,17 @@ func init() {
 	buildCmd.AddCommand(buildRuntimeCmd)
 
 	// Add flags for environment build command
-	buildEnvironmentCmd.Flags().String("provider", "", "AI provider to configure (openai, gemini, anthropic)")
-	buildEnvironmentCmd.Flags().String("model", "", "AI model to use")
+	buildEnvironmentCmd.Flags().Bool("skip-sync", false, "Skip sync during build (fast deployment builds, sync at runtime)")
+	buildEnvironmentCmd.Flags().String("image", "", "Custom image name (default: station-<environment>)")
+	buildEnvironmentCmd.Flags().String("tag", "latest", "Image tag")
+	buildEnvironmentCmd.Flags().String("provider", "", "AI provider for full builds (openai, gemini, anthropic)")
+	buildEnvironmentCmd.Flags().String("model", "", "AI model for full builds")
 	buildEnvironmentCmd.Flags().String("cloudshipai-registration-key", "", "CloudShip AI registration key for telemetry")
 	buildEnvironmentCmd.Flags().String("cloudshipai-endpoint", "127.0.0.1:50051", "CloudShip AI endpoint")
-	buildEnvironmentCmd.Flags().Bool("ship", false, "Install Ship CLI for security tools")
+	buildEnvironmentCmd.Flags().Bool("ship", false, "Install Ship CLI for security tools (full builds only)")
 
-	// Make provider and model required
-	buildEnvironmentCmd.MarkFlagRequired("provider")
-	buildEnvironmentCmd.MarkFlagRequired("model")
+	// Provider and model only required for full builds (not skip-sync)
+	// Validation happens in handler based on skip-sync flag
 
 	// Add flags for runtime build command
 	buildRuntimeCmd.Flags().Bool("no-ship", false, "Do not install Ship CLI")

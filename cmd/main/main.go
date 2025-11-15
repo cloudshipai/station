@@ -53,6 +53,7 @@ func init() {
 	rootCmd.AddCommand(bootstrapCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(syncCmd)
+	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(mcpCmd)
 	rootCmd.AddCommand(bundleCmd)
 	rootCmd.AddCommand(agentCmd)
@@ -161,6 +162,10 @@ func init() {
 	developCmd.Flags().Bool("auto-ui", true, "Auto-launch GenKit Developer UI (default: true)")
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 
+	// Deploy command flags
+	deployCmd.Flags().String("target", "fly", "Deployment target (fly)")
+	deployCmd.Flags().String("region", "ord", "Deployment region (e.g., ord, syd, fra)")
+
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")
 
@@ -251,6 +256,10 @@ func initConfig() {
 	// Read environment variables
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("STATION")
+
+	// Explicitly bind critical environment variables that may not be in config file
+	// This is required for Docker deployments where config is minimal
+	viper.BindEnv("encryption_key", "STATION_ENCRYPTION_KEY")
 
 	// Read config file if it exists
 	if err := viper.ReadInConfig(); err == nil {

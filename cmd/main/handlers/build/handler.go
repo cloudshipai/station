@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/common"
 	"station/internal/theme"
+	"station/pkg/builder"
 )
 
 type BuildHandler struct {
@@ -30,22 +31,9 @@ func (h *BuildHandler) RunBuildEnvironment(cmd *cobra.Command, args []string) er
 	}
 
 	// Get build configuration flags
-	provider, _ := cmd.Flags().GetString("provider")
-	model, _ := cmd.Flags().GetString("model")
-	cloudshipaiKey, _ := cmd.Flags().GetString("cloudshipai-registration-key")
-	cloudshipaiEndpoint, _ := cmd.Flags().GetString("cloudshipai-endpoint")
-	installShip, _ := cmd.Flags().GetBool("ship")
-
-	// Validate required flags
-	if provider == "" {
-		return fmt.Errorf("--provider flag is required (openai, gemini, anthropic)")
-	}
-	if model == "" {
-		return fmt.Errorf("--model flag is required (e.g., gpt-4o-mini, gemini-2.5-flash)")
-	}
-
-	log.Printf("Building containerized environment: %s", environmentName)
-	log.Printf("AI provider: %s, model: %s", provider, model)
+	skipSync, _ := cmd.Flags().GetBool("skip-sync")
+	imageName, _ := cmd.Flags().GetString("image")
+	imageTag, _ := cmd.Flags().GetString("tag")
 
 	configRoot, err := common.GetStationConfigRoot()
 	if err != nil {
@@ -57,30 +45,75 @@ func (h *BuildHandler) RunBuildEnvironment(cmd *cobra.Command, args []string) er
 		return fmt.Errorf("environment '%s' not found at %s", environmentName, envPath)
 	}
 
-	// Create build options
-	buildOptions := &BuildOptions{
-		Provider:            provider,
-		Model:               model,
-		CloudShipAIKey:      cloudshipaiKey,
-		CloudShipAIEndpoint: cloudshipaiEndpoint,
-		InstallShip:         installShip,
-	}
+	if skipSync {
+		// Fast deployment-ready build (0.1s) - uses shared Docker builder
+		log.Printf("Building deployment-ready image for environment: %s (skip-sync mode)", environmentName)
 
-	builder := NewEnvironmentBuilderWithOptions(environmentName, envPath, buildOptions)
-	containerImage, err := builder.Build(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to build container: %w", err)
-	}
+		dockerBuilder := builder.NewDockerBuilder(builder.BuildOptions{
+			EnvironmentName: environmentName,
+			EnvironmentPath: envPath,
+			ImageName:       imageName,
+			ImageTag:        imageTag,
+			SkipSync:        true,
+		})
 
-	if strings.HasSuffix(containerImage, ".tar") {
-		fmt.Printf("Successfully exported container: %s\n", containerImage)
-		fmt.Printf("Load with: docker load < %s\n", containerImage)
-		fmt.Printf("Run with: docker run -it --privileged -v /var/run/docker.sock:/var/run/docker.sock station-%s:latest\n", environmentName)
-		fmt.Printf("Note: --privileged and docker.sock mount enable Docker-in-Docker for MCP tools like Dagger\n")
+		containerImage, err := dockerBuilder.Build(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to build container: %w", err)
+		}
+
+		fmt.Printf("\n✅ Successfully built deployment-ready image: %s\n", containerImage)
+		fmt.Printf("📝 Note: This image will sync agents/MCP servers at runtime using environment secrets\n")
+		fmt.Printf("\n🚀 Deploy with:\n")
+		fmt.Printf("   docker push %s\n", containerImage)
+		fmt.Printf("   OR\n")
+		fmt.Printf("   stn deploy %s --target fly\n\n", environmentName)
 	} else {
-		fmt.Printf("Successfully built Docker image: %s\n", containerImage)
-		fmt.Printf("Run with: docker run -it --privileged -v /var/run/docker.sock:/var/run/docker.sock %s\n", containerImage)
-		fmt.Printf("Note: --privileged and docker.sock mount enable Docker-in-Docker for MCP tools like Dagger\n")
+		// Full build with Dagger (slow, for local development)
+		// Get additional flags for full build
+		provider, _ := cmd.Flags().GetString("provider")
+		model, _ := cmd.Flags().GetString("model")
+		cloudshipaiKey, _ := cmd.Flags().GetString("cloudshipai-registration-key")
+		cloudshipaiEndpoint, _ := cmd.Flags().GetString("cloudshipai-endpoint")
+		installShip, _ := cmd.Flags().GetBool("ship")
+
+		// Validate required flags for full build
+		if provider == "" {
+			return fmt.Errorf("--provider flag is required for full builds (openai, gemini, anthropic)")
+		}
+		if model == "" {
+			return fmt.Errorf("--model flag is required for full builds (e.g., gpt-4o-mini, gemini-2.5-flash)")
+		}
+
+		log.Printf("Building full containerized environment: %s", environmentName)
+		log.Printf("AI provider: %s, model: %s", provider, model)
+		log.Printf("⚠️  Warning: Full builds can take 15-20 minutes due to sync process")
+
+		// Create build options
+		buildOptions := &BuildOptions{
+			Provider:            provider,
+			Model:               model,
+			CloudShipAIKey:      cloudshipaiKey,
+			CloudShipAIEndpoint: cloudshipaiEndpoint,
+			InstallShip:         installShip,
+			ImageName:           imageName,
+			Tag:                 imageTag,
+		}
+
+		builder := NewEnvironmentBuilderWithOptions(environmentName, envPath, buildOptions)
+		containerImage, err := builder.Build(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to build container: %w", err)
+		}
+
+		if strings.HasSuffix(containerImage, ".tar") {
+			fmt.Printf("Successfully exported container: %s\n", containerImage)
+			fmt.Printf("Load with: docker load < %s\n", containerImage)
+			fmt.Printf("Run with: docker run -it --privileged -v /var/run/docker.sock:/var/run/docker.sock station-%s:latest\n", environmentName)
+		} else {
+			fmt.Printf("Successfully built Docker image: %s\n", containerImage)
+			fmt.Printf("Run with: docker run -it --privileged -v /var/run/docker.sock:/var/run/docker.sock %s\n", containerImage)
+		}
 	}
 
 	return nil
