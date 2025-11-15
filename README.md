@@ -86,23 +86,34 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/scripts/qu
 
 ---
 
-### ⚡ Fastest: Local Install & Run
+### ⚡ Fastest: Local Install
 
-For local development without Docker:
+For local development:
 
 ```bash
-curl -fsSL https://get.station.dev | bash
+# Install Station
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
-**What this does:**
-- ✅ Installs Station CLI
-- ✅ Prompts for AI provider setup
-- ✅ Starts Station locally
-- ✅ Opens browser automatically
+**Configure MCP Server for Claude Code/Cursor:**
+
+Add to your `.mcp.json` or MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
+```
 
 **Just need:** `curl` and your AI API key (OpenAI/Anthropic/Gemini/Ollama).
-
-**Stop Station:** `stn down`
 
 ---
 
