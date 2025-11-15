@@ -19,27 +19,18 @@ primary_region = "{{.FlyRegion}}"
   {{$key}} = "{{$value}}"
 {{end}}
 
-# Management MCP on port 8586 (admin tools)
+# Dynamic Agent MCP HTTPS service (agents as tools)
+# This is the primary endpoint users should connect to in ChatGPT/Claude Desktop
+# Port is MCPPort + 1 (e.g., 8586 + 1 = 8587)
 [http_service]
-  internal_port = {{.MCPPort}}
+  internal_port = 8587
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
   processes = ["app"]
 
-# Dynamic Agent MCP TCP service (agents as tools)
-# Port is MCPPort + 1 (e.g., 8586 + 1 = 8587)
-[[services]]
-  protocol = "tcp"
-  internal_port = 8587
-  auto_stop_machines = true
-  auto_start_machines = true
-
-  [[services.ports]]
-    port = 8587
-
-# Management MCP TCP service  
+# Management MCP TCP service (admin tools like add_agent, call_agent)  
 [[services]]
   protocol = "tcp"
   internal_port = {{.MCPPort}}
