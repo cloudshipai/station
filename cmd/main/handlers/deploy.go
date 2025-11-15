@@ -364,8 +364,9 @@ func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig)
 
 	// Production deployment settings
 	// STN_DEV_MODE is NOT set (defaults to false, disables port 8585)
-	// STATION_SKIP_SYNC_ON_STARTUP skips sync on startup (MCP configs already in database from volume)
-	secrets["STATION_SKIP_SYNC_ON_STARTUP"] = "true"
+	// NOTE: STATION_SKIP_SYNC_ON_STARTUP is NOT set, so sync WILL run on startup
+	// This is required to populate the database with agents from .prompt files
+	// Sync only needs to run on first boot; subsequent restarts use persisted database
 
 	return secrets, nil
 }

@@ -19,6 +19,7 @@ primary_region = "{{.FlyRegion}}"
   {{$key}} = "{{$value}}"
 {{end}}
 
+# Management MCP on port 8586 (admin tools)
 [http_service]
   internal_port = {{.MCPPort}}
   force_https = true
@@ -27,6 +28,18 @@ primary_region = "{{.FlyRegion}}"
   min_machines_running = 0
   processes = ["app"]
 
+# Dynamic Agent MCP TCP service (agents as tools)
+# Port is MCPPort + 1 (e.g., 8586 + 1 = 8587)
+[[services]]
+  protocol = "tcp"
+  internal_port = 8587
+  auto_stop_machines = true
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 8587
+
+# Management MCP TCP service  
 [[services]]
   protocol = "tcp"
   internal_port = {{.MCPPort}}

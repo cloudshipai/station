@@ -286,24 +286,11 @@ func runMainServer() error {
 
 	go func() {
 		defer wg.Done()
-		dynamicAgentPort := 3030
+		// Dynamic Agent MCP port is Management MCP port + 1 (e.g., 8586 + 1 = 8587)
+		dynamicAgentPort := cfg.MCPPort + 1
 		log.Printf("🤖 Starting Dynamic Agent MCP server on port %d", dynamicAgentPort)
 		if err := dynamicAgentServer.Start(ctx, dynamicAgentPort); err != nil {
 			log.Printf("Dynamic Agent MCP server error: %v", err)
-		}
-
-		// Wait for context cancellation, then shutdown fast
-		<-ctx.Done()
-
-		// Very aggressive timeout - 1s for dynamic MCP shutdown
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer shutdownCancel()
-
-		log.Printf("🤖 Shutting down Dynamic Agent MCP server...")
-		if err := dynamicAgentServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("Dynamic Agent MCP server shutdown error: %v", err)
-		} else {
-			log.Printf("🤖 Dynamic Agent MCP server stopped gracefully")
 		}
 	}()
 
