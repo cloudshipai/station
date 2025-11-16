@@ -352,10 +352,10 @@ func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig)
 	}
 	secrets["STATION_ENCRYPTION_KEY"] = encryptionKey
 
-	// AI configuration
-	secrets["STN_AI_PROVIDER"] = aiConfig.Provider
-	secrets["STN_AI_MODEL"] = aiConfig.Model
-	secrets["STN_AI_API_KEY"] = aiConfig.APIKey
+	// AI configuration (use STATION_ prefix for viper compatibility)
+	secrets["STATION_AI_PROVIDER"] = aiConfig.Provider
+	secrets["STATION_AI_MODEL"] = aiConfig.Model
+	secrets["STATION_AI_API_KEY"] = aiConfig.APIKey
 
 	// Environment variables from variables.yml
 	for k, v := range envConfig.Variables {
@@ -365,6 +365,9 @@ func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig)
 	// Production deployment settings
 	// STN_DEV_MODE is NOT set (defaults to false, disables port 8585)
 	// Sync always runs on startup to populate database with agents from .prompt files
+
+	// Enable MCP connection pooling for production (keeps connections alive)
+	secrets["STATION_MCP_POOLING"] = "true"
 
 	return secrets, nil
 }
