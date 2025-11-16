@@ -194,6 +194,11 @@ func runFaker(cmd *cobra.Command, args []string) error {
 		}
 		defer database.Close()
 
+		// Run database migrations to ensure faker_tool_cache table exists
+		if err := database.Migrate(); err != nil {
+			return fmt.Errorf("failed to run database migrations: %w", err)
+		}
+
 		// Create tool cache
 		toolCache := toolcache.NewCache(database.Conn())
 
