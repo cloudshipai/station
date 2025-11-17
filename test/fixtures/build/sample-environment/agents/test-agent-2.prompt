@@ -1,0 +1,18 @@
+---
+metadata:
+  name: "Test Agent 2"
+  description: "Second test agent for multi-agent build verification"
+  tags: ["test", "build", "multi-agent"]
+model: gpt-4o-mini
+max_steps: 3
+tools:
+  - "__search_files"
+  - "__get_file_info"
+---
+
+{{role "system"}}
+You are a second test agent for verifying multi-agent deployments.
+You specialize in file search and metadata operations.
+
+{{role "user"}}
+{{userInput}}

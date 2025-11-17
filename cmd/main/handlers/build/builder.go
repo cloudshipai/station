@@ -16,6 +16,7 @@ import (
 
 	"dagger.io/dagger"
 	"station/internal/db"
+	"station/internal/services"
 )
 
 type EnvironmentBuilder struct {
@@ -70,60 +71,19 @@ func NewEnvironmentBuilderWithOptions(environmentName, environmentPath string, o
 func (b *EnvironmentBuilder) Build(ctx context.Context) (string, error) {
 	log.Printf("Starting build for environment: %s", b.environmentName)
 
-	client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stdout))
-	if err != nil {
-		return "", fmt.Errorf("failed to connect to Dagger: %w", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	container, tempDBPath, err := b.buildContainer(ctx, client)
-	if err != nil {
-		return "", fmt.Errorf("failed to build container: %w", err)
-	}
-
-	// Clean up temp files after building container
-	if tempDBPath != "" {
-		defer os.Remove(tempDBPath)
-	}
-	defer os.Remove("stn") // Clean up temp binary
-
-	// Determine image name from build options or use default
+	// Determine image name
 	imageName := b.buildOptions.ImageName
 	if imageName == "" {
 		imageName = fmt.Sprintf("station-%s", b.environmentName)
 	}
-
-	// Determine tag from build options or use default
 	tag := b.buildOptions.Tag
 	if tag == "" {
 		tag = "latest"
 	}
-
-	// Combine image name and tag
 	fullImageName := fmt.Sprintf("%s:%s", imageName, tag)
 
-	// First export to tar
-	tarPath := fmt.Sprintf("station-%s.tar", b.environmentName)
-	_, err = container.Export(ctx, tarPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to export container: %w", err)
-	}
-
-	// Load into Docker daemon
-	imageID, err := b.loadImageToDocker(tarPath, fullImageName)
-	if err != nil {
-		log.Printf("Failed to load into Docker daemon, keeping tar file: %v", err)
-		log.Printf("Successfully exported container to: %s", tarPath)
-		return tarPath, nil
-	}
-
-	// Clean up tar file since we have it in Docker now
-	os.Remove(tarPath)
-
-	log.Printf("Successfully loaded Docker image: %s", fullImageName)
-	log.Printf("Image ID: %s", imageID)
-	log.Printf("Run with: docker run -it %s", fullImageName)
-	return fullImageName, nil
+	// Build using simple Dockerfile approach
+	return b.buildWithDockerfile(ctx, fullImageName)
 }
 
 // getHostPlatform returns the platform string for the host architecture
@@ -328,6 +288,11 @@ func (b *EnvironmentBuilder) buildContainer(ctx context.Context, client *dagger.
 
 	// Set working directory to /workspace for CI/CD operations
 	base = base.WithWorkdir("/workspace")
+
+	// Set entrypoint to empty array and default args to run Station
+	// This overrides ubuntu:22.04's CMD ["/bin/bash"]
+	base = base.WithEntrypoint([]string{}).
+		WithDefaultArgs([]string{"stn", "serve"})
 
 	return base, tempDBPath, nil
 }
@@ -667,6 +632,11 @@ func (b *EnvironmentBuilder) copyFile(src, dst string) error {
 		if err := destFile.Chmod(info.Mode()); err != nil {
 			return fmt.Errorf("failed to set file permissions: %w", err)
 		}
+	}
+
+	// Ensure data is flushed to disk
+	if err := destFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync file: %w", err)
 	}
 
 	return nil
@@ -1046,4 +1016,158 @@ func (b *BaseBuilder) extractImageIDFromLoadOutput(output string) string {
 		}
 	}
 	return ""
+}
+
+func (b *EnvironmentBuilder) buildWithDockerfile(ctx context.Context, fullImageName string) (string, error) {
+	// Create temp directory for build context
+	tmpDir, err := os.MkdirTemp("", "station-build-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Pull published base image from registry
+	log.Printf("🐳 Pulling base Station image from registry...")
+	pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station:latest")
+	if pullErr := pullCmd.Run(); pullErr != nil {
+		log.Printf("⚠️  Failed to pull from registry: %v", pullErr)
+		log.Printf("Checking for local station:latest image...")
+
+		// Fallback: check if local image exists
+		inspectCmd := exec.Command("docker", "inspect", "station:latest")
+		if inspectErr := inspectCmd.Run(); inspectErr != nil {
+			return "", fmt.Errorf("no base image available: registry pull failed and no local station:latest image found.\nPlease ensure Docker is running and you have internet connectivity, or build station:latest locally first.\nPull error: %w", pullErr)
+		}
+		log.Printf("✅ Using local station:latest image")
+	} else {
+		log.Printf("✅ Pulled ghcr.io/cloudshipai/station:latest")
+
+		// Tag pulled image as station:latest for consistency
+		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station:latest")
+		if tagErr := tagCmd.Run(); tagErr != nil {
+			log.Printf("⚠️  Warning: Failed to tag image: %v", tagErr)
+		}
+	}
+
+	// Create bundle tar.gz from environment
+	log.Printf("📦 Creating bundle from environment: %s", b.environmentName)
+	bundleService := services.NewBundleService()
+
+	// Validate environment first
+	if err := bundleService.ValidateEnvironment(b.environmentPath); err != nil {
+		return "", fmt.Errorf("environment validation failed: %w", err)
+	}
+
+	// Get bundle info for logging
+	bundleInfo, err := bundleService.GetBundleInfo(b.environmentPath)
+	if err != nil {
+		log.Printf("⚠️  Warning: Failed to get bundle info: %v", err)
+	} else {
+		log.Printf("📋 Bundle contents:")
+		log.Printf("   🤖 %d agent(s): %v", len(bundleInfo.AgentFiles), bundleInfo.AgentFiles)
+		log.Printf("   🔧 %d MCP config(s): %v", len(bundleInfo.MCPConfigs), bundleInfo.MCPConfigs)
+	}
+
+	// Create bundle
+	bundleBytes, err := bundleService.CreateBundle(b.environmentPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create bundle: %w", err)
+	}
+
+	// Write bundle to build context
+	bundlePath := filepath.Join(tmpDir, "environment-bundle.tar.gz")
+	if err := os.WriteFile(bundlePath, bundleBytes, 0644); err != nil {
+		return "", fmt.Errorf("failed to write bundle: %w", err)
+	}
+
+	bundleStat, _ := os.Stat(bundlePath)
+	log.Printf("✅ Bundle created: %s (%d bytes)", bundlePath, bundleStat.Size())
+
+	// Create Dockerfile that installs bundle at build time
+	dockerfile := `FROM station:latest
+
+# Copy bundle archive into container
+COPY --chown=station:station environment-bundle.tar.gz /tmp/environment-bundle.tar.gz
+
+# Switch to station user and install bundle to default environment
+USER station
+
+# Install bundle using Station CLI
+# This extracts the bundle to ~/.config/station/environments/default/
+# Bundle installation is filesystem-only (no database) at build time
+# Database will be created at runtime by stn serve via migrations + sync
+RUN stn bundle install /tmp/environment-bundle.tar.gz default && \
+    rm /tmp/environment-bundle.tar.gz
+
+# Switch back to root for entrypoint flexibility
+USER root
+
+# Database and config will be created at runtime by stn serve:
+# - Config: Auto-initialized from environment variables (STATION_AUTO_INIT=true)
+# - Database: Auto-created via migrations during sync
+# - Environment: Auto-synced from ~/.config/station/environments/default/
+
+# Working directory and CMD (stn serve) inherited from base image
+`
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "Dockerfile"), []byte(dockerfile), 0644); err != nil {
+		return "", fmt.Errorf("failed to write Dockerfile: %w", err)
+	}
+
+	// Bundle is already in tmpDir - no need to copy environment directory or database!
+
+	// Verify all files are in build context
+	files, _ := os.ReadDir(tmpDir)
+	log.Printf("Build context contains %d files:", len(files))
+	for _, f := range files {
+		info, _ := f.Info()
+		log.Printf("  - %s (%d bytes)", f.Name(), info.Size())
+	}
+
+	// Build the image
+	log.Printf("Building environment image: %s", fullImageName)
+	cmd := exec.Command("docker", "build", "--no-cache", "-t", fullImageName, tmpDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to build environment image: %w", err)
+	}
+
+	log.Printf("Successfully built Docker image: %s", fullImageName)
+	log.Printf("Run with: docker run -it %s", fullImageName)
+	return fullImageName, nil
+}
+
+// createDatabaseWithSync was removed - database is now created at runtime
+// via stn serve's auto-sync instead of being baked into the Docker image
+
+func (b *EnvironmentBuilder) copyDirectory(src, dst string, exclude []string) error {
+	return filepath.Walk(src, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		// Check if file should be excluded
+		for _, pattern := range exclude {
+			if strings.Contains(relPath, pattern) {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		return b.copyFile(path, dstPath)
+	})
 }

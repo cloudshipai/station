@@ -314,9 +314,32 @@ func runServe(cmd *cobra.Command, args []string) error {
 	configFile := filepath.Join(configDir, "config.yaml")
 
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		fmt.Printf("Configuration not found. Please run 'station init' first.\n")
-		fmt.Printf("Expected config file: %s\n", configFile)
-		return fmt.Errorf("configuration not initialized")
+		// Check if STATION_AUTO_INIT is enabled for Docker/container deployments
+		autoInit := os.Getenv("STATION_AUTO_INIT") == "true"
+		hasAPIKey := os.Getenv("OPENAI_API_KEY") != "" ||
+			os.Getenv("ANTHROPIC_API_KEY") != "" ||
+			os.Getenv("GEMINI_API_KEY") != "" ||
+			os.Getenv("GOOGLE_API_KEY") != "" ||
+			os.Getenv("AI_API_KEY") != "" ||
+			os.Getenv("STN_AI_API_KEY") != ""
+
+		if autoInit && hasAPIKey {
+			logging.Info("🔧 Auto-initializing Station from environment variables...")
+
+			// Auto-create config from environment variables
+			if err := autoInitializeConfig(configFile, configDir); err != nil {
+				return fmt.Errorf("auto-initialization failed: %w", err)
+			}
+
+			logging.Info("✅ Configuration auto-initialized successfully")
+		} else {
+			fmt.Printf("Configuration not found. Please run 'station init' first.\n")
+			fmt.Printf("Expected config file: %s\n", configFile)
+			fmt.Printf("\nOr set these environment variables for auto-init:\n")
+			fmt.Printf("  STATION_AUTO_INIT=true\n")
+			fmt.Printf("  OPENAI_API_KEY=sk-... (or other AI provider key)\n")
+			return fmt.Errorf("configuration not initialized")
+		}
 	}
 
 	// Validate encryption key - check config first, then environment variables
@@ -386,6 +409,101 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	// Import and run the main server code
 	return runMainServer()
+}
+
+// autoInitializeConfig creates a minimal Station config from environment variables
+// This allows Docker containers to start without pre-baked config.yaml files
+func autoInitializeConfig(configFile, configDir string) error {
+	// Create config directory if it doesn't exist
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Determine AI provider from env vars (fallback to openai)
+	provider := os.Getenv("STATION_AI_PROVIDER")
+	if provider == "" {
+		provider = os.Getenv("STN_AI_PROVIDER")
+	}
+	if provider == "" {
+		provider = "openai" // Default
+	}
+
+	// Determine AI model from env vars or use provider-specific defaults
+	model := os.Getenv("STATION_AI_MODEL")
+	if model == "" {
+		model = os.Getenv("STN_AI_MODEL")
+	}
+	if model == "" {
+		// Provider-specific defaults
+		switch provider {
+		case "openai":
+			model = "gpt-4o-mini"
+		case "anthropic":
+			model = "claude-3-5-sonnet-20241022"
+		case "google", "gemini":
+			model = "gemini-1.5-flash"
+		default:
+			model = "gpt-4o-mini"
+		}
+	}
+
+	// Generate encryption key
+	encryptionKey, err := auth.GenerateAPIKey()
+	if err != nil {
+		return fmt.Errorf("failed to generate encryption key: %w", err)
+	}
+	// Remove the "sk-" prefix as this is an encryption key, not an API key
+	encryptionKey = encryptionKey[3:]
+
+	// Get database path (defaults handled by config.Load())
+	databasePath := os.Getenv("DATABASE_URL")
+	if databasePath == "" {
+		databasePath = filepath.Join(configDir, "station.db")
+	}
+
+	// Set viper values for config creation
+	viper.Set("ai_provider", provider)
+	viper.Set("ai_model", model)
+	viper.Set("encryption_key", encryptionKey)
+	viper.Set("database_url", databasePath)
+	viper.Set("mcp_port", getEnvIntOrDefault("STATION_MCP_PORT", 8586))
+	viper.Set("api_port", getEnvIntOrDefault("STATION_API_PORT", 8585))
+	viper.Set("ssh_port", getEnvIntOrDefault("STATION_SSH_PORT", 2222))
+	viper.Set("telemetry_enabled", getEnvBoolOrDefault("STATION_TELEMETRY_ENABLED", false))
+	viper.Set("debug", getEnvBoolOrDefault("STATION_DEBUG", false))
+	viper.Set("local_mode", true) // Always local mode for containers
+
+	// Write config file
+	viper.SetConfigFile(configFile)
+	viper.SetConfigType("yaml")
+	if err := viper.WriteConfig(); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	logging.Info("📝 Created config file: %s", configFile)
+	logging.Info("🤖 AI Provider: %s", provider)
+	logging.Info("🧠 AI Model: %s", model)
+	logging.Info("🗄️  Database: %s", databasePath)
+
+	return nil
+}
+
+// Helper functions for auto-init
+func getEnvIntOrDefault(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		var intValue int
+		if _, err := fmt.Sscanf(value, "%d", &intValue); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvBoolOrDefault(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		return value == "true" || value == "1" || value == "yes"
+	}
+	return defaultValue
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

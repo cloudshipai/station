@@ -1,0 +1,14 @@
+{
+  "name": "test-environment",
+  "description": "Test environment for build and deployment verification",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@latest",
+        "/workspace"
+      ]
+    }
+  }
+}

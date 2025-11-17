@@ -1,0 +1,4 @@
+# Test variables for sample environment
+# This file should be EXCLUDED from bundles for security
+PROJECT_ROOT: "/workspace"
+TEST_VAR: "test-value"

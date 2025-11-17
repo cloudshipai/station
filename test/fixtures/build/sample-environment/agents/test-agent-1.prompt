@@ -1,0 +1,23 @@
+---
+metadata:
+  name: "Test Agent 1"
+  description: "Test agent for build verification and integration tests"
+  tags: ["test", "build", "integration"]
+model: gpt-4o-mini
+max_steps: 5
+tools:
+  - "__read_text_file"
+  - "__list_directory"
+---
+
+{{role "system"}}
+You are a test agent designed for build verification.
+Your purpose is to help test the Station build and deployment process.
+
+When asked to verify the build, you should:
+1. Confirm you can access filesystem tools
+2. List available MCP tools
+3. Demonstrate basic file operations
+
+{{role "user"}}
+{{userInput}}

@@ -8,19 +8,38 @@ primary_region = "{{.FlyRegion}}"
   image = "{{.DockerImage}}"
 
 [env]
+  # Auto-initialize Station if config.yaml doesn't exist (bundle-based deployments)
+  # This allows deploying without pre-baked configuration
+  STATION_AUTO_INIT = "true"
+  
+  # AI Configuration - Provider will auto-detect from API keys if not set
   STATION_AI_PROVIDER = "{{.AIProvider}}"
   STATION_AI_MODEL = "{{.AIModel}}"
+  
+  # Station Service Ports
   STATION_API_PORT = "{{.APIPort}}"
   STATION_MCP_PORT = "{{.MCPPort}}"
   STATION_SSH_PORT = "{{.SSHPort}}"
+  
+  # Debug and Telemetry
   STATION_DEBUG = "{{.Debug}}"
   STATION_TELEMETRY_ENABLED = "{{.TelemetryEnabled}}"
+  
 {{range $key, $value := .EnvironmentVariables}}
   {{$key}} = "{{$value}}"
 {{end}}
 
+# Secrets Configuration
+# Set API keys as Fly secrets (not baked into image or environment variables):
+#
+#   fly secrets set OPENAI_API_KEY="sk-..." -a station-{{.EnvironmentName}}
+#   fly secrets set ANTHROPIC_API_KEY="sk-..." -a station-{{.EnvironmentName}}
+#   fly secrets set GEMINI_API_KEY="..." -a station-{{.EnvironmentName}}
+#
+# Station will auto-detect provider from available API keys if STATION_AI_PROVIDER not set
+
 # Dynamic Agent MCP HTTPS service (agents as tools)
-# This is the primary endpoint users should connect to in ChatGPT/Claude Desktop
+# This is the primary endpoint users should connect to in ChatGPT/Claude Desktop  
 # Port is MCPPort + 1 (e.g., 8586 + 1 = 8587)
 [http_service]
   internal_port = 8587
@@ -45,9 +64,8 @@ primary_region = "{{.FlyRegion}}"
   cpus = 1
   memory_mb = 1024
 
-[[mounts]]
-  source = "station_data"
-  destination = "/data"
+# Stateless deployment - database rebuilt from environment files on each deploy
+# For persistence, configure Litestream replication via environment variables
 
 # Deployment instructions:
 #
@@ -60,10 +78,7 @@ primary_region = "{{.FlyRegion}}"
 # 3. Create the app (first time only):
 #    fly apps create station-{{.EnvironmentName}}
 #
-# 4. Create volume for persistent data:
-#    fly volumes create station_data --region {{.FlyRegion}} --size 1
-#
-# 5. Set API key secret:
+# 4. Set API key secret:
 #    fly secrets set OPENAI_API_KEY="{{.OpenAIAPIKey}}"
 #
 # 6. Deploy:
