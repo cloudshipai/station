@@ -10,10 +10,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	buildpkg "station/cmd/main/handlers/build"
 	"station/internal/auth"
 	"station/internal/config"
 	"station/internal/deployment"
-	"station/pkg/builder"
 )
 
 // DeploymentAIConfig holds AI configuration for deployment
@@ -178,20 +178,22 @@ func loadEnvironmentConfig(envName string) (*EnvironmentConfig, error) {
 	return envConfig, nil
 }
 
-// buildDeploymentImage builds a simple Docker image for Fly.io deployment using shared builder
+// buildDeploymentImage builds a bundle-based Docker image for Fly.io deployment
 func buildDeploymentImage(ctx context.Context, envName string, envConfig *EnvironmentConfig, aiConfig *DeploymentAIConfig) (string, error) {
 	fmt.Printf("🔨 Building Docker image for environment '%s'...\n", envName)
 
-	// Use shared Docker builder (DRY - same code used by stn build env)
-	dockerBuilder := builder.NewDockerBuilder(builder.BuildOptions{
-		EnvironmentName: envName,
-		EnvironmentPath: envConfig.Path,
-		ImageName:       fmt.Sprintf("station-%s", envName),
-		ImageTag:        "latest",
-		SkipSync:        true, // Deploy images sync at runtime with secrets
-	})
+	// Use NEW bundle-based builder (same as stn build env)
+	// This creates a runtime-init image with no baked database or config
+	envBuilder := buildpkg.NewEnvironmentBuilderWithOptions(
+		envName,
+		envConfig.Path,
+		&buildpkg.BuildOptions{
+			Provider: aiConfig.Provider,
+			Model:    aiConfig.Model,
+		},
+	)
 
-	imageName, err := dockerBuilder.Build(ctx)
+	imageName, err := envBuilder.Build(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to build deployment image: %w", err)
 	}

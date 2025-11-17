@@ -329,7 +329,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 			os.Getenv("GEMINI_API_KEY") != "" ||
 			os.Getenv("GOOGLE_API_KEY") != "" ||
 			os.Getenv("AI_API_KEY") != "" ||
-			os.Getenv("STN_API_KEY") != ""
+			os.Getenv("STN_API_KEY") != "" ||
+			os.Getenv("STATION_AI_API_KEY") != ""
 
 		if hasAPIKey {
 			logging.Info("🔧 Auto-initializing Station from environment variables...")
