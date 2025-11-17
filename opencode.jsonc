@@ -4,10 +4,15 @@
     "station": {
       "enabled": true,
       "type": "local",
-      "command": ["stn", "stdio"],
-        "environment": {
+      "command": [
+        "stn",
+        "--config",
+        "/home/epuerta/projects/hack/station/station-demo/config.yaml",
+        "stdio"
+      ],
+      "environment": {
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
       }
-    },
-  },
+    }
+  }
 }
