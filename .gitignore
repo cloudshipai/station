@@ -188,3 +188,6 @@ stn-test
 lighthouse.md
 lighthouse-payloads.md
 ~/
+
+# Station demo repo (separate Git repo, don't nest)
+station-demo/
