@@ -1026,28 +1026,14 @@ func (b *EnvironmentBuilder) buildWithDockerfile(ctx context.Context, fullImageN
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Pull published base image from registry
-	log.Printf("🐳 Pulling base Station image from registry...")
-	pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station:latest")
-	if pullErr := pullCmd.Run(); pullErr != nil {
-		log.Printf("⚠️  Failed to pull from registry: %v", pullErr)
-		log.Printf("Checking for local station:latest image...")
-
-		// Fallback: check if local image exists
-		inspectCmd := exec.Command("docker", "inspect", "station:latest")
-		if inspectErr := inspectCmd.Run(); inspectErr != nil {
-			return "", fmt.Errorf("no base image available: registry pull failed and no local station:latest image found.\nPlease ensure Docker is running and you have internet connectivity, or build station:latest locally first.\nPull error: %w", pullErr)
-		}
-		log.Printf("✅ Using local station:latest image")
-	} else {
-		log.Printf("✅ Pulled ghcr.io/cloudshipai/station:latest")
-
-		// Tag pulled image as station:latest for consistency
-		tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station:latest")
-		if tagErr := tagCmd.Run(); tagErr != nil {
-			log.Printf("⚠️  Warning: Failed to tag image: %v", tagErr)
-		}
+	// For development: Use local station:latest (skip registry pull)
+	// In production, this would pull from ghcr.io/cloudshipai/station:latest
+	log.Printf("🐳 Using local station:latest image for development...")
+	inspectCmd := exec.Command("docker", "inspect", "station:latest")
+	if inspectErr := inspectCmd.Run(); inspectErr != nil {
+		return "", fmt.Errorf("no local station:latest image found.\nPlease build it first with: docker build -t station:latest -f Dockerfile .")
 	}
+	log.Printf("✅ Using local station:latest image")
 
 	// Create bundle tar.gz from environment
 	log.Printf("📦 Creating bundle from environment: %s", b.environmentName)
@@ -1102,7 +1088,7 @@ RUN mkdir -p /home/station/.config/station/environments/default && \
 USER root
 
 # Database and config will be created at runtime by stn serve:
-# - Config: Auto-initialized from environment variables (STATION_AUTO_INIT=true)
+# - Config: Auto-initialized when API keys detected (OPENAI_API_KEY, etc.)
 # - Database: Auto-created via migrations during sync
 # - Environment: Auto-synced from ~/.config/station/environments/default/
 

@@ -8,10 +8,6 @@ primary_region = "{{.FlyRegion}}"
   image = "{{.DockerImage}}"
 
 [env]
-  # Auto-initialize Station if config.yaml doesn't exist (bundle-based deployments)
-  # This allows deploying without pre-baked configuration
-  STATION_AUTO_INIT = "true"
-  
   # AI Configuration - Provider will auto-detect from API keys if not set
   STATION_AI_PROVIDER = "{{.AIProvider}}"
   STATION_AI_MODEL = "{{.AIModel}}"

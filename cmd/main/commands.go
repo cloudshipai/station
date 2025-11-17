@@ -310,20 +310,28 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if configuration exists
-	configDir := getWorkspacePath()
+	// Use environment variable directly to avoid viper initialization issues
+	configDir := os.Getenv("STATION_CONFIG_DIR")
+	if configDir == "" {
+		configDir = os.Getenv("XDG_CONFIG_HOME")
+		if configDir != "" {
+			configDir = filepath.Join(configDir, "station")
+		} else {
+			configDir = filepath.Join(os.Getenv("HOME"), ".config", "station")
+		}
+	}
 	configFile := filepath.Join(configDir, "config.yaml")
 
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		// Check if STATION_AUTO_INIT is enabled for Docker/container deployments
-		autoInit := os.Getenv("STATION_AUTO_INIT") == "true"
+		// Auto-initialize if we detect API keys (Docker/container deployments)
 		hasAPIKey := os.Getenv("OPENAI_API_KEY") != "" ||
 			os.Getenv("ANTHROPIC_API_KEY") != "" ||
 			os.Getenv("GEMINI_API_KEY") != "" ||
 			os.Getenv("GOOGLE_API_KEY") != "" ||
 			os.Getenv("AI_API_KEY") != "" ||
-			os.Getenv("STN_AI_API_KEY") != ""
+			os.Getenv("STN_API_KEY") != ""
 
-		if autoInit && hasAPIKey {
+		if hasAPIKey {
 			logging.Info("🔧 Auto-initializing Station from environment variables...")
 
 			// Auto-create config from environment variables
@@ -335,9 +343,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Printf("Configuration not found. Please run 'station init' first.\n")
 			fmt.Printf("Expected config file: %s\n", configFile)
-			fmt.Printf("\nOr set these environment variables for auto-init:\n")
-			fmt.Printf("  STATION_AUTO_INIT=true\n")
-			fmt.Printf("  OPENAI_API_KEY=sk-... (or other AI provider key)\n")
+			fmt.Printf("\nFor container deployments, provide an API key via environment:\n")
+			fmt.Printf("  docker run -e OPENAI_API_KEY=sk-... station:latest\n")
 			return fmt.Errorf("configuration not initialized")
 		}
 	}
