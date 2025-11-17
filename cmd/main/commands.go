@@ -517,10 +517,13 @@ func getEnvBoolOrDefault(key string, defaultValue bool) bool {
 func runInit(cmd *cobra.Command, args []string) error {
 	// Check if custom config file path is provided
 	configPath, _ := cmd.Flags().GetString("config")
+	var configFile string
+	var configDir string
+
 	if configPath != "" {
-		// Set workspace to the directory containing the config file
-		workspaceDir := filepath.Dir(filepath.Clean(configPath))
-		workspaceDir, _ = filepath.Abs(workspaceDir)
+		// Use the provided config path for workspace initialization
+		configFile, _ = filepath.Abs(configPath)
+		workspaceDir := filepath.Dir(configFile)
 
 		// Set the workspace in viper for the session
 		viper.Set("workspace", workspaceDir)
@@ -528,11 +531,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// Also set database path relative to workspace
 		databasePath := filepath.Join(workspaceDir, "station.db")
 		viper.Set("database_url", databasePath)
-	}
 
-	// Config file always stays in secure default location
-	configDir := getXDGConfigDir() // Use XDG, not workspace
-	configFile := filepath.Join(configDir, "config.yaml")
+		configDir = workspaceDir
+	} else {
+		// No custom config - use secure default XDG location
+		configDir = getXDGConfigDir()
+		configFile = filepath.Join(configDir, "config.yaml")
+	}
 
 	// Workspace directory for content (environments, bundles, etc.)
 	workspaceDir := getWorkspacePath()
