@@ -166,7 +166,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang/protobuf v1.5.4
 	github.com/google/uuid v1.6.0
-	github.com/mark3labs/mcp-go v0.36.0
+	github.com/mark3labs/mcp-go v0.43.0
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/openai/openai-go v1.8.2
 	github.com/posthog/posthog-go v1.6.1
