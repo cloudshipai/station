@@ -717,6 +717,37 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
+	// Generate .gitignore for workspace if using custom config path
+	if configPath != "" {
+		gitignorePath := filepath.Join(configDir, ".gitignore")
+		if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
+			gitignoreContent := `# Station runtime files - DO NOT COMMIT
+station.db
+station.db-shm
+station.db-wal
+
+# Runtime variable resolution
+vars/
+
+# SSH host keys (regenerated per deployment)
+ssh_host_key
+ssh_host_key.pub
+
+# Local environment overrides
+*.local.yaml
+.env.local
+
+# Note: config.yaml contains generated encryption_key
+# Each engineer/deployment should generate their own via 'stn init'
+`
+			if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to create .gitignore: %v\n", err)
+			} else {
+				fmt.Printf("📝 Created .gitignore for workspace\n")
+			}
+		}
+	}
+
 	// Initialize database and run migrations
 	fmt.Printf("🗄️  Initializing database...\n")
 	databasePath := viper.GetString("database_url")
