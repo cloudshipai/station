@@ -1083,20 +1083,19 @@ func (b *EnvironmentBuilder) buildWithDockerfile(ctx context.Context, fullImageN
 	bundleStat, _ := os.Stat(bundlePath)
 	log.Printf("✅ Bundle created: %s (%d bytes)", bundlePath, bundleStat.Size())
 
-	// Create Dockerfile that installs bundle at build time
+	// Create Dockerfile that extracts bundle at build time
 	dockerfile := `FROM station:latest
 
 # Copy bundle archive into container
 COPY --chown=station:station environment-bundle.tar.gz /tmp/environment-bundle.tar.gz
 
-# Switch to station user and install bundle to default environment
+# Switch to station user and extract bundle to default environment
 USER station
 
-# Install bundle using Station CLI
-# This extracts the bundle to ~/.config/station/environments/default/
-# Bundle installation is filesystem-only (no database) at build time
-# Database will be created at runtime by stn serve via migrations + sync
-RUN stn bundle install /tmp/environment-bundle.tar.gz default && \
+# Extract bundle directly to environment directory (no database needed at build time)
+# This is filesystem-only installation - database will be created at runtime
+RUN mkdir -p /home/station/.config/station/environments/default && \
+    tar -xzf /tmp/environment-bundle.tar.gz -C /home/station/.config/station/environments/default && \
     rm /tmp/environment-bundle.tar.gz
 
 # Switch back to root for entrypoint flexibility
