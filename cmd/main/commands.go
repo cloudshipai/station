@@ -521,8 +521,19 @@ func runInit(cmd *cobra.Command, args []string) error {
 	var configDir string
 
 	if configPath != "" {
-		// Use the provided config path for workspace initialization
-		configFile, _ = filepath.Abs(configPath)
+		// Handle both file paths and directories
+		absPath, _ := filepath.Abs(configPath)
+
+		// If it's a directory or just ".", append config.yaml
+		if stat, err := os.Stat(absPath); err == nil && stat.IsDir() {
+			configFile = filepath.Join(absPath, "config.yaml")
+		} else if configPath == "." || configPath == "./" {
+			cwd, _ := os.Getwd()
+			configFile = filepath.Join(cwd, "config.yaml")
+		} else {
+			configFile = absPath
+		}
+
 		workspaceDir := filepath.Dir(configFile)
 
 		// Set the workspace in viper for the session
