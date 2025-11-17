@@ -98,7 +98,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 }
 
 func (s *Server) Start(ctx context.Context, port int) error {
-	addr := fmt.Sprintf(":%d", port)
+	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	log.Printf("Starting MCP server using streamable HTTP transport on %s", addr)
 	log.Printf("MCP endpoint will be available at http://localhost:%d/mcp", port)
 

@@ -1026,14 +1026,21 @@ func (b *EnvironmentBuilder) buildWithDockerfile(ctx context.Context, fullImageN
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// For development: Use local station:latest (skip registry pull)
-	// In production, this would pull from ghcr.io/cloudshipai/station:latest
-	log.Printf("🐳 Using local station:latest image for development...")
-	inspectCmd := exec.Command("docker", "inspect", "station:latest")
-	if inspectErr := inspectCmd.Run(); inspectErr != nil {
-		return "", fmt.Errorf("no local station:latest image found.\nPlease build it first with: docker build -t station:latest -f Dockerfile .")
+	// Pull latest station base image from registry
+	log.Printf("🐳 Pulling latest station base image from ghcr.io/cloudshipai/station:latest...")
+	pullCmd := exec.Command("docker", "pull", "ghcr.io/cloudshipai/station:latest")
+	pullCmd.Stdout = os.Stdout
+	pullCmd.Stderr = os.Stderr
+	if err := pullCmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to pull station base image: %w", err)
 	}
-	log.Printf("✅ Using local station:latest image")
+
+	// Tag it as station:latest for local use
+	tagCmd := exec.Command("docker", "tag", "ghcr.io/cloudshipai/station:latest", "station:latest")
+	if err := tagCmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to tag station image: %w", err)
+	}
+	log.Printf("✅ Using station:latest from registry")
 
 	// Create bundle tar.gz from environment
 	log.Printf("📦 Creating bundle from environment: %s", b.environmentName)

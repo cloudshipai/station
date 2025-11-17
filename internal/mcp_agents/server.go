@@ -48,7 +48,7 @@ func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 
 	// Start the HTTP server
 	das.httpServer = server.NewStreamableHTTPServer(das.mcpServer)
-	addr := fmt.Sprintf(":%d", port)
+	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	return das.httpServer.Start(addr)
 }
 
