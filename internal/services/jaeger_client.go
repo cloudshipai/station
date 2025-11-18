@@ -108,14 +108,16 @@ func (jc *JaegerClient) IsAvailable() bool {
 	return resp.StatusCode == 200
 }
 
-// QueryRunTrace queries Jaeger for a trace associated with a specific run ID
+// QueryRunTrace queries Jaeger for ALL traces associated with a specific run ID
+// Since a run can span multiple traces, this aggregates all spans into a single trace
 func (jc *JaegerClient) QueryRunTrace(runID int64, serviceName string) (*JaegerTrace, error) {
 	if serviceName == "" {
 		serviceName = "station"
 	}
 
 	// Build URL with tag filter - use tag=key:value format (not tags={json})
-	queryURL := fmt.Sprintf("%s/api/traces?service=%s&tag=run.id:%d&limit=1",
+	// Increase limit to get all traces for this run
+	queryURL := fmt.Sprintf("%s/api/traces?service=%s&tag=run.id:%d&limit=20",
 		jc.baseURL, serviceName, runID)
 
 	// Execute request
@@ -143,7 +145,26 @@ func (jc *JaegerClient) QueryRunTrace(runID int64, serviceName string) (*JaegerT
 		return nil, fmt.Errorf("no trace found for run %d", runID)
 	}
 
-	return &jaegerResp.Data[0], nil
+	// If we got multiple traces, combine all spans into one aggregated trace
+	if len(jaegerResp.Data) == 1 {
+		return &jaegerResp.Data[0], nil
+	}
+
+	// Aggregate all spans from all traces into a single trace
+	aggregatedTrace := &JaegerTrace{
+		TraceID:   jaegerResp.Data[0].TraceID,
+		Spans:     []JaegerSpan{},
+		Processes: make(map[string]JaegerProcess),
+	}
+
+	for _, trace := range jaegerResp.Data {
+		aggregatedTrace.Spans = append(aggregatedTrace.Spans, trace.Spans...)
+		for k, v := range trace.Processes {
+			aggregatedTrace.Processes[k] = v
+		}
+	}
+
+	return aggregatedTrace, nil
 }
 
 // QueryTraces queries Jaeger for traces matching filters

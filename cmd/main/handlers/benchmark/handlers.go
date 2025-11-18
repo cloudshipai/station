@@ -10,6 +10,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/services"
 	"station/internal/telemetry"
 	"station/internal/theme"
 	pkgbenchmark "station/pkg/benchmark"
@@ -97,7 +98,21 @@ func (h *BenchmarkHandler) evaluateRunLocal(runID int64, verbose bool) error {
 		return fmt.Errorf("failed to create LLM judge: %w", err)
 	}
 
-	analyzer := pkgbenchmark.NewAnalyzer(database.Conn(), judge)
+	// Create analyzer with Jaeger integration if available
+	var analyzer *pkgbenchmark.Analyzer
+	if cfg.JaegerQueryURL != "" {
+		jaegerClient := services.NewJaegerClient(cfg.JaegerQueryURL)
+		if jaegerClient.IsAvailable() {
+			adapter := services.NewBenchmarkJaegerAdapter(jaegerClient)
+			analyzer = pkgbenchmark.NewAnalyzerWithJaeger(database.Conn(), judge, adapter)
+			fmt.Println("✓ Using Jaeger traces for evaluation context")
+		} else {
+			analyzer = pkgbenchmark.NewAnalyzer(database.Conn(), judge)
+			fmt.Printf("⚠  Jaeger not available at %s\n", cfg.JaegerQueryURL)
+		}
+	} else {
+		analyzer = pkgbenchmark.NewAnalyzer(database.Conn(), judge)
+	}
 
 	// Evaluate the run
 	styles := getCLIStyles(h.themeManager)

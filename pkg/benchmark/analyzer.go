@@ -182,11 +182,11 @@ func (a *Analyzer) enrichWithEvidence(ctx context.Context, input *EvaluationInpu
 			// Otherwise fall back to database tool calls
 			if len(jaegerToolCalls) > 0 {
 				input.ToolCalls = jaegerToolCalls
-				fmt.Printf("✓ Loaded %d tool calls from Jaeger for run %d\n", len(jaegerToolCalls), input.RunID)
+				fmt.Printf("✓ Loaded %d tool calls with I/O from Jaeger traces (run %d)\n", len(jaegerToolCalls), input.RunID)
 			}
 		} else if err != nil {
 			// Log but don't fail - Jaeger data is optional
-			fmt.Printf("Warning: failed to load Jaeger trace for run %d: %v\n", input.RunID, err)
+			fmt.Printf("⚠ Could not load Jaeger trace for run %d: %v\n", input.RunID, err)
 		}
 	}
 
