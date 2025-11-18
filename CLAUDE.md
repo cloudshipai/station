@@ -143,6 +143,20 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 - Use `mcp__station__*` tools for agent management
 - Config discovery via `mcp__station__discover_tools`
 
+### Station MCP Tools (PREFERRED)
+- **CRITICAL**: When `opencode-station_*` MCP tools are available, ALWAYS use them instead of CLI commands
+- **Why**: MCP tools provide structured JSON responses, better error handling, and programmatic access
+- **When to use**:
+  - Creating/managing agents → `opencode-station_create_agent`
+  - Listing/inspecting runs → `opencode-station_list_runs`, `opencode-station_inspect_run`
+  - Report generation → `opencode-station_create_report`, `opencode-station_generate_report`
+  - Environment management → `opencode-station_list_environments`
+  - Benchmark evaluation → `opencode-station_evaluate_benchmark`
+- **CLI fallback**: Only use `stn` CLI commands when MCP tools are not available or for interactive operations
+- **Example**: 
+  - ✅ Preferred: `opencode-station_list_agents(environment_id=1)`
+  - ❌ Avoid: `./bin/stn agent list --env default`
+
 ## Next Steps for New Agents
 
 ### Immediate Investigations Needed
