@@ -75,7 +75,8 @@ func (e *RelevancyEvaluator) calculateScore(verdicts []RelevancyVerdict) float64
 	relevantCount := 0
 	for _, v := range verdicts {
 		verdict := strings.ToLower(strings.TrimSpace(v.Verdict))
-		if verdict == "yes" || verdict == "relevant" {
+		// Count both "yes" and "idk" as relevant (idk means contextually relevant)
+		if verdict == "yes" || verdict == "relevant" || verdict == "idk" {
 			relevantCount++
 		}
 	}
@@ -110,9 +111,11 @@ func (e *RelevancyEvaluator) buildPrompt(task, actualOutput string) string {
 
 TASK: Break down the response into individual statements, then judge if each statement is relevant to the task.
 
-IMPORTANT:
+IMPORTANT EVALUATION PRINCIPLES:
 - Extract 3-8 key statements from the response (don't list every sentence)
-- For each statement, determine: "yes" (relevant), "no" (irrelevant), or "idk" (ambiguous)
+- Be GENEROUS: If a statement provides useful context or partial answers, mark it as relevant
+- For each statement, determine: "yes" (relevant), "no" (irrelevant), or "idk" (contextually relevant)
+- "idk" means the statement provides context/metadata that's loosely related - this counts as relevant
 - Provide "reason" ONLY for "no" or "idk" verdicts
 - Return ONLY valid JSON with no markdown formatting
 

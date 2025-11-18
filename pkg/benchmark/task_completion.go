@@ -124,19 +124,39 @@ func (e *TaskCompletionEvaluator) buildPrompt(task, outcome string, input *Evalu
 
 TASK: Compare the desired task with what the agent actually accomplished and assign a completion score.
 
-IMPORTANT:
+IMPORTANT EVALUATION PRINCIPLES:
 - Score from 0.0 (completely failed) to 1.0 (perfectly completed)
-- Be objective - focus on whether the task was accomplished, not on how it was done
+- Be FAIR and CONTEXT-AWARE: The agent can only work with the data available from tools
+- If the agent called tools and worked with what they returned, give credit for that
 - Partial completion should receive partial scores (e.g., 0.7 for 70%% complete)
+- Don't penalize the agent for limitations of the underlying data sources
+- For "what if" or hypothetical questions, explanations can be valid responses
+- Focus on whether the core intent of the task was addressed
 - Return ONLY valid JSON with no markdown formatting
 
-EXAMPLE:
-Task: Scan terraform files for security vulnerabilities
-Outcome: The agent scanned 15 terraform files and found 47 vulnerabilities including SQL injection risks and exposed secrets
+SCORING GUIDELINES:
+- 0.9-1.0: Excellent - Task fully completed with high quality
+- 0.7-0.8: Good - Task substantially completed, minor gaps
+- 0.5-0.6: Partial - Core task addressed but significant limitations
+- 0.3-0.4: Minimal - Some relevant work done but incomplete
+- 0.0-0.2: Failed - Did not accomplish the task
+
+EXAMPLE 1:
+Task: Get the status of the last 10 builds for 'frontend' job
+Outcome: Agent called get_job tool and returned status for 3 builds with detailed information
 Example JSON:
 {
-  "verdict": 0.95,
-  "reason": "The agent successfully completed the task by scanning terraform files and identifying security vulnerabilities. Achieved 95%% completion as vulnerabilities were found and reported clearly."
+  "verdict": 0.5,
+  "reason": "Agent successfully called the tool and returned build statuses, but only provided 3 out of 10 requested builds. This appears to be a data limitation rather than agent failure. Partial completion: 50%%."
+}
+
+EXAMPLE 2:
+Task: What happens if I query a non-existent job?
+Outcome: Agent explained that it would return an error, but didn't actually test it
+Example JSON:
+{
+  "verdict": 0.6,
+  "reason": "Agent provided a conceptually correct explanation of what would happen. While testing the actual behavior would be ideal, the explanation addresses the question's core intent. Good theoretical completion."
 }
 
 NOW EVALUATE:
