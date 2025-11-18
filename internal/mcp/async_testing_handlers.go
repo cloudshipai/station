@@ -922,6 +922,98 @@ func (s *Server) generateScenariosWithAI(ctx context.Context, genkitApp *genkit.
 	return response.Text(), nil
 }
 
+func buildDomainContext(agentCtx *types.AgentContext) string {
+	// Detect domain based on agent name and description
+	agentInfo := strings.ToLower(agentCtx.Name + " " + agentCtx.Description)
+
+	// SRE/Incident Response domain
+	if strings.Contains(agentInfo, "incident") || strings.Contains(agentInfo, "coordinator") {
+		return `**Domain Context - SRE Incident Response:**
+Your scenarios should be realistic production incidents that require investigation and resolution.
+
+**Good Examples:**
+- "PRODUCTION INCIDENT: The payments-api service started returning HTTP 503 errors at 14:30 UTC. Users cannot complete checkout. Approximately 80% of payment requests are failing. This is a SEV1 incident in production environment."
+- "SEV2 ALERT: Database connection pool exhausted on user-service. Response times spiked from 200ms to 5s starting at 09:15 UTC. 30% of users affected."
+- "The checkout-worker pod keeps crashing with OOMKilled errors. It restarted 15 times in the last hour. Started after yesterday's deployment at 16:00 UTC."
+
+**Bad Examples (meta-questions, not real incidents):**
+- "How many open incidents do we have?"
+- "What are the details of the incident from last week?"
+- "Show me the incident dashboard"
+
+Each scenario should include: service name, symptoms, error types, time started, severity level, user impact percentage.`
+	}
+
+	// Logs analysis domain
+	if strings.Contains(agentInfo, "logs") || strings.Contains(agentInfo, "log investigator") {
+		return `**Domain Context - Log Analysis:**
+Your scenarios should be specific log investigation requests for troubleshooting production issues.
+
+**Good Examples:**
+- "Search application logs for NullPointerException errors in the payment-service between 14:00-15:00 UTC today and show me the stack traces."
+- "Find all ERROR level logs from the api-gateway in the last 2 hours that contain 'timeout' or 'connection refused'."
+- "Analyze logs from the order-processing service and identify any new error patterns that appeared in the last 30 minutes."
+
+Include: service names, time ranges, log levels, specific error messages, stack traces to search for.`
+	}
+
+	// Metrics analysis domain
+	if strings.Contains(agentInfo, "metrics") || strings.Contains(agentInfo, "performance") {
+		return `**Domain Context - Metrics Analysis:**
+Your scenarios should be specific metric investigation requests for performance/capacity issues.
+
+**Good Examples:**
+- "Check CPU and memory usage for payment-api pods in the last hour. Did anything spike above 80%?"
+- "Show me HTTP error rate for checkout-service from 14:00-15:00 UTC and compare it to the previous week's baseline."
+- "Analyze database query latency for user-service. Are there any queries taking longer than 1 second in the past 30 minutes?"
+
+Include: metric names, service names, time ranges, thresholds to check, baseline comparisons.`
+	}
+
+	// Traces analysis domain
+	if strings.Contains(agentInfo, "trace") || strings.Contains(agentInfo, "apm") {
+		return `**Domain Context - Distributed Tracing:**
+Your scenarios should be specific trace investigation requests for latency/error debugging.
+
+**Good Examples:**
+- "Find slow traces for the checkout API endpoint in the last hour where total duration exceeded 2 seconds. Which downstream service is the bottleneck?"
+- "Analyze failed traces for payment-service where HTTP status is 5xx. What's the common failure point in the call chain?"
+- "Show me traces for order-processing service that include database calls taking longer than 500ms."
+
+Include: service names, endpoints, latency thresholds, error statuses, time ranges.`
+	}
+
+	// Infrastructure domain
+	if strings.Contains(agentInfo, "infrastructure") || strings.Contains(agentInfo, "infra") || strings.Contains(agentInfo, "kubernetes") {
+		return `**Domain Context - Infrastructure:**
+Your scenarios should be specific infrastructure investigation requests.
+
+**Good Examples:**
+- "Check Kubernetes pod health for the payments namespace. Are any pods in CrashLoopBackOff or Pending state?"
+- "Investigate why ALB target health checks are failing for api-server. Show me target group health status."
+- "RDS instance payment-db is showing high CPU usage. Check for long-running queries and connection count."
+
+Include: infrastructure components (K8s, AWS, databases), specific resources, health states, error conditions.`
+	}
+
+	// Change detection domain
+	if strings.Contains(agentInfo, "change") || strings.Contains(agentInfo, "deployment") {
+		return `**Domain Context - Change Detection:**
+Your scenarios should be requests to correlate incidents with recent changes.
+
+**Good Examples:**
+- "Payment errors started at 14:30 UTC. Find any deployments, config changes, or feature flag rollouts in the 30 minutes before that time."
+- "Check if any feature flags were changed in the last hour that could affect the checkout flow."
+- "What code changes were deployed to user-service between 10:00-11:00 UTC today?"
+
+Include: incident start times, affected services, time ranges to check for changes.`
+	}
+
+	// Default for other agents
+	return `**Domain Context:**
+Create realistic, actionable scenarios based on the agent's description and available tools. Focus on specific tasks the agent would handle in real business situations, not meta-questions about the system itself.`
+}
+
 func buildScenarioGenerationPrompt(agentCtx *types.AgentContext, count int, strategy string) string {
 	toolsList := ""
 	if len(agentCtx.Tools) > 0 {
@@ -941,7 +1033,10 @@ func buildScenarioGenerationPrompt(agentCtx *types.AgentContext, count int, stra
 		strategyGuidance = "Include a comprehensive mix of common use cases, edge cases, complex scenarios, and error conditions."
 	}
 
-	return fmt.Sprintf(`You are a QA engineer creating realistic test scenarios for an AI agent. Generate %d diverse, realistic user tasks that this agent would handle.
+	// Add domain-specific context based on agent name/description
+	domainContext := buildDomainContext(agentCtx)
+
+	return fmt.Sprintf(`You are a QA engineer creating realistic test scenarios for an AI agent. Generate %d diverse, realistic user tasks that this agent would handle in real-world business situations.
 
 **Agent Information:**
 - Name: %s
@@ -949,38 +1044,32 @@ func buildScenarioGenerationPrompt(agentCtx *types.AgentContext, count int, stra
 
 **Testing Strategy:** %s
 
-**Instructions:**
-1. Generate %d realistic user tasks/questions that would be asked of this agent
-2. Each scenario should be:
-   - Written from the user's perspective (what they would type/ask)
-   - Specific and actionable (not vague or generic)
-   - Realistic for this agent's capabilities and tools
-   - Varied in complexity and focus areas
-3. Return ONLY a JSON array of scenario objects in this exact format:
+%s
+
+**CRITICAL Instructions:**
+1. Generate %d realistic user tasks/scenarios that would occur in real production/business environments
+2. Each scenario MUST be:
+   - A concrete business situation or problem (NOT meta-questions about the system)
+   - Written from the user's perspective (what they would report/request)
+   - Specific with actual details (service names, error codes, timestamps, metrics)
+   - Actionable and require the agent to USE ITS TOOLS
+   - Varied in complexity, severity, and focus areas
+3. DO NOT generate meta-questions like:
+   - "How many X do we have?" 
+   - "What are the details of Y?"
+   - "Show me information about Z"
+   These are system queries, not real business scenarios!
+4. Return ONLY a JSON array of scenario objects in this exact format:
    [
      {
-       "task": "The exact user task/question",
-       "description": "Brief description of what this tests",
+       "task": "The exact user task/scenario with specific details",
+       "description": "Brief description of what business situation this tests",
        "scenario_type": "common|edge_case|complex|error_handling"
      }
    ]
 
-**Example format for a different agent:**
-[
-  {
-    "task": "Find all TODO comments in the authentication module and create a summary",
-    "description": "Tests file search and content analysis capabilities",
-    "scenario_type": "common"
-  },
-  {
-    "task": "What happens if I try to access a file that doesn't exist?",
-    "description": "Tests error handling for missing files",
-    "scenario_type": "error_handling"
-  }
-]
-
 Generate %d scenarios now. Return ONLY the JSON array, no other text.`,
-		count, agentCtx.Name, agentCtx.Description, toolsList, strategyGuidance, count, count)
+		count, agentCtx.Name, agentCtx.Description, toolsList, strategyGuidance, domainContext, count, count)
 }
 
 // parseAIGeneratedScenarios extracts test scenarios from AI-generated JSON response

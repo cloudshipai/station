@@ -69,9 +69,18 @@ export const ReportDetailPage: React.FC = () => {
     const fetchReport = async () => {
       if (!reportId) return;
 
+      // Validate reportId is a number
+      const reportIdNum = parseInt(reportId);
+      if (isNaN(reportIdNum)) {
+        console.error('Invalid reportId:', reportId);
+        setError(`Invalid report ID: "${reportId}". Report IDs must be numbers.`);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        const response = await reportsApi.getById(parseInt(reportId));
+        const response = await reportsApi.getById(reportIdNum);
         const { report: reportData, agent_details } = response.data;
         
         setReport(reportData);

@@ -301,13 +301,29 @@ const Layout = ({ children }: any) => {
   }, [currentEnvironment, currentEnvironmentName, environmentContext?.selectedEnvironment, environmentContext?.environments]);
 
   const handleEnvironmentChange = (environmentName: string) => {
-    if (environmentName === 'default') {
-      // Navigate to default environment on current page
-      navigate(`/${currentPage}/default`);
-    } else {
-      // Navigate to specific environment on current page
-      navigate(`/${currentPage}/${environmentName}`);
+    // Find the environment by name and update context
+    const selectedEnv = environmentContext?.environments?.find(
+      (env: any) => env.name.toLowerCase() === environmentName.toLowerCase()
+    );
+    
+    if (selectedEnv) {
+      environmentContext.setSelectedEnvironment(selectedEnv.id);
     }
+    
+    // Only Agents and MCP Servers pages use environment-based routing
+    const pagesWithEnvironmentRouting = ['agents', 'mcps'];
+    
+    if (pagesWithEnvironmentRouting.includes(currentPage)) {
+      if (environmentName === 'default') {
+        // Navigate to default environment on current page
+        navigate(`/${currentPage}/default`);
+      } else {
+        // Navigate to specific environment on current page
+        navigate(`/${currentPage}/${environmentName}`);
+      }
+    }
+    // For other pages (reports, runs, etc.), just stay on the same page
+    // The environment context will update and components will filter data accordingly
   };
 
   const sidebarItems = [

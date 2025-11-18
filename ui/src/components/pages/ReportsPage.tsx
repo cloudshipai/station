@@ -16,6 +16,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<number | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = useState(false);
   const [generatingReports, setGeneratingReports] = useState<Set<number>>(new Set());
@@ -42,8 +43,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
   const fetchReports = async () => {
     try {
       if (reports.length === 0) setLoading(true);
-      const params = environmentContext?.selectedEnvironment
-        ? { environment_id: environmentContext.selectedEnvironment }
+      const params = selectedEnvironmentId
+        ? { environment_id: selectedEnvironmentId }
         : {};
       
       const response = await reportsApi.getAll(params);
@@ -58,7 +59,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
 
   useEffect(() => {
     fetchReports();
-  }, [environmentContext?.selectedEnvironment, environmentContext?.refreshTrigger]);
+  }, [selectedEnvironmentId, environmentContext?.refreshTrigger]);
 
   // Poll for generating reports
   useEffect(() => {
@@ -210,7 +211,21 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ environmentContext }) 
       {/* Filters */}
       <div className="p-4 border-b border-tokyo-dark3 bg-tokyo-dark1">
         <div className="flex items-center gap-4">
-          <label className="text-sm font-mono text-tokyo-comment">Status:</label>
+          <label className="text-sm font-mono text-tokyo-comment">Environment:</label>
+          <select
+            value={selectedEnvironmentId || 'all'}
+            onChange={(e) => setSelectedEnvironmentId(e.target.value === 'all' ? null : parseInt(e.target.value))}
+            className="px-3 py-1 bg-tokyo-bg border border-tokyo-dark3 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 transition-colors"
+          >
+            <option value="all">All Environments</option>
+            {environmentContext?.environments?.map((env: any) => (
+              <option key={env.id} value={env.id}>
+                {env.name}
+              </option>
+            ))}
+          </select>
+
+          <label className="text-sm font-mono text-tokyo-comment ml-4">Status:</label>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
