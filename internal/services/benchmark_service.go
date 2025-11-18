@@ -36,8 +36,24 @@ func NewBenchmarkService(db *sql.DB, cfg *config.Config) (*BenchmarkService, err
 		return nil, fmt.Errorf("failed to create benchmark judge: %w", err)
 	}
 
-	// Create analyzer
-	analyzer := benchmark.NewAnalyzer(db, judge)
+	// Create Jaeger client for trace querying
+	var analyzer *benchmark.Analyzer
+	if cfg.JaegerQueryURL != "" {
+		jaegerClient := NewJaegerClient(cfg.JaegerQueryURL)
+		if jaegerClient.IsAvailable() {
+			// Create analyzer with Jaeger integration using adapter
+			adapter := NewBenchmarkJaegerAdapter(jaegerClient)
+			analyzer = benchmark.NewAnalyzerWithJaeger(db, judge, adapter)
+			fmt.Printf("✓ Benchmark service initialized with Jaeger integration (%s)\n", cfg.JaegerQueryURL)
+		} else {
+			// Jaeger not available, use analyzer without it
+			analyzer = benchmark.NewAnalyzer(db, judge)
+			fmt.Printf("⚠ Jaeger not available at %s, continuing without trace data\n", cfg.JaegerQueryURL)
+		}
+	} else {
+		// No Jaeger URL configured
+		analyzer = benchmark.NewAnalyzer(db, judge)
+	}
 
 	return &BenchmarkService{
 		analyzer: analyzer,

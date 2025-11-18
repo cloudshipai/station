@@ -9,12 +9,19 @@ import (
 	"time"
 )
 
+// JaegerClientInterface defines the interface for querying Jaeger traces
+type JaegerClientInterface interface {
+	QueryRunTrace(runID int64, serviceName string) (*JaegerTrace, error)
+	IsAvailable() bool
+}
+
 // Analyzer performs benchmark evaluations on agent runs
 type Analyzer struct {
-	db         *sql.DB
-	judge      JudgeInterface
-	mu         sync.RWMutex
-	thresholds map[string]float64
+	db           *sql.DB
+	judge        JudgeInterface
+	jaegerClient JaegerClientInterface
+	mu           sync.RWMutex
+	thresholds   map[string]float64
 }
 
 // NewAnalyzer creates a new benchmark analyzer
@@ -23,6 +30,16 @@ func NewAnalyzer(db *sql.DB, judge JudgeInterface) *Analyzer {
 		db:         db,
 		judge:      judge,
 		thresholds: DefaultThresholds,
+	}
+}
+
+// NewAnalyzerWithJaeger creates a new benchmark analyzer with Jaeger integration
+func NewAnalyzerWithJaeger(db *sql.DB, judge JudgeInterface, jaegerClient JaegerClientInterface) *Analyzer {
+	return &Analyzer{
+		db:           db,
+		judge:        judge,
+		jaegerClient: jaegerClient,
+		thresholds:   DefaultThresholds,
 	}
 }
 
@@ -154,15 +171,27 @@ func (a *Analyzer) loadRunData(ctx context.Context, runID int64) (*EvaluationInp
 // ============================================================================
 
 func (a *Analyzer) enrichWithEvidence(ctx context.Context, input *EvaluationInput) error {
+	// First try to load tool call data from Jaeger if client is available
+	if a.jaegerClient != nil && a.jaegerClient.IsAvailable() {
+		trace, err := a.jaegerClient.QueryRunTrace(input.RunID, "station")
+		if err == nil && trace != nil {
+			// Extract tool calls with full input/output from Jaeger
+			jaegerToolCalls := ExtractToolCallsFromTrace(trace)
+
+			// If we got tool calls from Jaeger, use them (they have complete data)
+			// Otherwise fall back to database tool calls
+			if len(jaegerToolCalls) > 0 {
+				input.ToolCalls = jaegerToolCalls
+				fmt.Printf("✓ Loaded %d tool calls from Jaeger for run %d\n", len(jaegerToolCalls), input.RunID)
+			}
+		} else if err != nil {
+			// Log but don't fail - Jaeger data is optional
+			fmt.Printf("Warning: failed to load Jaeger trace for run %d: %v\n", input.RunID, err)
+		}
+	}
+
 	// Extract contexts from tool call outputs (for hallucination/faithfulness metrics)
 	input.Contexts = a.extractContexts(input.ToolCalls)
-
-	// TODO: Load Jaeger trace data if trace_id is present
-	// This would provide additional evidence for task completion metric
-	if input.TraceID != "" {
-		// Future: Load trace spans and analyze execution flow
-		// This will require injecting telemetry client
-	}
 
 	return nil
 }
