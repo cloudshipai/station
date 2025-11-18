@@ -1200,7 +1200,21 @@ func (rg *ReportGenerator) evaluateBenchmarksForRuns(ctx context.Context, runs [
 		return fmt.Errorf("failed to create benchmark judge: %w", err)
 	}
 
-	analyzer := benchmark.NewAnalyzer(rg.db, judge)
+	// Create analyzer with Jaeger integration if available
+	var analyzer *benchmark.Analyzer
+	if cfg.JaegerQueryURL != "" {
+		jaegerClient := NewJaegerClient(cfg.JaegerQueryURL)
+		if jaegerClient.IsAvailable() {
+			adapter := NewBenchmarkJaegerAdapter(jaegerClient)
+			analyzer = benchmark.NewAnalyzerWithJaeger(rg.db, judge, adapter)
+			logging.Info("Report benchmarks will use Jaeger traces for evaluation context")
+		} else {
+			analyzer = benchmark.NewAnalyzer(rg.db, judge)
+			logging.Info("Jaeger not available at %s, benchmarks will use database tool calls only", cfg.JaegerQueryURL)
+		}
+	} else {
+		analyzer = benchmark.NewAnalyzer(rg.db, judge)
+	}
 
 	logging.Info("Running benchmark evaluations on %d runs using model %s...", len(runs), judge.GetModelName())
 
