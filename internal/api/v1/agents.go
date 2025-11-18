@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -792,16 +791,8 @@ func (h *APIHandlers) getAgentPrompt(c *gin.Context) {
 		return
 	}
 
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get home directory"})
-		return
-	}
-
-	// Construct prompt file path
-	promptFileName := fmt.Sprintf("%s.prompt", agent.Name)
-	promptFilePath := filepath.Join(homeDir, ".config", "station", "environments", environment.Name, "agents", promptFileName)
+	// Construct prompt file path using config helpers to respect workspace
+	promptFilePath := config.GetAgentPromptPath(environment.Name, agent.Name)
 
 	// Check if file exists
 	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {
@@ -857,17 +848,9 @@ func (h *APIHandlers) updateAgentPrompt(c *gin.Context) {
 		return
 	}
 
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get home directory"})
-		return
-	}
-
-	// Construct prompt file path
-	promptFileName := fmt.Sprintf("%s.prompt", agent.Name)
-	agentsDir := filepath.Join(homeDir, ".config", "station", "environments", environment.Name, "agents")
-	promptFilePath := filepath.Join(agentsDir, promptFileName)
+	// Construct prompt file path using config helpers to respect workspace
+	promptFilePath := config.GetAgentPromptPath(environment.Name, agent.Name)
+	agentsDir := config.GetAgentsDir(environment.Name)
 
 	// Create agents directory if it doesn't exist
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {

@@ -133,24 +133,6 @@ func isJaegerAvailable() bool {
 	return resp.StatusCode == 200
 }
 
-// JaegerTrace represents a trace from Jaeger API
-type JaegerTrace struct {
-	TraceID string        `json:"traceID"`
-	Spans   []JaegerSpan  `json:"spans"`
-}
-
-// JaegerSpan represents a span from Jaeger API
-type JaegerSpan struct {
-	TraceID       string `json:"traceID"`
-	SpanID        string `json:"spanID"`
-	OperationName string `json:"operationName"`
-}
-
-// JaegerResponse represents Jaeger API response
-type JaegerResponse struct {
-	Data []JaegerTrace `json:"data"`
-}
-
 // Helper function to query Jaeger for traces
 func queryJaegerTraces(serviceName string) ([]JaegerTrace, error) {
 	url := fmt.Sprintf("http://localhost:16686/api/traces?service=%s&limit=20", serviceName)

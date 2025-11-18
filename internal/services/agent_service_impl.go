@@ -531,12 +531,10 @@ func (s *AgentService) DeleteAgent(ctx context.Context, agentID int64) error {
 
 // deleteAgentPromptFile removes the .prompt file for an agent from the filesystem
 func (s *AgentService) deleteAgentPromptFile(agentName, environmentName string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	promptFilePath := filepath.Join(homeDir, ".config", "station", "environments", environmentName, "agents", agentName+".prompt")
+	// Use config path helpers to respect workspace configuration
+	environmentDir := config.GetEnvironmentDir(environmentName)
+	agentsDir := filepath.Join(environmentDir, "agents")
+	promptFilePath := filepath.Join(agentsDir, agentName+".prompt")
 
 	// Check if file exists before attempting deletion
 	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {

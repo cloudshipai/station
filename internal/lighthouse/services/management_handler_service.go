@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
 	"station/internal/lighthouse/proto"
@@ -662,17 +662,11 @@ func (mhs *ManagementHandlerService) handleGetAgentDetails(ctx context.Context, 
 
 	// Try to read dotprompt content from file first (most accurate)
 	var dotpromptContent string
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		homeDir, _ = os.UserHomeDir()
-	}
-
-	if homeDir != "" {
-		promptFilePath := filepath.Join(homeDir, ".config", "station", "environments", environmentName, "agents", agent.Name+".prompt")
-		if fileContent, err := os.ReadFile(promptFilePath); err == nil {
-			dotpromptContent = string(fileContent)
-			logging.Debug("Loaded dotprompt content from file: %s", promptFilePath)
-		}
+	// Use config helper to respect workspace
+	promptFilePath := config.GetAgentPromptPath(environmentName, agent.Name)
+	if fileContent, err := os.ReadFile(promptFilePath); err == nil {
+		dotpromptContent = string(fileContent)
+		logging.Debug("Loaded dotprompt content from file: %s", promptFilePath)
 	}
 
 	// Fall back to generating dotprompt content if file not found
@@ -878,24 +872,11 @@ func (mhs *ManagementHandlerService) handleUpdateAgentPrompt(ctx context.Context
 	}
 
 	// Write the complete dotprompt file to filesystem (similar to export_handlers.go)
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		var homeErr error
-		homeDir, homeErr = os.UserHomeDir()
-		if homeErr != nil {
-			return &proto.UpdateAgentPromptResponse{
-				Success: false,
-				Message: fmt.Sprintf("Failed to get user home directory: %v", homeErr),
-			}, nil
-		}
-	}
-
-	// Construct the .prompt file path
-	promptFilePath := fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt",
-		homeDir, environmentName, agent.Name)
+	// Use config helpers to respect workspace
+	promptFilePath := config.GetAgentPromptPath(environmentName, agent.Name)
 
 	// Ensure directory exists
-	agentsDir := filepath.Dir(promptFilePath)
+	agentsDir := config.GetAgentsDir(environmentName)
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		return &proto.UpdateAgentPromptResponse{
 			Success: false,

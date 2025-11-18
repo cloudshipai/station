@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"station/internal/config"
 	"station/internal/services"
 	"station/pkg/models"
 	"station/pkg/schema"
@@ -53,15 +54,8 @@ func (s *Server) handleExportAgent(ctx context.Context, request mcp.CallToolRequ
 
 	// Determine output file path like CLI does
 	if outputPath == "" {
-		homeDir := os.Getenv("HOME")
-		if homeDir == "" {
-			var homeErr error
-			homeDir, homeErr = os.UserHomeDir()
-			if homeErr != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to get user home directory: %v", homeErr)), nil
-			}
-		}
-		outputPath = fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment.Name, agent.Name)
+		// Use config helper to get agent prompt path respecting workspace
+		outputPath = config.GetAgentPromptPath(environment.Name, agent.Name)
 	}
 
 	// Use the proper agent export service to generate dotprompt content with full metadata support
@@ -158,17 +152,8 @@ func (s *Server) handleExportAgents(ctx context.Context, request mcp.CallToolReq
 		// Determine output file path
 		var exportPath string
 		if outputDirectory == "" {
-			homeDir := os.Getenv("HOME")
-			if homeDir == "" {
-				var homeErr error
-				homeDir, homeErr = os.UserHomeDir()
-				if homeErr != nil {
-					errorMsg := fmt.Sprintf("Failed to get home directory for agent '%s': %v", agent.Name, homeErr)
-					exportErrors = append(exportErrors, errorMsg)
-					continue
-				}
-			}
-			exportPath = fmt.Sprintf("%s/.config/station/environments/%s/agents/%s.prompt", homeDir, environment.Name, agent.Name)
+			// Use config helper to respect workspace
+			exportPath = config.GetAgentPromptPath(environment.Name, agent.Name)
 		} else {
 			exportPath = filepath.Join(outputDirectory, fmt.Sprintf("%s.prompt", agent.Name))
 		}

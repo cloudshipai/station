@@ -4,14 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
+	"time"
+
 	"station/internal/db/queries"
 	"station/pkg/models"
-	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// Global mutex for serializing SQLite writes to prevent SQLITE_BUSY errors
+// SQLite only allows 1 writer at a time, even with WAL mode enabled
+var sqliteWriteMutex sync.Mutex
 
 type AgentRunRepo struct {
 	db      *sql.DB
@@ -351,6 +357,9 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 
 // CreateWithMetadata creates a new agent run with response object metadata
 func (r *AgentRunRepo) CreateWithMetadata(ctx context.Context, agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64, parentRunID *int64) (*models.AgentRun, error) {
+	sqliteWriteMutex.Lock()
+	defer sqliteWriteMutex.Unlock()
+
 	params := queries.CreateAgentRunParams{
 		AgentID:       agentID,
 		UserID:        userID,
@@ -420,6 +429,9 @@ func (r *AgentRunRepo) CreateWithMetadata(ctx context.Context, agentID, userID i
 
 // Create creates a new agent run (backwards compatibility)
 func (r *AgentRunRepo) Create(ctx context.Context, agentID, userID int64, task, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time) (*models.AgentRun, error) {
+	sqliteWriteMutex.Lock()
+	defer sqliteWriteMutex.Unlock()
+
 	ctx, span := r.tracer.Start(ctx, "db.agent_runs.create",
 		trace.WithAttributes(
 			attribute.Int64("agent.id", agentID),
@@ -562,6 +574,9 @@ func (r *AgentRunRepo) ListRecent(ctx context.Context, limit int64) ([]*models.A
 
 // UpdateCompletionWithMetadata updates an existing run record with completion data and response metadata
 func (r *AgentRunRepo) UpdateCompletionWithMetadata(ctx context.Context, id int64, finalResponse string, stepsTaken int64, toolCalls, executionSteps *models.JSONArray, status string, completedAt *time.Time, inputTokens, outputTokens, totalTokens *int64, durationSeconds *float64, modelName *string, toolsUsed *int64, errorMsg *string) error {
+	sqliteWriteMutex.Lock()
+	defer sqliteWriteMutex.Unlock()
+
 	ctx, span := r.tracer.Start(ctx, "db.agent_runs.update_completion",
 		trace.WithAttributes(
 			attribute.Int64("run.id", id),

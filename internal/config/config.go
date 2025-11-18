@@ -8,6 +8,11 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	// loadedConfig stores the loaded configuration for use by path helpers
+	loadedConfig *Config
+)
+
 type Config struct {
 	DatabaseURL      string
 	SSHPort          int
@@ -153,6 +158,9 @@ func Load() (*Config, error) {
 	// Load faker templates from config file
 	cfg.FakerTemplates = loadFakerTemplates()
 
+	// Store loaded config for use by path helpers
+	loadedConfig = cfg
+
 	return cfg, nil
 }
 
@@ -213,12 +221,18 @@ func getBuiltInFakerTemplates() map[string]FakerTemplate {
 // GetStationConfigDir returns the station configuration directory path
 // This respects workspace configuration and falls back to XDG paths
 func GetStationConfigDir() string {
-	// Check if workspace is configured via viper (CLI override or config file)
+	// CRITICAL: Use loaded config's workspace if available (most reliable)
+	// This ensures we use the actual loaded config, not viper which may not be initialized yet
+	if loadedConfig != nil && loadedConfig.Workspace != "" {
+		return loadedConfig.Workspace
+	}
+
+	// Fallback 1: Check if workspace is configured via viper (CLI override or config file)
 	if workspace := viper.GetString("workspace"); workspace != "" {
 		return workspace
 	}
 
-	// Fall back to XDG config directory
+	// Fallback 2: Use XDG config directory
 	return getXDGConfigDir()
 }
 

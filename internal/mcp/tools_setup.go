@@ -91,18 +91,6 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(listToolsTool, s.handleListTools)
 
-	listPromptsTool := mcp.NewTool("list_prompts",
-		mcp.WithDescription("List available MCP prompts"),
-		mcp.WithString("category", mcp.Description("Filter by prompt category")),
-	)
-	s.mcpServer.AddTool(listPromptsTool, s.handleListPrompts)
-
-	getPromptTool := mcp.NewTool("get_prompt",
-		mcp.WithDescription("Get the content of a specific MCP prompt"),
-		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the prompt to retrieve")),
-	)
-	s.mcpServer.AddTool(getPromptTool, s.handleGetPrompt)
-
 	// Agent and environment listing
 	listEnvironmentsTool := mcp.NewTool("list_environments",
 		mcp.WithDescription("List all available environments"),
@@ -159,21 +147,6 @@ func (s *Server) setupTools() {
 		mcp.WithString("tool_name", mcp.Required(), mcp.Description("Name of the tool to remove")),
 	)
 	s.mcpServer.AddTool(removeToolTool, s.handleRemoveTool)
-
-	exportAgentTool := mcp.NewTool("export_agent",
-		mcp.WithDescription("Export agent configuration to dotprompt format"),
-		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to export")),
-		mcp.WithString("output_path", mcp.Description("Optional output file path (defaults to agent name)")),
-	)
-	s.mcpServer.AddTool(exportAgentTool, s.handleExportAgent)
-
-	exportAgentsTool := mcp.NewTool("export_agents",
-		mcp.WithDescription("Export all agents in an environment to dotprompt format"),
-		mcp.WithString("environment_id", mcp.Description("Environment ID to export agents from (defaults to all environments)")),
-		mcp.WithString("output_directory", mcp.Description("Directory to export agents to (defaults to current environment's agents directory)")),
-		mcp.WithBoolean("enabled_only", mcp.Description("Export only enabled agents (default: false)")),
-	)
-	s.mcpServer.AddTool(exportAgentsTool, s.handleExportAgents)
 
 	// Agent run management tools
 	listRunsTool := mcp.NewTool("list_runs",
@@ -251,48 +224,21 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(deleteMCPServerTool, s.handleDeleteMCPServerFromEnvironment)
 
+	// Faker MCP Server Creation Tool
+	fakerCreateStandaloneTool := mcp.NewTool("faker_create_standalone",
+		mcp.WithDescription("Create a standalone faker with custom tools and AI-generated data. Define your own tool schemas and let AI generate realistic responses based on your goal/instruction. Uses Station's global AI configuration (STN_AI_PROVIDER, STN_AI_MODEL)."),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment where faker will be created")),
+		mcp.WithString("faker_name", mcp.Required(), mcp.Description("Name for the faker (e.g., 'prometheus-metrics', 'datadog-apm')")),
+		mcp.WithString("description", mcp.Required(), mcp.Description("Description of what this faker provides")),
+		mcp.WithString("goal", mcp.Required(), mcp.Description("Goal/instruction for AI data generation (e.g., 'Generate realistic Prometheus metrics for microservices')")),
+		mcp.WithString("tools", mcp.Description("JSON array of tool definitions with schemas (see faker-config.schema.json). If not provided, AI will suggest tools based on goal.")),
+		mcp.WithBoolean("persist", mcp.Description("Persist faker configuration to template.json for long-term use (default: true)")),
+		mcp.WithBoolean("auto_sync", mcp.Description("Automatically sync environment after creating faker (default: true)")),
+		mcp.WithBoolean("debug", mcp.Description("Enable debug logging for faker (default: false)")),
+	)
+	s.mcpServer.AddTool(fakerCreateStandaloneTool, s.handleFakerCreateStandalone)
+
 	// Raw MCP Config Management Tools
-	getRawMCPConfigTool := mcp.NewTool("get_raw_mcp_config",
-		mcp.WithDescription("Get the raw template.json content for an environment"),
-		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
-	)
-	s.mcpServer.AddTool(getRawMCPConfigTool, s.handleGetRawMCPConfig)
-
-	updateRawMCPConfigTool := mcp.NewTool("update_raw_mcp_config",
-		mcp.WithDescription("Update the raw template.json content for an environment"),
-		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
-		mcp.WithString("content", mcp.Required(), mcp.Description("Raw JSON content for template.json")),
-	)
-	s.mcpServer.AddTool(updateRawMCPConfigTool, s.handleUpdateRawMCPConfig)
-
-	// Environment File Config Management Tools
-	getEnvFileConfigTool := mcp.NewTool("get_environment_file_config",
-		mcp.WithDescription("Get all file-based configuration for an environment"),
-		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
-	)
-	s.mcpServer.AddTool(getEnvFileConfigTool, s.handleGetEnvironmentFileConfig)
-
-	updateEnvFileConfigTool := mcp.NewTool("update_environment_file_config",
-		mcp.WithDescription("Update a specific file in environment configuration"),
-		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
-		mcp.WithString("filename", mcp.Required(), mcp.Description("Name of the file to update (variables.yml or template.json)")),
-		mcp.WithString("content", mcp.Required(), mcp.Description("Content to write to the file")),
-	)
-	s.mcpServer.AddTool(updateEnvFileConfigTool, s.handleUpdateEnvironmentFileConfig)
-
-	// Demo Bundle Tools
-	listDemoBundlesTool := mcp.NewTool("list_demo_bundles",
-		mcp.WithDescription("List all available embedded demo bundles for trying Station features"),
-	)
-	s.mcpServer.AddTool(listDemoBundlesTool, s.handleListDemoBundles)
-
-	installDemoBundleTool := mcp.NewTool("install_demo_bundle",
-		mcp.WithDescription("Install an embedded demo bundle to a new environment"),
-		mcp.WithString("bundle_id", mcp.Required(), mcp.Description("ID of the demo bundle to install (e.g., 'finops-demo')")),
-		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name for the new environment where demo will be installed")),
-	)
-	s.mcpServer.AddTool(installDemoBundleTool, s.handleInstallDemoBundle)
-
 	// Benchmark Tools
 	evaluateBenchmarkTool := mcp.NewTool("evaluate_benchmark",
 		mcp.WithDescription("Evaluate an agent run asynchronously using LLM-as-judge metrics. Returns a task ID to check status later."),
@@ -346,11 +292,6 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(getReportTool, s.handleGetReport)
 
 	// Model Filtering Tools
-	listModelsTool := mcp.NewTool("list_models",
-		mcp.WithDescription("List all AI models used in agent runs with their counts. Useful for identifying which models to filter by when creating reports."),
-	)
-	s.mcpServer.AddTool(listModelsTool, s.handleListModels)
-
 	listRunsByModelTool := mcp.NewTool("list_runs_by_model",
 		mcp.WithDescription("List agent runs filtered by AI model name with pagination"),
 		mcp.WithString("model_name", mcp.Required(), mcp.Description("Model name to filter by (e.g., 'openai/gpt-4o-mini')")),
@@ -381,17 +322,37 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(getScheduleTool, s.handleGetSchedule)
 
-	// Faker Management Tools
-	fakerCreateTool := mcp.NewTool("faker_create_from_mcp_server",
-		mcp.WithDescription("Create a faker-wrapped version of an existing MCP server in the same environment. This allows agents to create custom simulated MCP servers with tailored AI instructions for realistic data generation."),
-		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment containing the MCP server")),
-		mcp.WithString("mcp_server_name", mcp.Required(), mcp.Description("Name of the existing MCP server to wrap with faker")),
-		mcp.WithString("ai_instruction", mcp.Required(), mcp.Description("Custom instruction for AI data generation (e.g., 'Generate realistic AWS cost data with proper spending patterns')")),
-		mcp.WithString("faker_name", mcp.Description("Name for the faker server (default: <mcp_server_name>-faker)")),
-		mcp.WithBoolean("debug", mcp.Description("Enable debug logging for faker (default: false)")),
-		mcp.WithBoolean("offline", mcp.Description("Offline mode - no real MCP server connection (default: false)")),
+	// Batch Execution and Testing Tools
+	batchExecuteAgentsTool := mcp.NewTool("batch_execute_agents",
+		mcp.WithDescription("Execute multiple agents concurrently for testing and evaluation. Creates run results and traces for analysis."),
+		mcp.WithString("tasks", mcp.Required(), mcp.Description("JSON array of execution tasks. Format: [{\"agent_id\": 1, \"task\": \"analyze logs\", \"variables\": {...}}]")),
+		mcp.WithNumber("max_concurrent", mcp.Description("Maximum concurrent executions (default: 5, max: 20)")),
+		mcp.WithNumber("iterations", mcp.Description("Number of times to execute each task (default: 1, max: 100)")),
+		mcp.WithBoolean("store_runs", mcp.Description("Store execution results in database (default: true)")),
 	)
-	s.mcpServer.AddTool(fakerCreateTool, s.handleFakerCreateFromMCPServer)
+	s.mcpServer.AddTool(batchExecuteAgentsTool, s.handleBatchExecuteAgents)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 46)
+	// Dataset Export Tool
+	exportDatasetTool := mcp.NewTool("export_dataset",
+		mcp.WithDescription("Export agent runs and execution traces to Genkit-compatible JSON format for external evaluation and analysis."),
+		mcp.WithString("filter_model", mcp.Description("Filter runs by AI model name (e.g., 'openai/gpt-4o-mini')")),
+		mcp.WithString("filter_agent_id", mcp.Description("Filter runs by specific agent ID")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of runs to export (default: 100)")),
+		mcp.WithNumber("offset", mcp.Description("Number of runs to skip (default: 0)")),
+		mcp.WithString("output_dir", mcp.Description("Output directory for dataset file (default: ./evals/)")),
+	)
+	s.mcpServer.AddTool(exportDatasetTool, s.handleExportDataset)
+
+	// Complete Async Testing Pipeline
+	generateAndTestAgentTool := mcp.NewTool("generate_and_test_agent",
+		mcp.WithDescription("Generate test scenarios and execute comprehensive agent testing pipeline with full trace capture. Runs asynchronously and returns task ID for progress monitoring. Results saved to timestamped datasets/ directory in agent's environment workspace."),
+		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to test")),
+		mcp.WithNumber("scenario_count", mcp.Description("Number of test scenarios to generate (default: 100)")),
+		mcp.WithNumber("max_concurrent", mcp.Description("Maximum concurrent executions (default: 10)")),
+		mcp.WithString("variation_strategy", mcp.Description("Scenario variation strategy: 'comprehensive', 'edge_cases', 'common' (default: 'comprehensive')")),
+		mcp.WithString("jaeger_url", mcp.Description("Jaeger URL for trace collection (default: http://localhost:16686)")),
+	)
+	s.mcpServer.AddTool(generateAndTestAgentTool, s.handleGenerateAndTestAgent)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 38)
 }

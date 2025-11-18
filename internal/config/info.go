@@ -87,19 +87,9 @@ func getDatabasePath() string {
 }
 
 // getConfigDirectory returns the directory where configuration should be stored
+// Delegates to GetStationConfigDir() which handles workspace config properly
 func getConfigDirectory() string {
-	// Check XDG_CONFIG_HOME first
-	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
-		return filepath.Join(xdgConfigHome, "station")
-	}
-
-	// Fallback to ~/.config/station
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(homeDir, ".config", "station")
-	}
-
-	// Last resort: current directory
-	return "."
+	return GetStationConfigDir()
 }
 
 // isLocalMode detects if the application is running in local development mode
@@ -140,9 +130,11 @@ func getConfigDirectories() []string {
 		dirs = append(dirs, filepath.Join(xdgConfigHome, "station"))
 	}
 
-	// User config directory
+	// User config directory - use GetStationConfigDir for workspace support
+	configDir := GetStationConfigDir()
+	dirs = append(dirs, configDir)
+	// Also check legacy .station directory in home
 	if homeDir, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(homeDir, ".config", "station"))
 		dirs = append(dirs, filepath.Join(homeDir, ".station"))
 	}
 

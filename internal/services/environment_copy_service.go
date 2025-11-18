@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/pkg/models"
@@ -224,17 +225,13 @@ func (s *EnvironmentCopyService) copyAgent(source *models.Agent, targetEnv *mode
 
 // generateAgentPromptFile creates the .prompt file for an agent
 func (s *EnvironmentCopyService) generateAgentPromptFile(agent *models.Agent, env *models.Environment) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	agentsDir := filepath.Join(homeDir, ".config", "station", "environments", env.Name, "agents")
+	// Use config helpers to respect workspace
+	agentsDir := config.GetAgentsDir(env.Name)
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create agents directory: %w", err)
 	}
 
-	promptFilePath := filepath.Join(agentsDir, fmt.Sprintf("%s.prompt", agent.Name))
+	promptFilePath := config.GetAgentPromptPath(env.Name, agent.Name)
 
 	// Get agent tools
 	tools, err := s.repos.AgentTools.ListAgentTools(agent.ID)
@@ -377,12 +374,8 @@ func (s *EnvironmentCopyService) formatSchemaYAML(schema map[string]interface{},
 
 // regenerateTemplateJSON rebuilds the template.json file for target environment
 func (s *EnvironmentCopyService) regenerateTemplateJSON(env *models.Environment) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", env.Name)
+	// Use config helper to respect workspace
+	envDir := config.GetEnvironmentDir(env.Name)
 	templatePath := filepath.Join(envDir, "template.json")
 
 	// Ensure the environment directory exists

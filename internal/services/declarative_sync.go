@@ -99,23 +99,9 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 		return nil, fmt.Errorf("environment '%s' not found: %w", environmentName, err)
 	}
 
-	// 2. Determine paths for this environment
-	// Get the workspace directory from config (e.g., /Users/jaredwolff/.config/station)
-	var workspaceDir string
-	if s.config.Workspace != "" {
-		workspaceDir = s.config.Workspace
-	} else {
-		// Fallback to XDG config directory
-		configHome := os.Getenv("XDG_CONFIG_HOME")
-		if configHome == "" {
-			homeDir, _ := os.UserHomeDir()
-			configHome = filepath.Join(homeDir, ".config")
-		}
-		workspaceDir = filepath.Join(configHome, "station")
-	}
-
-	envDir := filepath.Join(workspaceDir, "environments", environmentName)
-	agentsDir := filepath.Join(envDir, "agents")
+	// 2. Determine paths for this environment - use config helpers
+	envDir := config.GetEnvironmentDir(environmentName)
+	agentsDir := config.GetAgentsDir(environmentName)
 
 	// 3. Sync MCP template files FIRST (JSON files with potential variables)
 	// This must happen before agent sync so tools have stable IDs
@@ -223,19 +209,8 @@ func (s *DeclarativeSync) syncMCPTemplateFiles(ctx context.Context, envDir, envi
 	result.MCPServersProcessed = len(jsonFiles)
 
 	// Create template service once for this environment and reuse it
-	// Recalculate workspace directory to ensure it's in scope
-	var templateWorkspaceDir string
-	if s.config.Workspace != "" {
-		templateWorkspaceDir = s.config.Workspace
-	} else {
-		// Fallback to XDG config directory
-		configHome := os.Getenv("XDG_CONFIG_HOME")
-		if configHome == "" {
-			homeDir, _ := os.UserHomeDir()
-			configHome = filepath.Join(homeDir, ".config")
-		}
-		templateWorkspaceDir = filepath.Join(configHome, "station")
-	}
+	// Use config root helper to respect workspace configuration
+	templateWorkspaceDir := config.GetConfigRoot()
 	templateService := NewTemplateVariableService(templateWorkspaceDir, s.repos)
 	// Inject custom variable resolver if available
 	if s.customVariableResolver != nil {
@@ -426,19 +401,8 @@ func (s *DeclarativeSync) processTemplateJob(ctx context.Context, jsonFile, conf
 		return result
 	}
 
-	// Calculate environment directory for file config registration
-	var workspaceDir string
-	if s.config.Workspace != "" {
-		workspaceDir = s.config.Workspace
-	} else {
-		configHome := os.Getenv("XDG_CONFIG_HOME")
-		if configHome == "" {
-			homeDir, _ := os.UserHomeDir()
-			configHome = filepath.Join(homeDir, ".config")
-		}
-		workspaceDir = filepath.Join(configHome, "station")
-	}
-	envDir := filepath.Join(workspaceDir, "environments", environmentName)
+	// Calculate environment directory for file config registration - use config helper
+	envDir := config.GetEnvironmentDir(environmentName)
 
 	// 1. Register/update the file config in database
 	err = s.registerOrUpdateFileConfig(ctx, env.ID, configName, jsonFile, envDir, templateResult, options)
@@ -669,17 +633,8 @@ func (s *DeclarativeSync) resolveConfigPath(path string) string {
 	if strings.HasPrefix(path, "environments/") {
 		// Determine the base config directory based on runtime
 		var baseDir string
-		if s.config != nil && s.config.Workspace != "" {
-			// Use configured workspace
-			baseDir = s.config.Workspace
-		} else if os.Getenv("STATION_RUNTIME") == "docker" {
-			// In container, use station user's config directory
-			baseDir = config.GetConfigRoot()
-		} else {
-			// On host, use actual home directory
-			homeDir, _ := os.UserHomeDir()
-			baseDir = filepath.Join(homeDir, ".config", "station")
-		}
+		// Use config root helper which handles workspace/docker/XDG properly
+		baseDir = config.GetConfigRoot()
 		return filepath.Join(baseDir, path)
 	}
 
@@ -721,18 +676,8 @@ func (s *DeclarativeSync) processOpenAPISpecs(ctx context.Context, openapiFiles 
 	// Import the openapi package for conversion
 	openapiService := openapi.NewService()
 
-	// Create template service for variable resolution
-	var templateWorkspaceDir string
-	if s.config.Workspace != "" {
-		templateWorkspaceDir = s.config.Workspace
-	} else {
-		configHome := os.Getenv("XDG_CONFIG_HOME")
-		if configHome == "" {
-			homeDir, _ := os.UserHomeDir()
-			configHome = filepath.Join(homeDir, ".config")
-		}
-		templateWorkspaceDir = filepath.Join(configHome, "station")
-	}
+	// Create template service for variable resolution - use config helper
+	templateWorkspaceDir := config.GetConfigRoot()
 	templateService := NewTemplateVariableService(templateWorkspaceDir, s.repos)
 	if s.customVariableResolver != nil {
 		templateService.SetVariableResolver(s.customVariableResolver)

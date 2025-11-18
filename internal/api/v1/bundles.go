@@ -62,19 +62,8 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 
 	log.Printf("[Bundle] Request parsed - Environment: %s, Local: %v, Endpoint: %s", req.Environment, req.Local, req.Endpoint)
 
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Printf("[Bundle] ERROR: Failed to get home directory: %v", err)
-		c.JSON(http.StatusInternalServerError, BundleResponse{
-			Success: false,
-			Error:   "Failed to get home directory",
-		})
-		return
-	}
-
-	// Environment directory path
-	envPath := filepath.Join(homeDir, ".config", "station", "environments", req.Environment)
+	// Environment directory path - use config helper to respect workspace
+	envPath := config.GetEnvironmentDir(req.Environment)
 	log.Printf("[Bundle] Environment path: %s", envPath)
 
 	// Check if environment directory exists
@@ -104,8 +93,8 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 
 	if req.Local {
 		log.Printf("[Bundle] Saving bundle locally")
-		// Save locally
-		bundlesDir := filepath.Join(homeDir, ".config", "station", "bundles")
+		// Save locally - use config root to respect workspace
+		bundlesDir := filepath.Join(config.GetConfigRoot(), "bundles")
 		if err := os.MkdirAll(bundlesDir, 0755); err != nil {
 			log.Printf("[Bundle] ERROR: Failed to create bundles directory: %v", err)
 			c.JSON(http.StatusInternalServerError, BundleResponse{
@@ -365,34 +354,14 @@ func (h *APIHandlers) installBundle(c *gin.Context) {
 
 	log.Printf("[BundleInstall] Request parsed - Location: %s, Environment: %s, Source: %s", req.BundleLocation, req.EnvironmentName, req.Source)
 
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Printf("[BundleInstall] ERROR: Failed to get home directory: %v", err)
-		c.JSON(http.StatusInternalServerError, BundleInstallResponse{
-			Success: false,
-			Error:   "Failed to get home directory",
-		})
-		return
-	}
-
-	log.Printf("[BundleInstall] Home directory: %s", homeDir)
-
-	// Create bundles directory if it doesn't exist
-	bundlesDir := filepath.Join(homeDir, ".config", "station", "bundles")
-	if err := os.MkdirAll(bundlesDir, 0755); err != nil {
-		log.Printf("[BundleInstall] ERROR: Failed to create bundles directory: %v", err)
-		c.JSON(http.StatusInternalServerError, BundleInstallResponse{
-			Success: false,
-			Error:   "Failed to create bundles directory",
-		})
-		return
-	}
-
-	log.Printf("[BundleInstall] Bundles directory created: %s", bundlesDir)
+	// Create bundles directory if it doesn't exist - use config root
+	configRoot := config.GetConfigRoot()
+	log.Printf("[BundleInstall] Config root: %s", configRoot)
+	bundlesDir := filepath.Join(configRoot, "bundles")
 
 	// Download or copy the bundle
 	var bundlePath string
+	var err error
 	if req.Source == "url" {
 		log.Printf("[BundleInstall] Downloading bundle from URL: %s", req.BundleLocation)
 		// Download from URL
@@ -432,8 +401,8 @@ func (h *APIHandlers) installBundle(c *gin.Context) {
 		return
 	}
 
-	// Extract bundle to environment directory
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", req.EnvironmentName)
+	// Extract bundle to environment directory - use config helper
+	envDir := config.GetEnvironmentDir(req.EnvironmentName)
 	agentCount, mcpCount, err := extractBundle(bundlePath, envDir)
 	if err != nil {
 		// Clean up environment if extraction failed
@@ -659,17 +628,8 @@ type BundleInfo struct {
 // listBundles handles the GET /bundles endpoint
 func (h *APIHandlers) listBundles(c *gin.Context) {
 	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, BundleListResponse{
-			Success: false,
-			Error:   "Failed to get home directory",
-		})
-		return
-	}
-
-	// Get bundles directory
-	bundlesDir := filepath.Join(homeDir, ".config", "station", "bundles")
+	// Get bundles directory - use config root
+	bundlesDir := filepath.Join(config.GetConfigRoot(), "bundles")
 
 	// Check if bundles directory exists
 	if _, err := os.Stat(bundlesDir); os.IsNotExist(err) {

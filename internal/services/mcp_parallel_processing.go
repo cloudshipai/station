@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/logging"
 
@@ -169,16 +171,12 @@ func (mcm *MCPConnectionManager) processServersParallel(ctx context.Context, ser
 
 // debugLogToFile writes debug messages to a file for investigation
 func debugLogToFile(message string) {
-	// Use user's home directory for cross-platform compatibility
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return // Silently fail if can't get home dir
-	}
-	logFile := fmt.Sprintf("%s/.config/station/debug-mcp-sync.log", homeDir)
+	// Use config root to respect workspace
+	configRoot := config.GetConfigRoot()
+	logFile := filepath.Join(configRoot, "debug-mcp-sync.log")
 
 	// Ensure directory exists
-	logDir := fmt.Sprintf("%s/.config/station", homeDir)
-	_ = os.MkdirAll(logDir, 0755)
+	_ = os.MkdirAll(configRoot, 0755)
 
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

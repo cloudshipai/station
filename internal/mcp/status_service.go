@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/pkg/models"
@@ -173,8 +174,7 @@ func (s *StatusService) getAgentStatus(agent *models.Agent, fileConfigs []*repos
 
 // ValidateEnvironmentExists checks if file-based environment directory exists
 func (s *StatusService) ValidateEnvironmentExists(envName string) bool {
-	configDir := os.ExpandEnv("$HOME/.config/station")
-	envDir := fmt.Sprintf("%s/environments/%s", configDir, envName)
+	envDir := config.GetEnvironmentDir(envName)
 	if _, err := os.Stat(envDir); err != nil {
 		return false
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/version"
 )
@@ -554,17 +555,11 @@ type BundleInstallResult struct {
 // InstallBundle installs a bundle from URL or file path to create a new environment
 // Uses EnvironmentManagementService to properly create both database and filesystem
 func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*BundleInstallResult, error) {
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return &BundleInstallResult{
-			Success: false,
-			Error:   "Failed to get home directory",
-		}, err
-	}
+	// Use config root to respect workspace configuration
+	configRoot := config.GetConfigRoot()
 
 	// Create bundles directory if it doesn't exist
-	bundlesDir := filepath.Join(homeDir, ".config", "station", "bundles")
+	bundlesDir := filepath.Join(configRoot, "bundles")
 	if err := os.MkdirAll(bundlesDir, 0755); err != nil {
 		return &BundleInstallResult{
 			Success: false,
@@ -574,6 +569,7 @@ func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*
 
 	// Determine source type and download/copy bundle
 	var bundlePath string
+	var err error
 	if strings.HasPrefix(bundleLocation, "http") {
 		// Download from URL
 		bundlePath, err = s.downloadBundle(bundleLocation, bundlesDir)
@@ -594,8 +590,8 @@ func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*
 		}
 	}
 
-	// Environment directory path
-	envDir := filepath.Join(homeDir, ".config", "station", "environments", environmentName)
+	// Environment directory path - use config helper
+	envDir := config.GetEnvironmentDir(environmentName)
 
 	// Check if environment already exists (filesystem check)
 	if _, err := os.Stat(envDir); !os.IsNotExist(err) {
