@@ -110,21 +110,40 @@ func (jc *JaegerClient) IsAvailable() bool {
 
 // QueryRunTrace queries Jaeger for a trace associated with a specific run ID
 func (jc *JaegerClient) QueryRunTrace(runID int64, serviceName string) (*JaegerTrace, error) {
-	// Query using run.id tag
-	tags := map[string]string{
-		"run.id": fmt.Sprintf("%d", runID),
+	if serviceName == "" {
+		serviceName = "station"
 	}
 
-	traces, err := jc.QueryTraces(serviceName, "", tags, 1)
+	// Build URL with tag filter - use tag=key:value format (not tags={json})
+	queryURL := fmt.Sprintf("%s/api/traces?service=%s&tag=run.id:%d&limit=1",
+		jc.baseURL, serviceName, runID)
+
+	// Execute request
+	resp, err := jc.httpClient.Get(queryURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query trace for run %d: %w", runID, err)
+		return nil, fmt.Errorf("failed to query Jaeger for run %d: %w", runID, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Jaeger API returned status %d for run %d", resp.StatusCode, runID)
 	}
 
-	if len(traces) == 0 {
+	// Parse response
+	var jaegerResp JaegerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&jaegerResp); err != nil {
+		return nil, fmt.Errorf("failed to decode Jaeger response: %w", err)
+	}
+
+	if len(jaegerResp.Errors) > 0 {
+		return nil, fmt.Errorf("Jaeger API errors: %v", jaegerResp.Errors)
+	}
+
+	if len(jaegerResp.Data) == 0 {
 		return nil, fmt.Errorf("no trace found for run %d", runID)
 	}
 
-	return &traces[0], nil
+	return &jaegerResp.Data[0], nil
 }
 
 // QueryTraces queries Jaeger for traces matching filters

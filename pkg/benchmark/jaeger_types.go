@@ -50,6 +50,7 @@ type JaegerProcess struct {
 }
 
 // ExtractToolCallsFromTrace extracts tool calls with inputs/outputs from Jaeger spans
+// Genkit creates spans with genkit:input and genkit:output tags for tool calls
 func ExtractToolCallsFromTrace(trace *JaegerTrace) []ToolCall {
 	if trace == nil {
 		return nil
@@ -63,22 +64,49 @@ func ExtractToolCallsFromTrace(trace *JaegerTrace) []ToolCall {
 				Name: span.OperationName,
 			}
 
-			// Extract input and output from span tags
+			// Extract input and output from Genkit span tags
 			for _, tag := range span.Tags {
 				switch tag.Key {
-				case "tool.input":
-					// Store as Parameters (input is stored in Parameters field)
+				case "genkit:input":
+					// Genkit stores input as JSON string or map
 					if strVal, ok := tag.Value.(string); ok {
 						var params map[string]interface{}
-						// Try to parse as JSON, fallback to raw map
+						// Try to parse as JSON
 						if err := json.Unmarshal([]byte(strVal), &params); err == nil {
 							toolCall.Parameters = params
 						}
 					} else if mapVal, ok := tag.Value.(map[string]interface{}); ok {
 						toolCall.Parameters = mapVal
 					}
-				case "tool.output":
-					toolCall.Output = tag.Value
+				case "genkit:output":
+					// Genkit output is structured: {"content":[{"type":"text","text":"..."}]}
+					// Extract the actual output text/data
+					if strVal, ok := tag.Value.(string); ok {
+						// Parse the genkit output structure
+						var genkitOutput map[string]interface{}
+						if err := json.Unmarshal([]byte(strVal), &genkitOutput); err == nil {
+							// Extract content array
+							if content, ok := genkitOutput["content"].([]interface{}); ok && len(content) > 0 {
+								if firstContent, ok := content[0].(map[string]interface{}); ok {
+									if text, ok := firstContent["text"].(string); ok {
+										toolCall.Output = text
+									}
+								}
+							}
+						} else {
+							// Fallback to raw string
+							toolCall.Output = strVal
+						}
+					} else if mapVal, ok := tag.Value.(map[string]interface{}); ok {
+						// Handle map format
+						if content, ok := mapVal["content"].([]interface{}); ok && len(content) > 0 {
+							if firstContent, ok := content[0].(map[string]interface{}); ok {
+								if text, ok := firstContent["text"].(string); ok {
+									toolCall.Output = text
+								}
+							}
+						}
+					}
 				}
 			}
 
