@@ -100,17 +100,24 @@ func (s *BenchmarkService) ListResults(limit int, runID *int64) ([]*BenchmarkTas
 	defer s.mu.RUnlock()
 
 	var results []*BenchmarkTask
+
 	for _, task := range s.tasks {
+		// Filter by runID if provided
 		if runID != nil && task.RunID != *runID {
 			continue
 		}
-		if task.Status == "completed" {
-			results = append(results, task)
-		}
+		results = append(results, task)
+
+		// Limit results
 		if len(results) >= limit {
 			break
 		}
 	}
 
 	return results, nil
+}
+
+// EvaluateDataset performs comprehensive LLM-as-judge evaluation on a dataset
+func (s *BenchmarkService) EvaluateDataset(ctx context.Context, input *benchmark.DatasetEvaluationInput) (*benchmark.DatasetEvaluationResult, error) {
+	return s.analyzer.EvaluateDataset(ctx, input)
 }

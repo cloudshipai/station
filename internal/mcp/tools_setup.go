@@ -259,6 +259,12 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(listBenchmarkResultsTool, s.handleListBenchmarkResults)
 
+	evaluateDatasetTool := mcp.NewTool("evaluate_dataset",
+		mcp.WithDescription("Perform comprehensive LLM-as-judge evaluation on an entire dataset of agent runs. Generates aggregate quality scores, tool effectiveness analysis, and production readiness assessment."),
+		mcp.WithString("dataset_path", mcp.Required(), mcp.Description("Absolute path to the dataset directory containing dataset.json file (e.g., '/path/to/environments/default/datasets/agent-11-20251117-211916')")),
+	)
+	s.mcpServer.AddTool(evaluateDatasetTool, s.handleEvaluateDataset)
+
 	// Report Management Tools
 	createReportTool := mcp.NewTool("create_report",
 		mcp.WithDescription("Create a new report to evaluate how well the agent team achieves its business purpose"),

@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"station/pkg/benchmark"
 	"station/pkg/models"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -544,6 +547,72 @@ func (s *Server) handleListBenchmarkResults(ctx context.Context, request mcp.Cal
 	}
 	if runID != nil {
 		response["run_id"] = *runID
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+func (s *Server) handleEvaluateDataset(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Get dataset path
+	datasetPath, err := request.RequireString("dataset_path")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'dataset_path' parameter: %v", err)), nil
+	}
+
+	if s.benchmarkService == nil {
+		return mcp.NewToolResultError("Benchmark service not available"), nil
+	}
+
+	// Load dataset.json file
+	datasetFile := filepath.Join(datasetPath, "dataset.json")
+	datasetBytes, err := os.ReadFile(datasetFile)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to read dataset file: %v", err)), nil
+	}
+
+	// Parse dataset
+	var datasetInput benchmark.DatasetEvaluationInput
+	if err := json.Unmarshal(datasetBytes, &datasetInput); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse dataset: %v", err)), nil
+	}
+
+	// Set dataset ID from path
+	datasetInput.DatasetID = filepath.Base(datasetPath)
+
+	// Evaluate dataset
+	result, err := s.benchmarkService.EvaluateDataset(ctx, &datasetInput)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Dataset evaluation failed: %v", err)), nil
+	}
+
+	// Save result to llm_evaluation.json
+	evaluationFile := filepath.Join(datasetPath, "llm_evaluation.json")
+	resultBytes, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal evaluation result: %v", err)), nil
+	}
+
+	if err := os.WriteFile(evaluationFile, resultBytes, 0644); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to save evaluation result: %v", err)), nil
+	}
+
+	// Return summary
+	response := map[string]interface{}{
+		"success":          true,
+		"message":          "Dataset evaluation completed",
+		"dataset_id":       result.DatasetID,
+		"runs_evaluated":   result.RunsEvaluated,
+		"overall_score":    result.OverallScore,
+		"production_ready": result.ProductionReady,
+		"recommendation":   result.Recommendation,
+		"aggregate_scores": result.AggregateScores,
+		"pass_rates":       result.PassRates,
+		"key_strengths":    result.KeyStrengths,
+		"key_weaknesses":   result.KeyWeaknesses,
+		"output_file":      evaluationFile,
+		"evaluation_cost":  fmt.Sprintf("$%.4f", result.TotalJudgeCost),
+		"evaluation_time":  fmt.Sprintf("%.2fs", float64(result.EvaluationTimeMS)/1000),
 	}
 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")

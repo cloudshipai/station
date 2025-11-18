@@ -13,6 +13,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/services"
+	"station/pkg/benchmark"
 	"station/pkg/types"
 
 	"github.com/firebase/genkit/go/ai"
@@ -213,7 +214,7 @@ func (s *Server) executeTestingPipelineAsync(taskID string, config types.Testing
 		return
 	}
 
-	// Phase 6: Analyze Dataset
+	// Phase 6: Analyze Dataset (Statistical)
 	analysis, err := s.analyzeDataset(dataset, progress)
 	if err != nil {
 		updateProgress(progress, "failed", fmt.Sprintf("Analysis failed: %v", err))
@@ -221,8 +222,15 @@ func (s *Server) executeTestingPipelineAsync(taskID string, config types.Testing
 	}
 	dataset.Analysis = analysis
 
-	// Phase 7: Export Everything
-	if err := s.exportTestingResults(dataset, config.OutputDir, progress); err != nil {
+	// Phase 7: LLM-as-Judge Evaluation
+	llmEvaluation, err := s.evaluateDatasetWithLLM(ctx, dataset, &config, progress)
+	if err != nil {
+		// Non-fatal - continue without LLM evaluation
+		fmt.Printf("Warning: LLM evaluation failed: %v\n", err)
+	}
+
+	// Phase 8: Export Everything
+	if err := s.exportTestingResults(dataset, llmEvaluation, config.OutputDir, progress); err != nil {
 		updateProgress(progress, "failed", fmt.Sprintf("Export failed: %v", err))
 		return
 	}
@@ -741,7 +749,7 @@ func (s *Server) buildComprehensiveDataset(ctx context.Context, agentCtx *types.
 func (s *Server) analyzeDataset(dataset *types.ComprehensiveDataset, progress *types.TestingProgress) (*types.ComprehensiveAnalysis, error) {
 	startPhase(progress, "analysis")
 
-	// TODO: Implement comprehensive analysis
+	// TODO: Implement comprehensive statistical analysis
 	// For now, return basic placeholder
 	analysis := &types.ComprehensiveAnalysis{
 		Performance: &types.PerformanceMetrics{},
@@ -760,7 +768,72 @@ func (s *Server) analyzeDataset(dataset *types.ComprehensiveDataset, progress *t
 	return analysis, nil
 }
 
-func (s *Server) exportTestingResults(dataset *types.ComprehensiveDataset, outputDir string, progress *types.TestingProgress) error {
+func (s *Server) evaluateDatasetWithLLM(ctx context.Context, dataset *types.ComprehensiveDataset, config *types.TestingConfig, progress *types.TestingProgress) (*benchmark.DatasetEvaluationResult, error) {
+	startPhase(progress, "llm_evaluation")
+
+	// Check if benchmark service is available
+	if s.benchmarkService == nil {
+		failPhase(progress, "llm_evaluation", "Benchmark service not available")
+		return nil, fmt.Errorf("benchmark service not available")
+	}
+
+	// Convert dataset to benchmark input format
+	input := &benchmark.DatasetEvaluationInput{
+		DatasetID:   filepath.Base(config.OutputDir),
+		AgentID:     config.AgentID,
+		AgentName:   dataset.Metadata.AgentName,
+		Runs:        make([]benchmark.DatasetRun, len(dataset.Runs)),
+		GeneratedAt: dataset.Metadata.GeneratedAt,
+	}
+
+	// Convert runs
+	for i, run := range dataset.Runs {
+		// Convert tool calls to the right format
+		var toolCalls []map[string]interface{}
+		if run.ToolCalls != nil {
+			if tc, ok := run.ToolCalls.([]map[string]interface{}); ok {
+				toolCalls = tc
+			} else if tcSlice, ok := run.ToolCalls.([]interface{}); ok {
+				// Convert []interface{} to []map[string]interface{}
+				for _, item := range tcSlice {
+					if tcMap, ok := item.(map[string]interface{}); ok {
+						toolCalls = append(toolCalls, tcMap)
+					}
+				}
+			}
+		}
+
+		input.Runs[i] = benchmark.DatasetRun{
+			RunID:           run.RunID,
+			Task:            run.Task,
+			Response:        run.Response,
+			Status:          run.Status,
+			Success:         run.Success,
+			DurationSeconds: run.DurationSeconds,
+			StepsTaken:      run.StepsTaken,
+			TotalTokens:     run.TotalTokens,
+			ToolCalls:       toolCalls,
+		}
+	}
+
+	// Perform LLM evaluation
+	result, err := s.benchmarkService.EvaluateDataset(ctx, input)
+	if err != nil {
+		failPhase(progress, "llm_evaluation", fmt.Sprintf("LLM evaluation failed: %v", err))
+		return nil, err
+	}
+
+	completePhase(progress, "llm_evaluation", map[string]interface{}{
+		"runs_evaluated":   result.RunsEvaluated,
+		"overall_score":    result.OverallScore,
+		"production_ready": result.ProductionReady,
+		"evaluation_cost":  result.TotalJudgeCost,
+	})
+
+	return result, nil
+}
+
+func (s *Server) exportTestingResults(dataset *types.ComprehensiveDataset, llmEval *benchmark.DatasetEvaluationResult, outputDir string, progress *types.TestingProgress) error {
 	startPhase(progress, "export")
 
 	// Export dataset
@@ -779,6 +852,15 @@ func (s *Server) exportTestingResults(dataset *types.ComprehensiveDataset, outpu
 			return err
 		}
 		progress.OutputFiles.Analysis = analysisPath
+	}
+
+	// Export LLM evaluation results
+	if llmEval != nil {
+		llmEvalPath := filepath.Join(outputDir, "llm_evaluation.json")
+		if err := saveJSON(llmEvalPath, llmEval); err != nil {
+			failPhase(progress, "export", fmt.Sprintf("Failed to save LLM evaluation: %v", err))
+			return err
+		}
 	}
 
 	// Generate markdown report
