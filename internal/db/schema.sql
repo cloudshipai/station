@@ -374,6 +374,9 @@ CREATE TABLE IF NOT EXISTS agent_report_details (
     failure_patterns TEXT,                  -- JSON: [{pattern, frequency, examples, impact}]
     improvement_plan TEXT,                  -- JSON: [{issue, recommendation, priority, expected_impact, concrete_example}]
     
+    -- Quality metrics from LLM-as-judge evaluations (added 2025-11-18)
+    quality_metrics TEXT,                   -- JSON: {avg_task_completion, avg_relevancy, avg_faithfulness, avg_hallucination, avg_toxicity, pass_rates, evaluated_runs, total_runs}
+    
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     

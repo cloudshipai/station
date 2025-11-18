@@ -82,9 +82,10 @@ INSERT INTO agent_report_details (
     worst_run_example,
     tool_usage_analysis,
     failure_patterns,
-    improvement_plan
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, created_at
+    improvement_plan,
+    quality_metrics
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, quality_metrics, created_at
 `
 
 type CreateAgentReportDetailParams struct {
@@ -110,6 +111,7 @@ type CreateAgentReportDetailParams struct {
 	ToolUsageAnalysis  sql.NullString  `json:"tool_usage_analysis"`
 	FailurePatterns    sql.NullString  `json:"failure_patterns"`
 	ImprovementPlan    sql.NullString  `json:"improvement_plan"`
+	QualityMetrics     sql.NullString  `json:"quality_metrics"`
 }
 
 func (q *Queries) CreateAgentReportDetail(ctx context.Context, arg CreateAgentReportDetailParams) (AgentReportDetail, error) {
@@ -136,6 +138,7 @@ func (q *Queries) CreateAgentReportDetail(ctx context.Context, arg CreateAgentRe
 		arg.ToolUsageAnalysis,
 		arg.FailurePatterns,
 		arg.ImprovementPlan,
+		arg.QualityMetrics,
 	)
 	var i AgentReportDetail
 	err := row.Scan(
@@ -162,6 +165,7 @@ func (q *Queries) CreateAgentReportDetail(ctx context.Context, arg CreateAgentRe
 		&i.ToolUsageAnalysis,
 		&i.FailurePatterns,
 		&i.ImprovementPlan,
+		&i.QualityMetrics,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -270,7 +274,7 @@ func (q *Queries) FailReport(ctx context.Context, arg FailReportParams) error {
 }
 
 const getAgentReportDetail = `-- name: GetAgentReportDetail :one
-SELECT id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, created_at FROM agent_report_details WHERE id = ?
+SELECT id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, quality_metrics, created_at FROM agent_report_details WHERE id = ?
 `
 
 func (q *Queries) GetAgentReportDetail(ctx context.Context, id int64) (AgentReportDetail, error) {
@@ -300,13 +304,14 @@ func (q *Queries) GetAgentReportDetail(ctx context.Context, id int64) (AgentRepo
 		&i.ToolUsageAnalysis,
 		&i.FailurePatterns,
 		&i.ImprovementPlan,
+		&i.QualityMetrics,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getAgentReportDetailByAgentID = `-- name: GetAgentReportDetailByAgentID :one
-SELECT id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, created_at FROM agent_report_details WHERE report_id = ? AND agent_id = ?
+SELECT id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, quality_metrics, created_at FROM agent_report_details WHERE report_id = ? AND agent_id = ?
 `
 
 type GetAgentReportDetailByAgentIDParams struct {
@@ -341,13 +346,14 @@ func (q *Queries) GetAgentReportDetailByAgentID(ctx context.Context, arg GetAgen
 		&i.ToolUsageAnalysis,
 		&i.FailurePatterns,
 		&i.ImprovementPlan,
+		&i.QualityMetrics,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getAgentReportDetails = `-- name: GetAgentReportDetails :many
-SELECT id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, created_at FROM agent_report_details WHERE report_id = ? ORDER BY score DESC
+SELECT id, report_id, agent_id, agent_name, score, passed, reasoning, criteria_scores, runs_analyzed, run_ids, avg_duration_seconds, avg_tokens, avg_cost, success_rate, strengths, weaknesses, recommendations, telemetry_summary, best_run_example, worst_run_example, tool_usage_analysis, failure_patterns, improvement_plan, quality_metrics, created_at FROM agent_report_details WHERE report_id = ? ORDER BY score DESC
 `
 
 func (q *Queries) GetAgentReportDetails(ctx context.Context, reportID int64) ([]AgentReportDetail, error) {
@@ -383,6 +389,7 @@ func (q *Queries) GetAgentReportDetails(ctx context.Context, reportID int64) ([]
 			&i.ToolUsageAnalysis,
 			&i.FailurePatterns,
 			&i.ImprovementPlan,
+			&i.QualityMetrics,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

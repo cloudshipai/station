@@ -179,6 +179,7 @@ type AgentEvaluation struct {
 	ToolUsageAnalysis []ToolUsageStats    `json:"tool_usage_analysis,omitempty"`
 	FailurePatterns   []FailurePattern    `json:"failure_patterns,omitempty"`
 	ImprovementPlan   []ImprovementAction `json:"improvement_plan,omitempty"`
+	QualityMetrics    *QualityMetrics     `json:"quality_metrics,omitempty"`
 
 	Error error
 }
@@ -324,6 +325,7 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		toolUsageJSON, _ := json.Marshal(eval.ToolUsageAnalysis)
 		failurePatternsJSON, _ := json.Marshal(eval.FailurePatterns)
 		improvementPlanJSON, _ := json.Marshal(eval.ImprovementPlan)
+		qualityMetricsJSON, _ := json.Marshal(eval.QualityMetrics)
 
 		if _, err := rg.repos.Reports.CreateAgentReportDetail(ctx, queries.CreateAgentReportDetailParams{
 			ReportID:           reportID,
@@ -349,6 +351,7 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 			ToolUsageAnalysis: sql.NullString{String: string(toolUsageJSON), Valid: len(toolUsageJSON) > 2},
 			FailurePatterns:   sql.NullString{String: string(failurePatternsJSON), Valid: len(failurePatternsJSON) > 2},
 			ImprovementPlan:   sql.NullString{String: string(improvementPlanJSON), Valid: len(improvementPlanJSON) > 2},
+			QualityMetrics:    sql.NullString{String: string(qualityMetricsJSON), Valid: len(qualityMetricsJSON) > 2},
 		}); err != nil {
 			logging.Info("Failed to save agent report detail for %s: %v", eval.AgentName, err)
 			continue
@@ -626,6 +629,7 @@ func (rg *ReportGenerator) evaluateAgent(ctx context.Context, agent models.Agent
 		ToolUsageAnalysis: toolUsage,
 		FailurePatterns:   failurePatterns,
 		ImprovementPlan:   improvementPlan,
+		QualityMetrics:    metrics.QualityMetrics,
 	}
 }
 
@@ -634,6 +638,30 @@ type AgentMetrics struct {
 	AvgTokens   int64
 	AvgCost     float64
 	SuccessRate float64
+
+	// LLM-as-Judge Quality Metrics (from benchmark_metrics table)
+	QualityMetrics *QualityMetrics `json:"quality_metrics,omitempty"`
+}
+
+// QualityMetrics represents aggregate quality scores from LLM-as-judge evaluations
+type QualityMetrics struct {
+	// Average scores across evaluated runs (0.0-1.0)
+	AvgTaskCompletion float64 `json:"avg_task_completion"`
+	AvgRelevancy      float64 `json:"avg_relevancy"`
+	AvgFaithfulness   float64 `json:"avg_faithfulness"`
+	AvgHallucination  float64 `json:"avg_hallucination"` // Lower is better
+	AvgToxicity       float64 `json:"avg_toxicity"`      // Lower is better
+
+	// Pass rates (percentage of runs that met thresholds)
+	TaskCompletionPassRate float64 `json:"task_completion_pass_rate"`
+	RelevancyPassRate      float64 `json:"relevancy_pass_rate"`
+	FaithfulnessPassRate   float64 `json:"faithfulness_pass_rate"`
+	HallucinationPassRate  float64 `json:"hallucination_pass_rate"`
+	ToxicityPassRate       float64 `json:"toxicity_pass_rate"`
+
+	// Metadata
+	EvaluatedRuns int `json:"evaluated_runs"` // Number of runs with benchmarks
+	TotalRuns     int `json:"total_runs"`     // Total runs analyzed
 }
 
 func (rg *ReportGenerator) calculateAgentMetrics(runs []queries.AgentRun) AgentMetrics {
@@ -661,12 +689,96 @@ func (rg *ReportGenerator) calculateAgentMetrics(runs []queries.AgentRun) AgentM
 	// Estimate cost: ~$0.002 per 1000 tokens for gpt-4o-mini
 	avgCost := (float64(totalTokens) / 1000.0) * 0.002 / count
 
-	return AgentMetrics{
+	metrics := AgentMetrics{
 		AvgDuration: totalDuration / count,
 		AvgTokens:   totalTokens / int64(len(runs)),
 		AvgCost:     avgCost,
 		SuccessRate: float64(successCount) / count,
 	}
+
+	// Calculate quality metrics from benchmark_metrics table
+	qualityMetrics := rg.calculateQualityMetrics(runs)
+	if qualityMetrics != nil {
+		metrics.QualityMetrics = qualityMetrics
+	}
+
+	return metrics
+}
+
+// calculateQualityMetrics aggregates LLM-as-judge scores from benchmark_metrics
+func (rg *ReportGenerator) calculateQualityMetrics(runs []queries.AgentRun) *QualityMetrics {
+	if rg.db == nil || len(runs) == 0 {
+		return nil
+	}
+
+	// Build run IDs list for query
+	runIDs := make([]string, len(runs))
+	for i, run := range runs {
+		runIDs[i] = fmt.Sprintf("%d", run.ID)
+	}
+
+	// Query benchmark metrics for these runs
+	query := fmt.Sprintf(`
+		SELECT 
+			metric_type,
+			AVG(score) as avg_score,
+			SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as pass_rate,
+			COUNT(*) as count
+		FROM benchmark_metrics
+		WHERE run_id IN (%s)
+		GROUP BY metric_type
+	`, strings.Join(runIDs, ","))
+
+	rows, err := rg.db.Query(query)
+	if err != nil {
+		logging.Info("Failed to query benchmark metrics: %v", err)
+		return nil
+	}
+	defer rows.Close()
+
+	quality := &QualityMetrics{
+		TotalRuns: len(runs),
+	}
+
+	for rows.Next() {
+		var metricType string
+		var avgScore, passRate float64
+		var count int
+
+		if err := rows.Scan(&metricType, &avgScore, &passRate, &count); err != nil {
+			continue
+		}
+
+		// Track which runs have benchmarks
+		if count > quality.EvaluatedRuns {
+			quality.EvaluatedRuns = count
+		}
+
+		switch metricType {
+		case "task_completion":
+			quality.AvgTaskCompletion = avgScore
+			quality.TaskCompletionPassRate = passRate
+		case "relevancy":
+			quality.AvgRelevancy = avgScore
+			quality.RelevancyPassRate = passRate
+		case "faithfulness":
+			quality.AvgFaithfulness = avgScore
+			quality.FaithfulnessPassRate = passRate
+		case "hallucination":
+			quality.AvgHallucination = avgScore
+			quality.HallucinationPassRate = passRate
+		case "toxicity":
+			quality.AvgToxicity = avgScore
+			quality.ToxicityPassRate = passRate
+		}
+	}
+
+	// Only return if we found some benchmark data
+	if quality.EvaluatedRuns == 0 {
+		return nil
+	}
+
+	return quality
 }
 
 // LLM judge integration methods
@@ -755,6 +867,28 @@ func (rg *ReportGenerator) buildAgentEvaluationPrompt(agent models.Agent, runs [
 		}
 	}
 
+	// Build quality metrics section if available
+	qualityMetricsDesc := ""
+	if metrics.QualityMetrics != nil {
+		q := metrics.QualityMetrics
+		qualityMetricsDesc = fmt.Sprintf(`
+**Quality Metrics (LLM-as-Judge):**
+- Task Completion: %.2f/10 (%.1f%% pass rate) - %d/%d runs evaluated
+- Relevancy: %.2f/10 (%.1f%% pass rate)
+- Faithfulness: %.2f/10 (%.1f%% pass rate) - how well output aligns with tool context
+- Hallucination: %.2f/10 (%.1f%% pass rate) - lower is better, measures fabricated info
+- Toxicity: %.2f/10 (%.1f%% pass rate) - lower is better
+
+These scores come from automated LLM-based evaluation of actual agent outputs and tool usage.
+`,
+			q.AvgTaskCompletion, q.TaskCompletionPassRate, q.EvaluatedRuns, q.TotalRuns,
+			q.AvgRelevancy, q.RelevancyPassRate,
+			q.AvgFaithfulness, q.FaithfulnessPassRate,
+			q.AvgHallucination, q.HallucinationPassRate,
+			q.AvgToxicity, q.ToxicityPassRate,
+		)
+	}
+
 	return fmt.Sprintf(`You are an expert evaluator assessing individual agent performance.
 
 **Agent:** %s
@@ -765,15 +899,16 @@ func (rg *ReportGenerator) buildAgentEvaluationPrompt(agent models.Agent, runs [
 - Success rate: %.1f%%
 - Avg duration: %.2fs
 - Avg tokens: %d
-
+%s
 **Evaluation Criteria:**
 %s
 
 **Instructions:**
 1. Evaluate agent based on metrics and criteria
-2. Assign scores 0-10 for each criterion
-3. Identify strengths and weaknesses
-4. Provide actionable recommendations
+2. Consider both performance metrics AND quality metrics in your assessment
+3. Assign scores 0-10 for each criterion
+4. Identify strengths and weaknesses
+5. Provide actionable recommendations
 
 **Output Format (JSON):**
 {
@@ -792,13 +927,14 @@ func (rg *ReportGenerator) buildAgentEvaluationPrompt(agent models.Agent, runs [
   "recommendations": ["<recommendation 1>", "<recommendation 2>"]
 }
 
-Be specific and actionable in your feedback.`,
+Be specific and actionable in your feedback. Pay special attention to quality metrics - they represent actual evaluation of agent outputs.`,
 		agent.Name,
 		agent.Description,
 		len(runs),
 		metrics.SuccessRate*100,
 		metrics.AvgDuration,
 		metrics.AvgTokens,
+		qualityMetricsDesc,
 		criteriaDesc)
 }
 

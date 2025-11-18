@@ -297,6 +297,99 @@ const AgentScoreChart: React.FC<{ agents: any[] }> = ({ agents }) => {
   );
 };
 
+// Quality Metrics Component (LLM-as-Judge scores)
+const QualityMetricsSection: React.FC<{ qualityMetrics: any }> = ({ qualityMetrics }) => {
+  if (!qualityMetrics) return null;
+  
+  const metrics = [
+    { 
+      name: 'Task Completion', 
+      score: qualityMetrics.avg_task_completion || 0, 
+      passRate: qualityMetrics.task_completion_pass_rate || 0,
+      color: colors.chartGreen 
+    },
+    { 
+      name: 'Relevancy', 
+      score: qualityMetrics.avg_relevancy || 0, 
+      passRate: qualityMetrics.relevancy_pass_rate || 0,
+      color: colors.chartBlue 
+    },
+    { 
+      name: 'Faithfulness', 
+      score: qualityMetrics.avg_faithfulness || 0, 
+      passRate: qualityMetrics.faithfulness_pass_rate || 0,
+      color: colors.chartPurple 
+    },
+    { 
+      name: 'Hallucination', 
+      score: qualityMetrics.avg_hallucination || 0, 
+      passRate: qualityMetrics.hallucination_pass_rate || 0,
+      color: colors.chartYellow,
+      inverted: true // Lower is better
+    },
+    { 
+      name: 'Toxicity', 
+      score: qualityMetrics.avg_toxicity || 0, 
+      passRate: qualityMetrics.toxicity_pass_rate || 0,
+      color: colors.chartRed,
+      inverted: true // Lower is better
+    },
+  ];
+  
+  const barWidth = 400;
+  
+  return (
+    <View style={styles.chartContainer}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <Text style={styles.chartTitle}>Quality Metrics (LLM-as-Judge)</Text>
+        <Text style={{ fontSize: 8, color: colors.textLight }}>
+          {qualityMetrics.evaluated_runs}/{qualityMetrics.total_runs} runs evaluated
+        </Text>
+      </View>
+      
+      {metrics.map((metric, idx) => {
+        const scorePercent = (metric.score / 10) * 100;
+        const barColor = metric.inverted 
+          ? (metric.score < 3 ? colors.success : metric.score < 6 ? colors.warning : colors.danger)
+          : (metric.score >= 7 ? colors.success : metric.score >= 5 ? colors.warning : colors.danger);
+        
+        return (
+          <View key={idx} style={{ marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+              <Text style={{ fontSize: 9, color: colors.text, fontWeight: 'bold' }}>
+                {metric.name} {metric.inverted && '(lower is better)'}
+              </Text>
+              <Text style={{ fontSize: 9, color: colors.text }}>
+                {metric.score.toFixed(2)}/10 • {metric.passRate.toFixed(0)}% pass
+              </Text>
+            </View>
+            <Svg height={12} width={barWidth}>
+              <Rect
+                x="0"
+                y="0"
+                width={barWidth}
+                height={12}
+                fill={colors.bgLight}
+              />
+              <Rect
+                x="0"
+                y="0"
+                width={(scorePercent / 100) * barWidth}
+                height={12}
+                fill={barColor}
+              />
+            </Svg>
+          </View>
+        );
+      })}
+      
+      <Text style={{ fontSize: 7, color: colors.textLight, marginTop: 8, fontStyle: 'italic' }}>
+        Scores from automated LLM evaluation of agent outputs and tool usage context from Jaeger traces.
+      </Text>
+    </View>
+  );
+};
+
 // Tool Usage Pie Chart (simplified as bars due to SVG limitations)
 const ToolUsageChart: React.FC<{ toolUsage: any[] }> = ({ toolUsage }) => {
   if (!toolUsage || toolUsage.length === 0) return null;
@@ -575,6 +668,7 @@ export const EnterpriseReportPDF: React.FC<EnterpriseReportPDFProps> = ({
         const toolUsage = parseSqlJson(agent.tool_usage_analysis);
         const improvements = parseSqlJson(agent.improvement_plan);
         const failures = parseSqlJson(agent.failure_patterns);
+        const qualityMetrics = parseSqlJson(agent.quality_metrics);
         
         return (
           <Page key={agentIdx} size="A4" style={styles.page}>
@@ -606,6 +700,11 @@ export const EnterpriseReportPDF: React.FC<EnterpriseReportPDFProps> = ({
                 </Text>
               </View>
             </View>
+            
+            {/* Quality Metrics */}
+            {qualityMetrics && qualityMetrics.evaluated_runs > 0 && (
+              <QualityMetricsSection qualityMetrics={qualityMetrics} />
+            )}
             
             {/* Tool Usage */}
             {toolUsage && toolUsage.length > 0 && (

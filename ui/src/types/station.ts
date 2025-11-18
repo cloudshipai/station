@@ -208,6 +208,26 @@ export interface Report {
   updated_at: string;
 }
 
+export interface QualityMetrics {
+  // Average scores (0-10 scale from LLM-as-judge)
+  avg_task_completion: number;
+  avg_relevancy: number;
+  avg_faithfulness: number;
+  avg_hallucination: number;
+  avg_toxicity: number;
+  
+  // Pass rates (percentage of runs meeting thresholds)
+  task_completion_pass_rate: number;
+  relevancy_pass_rate: number;
+  faithfulness_pass_rate: number;
+  hallucination_pass_rate: number;
+  toxicity_pass_rate: number;
+  
+  // Metadata
+  evaluated_runs: number;  // Number of runs with benchmark metrics
+  total_runs: number;      // Total runs analyzed
+}
+
 export interface AgentReportDetail {
   id: number;
   report_id: number;
@@ -229,6 +249,9 @@ export interface AgentReportDetail {
   avg_tokens?: number;
   avg_cost?: number;
   success_rate?: number;    // 0.0-1.0
+  
+  // Quality Metrics (from LLM-as-judge benchmark evaluations)
+  quality_metrics?: string; // JSON: QualityMetrics
   
   // LLM Insights
   strengths?: string;       // JSON: string[]

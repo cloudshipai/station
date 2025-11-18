@@ -63,6 +63,7 @@ type AgentReportDetail struct {
 	ToolUsageAnalysis  sql.NullString  `json:"tool_usage_analysis"`
 	FailurePatterns    sql.NullString  `json:"failure_patterns"`
 	ImprovementPlan    sql.NullString  `json:"improvement_plan"`
+	QualityMetrics     sql.NullString  `json:"quality_metrics"`
 	CreatedAt          sql.NullTime    `json:"created_at"`
 }
 
