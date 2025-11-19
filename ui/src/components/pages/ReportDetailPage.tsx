@@ -475,7 +475,7 @@ export const ReportDetailPage: React.FC = () => {
         )}
 
         {/* Agent Criteria Section (if exists) */}
-        {agentCriteria && (
+        {agentCriteria && agentCriteria.goal && agentCriteria.criteria && (
           <div className="p-6 bg-gradient-to-r from-tokyo-purple/10 to-tokyo-pink/10 border-2 border-tokyo-purple rounded-lg">
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0">
