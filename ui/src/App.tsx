@@ -42,8 +42,11 @@ import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
 import { HierarchicalAgentNode } from './components/nodes/HierarchicalAgentNode';
 import { buildAgentHierarchyMap } from './utils/agentHierarchy';
 import { AgentsCanvas as AgentsCanvasComponent } from './components/agents/AgentsCanvas';
+import { AgentsLayout } from './components/agents/v2/AgentsLayout';
 import { RunDetailsModal } from './components/modals/RunDetailsModal';
 import type { AgentRunWithDetails } from './types/station';
+
+import { EnvironmentContext, EnvironmentProvider } from './contexts/EnvironmentContext';
 
 const queryClient = new QueryClient();
 
@@ -178,61 +181,16 @@ const agentPageNodeTypes = {
 
 // Station Banner Component
 const StationBanner = () => (
-  <div className="flex items-center gap-2">
-    <div className="relative">
-      <div className="w-8 h-8 bg-gradient-to-br from-tokyo-blue to-tokyo-purple rounded-lg flex items-center justify-center">
-        <span className="text-tokyo-fg font-mono font-bold text-sm">S</span>
-      </div>
-      <div className="absolute -top-1 -right-1 w-3 h-3 bg-tokyo-green rounded-full animate-pulse"></div>
-    </div>
-    <div>
-      <h1 className="text-xl font-mono font-semibold text-tokyo-blue">STATION</h1>
-      <p className="text-xs text-tokyo-comment font-mono -mt-1">🤖 agents for engineers. Be in control by CloudShipAI</p>
-    </div>
+  <div className="flex items-center justify-center py-6">
+    <img 
+      src="/station-logo.png" 
+      alt="Station Logo" 
+      className="w-24 h-24"
+    />
   </div>
 );
 
-// Environment Context
-const EnvironmentContext = React.createContext<any>({
-  environments: [],
-  selectedEnvironment: null,
-  setSelectedEnvironment: () => {},
-  refreshTrigger: 0
-});
 
-const EnvironmentProvider = ({ children }: { children: React.ReactNode }) => {
-  const [environments, setEnvironments] = useState<any[]>([]);
-  const [selectedEnvironment, setSelectedEnvironment] = useState<number | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  // Fetch environments
-  useEffect(() => {
-    const fetchEnvironments = async () => {
-      try {
-        const response = await environmentsApi.getAll();
-        setEnvironments(response.data.environments || []);
-      } catch (error) {
-        console.error('Failed to fetch environments:', error);
-        setEnvironments([]);
-      }
-    };
-    fetchEnvironments();
-  }, [refreshTrigger]);
-
-  const environmentContext = {
-    environments,
-    selectedEnvironment,
-    setSelectedEnvironment,
-    refreshTrigger,
-    refreshData: () => setRefreshTrigger(prev => prev + 1)
-  };
-
-  return (
-    <EnvironmentContext.Provider value={environmentContext}>
-      {children}
-    </EnvironmentContext.Provider>
-  );
-};
 
 const Layout = ({ children }: any) => {
   const environmentContext = React.useContext(EnvironmentContext);
@@ -327,34 +285,32 @@ const Layout = ({ children }: any) => {
   };
 
   const sidebarItems = [
-    { id: 'getting-started', label: 'Getting Started', icon: BookOpen, path: '/getting-started' },
     { id: 'agents', label: 'Agents', icon: Bot, path: currentEnvironmentName ? `/agents/${currentEnvironmentName}` : '/agents' },
+    { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
     { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
-    { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
-    { id: 'live-demo', label: 'Live Demo', icon: Play, path: '/live-demo' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
 
   return (
-    <div className="flex h-screen bg-tokyo-bg">
+    <div className="flex h-screen bg-white">
       {/* Sidebar */}
-      <div className="w-64 bg-tokyo-dark1 border-r border-tokyo-dark3 flex flex-col">
+      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-tokyo-dark3">
+        <div className="border-b border-gray-200">
           <StationBanner />
         </div>
 
         {/* Environment Selector */}
-        <div className="p-4 border-b border-tokyo-dark3">
-          <label className="block text-sm font-mono text-tokyo-fg mb-2">Environment</label>
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Environment</label>
           <select
             value={currentEnvironmentName || 'default'}
             onChange={(e) => handleEnvironmentChange(e.target.value)}
-            className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-dark3 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 transition-colors"
+            className="w-full px-3 py-2 bg-white border border-gray-300 text-gray-900 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-station-blue focus:border-station-blue transition-colors"
           >
             {environmentContext?.environments?.map((env: any) => (
               <option key={env.id} value={env.name.toLowerCase()}>
@@ -365,19 +321,19 @@ const Layout = ({ children }: any) => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-2">
+        <nav className="flex-1 p-4 bg-white">
+          <ul className="space-y-1">
             {sidebarItems.map((item) => (
               <li key={item.id}>
                 <button
                   onClick={() => navigate(item.path)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded font-mono text-sm transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                     currentPage === item.id
-                      ? 'bg-tokyo-blue bg-opacity-20 text-tokyo-bg border border-tokyo-blue shadow-md font-medium'
-                      : 'text-tokyo-fg hover:text-tokyo-blue hover:bg-tokyo-dark2'
+                      ? 'bg-blue-50 text-station-blue font-medium'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-5 w-5" />
                   {item.label}
                 </button>
               </li>
@@ -386,7 +342,7 @@ const Layout = ({ children }: any) => {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-tokyo-dark4">
+        <div className="p-4 border-t border-gray-200 bg-white">
           <CloudShipStatus />
         </div>
       </div>
@@ -400,9 +356,13 @@ const Layout = ({ children }: any) => {
 };
 
 // Wrapper for modular AgentsCanvas component
-const AgentsCanvas = () => {
+const LegacyAgentsCanvas = () => {
   const environmentContext = React.useContext(EnvironmentContext);
   return <AgentsCanvasComponent environmentContext={environmentContext} />;
+};
+
+const AgentsPage = () => {
+  return <AgentsLayout />;
 };
 
 // Old implementation (kept for reference, can be removed later)
@@ -2870,11 +2830,11 @@ function App() {
             <div className="min-h-screen bg-background">
               <Layout>
                 <Routes>
-                  <Route path="/" element={<AgentsCanvas />} />
+                  <Route path="/" element={<AgentsPage />} />
                   <Route path="/getting-started" element={<GettingStartedPage />} />
-                  <Route path="/agents" element={<AgentsCanvas />} />
-                  <Route path="/agents/:env" element={<AgentsCanvas />} />
-                  <Route path="/agent/:agentId" element={<AgentsCanvas />} />
+                  <Route path="/agents" element={<AgentsPage />} />
+                  <Route path="/agents/:env" element={<AgentsPage />} />
+                  <Route path="/agent/:agentId" element={<AgentsPage />} />
                   <Route path="/mcps" element={<MCPServersPage />} />
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
@@ -2886,7 +2846,7 @@ function App() {
                   <Route path="/live-demo" element={<LiveDemoPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
-                  <Route path="*" element={<AgentsCanvas />} />
+                  <Route path="*" element={<AgentsPage />} />
                 </Routes>
               </Layout>
             </div>
