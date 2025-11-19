@@ -464,8 +464,12 @@ export const MCPDirectoryPage: React.FC = () => {
         requiresOpenAPISpec: template.requiresOpenAPISpec || false,
       }));
 
-      // Merge with existing hardcoded servers
-      setServers(prev => [...prev, ...mappedTemplates]);
+      // Merge with existing hardcoded servers, avoiding duplicates
+      setServers(prev => {
+        const existingIds = new Set(prev.map(s => s.id));
+        const newTemplates = mappedTemplates.filter(t => !existingIds.has(t.id));
+        return [...prev, ...newTemplates];
+      });
     } catch (error) {
       console.error('Failed to fetch directory templates:', error);
     }
