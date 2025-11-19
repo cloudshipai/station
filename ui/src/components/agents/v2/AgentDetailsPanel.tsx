@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, Trash2, ExternalLink, Clock, CheckCircle, XCircle, PlayCircle, Loader2, HelpCircle } from 'lucide-react';
+import { Copy, Trash2, ExternalLink, Clock, CheckCircle, XCircle, PlayCircle, Loader2, HelpCircle, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { agentRunsApi, agentsApi } from '../../../api/station';
 import type { Agent, AgentRun } from '../../../types/station';
 
@@ -7,9 +8,11 @@ interface AgentDetailsPanelProps {
   agent: Agent;
   onRunAgent: (agent: Agent) => void;
   onViewRun: (runId: number) => void;
+  onScheduleAgent: (agent: Agent) => void;
 }
 
-export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onRunAgent, onViewRun }) => {
+export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onRunAgent, onViewRun, onScheduleAgent }) => {
+  const navigate = useNavigate();
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [tools, setTools] = useState<any[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(false);
@@ -125,9 +128,6 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
           >
             <PlayCircle className="h-4 w-4" />
             Run Agent
-          </button>
-          <button className="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all">
-            <ExternalLink className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -262,11 +262,23 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
           {runs.length > 0 && (
             <button 
               className="w-full mt-4 py-2.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-50/50 hover:bg-gray-100 rounded-lg border border-gray-200 hover:border-gray-300 transition-all"
-              onClick={() => { /* Navigate to runs page filtered by agent */ }}
+              onClick={() => navigate('/runs')}
             >
               View All Runs →
             </button>
           )}
+        </section>
+
+        {/* Schedule Section */}
+        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Schedule</h3>
+          <button 
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100 hover:border-gray-300 transition-all"
+            onClick={() => onScheduleAgent(agent)}
+          >
+            <Calendar className="h-4 w-4" />
+            Set Schedule
+          </button>
         </section>
       </div>
     </div>

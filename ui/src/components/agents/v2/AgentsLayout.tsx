@@ -9,6 +9,7 @@ import { agentsApi } from '../../../api/station';
 import { RunAgentModal } from '../../modals/RunAgentModal';
 import { RunDetailsModal } from '../../modals/RunDetailsModal';
 import { MCPServerDetailsModal } from '../../modals/MCPServerDetailsModal';
+import { AgentScheduleModal } from '../../modals/AgentScheduleModal';
 import { buildAgentGraph } from '../../../utils/agentGraphBuilder';
 import { ExecutionOverlayNode } from '../../nodes/ExecutionOverlayNode';
 import { MCPNode, ToolNode } from '../../nodes/MCPNodes';
@@ -43,6 +44,8 @@ export const AgentsLayout: React.FC = () => {
   const [isRunDetailsOpen, setIsRunDetailsOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [mcpModalId, setMcpModalId] = useState<number | null>(null);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleAgent, setScheduleAgent] = useState<any>(null);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -127,6 +130,12 @@ export const AgentsLayout: React.FC = () => {
     setIsRunDetailsOpen(true);
   };
 
+  const handleScheduleAgent = (agent: any) => {
+    if (!agent) return;
+    setScheduleAgent(agent);
+    setIsScheduleModalOpen(true);
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#fafaf8]">
       {/* Top Navigation Bar - Minimal design */}
@@ -202,6 +211,7 @@ export const AgentsLayout: React.FC = () => {
               agent={selectedAgent} 
               onRunAgent={handleRunAgent}
               onViewRun={handleViewRun}
+              onScheduleAgent={handleScheduleAgent}
             />
           </div>
         )}
@@ -228,6 +238,17 @@ export const AgentsLayout: React.FC = () => {
         isOpen={!!mcpModalId}
         onClose={() => setMcpModalId(null)}
       />
+
+      {scheduleAgent && (
+        <AgentScheduleModal
+          isOpen={isScheduleModalOpen}
+          onClose={() => {
+            setIsScheduleModalOpen(false);
+            setScheduleAgent(null);
+          }}
+          agent={scheduleAgent}
+        />
+      )}
     </div>
   );
 };

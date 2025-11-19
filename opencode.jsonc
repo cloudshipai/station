@@ -13,6 +13,11 @@
       "environment": {
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
       }
-    }
+    },
+    "playwright": {
+      "enabled": true,
+      "type": "local",
+      "command": ["npx", "@playwright/mcp@latest"]
+    },
   }
 }
