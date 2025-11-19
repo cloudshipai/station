@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink, Wand2 } from 'lucide-react';
+import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink, Wand2, X } from 'lucide-react';
 import { SyncModal } from '../sync/SyncModal';
 import { FakerBuilderModal } from '../modals/FakerBuilderModal';
 
