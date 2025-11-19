@@ -10,6 +10,7 @@ Complete documentation for Station, the open-source runtime for infrastructure m
 
 ### Core Concepts
 - [Agent Development](./agent-development.md) - Create agents with dotprompt format
+- [Multi-Agent Teams](./multi-agent-teams.md) - Build coordinator hierarchies with specialists
 - [Station MCP Tools](./station-mcp-tools.md) - Programmatic interface for managing agents (41 tools)
 - [MCP Tools](./mcp-tools.md) - Give agents access to APIs, databases, and services
 - [Template Variables](./templates.md) - Secure configuration management
