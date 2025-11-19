@@ -119,17 +119,6 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
             <Copy className="h-4 w-4" />
           </button>
         </div>
-        
-        {/* Quick Actions - Minimal design */}
-        <div className="flex gap-2.5">
-          <button 
-            onClick={() => onRunAgent(agent)}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-all active:scale-[0.98]"
-          >
-            <PlayCircle className="h-4 w-4" />
-            Run Agent
-          </button>
-        </div>
       </div>
 
       {/* Content - Paper sections */}

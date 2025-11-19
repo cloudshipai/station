@@ -125,75 +125,43 @@ export const ExecutionOverlayNode: React.FC<HierarchicalAgentNodeProps> = ({ dat
         </div>
       )}
 
-      {/* Main Node Container */}
+      {/* Main Node Container - Soft colored background */}
       <div className={cn(
         "border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all",
         isOrchestrator 
-          ? "bg-station-lavender-50 border-station-lavender-200" 
+          ? "bg-purple-50/40 border-purple-200/60" 
           : isCallable
-            ? "bg-station-mint-50 border-station-mint-200"
-            : "bg-white border-border",
+            ? "bg-emerald-50/40 border-emerald-200/60"
+            : "bg-blue-50/40 border-blue-200/60",
         isSelected && "ring-2 ring-primary",
         isGhostMode && "border-dashed border-red-300" // Dashed red border for uninstrumented nodes
       )}>
-        {/* Header */}
+        {/* Header - Clean without icons */}
         <div className={cn(
           "p-3 flex items-center justify-between border-b",
           isOrchestrator 
-            ? "bg-station-lavender-50/50 border-station-lavender-100" 
+            ? "bg-purple-100/50 border-purple-200/60" 
             : isCallable
-              ? "bg-station-mint-50/50 border-station-mint-100"
-              : "bg-gray-50 border-gray-100"
+              ? "bg-emerald-100/50 border-emerald-200/60"
+              : "bg-blue-100/50 border-blue-200/60"
         )}>
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className={cn(
-              "flex-shrink-0 p-1.5 rounded-lg",
-              isOrchestrator 
-                ? "bg-station-lavender-100" 
-                : isCallable
-                  ? "bg-station-mint-100"
-                  : "bg-gray-100"
-            )}>
-              <Bot className={cn(
-                "w-4 h-4",
-                isOrchestrator 
-                  ? "text-station-lavender-600" 
-                  : isCallable
-                    ? "text-station-mint-600"
-                    : "text-gray-600"
-              )} />
-            </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-gray-900 truncate text-sm">
+              <h3 className="font-semibold text-gray-900 truncate text-sm">
                 {agent.name}
               </h3>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={handleRunClick}
-              className="p-1 hover:bg-green-50 rounded transition-colors"
-              title="Run Agent"
-            >
-              <Play className="w-3.5 h-3.5 text-green-600" />
-            </button>
-            <button
-              onClick={handleScheduleClick}
-              className="p-1 hover:bg-blue-50 rounded transition-colors"
-              title="Schedule"
-            >
-              <Clock className="w-3.5 h-3.5 text-blue-600" />
-            </button>
-            <button
-              onClick={handleEditClick}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
-              title="Edit"
-            >
-              <Settings className="w-3.5 h-3.5 text-gray-600" />
-            </button>
-          </div>
+          {/* Type Badge */}
+          <span className={cn(
+            "text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0",
+            isOrchestrator ? "bg-purple-200/60 text-purple-800" : 
+            isCallable ? "bg-emerald-200/60 text-emerald-800" : 
+            "bg-blue-200/60 text-blue-800"
+          )}>
+            {isOrchestrator ? "Orchestrator" : isCallable ? "Callable" : "Agent"}
+          </span>
         </div>
 
         {/* Description */}
