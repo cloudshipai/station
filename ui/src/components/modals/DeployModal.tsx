@@ -31,42 +31,36 @@ const DeployModal: React.FC<DeployModalProps> = ({
       name: 'CLI (docker exec)',
       icon: Terminal,
       description: 'Bash script for local Docker deployment with agent CLI usage',
-      color: 'text-tokyo-yellow',
     },
     {
       id: 'github-actions',
       name: 'GitHub Actions',
       icon: GitBranch,
       description: 'CI/CD workflow with Docker container and agent execution',
-      color: 'text-tokyo-green',
     },
     {
       id: 'aws-ecs',
       name: 'AWS ECS (Fargate)',
       icon: Cloud,
       description: 'CloudFormation template with VPC, ALB, and ECS service',
-      color: 'text-tokyo-orange',
     },
     {
       id: 'gcp-cloudrun',
       name: 'GCP Cloud Run',
       icon: Cloud,
       description: 'Knative service configuration with secrets management',
-      color: 'text-tokyo-blue',
     },
     {
       id: 'fly',
       name: 'Fly.io',
       icon: Rocket,
       description: 'fly.toml with volume mounts and auto-scaling',
-      color: 'text-tokyo-magenta',
     },
     {
       id: 'docker-compose',
       name: 'Docker Compose',
       icon: Package,
       description: 'Local/VPS deployment with health checks',
-      color: 'text-tokyo-cyan',
     },
   ];
 
@@ -143,20 +137,20 @@ const DeployModal: React.FC<DeployModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-tokyo-bg rounded-lg border border-tokyo-dark4 w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg border border-gray-200 w-full max-w-4xl max-h-[90vh] flex flex-col shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-tokyo-dark4">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
-            <Rocket className="h-5 w-5 text-tokyo-orange" />
-            <h2 className="text-lg font-mono font-semibold text-tokyo-orange">
+            <Rocket className="h-5 w-5 text-orange-600" />
+            <h2 className="text-lg font-semibold text-gray-900">
               Deploy Environment: {environmentName}
             </h2>
           </div>
           <button
             onClick={handleClose}
-            className="p-1 hover:bg-tokyo-dark4 rounded transition-colors"
+            className="p-1 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5 text-tokyo-comment" />
+            <X className="h-5 w-5 text-gray-600" />
           </button>
         </div>
 
@@ -166,23 +160,22 @@ const DeployModal: React.FC<DeployModalProps> = ({
             <>
               {/* Docker Image Input */}
               <div className="space-y-2">
-                <label className="text-sm font-mono font-bold text-tokyo-orange">Docker Image</label>
+                <label className="text-sm font-medium text-gray-900">Docker Image</label>
                 <input
                   type="text"
                   value={dockerImage}
                   onChange={(e) => setDockerImage(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#292e42] border-[3px] border-[#7dcfff] rounded-lg text-[#7dcfff] font-mono font-semibold text-lg focus:outline-none focus:border-[#ff9e64] focus:text-[#ff9e64] shadow-tokyo-glow"
-                  style={{ backgroundColor: '#292e42', color: '#7dcfff', borderColor: '#7dcfff' }}
+                  className="w-full px-4 py-2.5 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-station-blue focus:border-station-blue transition-all"
                   placeholder="station-default:latest"
                 />
-                <p className="text-xs text-tokyo-fg-dark">
+                <p className="text-xs text-gray-600">
                   The Docker image to deploy (e.g., ghcr.io/yourusername/station-{environmentName}:latest)
                 </p>
               </div>
 
               {/* Provider Selection */}
               <div className="space-y-3">
-                <label className="text-sm font-mono text-tokyo-comment">Select Deployment Provider</label>
+                <label className="text-sm font-medium text-gray-900">Select Deployment Provider</label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {providers.map((provider) => {
                     const Icon = provider.icon;
@@ -192,17 +185,17 @@ const DeployModal: React.FC<DeployModalProps> = ({
                         onClick={() => setSelectedProvider(provider.id)}
                         className={`p-4 rounded-lg border-2 transition-all text-left ${
                           selectedProvider === provider.id
-                            ? 'border-tokyo-orange bg-tokyo-dark1'
-                            : 'border-tokyo-dark4 bg-tokyo-dark1 hover:border-tokyo-orange/50'
+                            ? 'border-station-blue bg-blue-50'
+                            : 'border-gray-200 bg-white hover:border-station-blue/50 hover:bg-gray-50'
                         }`}
                       >
                         <div className="flex items-start space-x-3">
-                          <Icon className={`h-6 w-6 ${provider.color} flex-shrink-0`} />
+                          <Icon className={`h-6 w-6 text-gray-600 flex-shrink-0`} />
                           <div className="flex-1 min-w-0">
-                            <div className="font-mono font-semibold text-tokyo-fg">
+                            <div className="font-semibold text-gray-900">
                               {provider.name}
                             </div>
-                            <div className="text-sm text-tokyo-comment mt-1">
+                            <div className="text-sm text-gray-600 mt-1">
                               {provider.description}
                             </div>
                           </div>
@@ -215,7 +208,7 @@ const DeployModal: React.FC<DeployModalProps> = ({
 
               {/* Error Display */}
               {error && (
-                <div className="flex items-center space-x-2 p-3 bg-tokyo-red/10 border border-tokyo-red/30 rounded text-tokyo-red">
+                <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span className="text-sm">{error}</span>
                 </div>
@@ -224,9 +217,9 @@ const DeployModal: React.FC<DeployModalProps> = ({
           ) : (
             <>
               {/* Success Message */}
-              <div className="flex items-center space-x-2 p-3 bg-tokyo-green/10 border border-tokyo-green/30 rounded text-tokyo-green">
+              <div className="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-600">
                 <CheckCircle className="h-5 w-5 flex-shrink-0" />
-                <span className="text-sm font-mono">
+                <span className="text-sm">
                   Deployment template generated successfully!
                 </span>
               </div>
@@ -234,28 +227,28 @@ const DeployModal: React.FC<DeployModalProps> = ({
               {/* Template Preview */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-mono text-tokyo-comment">
+                  <label className="text-sm font-medium text-gray-900">
                     Generated Template: {filename}
                   </label>
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={handleCopy}
-                      className="flex items-center space-x-1 px-3 py-1.5 bg-tokyo-blue text-tokyo-bg rounded text-sm font-mono hover:bg-opacity-90 transition-colors"
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-gray-100 text-gray-900 rounded text-sm hover:bg-gray-200 transition-colors border border-gray-300"
                     >
                       <Copy className="h-3.5 w-3.5" />
                       <span>{copied ? 'Copied!' : 'Copy'}</span>
                     </button>
                     <button
                       onClick={handleDownload}
-                      className="flex items-center space-x-1 px-3 py-1.5 bg-tokyo-green text-tokyo-bg rounded text-sm font-mono hover:bg-opacity-90 transition-colors"
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-station-blue text-white rounded text-sm hover:bg-blue-600 transition-colors"
                     >
                       <Download className="h-3.5 w-3.5" />
                       <span>Download</span>
                     </button>
                   </div>
                 </div>
-                <div className="bg-tokyo-dark1 border border-tokyo-dark4 rounded p-4 max-h-96 overflow-auto">
-                  <pre className="text-xs text-tokyo-fg font-mono whitespace-pre-wrap">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-auto">
+                  <pre className="text-xs text-gray-900 font-mono whitespace-pre-wrap">
                     {template}
                   </pre>
                 </div>
@@ -265,10 +258,10 @@ const DeployModal: React.FC<DeployModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 p-4 border-t border-tokyo-dark4">
+        <div className="flex items-center justify-end space-x-3 p-4 border-t border-gray-200">
           <button
             onClick={handleClose}
-            className="px-4 py-2 bg-tokyo-dark4 text-tokyo-fg rounded font-mono text-sm hover:bg-tokyo-dark3 transition-colors"
+            className="px-4 py-2 bg-white text-gray-700 rounded border border-gray-300 text-sm hover:bg-gray-50 transition-colors"
           >
             {generated ? 'Close' : 'Cancel'}
           </button>
@@ -276,7 +269,7 @@ const DeployModal: React.FC<DeployModalProps> = ({
             <button
               onClick={handleGenerate}
               disabled={isGenerating || !selectedProvider}
-              className="flex items-center space-x-2 px-4 py-2 bg-tokyo-orange text-tokyo-bg rounded font-mono text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center space-x-2 px-4 py-2 bg-station-blue text-white rounded text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGenerating ? (
                 <>

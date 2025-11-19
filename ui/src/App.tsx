@@ -1714,19 +1714,18 @@ const EnvironmentsPage = () => {
       </div>
 
       {/* Right Column - Controls */}
-      <div className="w-96 flex flex-col bg-tokyo-dark2 overflow-y-auto">
+      <div className="w-96 flex flex-col bg-white border-l border-gray-200 overflow-y-auto">
         {/* Environment Selector */}
-        <div className="p-6 border-b border-tokyo-fg-gutter">
-          <label className="block text-sm font-mono font-bold text-tokyo-orange mb-2">Environment</label>
+        <div className="p-6 border-b border-gray-200">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Environment</label>
           {environments.length > 0 && (
             <select
               value={selectedEnvironment || ''}
               onChange={(e) => setSelectedEnvironment(Number(e.target.value))}
-              className="w-full bg-[#292e42] border-[3px] border-[#7dcfff] text-[#7dcfff] font-mono font-semibold px-4 py-3 rounded-lg focus:outline-none focus:border-[#ff9e64] focus:text-[#ff9e64] text-lg shadow-tokyo-glow"
-              style={{ backgroundColor: '#292e42', color: '#7dcfff', borderColor: '#7dcfff' }}
+              className="w-full bg-white border-2 border-gray-300 text-gray-900 font-semibold px-4 py-3 rounded-lg focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue text-lg shadow-sm"
             >
               {environments.map((env) => (
-                <option key={env.id} value={env.id} className="bg-[#1a1b26] text-[#c0caf5]" style={{ backgroundColor: '#1a1b26', color: '#c0caf5' }}>
+                <option key={env.id} value={env.id}>
                   {env.name}
                 </option>
               ))}
@@ -1737,11 +1736,11 @@ const EnvironmentsPage = () => {
         {/* Action Buttons */}
         {selectedEnvironment && (
           <div className="p-6 space-y-3">
-            <h3 className="text-sm font-mono text-tokyo-comment mb-4">Actions</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-4">Actions</h3>
 
             <button
               onClick={handleSyncEnvironment}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-station-blue text-white hover:bg-blue-600 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <Play className="h-4 w-4" />
               <span>Sync Environment</span>
@@ -1749,7 +1748,7 @@ const EnvironmentsPage = () => {
 
             <button
               onClick={handleVariables}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-cyan text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-cyan-600 text-white hover:bg-cyan-700 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <FileText className="h-4 w-4" />
               <span>Edit Variables</span>
@@ -1757,18 +1756,18 @@ const EnvironmentsPage = () => {
 
             <button
               onClick={handleAddServer}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white hover:bg-green-700 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <Plus className="h-4 w-4" />
               <span>Add MCP Server</span>
             </button>
 
-            <div className="border-t border-tokyo-dark4 pt-3 mt-3">
-              <h3 className="text-sm font-mono text-tokyo-comment mb-3">Deployment</h3>
+            <div className="border-t border-gray-200 pt-3 mt-3">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Deployment</h3>
 
               <button
                 onClick={handleDeploy}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-purple-600 text-white hover:bg-purple-700 rounded text-sm font-medium transition-colors shadow-sm"
               >
                 <Rocket className="h-4 w-4" />
                 <span>Deploy Template</span>
@@ -1776,7 +1775,7 @@ const EnvironmentsPage = () => {
 
               <button
                 onClick={handleBuildImage}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-orange text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors mt-2"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-orange-600 text-white hover:bg-orange-700 rounded text-sm font-medium transition-colors shadow-sm mt-2"
               >
                 <Package className="h-4 w-4" />
                 <span>Build Docker Image</span>
@@ -1784,7 +1783,7 @@ const EnvironmentsPage = () => {
 
               <button
                 onClick={handleBundleEnvironment}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-yellow text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors mt-2"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-yellow-600 text-white hover:bg-yellow-700 rounded text-sm font-medium transition-colors shadow-sm mt-2"
               >
                 <Archive className="h-4 w-4" />
                 <span>Create Bundle</span>
@@ -1794,10 +1793,10 @@ const EnvironmentsPage = () => {
         )}
 
         {/* Install Bundle (always visible) */}
-        <div className="p-6 border-t border-tokyo-dark4 mt-auto">
+        <div className="p-6 border-t border-gray-200 mt-auto">
           <button
             onClick={handleInstallBundle}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-magenta text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-pink-600 text-white hover:bg-pink-700 rounded text-sm font-medium transition-colors shadow-sm"
           >
             <Download className="h-4 w-4" />
             <span>Install Bundle</span>

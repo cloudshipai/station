@@ -79,7 +79,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader className="h-8 w-8 text-gray-400 animate-spin" />
-        <span className="ml-3 text-gray-400 font-mono">Loading trace data...</span>
+        <span className="ml-3 text-gray-600">Loading trace data...</span>
       </div>
     );
   }
@@ -87,8 +87,8 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
   if (error) {
     return (
       <div className="text-center py-12">
-        <div className="text-red-400 font-mono mb-2">{error}</div>
-        <div className="text-gray-500 font-mono text-sm">
+        <div className="text-red-600 mb-2">{error}</div>
+        <div className="text-gray-500 text-sm">
           Make sure Jaeger is running at http://localhost:16686
         </div>
       </div>
@@ -98,8 +98,8 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
   if (spans.length === 0) {
     return (
       <div className="text-center py-12">
-        <Clock className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-        <div className="text-gray-400 font-mono">No trace data found for this run</div>
+        <Clock className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+        <div className="text-gray-600">No trace data found for this run</div>
       </div>
     );
   }
@@ -111,14 +111,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
   return (
     <div className="space-y-4">
       {/* Timeline Header */}
-      <div className="flex items-center justify-between p-4 bg-gray-800 rounded-lg border border-gray-700">
+      <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
         <div>
-          <div className="text-sm text-gray-400 mb-1">Total Execution Time</div>
-          <div className="text-2xl font-mono text-cyan-400">{formatDuration(totalDuration)}</div>
+          <div className="text-sm text-gray-600 mb-1">Total Execution Time</div>
+          <div className="text-2xl font-semibold text-primary">{formatDuration(totalDuration)}</div>
         </div>
         <div>
-          <div className="text-sm text-gray-400 mb-1">Span Count</div>
-          <div className="text-2xl font-mono text-purple-400">{spans.length}</div>
+          <div className="text-sm text-gray-600 mb-1">Span Count</div>
+          <div className="text-2xl font-semibold text-purple-600">{spans.length}</div>
         </div>
       </div>
 
@@ -132,19 +132,19 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
             <div key={span.spanID} className="relative">
               {/* Span Label */}
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-mono text-gray-300">
+                <span className="text-xs text-gray-700 font-medium">
                   {getSpanLabel(span.operationName)}
                 </span>
-                <span className="text-xs font-mono text-gray-500">
+                <span className="text-xs text-gray-500">
                   {formatDuration(span.duration)}
                 </span>
               </div>
               
               {/* Timeline Bar Container */}
-              <div className="relative h-8 bg-gray-800 rounded border border-gray-700 overflow-hidden">
+              <div className="relative h-8 bg-gray-100 rounded border border-gray-200 overflow-hidden">
                 {/* Timeline Bar */}
                 <div
-                  className={`absolute h-full ${getSpanColor(span.operationName)} opacity-80 transition-all hover:opacity-100 cursor-pointer`}
+                  className={`absolute h-full ${getSpanColor(span.operationName)} opacity-90 transition-all hover:opacity-100 cursor-pointer shadow-sm`}
                   style={{
                     left: `${relativeStart}%`,
                     width: `${Math.max(width, 0.5)}%`, // Minimum 0.5% width for visibility
@@ -153,7 +153,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
                 >
                   {/* Duration label inside bar if wide enough */}
                   {width > 10 && (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs font-mono text-white">
+                    <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white">
                       {formatDuration(span.duration)}
                     </div>
                   )}
@@ -165,18 +165,18 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 pt-4 border-t border-gray-700">
+      <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-purple-500 rounded"></div>
-          <span className="text-xs text-gray-400 font-mono">Agent</span>
+          <div className="w-3 h-3 bg-purple-500 rounded shadow-sm"></div>
+          <span className="text-xs text-gray-600 font-medium">Agent</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-blue-500 rounded"></div>
-          <span className="text-xs text-gray-400 font-mono">LLM</span>
+          <div className="w-3 h-3 bg-blue-500 rounded shadow-sm"></div>
+          <span className="text-xs text-gray-600 font-medium">LLM</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-green-500 rounded"></div>
-          <span className="text-xs text-gray-400 font-mono">Tools</span>
+          <div className="w-3 h-3 bg-green-500 rounded shadow-sm"></div>
+          <span className="text-xs text-gray-600 font-medium">Tools</span>
         </div>
       </div>
     </div>
@@ -273,19 +273,19 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'text-green-400';
-      case 'failed': return 'text-red-400';
-      case 'running': return 'text-blue-400';
-      default: return 'text-gray-400';
+      case 'completed': return 'text-green-700';
+      case 'failed': return 'text-red-700';
+      case 'running': return 'text-blue-700';
+      default: return 'text-gray-700';
     }
   };
 
   const getStatusBg = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-green-900 bg-opacity-20 border-green-500';
-      case 'failed': return 'bg-red-900 bg-opacity-20 border-red-500';
-      case 'running': return 'bg-blue-900 bg-opacity-20 border-blue-500';
-      default: return 'bg-gray-900 bg-opacity-20 border-gray-500';
+      case 'completed': return 'bg-green-50 border-green-200';
+      case 'failed': return 'bg-red-50 border-red-200';
+      case 'running': return 'bg-blue-50 border-blue-200';
+      default: return 'bg-gray-50 border-gray-200';
     }
   };
 
@@ -303,36 +303,36 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
   const toolCalls = runDetails?.tool_calls || [];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border-2 border-gray-700 rounded-lg w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <FileText className="h-6 w-6 text-cyan-400" />
-            <h2 className="text-xl font-mono font-semibold text-cyan-400">
+            <FileText className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-semibold text-gray-900">
               Run Details #{runId}
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-800 rounded transition-colors"
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5 text-gray-400 hover:text-gray-100" />
+            <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-700 px-6 bg-gray-800">
+        <div className="flex border-b border-gray-200 px-6 bg-gray-50">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as TabType)}
-                className={`flex items-center gap-2 px-4 py-3 font-mono text-sm transition-colors border-b-2 ${
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
                   activeTab === tab.id
-                    ? 'border-purple-500 text-purple-400 bg-gray-900'
-                    : 'border-transparent text-gray-400 hover:text-gray-200'
+                    ? 'border-primary text-primary bg-white'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -343,10 +343,10 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
           {loading ? (
             <div className="text-center py-12">
-              <div className="text-gray-400 font-mono">Loading run details...</div>
+              <div className="text-gray-600">Loading run details...</div>
             </div>
           ) : runDetails ? (
             <>
@@ -357,14 +357,14 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
                   <div className={`p-4 rounded-lg border ${getStatusBg(runDetails.status)}`}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-sm text-gray-400 mb-1">Status</div>
-                        <div className={`text-2xl font-mono font-bold ${getStatusColor(runDetails.status)}`}>
+                        <div className="text-sm text-gray-600 mb-1">Status</div>
+                        <div className={`text-2xl font-semibold ${getStatusColor(runDetails.status)}`}>
                           {runDetails.status.toUpperCase()}
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm text-gray-400 mb-1">Duration</div>
-                        <div className="text-xl font-mono text-gray-100">
+                        <div className="text-sm text-gray-600 mb-1">Duration</div>
+                        <div className="text-xl font-medium text-gray-900">
                           {runDetails.duration_seconds ? formatDuration(runDetails.duration_seconds) : 'N/A'}
                         </div>
                       </div>
@@ -373,42 +373,42 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
 
                   {/* Agent Info */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                      <div className="text-sm text-gray-400 mb-2">Agent</div>
-                      <div className="text-lg font-mono text-cyan-400">{runDetails.agent_name}</div>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="text-sm text-gray-600 mb-2">Agent</div>
+                      <div className="text-lg font-medium text-primary">{runDetails.agent_name}</div>
                     </div>
-                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                      <div className="text-sm text-gray-400 mb-2">User</div>
-                      <div className="text-lg font-mono text-gray-100">{runDetails.username}</div>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="text-sm text-gray-600 mb-2">User</div>
+                      <div className="text-lg font-medium text-gray-900">{runDetails.username}</div>
                     </div>
                   </div>
 
                   {/* Task */}
-                  <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                    <div className="text-sm text-gray-400 mb-2">Task</div>
-                    <div className="text-sm font-mono text-gray-100 whitespace-pre-wrap">{runDetails.task}</div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="text-sm text-gray-600 mb-2 font-medium">Task</div>
+                    <div className="text-sm text-gray-900 whitespace-pre-wrap">{runDetails.task}</div>
                   </div>
 
                   {/* Response */}
-                  <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                    <div className="text-sm text-gray-400 mb-2">Final Response</div>
-                    <div className="text-sm font-mono text-gray-100 whitespace-pre-wrap max-h-96 overflow-y-auto">
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="text-sm text-gray-600 mb-2 font-medium">Final Response</div>
+                    <div className="text-sm text-gray-900 whitespace-pre-wrap max-h-96 overflow-y-auto">
                       {runDetails.final_response}
                     </div>
                   </div>
 
                   {/* Timestamps */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                      <div className="text-sm text-gray-400 mb-2">Started At</div>
-                      <div className="text-sm font-mono text-gray-100">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="text-sm text-gray-600 mb-2">Started At</div>
+                      <div className="text-sm text-gray-900">
                         {new Date(runDetails.started_at).toLocaleString()}
                       </div>
                     </div>
                     {runDetails.completed_at && (
-                      <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                        <div className="text-sm text-gray-400 mb-2">Completed At</div>
-                        <div className="text-sm font-mono text-gray-100">
+                      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                        <div className="text-sm text-gray-600 mb-2">Completed At</div>
+                        <div className="text-sm text-gray-900">
                           {new Date(runDetails.completed_at).toLocaleString()}
                         </div>
                       </div>
@@ -431,24 +431,24 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
               {activeTab === 'metrics' && (
                 <div className="space-y-6">
                   {/* Token Usage */}
-                  <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                    <h3 className="text-lg font-mono font-semibold text-cyan-400 mb-4">Token Usage</h3>
+                  <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Token Usage</h3>
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <div className="text-sm text-gray-400 mb-1">Input Tokens</div>
-                        <div className="text-2xl font-mono text-blue-400">
+                        <div className="text-sm text-gray-600 mb-1">Input Tokens</div>
+                        <div className="text-2xl font-semibold text-blue-600">
                           {runDetails.input_tokens ? formatTokens(runDetails.input_tokens) : 'N/A'}
                         </div>
                       </div>
                       <div>
-                        <div className="text-sm text-gray-400 mb-1">Output Tokens</div>
-                        <div className="text-2xl font-mono text-green-400">
+                        <div className="text-sm text-gray-600 mb-1">Output Tokens</div>
+                        <div className="text-2xl font-semibold text-green-600">
                           {runDetails.output_tokens ? formatTokens(runDetails.output_tokens) : 'N/A'}
                         </div>
                       </div>
                       <div>
-                        <div className="text-sm text-gray-400 mb-1">Total Tokens</div>
-                        <div className="text-2xl font-mono text-purple-400">
+                        <div className="text-sm text-gray-600 mb-1">Total Tokens</div>
+                        <div className="text-2xl font-semibold text-purple-600">
                           {runDetails.total_tokens ? formatTokens(runDetails.total_tokens) : 'N/A'}
                         </div>
                       </div>
@@ -456,15 +456,15 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
 
                     {/* Cost Estimate */}
                     {runDetails.input_tokens && runDetails.output_tokens && runDetails.model_name && (
-                      <div className="mt-6 pt-6 border-t border-gray-700">
+                      <div className="mt-6 pt-6 border-t border-gray-200">
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="text-sm text-gray-400 mb-1">Estimated Cost</div>
-                            <div className="text-sm text-gray-500 font-mono">
+                            <div className="text-sm text-gray-600 mb-1">Estimated Cost</div>
+                            <div className="text-sm text-gray-500">
                               Model: {runDetails.model_name}
                             </div>
                           </div>
-                          <div className="text-3xl font-mono text-yellow-400">
+                          <div className="text-3xl font-semibold text-yellow-600">
                             {estimateCost(runDetails.input_tokens, runDetails.output_tokens, runDetails.model_name)}
                           </div>
                         </div>
@@ -473,18 +473,18 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
                   </div>
 
                   {/* Duration Breakdown */}
-                  <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                    <h3 className="text-lg font-mono font-semibold text-cyan-400 mb-4">Execution Metrics</h3>
+                  <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Execution Metrics</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <div className="text-sm text-gray-400 mb-1">Total Duration</div>
-                        <div className="text-2xl font-mono text-gray-100">
+                        <div className="text-sm text-gray-600 mb-1">Total Duration</div>
+                        <div className="text-2xl font-semibold text-gray-900">
                           {runDetails.duration_seconds ? formatDuration(runDetails.duration_seconds) : 'N/A'}
                         </div>
                       </div>
                       <div>
-                        <div className="text-sm text-gray-400 mb-1">Tool Calls</div>
-                        <div className="text-2xl font-mono text-gray-100">
+                        <div className="text-sm text-gray-600 mb-1">Tool Calls</div>
+                        <div className="text-2xl font-semibold text-gray-900">
                           {toolCalls.length}
                         </div>
                       </div>
@@ -501,9 +501,9 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
               {/* Debug Tab */}
               {activeTab === 'debug' && (
                 <div className="space-y-4">
-                  <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                    <h3 className="text-sm font-mono font-semibold text-cyan-400 mb-3">Raw Run Data</h3>
-                    <pre className="text-xs text-gray-300 overflow-x-auto font-mono">
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Raw Run Data</h3>
+                    <pre className="text-xs text-gray-700 overflow-x-auto font-mono bg-gray-50 p-4 rounded border border-gray-200">
                       {JSON.stringify(runDetails, null, 2)}
                     </pre>
                   </div>
@@ -511,7 +511,7 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
               )}
             </>
           ) : (
-            <div className="text-center text-gray-400 font-mono py-12">
+            <div className="text-center text-gray-600 py-12">
               Failed to load run details
             </div>
           )}

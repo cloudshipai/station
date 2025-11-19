@@ -60,21 +60,21 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
   };
 
   return (
-    <div className="h-full flex flex-col bg-tokyo-bg">
+    <div className="h-full flex flex-col bg-gray-50">
       {/* Content - Timeline has its own header with tabs */}
       <div className="flex-1 overflow-hidden">
         {activeTab === 'list' ? (
           <div className="h-full flex flex-col">
             {/* Header for List view */}
-            <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-              <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
-              <div className="flex bg-tokyo-bg rounded-lg p-1">
+            <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
+              <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
+              <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setActiveTab('list')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     activeTab === 'list'
-                      ? 'bg-tokyo-blue text-tokyo-bg'
-                      : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   <List className="h-4 w-4" />
@@ -82,10 +82,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
                 </button>
                 <button
                   onClick={() => setActiveTab('timeline')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     activeTab === 'timeline'
-                      ? 'bg-tokyo-blue text-tokyo-bg'
-                      : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   <GitBranch className="h-4 w-4" />
@@ -93,10 +93,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
                 </button>
                 <button
                   onClick={() => setActiveTab('stats')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     activeTab === 'stats'
-                      ? 'bg-tokyo-blue text-tokyo-bg'
-                      : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   <BarChart3 className="h-4 w-4" />
@@ -105,17 +105,17 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
               </div>
             </div>
             {runs.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center">
+              <div className="flex-1 flex items-center justify-center bg-white">
                 <div className="text-center">
-                  <Play className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-                  <div className="text-tokyo-fg font-mono text-lg mb-2">No agent runs found</div>
-                  <div className="text-tokyo-comment font-mono text-sm">
+                  <Play className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <div className="text-gray-900 text-lg mb-2">No agent runs found</div>
+                  <div className="text-gray-500 text-sm">
                     Agent executions will appear here when agents are run
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex-1 p-4 overflow-y-auto">
+              <div className="flex-1 p-4 overflow-y-auto bg-white">
                 <RunsList runs={currentRuns} onRunClick={onRunClick} />
                 <Pagination
                   currentPage={currentPage}
@@ -135,15 +135,15 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
         ) : (
           <div className="h-full flex flex-col">
             {/* Header for Stats view */}
-            <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-              <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
-              <div className="flex bg-tokyo-bg rounded-lg p-1">
+            <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
+              <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
+              <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setActiveTab('list')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     activeTab === 'list'
-                      ? 'bg-tokyo-blue text-tokyo-bg'
-                      : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   <List className="h-4 w-4" />
@@ -151,10 +151,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
                 </button>
                 <button
                   onClick={() => setActiveTab('timeline')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     activeTab === 'timeline'
-                      ? 'bg-tokyo-blue text-tokyo-bg'
-                      : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   <GitBranch className="h-4 w-4" />
@@ -162,10 +162,10 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
                 </button>
                 <button
                   onClick={() => setActiveTab('stats')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     activeTab === 'stats'
-                      ? 'bg-tokyo-blue text-tokyo-bg'
-                      : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   <BarChart3 className="h-4 w-4" />
@@ -173,7 +173,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
                 </button>
               </div>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto">
+            <div className="flex-1 p-4 overflow-y-auto bg-white">
               <StatsTab runs={runs} />
             </div>
           </div>

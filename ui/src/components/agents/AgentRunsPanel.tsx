@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Clock, CheckCircle, XCircle, Loader, TrendingUp, TrendingDown, DollarSign, Eye, Activity } from 'lucide-react';
 import { agentRunsApi } from '../../api/station';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 interface Run {
   id: number;
@@ -60,26 +64,26 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-400" />;
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
       case 'failed':
-        return <XCircle className="h-4 w-4 text-red-400" />;
+        return <XCircle className="h-4 w-4 text-red-600" />;
       case 'running':
-        return <Loader className="h-4 w-4 text-blue-400 animate-spin" />;
+        return <Loader className="h-4 w-4 text-station-blue animate-spin" />;
       default:
-        return <Clock className="h-4 w-4 text-gray-400" />;
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return 'border-green-500/30 bg-green-900/10';
+        return 'border-green-200 bg-green-50';
       case 'failed':
-        return 'border-red-500/30 bg-red-900/10';
+        return 'border-red-200 bg-red-50';
       case 'running':
-        return 'border-blue-500/30 bg-blue-900/10';
+        return 'border-blue-200 bg-blue-50';
       default:
-        return 'border-gray-700';
+        return 'border-border';
     }
   };
 
@@ -123,8 +127,8 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
 
   if (!agentId) {
     return (
-      <div className="w-96 h-full border-l border-gray-700 bg-gray-900 flex items-center justify-center">
-        <div className="text-center text-gray-500 font-mono text-sm">
+      <div className="w-96 h-full border-l bg-muted/30 flex items-center justify-center">
+        <div className="text-center text-muted-foreground text-sm">
           Select an agent to view runs
         </div>
       </div>
@@ -132,39 +136,41 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
   }
 
   return (
-    <div className="w-96 h-full border-l border-gray-700 bg-gray-900 overflow-hidden flex flex-col">
+    <div className="w-96 h-full border-l bg-background overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700 bg-gray-800">
+      <div className="p-4 border-b">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-mono font-semibold text-cyan-400">Recent Runs</h2>
+            <h2 className="text-lg font-semibold">Recent Runs</h2>
             {runs.some(r => r.status === 'running') && (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-red-900/30 border border-red-500/50 rounded animate-pulse">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping absolute"></div>
-                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                <span className="text-xs font-mono font-bold text-red-400">LIVE</span>
-              </div>
+              <Badge variant="destructive" className="animate-pulse">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-white rounded-full animate-ping absolute"></div>
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                  <span className="text-xs font-bold ml-1">LIVE</span>
+                </div>
+              </Badge>
             )}
           </div>
-          {loading && <Loader className="h-4 w-4 text-gray-400 animate-spin" />}
+          {loading && <Loader className="h-4 w-4 text-muted-foreground animate-spin" />}
         </div>
-        <p className="text-xs text-gray-400 font-mono">
+        <p className="text-xs text-muted-foreground">
           {agentName} · Last {runs.length} executions
         </p>
       </div>
 
       {/* Runs List */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {loading && runs.length === 0 ? (
           <div className="text-center py-8">
-            <Loader className="h-8 w-8 text-gray-500 animate-spin mx-auto mb-2" />
-            <div className="text-gray-500 font-mono text-sm">Loading runs...</div>
+            <Loader className="h-8 w-8 text-muted-foreground animate-spin mx-auto mb-2" />
+            <div className="text-muted-foreground text-sm">Loading runs...</div>
           </div>
         ) : runs.length === 0 ? (
           <div className="text-center py-8">
-            <Play className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-            <div className="text-gray-400 font-mono text-sm mb-1">No runs yet</div>
-            <div className="text-gray-500 font-mono text-xs">
+            <Play className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+            <div className="text-muted-foreground text-sm mb-1">No runs yet</div>
+            <div className="text-muted-foreground/70 text-xs">
               Execute this agent to see runs here
             </div>
           </div>
@@ -175,107 +181,120 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
             const isSelected = selectedRunId === run.id;
             
             return (
-              <div
+              <Card
                 key={run.id}
-                className={`w-full p-3 rounded-lg border transition-all duration-200 ${getStatusColor(run.status)} ${
-                  isSelected ? 'ring-2 ring-green-500/60 border-green-500/70 bg-green-900/20' : ''
-                }`}
+                className={cn(
+                  "transition-all duration-200",
+                  isSelected && "ring-2 ring-primary",
+                  run.status === 'running' && "border-blue-300",
+                  run.status === 'failed' && "border-red-300",
+                  run.status === 'completed' && "border-green-300"
+                )}
               >
-                {/* Header Row */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    {getStatusIcon(run.status)}
-                    <span className="text-xs text-gray-400 font-mono">
-                      Run #{run.id}
-                    </span>
-                    {run.status === 'running' && (
-                      <span className="px-1.5 py-0.5 bg-red-900/40 border border-red-500/50 rounded text-xs font-mono font-bold text-red-400 animate-pulse">
-                        LIVE
+                <CardContent className="p-3">
+                  {/* Header Row */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(run.status)}
+                      <span className="text-xs text-muted-foreground">
+                        Run #{run.id}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-500 font-mono">
-                    {new Date(run.started_at).toLocaleTimeString()}
-                  </div>
-                </div>
-
-                {/* Metrics Row */}
-                <div className="flex items-center gap-3 text-xs flex-wrap">
-                  {/* Duration */}
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3 text-gray-500" />
-                    <span className="text-gray-300 font-mono">
-                      {formatDuration(run.duration_seconds)}
-                    </span>
-                    {trend && trend !== 'same' && (
-                      trend === 'down' ? (
-                        <TrendingDown className="h-3 w-3 text-green-400" />
-                      ) : (
-                        <TrendingUp className="h-3 w-3 text-orange-400" />
-                      )
-                    )}
-                  </div>
-
-                  {/* Tokens */}
-                  {run.total_tokens && (
-                    <span className="text-purple-400 font-mono">
-                      {formatTokens(run.total_tokens)} tok
-                    </span>
-                  )}
-
-                  {/* Cost */}
-                  {cost && (
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="h-3 w-3 text-yellow-400" />
-                      <span className="text-yellow-400 font-mono">
-                        {cost}
-                      </span>
+                      {run.status === 'running' && (
+                        <Badge variant="destructive" className="text-xs animate-pulse">
+                          LIVE
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(run.started_at).toLocaleTimeString()}
+                    </div>
+                  </div>
 
-                {/* Status Badge and Action Buttons */}
-                <div className="mt-2 pt-2 border-t border-gray-700/50 flex items-center justify-between">
-                  <span className={`text-xs font-mono uppercase ${
-                    run.status === 'completed' ? 'text-green-400' :
-                    run.status === 'failed' ? 'text-red-400' :
-                    'text-blue-400'
-                  }`}>
-                    {run.status}
-                  </span>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-1">
-                    {/* Execution View Button */}
-                    {onExecutionViewClick && run.status === 'completed' && (
-                      <button
+                  {/* Metrics Row */}
+                  <div className="flex items-center gap-3 text-xs flex-wrap mb-2">
+                    {/* Duration */}
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-mono">
+                        {formatDuration(run.duration_seconds)}
+                      </span>
+                      {trend && trend !== 'same' && (
+                        trend === 'down' ? (
+                          <TrendingDown className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <TrendingUp className="h-3 w-3 text-orange-600" />
+                        )
+                      )}
+                    </div>
+
+                    {/* Tokens */}
+                    {run.total_tokens && (
+                      <span className="text-purple-600 font-mono">
+                        {formatTokens(run.total_tokens)} tok
+                      </span>
+                    )}
+
+                    {/* Cost */}
+                    {cost && (
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="h-3 w-3 text-yellow-600" />
+                        <span className="text-yellow-600 font-mono">
+                          {cost}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Status Badge and Action Buttons */}
+                  <div className="pt-2 border-t flex items-center justify-between">
+                    <Badge 
+                      variant={
+                        run.status === 'completed' ? 'default' :
+                        run.status === 'failed' ? 'destructive' :
+                        'secondary'
+                      }
+                      className="text-xs uppercase"
+                    >
+                      {run.status}
+                    </Badge>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-1">
+                      {/* Execution View Button */}
+                      {onExecutionViewClick && run.status === 'completed' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onExecutionViewClick(run.id, run.agent_id);
+                          }}
+                          className="h-7 text-xs px-2"
+                          title="View execution flow"
+                        >
+                          <Activity className="h-3 w-3 mr-1" />
+                          Flow
+                        </Button>
+                      )}
+                      
+                      {/* Details Modal Button */}
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onExecutionViewClick(run.id, run.agent_id);
+                          onRunClick(run.id, run.agent_id);
                         }}
-                        className="px-2 py-1 bg-cyan-900/40 border border-cyan-500/50 rounded text-xs font-mono text-cyan-400 hover:bg-cyan-900/60 hover:border-cyan-400 transition-all flex items-center gap-1"
-                        title="View execution flow"
+                        className="h-7 text-xs px-2"
+                        title="View run details"
                       >
-                        <Activity className="h-3 w-3" />
-                        <span>Flow</span>
-                      </button>
-                    )}
-                    
-                    {/* Details Modal Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRunClick(run.id, run.agent_id);
-                      }}
-                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs font-mono text-gray-300 hover:bg-gray-600 hover:border-gray-500 transition-all flex items-center gap-1"
-                      title="View run details"
-                    >
-                      <Eye className="h-3 w-3" />
-                      <span>Details</span>
-                    </button>
+                        <Eye className="h-3 w-3 mr-1" />
+                        Details
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             );
           })
         )}

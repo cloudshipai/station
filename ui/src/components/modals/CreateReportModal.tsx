@@ -256,23 +256,23 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-white border border-gray-200 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
         {/* Header */}
-        <div className="sticky top-0 bg-tokyo-bg-dark border-b border-tokyo-dark3 p-6 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
+            <h2 className="text-xl font-semibold text-gray-900">
               Create New Report
             </h2>
-            <p className="text-sm text-tokyo-comment font-mono mt-1">
+            <p className="text-sm text-gray-600 mt-1">
               Step {step}/3
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
+            <X className="h-5 w-5 text-gray-600 hover:text-gray-900" />
           </button>
         </div>
 
@@ -283,7 +283,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
               <div
                 key={s}
                 className={`flex-1 h-2 rounded-full ${
-                  s <= step ? 'bg-tokyo-blue' : 'bg-tokyo-dark3'
+                  s <= step ? 'bg-station-blue' : 'bg-gray-200'
                 }`}
               />
             ))}
@@ -293,9 +293,9 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
         {/* Content */}
         <div className="p-6">
           {error && (
-            <div className="mb-4 p-4 bg-tokyo-red/20 border border-tokyo-red rounded flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-tokyo-red" />
-              <span className="text-tokyo-red font-mono text-sm">{error}</span>
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              <span className="text-red-600 text-sm">{error}</span>
             </div>
           )}
 
@@ -303,7 +303,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-mono text-tokyo-fg mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Report Name *
                 </label>
                 <input
@@ -311,12 +311,12 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Q1 2025 Cost Optimization Review"
-                  className="w-full px-4 py-2 bg-tokyo-bg border border-tokyo-dark3 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 focus:border-tokyo-blue focus:outline-none"
+                  className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-900 rounded hover:border-gray-400 focus:border-station-blue focus:ring-2 focus:ring-station-blue focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-mono text-tokyo-fg mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Description (optional)
                 </label>
                 <textarea
@@ -324,18 +324,18 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Comprehensive evaluation of all cost-saving agents..."
                   rows={3}
-                  className="w-full px-4 py-2 bg-tokyo-bg border border-tokyo-dark3 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 focus:border-tokyo-blue focus:outline-none resize-none"
+                  className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-900 rounded hover:border-gray-400 focus:border-station-blue focus:ring-2 focus:ring-station-blue focus:outline-none resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-mono text-tokyo-fg mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Environment *
                 </label>
                 <select
                   value={environmentId || ''}
                   onChange={(e) => setEnvironmentId(parseInt(e.target.value))}
-                  className="w-full px-4 py-2 bg-tokyo-bg border border-tokyo-dark3 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 focus:border-tokyo-blue focus:outline-none"
+                  className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-900 rounded hover:border-gray-400 focus:border-station-blue focus:ring-2 focus:ring-station-blue focus:outline-none"
                 >
                   <option value="">Select environment</option>
                   {environments.map((env) => (
@@ -353,7 +353,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
             <div className="space-y-6">
               {/* Template Selection */}
               <div>
-                <label className="block text-sm font-mono text-tokyo-fg mb-3">
+                <label className="block text-sm font-medium text-gray-900 mb-3">
                   Choose a Template
                 </label>
                 <div className="grid grid-cols-4 gap-3">
@@ -371,12 +371,12 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                         onClick={() => handleTemplateChange(template.id as CriteriaTemplate)}
                         className={`p-4 border-2 rounded-lg transition-all ${
                           isSelected
-                            ? 'border-tokyo-blue bg-tokyo-blue/20'
-                            : 'border-tokyo-dark3 hover:border-tokyo-blue5'
+                            ? 'border-station-blue bg-blue-50'
+                            : 'border-gray-200 hover:border-station-blue/50 hover:bg-gray-50'
                         }`}
                       >
-                        <Icon className={`h-8 w-8 mx-auto mb-2 ${isSelected ? 'text-tokyo-blue' : 'text-tokyo-comment'}`} />
-                        <div className={`text-sm font-mono ${isSelected ? 'text-tokyo-blue font-semibold' : 'text-tokyo-fg'}`}>
+                        <Icon className={`h-8 w-8 mx-auto mb-2 ${isSelected ? 'text-station-blue' : 'text-gray-600'}`} />
+                        <div className={`text-sm ${isSelected ? 'text-station-blue font-semibold' : 'text-gray-900'}`}>
                           {template.label}
                         </div>
                       </button>
@@ -387,7 +387,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
 
               {/* Business Goal */}
               <div>
-                <label className="block text-sm font-mono text-tokyo-fg mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Business Goal *
                 </label>
                 <input
@@ -395,31 +395,31 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
                   placeholder="Reduce AWS costs by 20% in Q1 2025"
-                  className="w-full px-4 py-2 bg-tokyo-bg border border-tokyo-dark3 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 focus:border-tokyo-blue focus:outline-none"
+                  className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-900 rounded hover:border-gray-400 focus:border-station-blue focus:ring-2 focus:ring-station-blue focus:outline-none"
                 />
               </div>
 
               {/* Criteria List */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-mono text-tokyo-fg">
+                  <label className="text-sm font-medium text-gray-900">
                     Evaluation Criteria (must sum to 100%)
                   </label>
-                  <div className={`text-sm font-mono ${isWeightValid() ? 'text-tokyo-green' : 'text-tokyo-red'}`}>
+                  <div className={`text-sm ${isWeightValid() ? 'text-green-600' : 'text-red-600'}`}>
                     Total: {(getTotalWeight() * 100).toFixed(0)}%
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   {Object.entries(criteria).map(([name, config]) => (
-                    <div key={name} className="p-4 bg-tokyo-bg border border-tokyo-dark3 rounded">
+                    <div key={name} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <input
                             type="text"
                             value={name}
                             disabled
-                            className="font-mono text-sm text-tokyo-fg bg-transparent capitalize mb-1"
+                            className="text-sm text-gray-900 bg-transparent capitalize mb-1"
                           />
                           <input
                             type="text"
@@ -427,13 +427,13 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                             onChange={(e) =>
                               handleCriterionChange(name, 'description', e.target.value)
                             }
-                            className="w-full text-xs font-mono text-tokyo-comment bg-tokyo-bg-dark px-2 py-1 rounded border border-tokyo-dark3"
+                            className="w-full text-xs text-gray-600 bg-white px-2 py-1 rounded border border-gray-300"
                           />
                         </div>
                         {Object.keys(criteria).length > 1 && (
                           <button
                             onClick={() => removeCriterion(name)}
-                            className="ml-2 text-tokyo-red hover:text-red-400 text-xs"
+                            className="ml-2 text-red-600 hover:text-red-700 text-xs"
                           >
                             Remove
                           </button>
@@ -442,7 +442,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-xs font-mono text-tokyo-comment mb-1 block">
+                          <label className="text-xs text-gray-600 mb-1 block">
                             Weight
                           </label>
                           <div className="flex items-center gap-2">
@@ -457,14 +457,14 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                               }
                               className="flex-1"
                             />
-                            <span className="text-xs font-mono text-tokyo-fg w-12">
+                            <span className="text-xs text-gray-900 w-12">
                               {(config.weight * 100).toFixed(0)}%
                             </span>
                           </div>
                         </div>
 
                         <div>
-                          <label className="text-xs font-mono text-tokyo-comment mb-1 block">
+                          <label className="text-xs text-gray-600 mb-1 block">
                             Threshold
                           </label>
                           <div className="flex items-center gap-2">
@@ -479,7 +479,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                               }
                               className="flex-1"
                             />
-                            <span className="text-xs font-mono text-tokyo-fg w-12">
+                            <span className="text-xs text-gray-900 w-12">
                               {config.threshold.toFixed(1)}/10
                             </span>
                           </div>
@@ -491,7 +491,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
 
                 <button
                   onClick={addCustomCriterion}
-                  className="mt-3 px-4 py-2 bg-tokyo-dark2 border border-tokyo-dark3 text-tokyo-fg hover:border-tokyo-blue5 rounded font-mono text-sm transition-colors"
+                  className="mt-3 px-4 py-2 bg-white border border-gray-300 text-gray-900 hover:bg-gray-50 rounded text-sm transition-colors"
                 >
                   + Add Custom Criterion
                 </button>
@@ -502,45 +502,45 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
           {/* Step 3: Review */}
           {step === 3 && (
             <div className="space-y-4">
-              <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                <h3 className="text-sm font-mono font-semibold text-tokyo-cyan mb-3">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">
                   Report Summary
                 </h3>
-                <div className="space-y-2 text-sm font-mono">
+                <div className="space-y-2 text-sm">
                   <div>
-                    <span className="text-tokyo-comment">Name:</span>{' '}
-                    <span className="text-tokyo-fg">{name}</span>
+                    <span className="text-gray-600">Name:</span>{' '}
+                    <span className="text-gray-900">{name}</span>
                   </div>
                   {description && (
                     <div>
-                      <span className="text-tokyo-comment">Description:</span>{' '}
-                      <span className="text-tokyo-fg">{description}</span>
+                      <span className="text-gray-600">Description:</span>{' '}
+                      <span className="text-gray-900">{description}</span>
                     </div>
                   )}
                   <div>
-                    <span className="text-tokyo-comment">Environment:</span>{' '}
-                    <span className="text-tokyo-fg">
+                    <span className="text-gray-600">Environment:</span>{' '}
+                    <span className="text-gray-900">
                       {environments.find((e) => e.id === environmentId)?.name}
                     </span>
                   </div>
                   <div>
-                    <span className="text-tokyo-comment">Goal:</span>{' '}
-                    <span className="text-tokyo-fg">{goal}</span>
+                    <span className="text-gray-600">Goal:</span>{' '}
+                    <span className="text-gray-900">{goal}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                <h3 className="text-sm font-mono font-semibold text-tokyo-cyan mb-3">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">
                   Evaluation Criteria
                 </h3>
-                <ul className="space-y-2 text-sm font-mono">
+                <ul className="space-y-2 text-sm">
                   {Object.entries(criteria).map(([name, config]) => (
                     <li key={name} className="flex items-center justify-between">
-                      <span className="text-tokyo-fg capitalize">
+                      <span className="text-gray-900 capitalize">
                         {name.replace(/_/g, ' ')}
                       </span>
-                      <span className="text-tokyo-comment">
+                      <span className="text-gray-600">
                         {(config.weight * 100).toFixed(0)}% weight, {config.threshold.toFixed(1)}/10 threshold
                       </span>
                     </li>
@@ -548,19 +548,19 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                 </ul>
               </div>
 
-              <div className="p-4 bg-tokyo-blue/10 border border-tokyo-blue rounded">
-                <h3 className="text-sm font-mono font-semibold text-tokyo-blue mb-2">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-blue-600 mb-2">
                   Estimated Generation
                 </h3>
-                <div className="space-y-1 text-xs font-mono text-tokyo-comment">
+                <div className="space-y-1 text-xs text-gray-600">
                   <div>⏱️ Duration: ~26 seconds (with parallel evaluation)</div>
                   <div>💰 LLM Cost: ~$0.014 (GPT-4o-mini)</div>
                   <div>🧠 Judge Model: gpt-4o-mini</div>
                 </div>
               </div>
 
-              <div className="p-3 bg-tokyo-yellow/10 border border-tokyo-yellow rounded">
-                <p className="text-xs font-mono text-tokyo-comment">
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-xs text-gray-600">
                   ⚠️ Report generation runs in the background. You can view progress from the
                   reports list.
                 </p>
@@ -570,13 +570,13 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-tokyo-bg-dark border-t border-tokyo-dark3 p-6 flex items-center justify-between">
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex items-center justify-between">
           <div>
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
                 disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 text-tokyo-fg hover:text-tokyo-blue font-mono text-sm transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-station-blue text-sm transition-colors disabled:opacity-50"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back
@@ -588,7 +588,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
             <button
               onClick={onClose}
               disabled={loading}
-              className="px-4 py-2 text-tokyo-comment hover:text-tokyo-fg font-mono text-sm transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-gray-600 hover:text-gray-900 text-sm transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -601,7 +601,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                   (step === 1 && !canProceedToStep2()) ||
                   (step === 2 && !canProceedToStep3())
                 }
-                className="flex items-center gap-2 px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-station-blue text-white hover:bg-blue-600 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next: {step === 1 ? 'Criteria' : 'Review'}
                 <ArrowRight className="h-4 w-4" />
@@ -610,7 +610,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
               <button
                 onClick={handleCreate}
                 disabled={loading}
-                className="px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Creating...' : 'Create & Generate Report'}
               </button>

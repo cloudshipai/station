@@ -108,13 +108,13 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg w-full max-w-md p-6">
+      <div className="bg-white border border-gray-200 rounded-lg w-full max-w-md p-6 shadow-xl">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-mono font-semibold text-tokyo-magenta">Install Bundle</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Install Bundle</h2>
           <button
             onClick={handleClose}
             disabled={installing}
-            className="text-tokyo-comment hover:text-tokyo-fg transition-colors disabled:opacity-50"
+            className="text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
@@ -122,32 +122,32 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
 
         {installSuccess ? (
           <div className="text-center py-8">
-            <div className="bg-transparent border border-tokyo-green border-opacity-50 rounded-lg p-4 mb-4">
-              <Package className="h-8 w-8 text-tokyo-green mx-auto mb-2" />
-              <p className="text-tokyo-green font-mono">Bundle installed successfully!</p>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <Package className="h-8 w-8 text-green-600 mx-auto mb-2" />
+              <p className="text-green-600 font-semibold">Bundle installed successfully!</p>
               {installDetails && (
-                <div className="mt-3 text-sm text-tokyo-comment space-y-1">
-                  <p>Environment: <span className="text-tokyo-fg">{installDetails.environment_name}</span></p>
-                  <p>Agents: <span className="text-tokyo-blue">{installDetails.installed_agents || 0}</span></p>
-                  <p>MCP Servers: <span className="text-tokyo-cyan">{installDetails.installed_mcps || 0}</span></p>
+                <div className="mt-3 text-sm text-gray-600 space-y-1">
+                  <p>Environment: <span className="text-gray-900 font-medium">{installDetails.environment_name}</span></p>
+                  <p>Agents: <span className="text-blue-600">{installDetails.installed_agents || 0}</span></p>
+                  <p>MCP Servers: <span className="text-cyan-600">{installDetails.installed_mcps || 0}</span></p>
                 </div>
               )}
             </div>
-            <div className="bg-transparent border border-tokyo-blue border-opacity-50 rounded-lg p-3 relative group">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 relative group">
               <button
                 onClick={() => navigator.clipboard.writeText(`stn sync ${environmentName}`)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-tokyo-blue hover:bg-tokyo-blue1 text-tokyo-bg"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-station-blue hover:bg-blue-600 text-white"
                 title={`Copy sync command: stn sync ${environmentName}`}
               >
                 <Copy className="h-3 w-3" />
               </button>
-              <p className="text-sm text-tokyo-blue font-mono pr-8">
-                Next: Run <code className="bg-tokyo-bg px-1 rounded text-tokyo-orange">stn sync {environmentName}</code>
+              <p className="text-sm text-gray-700 pr-8">
+                Next: Run <code className="bg-white px-1 rounded text-orange-600 font-mono">stn sync {environmentName}</code>
               </p>
             </div>
             <button
               onClick={handleClose}
-              className="mt-4 px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors"
+              className="mt-4 px-4 py-2 bg-station-blue text-white hover:bg-blue-600 rounded text-sm transition-colors"
             >
               Close
             </button>
@@ -155,14 +155,14 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
         ) : (
           <div className="space-y-4">
             {error && (
-              <div className="bg-tokyo-bg-dark border border-tokyo-red rounded-lg p-3 flex items-start space-x-2">
-                <AlertCircle className="h-5 w-5 text-tokyo-red flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-tokyo-fg font-mono">{error}</p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-600">{error}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-mono text-tokyo-fg mb-2">
+              <label className="block text-sm text-gray-700 mb-2 font-medium">
                 Bundle Source
               </label>
               <div className="flex space-x-4">
@@ -172,9 +172,9 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     value="cloudship"
                     checked={bundleSource === 'cloudship'}
                     onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
-                    className="text-tokyo-blue focus:ring-tokyo-blue"
+                    className="text-station-blue focus:ring-station-blue"
                   />
-                  <span className="text-sm font-mono text-tokyo-fg flex items-center gap-1">
+                  <span className="text-sm text-gray-900 flex items-center gap-1">
                     <Cloud className="h-3 w-3" />
                     CloudShip
                   </span>
@@ -185,9 +185,9 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     value="url"
                     checked={bundleSource === 'url'}
                     onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
-                    className="text-tokyo-blue focus:ring-tokyo-blue"
+                    className="text-station-blue focus:ring-station-blue"
                   />
-                  <span className="text-sm font-mono text-tokyo-fg">URL</span>
+                  <span className="text-sm text-gray-900">URL</span>
                 </label>
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -195,25 +195,25 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     value="file"
                     checked={bundleSource === 'file'}
                     onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
-                    className="text-tokyo-blue focus:ring-tokyo-blue"
+                    className="text-station-blue focus:ring-station-blue"
                   />
-                  <span className="text-sm font-mono text-tokyo-fg">File Path</span>
+                  <span className="text-sm text-gray-900">File Path</span>
                 </label>
               </div>
             </div>
 
             {bundleSource === 'cloudship' ? (
               <div>
-                <label htmlFor="cloudship-bundle" className="block text-sm font-mono text-tokyo-fg mb-2">
+                <label htmlFor="cloudship-bundle" className="block text-sm text-gray-700 mb-2 font-medium">
                   Organization Bundle
                 </label>
                 {loadingBundles ? (
-                  <div className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-comment font-mono px-3 py-2 rounded flex items-center gap-2">
-                    <div className="animate-spin h-4 w-4 border-2 border-tokyo-blue border-t-transparent rounded-full"></div>
+                  <div className="w-full bg-gray-50 border border-gray-300 text-gray-600 px-3 py-2 rounded flex items-center gap-2">
+                    <div className="animate-spin h-4 w-4 border-2 border-station-blue border-t-transparent rounded-full"></div>
                     Loading bundles...
                   </div>
                 ) : cloudShipBundles.length === 0 ? (
-                  <div className="w-full bg-tokyo-bg border border-tokyo-red text-tokyo-red font-mono px-3 py-2 rounded text-sm">
+                  <div className="w-full bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded text-sm">
                     No bundles found in your organization
                   </div>
                 ) : (
@@ -221,10 +221,10 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     id="cloudship-bundle"
                     value={selectedCloudShipBundle}
                     onChange={(e) => setSelectedCloudShipBundle(e.target.value)}
-                    className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-cyan transition-colors [&>option]:bg-tokyo-bg [&>option]:text-tokyo-fg"
+                    className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue transition-colors"
                     disabled={installing}
                   >
-                    <option value="" className="bg-tokyo-bg text-tokyo-comment">Select a bundle...</option>
+                    <option value="">Select a bundle...</option>
                     {cloudShipBundles.map((bundle) => {
                       // Try multiple fields for name: name, filename (without .tar.gz), or fallback to version
                       const rawName = bundle.name || bundle.filename?.replace('.tar.gz', '').replace('.tar', '') || `Bundle v${bundle.version || '1.0.0'}`;
@@ -232,7 +232,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                       const displayText = `${rawName} - ${uploadDate}`;
 
                       return (
-                        <option key={bundle.bundle_id || bundle.id} value={bundle.bundle_id || bundle.id} className="bg-tokyo-bg text-tokyo-fg">
+                        <option key={bundle.bundle_id || bundle.id} value={bundle.bundle_id || bundle.id}>
                           {displayText}
                         </option>
                       );
@@ -242,7 +242,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
               </div>
             ) : (
               <div>
-                <label htmlFor="bundle-location" className="block text-sm font-mono text-tokyo-fg mb-2">
+                <label htmlFor="bundle-location" className="block text-sm text-gray-700 mb-2 font-medium">
                   {bundleSource === 'url' ? 'Bundle URL' : 'Bundle File Path'}
                 </label>
                 <input
@@ -251,14 +251,14 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                   value={bundleLocation}
                   onChange={(e) => setBundleLocation(e.target.value)}
                   placeholder={bundleSource === 'url' ? 'https://example.com/bundle.tar.gz' : '/path/to/bundle.tar.gz'}
-                  className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-cyan placeholder:text-tokyo-comment transition-colors"
+                  className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue placeholder:text-gray-400 transition-colors"
                   disabled={installing}
                 />
               </div>
             )}
 
             <div>
-              <label htmlFor="environment-name" className="block text-sm font-mono text-tokyo-fg mb-2">
+              <label htmlFor="environment-name" className="block text-sm text-gray-700 mb-2 font-medium">
                 Environment Name
               </label>
               <input
@@ -267,7 +267,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                 value={environmentName}
                 onChange={(e) => setEnvironmentName(e.target.value)}
                 placeholder="my-environment"
-                className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono px-3 py-2 rounded focus:outline-none focus:border-tokyo-cyan placeholder:text-tokyo-comment transition-colors"
+                className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue placeholder:text-gray-400 transition-colors"
                 disabled={installing}
               />
             </div>
@@ -276,7 +276,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
               <button
                 onClick={handleClose}
                 disabled={installing}
-                className="flex-1 px-4 py-2 bg-tokyo-dark2 text-tokyo-fg hover:bg-tokyo-dark4 rounded font-mono text-sm transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-sm transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -287,11 +287,11 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                   !environmentName.trim() ||
                   (bundleSource === 'cloudship' ? !selectedCloudShipBundle : !bundleLocation.trim())
                 }
-                className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-tokyo-magenta text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-pink-600 text-white hover:bg-pink-700 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {installing ? (
                   <>
-                    <div className="animate-spin h-4 w-4 border-2 border-tokyo-bg border-t-transparent rounded-full"></div>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                     <span>Installing...</span>
                   </>
                 ) : (

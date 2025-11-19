@@ -67,17 +67,17 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
     }
   };
 
-  // Color by status
+  // Color by status - soft palette for visibility
   const getStatusColor = () => {
     switch (run.status) {
       case 'completed':
-        return 'bg-tokyo-green';
+        return 'bg-green-500';
       case 'failed':
-        return 'bg-tokyo-red';
+        return 'bg-red-500';
       case 'running':
-        return 'bg-tokyo-blue animate-pulse';
+        return 'bg-blue-500 animate-pulse';
       default:
-        return 'bg-tokyo-comment';
+        return 'bg-gray-400';
     }
   };
 
@@ -102,16 +102,16 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
   return (
     <>
       <div
-        className={`absolute cursor-pointer transition-all duration-150 rounded ${getStatusColor()} ${
-          isHighlighted ? 'ring-2 ring-tokyo-cyan' : ''
-        } ${isHovered ? 'opacity-90 z-10' : 'opacity-80'}`}
+        className={`absolute cursor-pointer transition-all duration-150 rounded shadow-sm ${getStatusColor()} ${
+          isHighlighted ? 'ring-2 ring-primary' : ''
+        } ${isHovered ? 'opacity-100 z-10 scale-105' : 'opacity-90'}`}
         style={{
           left: `${left}%`,
           width: `${Math.max(width, 0.5)}%`, // Minimum width for visibility
           height: `${height}px`,
           top: '50%',
           transform: 'translateY(-50%)',
-          minWidth: '2px'
+          minWidth: '3px'
         }}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
