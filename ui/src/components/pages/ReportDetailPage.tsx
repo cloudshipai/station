@@ -263,11 +263,11 @@ export const ReportDetailPage: React.FC = () => {
       
       <div className="h-full flex flex-col bg-tokyo-bg overflow-y-auto">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-tokyo-bg-dark border-b border-tokyo-dark3">
+      <div className="sticky top-0 z-10 bg-[#fafaf8] border-b border-gray-200/60">
         <div className="p-6">
           <button
             onClick={() => navigate('/reports')}
-            className="flex items-center gap-2 text-tokyo-blue hover:text-tokyo-blue5 mb-4 font-mono text-sm"
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 text-sm transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Reports
@@ -275,18 +275,18 @@ export const ReportDetailPage: React.FC = () => {
           
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h1 className="text-2xl font-mono font-semibold text-tokyo-cyan mb-2">
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">
                 {report.name}
               </h1>
               {(() => {
                 const desc = getSqlValue(report.description);
                 return desc && (
-                  <p className="text-sm text-tokyo-comment font-mono mb-4">{desc}</p>
+                  <p className="text-sm text-gray-600 mb-4">{desc}</p>
                 );
               })()}
               
-              <div className="flex items-center gap-6 text-sm font-mono text-tokyo-comment">
-                <span>Status: <span className={report.status === 'completed' ? 'text-tokyo-green' : 'text-tokyo-yellow'}>{report.status}</span></span>
+              <div className="flex items-center gap-6 text-sm text-gray-600">
+                <span>Status: <span className={report.status === 'completed' ? 'text-emerald-600' : 'text-amber-600'}>{report.status}</span></span>
                 <span>Generated: {formatDate(getSqlValue(report.generation_completed_at))}</span>
                 {(() => {
                   const duration = getSqlValue(report.generation_duration_seconds);
@@ -307,7 +307,7 @@ export const ReportDetailPage: React.FC = () => {
             <button 
               onClick={handleExportPDF}
               disabled={exportingPDF}
-              className="flex items-center gap-2 px-4 py-2 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors disabled:opacity-50 disabled:cursor-wait"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white hover:bg-gray-800 hover:shadow-md rounded-lg text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-wait"
             >
               {exportingPDF ? (
                 <>
