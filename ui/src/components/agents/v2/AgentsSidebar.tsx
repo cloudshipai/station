@@ -26,7 +26,7 @@ export const AgentsSidebar: React.FC<AgentsSidebarProps> = ({ agents, selectedAg
             placeholder="Search agents..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-all placeholder:text-gray-400"
+            className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 focus:bg-white transition-all duration-200 placeholder:text-gray-400"
           />
         </div>
       </div>
@@ -34,28 +34,29 @@ export const AgentsSidebar: React.FC<AgentsSidebarProps> = ({ agents, selectedAg
       {/* Agent List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {filteredAgents.length === 0 ? (
-          <div className="text-center py-12 px-4">
-            <Bot className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No agents found</p>
+          <div className="text-center py-12 px-4 animate-in fade-in duration-300">
+            <Bot className="h-12 w-12 text-gray-300 mx-auto mb-3 animate-in zoom-in duration-500" />
+            <p className="text-sm text-gray-500 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">No agents found</p>
             {searchQuery && (
               <button 
                 onClick={() => setSearchQuery('')}
-                className="text-xs text-gray-600 hover:text-gray-900 mt-2 underline"
+                className="text-xs text-gray-600 hover:text-gray-900 mt-2 underline animate-in fade-in duration-500 delay-200"
               >
                 Clear search
               </button>
             )}
           </div>
         ) : (
-          filteredAgents.map((agent) => (
+          filteredAgents.map((agent, index) => (
             <div 
               key={agent.id} 
               onClick={() => onSelectAgent(agent)}
-              className={`p-3.5 rounded-xl border cursor-pointer transition-all group ${
+              className={`p-3.5 rounded-xl border cursor-pointer transition-all duration-300 group animate-in fade-in slide-in-from-left-2 ${
                 selectedAgentId === agent.id 
-                  ? 'bg-gray-900 border-gray-900 shadow-lg' 
-                  : 'bg-white border-gray-200/60 hover:border-gray-300 hover:shadow-md'
+                  ? 'bg-gray-900 border-gray-900 shadow-lg scale-[1.02] ring-2 ring-gray-900/20' 
+                  : 'bg-white border-gray-200/60 hover:border-gray-300 hover:shadow-md hover:scale-[1.01]'
               }`}
+              style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="flex items-start gap-3">
                 <div className={`p-2 rounded-lg transition-all ${

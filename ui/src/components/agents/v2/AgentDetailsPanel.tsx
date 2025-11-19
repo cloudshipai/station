@@ -103,7 +103,7 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
   return (
     <div className="h-full flex flex-col bg-[#fafaf8]">
       {/* Header - Paper matte style */}
-      <div className="px-6 py-5 border-b border-gray-200/60 bg-white/60 backdrop-blur-sm">
+      <div className="px-6 py-5 border-b border-gray-200/60 bg-white/60 backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
         <div className="flex items-start justify-between mb-5">
           <div className="flex-1 min-w-0 mr-4">
             <h2 className="text-xl font-medium text-gray-900 truncate mb-1.5" title={agent.name}>{agent.name}</h2>
@@ -124,7 +124,7 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
       {/* Content - Paper sections */}
       <div className="flex-1 p-6 overflow-y-auto space-y-6">
         {/* Configuration Section - Card style */}
-        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm">
+        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Configuration</h3>
           <div className="space-y-5">
             <div>
@@ -163,7 +163,7 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
         </section>
 
         {/* Tools Section - Clean card */}
-        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm">
+        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-900">Tools</h3>
             <span className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-md font-medium border border-gray-200">
@@ -199,7 +199,7 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
         </section>
 
         {/* Recent Activity Section - Timeline style */}
-        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm">
+        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Recent Runs</h3>
           
           {loadingRuns ? (
@@ -259,7 +259,7 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
         </section>
 
         {/* Schedule Section */}
-        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm">
+        <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Schedule</h3>
           <button 
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100 hover:border-gray-300 transition-all"

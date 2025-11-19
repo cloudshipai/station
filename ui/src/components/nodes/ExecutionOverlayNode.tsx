@@ -127,13 +127,13 @@ export const ExecutionOverlayNode: React.FC<HierarchicalAgentNodeProps> = ({ dat
 
       {/* Main Node Container - Soft colored background */}
       <div className={cn(
-        "border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all",
+        "border rounded-xl overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer",
         isOrchestrator 
-          ? "bg-purple-50/40 border-purple-200/60" 
+          ? "bg-purple-50/40 border-purple-200/60 hover:bg-purple-50/60" 
           : isCallable
-            ? "bg-emerald-50/40 border-emerald-200/60"
-            : "bg-blue-50/40 border-blue-200/60",
-        isSelected && "ring-2 ring-primary",
+            ? "bg-emerald-50/40 border-emerald-200/60 hover:bg-emerald-50/60"
+            : "bg-blue-50/40 border-blue-200/60 hover:bg-blue-50/60",
+        isSelected && "ring-2 ring-primary scale-105",
         isGhostMode && "border-dashed border-red-300" // Dashed red border for uninstrumented nodes
       )}>
         {/* Header - Clean without icons */}

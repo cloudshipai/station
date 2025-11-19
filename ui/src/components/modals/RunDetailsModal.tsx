@@ -303,8 +303,8 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
   const toolCalls = runDetails?.tool_calls || [];
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm">
-      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">

@@ -157,21 +157,21 @@ export const AgentsLayout: React.FC = () => {
             <>
               <button 
                 onClick={() => navigate('/runs')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-all"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:scale-105 rounded-lg transition-all duration-200 active:scale-95"
               >
                 <BarChart2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Runs</span>
               </button>
               <button 
                 onClick={() => navigate(`/agent-editor/${selectedAgent.id}`)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-all"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:scale-105 rounded-lg transition-all duration-200 active:scale-95"
               >
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">Configure</span>
               </button>
               <button 
                 onClick={() => handleRunAgent(selectedAgent)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 rounded-lg transition-all active:scale-[0.98] shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 rounded-lg transition-all duration-200 active:scale-95 shadow-sm"
               >
                 <Play className="h-4 w-4" />
                 Run Agent
