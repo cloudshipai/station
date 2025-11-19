@@ -442,7 +442,7 @@ Station automatically tested this team against 100+ production scenarios:
 
 ### One-Command Cloud Deploy
 
-Deploy your agent team to Fly.io in seconds:
+Deploy your agent team to Fly.io and expose agents as consumable MCP tools:
 
 ```bash
 # Deploy the SRE team
@@ -451,13 +451,24 @@ stn deploy station-sre --target fly
 ✅ Building Docker image with agents
 ✅ Deploying to Fly.io (ord region)
 ✅ Configuring secrets from variables.yml
-✅ Starting MCP endpoint on port 3030
+✅ Starting MCP server on port 3030
 
 Your agents are live at:
-https://station-sre.fly.dev:3030/mcp
+https://station-sre.fly.dev:3030
 ```
 
-Connect deployed agents to your AI assistant:
+**What you get:**
+- **MCP Endpoint**: All 9 SRE agents exposed as MCP tools
+- **Agent Tools**: Each agent becomes `__agent_<name>` tool
+- **Secure Access**: Authentication via deploy token
+- **Auto-Scaling**: Fly.io scales based on demand
+- **Global CDN**: Deploy to regions worldwide
+
+### Connect Deployed Agents to Your AI Assistant
+
+Your deployed agents are now accessible as MCP tools from Claude, Cursor, or OpenCode:
+
+**Claude Desktop / Cursor configuration:**
 ```json
 {
   "mcpServers": {
@@ -471,26 +482,168 @@ Connect deployed agents to your AI assistant:
 }
 ```
 
-### Build for Any Platform
-
-Create Docker images for your infrastructure:
-
-```bash
-# Fast deployment build (recommended)
-stn build env station-sre --skip-sync
-
-# Full build with AI provider (slower, for dev)
-stn build env station-sre --provider openai --model gpt-4o-mini
-
-# Run anywhere
-docker run -p 3030:3030 -e OPENAI_API_KEY=$OPENAI_API_KEY station-sre:latest
+**Available tools after connection:**
+```
+__agent_incident_coordinator      - Orchestrates incident response
+__agent_logs_investigator         - Analyzes error patterns
+__agent_metrics_investigator      - Identifies performance spikes
+__agent_traces_investigator       - Examines distributed traces
+__agent_change_detective          - Correlates with deployments
+__agent_infra_sre                 - Checks K8s/AWS infrastructure
+__agent_saas_dependency_analyst   - Monitors external services
+__agent_runbook_recommender       - Finds relevant docs
+__agent_scribe                    - Generates incident reports
 ```
 
-Deploy to:
-- **Kubernetes** - Helm charts available
-- **AWS ECS** - Task definitions included
-- **Google Cloud Run** - One-click deploy
+**Now you can call your agents from anywhere:**
+```
+You: "Investigate the API timeout issue using my SRE team"
+
+Claude: [Calling __agent_incident_coordinator...]
+[Full incident investigation with multi-agent delegation]
+```
+
+---
+
+### Build for Self-Hosted Infrastructure
+
+Create Docker images to run on your own infrastructure:
+
+**Step 1: Build the image**
+```bash
+# Build with your environment embedded
+stn build env station-sre --skip-sync
+
+# Output: station-sre:latest Docker image
+```
+
+**Step 2: Run with your environment variables**
+```bash
+docker run -d \
+  -p 3030:3030 \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+  -e PROJECT_ROOT=/workspace \
+  -e AWS_REGION=us-east-1 \
+  station-sre:latest
+```
+
+**Environment Variables at Runtime:**
+- **AI Provider Keys**: `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc.
+- **Cloud Credentials**: `AWS_*`, `GCP_*`, `AZURE_*` credentials
+- **Template Variables**: Any `{{ .VARIABLE }}` from your configs
+- **MCP Server Config**: Database URLs, API endpoints, etc.
+
+**Deploy anywhere:**
+- **Kubernetes** - Standard deployment with ConfigMaps/Secrets
+- **AWS ECS/Fargate** - Task definition with environment variables
+- **Google Cloud Run** - One-click deploy with secrets
 - **Azure Container Instances** - ARM templates
+- **Docker Compose** - Multi-container orchestration
+- **Your own servers** - Any Docker-capable host
+
+**Example: Kubernetes Deployment**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: station-sre
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+      - name: station
+        image: your-registry/station-sre:latest
+        ports:
+        - containerPort: 3030
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: station-secrets
+              key: openai-api-key
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: secret-access-key
+        - name: PROJECT_ROOT
+          value: "/workspace"
+        - name: AWS_REGION
+          value: "us-east-1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: station-sre
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3030
+    targetPort: 3030
+  selector:
+    app: station-sre
+```
+
+**Connect to your self-hosted MCP endpoint:**
+```json
+{
+  "mcpServers": {
+    "station-sre-production": {
+      "url": "https://your-domain.com:3030/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Advanced Deployment Options
+
+**Custom AI Provider Configuration:**
+```bash
+# Build with specific model configuration
+stn build env station-sre \
+  --provider openai \
+  --model gpt-4o-mini
+
+# Or use environment variables at runtime
+docker run -e STN_AI_PROVIDER=gemini \
+           -e GEMINI_API_KEY=$GEMINI_API_KEY \
+           station-sre:latest
+```
+
+**Multiple Regions:**
+```bash
+# Deploy to multiple Fly.io regions
+stn deploy station-sre --target fly --region ord  # Chicago
+stn deploy station-sre --target fly --region syd  # Sydney
+stn deploy station-sre --target fly --region fra  # Frankfurt
+```
+
+**Health Checks:**
+```bash
+# Check MCP endpoint health
+curl https://station-sre.fly.dev:3030/health
+
+# Response
+{
+  "status": "healthy",
+  "agents": 9,
+  "mcp_servers": 3,
+  "uptime": "2h 15m 30s"
+}
+```
 
 ### Bundle and Share
 
