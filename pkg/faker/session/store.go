@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"station/internal/db"
+
 	"github.com/google/uuid"
 )
 
@@ -28,6 +30,10 @@ func (s *store) createSession(ctx context.Context, instruction string, debug boo
 		INSERT INTO faker_sessions (id, instruction, created_at, updated_at)
 		VALUES (?, ?, ?, ?)
 	`
+
+	// Lock for SQLite write operation
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
 
 	_, err := s.db.ExecContext(ctx, query,
 		session.ID,
@@ -75,6 +81,10 @@ func (s *store) getSession(ctx context.Context, sessionID string) (*Session, err
 func (s *store) deleteSession(ctx context.Context, sessionID string, debug bool) error {
 	query := `DELETE FROM faker_sessions WHERE id = ?`
 
+	// Lock for SQLite write operation
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
+
 	result, err := s.db.ExecContext(ctx, query, sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
@@ -110,6 +120,10 @@ func (s *store) recordEvent(ctx context.Context, event *Event, debug bool) error
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
 
+	// Lock for SQLite write operations (INSERT + UPDATE)
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
+
 	result, err := s.db.ExecContext(ctx, query,
 		event.SessionID,
 		event.ToolName,
@@ -130,7 +144,7 @@ func (s *store) recordEvent(ctx context.Context, event *Event, debug bool) error
 			event.OperationType, event.ToolName, event.SessionID)
 	}
 
-	// Update session timestamp
+	// Update session timestamp (still under mutex lock)
 	_, err = s.db.ExecContext(ctx,
 		`UPDATE faker_sessions SET updated_at = ? WHERE id = ?`,
 		time.Now(), event.SessionID)
@@ -281,6 +295,10 @@ func (s *store) getSessionCount(ctx context.Context) (int, error) {
 
 // clearAllSessions deletes all sessions and returns the count deleted
 func (s *store) clearAllSessions(ctx context.Context, debug bool) (int, error) {
+	// Lock for SQLite write operation
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
+
 	result, err := s.db.ExecContext(ctx, "DELETE FROM faker_sessions")
 	if err != nil {
 		return 0, fmt.Errorf("failed to clear sessions: %w", err)
