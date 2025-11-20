@@ -151,17 +151,17 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-dark1 border border-tokyo-dark4 rounded-lg p-6 w-full max-w-md">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+      <div className="bg-white border border-gray-200 rounded-lg p-6 w-full max-w-md shadow-xl">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-mono font-semibold text-tokyo-orange flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Package className="h-5 w-5" />
             Build Docker Image
           </h2>
           <button
             onClick={handleClose}
             disabled={isBuilding}
-            className="text-tokyo-comment hover:text-tokyo-fg transition-colors disabled:opacity-50"
+            className="text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
@@ -169,13 +169,13 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
 
         <div className="space-y-4">
           <div>
-            <p className="text-tokyo-comment text-sm mb-4">
-              Build a Docker image for the <span className="text-tokyo-blue font-medium">{environmentName}</span> environment.
+            <p className="text-gray-600 text-sm mb-4">
+              Build a Docker image for the <span className="text-station-blue font-medium">{environmentName}</span> environment.
             </p>
           </div>
 
           <div>
-            <label className="block text-tokyo-fg text-sm font-medium mb-2">
+            <label className="block text-gray-900 text-sm font-medium mb-2">
               Image Name
             </label>
             <input
@@ -183,13 +183,13 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
               value={imageName}
               onChange={(e) => setImageName(e.target.value)}
               disabled={isBuilding}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-tokyo-purple focus:border-tokyo-purple disabled:opacity-50"
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-station-blue focus:border-station-blue disabled:opacity-50"
               placeholder="station-env-name"
             />
           </div>
 
           <div>
-            <label className="block text-tokyo-fg text-sm font-medium mb-2">
+            <label className="block text-gray-900 text-sm font-medium mb-2">
               Tag
             </label>
             <input
@@ -197,30 +197,30 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
               value={tag}
               onChange={(e) => setTag(e.target.value)}
               disabled={isBuilding}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-tokyo-purple focus:border-tokyo-purple disabled:opacity-50"
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-station-blue focus:border-station-blue disabled:opacity-50"
               placeholder="latest"
             />
           </div>
 
           {buildStatus === 'error' && (
-            <div className="flex items-center gap-2 p-3 bg-red-900 bg-opacity-30 border border-red-500 border-opacity-50 rounded">
-              <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-              <span className="text-white text-sm font-medium">{errorMessage}</span>
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+              <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
             </div>
           )}
 
           {buildStatus === 'success' && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 p-3 bg-green-900 bg-opacity-30 border border-green-500 border-opacity-50 rounded">
-                <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
-                <span className="text-white text-sm font-medium">
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span className="text-green-600 text-sm font-medium">
                   Docker image built successfully: {imageName}:{tag}
                 </span>
               </div>
 
               {imageId && (
                 <div className="space-y-2">
-                  <label className="block text-tokyo-fg text-sm font-medium">
+                  <label className="block text-gray-900 text-sm font-medium">
                     Image ID
                   </label>
                   <div className="flex items-center gap-2">
@@ -228,11 +228,11 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
                       type="text"
                       value={imageId}
                       readOnly
-                      className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white font-mono text-sm focus:outline-none"
+                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded text-gray-900 font-mono text-sm focus:outline-none"
                     />
                     <button
                       onClick={() => navigator.clipboard.writeText(imageId)}
-                      className="px-3 py-2 bg-tokyo-dark2 border border-tokyo-dark4 rounded text-tokyo-fg hover:bg-tokyo-dark3 transition-colors"
+                      className="px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 hover:bg-gray-50 transition-colors"
                       title="Copy Image ID"
                     >
                       <Copy className="h-4 w-4" />
@@ -243,7 +243,7 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
 
               {dockerRunCommand && (
                 <div className="space-y-2">
-                  <label className="block text-tokyo-fg text-sm font-medium">
+                  <label className="block text-gray-900 text-sm font-medium">
                     Docker Run Command
                   </label>
                   <div className="flex items-start gap-2">
@@ -251,17 +251,17 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
                       value={dockerRunCommand}
                       readOnly
                       rows={8}
-                      className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white font-mono text-xs focus:outline-none resize-none"
+                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded text-gray-900 font-mono text-xs focus:outline-none resize-none"
                     />
                     <button
                       onClick={() => navigator.clipboard.writeText(dockerRunCommand)}
-                      className="px-3 py-2 bg-tokyo-dark2 border border-tokyo-dark4 rounded text-tokyo-fg hover:bg-tokyo-dark3 transition-colors"
+                      className="px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 hover:bg-gray-50 transition-colors"
                       title="Copy Docker Command"
                     >
                       <Copy className="h-4 w-4" />
                     </button>
                   </div>
-                  <p className="text-tokyo-comment text-xs">
+                  <p className="text-gray-600 text-xs">
                     This command includes all environment variables from your {environmentName} environment.
                   </p>
                 </div>
@@ -273,14 +273,14 @@ const BuildImageModal: React.FC<BuildImageModalProps> = ({
             <button
               onClick={handleClose}
               disabled={isBuilding}
-              className="flex-1 px-4 py-2 bg-tokyo-dark2 text-tokyo-fg border border-tokyo-dark4 rounded font-mono text-sm hover:bg-tokyo-dark3 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleBuildImage}
               disabled={isBuilding || !imageName.trim() || !tag.trim()}
-              className="flex-1 px-4 py-2 bg-tokyo-purple text-tokyo-bg rounded font-mono text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2 bg-station-blue text-white rounded text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isBuilding ? (
                 <>

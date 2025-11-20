@@ -95,19 +95,19 @@ export const ExecutionOverlayNode: React.FC<HierarchicalAgentNodeProps> = ({ dat
   return (
     <div className={cn(
       "relative w-[280px] transition-all duration-200 group",
-      isSelected && "ring-2 ring-tokyo-blue",
+      isSelected && "ring-2 ring-primary ring-offset-2",
       isGhostMode && "opacity-50" // Ghost mode: 50% opacity when no execution data
     )}>
       {/* Hierarchy Badge - Top Left */}
       {isInHierarchy && (
         <div className="absolute -top-3 -left-3 z-10">
           {isOrchestrator ? (
-            <div className="flex items-center gap-1 px-2 py-1 bg-tokyo-purple rounded-full border border-tokyo-purple text-xs font-mono">
+            <div className="flex items-center gap-1 px-2 py-1 bg-station-lavender-400 text-white rounded-full shadow-sm text-xs font-medium">
               <Network className="w-3 h-3" />
               <span>Orchestrator</span>
             </div>
           ) : isCallable ? (
-            <div className="flex items-center gap-1 px-2 py-1 bg-tokyo-cyan rounded-full border border-tokyo-cyan text-xs font-mono">
+            <div className="flex items-center gap-1 px-2 py-1 bg-station-mint-400 text-white rounded-full shadow-sm text-xs font-medium">
               <Users className="w-3 h-3" />
               <span>Callable</span>
             </div>
@@ -118,84 +118,78 @@ export const ExecutionOverlayNode: React.FC<HierarchicalAgentNodeProps> = ({ dat
       {/* Execution Badge - Top Right */}
       {hasExecutionData && (
         <div className="absolute -top-3 -right-3 z-10">
-          <div className="flex items-center gap-1 px-2 py-1 bg-green-900/80 border border-green-500 rounded-full text-xs font-mono">
-            <Zap className="w-3 h-3 text-green-400" />
-            <span className="text-green-300">{executionSpans!.length} calls</span>
+          <div className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-medium shadow-sm">
+            <Zap className="w-3 h-3 text-green-600" />
+            <span className="text-green-700">{executionSpans!.length} calls</span>
           </div>
         </div>
       )}
 
-      {/* Main Node Container */}
+      {/* Main Node Container - Soft colored background */}
       <div className={cn(
-        "bg-tokyo-bg-dark border-2 rounded-lg overflow-hidden shadow-lg backdrop-blur-sm",
-        isSelected ? "border-tokyo-blue" : "border-tokyo-blue7 hover:border-tokyo-blue8",
-        isGhostMode && "border-dashed border-red-500" // Dashed red border for uninstrumented nodes
+        "border rounded-xl overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer",
+        isOrchestrator 
+          ? "bg-purple-50/40 border-purple-200/60 hover:bg-purple-50/60" 
+          : isCallable
+            ? "bg-emerald-50/40 border-emerald-200/60 hover:bg-emerald-50/60"
+            : "bg-blue-50/40 border-blue-200/60 hover:bg-blue-50/60",
+        isSelected && "ring-2 ring-primary scale-105",
+        isGhostMode && "border-dashed border-red-300" // Dashed red border for uninstrumented nodes
       )}>
-        {/* Header */}
-        <div className="bg-gradient-to-r from-tokyo-blue7 to-tokyo-purple7 p-3 flex items-center justify-between">
+        {/* Header - Clean without icons */}
+        <div className={cn(
+          "p-3 flex items-center justify-between border-b",
+          isOrchestrator 
+            ? "bg-purple-100/50 border-purple-200/60" 
+            : isCallable
+              ? "bg-emerald-100/50 border-emerald-200/60"
+              : "bg-blue-100/50 border-blue-200/60"
+        )}>
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="flex-shrink-0 p-1.5 bg-tokyo-bg rounded-lg">
-              <Bot className="w-4 h-4 text-tokyo-blue" />
-            </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-mono font-semibold text-tokyo-fg truncate text-sm">
+              <h3 className="font-semibold text-gray-900 truncate text-sm">
                 {agent.name}
               </h3>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={handleRunClick}
-              className="p-1 hover:bg-tokyo-green/20 rounded transition-colors"
-              title="Run Agent"
-            >
-              <Play className="w-3.5 h-3.5 text-tokyo-green" />
-            </button>
-            <button
-              onClick={handleScheduleClick}
-              className="p-1 hover:bg-tokyo-cyan/20 rounded transition-colors"
-              title="Schedule"
-            >
-              <Clock className="w-3.5 h-3.5 text-tokyo-cyan" />
-            </button>
-            <button
-              onClick={handleEditClick}
-              className="p-1 hover:bg-tokyo-orange/20 rounded transition-colors"
-              title="Edit"
-            >
-              <Settings className="w-3.5 h-3.5 text-tokyo-orange" />
-            </button>
-          </div>
+          {/* Type Badge */}
+          <span className={cn(
+            "text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0",
+            isOrchestrator ? "bg-purple-200/60 text-purple-800" : 
+            isCallable ? "bg-emerald-200/60 text-emerald-800" : 
+            "bg-blue-200/60 text-blue-800"
+          )}>
+            {isOrchestrator ? "Orchestrator" : isCallable ? "Callable" : "Agent"}
+          </span>
         </div>
 
         {/* Description */}
-        <div className="p-3 border-b border-tokyo-blue7">
-          <p className="text-xs text-tokyo-comment font-mono line-clamp-2">
+        <div className="p-3 border-b border-gray-100">
+          <p className="text-xs text-gray-600 line-clamp-2">
             {agent.description || 'No description provided'}
           </p>
         </div>
 
         {/* Stats */}
-        <div className="px-3 py-2 bg-tokyo-bg flex items-center justify-between text-xs">
-          <span className="text-tokyo-comment font-mono">
+        <div className="px-3 py-2 bg-gray-50 flex items-center justify-between text-xs">
+          <span className="text-gray-500">
             {agent.max_steps} max steps
           </span>
           {agent.is_scheduled && (
-            <div className="flex items-center gap-1 text-tokyo-green">
+            <div className="flex items-center gap-1 text-green-600">
               <Clock className="w-3 h-3" />
-              <span className="font-mono">Scheduled</span>
+              <span>Scheduled</span>
             </div>
           )}
         </div>
 
         {/* MICRO-TIMELINE: Inline execution visualization */}
         {hasExecutionData && runDuration && (
-          <div className="px-3 py-2 bg-tokyo-bg-dark border-t border-tokyo-blue7">
+          <div className="px-3 py-2 bg-gray-50 border-t border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-tokyo-comment font-mono">Execution</span>
-              <span className="text-xs text-tokyo-cyan font-mono">
+              <span className="text-xs text-gray-500 font-medium">Execution</span>
+              <span className="text-xs text-blue-600 font-medium">
                 {formatDuration(runDuration)}
               </span>
             </div>
@@ -208,12 +202,12 @@ export const ExecutionOverlayNode: React.FC<HierarchicalAgentNodeProps> = ({ dat
                 const isActive = activeSpanIds?.includes(span.spanID);
                 
                 return (
-                  <div key={span.spanID} className="relative h-1.5 bg-gray-900 rounded overflow-hidden">
+                  <div key={span.spanID} className="relative h-1.5 bg-gray-200 rounded overflow-hidden">
                     <div
                       className={cn(
                         "absolute h-full rounded transition-all",
                         getStatusColor(span.status),
-                        isActive && "ring-2 ring-white ring-offset-1 ring-offset-gray-900 scale-110 z-10"
+                        isActive && "ring-2 ring-primary ring-offset-1 ring-offset-gray-50 scale-110 z-10"
                       )}
                       style={{
                         left: `${relativeStart}%`,
@@ -241,8 +235,8 @@ export const ExecutionOverlayNode: React.FC<HierarchicalAgentNodeProps> = ({ dat
       </div>
 
       {/* Connection Handles */}
-      <Handle type="target" position={Position.Left} className="w-2 h-2 bg-tokyo-blue border-2 border-tokyo-fg" />
-      <Handle type="source" position={Position.Right} className="w-2 h-2 bg-tokyo-blue border-2 border-tokyo-fg" />
+      <Handle type="target" position={Position.Left} className="w-2 h-2 bg-primary border-2 border-white shadow-sm" />
+      <Handle type="source" position={Position.Right} className="w-2 h-2 bg-primary border-2 border-white shadow-sm" />
     </div>
   );
 };

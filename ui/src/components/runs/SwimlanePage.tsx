@@ -130,18 +130,18 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
 
   if (runs.length === 0) {
     return (
-      <div className="h-full flex flex-col bg-tokyo-bg">
-        {/* Header with view tabs */}
-        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-          <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
+      <div className="h-full flex flex-col bg-gray-50">
+        {/* Header with view tabs on left */}
+        <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
+          <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
           {onViewChange && (
-            <div className="flex bg-tokyo-bg rounded-lg p-1">
+            <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => onViewChange('list')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'list'
-                    ? 'bg-tokyo-blue text-tokyo-bg'
-                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <List className="h-4 w-4" />
@@ -149,10 +149,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
               </button>
               <button
                 onClick={() => onViewChange('timeline')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'timeline'
-                    ? 'bg-tokyo-blue text-tokyo-bg'
-                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <GitBranch className="h-4 w-4" />
@@ -160,10 +160,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
               </button>
               <button
                 onClick={() => onViewChange('stats')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'stats'
-                    ? 'bg-tokyo-blue text-tokyo-bg'
-                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <BarChart3 className="h-4 w-4" />
@@ -174,9 +174,9 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
         </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <AlertCircle className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-            <div className="text-tokyo-fg font-mono text-lg mb-2">No runs to display</div>
-            <div className="text-tokyo-comment font-mono text-sm">
+            <AlertCircle className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <div className="text-gray-900 text-lg mb-2">No runs to display</div>
+            <div className="text-gray-500 text-sm">
               Agent execution runs will appear here in a timeline view
             </div>
           </div>
@@ -187,18 +187,18 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
 
   if (filteredRuns.length === 0) {
     return (
-      <div className="h-full flex flex-col bg-tokyo-bg">
-        {/* Header with view tabs */}
-        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-          <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
+      <div className="h-full flex flex-col bg-gray-50">
+        {/* Header with view tabs on left */}
+        <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
+          <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
           {onViewChange && (
-            <div className="flex bg-tokyo-bg rounded-lg p-1">
+            <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => onViewChange('list')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'list'
-                    ? 'bg-tokyo-blue text-tokyo-bg'
-                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <List className="h-4 w-4" />
@@ -206,10 +206,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
               </button>
               <button
                 onClick={() => onViewChange('timeline')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'timeline'
-                    ? 'bg-tokyo-blue text-tokyo-bg'
-                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <GitBranch className="h-4 w-4" />
@@ -217,10 +217,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
               </button>
               <button
                 onClick={() => onViewChange('stats')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'stats'
-                    ? 'bg-tokyo-blue text-tokyo-bg'
-                    : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <BarChart3 className="h-4 w-4" />
@@ -239,9 +239,9 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
         />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <AlertCircle className="h-12 w-12 text-tokyo-comment mx-auto mb-3" />
-            <div className="text-tokyo-fg font-mono mb-2">No runs in selected time range</div>
-            <div className="text-tokyo-comment font-mono text-sm">
+            <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <div className="text-gray-900 mb-2">No runs in selected time range</div>
+            <div className="text-gray-500 text-sm">
               Try selecting a different time range
             </div>
           </div>
@@ -269,18 +269,18 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
   };
 
   return (
-    <div className="h-full flex flex-col bg-tokyo-bg">
-      {/* Header with view tabs */}
-      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-        <h1 className="text-xl font-mono font-semibold text-tokyo-green">Agent Runs</h1>
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Header with view tabs on left */}
+      <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
+        <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
         {onViewChange && (
-          <div className="flex bg-tokyo-bg rounded-lg p-1">
+          <div className="flex bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => onViewChange('list')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeView === 'list'
-                  ? 'bg-tokyo-blue text-tokyo-bg'
-                  : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               <List className="h-4 w-4" />
@@ -288,10 +288,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
             </button>
             <button
               onClick={() => onViewChange('timeline')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeView === 'timeline'
-                  ? 'bg-tokyo-blue text-tokyo-bg'
-                  : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               <GitBranch className="h-4 w-4" />
@@ -299,10 +299,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
             </button>
             <button
               onClick={() => onViewChange('stats')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeView === 'stats'
-                  ? 'bg-tokyo-blue text-tokyo-bg'
-                  : 'text-tokyo-comment hover:text-tokyo-blue hover:bg-tokyo-bg-highlight'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               <BarChart3 className="h-4 w-4" />
@@ -313,7 +313,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
       </div>
 
       {/* Main timeline content area */}
-      <div className="flex-1 flex bg-tokyo-bg relative overflow-hidden">
+      <div className="flex-1 flex bg-white relative overflow-hidden">
         {/* Main content - always has space for right panel */}
         <div className="flex-1 flex flex-col mr-80">
           {/* Controls */}
@@ -327,13 +327,13 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
         />
 
       {/* Time Axis */}
-      <div className="flex items-center gap-4 px-4 py-2 bg-tokyo-bg-dark border-b border-tokyo-blue7">
+      <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 border-b border-gray-200">
         <div className="w-48 flex-shrink-0">
-          <div className="text-xs font-mono text-tokyo-comment">
+          <div className="text-xs text-gray-600">
             {filteredRuns.length} run{filteredRuns.length !== 1 ? 's' : ''} • {lanes.size} agent{lanes.size !== 1 ? 's' : ''}
           </div>
         </div>
-        <div className="flex-1 flex justify-between text-xs font-mono text-tokyo-comment">
+        <div className="flex-1 flex justify-between text-xs text-gray-500">
           <span>{formatTime(timeBounds.start, 'medium')}</span>
           <span>{formatTime((timeBounds.start + timeBounds.end) / 2, 'medium')}</span>
           <span>{formatTime(timeBounds.end, 'medium')}</span>
@@ -366,16 +366,16 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
 
         {/* Parent-Child Relationship Indicator */}
         {relationships.length > 0 && (
-          <div className="p-2 bg-tokyo-bg-dark border-t border-tokyo-blue7 text-xs font-mono text-tokyo-comment text-center">
+          <div className="p-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-600 text-center">
             {relationships.length} parent-child relationship{relationships.length !== 1 ? 's' : ''} detected
-            <span className="ml-2 text-tokyo-cyan">(click runs to highlight)</span>
+            <span className="ml-2 text-cyan-600">(click runs to highlight)</span>
           </div>
         )}
       </div>
 
       {/* Right Side Panel - Always visible */}
       <div 
-        className="fixed right-0 top-0 h-full w-80 bg-tokyo-bg-dark border-l-2 border-tokyo-blue7 shadow-2xl z-50"
+        className="fixed right-0 top-0 h-full w-80 bg-white border-l-2 border-gray-200 shadow-2xl z-50"
         onMouseEnter={() => {
           console.log('Panel mouse enter - clearing close timeout');
           // Clear any pending close timeout when mouse enters panel
@@ -399,71 +399,71 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
             {/* Header with Close Button */}
             <div className="mb-6 relative">
               <div className="flex items-center justify-between mb-1">
-                <div className="text-lg font-semibold text-tokyo-green font-mono">
+                <div className="text-lg font-semibold text-gray-900">
                   Run #{displayedRun.id}
                 </div>
                 <div className="flex items-center gap-2">
                   {pinnedRun && (
-                    <Pin className="h-4 w-4 text-tokyo-cyan" />
+                    <Pin className="h-4 w-4 text-cyan-600" />
                   )}
                   <button
                     onClick={handleClosePanel}
-                    className="text-tokyo-comment hover:text-tokyo-red transition-colors p-1 hover:bg-tokyo-bg rounded"
+                    className="text-gray-500 hover:text-red-600 transition-colors p-1 hover:bg-gray-100 rounded"
                     title="Close panel"
                   >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
               </div>
-              <div className="text-sm text-tokyo-cyan font-mono">
+              <div className="text-sm text-cyan-600">
                 {displayedRun.agent_name}
               </div>
             </div>
 
             {/* Run Details */}
-            <div className="flex-1 space-y-4 font-mono text-sm overflow-y-auto">
+            <div className="flex-1 space-y-4 text-sm overflow-y-auto">
               {/* Status */}
-              <div className="bg-tokyo-bg p-3 rounded border border-tokyo-blue7">
-                <div className="text-xs text-tokyo-comment mb-1">Status</div>
+              <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Status</div>
                 <div className={`text-lg font-semibold ${
-                  displayedRun.status === 'completed' ? 'text-tokyo-green' :
-                  displayedRun.status === 'failed' ? 'text-tokyo-red' :
-                  'text-tokyo-blue'
+                  displayedRun.status === 'completed' ? 'text-green-600' :
+                  displayedRun.status === 'failed' ? 'text-red-600' :
+                  'text-blue-600'
                 }`}>
                   {displayedRun.status.toUpperCase()}
                 </div>
               </div>
 
               {/* Timing */}
-              <div className="bg-tokyo-bg p-3 rounded border border-tokyo-blue7">
-                <div className="text-xs text-tokyo-comment mb-2">Timing</div>
+              <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                <div className="text-xs text-gray-600 mb-2">Timing</div>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-tokyo-comment">Duration:</span>
-                    <span className="text-tokyo-fg">{formatDuration(displayedRun.duration_seconds || 0)}</span>
+                    <span className="text-gray-600">Duration:</span>
+                    <span className="text-gray-900">{formatDuration(displayedRun.duration_seconds || 0)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-tokyo-comment">Started:</span>
-                    <span className="text-tokyo-fg text-xs">{new Date(displayedRun.started_at).toLocaleString()}</span>
+                    <span className="text-gray-600">Started:</span>
+                    <span className="text-gray-900 text-xs">{new Date(displayedRun.started_at).toLocaleString()}</span>
                   </div>
                 </div>
               </div>
 
               {/* Resources */}
               {(displayedRun.total_tokens || displayedRun.cost) && (
-                <div className="bg-tokyo-bg p-3 rounded border border-tokyo-blue7">
-                  <div className="text-xs text-tokyo-comment mb-2">Resources</div>
+                <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                  <div className="text-xs text-gray-600 mb-2">Resources</div>
                   <div className="space-y-2">
                     {displayedRun.total_tokens && (
                       <div className="flex justify-between">
-                        <span className="text-tokyo-comment">Tokens:</span>
-                        <span className="text-tokyo-purple">{formatTokens(displayedRun.total_tokens)}</span>
+                        <span className="text-gray-600">Tokens:</span>
+                        <span className="text-purple-600">{formatTokens(displayedRun.total_tokens)}</span>
                       </div>
                     )}
                     {displayedRun.cost && (
                       <div className="flex justify-between">
-                        <span className="text-tokyo-comment">Cost:</span>
-                        <span className="text-tokyo-yellow">{formatCost(displayedRun.cost)}</span>
+                        <span className="text-gray-600">Cost:</span>
+                        <span className="text-yellow-600">{formatCost(displayedRun.cost)}</span>
                       </div>
                     )}
                   </div>
@@ -472,9 +472,9 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
 
               {/* Error */}
               {displayedRun.error && (
-                <div className="bg-tokyo-red/10 p-3 rounded border border-tokyo-red/30">
-                  <div className="text-xs text-tokyo-red font-semibold mb-2">Error</div>
-                  <div className="text-tokyo-red text-xs break-words">
+                <div className="bg-red-50 p-3 rounded border border-red-200">
+                  <div className="text-xs text-red-600 font-semibold mb-2">Error</div>
+                  <div className="text-red-600 text-xs break-words">
                     {displayedRun.error}
                   </div>
                 </div>
@@ -482,8 +482,8 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
             </div>
 
             {/* Footer */}
-            <div className="mt-6 pt-4 border-t border-tokyo-blue7">
-              <div className="text-xs text-tokyo-comment text-center">
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <div className="text-xs text-gray-600 text-center">
                 {pinnedRun 
                   ? 'Double-click the bar to view full details in modal'
                   : 'Click to pin • Double-click for full details'}
@@ -493,10 +493,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({ runs, onRunClick, ac
         ) : (
           <div className="h-full flex items-center justify-center p-6">
             <div className="text-center">
-              <div className="text-tokyo-comment font-mono text-sm mb-2">
+              <div className="text-gray-600 text-sm mb-2">
                 Run Details
               </div>
-              <div className="text-tokyo-comment/60 font-mono text-xs">
+              <div className="text-gray-500 text-xs">
                 Hover or click a run bar to view details
               </div>
             </div>

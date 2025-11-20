@@ -170,20 +170,20 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
 
   if (success) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-gray-900 border-2 border-green-500 rounded-lg p-8 max-w-md w-full mx-4">
+      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-white border border-emerald-200/60 rounded-xl p-8 max-w-md w-full mx-4 shadow-lg animate-in zoom-in-95 fade-in duration-300">
           <div className="text-center">
-            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-mono font-bold text-green-500 mb-2">
+            <CheckCircle className="h-16 w-16 text-emerald-600 mx-auto mb-4 animate-in zoom-in duration-500" />
+            <h2 className="text-2xl font-semibold text-emerald-600 mb-2">
               Faker Created!
             </h2>
-            <p className="text-gray-400 font-mono mb-4">
-              <span className="text-cyan-400">{fakerName}</span> has been created successfully.
+            <p className="text-gray-600 mb-4 text-sm leading-relaxed">
+              <span className="text-gray-900 font-semibold">{fakerName}</span> has been created successfully.
             </p>
-            <p className="text-gray-400 font-mono text-sm">
+            <p className="text-gray-500 text-sm">
               Syncing environment automatically...
             </p>
-            <Loader className="h-6 w-6 text-blue-500 mx-auto mt-4 animate-spin" />
+            <Loader className="h-6 w-6 text-gray-900 mx-auto mt-4 animate-spin" />
           </div>
         </div>
       </div>
@@ -191,67 +191,69 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border-2 border-gray-700 rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white border border-gray-200/60 rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200/60">
           <div className="flex items-center gap-3">
-            <Wand2 className="h-6 w-6 text-purple-400" />
-            <h2 className="text-xl font-mono font-semibold text-gray-100">
+            <div className="p-2 bg-purple-50 rounded-lg">
+              <Wand2 className="h-5 w-5 text-purple-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900">
               Create Faker
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-800 rounded transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-all"
           >
-            <X className="h-5 w-5 text-gray-400 hover:text-gray-100" />
+            <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
           </button>
         </div>
 
         {/* Body */}
         <div className="p-6">
           {/* Environment Info */}
-          <div className="mb-6 p-4 bg-gray-800 border border-gray-700 rounded-lg">
-            <div className="text-sm text-gray-400 mb-1">Target Environment:</div>
-            <div className="text-lg font-mono text-cyan-400">{environmentName}</div>
+          <div className="mb-6 p-4 bg-gray-50/50 border border-gray-200/60 rounded-lg">
+            <div className="text-xs font-medium text-gray-600 mb-1">Target Environment:</div>
+            <div className="text-base font-semibold text-gray-900">{environmentName}</div>
           </div>
 
           {/* Faker Name Input */}
           <div className="mb-6">
-            <label className="block text-sm font-mono text-gray-100 mb-2">
-              Faker Name <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Faker Name <span className="text-red-600">*</span>
             </label>
             <input
               type="text"
               value={fakerName}
               onChange={(e) => setFakerName(e.target.value.toLowerCase())}
               placeholder="e.g., my-aws-costs, gcp-billing-faker"
-              className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 font-mono rounded-lg focus:outline-none focus:border-blue-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 text-gray-900 font-mono text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-all"
             />
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-xs text-gray-600 mt-1.5">
               Lowercase letters, numbers, and hyphens only
             </div>
           </div>
 
           {/* Tab Selector */}
-          <div className="flex bg-gray-800 rounded-lg p-1 mb-6">
+          <div className="flex bg-gray-50 rounded-lg p-1 mb-6 border border-gray-200/60">
             <button
               onClick={() => setActiveTab('template')}
-              className={`flex-1 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                 activeTab === 'template'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-400 hover:text-purple-400'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
               }`}
             >
               Use Template
             </button>
             <button
               onClick={() => setActiveTab('custom')}
-              className={`flex-1 px-4 py-2 rounded-md font-mono text-sm transition-colors ${
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                 activeTab === 'custom'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-400 hover:text-purple-400'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
               }`}
             >
               Custom Instruction
@@ -261,29 +263,29 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
           {/* Template Selection */}
           {activeTab === 'template' && (
             <div className="mb-6">
-              <label className="block text-sm font-mono text-gray-100 mb-3">
-                Select Template <span className="text-red-400">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Select Template <span className="text-red-600">*</span>
               </label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {FAKER_TEMPLATES.map((template) => (
                   <div
                     key={template.id}
                     onClick={() => setSelectedTemplate(template.id)}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
                       selectedTemplate === template.id
-                        ? 'border-purple-500 bg-purple-900 bg-opacity-20'
-                        : 'border-gray-700 hover:border-gray-600 bg-gray-800'
+                        ? 'border-gray-900 bg-gray-50 shadow-sm scale-[1.02]'
+                        : 'border-gray-200/60 bg-white hover:border-gray-300 hover:shadow-sm hover:scale-[1.01]'
                     }`}
                   >
-                    <h3 className="font-mono font-semibold text-cyan-400 mb-1">
+                    <h3 className="font-semibold text-gray-900 mb-1 text-sm">
                       {template.name}
                     </h3>
-                    <p className="text-sm text-gray-400 mb-2">
+                    <p className="text-xs text-gray-600 mb-2.5 leading-relaxed">
                       {template.description}
                     </p>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-purple-400">{template.category}</span>
-                      <span className="text-green-400">{template.toolsGenerated}</span>
+                      <span className="text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">{template.category}</span>
+                      <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium">{template.toolsGenerated}</span>
                     </div>
                   </div>
                 ))}
@@ -294,17 +296,17 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
           {/* Custom Instruction */}
           {activeTab === 'custom' && (
             <div className="mb-6">
-              <label className="block text-sm font-mono text-gray-100 mb-2">
-                AI Instruction <span className="text-red-400">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                AI Instruction <span className="text-red-600">*</span>
               </label>
               <textarea
                 value={customInstruction}
                 onChange={(e) => setCustomInstruction(e.target.value)}
                 placeholder="Describe the tools you want the faker to generate. Be specific about the API operations, parameters, and response formats needed..."
                 rows={8}
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 text-gray-100 font-mono text-sm rounded-lg focus:outline-none focus:border-blue-500 resize-none"
+                className="w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-all resize-none"
               />
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-xs text-gray-600 mt-1.5">
                 {customInstruction.length}/50 characters minimum
               </div>
             </div>
@@ -312,13 +314,13 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
 
           {/* AI Model Selection */}
           <div className="mb-6">
-            <label className="block text-sm font-mono text-gray-100 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               AI Model (Optional)
             </label>
             <select
               value={aiModel}
               onChange={(e) => setAiModel(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 font-mono rounded-lg focus:outline-none focus:border-blue-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 text-gray-900 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-all"
             >
               <option value="gpt-4o-mini">gpt-4o-mini (Default)</option>
               <option value="gpt-4o">gpt-4o</option>
@@ -328,26 +330,26 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
 
           {/* Error Display */}
           {error && (
-            <div className="mb-6 p-4 bg-red-900 bg-opacity-20 border border-red-500 rounded-lg flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-red-400 font-mono">{error}</div>
+            <div className="mb-6 p-4 bg-red-50 border border-red-200/60 rounded-lg flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-700">{error}</div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200/60">
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="px-6 py-2 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 font-mono text-sm transition-colors disabled:opacity-50"
+            className="px-6 py-2.5 text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-sm font-medium transition-all disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={isLoading || !fakerName}
-            className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-mono text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 hover:shadow-md hover:-translate-y-0.5 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0 active:scale-95 shadow-sm"
           >
             {isLoading ? (
               <>

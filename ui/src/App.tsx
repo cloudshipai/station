@@ -42,8 +42,11 @@ import { JsonSchemaEditor } from './components/schema/JsonSchemaEditor';
 import { HierarchicalAgentNode } from './components/nodes/HierarchicalAgentNode';
 import { buildAgentHierarchyMap } from './utils/agentHierarchy';
 import { AgentsCanvas as AgentsCanvasComponent } from './components/agents/AgentsCanvas';
+import { AgentsLayout } from './components/agents/v2/AgentsLayout';
 import { RunDetailsModal } from './components/modals/RunDetailsModal';
 import type { AgentRunWithDetails } from './types/station';
+
+import { EnvironmentContext, EnvironmentProvider } from './contexts/EnvironmentContext';
 
 const queryClient = new QueryClient();
 
@@ -178,61 +181,16 @@ const agentPageNodeTypes = {
 
 // Station Banner Component
 const StationBanner = () => (
-  <div className="flex items-center gap-2">
-    <div className="relative">
-      <div className="w-8 h-8 bg-gradient-to-br from-tokyo-blue to-tokyo-purple rounded-lg flex items-center justify-center">
-        <span className="text-tokyo-fg font-mono font-bold text-sm">S</span>
-      </div>
-      <div className="absolute -top-1 -right-1 w-3 h-3 bg-tokyo-green rounded-full animate-pulse"></div>
-    </div>
-    <div>
-      <h1 className="text-xl font-mono font-semibold text-tokyo-blue">STATION</h1>
-      <p className="text-xs text-tokyo-comment font-mono -mt-1">🤖 agents for engineers. Be in control by CloudShipAI</p>
-    </div>
+  <div className="flex items-center justify-center py-6">
+    <img 
+      src="/station-logo.png" 
+      alt="Station Logo" 
+      className="w-24 h-24"
+    />
   </div>
 );
 
-// Environment Context
-const EnvironmentContext = React.createContext<any>({
-  environments: [],
-  selectedEnvironment: null,
-  setSelectedEnvironment: () => {},
-  refreshTrigger: 0
-});
 
-const EnvironmentProvider = ({ children }: { children: React.ReactNode }) => {
-  const [environments, setEnvironments] = useState<any[]>([]);
-  const [selectedEnvironment, setSelectedEnvironment] = useState<number | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  // Fetch environments
-  useEffect(() => {
-    const fetchEnvironments = async () => {
-      try {
-        const response = await environmentsApi.getAll();
-        setEnvironments(response.data.environments || []);
-      } catch (error) {
-        console.error('Failed to fetch environments:', error);
-        setEnvironments([]);
-      }
-    };
-    fetchEnvironments();
-  }, [refreshTrigger]);
-
-  const environmentContext = {
-    environments,
-    selectedEnvironment,
-    setSelectedEnvironment,
-    refreshTrigger,
-    refreshData: () => setRefreshTrigger(prev => prev + 1)
-  };
-
-  return (
-    <EnvironmentContext.Provider value={environmentContext}>
-      {children}
-    </EnvironmentContext.Provider>
-  );
-};
 
 const Layout = ({ children }: any) => {
   const environmentContext = React.useContext(EnvironmentContext);
@@ -327,34 +285,32 @@ const Layout = ({ children }: any) => {
   };
 
   const sidebarItems = [
-    { id: 'getting-started', label: 'Getting Started', icon: BookOpen, path: '/getting-started' },
     { id: 'agents', label: 'Agents', icon: Bot, path: currentEnvironmentName ? `/agents/${currentEnvironmentName}` : '/agents' },
+    { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
     { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
-    { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
     { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
     { id: 'environments', label: 'Environments', icon: Users, path: '/environments' },
     { id: 'bundles', label: 'Bundles', icon: Package, path: '/bundles' },
-    { id: 'live-demo', label: 'Live Demo', icon: Play, path: '/live-demo' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
   ];
 
   return (
-    <div className="flex h-screen bg-tokyo-bg">
+    <div className="flex h-screen bg-white">
       {/* Sidebar */}
-      <div className="w-64 bg-tokyo-dark1 border-r border-tokyo-dark3 flex flex-col">
+      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-tokyo-dark3">
+        <div className="border-b border-gray-200">
           <StationBanner />
         </div>
 
         {/* Environment Selector */}
-        <div className="p-4 border-b border-tokyo-dark3">
-          <label className="block text-sm font-mono text-tokyo-fg mb-2">Environment</label>
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Environment</label>
           <select
             value={currentEnvironmentName || 'default'}
             onChange={(e) => handleEnvironmentChange(e.target.value)}
-            className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-dark3 text-tokyo-fg font-mono rounded hover:border-tokyo-blue5 transition-colors"
+            className="w-full px-3 py-2 bg-white border border-gray-300 text-gray-900 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-station-blue focus:border-station-blue transition-colors"
           >
             {environmentContext?.environments?.map((env: any) => (
               <option key={env.id} value={env.name.toLowerCase()}>
@@ -365,19 +321,19 @@ const Layout = ({ children }: any) => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-2">
+        <nav className="flex-1 p-4 bg-white">
+          <ul className="space-y-1">
             {sidebarItems.map((item) => (
               <li key={item.id}>
                 <button
                   onClick={() => navigate(item.path)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded font-mono text-sm transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                     currentPage === item.id
-                      ? 'bg-tokyo-blue bg-opacity-20 text-tokyo-bg border border-tokyo-blue shadow-md font-medium'
-                      : 'text-tokyo-fg hover:text-tokyo-blue hover:bg-tokyo-dark2'
+                      ? 'bg-blue-50 text-station-blue font-medium'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-5 w-5" />
                   {item.label}
                 </button>
               </li>
@@ -386,7 +342,7 @@ const Layout = ({ children }: any) => {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-tokyo-dark4">
+        <div className="p-4 border-t border-gray-200 bg-white">
           <CloudShipStatus />
         </div>
       </div>
@@ -400,9 +356,13 @@ const Layout = ({ children }: any) => {
 };
 
 // Wrapper for modular AgentsCanvas component
-const AgentsCanvas = () => {
+const LegacyAgentsCanvas = () => {
   const environmentContext = React.useContext(EnvironmentContext);
   return <AgentsCanvasComponent environmentContext={environmentContext} />;
+};
+
+const AgentsPage = () => {
+  return <AgentsLayout />;
 };
 
 // Old implementation (kept for reference, can be removed later)
@@ -1714,19 +1674,18 @@ const EnvironmentsPage = () => {
       </div>
 
       {/* Right Column - Controls */}
-      <div className="w-96 flex flex-col bg-tokyo-dark2 overflow-y-auto">
+      <div className="w-96 flex flex-col bg-white border-l border-gray-200 overflow-y-auto">
         {/* Environment Selector */}
-        <div className="p-6 border-b border-tokyo-fg-gutter">
-          <label className="block text-sm font-mono font-bold text-tokyo-orange mb-2">Environment</label>
+        <div className="p-6 border-b border-gray-200">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Environment</label>
           {environments.length > 0 && (
             <select
               value={selectedEnvironment || ''}
               onChange={(e) => setSelectedEnvironment(Number(e.target.value))}
-              className="w-full bg-[#292e42] border-[3px] border-[#7dcfff] text-[#7dcfff] font-mono font-semibold px-4 py-3 rounded-lg focus:outline-none focus:border-[#ff9e64] focus:text-[#ff9e64] text-lg shadow-tokyo-glow"
-              style={{ backgroundColor: '#292e42', color: '#7dcfff', borderColor: '#7dcfff' }}
+              className="w-full bg-white border-2 border-gray-300 text-gray-900 font-semibold px-4 py-3 rounded-lg focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue text-lg shadow-sm"
             >
               {environments.map((env) => (
-                <option key={env.id} value={env.id} className="bg-[#1a1b26] text-[#c0caf5]" style={{ backgroundColor: '#1a1b26', color: '#c0caf5' }}>
+                <option key={env.id} value={env.id}>
                   {env.name}
                 </option>
               ))}
@@ -1737,11 +1696,11 @@ const EnvironmentsPage = () => {
         {/* Action Buttons */}
         {selectedEnvironment && (
           <div className="p-6 space-y-3">
-            <h3 className="text-sm font-mono text-tokyo-comment mb-4">Actions</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-4">Actions</h3>
 
             <button
               onClick={handleSyncEnvironment}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-station-blue text-white hover:bg-blue-600 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <Play className="h-4 w-4" />
               <span>Sync Environment</span>
@@ -1749,7 +1708,7 @@ const EnvironmentsPage = () => {
 
             <button
               onClick={handleVariables}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-cyan text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-cyan-600 text-white hover:bg-cyan-700 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <FileText className="h-4 w-4" />
               <span>Edit Variables</span>
@@ -1757,18 +1716,18 @@ const EnvironmentsPage = () => {
 
             <button
               onClick={handleAddServer}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-green text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white hover:bg-green-700 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <Plus className="h-4 w-4" />
               <span>Add MCP Server</span>
             </button>
 
-            <div className="border-t border-tokyo-dark4 pt-3 mt-3">
-              <h3 className="text-sm font-mono text-tokyo-comment mb-3">Deployment</h3>
+            <div className="border-t border-gray-200 pt-3 mt-3">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Deployment</h3>
 
               <button
                 onClick={handleDeploy}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-purple-600 text-white hover:bg-purple-700 rounded text-sm font-medium transition-colors shadow-sm"
               >
                 <Rocket className="h-4 w-4" />
                 <span>Deploy Template</span>
@@ -1776,7 +1735,7 @@ const EnvironmentsPage = () => {
 
               <button
                 onClick={handleBuildImage}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-orange text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors mt-2"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-orange-600 text-white hover:bg-orange-700 rounded text-sm font-medium transition-colors shadow-sm mt-2"
               >
                 <Package className="h-4 w-4" />
                 <span>Build Docker Image</span>
@@ -1784,7 +1743,7 @@ const EnvironmentsPage = () => {
 
               <button
                 onClick={handleBundleEnvironment}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-yellow text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors mt-2"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-yellow-600 text-white hover:bg-yellow-700 rounded text-sm font-medium transition-colors shadow-sm mt-2"
               >
                 <Archive className="h-4 w-4" />
                 <span>Create Bundle</span>
@@ -1794,10 +1753,10 @@ const EnvironmentsPage = () => {
         )}
 
         {/* Install Bundle (always visible) */}
-        <div className="p-6 border-t border-tokyo-dark4 mt-auto">
+        <div className="p-6 border-t border-gray-200 mt-auto">
           <button
             onClick={handleInstallBundle}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-tokyo-magenta text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm font-medium transition-colors"
+            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-pink-600 text-white hover:bg-pink-700 rounded text-sm font-medium transition-colors shadow-sm"
           >
             <Download className="h-4 w-4" />
             <span>Install Bundle</span>
@@ -2871,11 +2830,11 @@ function App() {
             <div className="min-h-screen bg-background">
               <Layout>
                 <Routes>
-                  <Route path="/" element={<AgentsCanvas />} />
+                  <Route path="/" element={<AgentsPage />} />
                   <Route path="/getting-started" element={<GettingStartedPage />} />
-                  <Route path="/agents" element={<AgentsCanvas />} />
-                  <Route path="/agents/:env" element={<AgentsCanvas />} />
-                  <Route path="/agent/:agentId" element={<AgentsCanvas />} />
+                  <Route path="/agents" element={<AgentsPage />} />
+                  <Route path="/agents/:env" element={<AgentsPage />} />
+                  <Route path="/agent/:agentId" element={<AgentsPage />} />
                   <Route path="/mcps" element={<MCPServersPage />} />
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
@@ -2887,7 +2846,7 @@ function App() {
                   <Route path="/live-demo" element={<LiveDemoPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
-                  <Route path="*" element={<AgentsCanvas />} />
+                  <Route path="*" element={<AgentsPage />} />
                 </Routes>
               </Layout>
             </div>

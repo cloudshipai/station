@@ -106,17 +106,17 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-tokyo-glow max-w-2xl w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-2xl w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark rounded-t-lg">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white rounded-t-lg">
           <div className="flex items-center gap-2">
-            <Copy className="h-5 w-5 text-tokyo-orange" />
-            <h2 className="text-lg font-mono font-semibold text-tokyo-fg z-10 relative">
+            <Copy className="h-5 w-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-900 z-10 relative">
               Copy Environment: {sourceEnvironmentName}
             </h2>
           </div>
-          <button onClick={handleClose} className="text-tokyo-comment hover:text-tokyo-fg transition-colors z-10 relative">
+          <button onClick={handleClose} className="text-gray-600 hover:text-gray-900 transition-colors z-10 relative">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -126,19 +126,19 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
           {!result ? (
             <>
               {/* Info */}
-              <div className="bg-tokyo-blue7 bg-opacity-20 border border-tokyo-blue7 rounded p-3">
-                <p className="text-sm text-tokyo-fg font-mono">
-                  This will copy all agents and MCP servers from <span className="text-tokyo-orange font-semibold">{sourceEnvironmentName}</span> to the selected target environment, then automatically sync and assign tools.
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-gray-900">
+                  This will copy all agents and MCP servers from <span className="text-blue-600 font-semibold">{sourceEnvironmentName}</span> to the selected target environment, then automatically sync and assign tools.
                 </p>
               </div>
 
               {/* Target Environment Selection */}
               <div className="space-y-3">
-                <label className="text-sm font-mono text-tokyo-comment">Target Environment:</label>
+                <label className="text-sm font-medium text-gray-900">Target Environment:</label>
                 <select
                   value={selectedTargetEnv || ''}
                   onChange={(e) => setSelectedTargetEnv(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 rounded text-tokyo-fg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-tokyo-orange focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-station-blue focus:border-station-blue"
                   disabled={copying}
                 >
                   <option value="">Select target environment...</option>
@@ -151,8 +151,8 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
               </div>
 
               {/* Info about automatic process */}
-              <div className="bg-green-900 bg-opacity-20 border border-green-500 border-opacity-50 rounded p-3">
-                <p className="text-sm text-green-300 font-mono">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-sm text-gray-900">
                   <strong>Automatic Process:</strong>
                   <br />
                   1. Copy MCP servers and agents to target environment
@@ -166,39 +166,39 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
           ) : (
             <>
               {/* Result Display */}
-              <div className={`border rounded p-4 ${result.success ? 'bg-green-900 bg-opacity-20 border-green-500' : 'bg-red-900 bg-opacity-20 border-red-500'}`}>
+              <div className={`border rounded-lg p-4 ${result.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
                   {result.success ? (
-                    <CheckCircle className="h-5 w-5 text-green-400" />
+                    <CheckCircle className="h-5 w-5 text-green-600" />
                   ) : (
-                    <AlertCircle className="h-5 w-5 text-red-400" />
+                    <AlertCircle className="h-5 w-5 text-red-600" />
                   )}
-                  <span className={`font-mono font-semibold ${result.success ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className={`font-semibold ${result.success ? 'text-green-600' : 'text-red-600'}`}>
                     {result.success ? 'Copy Completed' : 'Copy Failed'}
                   </span>
                 </div>
-                <p className="text-sm font-mono text-tokyo-fg mb-3">
+                <p className="text-sm text-gray-900 mb-3">
                   {result.message}
                 </p>
-                <div className="grid grid-cols-2 gap-2 text-sm font-mono">
+                <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <span className="text-tokyo-comment">MCP Servers Copied: </span>
-                    <span className="text-tokyo-cyan font-semibold">{result.mcp_servers_copied}</span>
+                    <span className="text-gray-600">MCP Servers Copied: </span>
+                    <span className="text-blue-600 font-semibold">{result.mcp_servers_copied}</span>
                   </div>
                   <div>
-                    <span className="text-tokyo-comment">Agents Copied: </span>
-                    <span className="text-tokyo-blue font-semibold">{result.agents_copied}</span>
+                    <span className="text-gray-600">Agents Copied: </span>
+                    <span className="text-blue-600 font-semibold">{result.agents_copied}</span>
                   </div>
                   {result.mcp_servers_synced !== undefined && (
                     <div>
-                      <span className="text-tokyo-comment">MCP Servers Synced: </span>
-                      <span className="text-tokyo-green font-semibold">{result.mcp_servers_synced}</span>
+                      <span className="text-gray-600">MCP Servers Synced: </span>
+                      <span className="text-green-600 font-semibold">{result.mcp_servers_synced}</span>
                     </div>
                   )}
                   {result.tools_assigned !== undefined && (
                     <div>
-                      <span className="text-tokyo-comment">Tools Assigned: </span>
-                      <span className="text-tokyo-purple font-semibold">{result.tools_assigned}</span>
+                      <span className="text-gray-600">Tools Assigned: </span>
+                      <span className="text-purple-600 font-semibold">{result.tools_assigned}</span>
                     </div>
                   )}
                 </div>
@@ -209,19 +209,19 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
                 <div className="space-y-2">
                   <button
                     onClick={() => setShowConflicts(!showConflicts)}
-                    className="flex items-center gap-2 text-sm font-mono text-yellow-400 hover:text-yellow-300"
+                    className="flex items-center gap-2 text-sm text-yellow-600 hover:text-yellow-700"
                   >
                     <AlertCircle className="h-4 w-4" />
                     {result.conflicts.length} conflict{result.conflicts.length > 1 ? 's' : ''} detected
                     <span className="text-xs">{showConflicts ? '▼' : '▶'}</span>
                   </button>
                   {showConflicts && (
-                    <div className="bg-yellow-900 bg-opacity-20 border border-yellow-500 border-opacity-50 rounded p-3 max-h-48 overflow-y-auto">
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 max-h-48 overflow-y-auto">
                       {result.conflicts.map((conflict, idx) => (
-                        <div key={idx} className="text-sm font-mono text-yellow-300 mb-2">
-                          <span className="text-yellow-400 font-semibold">{conflict.type}:</span> {conflict.name}
+                        <div key={idx} className="text-sm text-gray-900 mb-2">
+                          <span className="text-yellow-700 font-semibold">{conflict.type}:</span> {conflict.name}
                           <br />
-                          <span className="text-yellow-200 text-xs">{conflict.reason}</span>
+                          <span className="text-gray-600 text-xs">{conflict.reason}</span>
                         </div>
                       ))}
                     </div>
@@ -231,9 +231,9 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
 
               {/* Errors Section */}
               {result.errors && result.errors.length > 0 && (
-                <div className="bg-red-900 bg-opacity-20 border border-red-500 border-opacity-50 rounded p-3 max-h-48 overflow-y-auto">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-48 overflow-y-auto">
                   {result.errors.map((error, idx) => (
-                    <div key={idx} className="text-sm font-mono text-red-300 mb-1">
+                    <div key={idx} className="text-sm text-red-600 mb-1">
                       • {error}
                     </div>
                   ))}
@@ -242,35 +242,35 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
 
               {/* Success Summary */}
               {result.success && result.tools_assigned !== undefined && result.tools_assigned > 0 && (
-                <div className="bg-green-900 bg-opacity-20 border border-green-500 border-opacity-50 rounded p-3">
-                  <p className="text-sm text-green-300 font-mono font-semibold">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-700 font-semibold">
                     ✅ Complete! Environment copied, synced, and tools assigned automatically.
                   </p>
-                  <p className="text-sm text-green-200 font-mono mt-2">
-                    Your agents in <span className="text-tokyo-orange">{result.target_environment}</span> are ready to use!
+                  <p className="text-sm text-gray-900 mt-2">
+                    Your agents in <span className="text-blue-600 font-semibold">{result.target_environment}</span> are ready to use!
                   </p>
                 </div>
               )}
 
               {/* Partial Success - Sync Failed */}
               {result.sync_failed && (
-                <div className="bg-yellow-900 bg-opacity-30 border border-yellow-500 border-opacity-50 rounded p-3">
-                  <p className="text-sm text-yellow-300 font-mono font-semibold">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800 font-semibold">
                     ⚠️ Copied but sync failed
                   </p>
-                  <p className="text-sm text-yellow-200 font-mono mt-2">
-                    MCP servers and agents were copied, but auto-sync failed. Run <code className="bg-black bg-opacity-30 px-1 rounded">stn sync {result.target_environment}</code> manually.
+                  <p className="text-sm text-gray-900 mt-2">
+                    MCP servers and agents were copied, but auto-sync failed. Run <code className="bg-gray-100 px-1 rounded">stn sync {result.target_environment}</code> manually.
                   </p>
                 </div>
               )}
 
               {/* Partial Success - Tool Assignment Failed */}
               {result.sync_succeeded && result.tools_assigned === 0 && (
-                <div className="bg-yellow-900 bg-opacity-30 border border-yellow-500 border-opacity-50 rounded p-3">
-                  <p className="text-sm text-yellow-300 font-mono font-semibold">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800 font-semibold">
                     ⚠️ Copied and synced but tool assignment failed
                   </p>
-                  <p className="text-sm text-yellow-200 font-mono mt-2">
+                  <p className="text-sm text-gray-900 mt-2">
                     MCP servers connected successfully, but tool assignment failed. You may need to manually assign tools to agents.
                   </p>
                 </div>
@@ -280,12 +280,12 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-4 border-t border-tokyo-blue7 bg-tokyo-bg-dark rounded-b-lg">
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-white rounded-b-lg">
           {!result ? (
             <>
               <button
                 onClick={handleClose}
-                className="px-4 py-2 text-sm font-mono text-tokyo-comment hover:text-tokyo-fg transition-colors"
+                className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 transition-colors"
                 disabled={copying}
               >
                 Cancel
@@ -293,7 +293,7 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
               <button
                 onClick={handleCopy}
                 disabled={!selectedTargetEnv || copying}
-                className="px-4 py-2 bg-tokyo-orange text-tokyo-bg rounded font-mono text-sm hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-station-blue text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {copying && <Loader className="h-4 w-4 animate-spin" />}
                 {copying ? 'Copying...' : 'Copy Environment'}
@@ -303,7 +303,7 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
             <>
               <button
                 onClick={handleClose}
-                className="px-4 py-2 bg-tokyo-green text-tokyo-bg rounded font-mono text-sm hover:bg-opacity-90"
+                className="px-4 py-2 bg-station-blue text-white rounded text-sm hover:bg-blue-600"
               >
                 {result?.success ? 'Done' : 'Close'}
               </button>

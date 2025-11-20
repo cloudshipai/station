@@ -96,22 +96,22 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
   };
 
   const getScoreColor = (score: number): string => {
-    if (score >= 8.5) return 'text-green-400';
-    if (score >= 7.0) return 'text-yellow-400';
-    return 'text-red-400';
+    if (score >= 8.5) return 'text-green-700';
+    if (score >= 7.0) return 'text-yellow-700';
+    return 'text-red-700';
   };
 
   const getScoreBg = (score: number): string => {
-    if (score >= 8.5) return 'bg-green-900 bg-opacity-20 border-green-500';
-    if (score >= 7.0) return 'bg-yellow-900 bg-opacity-20 border-yellow-500';
-    return 'bg-red-900 bg-opacity-20 border-red-500';
+    if (score >= 8.5) return 'bg-green-50 border-green-200';
+    if (score >= 7.0) return 'bg-yellow-50 border-yellow-200';
+    return 'bg-red-50 border-red-200';
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader className="h-8 w-8 text-gray-400 animate-spin" />
-        <span className="ml-3 text-gray-400 font-mono">Loading benchmark data...</span>
+        <span className="ml-3 text-gray-600">Loading benchmark data...</span>
       </div>
     );
   }
@@ -119,7 +119,7 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
   if (error && metrics.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="text-red-400 font-mono mb-2">{error}</div>
+        <div className="text-red-600 mb-2">{error}</div>
       </div>
     );
   }
@@ -127,15 +127,15 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
   if (metrics.length === 0 && !result) {
     return (
       <div className="text-center py-12">
-        <Sparkles className="h-12 w-12 text-purple-400 mx-auto mb-4" />
-        <h3 className="text-lg font-mono text-gray-200 mb-2">Quality Evaluation</h3>
-        <p className="text-gray-400 font-mono mb-6 max-w-md mx-auto">
+        <Sparkles className="h-12 w-12 text-purple-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Quality Evaluation</h3>
+        <p className="text-gray-600 mb-6 max-w-md mx-auto">
           Evaluate this run using LLM-as-judge metrics to assess quality, hallucination, relevancy, and production readiness.
         </p>
         <button
           onClick={handleEvaluate}
           disabled={evaluating}
-          className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-mono rounded-lg transition-colors flex items-center gap-2 mx-auto"
+          className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2 mx-auto shadow-sm"
         >
           {evaluating ? (
             <>
@@ -150,7 +150,7 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
           )}
         </button>
         {error && (
-          <div className="mt-4 text-red-400 font-mono text-sm">{error}</div>
+          <div className="mt-4 text-red-600 text-sm">{error}</div>
         )}
       </div>
     );
@@ -160,13 +160,13 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
     <div className="space-y-6">
       {/* Overall Score Card */}
       {result && (
-        <div className={`border-2 rounded-lg p-6 ${getScoreBg(result.quality_score)}`}>
+        <div className={`border-2 rounded-lg p-6 shadow-sm ${getScoreBg(result.quality_score)}`}>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-mono text-gray-200 mb-1">Quality Score</h3>
-              <p className="text-gray-400 font-mono text-sm">Overall evaluation across all metrics</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Quality Score</h3>
+              <p className="text-gray-600 text-sm">Overall evaluation across all metrics</p>
             </div>
-            <div className={`text-5xl font-bold font-mono ${getScoreColor(result.quality_score)}`}>
+            <div className={`text-5xl font-bold ${getScoreColor(result.quality_score)}`}>
               {result.quality_score.toFixed(1)}<span className="text-2xl">/10</span>
             </div>
           </div>
@@ -174,21 +174,21 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
           <div className="flex items-center gap-2 mb-3">
             {result.production_ready ? (
               <>
-                <CheckCircle className="h-5 w-5 text-green-400" />
-                <span className="font-mono text-green-400 font-semibold">Production Ready</span>
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-green-700 font-semibold">Production Ready</span>
               </>
             ) : (
               <>
-                <AlertTriangle className="h-5 w-5 text-yellow-400" />
-                <span className="font-mono text-yellow-400 font-semibold">Needs Improvement</span>
+                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                <span className="text-yellow-700 font-semibold">Needs Improvement</span>
               </>
             )}
           </div>
           
-          <p className="text-gray-300 font-mono text-sm">{result.recommendation}</p>
+          <p className="text-gray-700 text-sm">{result.recommendation}</p>
           
           {result.total_judge_cost > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-700 text-xs font-mono text-gray-400">
+            <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-600">
               Evaluation cost: ${result.total_judge_cost.toFixed(4)} • {result.total_judge_tokens.toLocaleString()} tokens • {result.evaluation_time_ms}ms
             </div>
           )}
@@ -200,36 +200,36 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
         {metrics.map((metric) => (
           <div
             key={metric.id}
-            className={`border-2 rounded-lg p-4 ${
+            className={`border-2 rounded-lg p-4 shadow-sm ${
               metric.passed
-                ? 'bg-green-900 bg-opacity-10 border-green-700'
-                : 'bg-red-900 bg-opacity-10 border-red-700'
+                ? 'bg-green-50 border-green-200'
+                : 'bg-red-50 border-red-200'
             }`}
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 {metric.passed ? (
-                  <CheckCircle className="h-5 w-5 text-green-400" />
+                  <CheckCircle className="h-5 w-5 text-green-600" />
                 ) : (
-                  <XCircle className="h-5 w-5 text-red-400" />
+                  <XCircle className="h-5 w-5 text-red-600" />
                 )}
-                <h4 className="font-mono font-semibold text-gray-200 capitalize">
+                <h4 className="font-semibold text-gray-900 capitalize">
                   {metric.metric_name.replace(/_/g, ' ')}
                 </h4>
               </div>
-              <span className={`text-2xl font-bold font-mono ${
-                metric.passed ? 'text-green-400' : 'text-red-400'
+              <span className={`text-2xl font-bold ${
+                metric.passed ? 'text-green-600' : 'text-red-600'
               }`}>
                 {metric.score.toFixed(2)}
               </span>
             </div>
             
             <div className="mb-3">
-              <div className="flex items-center justify-between text-xs font-mono text-gray-400 mb-1">
+              <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
                 <span>Threshold: {metric.threshold.toFixed(2)}</span>
-                <span>{metric.passed ? 'PASS' : 'FAIL'}</span>
+                <span className="font-semibold">{metric.passed ? 'PASS' : 'FAIL'}</span>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all ${
                     metric.passed ? 'bg-green-500' : 'bg-red-500'
@@ -240,7 +240,7 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
             </div>
             
             {metric.reason && (
-              <p className="text-xs font-mono text-gray-400 leading-relaxed">
+              <p className="text-xs text-gray-600 leading-relaxed">
                 {metric.reason}
               </p>
             )}

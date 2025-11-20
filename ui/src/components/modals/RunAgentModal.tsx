@@ -116,31 +116,31 @@ export const RunAgentModal: React.FC<RunAgentModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-200">
+      <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Play className="h-6 w-6 text-tokyo-green" />
+            <Play className="h-6 w-6 text-green-600" />
             <div>
-              <h2 className="text-xl font-mono font-semibold text-tokyo-fg">
+              <h2 className="text-xl font-semibold text-gray-900">
                 Run Agent
               </h2>
-              <p className="text-sm text-tokyo-comment font-mono">{agent.name}</p>
+              <p className="text-sm text-gray-600">{agent.name}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
+            <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
           </button>
         </div>
 
         {/* Agent Description */}
         {agent.description && (
-          <div className="mb-6 p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-            <p className="text-sm text-tokyo-fg font-mono">{agent.description}</p>
+          <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded">
+            <p className="text-sm text-gray-700">{agent.description}</p>
           </div>
         )}
 
@@ -148,12 +148,12 @@ export const RunAgentModal: React.FC<RunAgentModalProps> = ({
         <div className="space-y-4 mb-6">
           {inputFields.map((field) => (
             <div key={field.name}>
-              <label className="block text-sm font-mono text-tokyo-fg mb-2">
+              <label className="block text-sm text-gray-700 mb-2 font-medium">
                 {field.name}
-                {field.required && <span className="text-tokyo-red ml-1">*</span>}
+                {field.required && <span className="text-red-500 ml-1">*</span>}
               </label>
               {field.description && (
-                <p className="text-xs text-tokyo-comment font-mono mb-2">
+                <p className="text-xs text-gray-600 mb-2">
                   {field.description}
                 </p>
               )}
@@ -163,7 +163,7 @@ export const RunAgentModal: React.FC<RunAgentModalProps> = ({
                   onChange={(e) => handleInputChange(field.name, e.target.value)}
                   placeholder={`Enter ${field.name}...`}
                   rows={4}
-                  className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono rounded focus:outline-none focus:border-tokyo-blue resize-y"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 text-gray-900 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue resize-y"
                 />
               ) : (
                 <input
@@ -171,7 +171,7 @@ export const RunAgentModal: React.FC<RunAgentModalProps> = ({
                   value={inputs[field.name] || ''}
                   onChange={(e) => handleInputChange(field.name, e.target.value)}
                   placeholder={`Enter ${field.name}...`}
-                  className="w-full px-3 py-2 bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono rounded focus:outline-none focus:border-tokyo-blue"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 text-gray-900 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue"
                 />
               )}
             </div>
@@ -180,15 +180,15 @@ export const RunAgentModal: React.FC<RunAgentModalProps> = ({
 
         {/* Error Message */}
         {error && (
-          <div className="mb-4 p-3 bg-tokyo-red/20 border border-tokyo-red rounded flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-tokyo-red" />
-            <p className="text-sm text-tokyo-red font-mono">{error}</p>
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
 
         {/* Info about max steps */}
-        <div className="mb-4 p-3 bg-tokyo-blue/20 border border-tokyo-blue7 rounded">
-          <p className="text-xs text-tokyo-comment font-mono">
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+          <p className="text-xs text-gray-600">
             This agent will execute with a maximum of {agent.max_steps} steps
           </p>
         </div>
@@ -197,18 +197,18 @@ export const RunAgentModal: React.FC<RunAgentModalProps> = ({
         <div className="flex gap-3 justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono rounded hover:bg-tokyo-dark2 transition-colors"
+            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleRun}
             disabled={executing}
-            className="px-4 py-2 bg-tokyo-green text-tokyo-bg font-mono rounded hover:bg-tokyo-green/80 transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 bg-station-blue text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {executing ? (
               <>
-                <span className="animate-spin">⏳</span>
+                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                 Executing...
               </>
             ) : (

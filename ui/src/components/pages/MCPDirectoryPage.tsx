@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink, Wand2 } from 'lucide-react';
+import { Plus, Server, Globe, Database, Terminal, Code, Search, Cloud, Layers, FileText, Settings, AlertCircle, MessageSquare, Package, Shield, ExternalLink, Wand2, X } from 'lucide-react';
 import { SyncModal } from '../sync/SyncModal';
 import { FakerBuilderModal } from '../modals/FakerBuilderModal';
 
@@ -208,52 +208,52 @@ const MCPServerCard: React.FC<MCPServerCardProps> = ({ server, onAddServer, disa
   const Icon = server.icon;
 
   return (
-    <div className={`bg-gray-800 rounded-lg border border-gray-700 shadow-sm p-6 ${disabled ? 'opacity-50' : ''}`}>
+    <div className={`bg-white rounded-xl border border-gray-200/60 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 p-5 ${disabled ? 'opacity-50' : ''}`}>
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center space-x-3">
-          <div className="p-2 bg-purple-900 rounded-lg">
-            <Icon size={24} className="text-purple-400" />
+          <div className="p-2 bg-purple-50 rounded-lg">
+            <Icon size={20} className="text-purple-600" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h3 className="text-lg font-semibold text-gray-100">{server.name}</h3>
+              <h3 className="text-base font-semibold text-gray-900">{server.name}</h3>
               {server.requiresOpenAPISpec && (
-                <span className="px-2 py-0.5 text-xs bg-blue-900 text-blue-300 rounded border border-blue-700" title={`OpenAPI Spec: ${server.openapiSpec}`}>
+                <span className="px-2 py-0.5 text-[10px] bg-blue-50 text-blue-700 rounded-md border border-blue-200/60 font-medium" title={`OpenAPI Spec: ${server.openapiSpec}`}>
                   OpenAPI
                 </span>
               )}
             </div>
-            <span className="text-sm text-gray-400">{server.category}</span>
+            <span className="text-xs text-gray-600">{server.category}</span>
           </div>
         </div>
         {server.isInstalled && (
-          <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+          <span className="px-2.5 py-1 text-xs bg-emerald-50 text-emerald-700 rounded-full font-medium border border-emerald-200/60">
             Installed
           </span>
         )}
       </div>
 
-      <p className="text-gray-300 mb-4">{server.description}</p>
+      <p className="text-sm text-gray-600 mb-4 leading-relaxed line-clamp-2">{server.description}</p>
 
-      <div className="space-y-2 mb-4">
+      <div className="space-y-2.5 mb-4">
         <div className="text-sm">
-          <span className="font-medium text-gray-300">Command:</span>
-          <code className="ml-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">
+          <span className="font-medium text-gray-700 text-xs">Command:</span>
+          <code className="mt-1 block px-3 py-2 bg-gray-50/50 text-gray-800 rounded-lg text-xs font-mono border border-gray-200/60">
             {server.command} {server.args?.join(' ') || ''}
           </code>
         </div>
 
         {server.env && Object.keys(server.env).length > 0 && (
           <div className="text-sm">
-            <span className="font-medium text-gray-300">Environment:</span>
-            <div className="mt-1 space-y-1">
+            <span className="font-medium text-gray-700 text-xs">Environment:</span>
+            <div className="mt-1.5 space-y-1">
               {Object.entries(server.env).map(([key, value]) => (
                 <div key={key} className="flex items-center space-x-2">
-                  <code className="px-2 py-1 bg-gray-100 rounded text-xs">
+                  <code className="px-2 py-1 bg-gray-50 rounded text-xs font-mono border border-gray-200/60">
                     {key}={value}
                   </code>
                   {value.includes('{{ .') && (
-                    <AlertCircle size={14} className="text-amber-500" title="Requires configuration" />
+                    <AlertCircle size={14} className="text-amber-600" title="Requires configuration" />
                   )}
                 </div>
               ))}
@@ -265,10 +265,10 @@ const MCPServerCard: React.FC<MCPServerCardProps> = ({ server, onAddServer, disa
       <button
         onClick={() => onAddServer(server)}
         disabled={disabled || server.isInstalled}
-        className={`w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-lg font-medium ${
+        className={`w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
           disabled || server.isInstalled
-            ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-            : 'bg-purple-600 text-white hover:bg-purple-700'
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200/60'
+            : 'bg-gray-900 text-white hover:bg-gray-800 hover:shadow-md hover:-translate-y-0.5 active:scale-95 shadow-sm'
         }`}
       >
         <Plus size={16} />
@@ -310,24 +310,24 @@ const AddServerModal: React.FC<AddServerModalProps> = ({ server, environments, o
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-700">
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200/60 shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-white">Add {server.name} Server</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-200">
-            ×
+          <h2 className="text-xl font-semibold text-gray-900">Add {server.name} Server</h2>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
+            <X size={20} />
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Environment
             </label>
             <select
               value={selectedEnvironment}
               onChange={(e) => setSelectedEnvironment(e.target.value)}
-              className="w-full border border-gray-600 rounded-lg px-3 py-2 bg-gray-700 text-white"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-all"
             >
               <option value="">Choose environment...</option>
               {Array.isArray(environments) && environments.map(env => (
@@ -337,23 +337,23 @@ const AddServerModal: React.FC<AddServerModalProps> = ({ server, environments, o
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Server Configuration
             </label>
-            <div className="bg-gray-700 p-4 rounded-lg border border-gray-600">
-              <pre className="text-sm text-gray-300">
+            <div className="bg-gray-50/50 p-4 rounded-lg border border-gray-200/60">
+              <pre className="text-xs text-gray-800 font-mono overflow-x-auto">
                 {JSON.stringify(config, null, 2)}
               </pre>
             </div>
           </div>
 
           {server.env && Object.keys(server.env).length > 0 && (
-            <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-4">
+            <div className="bg-amber-50 border border-amber-200/60 rounded-lg p-4">
               <div className="flex items-center space-x-2 mb-2">
-                <AlertCircle size={16} className="text-yellow-400" />
-                <span className="text-sm font-medium text-yellow-300">Configuration Required</span>
+                <AlertCircle size={16} className="text-amber-600" />
+                <span className="text-sm font-medium text-amber-900">Configuration Required</span>
               </div>
-              <p className="text-sm text-yellow-200">
+              <p className="text-sm text-amber-700 leading-relaxed">
                 This server requires environment variables to be configured. Please update the values after installation.
               </p>
             </div>
@@ -363,14 +363,14 @@ const AddServerModal: React.FC<AddServerModalProps> = ({ server, environments, o
         <div className="flex justify-end space-x-3 mt-6">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-300 border border-gray-600 rounded-lg hover:bg-gray-700"
+            className="px-4 py-2.5 text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-sm font-medium"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selectedEnvironment}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-600 disabled:text-gray-400"
+            className="px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 hover:shadow-md hover:-translate-y-0.5 disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:shadow-none disabled:hover:translate-y-0 transition-all duration-200 active:scale-95 text-sm font-medium shadow-sm"
           >
             Add Server
           </button>
@@ -464,8 +464,12 @@ export const MCPDirectoryPage: React.FC = () => {
         requiresOpenAPISpec: template.requiresOpenAPISpec || false,
       }));
 
-      // Merge with existing hardcoded servers
-      setServers(prev => [...prev, ...mappedTemplates]);
+      // Merge with existing hardcoded servers, avoiding duplicates
+      setServers(prev => {
+        const existingIds = new Set(prev.map(s => s.id));
+        const newTemplates = mappedTemplates.filter(t => !existingIds.has(t.id));
+        return [...prev, ...newTemplates];
+      });
     } catch (error) {
       console.error('Failed to fetch directory templates:', error);
     }
@@ -567,48 +571,51 @@ export const MCPDirectoryPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading MCP Directory...</div>
+      <div className="flex items-center justify-center h-64 bg-[#fafaf8]">
+        <div className="text-gray-600 text-sm font-medium animate-pulse">Loading MCP Directory...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
-      {/* Header */}
-      <div className="flex-shrink-0 p-6 bg-gray-800 border-b border-gray-700">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-100 mb-2">MCP Directory</h1>
-          <p className="text-gray-400">Discover and install MCP servers to extend your Station capabilities</p>
+    <div className="h-full flex flex-col bg-[#fafaf8]">
+      {/* Header - Paper matte style */}
+      <div className="flex-shrink-0 px-6 py-5 border-b border-gray-200/60 bg-white/60 backdrop-blur-sm">
+        <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
+          <h1 className="text-2xl font-medium text-gray-900 mb-2">MCP Directory</h1>
+          <p className="text-sm text-gray-600">Discover and install MCP servers to extend your Station capabilities</p>
         </div>
 
-        <div className="mb-6 flex items-center gap-4">
-          <input
-            type="text"
-            placeholder="Search servers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
+        <div className="mb-6 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300 delay-100">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search servers..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 focus:bg-white transition-all duration-200 placeholder:text-gray-400"
+            />
+          </div>
           <button
             onClick={handleOpenFakerBuilder}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 text-white rounded-lg text-sm font-medium transition-all duration-200 active:scale-95 shadow-sm whitespace-nowrap"
           >
-            <Wand2 className="h-5 w-5" />
+            <Wand2 className="h-4 w-4" />
             Create Faker
           </button>
         </div>
 
-        {/* Category Tabs */}
-        <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-700 pb-4">
+        {/* Category Tabs - Clean pill style */}
+        <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2 duration-300 delay-200">
           {categories.map(category => (
             <button
               key={category}
               onClick={() => setSelectedCategory(category)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                 selectedCategory === category
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                  ? 'bg-gray-900 text-white shadow-sm scale-105'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 hover:scale-105 border border-gray-200/60 shadow-sm'
               }`}
             >
               {category}
@@ -620,42 +627,47 @@ export const MCPDirectoryPage: React.FC = () => {
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-8">
         {filteredServers.length === 0 ? (
-          <div className="text-center py-12">
-            <Server size={48} className="mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-100 mb-2">No servers found</h3>
-            <p className="text-gray-400">Try adjusting your search or category filter</p>
+          <div className="text-center py-16 animate-in fade-in zoom-in duration-500">
+            <Server size={48} className="mx-auto text-gray-300 mb-4 animate-in zoom-in duration-500 delay-100" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-200">No servers found</h3>
+            <p className="text-sm text-gray-600 animate-in fade-in duration-500 delay-300">Try adjusting your search or category filter</p>
           </div>
         ) : (
           <>
             {/* Show Ship installation prompt if Ship category selected and Ship not installed */}
             {selectedCategory === 'Ship Security Tools' && !shipInstalled && !checkingShip ? (
-              <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center max-w-2xl mx-auto">
-                <Shield size={64} className="mx-auto text-purple-500 mb-4" />
-                <h3 className="text-2xl font-bold text-gray-100 mb-3">Ship CLI Required</h3>
-                <p className="text-gray-300 mb-6 text-lg">
+              <div className="bg-white border border-gray-200/60 rounded-xl p-8 text-center max-w-2xl mx-auto shadow-sm animate-in fade-in zoom-in-95 duration-500">
+                <Shield size={64} className="mx-auto text-purple-600 mb-4" />
+                <h3 className="text-2xl font-semibold text-gray-900 mb-3">Ship CLI Required</h3>
+                <p className="text-gray-600 mb-6 text-base leading-relaxed">
                   Install Ship to access 300+ security tools including GitLeaks, Semgrep, Checkov, TFLint, Trivy, and more.
                 </p>
-                <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 mb-6 font-mono text-left overflow-x-auto">
-                  <code className="text-sm text-green-400">curl -fsSL https://ship.cloudship.ai/install.sh | sh</code>
+                <div className="bg-gray-50 border border-gray-200/60 rounded-lg p-4 mb-6 font-mono text-left overflow-x-auto">
+                  <code className="text-sm text-emerald-600">curl -fsSL https://ship.cloudship.ai/install.sh | sh</code>
                 </div>
                 <a
                   href="https://github.com/cloudshipai/ship"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 text-white rounded-lg text-sm font-medium transition-all duration-200 active:scale-95 shadow-sm"
                 >
                   <span>Learn More About Ship</span>
                   <ExternalLink size={18} />
                 </a>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredServers.map(server => (
-                  <MCPServerCard
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredServers.map((server, index) => (
+                  <div
                     key={server.id}
-                    server={server}
-                    onAddServer={handleAddServer}
-                  />
+                    className="animate-in fade-in slide-in-from-bottom-4 duration-500"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <MCPServerCard
+                      server={server}
+                      onAddServer={handleAddServer}
+                    />
+                  </div>
                 ))}
               </div>
             )}

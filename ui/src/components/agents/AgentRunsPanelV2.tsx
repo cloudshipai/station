@@ -26,7 +26,13 @@ interface AgentRunsPanelProps {
   selectedRunId?: number | null;
 }
 
-export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentName, onRunClick, onExecutionViewClick, selectedRunId }) => {
+export const AgentRunsPanelV2: React.FC<AgentRunsPanelProps> = ({ 
+  agentId, 
+  agentName, 
+  onRunClick, 
+  onExecutionViewClick, 
+  selectedRunId 
+}) => {
   const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -68,22 +74,9 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
       case 'failed':
         return <XCircle className="h-4 w-4 text-red-600" />;
       case 'running':
-        return <Loader className="h-4 w-4 text-station-blue animate-spin" />;
+        return <Loader className="h-4 w-4 text-primary animate-spin" />;
       default:
         return <Clock className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'border-green-200 bg-green-50';
-      case 'failed':
-        return 'border-red-200 bg-red-50';
-      case 'running':
-        return 'border-blue-200 bg-blue-50';
-      default:
-        return 'border-border';
     }
   };
 
@@ -128,7 +121,7 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
   if (!agentId) {
     return (
       <div className="w-96 h-full border-l bg-muted/30 flex items-center justify-center">
-        <div className="text-center text-muted-foreground text-sm">
+        <div className="text-center text-muted-foreground font-mono text-sm">
           Select an agent to view runs
         </div>
       </div>
@@ -136,9 +129,9 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
   }
 
   return (
-    <div className="w-96 h-full border-l bg-background overflow-hidden flex flex-col">
+    <div className="w-96 h-full border-l bg-muted/30 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b">
+      <div className="p-4 border-b bg-background">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold">Recent Runs</h2>
@@ -160,7 +153,7 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
       </div>
 
       {/* Runs List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {loading && runs.length === 0 ? (
           <div className="text-center py-8">
             <Loader className="h-8 w-8 text-muted-foreground animate-spin mx-auto mb-2" />
@@ -185,10 +178,10 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
                 key={run.id}
                 className={cn(
                   "transition-all duration-200",
-                  isSelected && "ring-2 ring-primary",
-                  run.status === 'running' && "border-blue-300",
-                  run.status === 'failed' && "border-red-300",
-                  run.status === 'completed' && "border-green-300"
+                  isSelected && "ring-2 ring-primary ring-offset-2",
+                  run.status === 'running' && "border-primary",
+                  run.status === 'failed' && "border-destructive",
+                  run.status === 'completed' && "border-green-600"
                 )}
               >
                 <CardContent className="p-3">
@@ -200,7 +193,7 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
                         Run #{run.id}
                       </span>
                       {run.status === 'running' && (
-                        <Badge variant="destructive" className="text-xs animate-pulse">
+                        <Badge variant="destructive" className="animate-pulse text-xs">
                           LIVE
                         </Badge>
                       )}
@@ -211,7 +204,7 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
                   </div>
 
                   {/* Metrics Row */}
-                  <div className="flex items-center gap-3 text-xs flex-wrap mb-2">
+                  <div className="flex items-center gap-3 text-xs flex-wrap">
                     {/* Duration */}
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3 text-muted-foreground" />
@@ -246,14 +239,14 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
                   </div>
 
                   {/* Status Badge and Action Buttons */}
-                  <div className="pt-2 border-t flex items-center justify-between">
+                  <div className="mt-2 pt-2 border-t flex items-center justify-between">
                     <Badge 
                       variant={
                         run.status === 'completed' ? 'default' :
                         run.status === 'failed' ? 'destructive' :
                         'secondary'
                       }
-                      className="text-xs uppercase"
+                      className="text-xs"
                     >
                       {run.status}
                     </Badge>
@@ -269,7 +262,7 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
                             e.stopPropagation();
                             onExecutionViewClick(run.id, run.agent_id);
                           }}
-                          className="h-7 text-xs px-2"
+                          className="h-7 text-xs"
                           title="View execution flow"
                         >
                           <Activity className="h-3 w-3 mr-1" />
@@ -285,7 +278,7 @@ export const AgentRunsPanel: React.FC<AgentRunsPanelProps> = ({ agentId, agentNa
                           e.stopPropagation();
                           onRunClick(run.id, run.agent_id);
                         }}
-                        className="h-7 text-xs px-2"
+                        className="h-7 text-xs"
                         title="View run details"
                       >
                         <Eye className="h-3 w-3 mr-1" />

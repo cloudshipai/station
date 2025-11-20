@@ -315,16 +315,16 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
     : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-tokyo-dark3 bg-tokyo-bg">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
           <div>
-            <h2 className="text-2xl font-mono font-semibold text-tokyo-cyan flex items-center gap-2">
-              <Zap className="h-6 w-6 text-tokyo-purple" />
+            <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+              <Zap className="h-6 w-6 text-purple-600" />
               Benchmark Experiment Runner
             </h2>
-            <p className="text-sm text-tokyo-comment mt-1">
+            <p className="text-sm text-gray-600 mt-1">
               {step === 'config' && 'Configure and run quality benchmarks across multiple agent runs'}
               {step === 'running' && 'Evaluating runs in parallel with LLM-as-judge metrics'}
               {step === 'results' && 'Experiment complete - Review quality analysis results'}
@@ -332,18 +332,18 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
           </div>
           <button
             onClick={handleClose}
-            className="p-2 hover:bg-tokyo-dark3 rounded transition-colors"
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5 text-tokyo-fg" />
+            <X className="h-5 w-5 text-gray-600" />
           </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {error && (
-            <div className="mb-4 p-4 bg-tokyo-red/20 border border-tokyo-red rounded flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-tokyo-red flex-shrink-0" />
-              <span className="text-tokyo-red font-mono text-sm">{error}</span>
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
+              <span className="text-red-600 text-sm">{error}</span>
             </div>
           )}
 
@@ -351,8 +351,8 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
           {step === 'config' && (
             <div className="space-y-6">
               {/* Concurrency Setting */}
-              <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded-lg">
-                <label className="block text-sm font-mono text-tokyo-cyan mb-2">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <label className="block text-sm text-gray-900 mb-2">
                   Parallel Evaluations (Concurrency)
                 </label>
                 <div className="flex items-center gap-4">
@@ -364,11 +364,11 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
                     onChange={(e) => setConfig({ ...config, concurrency: parseInt(e.target.value) })}
                     className="flex-1"
                   />
-                  <span className="text-lg font-mono font-bold text-tokyo-purple w-16 text-right">
+                  <span className="text-lg font-bold text-purple-600 w-16 text-right">
                     {config.concurrency}
                   </span>
                 </div>
-                <p className="text-xs text-tokyo-comment mt-2">
+                <p className="text-xs text-gray-600 mt-2">
                   Higher concurrency = faster evaluation but more API costs
                 </p>
               </div>
@@ -376,15 +376,15 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
               {/* Agent Selection */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-mono font-semibold text-tokyo-fg">
+                  <h3 className="text-lg font-semibold text-gray-900">
                     Select Agents ({config.selectedAgents.length} selected)
                   </h3>
                   <button
                     onClick={toggleAllRuns}
-                    className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
+                    className={`px-3 py-1 text-xs rounded transition-colors ${
                       config.includeAllRuns
-                        ? 'bg-tokyo-green text-tokyo-bg'
-                        : 'bg-tokyo-dark3 text-tokyo-fg hover:bg-tokyo-blue7'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-100 text-gray-900 hover:bg-station-blue7'
                     }`}
                   >
                     {config.includeAllRuns ? 'All runs included' : 'Include all runs'}
@@ -393,7 +393,7 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
 
                 {loading ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader className="h-6 w-6 text-tokyo-blue animate-spin" />
+                    <Loader className="h-6 w-6 text-station-blue animate-spin" />
                   </div>
                 ) : (
                   <div className="grid gap-3">
@@ -409,8 +409,8 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
                           key={agent.id}
                           className={`p-4 border rounded-lg transition-all ${
                             isSelected
-                              ? 'bg-tokyo-blue/10 border-tokyo-blue'
-                              : 'bg-tokyo-bg border-tokyo-dark3 hover:border-tokyo-blue7'
+                              ? 'bg-station-blue/10 border-station-blue'
+                              : 'bg-white border-gray-200 hover:border-gray-300'
                           }`}
                         >
                           <div className="flex items-start gap-3">
@@ -422,34 +422,34 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
                             />
                             <div className="flex-1">
                               <div className="flex items-center justify-between">
-                                <h4 className="font-mono font-semibold text-tokyo-fg">
+                                <h4 className="font-semibold text-gray-900">
                                   {agent.name}
                                 </h4>
-                                <span className="text-xs font-mono text-tokyo-comment">
+                                <span className="text-xs text-gray-600">
                                   {runs.length} runs
                                   {config.includeAllRuns && isSelected && (
-                                    <span className="text-tokyo-green ml-2">• All included</span>
+                                    <span className="text-green-600 ml-2">• All included</span>
                                   )}
                                   {!config.includeAllRuns && selectedRunsForAgent > 0 && (
-                                    <span className="text-tokyo-blue ml-2">
+                                    <span className="text-station-blue ml-2">
                                       • {selectedRunsForAgent} selected
                                     </span>
                                   )}
                                 </span>
                               </div>
                               {agent.description && (
-                                <p className="text-sm text-tokyo-comment font-mono mt-1">
+                                <p className="text-sm text-gray-600 mt-1">
                                   {agent.description}
                                 </p>
                               )}
 
                               {/* Run selection (only show if agent selected and not includeAllRuns) */}
                               {isSelected && !config.includeAllRuns && runs.length > 0 && (
-                                <div className="mt-3 pl-4 border-l-2 border-tokyo-blue7 space-y-2">
+                                <div className="mt-3 pl-4 border-l-2 border-gray-300 space-y-2">
                                   {runs.slice(0, 10).map((run) => (
                                     <label
                                       key={run.id}
-                                      className="flex items-start gap-2 text-sm cursor-pointer hover:bg-tokyo-dark3/50 p-2 rounded"
+                                      className="flex items-start gap-2 text-sm cursor-pointer hover:bg-gray-100/50 p-2 rounded"
                                     >
                                       <input
                                         type="checkbox"
@@ -458,17 +458,17 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
                                         className="mt-0.5"
                                       />
                                       <div className="flex-1">
-                                        <div className="font-mono text-tokyo-comment">
+                                        <div className="text-gray-600">
                                           Run #{run.id} • {run.status}
                                         </div>
-                                        <div className="text-xs text-tokyo-comment truncate">
+                                        <div className="text-xs text-gray-600 truncate">
                                           {run.task.substring(0, 100)}...
                                         </div>
                                       </div>
                                     </label>
                                   ))}
                                   {runs.length > 10 && (
-                                    <div className="text-xs text-tokyo-comment italic pl-2">
+                                    <div className="text-xs text-gray-600 italic pl-2">
                                       + {runs.length - 10} more runs
                                     </div>
                                   )}
@@ -485,20 +485,20 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
 
               {/* Summary */}
               {config.selectedRuns.length > 0 && (
-                <div className="p-4 bg-tokyo-purple/10 border border-tokyo-purple rounded-lg">
+                <div className="p-4 bg-purple-600/10 border border-purple-600 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-lg font-mono font-semibold text-tokyo-purple">
+                      <div className="text-lg font-semibold text-purple-600">
                         Ready to evaluate {config.selectedRuns.length} runs
                       </div>
-                      <div className="text-sm text-tokyo-comment mt-1">
+                      <div className="text-sm text-gray-600 mt-1">
                         Estimated cost: ~${(config.selectedRuns.length * 0.0004).toFixed(4)} •
                         Duration: ~{Math.ceil((config.selectedRuns.length / config.concurrency) * 4)}s
                       </div>
                     </div>
                     <button
                       onClick={startExperiment}
-                      className="flex items-center gap-2 px-6 py-3 bg-tokyo-purple text-tokyo-bg hover:bg-opacity-90 rounded font-mono font-semibold transition-colors"
+                      className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white hover:bg-opacity-90 rounded font-semibold transition-colors"
                     >
                       <Play className="h-5 w-5" />
                       Start Experiment
@@ -514,46 +514,46 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
             <div className="space-y-6">
               {/* Progress Overview */}
               <div className="grid grid-cols-4 gap-4">
-                <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded-lg">
-                  <div className="text-sm font-mono text-tokyo-comment mb-1">Total Runs</div>
-                  <div className="text-2xl font-mono font-bold text-tokyo-cyan">
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">Total Runs</div>
+                  <div className="text-2xl font-bold text-gray-900">
                     {config.selectedRuns.length}
                   </div>
                 </div>
-                <div className="p-4 bg-tokyo-green/10 border border-tokyo-green rounded-lg">
-                  <div className="text-sm font-mono text-tokyo-comment mb-1">Completed</div>
-                  <div className="text-2xl font-mono font-bold text-tokyo-green">
+                <div className="p-4 bg-green-600/10 border border-green-600 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">Completed</div>
+                  <div className="text-2xl font-bold text-green-600">
                     {completedCount}
                   </div>
                 </div>
-                <div className="p-4 bg-tokyo-blue/10 border border-tokyo-blue rounded-lg">
-                  <div className="text-sm font-mono text-tokyo-comment mb-1">Evaluating</div>
-                  <div className="text-2xl font-mono font-bold text-tokyo-blue">
+                <div className="p-4 bg-station-blue/10 border border-station-blue rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">Evaluating</div>
+                  <div className="text-2xl font-bold text-station-blue">
                     {evaluatingCount}
                   </div>
                 </div>
-                <div className="p-4 bg-tokyo-red/10 border border-tokyo-red rounded-lg">
-                  <div className="text-sm font-mono text-tokyo-comment mb-1">Failed</div>
-                  <div className="text-2xl font-mono font-bold text-tokyo-red">
+                <div className="p-4 bg-red-600/10 border border-red-600 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">Failed</div>
+                  <div className="text-2xl font-bold text-red-600">
                     {failedCount}
                   </div>
                 </div>
               </div>
 
               {/* Progress Bar */}
-              <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded-lg">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-mono text-tokyo-comment">
+                  <div className="text-sm text-gray-600">
                     Progress: {Math.floor(progressPct)}%
                   </div>
-                  <div className="text-sm font-mono text-tokyo-comment flex items-center gap-2">
+                  <div className="text-sm text-gray-600 flex items-center gap-2">
                     <Clock className="h-4 w-4" />
                     {elapsedTime}s elapsed
                   </div>
                 </div>
-                <div className="w-full bg-tokyo-dark3 rounded-full h-3 overflow-hidden">
+                <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-gradient-to-r from-tokyo-blue to-tokyo-purple h-full transition-all duration-300"
+                    className="bg-gradient-to-r from-station-blue to-purple-600 h-full transition-all duration-300"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
@@ -566,33 +566,33 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
                     key={progress.run_id}
                     className={`p-3 border rounded-lg flex items-center justify-between ${
                       progress.status === 'completed'
-                        ? 'bg-tokyo-green/10 border-tokyo-green'
+                        ? 'bg-green-600/10 border-green-600'
                         : progress.status === 'failed'
-                        ? 'bg-tokyo-red/10 border-tokyo-red'
+                        ? 'bg-red-600/10 border-red-600'
                         : progress.status === 'evaluating'
-                        ? 'bg-tokyo-blue/10 border-tokyo-blue'
-                        : 'bg-tokyo-bg border-tokyo-dark3'
+                        ? 'bg-station-blue/10 border-station-blue'
+                        : 'bg-white border-gray-200'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       {progress.status === 'completed' && (
-                        <CheckCircle className="h-5 w-5 text-tokyo-green" />
+                        <CheckCircle className="h-5 w-5 text-green-600" />
                       )}
                       {progress.status === 'failed' && (
-                        <XCircle className="h-5 w-5 text-tokyo-red" />
+                        <XCircle className="h-5 w-5 text-red-600" />
                       )}
                       {progress.status === 'evaluating' && (
-                        <Loader className="h-5 w-5 text-tokyo-blue animate-spin" />
+                        <Loader className="h-5 w-5 text-station-blue animate-spin" />
                       )}
                       {progress.status === 'pending' && (
-                        <div className="h-5 w-5 border-2 border-tokyo-dark3 rounded-full" />
+                        <div className="h-5 w-5 border-2 border-gray-200 rounded-full" />
                       )}
                       <div>
-                        <div className="font-mono text-sm text-tokyo-fg">
+                        <div className="text-sm text-gray-900">
                           Run #{progress.run_id}
                         </div>
                         {progress.error && (
-                          <div className="text-xs text-tokyo-red">{progress.error}</div>
+                          <div className="text-xs text-red-600">{progress.error}</div>
                         )}
                       </div>
                     </div>
@@ -600,21 +600,21 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
                     {progress.status === 'completed' && (
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <div className="text-xs text-tokyo-comment">Quality Score</div>
+                          <div className="text-xs text-gray-600">Quality Score</div>
                           <div
-                            className={`text-lg font-mono font-bold ${
+                            className={`text-lg font-bold ${
                               (progress.quality_score || 0) >= 8.5
-                                ? 'text-tokyo-green'
+                                ? 'text-green-600'
                                 : (progress.quality_score || 0) >= 7
-                                ? 'text-tokyo-yellow'
-                                : 'text-tokyo-red'
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
                             }`}
                           >
                             {progress.quality_score?.toFixed(1)}/10
                           </div>
                         </div>
                         {progress.production_ready && (
-                          <div className="px-2 py-1 bg-tokyo-green text-tokyo-bg text-xs font-mono rounded">
+                          <div className="px-2 py-1 bg-green-600 text-white text-xs rounded">
                             PROD READY
                           </div>
                         )}
@@ -631,37 +631,37 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
             <div className="space-y-6">
               {/* Summary Cards */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-6 bg-gradient-to-br from-tokyo-purple/20 to-tokyo-blue/20 border border-tokyo-purple rounded-lg">
+                <div className="p-6 bg-gradient-to-br from-purple-100 to-blue-100 border border-purple-600 rounded-lg">
                   <div className="flex items-center gap-3 mb-2">
-                    <TrendingUp className="h-6 w-6 text-tokyo-purple" />
-                    <div className="text-sm font-mono text-tokyo-comment">
+                    <TrendingUp className="h-6 w-6 text-purple-600" />
+                    <div className="text-sm text-gray-600">
                       Average Quality Score
                     </div>
                   </div>
                   <div
-                    className={`text-4xl font-mono font-bold ${
+                    className={`text-4xl font-bold ${
                       experimentResults.avgQualityScore >= 8.5
-                        ? 'text-tokyo-green'
+                        ? 'text-green-600'
                         : experimentResults.avgQualityScore >= 7
-                        ? 'text-tokyo-yellow'
-                        : 'text-tokyo-red'
+                        ? 'text-yellow-600'
+                        : 'text-red-600'
                     }`}
                   >
                     {experimentResults.avgQualityScore.toFixed(1)}/10
                   </div>
                 </div>
 
-                <div className="p-6 bg-gradient-to-br from-tokyo-green/20 to-tokyo-cyan/20 border border-tokyo-green rounded-lg">
+                <div className="p-6 bg-gradient-to-br from-green-100 to-blue-100 border border-green-600 rounded-lg">
                   <div className="flex items-center gap-3 mb-2">
-                    <CheckCircle className="h-6 w-6 text-tokyo-green" />
-                    <div className="text-sm font-mono text-tokyo-comment">
+                    <CheckCircle className="h-6 w-6 text-green-600" />
+                    <div className="text-sm text-gray-600">
                       Production Ready
                     </div>
                   </div>
-                  <div className="text-4xl font-mono font-bold text-tokyo-green">
+                  <div className="text-4xl font-bold text-green-600">
                     {Math.floor(experimentResults.productionReadyPct)}%
                   </div>
-                  <div className="text-sm text-tokyo-comment mt-1">
+                  <div className="text-sm text-gray-600 mt-1">
                     {experimentResults.results.filter((r) => r.production_ready).length} of{' '}
                     {experimentResults.completed} runs
                   </div>
@@ -670,46 +670,46 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
 
               {/* Experiment Stats */}
               <div className="grid grid-cols-4 gap-3">
-                <div className="p-4 bg-tokyo-bg border border-tokyo-dark3 rounded">
-                  <div className="text-xs font-mono text-tokyo-comment mb-1">Total Runs</div>
-                  <div className="text-xl font-mono font-bold text-tokyo-cyan">
+                <div className="p-4 bg-white border border-gray-200 rounded">
+                  <div className="text-xs text-gray-600 mb-1">Total Runs</div>
+                  <div className="text-xl font-bold text-gray-900">
                     {experimentResults.totalRuns}
                   </div>
                 </div>
-                <div className="p-4 bg-tokyo-bg border border-tokyo-dark3 rounded">
-                  <div className="text-xs font-mono text-tokyo-comment mb-1">Completed</div>
-                  <div className="text-xl font-mono font-bold text-tokyo-green">
+                <div className="p-4 bg-white border border-gray-200 rounded">
+                  <div className="text-xs text-gray-600 mb-1">Completed</div>
+                  <div className="text-xl font-bold text-green-600">
                     {experimentResults.completed}
                   </div>
                 </div>
-                <div className="p-4 bg-tokyo-bg border border-tokyo-dark3 rounded">
-                  <div className="text-xs font-mono text-tokyo-comment mb-1">Failed</div>
-                  <div className="text-xl font-mono font-bold text-tokyo-red">
+                <div className="p-4 bg-white border border-gray-200 rounded">
+                  <div className="text-xs text-gray-600 mb-1">Failed</div>
+                  <div className="text-xl font-bold text-red-600">
                     {experimentResults.failed}
                   </div>
                 </div>
-                <div className="p-4 bg-tokyo-bg border border-tokyo-dark3 rounded">
-                  <div className="text-xs font-mono text-tokyo-comment mb-1 flex items-center gap-1">
+                <div className="p-4 bg-white border border-gray-200 rounded">
+                  <div className="text-xs text-gray-600 mb-1 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     Duration
                   </div>
-                  <div className="text-xl font-mono font-bold text-tokyo-purple">
+                  <div className="text-xl font-bold text-purple-600">
                     {experimentResults.durationSeconds.toFixed(1)}s
                   </div>
                 </div>
               </div>
 
               {/* Quality Distribution */}
-              <div className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded-lg">
-                <h3 className="text-lg font-mono font-semibold text-tokyo-cyan mb-3">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Quality Score Distribution
                 </h3>
                 <div className="space-y-2">
                   {[
-                    { range: '9.0-10.0', label: 'Excellent', color: 'tokyo-green' },
-                    { range: '8.0-8.9', label: 'Good', color: 'tokyo-cyan' },
-                    { range: '7.0-7.9', label: 'Fair', color: 'tokyo-yellow' },
-                    { range: '0.0-6.9', label: 'Needs Work', color: 'tokyo-red' },
+                    { range: '9.0-10.0', label: 'Excellent', color: 'green-600' },
+                    { range: '8.0-8.9', label: 'Good', color: 'blue-600' },
+                    { range: '7.0-7.9', label: 'Fair', color: 'yellow-600' },
+                    { range: '0.0-6.9', label: 'Needs Work', color: 'red-600' },
                   ].map((bucket) => {
                     const count = experimentResults.results.filter((r) => {
                       if (!r.quality_score) return false;
@@ -724,14 +724,14 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
                     return (
                       <div key={bucket.range}>
                         <div className="flex items-center justify-between mb-1">
-                          <div className="text-sm font-mono text-tokyo-fg">
+                          <div className="text-sm text-gray-900">
                             {bucket.range} - {bucket.label}
                           </div>
-                          <div className="text-sm font-mono text-tokyo-comment">
+                          <div className="text-sm text-gray-600">
                             {count} runs ({Math.floor(pct)}%)
                           </div>
                         </div>
-                        <div className="w-full bg-tokyo-dark3 rounded-full h-2 overflow-hidden">
+                        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                           <div
                             className={`bg-${bucket.color} h-full transition-all duration-300`}
                             style={{ width: `${pct}%` }}
@@ -747,8 +747,8 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-tokyo-dark3 bg-tokyo-bg flex items-center justify-between">
-          <div className="text-sm font-mono text-tokyo-comment">
+        <div className="p-4 border-t border-gray-200 bg-white flex items-center justify-between">
+          <div className="text-sm text-gray-600">
             {step === 'config' && `${config.selectedRuns.length} runs selected`}
             {step === 'running' && `Evaluating ${config.selectedRuns.length} runs...`}
             {step === 'results' && `Experiment completed in ${experimentResults?.durationSeconds.toFixed(1)}s`}
@@ -758,13 +758,13 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
               <>
                 <button
                   onClick={reset}
-                  className="px-4 py-2 bg-tokyo-dark3 text-tokyo-fg hover:bg-tokyo-blue7 rounded font-mono text-sm transition-colors"
+                  className="px-4 py-2 bg-gray-100 text-gray-900 hover:bg-station-blue7 rounded text-sm transition-colors"
                 >
                   New Experiment
                 </button>
                 <button
                   onClick={handleClose}
-                  className="px-4 py-2 bg-tokyo-blue text-tokyo-bg hover:bg-opacity-90 rounded font-mono text-sm transition-colors"
+                  className="px-4 py-2 bg-station-blue text-white hover:bg-opacity-90 rounded text-sm transition-colors"
                 >
                   Done
                 </button>
@@ -773,7 +773,7 @@ export const BenchmarkExperimentModal: React.FC<BenchmarkExperimentModalProps> =
             {step === 'config' && (
               <button
                 onClick={handleClose}
-                className="px-4 py-2 bg-tokyo-dark3 text-tokyo-fg hover:bg-tokyo-blue7 rounded font-mono text-sm transition-colors"
+                className="px-4 py-2 bg-gray-100 text-gray-900 hover:bg-station-blue7 rounded text-sm transition-colors"
               >
                 Cancel
               </button>

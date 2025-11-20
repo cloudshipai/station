@@ -4,85 +4,34 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    /* Station Blue Theme - Light Mode */
+    --background: 210 40% 98%;         /* #F8FAFB - Very light blue-gray */
+    --foreground: 214 32% 10%;         /* #171923 - Very dark blue-gray */
+    --card: 0 0% 100%;                 /* #FFFFFF - Pure white */
+    --card-foreground: 214 32% 10%;    /* #171923 - Very dark blue-gray */
+    --popover: 0 0% 100%;              /* #FFFFFF - Pure white */
+    --popover-foreground: 214 32% 10%; /* #171923 - Very dark blue-gray */
+    --primary: 210 100% 50%;           /* #0084FF - Station blue */
+    --primary-foreground: 0 0% 100%;   /* #FFFFFF - White */
+    --secondary: 210 25% 88%;          /* #DAE5ED - Light blue-gray */
+    --secondary-foreground: 214 32% 10%; /* #171923 - Very dark blue-gray */
+    --muted: 210 25% 94%;              /* #EDF2F6 - Very light blue-gray */
+    --muted-foreground: 210 15% 40%;   /* #6B7280 - Medium gray */
+    --accent: 210 100% 50%;            /* #0084FF - Station blue */
+    --accent-foreground: 0 0% 100%;    /* #FFFFFF - White */
+    --destructive: 0 84.2% 60.2%;      /* #EF4444 - Red */
+    --destructive-foreground: 0 0% 98%; /* #FAFAFA - Almost white */
+    --border: 210 25% 88%;             /* #DAE5ED - Light blue-gray */
+    --input: 210 25% 88%;              /* #DAE5ED - Light blue-gray */
+    --ring: 210 100% 50%;              /* #0084FF - Station blue */
     --radius: 0.5rem;
-
-    /* Tokyo Night Theme Colors */
-    --tokyo-bg: #1a1b26;
-    --tokyo-bg-dark: #16161e;
-    --tokyo-bg-highlight: #292e42;
-    --tokyo-terminal-black: #414868;
-    --tokyo-fg: #c0caf5;
-    --tokyo-fg-dark: #a9b1d6;
-    --tokyo-fg-gutter: #3b4261;
-    --tokyo-dark3: #545c7e;
-    --tokyo-comment: #565f89;
-    --tokyo-dark5: #737aa2;
-    --tokyo-blue0: #3d59a1;
-    --tokyo-blue: #7aa2f7;
-    --tokyo-cyan: #7dcfff;
-    --tokyo-blue1: #2ac3de;
-    --tokyo-blue2: #0db9d7;
-    --tokyo-blue5: #89ddff;
-    --tokyo-blue6: #b4f9f8;
-    --tokyo-blue7: #394b70;
-    --tokyo-purple: #9d7cd8;
-    --tokyo-magenta: #bb9af7;
-    --tokyo-magenta2: #ff007c;
-    --tokyo-red: #f7768e;
-    --tokyo-red1: #db4b4b;
-    --tokyo-orange: #ff9e64;
-    --tokyo-yellow: #e0af68;
-    --tokyo-green: #9ece6a;
-    --tokyo-green1: #73daca;
-    --tokyo-green2: #41a6b5;
-    --tokyo-teal: #1abc9c;
     
-    /* Neon Edge Colors */
-    --neon-pink: #ff00ff;
-    --neon-purple: #a855f7;
-    --neon-bright: #ff44ff;
-    --neon-glow: #ff00ff80;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
+    /* Chart colors - Blue-based palette */
+    --chart-1: 210 100% 50%;  /* Primary blue */
+    --chart-2: 199 89% 48%;   /* Cyan blue */
+    --chart-3: 188 86% 53%;   /* Teal blue */
+    --chart-4: 220 83% 54%;   /* Indigo blue */
+    --chart-5: 230 89% 62%;   /* Light blue */
   }
 }
 
@@ -95,71 +44,67 @@
 }
 
 @layer utilities {
-  .shadow-tokyo {
+  /* Clean shadows for Station theme */
+  .shadow-station {
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  
+  .shadow-station-md {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
   
-  .shadow-tokyo-lg {
+  .shadow-station-lg {
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   }
   
-  .shadow-tokyo-blue {
-    box-shadow: 0 0 0 1px var(--tokyo-blue7), 0 4px 6px -1px rgba(122, 162, 247, 0.1);
-  }
-  
-  .shadow-tokyo-glow {
-    box-shadow: 0 0 20px rgba(122, 162, 247, 0.2);
-  }
-  
-  /* Neon edge animations */
-  @keyframes pulse-neon {
-    0%, 100% {
-      filter: drop-shadow(0 0 5px var(--neon-glow)) brightness(1);
-    }
-    50% {
-      filter: drop-shadow(0 0 15px var(--neon-glow)) brightness(1.2);
-    }
-  }
-  
-  /* React Flow edge styling with neon effects */
+  /* Clean React Flow edge styling - OpenAI inspired */
   .react-flow__edge-path {
-    stroke: #ff00ff !important;
-    stroke-width: 3px !important;
-    filter: drop-shadow(0 0 8px #ff00ff80) !important;
-    animation: pulse-neon 2s ease-in-out infinite !important;
-  }
-  
-  .neon-edge .react-flow__edge-path {
-    stroke: var(--neon-pink) !important;
-    stroke-width: 3px !important;
-    animation: pulse-neon 2s ease-in-out infinite;
-    filter: drop-shadow(0 0 8px var(--neon-glow));
-  }
-  
-  .neon-edge-mcp .react-flow__edge-path {
-    stroke: var(--neon-purple) !important;
+    stroke: #C4C4C4 !important; /* Light gray - very subtle */
     stroke-width: 2px !important;
-    animation: pulse-neon 2.5s ease-in-out infinite;
-    filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.6));
+    opacity: 0.6;
   }
   
-  /* Ensure edges are visible */
-  .react-flow__edges {
-    z-index: 100 !important;
+  .react-flow__edge-path:hover {
+    stroke: #A78BFA !important; /* Soft lavender on hover */
+    stroke-width: 2.5px !important;
+    opacity: 1;
   }
-
-  /* Node transition animations for expand/collapse */
+  
+  /* Orchestrator edges - soft lavender */
+  .react-flow__edge.orchestrator .react-flow__edge-path {
+    stroke: #C4B5FD !important; /* Soft lavender */
+    stroke-width: 2px !important;
+    opacity: 0.7;
+  }
+  
+  /* Callable edges - soft mint */
+  .react-flow__edge.callable .react-flow__edge-path {
+    stroke: #86EFAC !important; /* Soft mint */
+    stroke-width: 2px !important;
+    opacity: 0.7;
+  }
+  
+  /* Clean transitions */
   .react-flow__node {
-    transition: all 0.3s ease-in-out !important;
-  }
-  
-  /* Smooth transitions for handles */
-  .react-flow__handle {
     transition: all 0.2s ease-in-out !important;
   }
   
-  /* Edge transition animations */
+  .react-flow__handle {
+    transition: all 0.15s ease-in-out !important;
+  }
+  
   .react-flow__edge {
-    transition: all 0.3s ease-in-out !important;
+    transition: all 0.2s ease-in-out !important;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wrench, ChevronDown, ChevronUp, Copy, CheckCircle, Clock, Zap } from 'lucide-react';
+import { Wrench, ChevronDown, ChevronUp, Copy, CheckCircle, Clock, Zap, Database, DollarSign, Rocket, AlertTriangle, Bot, BarChart2 } from 'lucide-react';
 import { tracesApi } from '../../api/station';
 import type { JaegerSpan, JaegerTag } from '../../types/station';
 
@@ -143,30 +143,31 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
 
   const getToolColor = (toolName: string): string => {
     if (toolName.includes('get_') || toolName.includes('list_') || toolName.includes('read_')) {
-      return 'border-blue-500 bg-blue-900/20';
+      return 'border-blue-200 bg-blue-50';
     }
     if (toolName.includes('cost') || toolName.includes('billing')) {
-      return 'border-green-500 bg-green-900/20';
+      return 'border-green-200 bg-green-50';
     }
     if (toolName.includes('agent_')) {
-      return 'border-purple-500 bg-purple-900/20';
+      return 'border-station-lavender-200 bg-station-lavender-50';
     }
-    return 'border-gray-500 bg-gray-900/20';
+    return 'border-gray-200 bg-gray-50';
   };
 
-  const getToolIcon = (toolName: string): string => {
-    if (toolName.includes('agent_')) return '🤖';
-    if (toolName.includes('get_') || toolName.includes('list_')) return '📊';
-    if (toolName.includes('cost') || toolName.includes('billing')) return '💰';
-    if (toolName.includes('deployment')) return '🚀';
-    if (toolName.includes('incident')) return '🚨';
-    return '🔧';
+  const getToolIconComponent = (toolName: string) => {
+    const iconClass = "h-5 w-5";
+    if (toolName.includes('agent_')) return <Bot className={`${iconClass} text-station-lavender-600`} />;
+    if (toolName.includes('get_') || toolName.includes('list_')) return <BarChart2 className={`${iconClass} text-blue-600`} />;
+    if (toolName.includes('cost') || toolName.includes('billing')) return <DollarSign className={`${iconClass} text-green-600`} />;
+    if (toolName.includes('deployment')) return <Rocket className={`${iconClass} text-purple-600`} />;
+    if (toolName.includes('incident')) return <AlertTriangle className={`${iconClass} text-red-600`} />;
+    return <Wrench className={`${iconClass} text-gray-600`} />;
   };
 
   if (loading) {
     return (
       <div className="text-center py-12">
-        <div className="text-gray-400 font-mono">Loading tool calls...</div>
+        <div className="text-gray-600">Loading tool calls...</div>
       </div>
     );
   }
@@ -174,8 +175,8 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
   if (error) {
     return (
       <div className="text-center py-12">
-        <div className="text-red-400 font-mono mb-2">{error}</div>
-        <div className="text-gray-500 font-mono text-sm">
+        <div className="text-red-600 mb-2">{error}</div>
+        <div className="text-gray-500 text-sm">
           Tool call data may not be available for this run
         </div>
       </div>
@@ -185,7 +186,7 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
   if (toolCalls.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="text-gray-400 font-mono">No tool calls recorded for this run</div>
+        <div className="text-gray-600">No tool calls recorded for this run</div>
       </div>
     );
   }
@@ -194,30 +195,30 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
     <div className="space-y-3">
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
-            <Wrench className="h-4 w-4 text-cyan-400" />
-            <div className="text-sm text-gray-400">Total Tool Calls</div>
+            <Wrench className="h-4 w-4 text-primary" />
+            <div className="text-sm text-gray-600">Total Tool Calls</div>
           </div>
-          <div className="text-2xl font-mono text-cyan-400">{toolCalls.length}</div>
+          <div className="text-2xl font-semibold text-primary">{toolCalls.length}</div>
         </div>
         
-        <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
-            <Clock className="h-4 w-4 text-blue-400" />
-            <div className="text-sm text-gray-400">Total Tool Time</div>
+            <Clock className="h-4 w-4 text-blue-600" />
+            <div className="text-sm text-gray-600">Total Tool Time</div>
           </div>
-          <div className="text-2xl font-mono text-blue-400">
+          <div className="text-2xl font-semibold text-blue-600">
             {formatDuration(toolCalls.reduce((sum, call) => sum + call.duration, 0))}
           </div>
         </div>
 
-        <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
-            <Zap className="h-4 w-4 text-green-400" />
-            <div className="text-sm text-gray-400">Avg Duration</div>
+            <Zap className="h-4 w-4 text-green-600" />
+            <div className="text-sm text-gray-600">Avg Duration</div>
           </div>
-          <div className="text-2xl font-mono text-green-400">
+          <div className="text-2xl font-semibold text-green-600">
             {formatDuration(toolCalls.reduce((sum, call) => sum + call.duration, 0) / toolCalls.length)}
           </div>
         </div>
@@ -227,55 +228,56 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
       {toolCalls.map((call, index) => (
         <div
           key={call.spanID}
-          className={`border rounded-lg overflow-hidden transition-all ${getToolColor(call.toolName)}`}
+          className={`border rounded-lg overflow-hidden transition-all shadow-sm hover:shadow-md ${getToolColor(call.toolName)}`}
         >
           <div
-            className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-800/50 transition-colors"
+            className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/50 transition-colors"
             onClick={() => toggleExpand(call.spanID)}
           >
             <div className="flex items-center gap-3 flex-1">
-              <span className="text-2xl">{getToolIcon(call.toolName)}</span>
+              {getToolIconComponent(call.toolName)}
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-500 font-mono text-xs">#{index + 1}</span>
-                  <span className="font-mono text-gray-100 font-semibold">{call.toolName}</span>
+                  <span className="text-gray-500 text-xs">#{index + 1}</span>
+                  <span className="text-gray-900 font-medium">{call.toolName}</span>
                 </div>
                 {call.error && (
-                  <div className="text-red-400 text-xs font-mono mt-1">
-                    ⚠️ {call.error}
+                  <div className="flex items-center gap-1 text-red-600 text-xs mt-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {call.error}
                   </div>
                 )}
               </div>
             </div>
             
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 px-3 py-1 bg-gray-900/50 rounded border border-gray-700">
-                <Clock className="h-3 w-3 text-gray-400" />
-                <span className="text-gray-300 font-mono text-sm font-semibold">
+              <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded border border-gray-200">
+                <Clock className="h-3 w-3 text-gray-600" />
+                <span className="text-gray-900 text-sm font-medium">
                   {formatDuration(call.duration)}
                 </span>
               </div>
               {expandedCalls.has(call.spanID) ? (
-                <ChevronUp className="h-5 w-5 text-gray-400" />
+                <ChevronUp className="h-5 w-5 text-gray-600" />
               ) : (
-                <ChevronDown className="h-5 w-5 text-gray-400" />
+                <ChevronDown className="h-5 w-5 text-gray-600" />
               )}
             </div>
           </div>
 
           {expandedCalls.has(call.spanID) && (
-            <div className="border-t border-gray-700 bg-gray-900/30 p-4 space-y-4">
+            <div className="border-t border-gray-200 bg-white p-4 space-y-4">
               {/* Input Section */}
               {call.input && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-mono font-semibold text-cyan-400">Input</h4>
+                    <h4 className="text-sm font-semibold text-gray-900">Input</h4>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         copyToClipboard(JSON.stringify(call.input, null, 2), `${call.spanID}-input`);
                       }}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                      className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
                     >
                       {copiedIndex === `${call.spanID}-input` ? (
                         <><CheckCircle className="h-3 w-3" /> Copied</>
@@ -284,8 +286,8 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
                       )}
                     </button>
                   </div>
-                  <div className="bg-gray-950 border border-gray-800 rounded p-4 max-h-80 overflow-auto">
-                    <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap break-words">
+                  <div className="bg-gray-50 border border-gray-200 rounded p-4 max-h-80 overflow-auto">
+                    <pre className="text-xs text-gray-900 font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(call.input, null, 2)}
                     </pre>
                   </div>
@@ -296,13 +298,13 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
               {call.output && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-mono font-semibold text-green-400">Output</h4>
+                    <h4 className="text-sm font-semibold text-gray-900">Output</h4>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         copyToClipboard(JSON.stringify(call.output, null, 2), `${call.spanID}-output`);
                       }}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                      className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
                     >
                       {copiedIndex === `${call.spanID}-output` ? (
                         <><CheckCircle className="h-3 w-3" /> Copied</>
@@ -311,8 +313,8 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
                       )}
                     </button>
                   </div>
-                  <div className="bg-gray-950 border border-gray-800 rounded p-4 max-h-[32rem] overflow-auto">
-                    <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap break-words">
+                  <div className="bg-gray-50 border border-gray-200 rounded p-4 max-h-[32rem] overflow-auto">
+                    <pre className="text-xs text-gray-900 font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(call.output, null, 2)}
                     </pre>
                   </div>
@@ -321,26 +323,26 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
 
               {/* Span Metadata - only show if no input/output */}
               {!call.input && !call.output && (
-                <div className="pt-4 border-t border-gray-800">
-                  <h4 className="text-xs font-mono font-semibold text-gray-400 mb-2">Span Metadata</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                    <div className="text-gray-500">Span ID:</div>
-                    <div className="text-gray-300 font-mono">{call.spanID.substring(0, 16)}...</div>
+                <div className="pt-4 border-t border-gray-200">
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2">Span Metadata</h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="text-gray-600">Span ID:</div>
+                    <div className="text-gray-900 font-mono">{call.spanID.substring(0, 16)}...</div>
                     
-                    <div className="text-gray-500">Operation:</div>
-                    <div className="text-gray-300">{call.operationName}</div>
+                    <div className="text-gray-600">Operation:</div>
+                    <div className="text-gray-900">{call.operationName}</div>
                     
                     {Object.keys(call.tags).length > 0 && (
                       <>
-                        <div className="text-gray-500 col-span-2 mt-2 mb-1">Available Tags:</div>
+                        <div className="text-gray-600 col-span-2 mt-2 mb-1">Available Tags:</div>
                         {Object.entries(call.tags).slice(0, 8).map(([key, value]) => {
                           // Skip genkit internal tags for cleaner display
                           if (key.startsWith('otel.') || key.startsWith('span.')) return null;
                           const valStr = String(value);
                           return (
                             <React.Fragment key={key}>
-                              <div className="text-gray-500 pl-2 text-xs">{key}:</div>
-                              <div className="text-gray-300 font-mono text-xs break-all">
+                              <div className="text-gray-600 pl-2 text-xs">{key}:</div>
+                              <div className="text-gray-900 font-mono text-xs break-all">
                                 {valStr.length > 100 ? `${valStr.substring(0, 100)}...` : valStr}
                               </div>
                             </React.Fragment>
