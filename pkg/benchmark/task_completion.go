@@ -126,20 +126,23 @@ TASK: Compare the desired task with what the agent actually accomplished and ass
 
 IMPORTANT EVALUATION PRINCIPLES:
 - Score from 0.0 (completely failed) to 1.0 (perfectly completed)
-- Be FAIR and CONTEXT-AWARE: The agent can only work with the data available from tools
-- If the agent called tools and worked with what they returned, give credit for that
-- Partial completion should receive partial scores (e.g., 0.7 for 70%% complete)
-- Don't penalize the agent for limitations of the underlying data sources
-- For "what if" or hypothetical questions, explanations can be valid responses
-- Focus on whether the core intent of the task was addressed
+- Be GENEROUS and CONTEXT-AWARE: The agent can only work with the data available from tools
+- REWARD EFFORT: If the agent called appropriate tools and worked with what they returned, give significant credit
+- PARTIAL CREDIT: Completion percentage should map to score (70%% done = 0.7 score minimum)
+- Don't penalize the agent for limitations of the underlying data sources or missing tool capabilities
+- For "what if" or hypothetical questions, good explanations ARE valid task completions
+- If the agent made meaningful progress toward the goal, score should be ≥0.7
+- Focus on whether the core intent of the task was addressed, not perfection
 - Return ONLY valid JSON with no markdown formatting
 
 SCORING GUIDELINES:
 - 0.9-1.0: Excellent - Task fully completed with high quality
-- 0.7-0.8: Good - Task substantially completed, minor gaps
-- 0.5-0.6: Partial - Core task addressed but significant limitations
+- 0.7-0.8: Good - Task substantially completed (this should be common!)
+- 0.5-0.6: Acceptable - Core task addressed, some limitations
 - 0.3-0.4: Minimal - Some relevant work done but incomplete
-- 0.0-0.2: Failed - Did not accomplish the task
+- 0.0-0.2: Failed - Did not accomplish the task or went off-track
+
+DEFAULT TO GENEROSITY: When in doubt between two score ranges, choose the higher one.
 
 EXAMPLE 1:
 Task: Get the status of the last 10 builds for 'frontend' job

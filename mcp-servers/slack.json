@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "slack": {
+      "description": "Slack MCP server for posting incident reports and communicating with the team.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@zencoderai/slack-mcp-server"
+      ],
+      "env": {
+        "SLACK_BOT_TOKEN": "{{ .SLACK_BOT_TOKEN }}",
+        "SLACK_TEAM_ID": "{{ .SLACK_TEAM_ID }}"
+      }
+    }
+  }
+}

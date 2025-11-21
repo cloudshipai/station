@@ -801,84 +801,92 @@ const MCPServerDetailsModal = ({ serverId, isOpen, onClose }: { serverId: number
   if (!isOpen || !serverId) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
-            MCP Server Details: {serverDetails?.name}
-          </h2>
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <Database className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-semibold text-gray-900">
+              MCP Server Details: {serverDetails?.name}
+            </h2>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
+            <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
           </button>
         </div>
 
-        {serverDetails && (
-          <div className="space-y-6">
-            {/* Server Configuration */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-blue mb-3">Configuration</h3>
-              <div className="grid gap-3">
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Command:</span>
-                  <span className="font-mono text-tokyo-fg">{serverDetails.command}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Arguments:</span>
-                  <span className="font-mono text-tokyo-fg">{serverDetails.args ? serverDetails.args.join(' ') : 'None'}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Environment ID:</span>
-                  <span className="font-mono text-tokyo-fg">{serverDetails.environment_id}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Created:</span>
-                  <span className="font-mono text-tokyo-fg">{new Date(serverDetails.created_at).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Timeout:</span>
-                  <span className="font-mono text-tokyo-fg">{serverDetails.timeout_seconds || 30}s</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <span className="font-mono text-tokyo-comment">Auto Restart:</span>
-                  <span className="font-mono text-tokyo-fg">{serverDetails.auto_restart ? 'Yes' : 'No'}</span>
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+          {serverDetails && (
+            <div className="space-y-6">
+              {/* Server Configuration */}
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Database className="h-5 w-5 text-primary" />
+                  Configuration
+                </h3>
+                <div className="grid gap-3">
+                  <div className="flex flex-col gap-1 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Command:</span>
+                    <span className="text-gray-900 font-mono text-sm">{serverDetails.command}</span>
+                  </div>
+                  <div className="flex flex-col gap-1 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Arguments:</span>
+                    <span className="text-gray-900 font-mono text-sm break-all">{serverDetails.args ? serverDetails.args.join(' ') : 'None'}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Environment ID:</span>
+                    <span className="text-gray-900 font-medium">{serverDetails.environment_id}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Created:</span>
+                    <span className="text-gray-900 font-medium">{new Date(serverDetails.created_at).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Timeout:</span>
+                    <span className="text-gray-900 font-medium">{serverDetails.timeout_seconds || 30}s</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Auto Restart:</span>
+                    <span className="text-gray-900 font-medium">{serverDetails.auto_restart ? 'Yes' : 'No'}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Available Tools */}
-            <div>
-              <h3 className="text-lg font-mono font-medium text-tokyo-green mb-3">
-                Available Tools ({serverTools.length})
-              </h3>
-              {serverTools.length === 0 ? (
-                <div className="text-center p-6 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                  <Database className="h-12 w-12 text-tokyo-comment mx-auto mb-3" />
-                  <div className="text-tokyo-comment font-mono">No tools found for this server</div>
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {serverTools.map((tool, index) => (
-                    <div key={tool.id || index} className="p-4 bg-tokyo-bg border border-tokyo-blue7 rounded">
-                      <h4 className="font-mono font-medium text-tokyo-green mb-2">{tool.name}</h4>
-                      <p className="text-sm text-tokyo-comment font-mono mb-2">{tool.description}</p>
-                      {tool.input_schema && (
-                        <div className="mt-2">
-                          <div className="text-xs text-tokyo-comment font-mono mb-1">Input Schema:</div>
-                          <pre className="text-xs bg-tokyo-bg-dark p-2 rounded border border-tokyo-blue7 overflow-x-auto text-tokyo-fg font-mono">
-                            {JSON.stringify(JSON.parse(tool.input_schema), null, 2)}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Available Tools */}
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Available Tools ({serverTools.length})
+                </h3>
+                {serverTools.length === 0 ? (
+                  <div className="text-center p-8 bg-gray-50 border border-gray-200 rounded-lg">
+                    <Database className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                    <div className="text-gray-600">No tools found for this server</div>
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {serverTools.map((tool, index) => (
+                      <div key={tool.id || index} className="p-4 bg-gray-50 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                        <h4 className="font-semibold text-gray-900 mb-2">{tool.name}</h4>
+                        <p className="text-sm text-gray-600 mb-2">{tool.description}</p>
+                        {tool.input_schema && (
+                          <div className="mt-3">
+                            <div className="text-xs font-medium text-gray-600 mb-2">Input Schema:</div>
+                            <pre className="text-xs bg-white p-3 rounded border border-gray-200 overflow-x-auto text-gray-900">
+                              {JSON.stringify(JSON.parse(tool.input_schema), null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2192,23 +2200,23 @@ const RawConfigEditorModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-6xl mx-4 max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
             Server Config Editor - {environmentName}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
+            <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
           </button>
         </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="mb-4">
-            <p className="text-tokyo-comment text-sm font-mono">
+        <div className="flex-1 flex flex-col overflow-hidden p-6 bg-gray-50">
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-gray-700">
               Edit the configuration for this specific MCP server.
               Changes will be merged back into the environment's template.json file.
             </p>
@@ -2216,23 +2224,23 @@ const RawConfigEditorModal = ({
 
           {/* Tab Switcher - Only show if this is an OpenAPI server */}
           {isOpenAPIServer && onTabChange && (
-            <div className="flex gap-2 mb-4 border-b border-tokyo-dark4">
+            <div className="flex gap-2 mb-4 border-b border-gray-200 bg-white rounded-t-lg px-2">
               <button
                 onClick={() => onTabChange('mcp')}
-                className={`px-4 py-2 font-mono text-sm transition-colors ${
+                className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
                   currentTab === 'mcp'
-                    ? 'text-tokyo-cyan border-b-2 border-tokyo-cyan'
-                    : 'text-tokyo-comment hover:text-tokyo-fg'
+                    ? 'text-primary border-primary'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
                 MCP Config
               </button>
               <button
                 onClick={() => onTabChange('openapi')}
-                className={`px-4 py-2 font-mono text-sm transition-colors ${
+                className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
                   currentTab === 'openapi'
-                    ? 'text-tokyo-cyan border-b-2 border-tokyo-cyan'
-                    : 'text-tokyo-comment hover:text-tokyo-fg'
+                    ? 'text-primary border-primary'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
                 OpenAPI Spec
@@ -2241,7 +2249,7 @@ const RawConfigEditorModal = ({
           )}
 
           {/* Monaco Editor */}
-          <div className="flex-1 border border-tokyo-blue7 rounded overflow-hidden min-h-[500px]">
+          <div className="flex-1 border border-gray-300 rounded-lg overflow-hidden min-h-[500px] shadow-sm bg-white">
             <Editor
               height="500px"
               defaultLanguage="json"
@@ -2265,20 +2273,21 @@ const RawConfigEditorModal = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex justify-between items-center mt-6 pt-4 border-t border-tokyo-blue7">
-            <div className="text-tokyo-comment text-sm font-mono">
-              💡 Tip: Use Ctrl+Shift+F to format JSON
+          <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200 bg-white px-4 py-3 rounded-lg">
+            <div className="text-gray-600 text-sm flex items-center gap-2">
+              <span className="text-lg">💡</span>
+              <span>Tip: Use Ctrl+Shift+F to format JSON</span>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-tokyo-comment hover:bg-gray-600 text-tokyo-bg rounded font-mono text-sm transition-colors"
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded font-medium text-sm transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={onSave}
-                className="px-4 py-2 bg-tokyo-green hover:bg-green-600 text-tokyo-bg rounded font-mono text-sm transition-colors"
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium text-sm transition-colors"
               >
                 Save Changes
               </button>

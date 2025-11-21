@@ -890,8 +890,8 @@ Output ONLY valid JSON that matches AWS CloudWatch API responses.`,
 		}
 	}()
 
-	// Wait for result or timeout (90s from caller + 10s buffer = 100s max)
-	timeoutTimer := time.NewTimer(100 * time.Second)
+	// Wait for result or timeout (3 minutes for complex agent responses)
+	timeoutTimer := time.NewTimer(180 * time.Second)
 	defer timeoutTimer.Stop()
 
 	var text string
@@ -905,7 +905,7 @@ Output ONLY valid JSON that matches AWS CloudWatch API responses.`,
 	case <-timeoutTimer.C:
 		apiElapsed := time.Since(apiStartTime)
 		logFaker("[FAKER] ⏰ OpenAI API call TIMEOUT after %v at %s\n", apiElapsed, time.Now().Format("15:04:05"))
-		return nil, fmt.Errorf("AI generation timeout after %v (hard limit: 100s)", apiElapsed)
+		return nil, fmt.Errorf("AI generation timeout after %v (hard limit: 180s)", apiElapsed)
 	case <-ctx.Done():
 		apiElapsed := time.Since(apiStartTime)
 		logFaker("[FAKER] ⏰ Context cancelled after %v at %s\n", apiElapsed, time.Now().Format("15:04:05"))

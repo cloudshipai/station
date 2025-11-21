@@ -315,7 +315,8 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 	}
 
 	var req struct {
-		Task string `json:"task" binding:"required"`
+		Task      string                 `json:"task" binding:"required"`
+		Variables map[string]interface{} `json:"variables"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -366,6 +367,13 @@ func (h *APIHandlers) queueAgent(c *gin.Context) {
 			"source":       "api_execution",
 			"triggered_by": "api",
 			"api_endpoint": c.Request.URL.Path,
+		}
+
+		// Merge variables into metadata
+		if req.Variables != nil {
+			for k, v := range req.Variables {
+				metadata[k] = v
+			}
 		}
 
 		_, err := h.agentService.ExecuteAgentWithRunID(ctx, agent.ID, req.Task, agentRun.ID, metadata)

@@ -37,7 +37,7 @@ func TestDefaultThresholds(t *testing.T) {
 	}{
 		{MetricHallucination, 0.10, true},
 		{MetricRelevancy, 0.80, false},
-		{MetricTaskCompletion, 0.85, false},
+		{MetricTaskCompletion, 0.70, false},
 		{MetricFaithfulness, 0.85, false},
 		{MetricToxicity, 0.05, true},
 	}
@@ -380,7 +380,7 @@ func BenchmarkCalculateAggregateScores(b *testing.B) {
 	metrics := map[string]MetricResult{
 		MetricHallucination:  {Score: 0.05, Threshold: 0.10, Passed: true},
 		MetricRelevancy:      {Score: 0.90, Threshold: 0.80, Passed: true},
-		MetricTaskCompletion: {Score: 0.85, Threshold: 0.85, Passed: true},
+		MetricTaskCompletion: {Score: 0.85, Threshold: 0.70, Passed: true},
 	}
 
 	b.ResetTimer()

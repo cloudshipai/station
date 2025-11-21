@@ -7,8 +7,6 @@
         "awslabs.cloudwatch-mcp-server@latest"
       ],
       "env": {
-        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
-        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}",
         "FASTMCP_LOG_LEVEL": "ERROR"
       },
       "metadata": {

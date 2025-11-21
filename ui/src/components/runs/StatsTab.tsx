@@ -119,15 +119,22 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs }) => {
             <BarChart data={stats.agentStats}>
               <CartesianGrid strokeDasharray="3 3" stroke="#414868" />
               <XAxis dataKey="agent" stroke="#565f89" />
-              <YAxis stroke="#565f89" />
+               <YAxis stroke="#565f89" />
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#24283b', 
-                  border: '1px solid #565f89',
+                  backgroundColor: '#ffffff', 
+                  border: '1px solid #e5e7eb',
                   borderRadius: '8px',
-                  color: '#c0caf5',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)'
-                }} 
+                  color: '#1f2937',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+                itemStyle={{
+                  color: '#1f2937'
+                }}
+                labelStyle={{
+                  color: '#1f2937',
+                  fontWeight: 600
+                }}
               />
               <Legend />
               <Bar dataKey="runs" fill="#7aa2f7" name="Total Runs" />
@@ -180,12 +187,19 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs }) => {
               <YAxis stroke="#565f89" />
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#24283b', 
-                  border: '1px solid #565f89',
+                  backgroundColor: '#ffffff', 
+                  border: '1px solid #e5e7eb',
                   borderRadius: '8px',
-                  color: '#c0caf5',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)'
-                }} 
+                  color: '#1f2937',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+                itemStyle={{
+                  color: '#1f2937'
+                }}
+                labelStyle={{
+                  color: '#1f2937',
+                  fontWeight: 600
+                }}
               />
               <Line type="monotone" dataKey="duration" stroke="#bb9af7" strokeWidth={2} dot={{ fill: '#bb9af7' }} />
             </LineChart>
@@ -202,12 +216,19 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs }) => {
               <YAxis stroke="#565f89" />
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#24283b', 
-                  border: '1px solid #565f89',
+                  backgroundColor: '#ffffff', 
+                  border: '1px solid #e5e7eb',
                   borderRadius: '8px',
-                  color: '#c0caf5',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)'
-                }} 
+                  color: '#1f2937',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+                itemStyle={{
+                  color: '#1f2937'
+                }}
+                labelStyle={{
+                  color: '#1f2937',
+                  fontWeight: 600
+                }}
               />
               <Legend />
               <Bar dataKey="input_tokens" stackId="a" fill="#7dcfff" name="Input Tokens" />
