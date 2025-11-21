@@ -13,7 +13,8 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
   onClose,
   environmentName
 }) => {
-  const [bundleType, setBundleType] = useState<'cloudship' | 'local'>('cloudship');
+  const [bundleType, setBundleType] = useState<'cloudship' | 'local' | 'public'>('cloudship');
+  const [publicEndpoint, setPublicEndpoint] = useState('https://share.cloudshipai.com/upload');
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<any>(null);
 
@@ -22,8 +23,12 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
     setResponse(null);
 
     try {
-      // Call the bundles API - local=true for local bundles, local=false for CloudShip
-      const result = await bundlesApi.create(environmentName, bundleType === 'local', undefined);
+      // Call the bundles API
+      // - local=true for local bundles
+      // - local=false with endpoint for public share
+      // - local=false without endpoint for CloudShip
+      const endpoint = bundleType === 'public' ? publicEndpoint : undefined;
+      const result = await bundlesApi.create(environmentName, bundleType === 'local', endpoint);
       setResponse(result.data);
     } catch (error) {
       console.error('Failed to create bundle:', error);
@@ -76,6 +81,18 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
               <div className="flex items-center gap-3">
                 <input
                   type="radio"
+                  id="public-bundle"
+                  checked={bundleType === 'public'}
+                  onChange={() => setBundleType('public')}
+                  className="w-4 h-4 text-station-blue focus:ring-station-blue focus:ring-2"
+                />
+                <label htmlFor="public-bundle" className="text-sm text-gray-900">
+                  Upload to Public Share
+                </label>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
                   id="local-bundle"
                   checked={bundleType === 'local'}
                   onChange={() => setBundleType('local')}
@@ -87,6 +104,20 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Public Endpoint Input - Show when public is selected */}
+          {bundleType === 'public' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900">Upload Endpoint:</label>
+              <input
+                type="text"
+                value={publicEndpoint}
+                onChange={(e) => setPublicEndpoint(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded font-mono text-sm text-gray-900 focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue"
+                placeholder="https://share.cloudshipai.com/upload"
+              />
+            </div>
+          )}
 
           {/* Response Display */}
           {response && (
@@ -132,6 +163,49 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
                         <div className="text-xs text-gray-700 mb-1 font-medium">Uploaded:</div>
                         <div className="p-2 bg-white border border-gray-200 rounded font-mono text-xs text-gray-900">
                           {response.cloudship_info.uploaded_at}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Public share success */}
+              {response.success && response.share_url && !response.cloudship_info && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm text-gray-900 font-medium">Bundle Shared Successfully</h4>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(response.share_url)}
+                      className="p-1 text-green-600 hover:text-green-700 transition-colors"
+                      title="Copy share URL"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {response.share_id && (
+                      <div>
+                        <div className="text-xs text-gray-700 mb-1 font-medium">Share ID:</div>
+                        <div className="p-2 bg-white border border-gray-200 rounded font-mono text-xs text-gray-900">
+                          {response.share_id}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="text-xs text-gray-700 mb-1 font-medium">Share URL:</div>
+                      <div className="p-2 bg-white border border-gray-200 rounded font-mono text-xs text-gray-900 break-all">
+                        {response.share_url}
+                      </div>
+                    </div>
+
+                    {response.expires && (
+                      <div>
+                        <div className="text-xs text-gray-700 mb-1 font-medium">Expires:</div>
+                        <div className="p-2 bg-white border border-gray-200 rounded font-mono text-xs text-gray-900">
+                          {response.expires}
                         </div>
                       </div>
                     )}

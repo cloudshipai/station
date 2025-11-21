@@ -120,6 +120,31 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			Message:   "Bundle created successfully",
 			LocalPath: localPath,
 		})
+	} else if req.Endpoint != "" {
+		log.Printf("[Bundle] Uploading bundle to public share endpoint: %s", req.Endpoint)
+		// Upload to public share endpoint
+		shareResp, err := uploadToPublicShare(tarData, fmt.Sprintf("%s.tar.gz", req.Environment), req.Endpoint)
+		if err != nil {
+			log.Printf("[Bundle] ERROR: Public share upload failed: %v", err)
+			c.JSON(http.StatusInternalServerError, BundleResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to upload to public share: %v", err),
+			})
+			return
+		}
+
+		// Calculate share URL - replace /upload with response URL
+		baseURL := strings.Replace(req.Endpoint, "/upload", "", 1)
+		shareURL := fmt.Sprintf("%s%s", baseURL, shareResp.URL)
+
+		log.Printf("[Bundle] Public share upload successful! Share URL: %s", shareURL)
+		c.JSON(http.StatusOK, BundleResponse{
+			Success:  true,
+			Message:  "Bundle uploaded successfully",
+			ShareID:  shareResp.ShareID,
+			ShareURL: shareURL,
+			Expires:  shareResp.Expires,
+		})
 	} else {
 		log.Printf("[Bundle] Uploading bundle to CloudShip")
 		// Upload to CloudShip
@@ -237,6 +262,82 @@ func createTarGz(sourceDir string) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+// uploadToPublicShare uploads the bundle to a public share endpoint
+func uploadToPublicShare(tarData []byte, filename, endpoint string) (*ShareServerResponse, error) {
+	log.Printf("[PublicShare] Starting upload - Filename: %s, Size: %d bytes", filename, len(tarData))
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// Create the file field
+	part, err := writer.CreateFormFile("bundle", filename)
+	if err != nil {
+		log.Printf("[PublicShare] ERROR: Failed to create form file: %v", err)
+		return nil, err
+	}
+
+	// Write the tar data
+	if _, err := part.Write(tarData); err != nil {
+		log.Printf("[PublicShare] ERROR: Failed to write tar data: %v", err)
+		return nil, err
+	}
+
+	// Close the writer to finalize the multipart data
+	if err := writer.Close(); err != nil {
+		log.Printf("[PublicShare] ERROR: Failed to close multipart writer: %v", err)
+		return nil, err
+	}
+
+	log.Printf("[PublicShare] Upload URL: %s", endpoint)
+	log.Printf("[PublicShare] Content-Type: %s", writer.FormDataContentType())
+	log.Printf("[PublicShare] Request size: %d bytes", buf.Len())
+
+	// Create the request
+	req, err := http.NewRequest("POST", endpoint, &buf)
+	if err != nil {
+		log.Printf("[PublicShare] ERROR: Failed to create HTTP request: %v", err)
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	log.Printf("[PublicShare] Sending request to public share endpoint...")
+
+	// Send the request
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[PublicShare] ERROR: HTTP request failed: %v", err)
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	log.Printf("[PublicShare] Response received - Status Code: %d", resp.StatusCode)
+
+	// Read response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[PublicShare] ERROR: Failed to read response body: %v", err)
+		return nil, err
+	}
+
+	log.Printf("[PublicShare] Response body: %s", string(respBody))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		log.Printf("[PublicShare] ERROR: Upload failed with HTTP %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("public share upload failed (HTTP %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	// Parse response
+	var shareResp ShareServerResponse
+	if err := json.Unmarshal(respBody, &shareResp); err != nil {
+		log.Printf("[PublicShare] ERROR: Failed to parse JSON response: %v", err)
+		return nil, fmt.Errorf("failed to parse public share response: %v", err)
+	}
+
+	log.Printf("[PublicShare] Upload successful! Parsed response: %+v", shareResp)
+	return &shareResp, nil
 }
 
 // uploadToCloudShip uploads the bundle to CloudShip's authenticated API
