@@ -18,9 +18,9 @@ interface SwimlanePageProps {
   onRunClick: (runId: number) => void;
   activeView?: 'list' | 'timeline' | 'stats';
   onViewChange?: (view: 'list' | 'timeline' | 'stats') => void;
-  currentEnvironment?: string;
+  currentEnvironment?: any;
   environments?: any[];
-  onEnvironmentChange?: (env: string) => void;
+  onEnvironmentChange?: (envName: string) => void;
 }
 
 export const SwimlanePage: React.FC<SwimlanePageProps> = ({ 
@@ -151,7 +151,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
             <>
               <div className="h-4 w-px bg-gray-300"></div>
               <select
-                value={currentEnvironment || ''}
+                value={currentEnvironment?.name?.toLowerCase() || ''}
                 onChange={(e) => onEnvironmentChange(e.target.value)}
                 className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 transition-colors"
               >
@@ -227,7 +227,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
             <>
               <div className="h-4 w-px bg-gray-300"></div>
               <select
-                value={currentEnvironment || ''}
+                value={currentEnvironment?.name?.toLowerCase() || ''}
                 onChange={(e) => onEnvironmentChange(e.target.value)}
                 className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 transition-colors"
               >
@@ -368,15 +368,12 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
           {/* Environment Selector and Controls */}
           <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
             <select
-              value={currentEnvironment?.id || ''}
-              onChange={(e) => {
-                const env = environments.find(env => env.id === parseInt(e.target.value));
-                if (env) onEnvironmentChange(env);
-              }}
+              value={currentEnvironment?.name?.toLowerCase() || ''}
+              onChange={(e) => onEnvironmentChange(e.target.value)}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             >
               {environments.map((env) => (
-                <option key={env.id} value={env.id}>
+                <option key={env.id} value={env.name.toLowerCase()}>
                   {env.name}
                 </option>
               ))}

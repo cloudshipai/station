@@ -16,9 +16,12 @@ interface Run {
 
 interface StatsTabProps {
   runs: Run[];
+  currentEnvironment?: any;
+  environments?: any[];
+  onEnvironmentChange?: (envName: string) => void;
 }
 
-export const StatsTab: React.FC<StatsTabProps> = ({ runs }) => {
+export const StatsTab: React.FC<StatsTabProps> = ({ runs, currentEnvironment, environments = [], onEnvironmentChange }) => {
   const [filterAgent, setFilterAgent] = useState<string>('all');
 
   const completedRuns = runs.filter(run => run.status === 'completed');

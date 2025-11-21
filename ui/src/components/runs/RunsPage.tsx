@@ -89,8 +89,8 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
     setCurrentPage(page);
   };
 
-  const handleEnvironmentChange = (newEnv: string) => {
-    navigate(`/runs/${newEnv}`);
+  const handleEnvironmentChange = (newEnvName: string) => {
+    navigate(`/runs/${newEnvName.toLowerCase()}`);
   };
 
   return (
@@ -184,16 +184,16 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
             onRunClick={onRunClick}
             activeView={activeTab}
             onViewChange={setActiveTab}
-            currentEnvironment={env}
+            currentEnvironment={currentEnvironment}
             environments={environments}
-            onEnvironmentChange={handleEnvironmentChange}
+            onEnvironmentChange={(envName: string) => handleEnvironmentChange(envName)}
           />
         ) : (
           <StatsTab 
             runs={runs}
-            currentEnvironment={env}
+            currentEnvironment={currentEnvironment}
             environments={environments}
-            onEnvironmentChange={handleEnvironmentChange}
+            onEnvironmentChange={(envName: string) => handleEnvironmentChange(envName)}
           />
         )}
       </div>
