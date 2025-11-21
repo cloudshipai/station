@@ -231,57 +231,60 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
   };
 
   const getStatusIcon = () => {
-    if (!syncStatus) return <Database className="h-5 w-5 text-tokyo-cyan" />;
+    if (!syncStatus) return <Database className="h-6 w-6 text-cyan-600" />;
     
     switch (syncStatus.status) {
       case 'running':
-        return <Clock className="h-5 w-5 text-tokyo-blue animate-spin" />;
+        return <Clock className="h-6 w-6 text-blue-600 animate-spin" />;
       case 'waiting_for_input':
-        return <AlertCircle className="h-5 w-5 text-tokyo-yellow" />;
+        return <AlertCircle className="h-6 w-6 text-yellow-600" />;
       case 'completed':
-        return <CheckCircle className="h-5 w-5 text-tokyo-green" />;
+        return <CheckCircle className="h-6 w-6 text-green-600" />;
       case 'failed':
-        return <AlertCircle className="h-5 w-5 text-tokyo-red" />;
+        return <AlertCircle className="h-6 w-6 text-red-600" />;
       default:
-        return <Database className="h-5 w-5 text-tokyo-cyan" />;
+        return <Database className="h-6 w-6 text-cyan-600" />;
     }
   };
 
   const getStatusColor = () => {
-    if (!syncStatus) return 'text-tokyo-cyan';
+    if (!syncStatus) return 'text-cyan-600';
     
     switch (syncStatus.status) {
       case 'running':
-        return 'text-tokyo-blue';
+        return 'text-blue-600';
       case 'waiting_for_input':
-        return 'text-tokyo-yellow';
+        return 'text-yellow-600';
       case 'completed':
-        return 'text-tokyo-green';
+        return 'text-green-600';
       case 'failed':
-        return 'text-tokyo-red';
+        return 'text-red-600';
       default:
-        return 'text-tokyo-cyan';
+        return 'text-cyan-600';
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-200">
+      <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             {getStatusIcon()}
-            <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
-              Sync Environment: {environment}
-            </h2>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Sync Environment
+              </h2>
+              <p className="text-sm text-gray-600">{environment}</p>
+            </div>
           </div>
           <button 
             onClick={handleClose}
-            className="text-tokyo-comment hover:text-tokyo-fg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
           </button>
         </div>
 
@@ -290,17 +293,17 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
           {!syncStatus ? (
             /* Initial State */
             <div className="text-center py-8">
-              <Database className="h-16 w-16 text-tokyo-cyan mx-auto mb-4" />
-              <h3 className="text-lg font-mono font-medium text-tokyo-fg mb-2">
+              <Database className="h-16 w-16 text-cyan-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Ready to Sync
               </h3>
-              <p className="text-tokyo-comment font-mono text-sm mb-6">
+              <p className="text-gray-600 text-sm mb-6">
                 This will sync all MCP server configurations for the {environment} environment
               </p>
               <button
                 onClick={startSync}
                 disabled={isLoading}
-                className="px-6 py-3 bg-tokyo-cyan text-tokyo-bg rounded font-mono font-medium hover:bg-tokyo-blue transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
+                className="px-6 py-3 bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto shadow-sm"
               >
                 {isLoading ? (
                   <>
@@ -320,62 +323,62 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
               {/* Progress Indicator */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className={`font-mono font-medium ${getStatusColor()}`}>
+                  <span className={`font-semibold ${getStatusColor()}`}>
                     {syncStatus.status === 'running' && 'Syncing...'}
                     {syncStatus.status === 'waiting_for_input' && 'Waiting for Input'}
                     {syncStatus.status === 'completed' && 'Completed'}
                     {syncStatus.status === 'failed' && 'Failed'}
                   </span>
-                  <span className="text-tokyo-comment font-mono text-sm">
+                  <span className="text-gray-600 text-sm">
                     {syncStatus.progress.steps_complete} / {syncStatus.progress.steps_total}
                   </span>
                 </div>
                 
                 {/* Progress Bar */}
-                <div className="w-full bg-tokyo-bg border border-tokyo-blue7 rounded-full h-2">
+                <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
-                    className="bg-tokyo-cyan h-2 rounded-full transition-all duration-300"
+                    className="bg-cyan-600 h-2 rounded-full transition-all duration-300"
                     style={{ 
                       width: `${(syncStatus.progress.steps_complete / syncStatus.progress.steps_total) * 100}%` 
                     }}
                   />
                 </div>
                 
-                <div className="text-sm text-tokyo-comment font-mono">
-                  <div className="font-medium">{syncStatus.progress.current_step}</div>
+                <div className="text-sm text-gray-600">
+                  <div className="font-medium text-gray-900">{syncStatus.progress.current_step}</div>
                   <div>{syncStatus.progress.message}</div>
                 </div>
               </div>
 
               {/* Variable Input Form */}
               {syncStatus.status === 'waiting_for_input' && syncStatus.variables && (
-                <div className="bg-tokyo-bg border border-tokyo-blue7 rounded-lg p-4 space-y-4">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-5 space-y-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertCircle className="h-5 w-5 text-tokyo-yellow" />
-                    <h3 className="text-lg font-mono font-medium text-tokyo-yellow">
+                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+                    <h3 className="text-lg font-semibold text-yellow-900">
                       Configuration Variables Required
                     </h3>
                   </div>
                   
-                  <div className="text-sm text-tokyo-comment font-mono mb-4">
-                    Config: <span className="text-tokyo-cyan">{syncStatus.variables.config_name}</span>
+                  <div className="text-sm text-gray-700 mb-4">
+                    Config: <span className="font-semibold text-cyan-700">{syncStatus.variables.config_name}</span>
                   </div>
                   
                   {syncStatus.variables.message && (
-                    <div className="text-sm text-tokyo-comment font-mono mb-4 p-3 bg-tokyo-bg-highlight rounded border border-tokyo-blue7">
+                    <div className="text-sm text-gray-700 mb-4 p-3 bg-white rounded border border-yellow-200">
                       {syncStatus.variables.message}
                     </div>
                   )}
 
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {syncStatus.variables.variables.map((variable) => (
-                      <div key={variable.name} className="space-y-2">
-                        <label className="block text-sm font-mono text-tokyo-cyan font-medium">
+                      <div key={variable.name} className="space-y-1.5">
+                        <label className="block text-sm font-semibold text-gray-900">
                           {variable.name}
-                          {variable.required && <span className="text-tokyo-red ml-1">*</span>}
+                          {variable.required && <span className="text-red-600 ml-1">*</span>}
                         </label>
                         {variable.description && (
-                          <p className="text-xs text-tokyo-comment font-mono">
+                          <p className="text-xs text-gray-600">
                             {variable.description}
                           </p>
                         )}
@@ -387,15 +390,15 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
                           type={variable.secret ? 'password' : 'text'}
                           defaultValue={variable.default || ''}
                           placeholder={variable.default || `Enter ${variable.name}...`}
-                          className={`w-full px-3 py-2 bg-tokyo-bg border rounded font-mono text-tokyo-fg focus:outline-none text-sm ${
+                          className={`w-full px-3 py-2 bg-white border rounded text-gray-900 focus:outline-none focus:ring-2 text-sm ${
                             validationErrors[variable.name] 
-                              ? 'border-tokyo-red focus:border-tokyo-red' 
-                              : 'border-tokyo-blue7 focus:border-tokyo-cyan'
+                              ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
+                              : 'border-gray-300 focus:border-cyan-500 focus:ring-cyan-200'
                           }`}
                           autoComplete="off"
                         />
                         {validationErrors[variable.name] && (
-                          <p className="text-xs text-tokyo-red font-mono mt-1">
+                          <p className="text-xs text-red-600 mt-1">
                             {validationErrors[variable.name]}
                           </p>
                         )}
@@ -406,10 +409,10 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
                   <button
                     onClick={submitVariables}
                     disabled={isSubmittingVariables || Object.keys(validationErrors).length > 0}
-                    className={`w-full px-4 py-2 rounded font-mono font-medium transition-colors flex items-center justify-center gap-2 ${
+                    className={`w-full px-4 py-2.5 rounded font-medium transition-colors flex items-center justify-center gap-2 shadow-sm ${
                       isSubmittingVariables || Object.keys(validationErrors).length > 0
-                        ? 'bg-tokyo-comment text-tokyo-bg cursor-not-allowed'
-                        : 'bg-tokyo-cyan text-tokyo-bg hover:bg-tokyo-blue'
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-cyan-600 text-white hover:bg-cyan-700'
                     }`}
                   >
                     {isSubmittingVariables ? (
@@ -426,33 +429,33 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
 
               {/* Results */}
               {syncStatus.status === 'completed' && (
-                <div className="bg-green-900 bg-opacity-30 border border-green-500 border-opacity-50 rounded p-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <CheckCircle className="h-5 w-5 text-tokyo-green" />
-                    <h3 className="text-lg font-mono font-medium text-tokyo-green">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <h3 className="text-lg font-semibold text-green-900">
                       Sync Completed Successfully
                     </h3>
                   </div>
                   
-                  <p className="text-tokyo-green font-mono text-sm mb-3">
-                    Environment '{environment}' has been synchronized successfully. 
+                  <p className="text-green-800 text-sm mb-3">
+                    Environment '<span className="font-semibold">{environment}</span>' has been synchronized successfully. 
                     {syncStatus.variables ? ' All required variables have been configured.' : ''}
                   </p>
                   
                   {syncStatus.result && (
-                    <div className="space-y-2 text-sm font-mono">
-                      <div className="text-tokyo-comment">
-                        📊 <strong>Sync Results:</strong>
+                    <div className="space-y-2 text-sm">
+                      <div className="text-gray-700 font-semibold">
+                        Sync Results:
                       </div>
-                      <div className="ml-4 space-y-1">
-                        <div className="text-tokyo-cyan">
-                          • MCP Servers: {syncStatus.result.MCPServersProcessed} processed, {syncStatus.result.MCPServersConnected} connected
+                      <div className="ml-4 space-y-1 text-gray-800">
+                        <div>
+                          • MCP Servers: <span className="font-semibold">{syncStatus.result.MCPServersProcessed}</span> processed, <span className="font-semibold">{syncStatus.result.MCPServersConnected}</span> connected
                         </div>
-                        <div className="text-tokyo-green">
-                          • Agents: {syncStatus.result.AgentsProcessed} processed, {syncStatus.result.AgentsSynced} synced
+                        <div>
+                          • Agents: <span className="font-semibold">{syncStatus.result.AgentsProcessed}</span> processed, <span className="font-semibold">{syncStatus.result.AgentsSynced}</span> synced
                         </div>
                         {syncStatus.result.AgentsSkipped > 0 && (
-                          <div className="text-tokyo-comment">
+                          <div className="text-gray-600">
                             • {syncStatus.result.AgentsSkipped} agents up-to-date (skipped)
                           </div>
                         )}
@@ -464,16 +467,16 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
 
               {/* Error */}
               {syncStatus.status === 'failed' && (
-                <div className="bg-red-900 bg-opacity-30 border border-red-500 border-opacity-50 rounded p-4">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertCircle className="h-5 w-5 text-tokyo-red" />
-                    <h3 className="text-lg font-mono font-medium text-tokyo-red">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <h3 className="text-lg font-semibold text-red-900">
                       Sync Failed
                     </h3>
                   </div>
                   
                   {syncStatus.error && (
-                    <div className="text-sm font-mono text-tokyo-red">
+                    <div className="text-sm text-red-800">
                       {syncStatus.error}
                     </div>
                   )}
@@ -488,7 +491,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
           <div className="flex justify-end mt-6">
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg rounded font-mono hover:bg-tokyo-bg-highlight transition-colors"
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors shadow-sm"
             >
               Close
             </button>
