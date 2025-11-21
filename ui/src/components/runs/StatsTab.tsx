@@ -17,14 +17,11 @@ interface Run {
 
 interface StatsTabProps {
   runs: Run[];
-  currentEnvironment?: any;
-  environments?: any[];
-  onEnvironmentChange?: (envName: string) => void;
   activeView?: 'list' | 'timeline' | 'stats';
   onViewChange?: (view: 'list' | 'timeline' | 'stats') => void;
 }
 
-export const StatsTab: React.FC<StatsTabProps> = ({ runs, currentEnvironment, environments = [], onEnvironmentChange }) => {
+export const StatsTab: React.FC<StatsTabProps> = ({ runs, activeView = 'stats', onViewChange }) => {
   const [filterAgent, setFilterAgent] = useState<string>('all');
 
   const completedRuns = runs.filter(run => run.status === 'completed');
@@ -81,21 +78,66 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs, currentEnvironment, en
   const COLORS = ['#9ece6a', '#7aa2f7', '#f7768e', '#e0af68', '#bb9af7'];
 
   return (
-    <div className="space-y-6">
-      {/* Filter Controls */}
-      <div className="flex items-center gap-4">
-        <label className="text-sm font-mono text-tokyo-comment">Filter by Agent:</label>
-        <select
-          value={filterAgent}
-          onChange={(e) => setFilterAgent(e.target.value)}
-          className="px-3 py-2 bg-tokyo-bg-dark border border-tokyo-blue7 rounded text-tokyo-fg font-mono text-sm focus:outline-none focus:border-tokyo-blue"
-        >
-          <option value="all">All Agents</option>
-          {agentNames.map(name => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Header with view tabs */}
+      <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
+        <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
+        
+        {onViewChange && (
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => onViewChange('list')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeView === 'list'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <List className="h-4 w-4" />
+              List
+            </button>
+            <button
+              onClick={() => onViewChange('timeline')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeView === 'timeline'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <GitBranch className="h-4 w-4" />
+              Timeline
+            </button>
+            <button
+              onClick={() => onViewChange('stats')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeView === 'stats'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Stats
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Stats Content */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Filter Controls */}
+        <div className="flex items-center gap-4">
+          <label className="text-sm font-mono text-tokyo-comment">Filter by Agent:</label>
+          <select
+            value={filterAgent}
+            onChange={(e) => setFilterAgent(e.target.value)}
+            className="px-3 py-2 bg-tokyo-bg-dark border border-tokyo-blue7 rounded text-tokyo-fg font-mono text-sm focus:outline-none focus:border-tokyo-blue"
+          >
+            <option value="all">All Agents</option>
+            {agentNames.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
 
       {/* Overview Stats */}
       <div className="grid grid-cols-3 gap-4">
@@ -170,12 +212,19 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs, currentEnvironment, en
               </Pie>
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#24283b', 
-                  border: '1px solid #565f89',
+                  backgroundColor: '#ffffff', 
+                  border: '1px solid #e5e7eb',
                   borderRadius: '8px',
-                  color: '#c0caf5',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)'
-                }} 
+                  color: '#1f2937',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+                itemStyle={{
+                  color: '#1f2937'
+                }}
+                labelStyle={{
+                  color: '#1f2937',
+                  fontWeight: 600
+                }}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -242,6 +291,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ runs, currentEnvironment, en
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
       </div>
     </div>
   );

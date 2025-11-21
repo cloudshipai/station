@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { Play, BarChart3, List, GitBranch } from 'lucide-react';
 import { RunsList } from './RunsList';
 import { Pagination } from './Pagination';
 import { StatsTab } from './StatsTab';
 import { SwimlanePage } from './SwimlanePage';
 import { agentRunsApi } from '../../api/station';
-import { EnvironmentContext } from '../../contexts/EnvironmentContext';
 import type { TimelineRun } from '../../utils/timelineLayout';
 
 interface Run {
@@ -33,42 +31,17 @@ interface RunsPageProps {
 }
 
 export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }) => {
-  const { env } = useParams<{ env?: string }>();
-  const navigate = useNavigate();
-  const { environments } = useContext(EnvironmentContext);
-  const [currentEnvironment, setCurrentEnvironment] = useState<any | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'timeline' | 'stats'>('timeline');
   const [currentPage, setCurrentPage] = useState(1);
   const runsPerPage = 20;
 
-  // Determine current environment from URL param
-  useEffect(() => {
-    if (env && environments.length > 0) {
-      const environment = environments.find((e: any) => e.name.toLowerCase() === env.toLowerCase());
-      setCurrentEnvironment(environment || null);
-      
-      // If env in URL doesn't exist, redirect to first environment
-      if (!environment && environments.length > 0) {
-        navigate(`/runs/${environments[0].name.toLowerCase()}`);
-      }
-    } else if (!env && environments.length > 0) {
-      // No env in URL, redirect to first environment
-      navigate(`/runs/${environments[0].name.toLowerCase()}`);
-    }
-  }, [env, environments, navigate]);
-
-  // Fetch runs data
+  // Fetch all runs (not filtered by environment)
   useEffect(() => {
     const fetchRuns = async () => {
-      if (!currentEnvironment) {
-        return;
-      }
-
       try {
-        // Fetch runs filtered by environment from the API
-        const params = { environment_id: currentEnvironment.id };
-        const response = await agentRunsApi.getAll(params);
+        // Fetch all runs across all environments
+        const response = await agentRunsApi.getAll();
         setRuns(response.data.runs || []);
       } catch (error) {
         console.error('Failed to fetch runs:', error);
@@ -76,7 +49,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
     };
 
     fetchRuns();
-  }, [refreshTrigger, currentEnvironment]);
+  }, [refreshTrigger]);
 
   // Pagination logic
   const totalPages = Math.ceil(runs.length / runsPerPage);
@@ -88,10 +61,6 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
     setCurrentPage(page);
   };
 
-  const handleEnvironmentChange = (newEnvName: string) => {
-    navigate(`/runs/${newEnvName.toLowerCase()}`);
-  };
-
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Content - Timeline has its own header with tabs */}
@@ -101,24 +70,6 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
             {/* Header for List view */}
             <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
               <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
-              
-              {/* Environment Selector */}
-              {env && (
-                <>
-                  <div className="h-4 w-px bg-gray-300"></div>
-                  <select
-                    value={env || ''}
-                    onChange={(e) => handleEnvironmentChange(e.target.value)}
-                    className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 transition-colors"
-                  >
-                    {environments.map((environment: any) => (
-                      <option key={environment.id} value={environment.name.toLowerCase()}>
-                        {environment.name}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
               
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
@@ -183,16 +134,12 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
             onRunClick={onRunClick}
             activeView={activeTab}
             onViewChange={setActiveTab}
-            currentEnvironment={currentEnvironment}
-            environments={environments}
-            onEnvironmentChange={(envName: string) => handleEnvironmentChange(envName)}
           />
         ) : (
           <StatsTab 
             runs={runs}
-            currentEnvironment={currentEnvironment}
-            environments={environments}
-            onEnvironmentChange={(envName: string) => handleEnvironmentChange(envName)}
+            activeView={activeTab}
+            onViewChange={setActiveTab}
           />
         )}
       </div>

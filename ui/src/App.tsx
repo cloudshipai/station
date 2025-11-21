@@ -2867,7 +2867,6 @@ function App() {
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
                   <Route path="/runs" element={<RunsPage />} />
-                  <Route path="/runs/:env" element={<RunsPage />} />
                   <Route path="/reports" element={<ReportsPageWrapper />} />
                   <Route path="/reports/:reportId" element={<ReportDetailPageWrapper />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />

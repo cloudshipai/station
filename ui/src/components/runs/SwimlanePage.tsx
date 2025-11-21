@@ -18,19 +18,13 @@ interface SwimlanePageProps {
   onRunClick: (runId: number) => void;
   activeView?: 'list' | 'timeline' | 'stats';
   onViewChange?: (view: 'list' | 'timeline' | 'stats') => void;
-  currentEnvironment?: any;
-  environments?: any[];
-  onEnvironmentChange?: (envName: string) => void;
 }
 
 export const SwimlanePage: React.FC<SwimlanePageProps> = ({ 
   runs, 
   onRunClick, 
   activeView = 'timeline', 
-  onViewChange,
-  currentEnvironment,
-  environments = [],
-  onEnvironmentChange
+  onViewChange
 }) => {
   const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRangePreset>(TIME_RANGE_PRESETS[1]); // Last Day
   const [densityMetric, setDensityMetric] = useState<'tokens' | 'cost'>('tokens');
@@ -142,27 +136,9 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
   if (runs.length === 0) {
     return (
       <div className="h-full flex flex-col bg-gray-50">
-        {/* Header with view tabs on left */}
+        {/* Header with view tabs */}
         <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
           <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
-          
-          {/* Environment Selector */}
-          {currentEnvironment && environments.length > 0 && onEnvironmentChange && (
-            <>
-              <div className="h-4 w-px bg-gray-300"></div>
-              <select
-                value={currentEnvironment?.name?.toLowerCase() || ''}
-                onChange={(e) => onEnvironmentChange(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 transition-colors"
-              >
-                {environments.map((environment: any) => (
-                  <option key={environment.id} value={environment.name.toLowerCase()}>
-                    {environment.name}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
           
           {onViewChange && (
             <div className="flex bg-gray-100 rounded-lg p-1">
@@ -221,24 +197,6 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
         {/* Header with view tabs on left */}
         <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
           <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
-          
-          {/* Environment Selector */}
-          {currentEnvironment && environments.length > 0 && onEnvironmentChange && (
-            <>
-              <div className="h-4 w-px bg-gray-300"></div>
-              <select
-                value={currentEnvironment?.name?.toLowerCase() || ''}
-                onChange={(e) => onEnvironmentChange(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 transition-colors"
-              >
-                {environments.map((environment: any) => (
-                  <option key={environment.id} value={environment.name.toLowerCase()}>
-                    {environment.name}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
           
           {onViewChange && (
             <div className="flex bg-gray-100 rounded-lg p-1">
@@ -318,11 +276,12 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
-      {/* Header with view tabs on left */}
-      <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
-        <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
-        {onViewChange && (
+      <div className="h-full flex flex-col bg-gray-50">
+        {/* Header with view tabs on left */}
+        <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
+          <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
+          
+          {onViewChange && (
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => onViewChange('list')}
@@ -365,19 +324,8 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
       <div className="flex-1 flex bg-white relative overflow-hidden">
         {/* Main content - always has space for right panel */}
         <div className="flex-1 flex flex-col mr-80">
-          {/* Environment Selector and Controls */}
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-            <select
-              value={currentEnvironment?.name?.toLowerCase() || ''}
-              onChange={(e) => onEnvironmentChange(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-            >
-              {environments.map((env) => (
-                <option key={env.id} value={env.name.toLowerCase()}>
-                  {env.name}
-                </option>
-              ))}
-            </select>
+          {/* Timeline Controls */}
+          <div className="flex items-center justify-end px-4 py-3 bg-white border-b border-gray-200">
             <TimelineControls
               selectedTimeRange={selectedTimeRange}
               onTimeRangeChange={setSelectedTimeRange}
