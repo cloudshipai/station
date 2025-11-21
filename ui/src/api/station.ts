@@ -73,7 +73,16 @@ export const usersApi = {
 
 // Agent Runs API  
 export const agentRunsApi = {
-  getAll: () => apiClient.get<{runs: AgentRunWithDetails[], count: number, limit: number}>('/runs'),
+  getAll: (params?: { environment_id?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.environment_id) {
+      queryParams.append('environment_id', params.environment_id.toString());
+    }
+    const queryString = queryParams.toString();
+    return apiClient.get<{runs: AgentRunWithDetails[], count: number, limit: number}>(
+      `/runs${queryString ? `?${queryString}` : ''}`
+    );
+  },
   getById: (id: number) => apiClient.get<{run: AgentRunWithDetails}>(`/runs/${id}`),
   getByAgent: (agentId: number) => 
     apiClient.get<{runs: AgentRun[], count: number, agent_id: number}>(`/agents/${agentId}/runs`),

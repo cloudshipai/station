@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { List, GitBranch, BarChart3 } from 'lucide-react';
 
 interface Run {
   id: number;
@@ -19,6 +20,8 @@ interface StatsTabProps {
   currentEnvironment?: any;
   environments?: any[];
   onEnvironmentChange?: (envName: string) => void;
+  activeView?: 'list' | 'timeline' | 'stats';
+  onViewChange?: (view: 'list' | 'timeline' | 'stats') => void;
 }
 
 export const StatsTab: React.FC<StatsTabProps> = ({ runs, currentEnvironment, environments = [], onEnvironmentChange }) => {

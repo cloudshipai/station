@@ -61,16 +61,15 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
   // Fetch runs data
   useEffect(() => {
     const fetchRuns = async () => {
+      if (!currentEnvironment) {
+        return;
+      }
+
       try {
-        const response = await agentRunsApi.getAll();
-        let allRuns = response.data.runs || [];
-        
-        // Filter by environment if one is selected
-        if (currentEnvironment) {
-          allRuns = allRuns.filter((run: Run) => run.environment_id === currentEnvironment.id);
-        }
-        
-        setRuns(allRuns);
+        // Fetch runs filtered by environment from the API
+        const params = { environment_id: currentEnvironment.id };
+        const response = await agentRunsApi.getAll(params);
+        setRuns(response.data.runs || []);
       } catch (error) {
         console.error('Failed to fetch runs:', error);
       }
