@@ -25,12 +25,12 @@ const nodeTypes: NodeTypes = {
 
 export const AgentsLayout: React.FC = () => {
   const context = useContext(EnvironmentContext);
-  console.log('AgentsLayout context:', context);
-  const { selectedEnvironment } = context;
-  const { agentId } = useParams<{ agentId?: string }>();
+  const { environments } = context;
+  const { env, agentId } = useParams<{ env?: string; agentId?: string }>();
   const navigate = useNavigate();
   const [agents, setAgents] = useState<any[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null);
+  const [currentEnvironment, setCurrentEnvironment] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Graph State
@@ -47,11 +47,28 @@ export const AgentsLayout: React.FC = () => {
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleAgent, setScheduleAgent] = useState<any>(null);
 
+  // Determine current environment from URL param
+  useEffect(() => {
+    if (env && environments.length > 0) {
+      const environment = environments.find((e: any) => e.name.toLowerCase() === env.toLowerCase());
+      setCurrentEnvironment(environment || null);
+      
+      // If env in URL doesn't exist, redirect to first environment
+      if (!environment && environments.length > 0) {
+        navigate(`/agents/${environments[0].name.toLowerCase()}`);
+      }
+    } else if (!env && environments.length > 0) {
+      // No env in URL, redirect to first environment
+      navigate(`/agents/${environments[0].name.toLowerCase()}`);
+    }
+  }, [env, environments, navigate]);
+
+  // Fetch agents for current environment
   useEffect(() => {
     const fetchAgents = async () => {
-      if (!selectedEnvironment) return;
+      if (!currentEnvironment) return;
       try {
-        const response = await agentsApi.getByEnvironment(selectedEnvironment);
+        const response = await agentsApi.getByEnvironment(currentEnvironment.id);
         setAgents(response.data.agents || []);
       } catch (error) {
         console.error('Failed to fetch agents:', error);
@@ -61,8 +78,9 @@ export const AgentsLayout: React.FC = () => {
     };
 
     fetchAgents();
-  }, [selectedEnvironment]);
+  }, [currentEnvironment]);
 
+  // Select agent based on URL param
   useEffect(() => {
     if (agentId && agents.length > 0) {
       const agent = agents.find(a => a.id === parseInt(agentId));
@@ -79,13 +97,13 @@ export const AgentsLayout: React.FC = () => {
   // Build Graph Effect
   useEffect(() => {
     const buildGraph = async () => {
-      if (!selectedAgent) return;
+      if (!selectedAgent || !env) return;
       try {
         const graphData = await buildAgentGraph({
           agentId: selectedAgent.id,
           expandedServers,
           agents,
-          openAgentModal: (id) => navigate(`/agent/${id}`), // Navigate to child agent
+          openAgentModal: (id) => navigate(`/agents/${env}/${id}`), // Navigate to child agent with env
           editAgent: () => {}, 
           openMCPServerModal: (id) => setMcpModalId(id),
           toggleServerExpansion: (id) => {
@@ -107,10 +125,15 @@ export const AgentsLayout: React.FC = () => {
     };
 
     buildGraph();
-  }, [selectedAgent, expandedServers, agents, navigate]);
+  }, [selectedAgent, expandedServers, agents, navigate, env]);
 
   const handleAgentSelect = (agent: any) => {
-    navigate(`/agent/${agent.id}`);
+    if (!env) return;
+    navigate(`/agents/${env}/${agent.id}`);
+  };
+  
+  const handleEnvironmentChange = (newEnv: string) => {
+    navigate(`/agents/${newEnv}`);
   };
 
   const handleRunAgent = (agent: any) => {
@@ -150,13 +173,27 @@ export const AgentsLayout: React.FC = () => {
               </span>
             </>
           )}
+          
+          {/* Environment Selector */}
+          <div className="h-4 w-px bg-gray-300"></div>
+          <select
+            value={env || ''}
+            onChange={(e) => handleEnvironmentChange(e.target.value)}
+            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 transition-colors"
+          >
+            {environments.map((environment: any) => (
+              <option key={environment.id} value={environment.name.toLowerCase()}>
+                {environment.name}
+              </option>
+            ))}
+          </select>
         </div>
         
         <div className="flex items-center gap-2">
           {selectedAgent && (
             <>
               <button 
-                onClick={() => navigate('/runs')}
+                onClick={() => navigate(`/runs/${env}`)}
                 className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:scale-105 rounded-lg transition-all duration-200 active:scale-95"
               >
                 <BarChart2 className="h-4 w-4" />

@@ -304,24 +304,8 @@ const Layout = ({ children }: any) => {
           <StationBanner />
         </div>
 
-        {/* Environment Selector */}
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Environment</label>
-          <select
-            value={currentEnvironmentName || 'default'}
-            onChange={(e) => handleEnvironmentChange(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-gray-300 text-gray-900 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-station-blue focus:border-station-blue transition-colors"
-          >
-            {environmentContext?.environments?.map((env: any) => (
-              <option key={env.id} value={env.name.toLowerCase()}>
-                {env.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* Navigation */}
-        <nav className="flex-1 p-4 bg-white">
+        <nav className="flex-1 p-4 bg-white mt-4">
           <ul className="space-y-1">
             {sidebarItems.map((item) => (
               <li key={item.id}>
@@ -894,10 +878,13 @@ const MCPServerDetailsModal = ({ serverId, isOpen, onClose }: { serverId: number
 
 // MCP Servers Page
 const MCPServersPage = () => {
+  const { env } = useParams();
+  const navigate = useNavigate();
   const [mcpServers, setMcpServers] = useState<any[]>([]);
   const [modalMCPServerId, setModalMCPServerId] = useState<number | null>(null);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
   const [environments, setEnvironments] = useState<any[]>([]);
+  const [currentEnvironment, setCurrentEnvironment] = useState<any>(null);
   const [isRawConfigModalOpen, setIsRawConfigModalOpen] = useState(false);
   const [rawConfig, setRawConfig] = useState('');
   const [rawConfigEnvironment, setRawConfigEnvironment] = useState('');
@@ -1104,45 +1091,76 @@ const MCPServersPage = () => {
         const response = await environmentsApi.getAll();
         const environmentsData = response.data.environments || [];
         setEnvironments(Array.isArray(environmentsData) ? environmentsData : []);
+        
+        // Set current environment from URL or default to first
+        if (env) {
+          const selectedEnv = environmentsData.find((e: any) => e.name === env);
+          if (selectedEnv) {
+            setCurrentEnvironment(selectedEnv);
+          }
+        } else if (environmentsData.length > 0) {
+          setCurrentEnvironment(environmentsData[0]);
+          navigate(`/mcps/${environmentsData[0].name}`, { replace: true });
+        }
       } catch (error) {
         console.error('Failed to fetch environments:', error);
         setEnvironments([]);
       }
     };
     fetchEnvironments();
-  }, []);
+  }, [env, navigate]);
 
   // Define fetchMCPServers function
   const fetchMCPServers = useCallback(async () => {
     try {
-      const selectedEnvId = environmentContext?.selectedEnvironment;
-
-      if (!selectedEnvId) {
-        const response = await mcpServersApi.getAll();
-        setMcpServers(response.data.servers || []);
-      } else {
-        // Use the environment ID directly since that's what the context stores
-        const response = await mcpServersApi.getByEnvironment(selectedEnvId);
-        setMcpServers(response.data.servers || []);
+      if (!currentEnvironment?.id) {
+        setMcpServers([]);
+        return;
       }
+
+      const response = await mcpServersApi.getByEnvironment(currentEnvironment.id);
+      setMcpServers(response.data.servers || []);
     } catch (error) {
       console.error('Failed to fetch MCP servers:', error);
       setMcpServers([]);
     }
-  }, [environmentContext?.selectedEnvironment]);
+  }, [currentEnvironment?.id]);
 
   // Fetch MCP servers data when environment changes
   useEffect(() => {
     fetchMCPServers();
-  }, [fetchMCPServers, environmentContext?.refreshTrigger]);
+  }, [fetchMCPServers]);
 
   // MCP servers are already filtered by environment on the backend
   const filteredServers = mcpServers || [];
 
+  const handleEnvironmentChange = (environment: any) => {
+    setCurrentEnvironment(environment);
+    navigate(`/mcps/${environment.name}`);
+  };
+
   return (
     <div className="h-full flex flex-col bg-tokyo-bg">
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
-        <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
+          {environments.length > 0 && currentEnvironment && (
+            <select
+              value={currentEnvironment.id || ''}
+              onChange={(e) => {
+                const env = environments.find(env => env.id === parseInt(e.target.value));
+                if (env) handleEnvironmentChange(env);
+              }}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              {environments.map((env) => (
+                <option key={env.id} value={env.id}>
+                  {env.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         {filteredServers.length === 0 ? (
@@ -1151,9 +1169,9 @@ const MCPServersPage = () => {
               <Database className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
               <div className="text-tokyo-fg font-mono text-lg mb-2">No MCP servers found</div>
               <div className="text-tokyo-comment font-mono text-sm">
-                {environmentContext?.selectedEnvironment
-                  ? `No MCP servers in the selected environment`
-                  : 'Add your first MCP server to get started'
+                {currentEnvironment
+                  ? `No MCP servers in ${currentEnvironment.name} environment`
+                  : 'Select an environment to view MCP servers'
                 }
               </div>
             </div>
@@ -2843,11 +2861,13 @@ function App() {
                   <Route path="/getting-started" element={<GettingStartedPage />} />
                   <Route path="/agents" element={<AgentsPage />} />
                   <Route path="/agents/:env" element={<AgentsPage />} />
+                  <Route path="/agents/:env/:agentId" element={<AgentsPage />} />
                   <Route path="/agent/:agentId" element={<AgentsPage />} />
                   <Route path="/mcps" element={<MCPServersPage />} />
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
                   <Route path="/runs" element={<RunsPage />} />
+                  <Route path="/runs/:env" element={<RunsPage />} />
                   <Route path="/reports" element={<ReportsPageWrapper />} />
                   <Route path="/reports/:reportId" element={<ReportDetailPageWrapper />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
