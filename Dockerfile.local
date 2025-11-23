@@ -14,7 +14,13 @@ RUN apt-get update && apt-get install -y \
     python3-venv \
     build-essential \
     openssh-client \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Litestream for database replication
+RUN wget -qO- https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.tar.gz | \
+    tar -xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/litestream
 
 # Install Node.js 20 and genkit CLI
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -84,6 +90,9 @@ if [ "$(id -u)" = "0" ]; then\n\
     fi\n\
     if [ -d /data ]; then\n\
         chown -R station:station /data 2>/dev/null || true\n\
+    fi\n\
+    if [ -d /backups ]; then\n\
+        chown -R station:station /backups 2>/dev/null || true\n\
     fi\n\
     export HOME=/home/station\n\
     export USER=station\n\

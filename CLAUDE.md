@@ -184,6 +184,41 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - **Goal**: Single unified execution interface that all callers use consistently
   - **Benefit**: Easier maintenance, consistent behavior, reduced duplication
 
+## Recent Completions (2025-11-23)
+
+### ✅ Docker Deployment Testing
+- **Status**: Complete
+- **What**: Tested full deployment lifecycle with docker-compose
+  - Built deployment images with `stn build env`
+  - Tested v1 → v2 upgrade workflow
+  - Validated database persistence across deployments
+  - Confirmed agent config updates propagate correctly
+- **Key Finding**: Agent records update in-place (same ID), configs apply immediately
+- **Documentation**: Created `station-demo/test-docker-deploy/DEPLOYMENT_WORKFLOW.md`
+
+### ✅ GEMINI_API_KEY Bug Fix
+- **Status**: Fixed and tested
+- **Problem**: Station required GEMINI_API_KEY even when using OpenAI provider
+- **Root Cause**: BenchmarkService eagerly initialized on startup, panicked if Gemini credentials missing
+- **Solution**: Implemented lazy initialization pattern in `internal/services/benchmark_service.go`
+- **Impact**: Station now starts with only OPENAI_API_KEY, GEMINI_API_KEY only needed for Gemini provider
+- **Testing**: ✅ Verified locally, deployment ready
+- **Documentation**: `deployments/kubernetes/GEMINI_API_KEY_BUG.md` marked as fixed
+
+### ✅ Kubernetes Deployment Manifests
+- **Status**: Complete and production-ready
+- **Created**: Full K8s deployment suite in `deployments/kubernetes/`
+  - `namespace.yaml` - Station namespace
+  - `secret.yaml` - API keys (GEMINI now optional!)
+  - `configmap.yaml` - Configuration
+  - `pvc.yaml` - Persistent volume (REQUIRED)
+  - `deployment.yaml` - Deployment with health checks
+  - `service.yaml` - Services (ClusterIP + LoadBalancer)
+  - `README.md` - Comprehensive deployment guide
+  - `CHANGELOG.md` - Deployment changelog
+- **Features**: Health checks, resource limits, k3s support, production best practices
+- **Next**: Ready for k3s testing
+
 ## Bundle Creation and Registry Management
 
 ### Complete Bundle Lifecycle Process

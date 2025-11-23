@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: station
+  namespace: station
+  labels:
+    app: station
+spec:
+  replicas: 1  # IMPORTANT: SQLite only supports single instance
+  strategy:
+    type: Recreate  # Required for PVC with ReadWriteOnce
+  selector:
+    matchLabels:
+      app: station
+  template:
+    metadata:
+      labels:
+        app: station
+    spec:
+      containers:
+      - name: station
+        # Replace with your environment image
+        # Build with: stn build env <env-name> --tag <version>
+        image: station-test-deploy:v2
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - name: api
+          containerPort: 8585
+          protocol: TCP
+        - name: mcp
+          containerPort: 8586
+          protocol: TCP
+        
+        env:
+        # ConfigMap values
+        - name: STATION_LOCAL_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: station-config
+              key: STATION_LOCAL_MODE
+        - name: STN_DEV_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: station-config
+              key: STN_DEV_MODE
+        
+        # Secret values (API keys)
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: station-secrets
+              key: OPENAI_API_KEY
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: station-secrets
+              key: GEMINI_API_KEY
+        - name: STATION_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: station-secrets
+              key: STATION_ENCRYPTION_KEY
+        
+        # Optional: Jaeger/OTEL configuration
+        - name: JAEGER_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: station-config
+              key: JAEGER_ENABLED
+        - name: OTEL_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: station-config
+              key: OTEL_ENDPOINT
+              optional: true
+        
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        
+        # Health check using Station's health endpoint
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8585
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8585
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: station-data

@@ -20,6 +20,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Global semaphore for concurrent agent execution (max 100 concurrent goroutines)
+var agentExecutionSem = make(chan struct{}, 100)
+
 // registerAgentAdminRoutes registers admin-only agent management routes
 func (h *APIHandlers) registerAgentAdminRoutes(group *gin.RouterGroup) {
 	group.POST("", h.createAgent)
@@ -166,6 +169,10 @@ func (h *APIHandlers) callAgent(c *gin.Context) {
 
 	// Execute agent in background goroutine to avoid blocking the API response
 	go func() {
+		// Acquire semaphore to limit concurrent executions (max 100)
+		agentExecutionSem <- struct{}{}
+		defer func() { <-agentExecutionSem }()
+
 		ctx := context.Background()
 
 		// Skip execution in test mode (when repos is nil)

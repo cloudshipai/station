@@ -1,0 +1,18 @@
+# PersistentVolumeClaim for Station database
+# CRITICAL: Station REQUIRES persistent storage for /data directory
+# Without this, container will crash with "permission denied" error
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: station-data
+  namespace: station
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # Optional: specify storageClassName for specific storage class
+  # storageClassName: local-path  # For k3s default
+  # storageClassName: gp3          # For AWS EBS
+  # storageClassName: standard     # For GKE
