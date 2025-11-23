@@ -10,7 +10,18 @@ if [ -z "$LITESTREAM_S3_BUCKET" ] && [ -z "$LITESTREAM_ABS_BUCKET" ] && [ -z "$L
     echo "   Set LITESTREAM_S3_BUCKET, LITESTREAM_ABS_BUCKET, or LITESTREAM_GCS_BUCKET for persistence."
 fi
 
-# Create data directory if it doesn't exist
+# Fix volume permissions if running as root
+if [ "$(id -u)" = "0" ]; then
+    echo "🔧 Running as root - fixing volume permissions..."
+    mkdir -p /data /backup /config
+    chown -R station:station /data /backup /config 2>/dev/null || true
+    
+    # Re-execute this script as station user
+    echo "🔄 Switching to station user..."
+    exec su-exec station "$0" "$@"
+fi
+
+# Create data directory if it doesn't exist (as station user)
 mkdir -p /data
 
 # Restore database from replica if it exists and local DB is missing

@@ -15,7 +15,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o station ./cmd/main
 FROM alpine:latest
 
 # Install dependencies
-RUN apk --no-cache add ca-certificates sqlite curl
+RUN apk --no-cache add ca-certificates sqlite curl su-exec
 
 # Install Litestream
 ARG LITESTREAM_VERSION=v0.3.13
@@ -31,22 +31,22 @@ RUN addgroup -g 1000 station && \
 RUN mkdir -p /app /data /backup /config && \
     chown -R station:station /app /data /backup /config
 
-USER station
 WORKDIR /app
 
 # Copy application and config
 COPY --from=builder /app/station .
 COPY --from=builder /app/examples/ ./examples/
+RUN chown -R station:station /app
+
+# Startup script that handles Litestream restoration and replication
+COPY docker/entrypoint-production.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
-# Startup script that handles Litestream restoration and replication
-COPY docker/entrypoint-production.sh /entrypoint.sh
-USER root
-RUN chmod +x /entrypoint.sh
-USER station
-
 EXPOSE 8080
+
+# Run as root initially - entrypoint will fix permissions and switch to station user
 ENTRYPOINT ["/entrypoint.sh"]

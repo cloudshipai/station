@@ -31,6 +31,9 @@ spec:
         - name: mcp
           containerPort: 8586
           protocol: TCP
+        - name: dynamic-mcp
+          containerPort: 8587
+          protocol: TCP
         
         env:
         # ConfigMap values
