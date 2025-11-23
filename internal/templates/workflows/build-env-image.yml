@@ -1,0 +1,243 @@
+name: Build Environment Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: 'Environment to build (e.g., production, staging)'
+        required: true
+        type: string
+      image_tag:
+        description: 'Image tag (e.g., v1.0.0, latest)'
+        required: true
+        type: string
+        default: 'latest'
+      push_to_registry:
+        description: 'Push to GitHub Container Registry'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  REGISTRY: ghcr.io
+  # Auto-detect owner from repository (e.g., ghcr.io/myorg/station-production:v1.0.0)
+  IMAGE_NAME: ${{ github.repository_owner }}/station-${{ github.event.inputs.environment_name }}
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudshipai/station:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build environment image
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        
+        # Initialize Station with current workspace
+        stn init --config ./environments
+        
+        # Build deployment image
+        stn build env "$ENV_NAME" \
+          --skip-sync \
+          --tag "$IMAGE_TAG"
+        
+        echo "✅ Environment image built: station-${ENV_NAME}:${IMAGE_TAG}"
+        docker images | grep "station-${ENV_NAME}" || true
+    
+    - name: Tag image for registry
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        
+        # Tag for GitHub Container Registry
+        docker tag "station-${ENV_NAME}:${IMAGE_TAG}" \
+          "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        
+        # Also tag as latest if not already latest
+        if [ "$IMAGE_TAG" != "latest" ]; then
+          docker tag "station-${ENV_NAME}:${IMAGE_TAG}" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        fi
+    
+    - name: Log in to Container Registry
+      if: github.event.inputs.push_to_registry == 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Push to GitHub Container Registry
+      if: github.event.inputs.push_to_registry == 'true'
+      run: |
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        
+        # Push versioned tag
+        docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        
+        # Push latest tag if applicable
+        if [ "$IMAGE_TAG" != "latest" ]; then
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        fi
+    
+    - name: Export image as artifact (if not pushing)
+      if: github.event.inputs.push_to_registry != 'true'
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        
+        # Save image to tar file
+        docker save "station-${ENV_NAME}:${IMAGE_TAG}" | gzip > "${ENV_NAME}-${IMAGE_TAG}.tar.gz"
+    
+    - name: Upload image artifact
+      if: github.event.inputs.push_to_registry != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.image_tag }}
+        path: ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.image_tag }}.tar.gz
+        retention-days: 30
+    
+    - name: Generate deployment instructions
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        IMAGE_FULL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        
+        cat > deployment-instructions.md <<EOF
+        # Deployment Instructions for ${ENV_NAME}
+        
+        ## Quick Start with Docker
+        
+        \`\`\`bash
+        docker run -d \\
+          --name station-${ENV_NAME} \\
+          -p 8585:8585 \\
+          -p 8586:8586 \\
+          -p 8587:8587 \\
+          -e OPENAI_API_KEY=\${OPENAI_API_KEY} \\
+          -v station-data:/data \\
+          ${IMAGE_FULL}
+        \`\`\`
+        
+        ## Docker Compose
+        
+        \`\`\`yaml
+        services:
+          station:
+            image: ${IMAGE_FULL}
+            ports:
+              - "8585:8585"  # API
+              - "8586:8586"  # MCP
+              - "8587:8587"  # Dynamic Agent MCP
+            environment:
+              - OPENAI_API_KEY=\${OPENAI_API_KEY}
+            volumes:
+              - station-data:/data
+        
+        volumes:
+          station-data:
+        \`\`\`
+        
+        ## Kubernetes
+        
+        \`\`\`bash
+        kubectl create secret generic station-secrets \\
+          --from-literal=OPENAI_API_KEY="\${OPENAI_API_KEY}"
+        
+        kubectl apply -f - <<EOYAML
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: station-${ENV_NAME}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: station-${ENV_NAME}
+          template:
+            metadata:
+              labels:
+                app: station-${ENV_NAME}
+            spec:
+              containers:
+              - name: station
+                image: ${IMAGE_FULL}
+                ports:
+                - containerPort: 8585
+                - containerPort: 8586
+                - containerPort: 8587
+                env:
+                - name: OPENAI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: station-secrets
+                      key: OPENAI_API_KEY
+                volumeMounts:
+                - name: data
+                  mountPath: /data
+              volumes:
+              - name: data
+                persistentVolumeClaim:
+                  claimName: station-data
+        ---
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: station-data
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+        EOYAML
+        \`\`\`
+        
+        ## Image Details
+        
+        - **Environment**: ${ENV_NAME}
+        - **Tag**: ${IMAGE_TAG}
+        - **Built**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        - **Commit**: ${{ github.sha }}
+        - **Repository**: ${{ github.repository }}
+        EOF
+    
+    - name: Upload deployment instructions
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-instructions-${{ github.event.inputs.environment_name }}
+        path: deployment-instructions.md
+        retention-days: 90
+    
+    - name: Summary
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        IMAGE_FULL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        
+        echo "## 🎉 Environment Image Built Successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment**: ${ENV_NAME}" >> $GITHUB_STEP_SUMMARY
+        echo "**Image**: \`${IMAGE_FULL}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Quick Deploy" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -d -p 8585:8585 -p 8586:8586 -p 8587:8587 \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -e OPENAI_API_KEY=\${OPENAI_API_KEY} \\" >> $GITHUB_STEP_SUMMARY
+        echo "  ${IMAGE_FULL}" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

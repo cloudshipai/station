@@ -1,0 +1,99 @@
+name: Build Agent Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: 'Environment to bundle (e.g., production, staging)'
+        required: true
+        type: string
+      bundle_version:
+        description: 'Bundle version (e.g., 1.0.0)'
+        required: true
+        type: string
+        default: '1.0.0'
+
+jobs:
+  build-bundle:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudshipai/station:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    permissions:
+      contents: write
+      packages: read
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Build agent bundle
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        VERSION="${{ github.event.inputs.bundle_version }}"
+        
+        # Initialize Station with current workspace
+        stn init --config ./environments
+        
+        # Sync environment to load agents
+        stn sync "$ENV_NAME"
+        
+        # Create bundle
+        stn bundle create \
+          --env "$ENV_NAME" \
+          --output "${ENV_NAME}-${VERSION}.tar.gz"
+        
+        echo "✅ Bundle created: ${ENV_NAME}-${VERSION}.tar.gz"
+        ls -lh "${ENV_NAME}-${VERSION}.tar.gz"
+    
+    - name: Generate bundle metadata
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        VERSION="${{ github.event.inputs.bundle_version }}"
+        
+        cat > "${ENV_NAME}-${VERSION}.json" <<EOF
+        {
+          "name": "${ENV_NAME}",
+          "version": "${VERSION}",
+          "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "git_commit": "${{ github.sha }}",
+          "git_ref": "${{ github.ref }}",
+          "repository": "${{ github.repository }}"
+        }
+        EOF
+    
+    - name: Upload bundle artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.event.inputs.environment_name }}-bundle-${{ github.event.inputs.bundle_version }}
+        path: |
+          ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.bundle_version }}.tar.gz
+          ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.bundle_version }}.json
+        retention-days: 90
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.bundle_version }}
+        name: ${{ github.event.inputs.environment_name }} Bundle v${{ github.event.inputs.bundle_version }}
+        files: |
+          ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.bundle_version }}.tar.gz
+          ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.bundle_version }}.json
+        body: |
+          ## ${{ github.event.inputs.environment_name }} Agent Bundle
+          
+          Version: ${{ github.event.inputs.bundle_version }}
+          Commit: ${{ github.sha }}
+          
+          ### Installation
+          ```bash
+          stn template install https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.environment_name }}-${{ github.event.inputs.bundle_version }}/${{ github.event.inputs.environment_name }}-${{ github.event.inputs.bundle_version }}.tar.gz
+          ```
+          
+          ### What's Included
+          This bundle contains all agents and MCP server configurations for the **${{ github.event.inputs.environment_name }}** environment.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

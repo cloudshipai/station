@@ -18,6 +18,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/logging"
 	"station/internal/services"
+	"station/internal/templates"
 )
 
 // Command definitions
@@ -757,6 +758,13 @@ ssh_host_key.pub
 				fmt.Printf("📝 Created .gitignore for workspace\n")
 			}
 		}
+
+		// Bootstrap GitHub Actions workflows
+		if err := bootstrapGitHubWorkflows(configDir); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to create GitHub Actions workflows: %v\n", err)
+		} else {
+			fmt.Printf("🔄 Created GitHub Actions workflows in .github/workflows/\n")
+		}
 	}
 
 	// Initialize database and run migrations
@@ -804,6 +812,11 @@ ssh_host_key.pub
 	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
 	fmt.Printf("📁 File config structure: %s\n", filepath.Join(workspaceDir, "environments", "default"))
 
+	// Show GitHub workflows info if created
+	if configPath != "" {
+		fmt.Printf("🔄 GitHub Actions workflows: %s\n", filepath.Join(configDir, ".github", "workflows"))
+	}
+
 	if !configExists {
 		fmt.Printf("🤖 AI Provider: %s\n", providerConfig.Provider)
 		fmt.Printf("🧠 Model: %s\n", providerConfig.Model)
@@ -835,6 +848,14 @@ ssh_host_key.pub
 		fmt.Printf("   • Visit http://localhost:8585 to add MCP tools and manage bundles\n")
 		fmt.Printf("   • Use 'stn mcp list' to see your MCP configurations\n")
 		fmt.Printf("   • Create and manage agents via Claude Code/Cursor using Station's MCP tools\n")
+
+		// Show GitHub Actions info if workflows were created
+		if configPath != "" {
+			fmt.Printf("\n🚀 CI/CD Ready:\n")
+			fmt.Printf("   • Workflows created in .github/workflows/\n")
+			fmt.Printf("   • Push to GitHub and use Actions tab to build bundles or container images\n")
+			fmt.Printf("   • Trigger manually: gh workflow run build-env-image.yml -f environment_name=default -f image_tag=v1.0.0\n")
+		}
 	}
 
 	return nil
@@ -1428,4 +1449,32 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 	return handlers.HandleDeploy(ctx, envName, target, region)
+}
+
+// bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/
+func bootstrapGitHubWorkflows(workspaceDir string) error {
+	workflowsDir := filepath.Join(workspaceDir, ".github", "workflows")
+
+	// Create .github/workflows directory
+	if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .github/workflows directory: %w", err)
+	}
+
+	// Write build-bundle.yml
+	bundleWorkflowPath := filepath.Join(workflowsDir, "build-bundle.yml")
+	if _, err := os.Stat(bundleWorkflowPath); os.IsNotExist(err) {
+		if err := os.WriteFile(bundleWorkflowPath, []byte(templates.BuildBundleWorkflow), 0644); err != nil {
+			return fmt.Errorf("failed to write build-bundle.yml: %w", err)
+		}
+	}
+
+	// Write build-env-image.yml
+	envImageWorkflowPath := filepath.Join(workflowsDir, "build-env-image.yml")
+	if _, err := os.Stat(envImageWorkflowPath); os.IsNotExist(err) {
+		if err := os.WriteFile(envImageWorkflowPath, []byte(templates.BuildEnvImageWorkflow), 0644); err != nil {
+			return fmt.Errorf("failed to write build-env-image.yml: %w", err)
+		}
+	}
+
+	return nil
 }
