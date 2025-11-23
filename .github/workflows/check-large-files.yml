@@ -83,17 +83,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## ⚠️ Large Files Detected
-
-This PR contains files larger than 1MB, which can cause repository bloat.
-
-**What to do:**
-- If these are build artifacts (node_modules, binaries, etc.), add them to \`.gitignore\`
-- If these are binary assets (images, videos, etc.), consider using [Git LFS](https://git-lfs.github.com/)
-- If these are large data files, host them externally or use a data storage service
-
-**Why this matters:**
-The station repository was recently cleaned from 240MB to 26MB by removing accidentally committed \`node_modules\`. This check prevents similar issues in the future.
-
-See the workflow run for details: ${context.payload.pull_request.html_url}/checks`
+              body: '## ⚠️ Large Files Detected\n\nThis PR contains files larger than 1MB, which can cause repository bloat.\n\n**What to do:**\n- If these are build artifacts (node_modules, binaries, etc.), add them to `.gitignore`\n- If these are binary assets (images, videos, etc.), consider using [Git LFS](https://git-lfs.github.com/)\n- If these are large data files, host them externally or use a data storage service\n\n**Why this matters:**\nThe station repository was recently cleaned from 240MB to 26MB by removing accidentally committed `node_modules`. This check prevents similar issues in the future.\n\nSee the workflow run for details: ' + context.payload.pull_request.html_url + '/checks'
             })
