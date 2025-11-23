@@ -101,6 +101,10 @@ if [ "$(id -u)" = "0" ]; then\n\
     if [ -d /workspace ]; then\n\
         chown station:station /workspace 2>/dev/null || true\n\
     fi\n\
+    # Fix data directory ownership for SQLite (prevents "out of memory (14)" errors)\n\
+    if [ -d /data ]; then\n\
+        chown -R station:station /data 2>/dev/null || true\n\
+    fi\n\
     # Set proper environment for station user\n\
     export HOME=/home/station\n\
     export USER=station\n\

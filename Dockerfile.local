@@ -82,6 +82,9 @@ if [ "$(id -u)" = "0" ]; then\n\
     if [ -d /workspace ]; then\n\
         chown station:station /workspace 2>/dev/null || true\n\
     fi\n\
+    if [ -d /data ]; then\n\
+        chown -R station:station /data 2>/dev/null || true\n\
+    fi\n\
     export HOME=/home/station\n\
     export USER=station\n\
     exec gosu station "$@"\n\

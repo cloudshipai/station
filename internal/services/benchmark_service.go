@@ -13,9 +13,13 @@ import (
 
 // BenchmarkService provides async benchmark evaluation
 type BenchmarkService struct {
+	db       *sql.DB
+	cfg      *config.Config
 	analyzer *benchmark.Analyzer
 	tasks    map[string]*BenchmarkTask
 	mu       sync.RWMutex
+	once     sync.Once
+	initErr  error
 }
 
 // BenchmarkTask tracks async benchmark evaluation
@@ -28,37 +32,54 @@ type BenchmarkTask struct {
 	Error     error
 }
 
-// NewBenchmarkService creates a new benchmark service
+// NewBenchmarkService creates a new benchmark service with lazy initialization
 func NewBenchmarkService(db *sql.DB, cfg *config.Config) (*BenchmarkService, error) {
-	// Create judge for LLM evaluations
-	judge, err := benchmark.NewJudge(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create benchmark judge: %w", err)
+	if db == nil || cfg == nil {
+		return nil, fmt.Errorf("database and config are required")
 	}
 
-	// Create Jaeger client for trace querying
-	var analyzer *benchmark.Analyzer
-	if cfg.JaegerQueryURL != "" {
-		jaegerClient := NewJaegerClient(cfg.JaegerQueryURL)
-		if jaegerClient.IsAvailable() {
-			// Create analyzer with Jaeger integration using adapter
-			adapter := NewBenchmarkJaegerAdapter(jaegerClient)
-			analyzer = benchmark.NewAnalyzerWithJaeger(db, judge, adapter)
-			fmt.Printf("✓ Benchmark service initialized with Jaeger integration (%s)\n", cfg.JaegerQueryURL)
-		} else {
-			// Jaeger not available, use analyzer without it
-			analyzer = benchmark.NewAnalyzer(db, judge)
-			fmt.Printf("⚠ Jaeger not available at %s, continuing without trace data\n", cfg.JaegerQueryURL)
-		}
-	} else {
-		// No Jaeger URL configured
-		analyzer = benchmark.NewAnalyzer(db, judge)
-	}
-
+	// Create service with deferred initialization
+	// This allows server to start even if AI provider credentials are missing
 	return &BenchmarkService{
-		analyzer: analyzer,
-		tasks:    make(map[string]*BenchmarkTask),
+		db:    db,
+		cfg:   cfg,
+		tasks: make(map[string]*BenchmarkTask),
 	}, nil
+}
+
+// getAnalyzer initializes the analyzer on first use (lazy initialization)
+func (s *BenchmarkService) getAnalyzer() (*benchmark.Analyzer, error) {
+	s.once.Do(func() {
+		// Create judge for LLM evaluations
+		judge, err := benchmark.NewJudge(s.cfg)
+		if err != nil {
+			s.initErr = fmt.Errorf("failed to create benchmark judge: %w", err)
+			return
+		}
+
+		// Create Jaeger client for trace querying
+		if s.cfg.JaegerQueryURL != "" {
+			jaegerClient := NewJaegerClient(s.cfg.JaegerQueryURL)
+			if jaegerClient.IsAvailable() {
+				// Create analyzer with Jaeger integration using adapter
+				adapter := NewBenchmarkJaegerAdapter(jaegerClient)
+				s.analyzer = benchmark.NewAnalyzerWithJaeger(s.db, judge, adapter)
+				fmt.Printf("✓ Benchmark service initialized with Jaeger integration (%s)\n", s.cfg.JaegerQueryURL)
+			} else {
+				// Jaeger not available, use analyzer without it
+				s.analyzer = benchmark.NewAnalyzer(s.db, judge)
+				fmt.Printf("⚠ Jaeger not available at %s, continuing without trace data\n", s.cfg.JaegerQueryURL)
+			}
+		} else {
+			// No Jaeger URL configured
+			s.analyzer = benchmark.NewAnalyzer(s.db, judge)
+		}
+	})
+
+	if s.initErr != nil {
+		return nil, s.initErr
+	}
+	return s.analyzer, nil
 }
 
 // EvaluateAsync starts async benchmark evaluation
@@ -79,8 +100,18 @@ func (s *BenchmarkService) EvaluateAsync(ctx context.Context, runID int64, taskI
 		task.Status = "running"
 		s.mu.Unlock()
 
+		// Get analyzer (lazy initialization)
+		analyzer, err := s.getAnalyzer()
+		if err != nil {
+			s.mu.Lock()
+			task.Status = "failed"
+			task.Error = fmt.Errorf("benchmark service not available: %w", err)
+			s.mu.Unlock()
+			return
+		}
+
 		// Execute benchmark evaluation
-		result, err := s.analyzer.EvaluateRun(context.Background(), runID)
+		result, err := analyzer.EvaluateRun(context.Background(), runID)
 
 		s.mu.Lock()
 		defer s.mu.Unlock()
