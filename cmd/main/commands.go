@@ -1476,5 +1476,13 @@ func bootstrapGitHubWorkflows(workspaceDir string) error {
 		}
 	}
 
+	// Write build-image-from-bundle.yml
+	bundleImageWorkflowPath := filepath.Join(workflowsDir, "build-image-from-bundle.yml")
+	if _, err := os.Stat(bundleImageWorkflowPath); os.IsNotExist(err) {
+		if err := os.WriteFile(bundleImageWorkflowPath, []byte(templates.BuildImageFromBundleWorkflow), 0644); err != nil {
+			return fmt.Errorf("failed to write build-image-from-bundle.yml: %w", err)
+		}
+	}
+
 	return nil
 }

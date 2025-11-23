@@ -1,0 +1,267 @@
+name: Build Image from Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_url:
+        description: 'Bundle URL (GitHub release, HTTP endpoint, or local path)'
+        required: true
+        type: string
+        default: 'https://github.com/myorg/my-bundles/releases/download/v1.0.0/production-1.0.0.tar.gz'
+      environment_name:
+        description: 'Environment name (used for image naming)'
+        required: true
+        type: string
+        default: 'production'
+      image_tag:
+        description: 'Image tag (e.g., v1.0.0, latest)'
+        required: true
+        type: string
+        default: 'latest'
+      push_to_registry:
+        description: 'Push to GitHub Container Registry'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/station-${{ github.event.inputs.environment_name }}
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Download Station CLI from releases
+      run: |
+        # Download latest Station CLI release
+        LATEST_RELEASE=$(curl -s https://api.github.com/repos/cloudshipai/station/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+        echo "Downloading Station CLI ${LATEST_RELEASE}..."
+        
+        # Determine platform
+        PLATFORM="linux-amd64"
+        DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${LATEST_RELEASE}/station-${LATEST_RELEASE}-${PLATFORM}.tar.gz"
+        
+        # Download and extract
+        curl -L -o station.tar.gz "$DOWNLOAD_URL"
+        tar -xzf station.tar.gz
+        chmod +x station
+        
+        # Verify
+        ./station --version
+    
+    - name: Download bundle
+      run: |
+        BUNDLE_URL="${{ github.event.inputs.bundle_url }}"
+        
+        # Handle different bundle sources
+        if [[ "$BUNDLE_URL" == http* ]]; then
+          echo "📥 Downloading bundle from URL: $BUNDLE_URL"
+          curl -L -o bundle.tar.gz "$BUNDLE_URL"
+        elif [[ -f "$BUNDLE_URL" ]]; then
+          echo "📁 Using local bundle: $BUNDLE_URL"
+          cp "$BUNDLE_URL" bundle.tar.gz
+        else
+          echo "❌ Bundle not found: $BUNDLE_URL"
+          exit 1
+        fi
+        
+        # Verify bundle
+        echo "✅ Bundle downloaded successfully"
+        ls -lh bundle.tar.gz
+    
+    - name: Create workspace and install bundle
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        
+        # Create workspace
+        mkdir -p workspace/environments
+        cd workspace
+        
+        # Initialize Station
+        ../station init --config . --yes
+        
+        # Install bundle
+        echo "📦 Installing bundle to environment: $ENV_NAME"
+        ../station template install ../bundle.tar.gz --env "$ENV_NAME"
+        
+        # Verify installation
+        echo "✅ Bundle installed successfully"
+        ls -la environments/$ENV_NAME/
+    
+    - name: Pull official Station base image
+      run: |
+        echo "🐳 Pulling official Station base image..."
+        docker pull ghcr.io/cloudshipai/station:latest
+    
+    - name: Build deployment image with bundle
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        
+        # Create Dockerfile for bundle deployment
+        cat > Dockerfile.bundle <<'EOF'
+FROM ghcr.io/cloudshipai/station:latest
+
+# Copy workspace with installed bundle
+COPY workspace/ /workspace/
+
+# Set workspace as default
+ENV STATION_WORKSPACE=/workspace
+WORKDIR /workspace
+
+# Station will use this workspace on startup
+CMD ["station", "serve", "--config", "/workspace"]
+EOF
+        
+        # Build image
+        echo "🔨 Building deployment image: station-${ENV_NAME}:${IMAGE_TAG}"
+        docker build -f Dockerfile.bundle -t "station-${ENV_NAME}:${IMAGE_TAG}" .
+        
+        echo "✅ Image built successfully"
+        docker images | grep "station-${ENV_NAME}"
+    
+    - name: Tag image for registry
+      run: |
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        
+        # Tag for GitHub Container Registry
+        docker tag "station-${ENV_NAME}:${IMAGE_TAG}" \
+          "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        
+        # Also tag as latest if not already latest
+        if [ "$IMAGE_TAG" != "latest" ]; then
+          docker tag "station-${ENV_NAME}:${IMAGE_TAG}" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        fi
+    
+    - name: Log in to Container Registry
+      if: github.event.inputs.push_to_registry == 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Push to GitHub Container Registry
+      if: github.event.inputs.push_to_registry == 'true'
+      run: |
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        
+        # Push versioned tag
+        docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        
+        # Push latest tag if applicable
+        if [ "$IMAGE_TAG" != "latest" ]; then
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        fi
+    
+    - name: Export image as artifact (if not pushing)
+      if: github.event.inputs.push_to_registry != 'true'
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        
+        # Save image to tar file
+        docker save "station-${ENV_NAME}:${IMAGE_TAG}" | gzip > "${ENV_NAME}-${IMAGE_TAG}.tar.gz"
+    
+    - name: Upload image artifact
+      if: github.event.inputs.push_to_registry != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.image_tag }}
+        path: ${{ github.event.inputs.environment_name }}-${{ github.event.inputs.image_tag }}.tar.gz
+        retention-days: 30
+    
+    - name: Generate deployment instructions
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        IMAGE_FULL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        BUNDLE_URL="${{ github.event.inputs.bundle_url }}"
+        
+        cat > deployment-instructions.md <<EOF
+# Deployment Instructions for ${ENV_NAME}
+
+Built from bundle: \`${BUNDLE_URL}\`
+
+## Quick Start with Docker
+
+\`\`\`bash
+docker run -d \\
+  --name station-${ENV_NAME} \\
+  -p 8585:8585 \\
+  -p 8586:8586 \\
+  -p 8587:8587 \\
+  -e OPENAI_API_KEY=\${OPENAI_API_KEY} \\
+  -v station-data:/data \\
+  ${IMAGE_FULL}
+\`\`\`
+
+## Docker Compose
+
+\`\`\`yaml
+services:
+  station:
+    image: ${IMAGE_FULL}
+    ports:
+      - "8585:8585"  # API
+      - "8586:8586"  # MCP
+      - "8587:8587"  # Dynamic Agent MCP
+    environment:
+      - OPENAI_API_KEY=\${OPENAI_API_KEY}
+    volumes:
+      - station-data:/data
+
+volumes:
+  station-data:
+\`\`\`
+
+## Image Details
+
+- **Environment**: ${ENV_NAME}
+- **Bundle**: ${BUNDLE_URL}
+- **Tag**: ${IMAGE_TAG}
+- **Built**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+- **Commit**: ${{ github.sha }}
+- **Repository**: ${{ github.repository }}
+EOF
+    
+    - name: Upload deployment instructions
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-instructions-${{ github.event.inputs.environment_name }}
+        path: deployment-instructions.md
+        retention-days: 90
+    
+    - name: Summary
+      run: |
+        ENV_NAME="${{ github.event.inputs.environment_name }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        IMAGE_FULL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+        BUNDLE_URL="${{ github.event.inputs.bundle_url }}"
+        
+        echo "## 🎉 Image Built from Bundle!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Bundle**: \`${BUNDLE_URL}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment**: ${ENV_NAME}" >> $GITHUB_STEP_SUMMARY
+        echo "**Image**: \`${IMAGE_FULL}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Quick Deploy" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -d -p 8585:8585 -p 8586:8586 -p 8587:8587 \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -e OPENAI_API_KEY=\${OPENAI_API_KEY} \\" >> $GITHUB_STEP_SUMMARY
+        echo "  ${IMAGE_FULL}" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
