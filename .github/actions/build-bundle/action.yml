@@ -1,5 +1,5 @@
 name: 'Build Station Bundle'
-description: 'Create a Station agent bundle from an environment'
+description: 'Create a Station agent bundle from an environment using stn bundle create'
 branding:
   icon: 'package'
   color: 'purple'
@@ -19,9 +19,14 @@ inputs:
     required: false
   
   workspace-path:
-    description: 'Path to Station workspace directory'
+    description: 'Path to Station workspace directory (where environments/ is located)'
     required: false
     default: '.'
+  
+  station-version:
+    description: 'Station CLI version to use (default: latest)'
+    required: false
+    default: 'latest'
 
 outputs:
   bundle-path:
@@ -39,22 +44,50 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Validate environment exists
+    - name: Install Station CLI
+      shell: bash
+      run: |
+        VERSION="${{ inputs.station-version }}"
+        
+        if [ "$VERSION" = "latest" ]; then
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/cloudshipai/station/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+          VERSION="$LATEST_RELEASE"
+        fi
+        
+        echo "📦 Installing Station CLI ${VERSION}..."
+        
+        # Detect OS and architecture
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+        esac
+        
+        # Download and install
+        DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${VERSION}/station_${OS}_${ARCH}"
+        
+        curl -fsSL "$DOWNLOAD_URL" -o /tmp/stn
+        chmod +x /tmp/stn
+        sudo mv /tmp/stn /usr/local/bin/stn
+        
+        echo "✅ Station CLI ${VERSION} installed"
+        stn --version
+    
+    - name: Initialize Station workspace
       shell: bash
       run: |
         cd "${{ inputs.workspace-path }}"
-        ENV_DIR="./environments/${{ inputs.environment }}"
         
-        if [ ! -d "$ENV_DIR" ]; then
-          echo "❌ Error: Environment directory not found: $ENV_DIR"
-          echo "Available environments:"
-          ls -1 ./environments/ 2>/dev/null || echo "  (no environments found)"
-          exit 1
-        fi
+        # Initialize Station to create config.yaml
+        stn init --config ./config.yaml --yes
         
-        echo "✅ Environment directory found: $ENV_DIR"
-        echo "Contents:"
-        ls -la "$ENV_DIR"
+        # Update workspace to point to current directory (where environments/ is)
+        sed -i "s|workspace:.*|workspace: $(pwd)|g" config.yaml
+        
+        echo "📝 Station workspace initialized:"
+        cat config.yaml
     
     - name: Create bundle
       id: bundle
@@ -70,16 +103,12 @@ runs:
           OUTPUT_PATH="${ENV_NAME}-${VERSION}.tar.gz"
         fi
         
-        echo "📦 Creating bundle from environment: $ENV_NAME"
+        echo "📦 Creating bundle using stn bundle create..."
         
-        # Create tar.gz directly from environment directory
-        cd environments
-        tar -czf "../${OUTPUT_PATH}" \
-          --exclude='*.db' \
-          --exclude='*.log' \
-          --exclude='.git*' \
-          -C "$ENV_NAME" .
-        cd ..
+        # Create bundle using Station CLI
+        stn bundle create "$ENV_NAME" \
+          --output "$OUTPUT_PATH" \
+          --config ./config.yaml
         
         # Verify bundle was created
         if [ ! -f "$OUTPUT_PATH" ]; then
