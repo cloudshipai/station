@@ -492,3 +492,50 @@ uses: cloudshipai/station/.github/actions/setup-station@d6ba798b
 - **Examples**: https://github.com/cloudshipai/station-demo
 - **Issues**: https://github.com/cloudshipai/station/issues
 - **Community**: https://github.com/cloudshipai/station/discussions
+
+---
+
+## Verified Workflows
+
+All workflows and reusable actions have been tested and verified in production:
+
+### ✅ Container-based Workflow (`build-bundle.yml`)
+**Repository**: [cloudshipai/station-demo](https://github.com/cloudshipai/station-demo)
+- Uses `ghcr.io/cloudshipai/station:latest` container
+- Tested with Station v0.21.2+
+- Successfully creates bundles and GitHub releases
+- **Key Fix**: `stn init --config ./config.yaml` now correctly sets workspace
+
+###✅ Reusable Action (`build-bundle`)
+**Location**: `.github/actions/build-bundle/action.yml`
+- Downloads Station CLI from GitHub releases
+- Runs `stn init` to create config
+- Creates bundle using `stn bundle create`
+- Generates metadata JSON
+- **Verified**: Successfully tested in [station-demo](https://github.com/cloudshipai/station-demo/actions/workflows/test-reusable-action.yml)
+
+### Testing Summary
+
+| Component | Status | Version | Notes |
+|-----------|--------|---------|-------|
+| Container Workflow | ✅ Passing | v0.21.2 | Fixed workspace path bug |
+| Reusable build-bundle | ✅ Passing | v0.21.2 | Downloads CLI, creates bundles |
+| Reusable setup-station | ✅ Passing | v0.21.2 | CLI installation verified |
+| Bundle Creation | ✅ Working | All | Creates .tar.gz + metadata |
+| GitHub Releases | ✅ Working | All | Auto-uploads to releases |
+
+### Known Fixes in v0.21.2
+
+**Critical Bug Fixed**: Prior to v0.21.2, `stn init --config ./config.yaml` did not correctly set the workspace path. This caused bundle creation to fail in CI/CD environments.
+
+**Before v0.21.2** (required workaround):
+```bash
+stn init --config ./config.yaml --yes
+sed -i "s|workspace:.*|workspace: $(pwd)|g" config.yaml  # Manual fix needed
+```
+
+**v0.21.2+** (works correctly):
+```bash
+stn init --config ./config.yaml --yes  # Workspace automatically set correctly
+```
+
