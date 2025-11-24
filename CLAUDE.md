@@ -5,6 +5,17 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 
 ## Current System State
 
+### ⚠️ Known Issues
+
+#### GenKit v1.2.0 Incompatibility
+- **Status**: Station pinned to GenKit v1.1.0 (working)
+- **Issue**: GenKit v1.2.0+ breaks tool registration with child registry pattern
+- **Impact**: "tool not found" errors on both OpenAI and Gemini
+- **Root Cause**: PR #3753 changed tools to register in child registry instead of parent
+- **Workaround**: Stay on v1.1.0 (stable, tested, works perfectly)
+- **Documentation**: See `docs/GENKIT_V1.2.0_INCOMPATIBILITY.md` for full details
+- **Future Action**: Need to adapt tool registration pattern or report upstream
+
 ### ✅ Completed Major Architecture Overhaul
 - **Modular Handler Architecture**: ✅ Complete - Split 5 large files (5,777 lines) into 43 focused modules
   - All handler modules now under 500 lines for maximum maintainability
