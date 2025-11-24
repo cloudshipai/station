@@ -521,6 +521,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	var configFile string
 	var configDir string
 
+	var workspaceDir string
+
 	if configPath != "" {
 		// Handle both file paths and directories
 		absPath, _ := filepath.Abs(configPath)
@@ -535,7 +537,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 			configFile = absPath
 		}
 
-		workspaceDir := filepath.Dir(configFile)
+		workspaceDir = filepath.Dir(configFile)
 
 		// Set the workspace in viper for the session
 		viper.Set("workspace", workspaceDir)
@@ -549,10 +551,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// No custom config - use secure default XDG location
 		configDir = getXDGConfigDir()
 		configFile = filepath.Join(configDir, "config.yaml")
-	}
 
-	// Workspace directory for content (environments, bundles, etc.)
-	workspaceDir := getWorkspacePath()
+		// Workspace directory for content (environments, bundles, etc.)
+		workspaceDir = getWorkspacePath()
+	}
 
 	// Check if replication setup is requested
 	replicationSetup, _ := cmd.Flags().GetBool("replicate")
