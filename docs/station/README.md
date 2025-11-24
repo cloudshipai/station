@@ -21,6 +21,7 @@ Complete documentation for Station, the open-source runtime for infrastructure m
 - [Deployment Modes](./deployment-modes.md) - Server, stdio, standalone binary, and Docker modes
 - [Zero-Config Deployments](./zero-config-deployments.md) - Deploy without manual configuration
 - [Docker Compose Deployments](./docker-compose-deployments.md) - Production deployment examples
+- [GitHub Actions](./github-actions.md) - Reusable actions for CI/CD workflows
 
 ### Distribution
 - [Bundles](./bundles.md) - Package and share agents
