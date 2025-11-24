@@ -66,11 +66,14 @@ runs:
         esac
         
         # Download and install
-        DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${VERSION}/station_${OS}_${ARCH}"
+        VERSION_NO_V="${VERSION#v}"  # Remove 'v' prefix for filename
+        DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${VERSION}/station_${VERSION_NO_V}_${OS}_${ARCH}.tar.gz"
         
-        curl -fsSL "$DOWNLOAD_URL" -o /tmp/stn
+        curl -fsSL "$DOWNLOAD_URL" -o /tmp/station.tar.gz
+        tar -xzf /tmp/station.tar.gz -C /tmp
         chmod +x /tmp/stn
         sudo mv /tmp/stn /usr/local/bin/stn
+        rm /tmp/station.tar.gz
         
         echo "✅ Station CLI ${VERSION} installed"
         stn --version
