@@ -81,10 +81,8 @@ runs:
         cd "${{ inputs.workspace-path }}"
         
         # Initialize Station to create config.yaml
+        # stn init --config ./config.yaml sets workspace to current directory automatically
         stn init --config ./config.yaml --yes
-        
-        # Update workspace to point to current directory (where environments/ is)
-        sed -i "s|workspace:.*|workspace: $(pwd)|g" config.yaml
         
         echo "📝 Station workspace initialized:"
         cat config.yaml
