@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"station/internal/config"
 	"station/internal/db/queries"
+	"station/internal/logging"
 	"station/internal/services"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -62,13 +64,26 @@ func (s *Server) handleCreateReport(ctx context.Context, request mcp.CallToolReq
 		filterModelSQL = sql.NullString{String: filterModel, Valid: true}
 	}
 
+	// Use Station's global AI model for LLM judge
+	cfg, err := config.Load()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to load Station config: %v", err)), nil
+	}
+	judgeModel := cfg.AIModel
+	if judgeModel == "" {
+		judgeModel = "gpt-4o-mini" // Fallback only if config has no model
+		logging.Info("No AI model in config, using fallback for LLM judge: gpt-4o-mini")
+	} else {
+		logging.Info("Using Station AI model for LLM judge: %s", judgeModel)
+	}
+
 	report, err := s.repos.Reports.CreateReport(ctx, queries.CreateReportParams{
 		Name:          name,
 		Description:   descSQL,
 		EnvironmentID: envID,
 		TeamCriteria:  teamCriteria,
 		AgentCriteria: agentCriteriaSQL,
-		JudgeModel:    sql.NullString{String: "gpt-4o-mini", Valid: true},
+		JudgeModel:    sql.NullString{String: judgeModel, Valid: true},
 		FilterModel:   filterModelSQL,
 	})
 	if err != nil {

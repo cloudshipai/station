@@ -36,26 +36,36 @@ type ReportGeneratorConfig struct {
 }
 
 // NewReportGenerator creates a new report generator
-func NewReportGenerator(repos *repositories.Repositories, db *sql.DB, config *ReportGeneratorConfig) *ReportGenerator {
-	if config == nil {
-		config = &ReportGeneratorConfig{
-			JudgeModel:         "gpt-4o-mini",
+func NewReportGenerator(repos *repositories.Repositories, db *sql.DB, cfg *ReportGeneratorConfig) *ReportGenerator {
+	if cfg == nil {
+		cfg = &ReportGeneratorConfig{
+			JudgeModel:         "",
 			MaxConcurrentEvals: 10,
 		}
 	}
 
-	if config.JudgeModel == "" {
-		config.JudgeModel = "gpt-4o-mini"
+	// Use Station's global AI configuration for judge model if not explicitly provided
+	if cfg.JudgeModel == "" {
+		stationCfg, err := config.Load()
+		if err == nil && stationCfg.AIModel != "" {
+			cfg.JudgeModel = stationCfg.AIModel
+			logging.Info("Using Station AI model for LLM judge: %s", cfg.JudgeModel)
+		} else {
+			// Fallback only if config loading fails
+			cfg.JudgeModel = "gpt-4o-mini"
+			logging.Info("Failed to load Station config for LLM judge, using fallback: gpt-4o-mini")
+		}
 	}
-	if config.MaxConcurrentEvals == 0 {
-		config.MaxConcurrentEvals = 10
+
+	if cfg.MaxConcurrentEvals == 0 {
+		cfg.MaxConcurrentEvals = 10
 	}
 
 	return &ReportGenerator{
 		repos:              repos,
 		genkitProvider:     NewGenKitProvider(),
-		judgeModel:         config.JudgeModel,
-		maxConcurrentEvals: config.MaxConcurrentEvals,
+		judgeModel:         cfg.JudgeModel,
+		maxConcurrentEvals: cfg.MaxConcurrentEvals,
 		db:                 db,
 	}
 }
@@ -789,10 +799,22 @@ func (rg *ReportGenerator) callLLMJudge(ctx context.Context, prompt string) (str
 		return "", fmt.Errorf("failed to get GenKit app: %w", err)
 	}
 
-	// Ensure model name is prefixed with provider (e.g., "openai/gpt-4o-mini")
+	// Get Station's global AI configuration to determine provider
+	cfg, err := config.Load()
+	if err != nil {
+		return "", fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Format model name with provider prefix (e.g., "googleai/gemini-2.5-pro", "openai/gpt-4o-mini")
 	modelName := rg.judgeModel
 	if !strings.Contains(modelName, "/") {
-		modelName = "openai/" + modelName
+		// Use Station's configured provider
+		provider := strings.ToLower(cfg.AIProvider)
+		if provider == "gemini" {
+			provider = "googleai" // GenKit uses "googleai" for Gemini models
+		}
+		modelName = fmt.Sprintf("%s/%s", provider, modelName)
+		logging.Debug("Formatted LLM judge model name: %s (provider: %s)", modelName, cfg.AIProvider)
 	}
 
 	response, err := genkit.Generate(ctx, genkitApp,

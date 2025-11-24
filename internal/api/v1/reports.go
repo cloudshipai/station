@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"station/internal/config"
 	"station/internal/db/queries"
 	"station/internal/services"
 )
@@ -155,10 +156,19 @@ func (h *APIHandlers) createReport(c *gin.Context) {
 		agentCriteriaJSON = sql.NullString{String: string(agentBytes), Valid: true}
 	}
 
-	// Set judge model
-	judgeModel := sql.NullString{String: "gpt-4o-mini", Valid: true}
+	// Set judge model - use Station's global AI model if not explicitly provided
+	var judgeModel sql.NullString
 	if req.JudgeModel != "" {
 		judgeModel = sql.NullString{String: req.JudgeModel, Valid: true}
+	} else {
+		// Use Station's global AI configuration
+		cfg, err := config.Load()
+		if err == nil && cfg.AIModel != "" {
+			judgeModel = sql.NullString{String: cfg.AIModel, Valid: true}
+		} else {
+			// Fallback only if config loading fails
+			judgeModel = sql.NullString{String: "gpt-4o-mini", Valid: true}
+		}
 	}
 
 	// Create report
