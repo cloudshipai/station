@@ -1,0 +1,101 @@
+name: 'Setup Station CLI'
+description: 'Install and configure Station CLI for GitHub Actions workflows'
+branding:
+  icon: 'terminal'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'Station version to install (e.g., v0.21.1, latest)'
+    required: false
+    default: 'latest'
+  
+  provider:
+    description: 'AI provider (openai, gemini, anthropic)'
+    required: false
+    default: 'openai'
+  
+  model:
+    description: 'AI model to use (e.g., gpt-4o-mini, gemini-2.0-flash-exp)'
+    required: false
+    default: 'gpt-4o-mini'
+  
+  api-key-secret:
+    description: 'GitHub secret name containing API key (e.g., OPENAI_API_KEY)'
+    required: true
+  
+  workspace-path:
+    description: 'Path to Station workspace/config directory'
+    required: false
+    default: '.'
+
+outputs:
+  version:
+    description: 'Installed Station version'
+    value: ${{ steps.install.outputs.version }}
+  
+  cli-path:
+    description: 'Path to Station CLI binary'
+    value: ${{ steps.install.outputs.cli-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Station CLI
+      id: install
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        
+        if [ "$VERSION" = "latest" ]; then
+          echo "📦 Installing latest Station CLI..."
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/cloudshipai/station/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+          VERSION="$LATEST_RELEASE"
+        fi
+        
+        echo "Downloading Station CLI ${VERSION}..."
+        
+        # Detect OS and architecture
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          armv7l) ARCH="arm" ;;
+        esac
+        
+        # Download and install
+        DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${VERSION}/station_${OS}_${ARCH}"
+        
+        curl -fsSL "$DOWNLOAD_URL" -o /tmp/stn
+        chmod +x /tmp/stn
+        sudo mv /tmp/stn /usr/local/bin/stn
+        
+        echo "✅ Station CLI ${VERSION} installed successfully"
+        
+        # Set outputs
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "cli-path=/usr/local/bin/stn" >> $GITHUB_OUTPUT
+    
+    - name: Verify Installation
+      shell: bash
+      run: |
+        stn --version
+    
+    - name: Initialize Station
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.api-key-secret }}
+        GEMINI_API_KEY: ${{ inputs.api-key-secret }}
+        ANTHROPIC_API_KEY: ${{ inputs.api-key-secret }}
+      run: |
+        cd "${{ inputs.workspace-path }}"
+        
+        echo "🔧 Initializing Station..."
+        stn init --config . --yes
+        
+        echo "✅ Station initialized with:"
+        echo "   Provider: ${{ inputs.provider }}"
+        echo "   Model: ${{ inputs.model }}"
+        echo "   Workspace: ${{ inputs.workspace-path }}"

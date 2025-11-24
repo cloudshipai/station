@@ -1,0 +1,127 @@
+name: 'Build Station Bundle'
+description: 'Create a Station agent bundle from an environment'
+branding:
+  icon: 'package'
+  color: 'purple'
+
+inputs:
+  environment:
+    description: 'Environment name to bundle (e.g., production, staging)'
+    required: true
+  
+  version:
+    description: 'Bundle version (e.g., 1.0.0)'
+    required: true
+    default: '1.0.0'
+  
+  output-path:
+    description: 'Output path for bundle file (defaults to <environment>-<version>.tar.gz)'
+    required: false
+  
+  workspace-path:
+    description: 'Path to Station workspace directory'
+    required: false
+    default: '.'
+
+outputs:
+  bundle-path:
+    description: 'Path to the created bundle file'
+    value: ${{ steps.bundle.outputs.bundle-path }}
+  
+  bundle-size:
+    description: 'Size of the created bundle'
+    value: ${{ steps.bundle.outputs.bundle-size }}
+  
+  metadata-path:
+    description: 'Path to bundle metadata JSON'
+    value: ${{ steps.metadata.outputs.metadata-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate environment exists
+      shell: bash
+      run: |
+        cd "${{ inputs.workspace-path }}"
+        ENV_DIR="./environments/${{ inputs.environment }}"
+        
+        if [ ! -d "$ENV_DIR" ]; then
+          echo "❌ Error: Environment directory not found: $ENV_DIR"
+          echo "Available environments:"
+          ls -1 ./environments/ 2>/dev/null || echo "  (no environments found)"
+          exit 1
+        fi
+        
+        echo "✅ Environment directory found: $ENV_DIR"
+        echo "Contents:"
+        ls -la "$ENV_DIR"
+    
+    - name: Create bundle
+      id: bundle
+      shell: bash
+      run: |
+        cd "${{ inputs.workspace-path }}"
+        ENV_NAME="${{ inputs.environment }}"
+        VERSION="${{ inputs.version }}"
+        OUTPUT_PATH="${{ inputs.output-path }}"
+        
+        # Use default output path if not provided
+        if [ -z "$OUTPUT_PATH" ]; then
+          OUTPUT_PATH="${ENV_NAME}-${VERSION}.tar.gz"
+        fi
+        
+        echo "📦 Creating bundle from environment: $ENV_NAME"
+        
+        # Create tar.gz directly from environment directory
+        cd environments
+        tar -czf "../${OUTPUT_PATH}" \
+          --exclude='*.db' \
+          --exclude='*.log' \
+          --exclude='.git*' \
+          -C "$ENV_NAME" .
+        cd ..
+        
+        # Verify bundle was created
+        if [ ! -f "$OUTPUT_PATH" ]; then
+          echo "❌ Error: Bundle creation failed"
+          exit 1
+        fi
+        
+        BUNDLE_SIZE=$(ls -lh "$OUTPUT_PATH" | awk '{print $5}')
+        echo "✅ Bundle created: $OUTPUT_PATH ($BUNDLE_SIZE)"
+        
+        # Set outputs
+        echo "bundle-path=$OUTPUT_PATH" >> $GITHUB_OUTPUT
+        echo "bundle-size=$BUNDLE_SIZE" >> $GITHUB_OUTPUT
+    
+    - name: Generate metadata
+      id: metadata
+      shell: bash
+      run: |
+        cd "${{ inputs.workspace-path }}"
+        ENV_NAME="${{ inputs.environment }}"
+        VERSION="${{ inputs.version }}"
+        OUTPUT_PATH="${{ inputs.output-path }}"
+        
+        if [ -z "$OUTPUT_PATH" ]; then
+          OUTPUT_PATH="${ENV_NAME}-${VERSION}.tar.gz"
+        fi
+        
+        METADATA_PATH="${OUTPUT_PATH%.tar.gz}.json"
+        
+        cat > "$METADATA_PATH" <<EOF
+        {
+          "name": "$ENV_NAME",
+          "version": "$VERSION",
+          "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "git_commit": "${{ github.sha }}",
+          "git_ref": "${{ github.ref }}",
+          "repository": "${{ github.repository }}",
+          "bundle_size": "$(stat -c%s "$OUTPUT_PATH" 2>/dev/null || stat -f%z "$OUTPUT_PATH")"
+        }
+        EOF
+        
+        echo "📝 Metadata created: $METADATA_PATH"
+        cat "$METADATA_PATH"
+        
+        echo "metadata-path=$METADATA_PATH" >> $GITHUB_OUTPUT
