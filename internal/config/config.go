@@ -158,6 +158,17 @@ func Load() (*Config, error) {
 	// Load faker templates from config file
 	cfg.FakerTemplates = loadFakerTemplates()
 
+	// Environment variable overrides (take precedence over config file)
+	if envProvider := os.Getenv("STN_AI_PROVIDER"); envProvider != "" {
+		cfg.AIProvider = envProvider
+	}
+	if envModel := os.Getenv("STN_AI_MODEL"); envModel != "" {
+		cfg.AIModel = envModel
+	}
+	if envBaseURL := os.Getenv("STN_AI_BASE_URL"); envBaseURL != "" {
+		cfg.AIBaseURL = envBaseURL
+	}
+
 	// Store loaded config for use by path helpers
 	loadedConfig = cfg
 
