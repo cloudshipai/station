@@ -2,6 +2,7 @@ package faker
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -62,6 +63,10 @@ type MCPFaker struct {
 	standaloneMode bool        // If true, no target MCP server (AI-generated tools only)
 	fakerID        string      // Unique identifier for tool caching in standalone mode
 	toolCache      interface{} // Tool cache for standalone mode (toolcache.Cache)
+
+	// Response cache for deterministic behavior within a session
+	responseCache     map[string]*mcp.CallToolResult // Cache key: hash(toolName + args)
+	responseCacheLock sync.RWMutex                   // Lock for thread-safe cache access
 }
 
 // Global log file for faker debugging (since stderr isn't captured by parent)
@@ -92,6 +97,33 @@ func logFaker(format string, args ...interface{}) {
 		fmt.Fprint(fakerLogFile, msg)
 		fakerLogFile.Sync() // Flush immediately so we don't lose logs if process hangs
 	}
+}
+
+// generateCacheKey creates a deterministic cache key from tool name and arguments
+func generateCacheKey(toolName string, args map[string]interface{}) string {
+	// Serialize arguments to JSON for consistent hashing
+	argsJSON, err := json.Marshal(args)
+	if err != nil {
+		// Fallback to toolName only if serialization fails
+		return toolName
+	}
+	// Hash the arguments for consistent cache key
+	hash := sha256.Sum256(argsJSON)
+	// Return toolName:argsHash for readability in logs
+	return fmt.Sprintf("%s:%x", toolName, hash[:8])
+}
+
+// cacheAndReturn stores the result in cache and returns it
+func (f *MCPFaker) cacheAndReturn(cacheKey string, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+	f.responseCacheLock.Lock()
+	f.responseCache[cacheKey] = result
+	f.responseCacheLock.Unlock()
+
+	if f.debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] 💾 Cached response for key: %s (cache size: %d)\n", cacheKey, len(f.responseCache))
+	}
+
+	return result, nil
 }
 
 // NewMCPFaker creates a new MCP faker server
@@ -293,18 +325,20 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 	}
 
 	return &MCPFaker{
-		targetClient:    targetClient,
-		genkitApp:       app,
-		stationConfig:   stationConfig,
-		instruction:     instruction,
-		debug:           debug,
-		writeOperations: make(map[string]bool),
-		safetyMode:      true, // Always enable safety mode by default
-		callHistory:     make([]ToolCallHistory, 0),
-		sessionManager:  sessionMgr,
-		session:         sess,
-		toolSchemas:     make(map[string]*mcp.Tool),
-		standaloneMode:  false,
+		targetClient:      targetClient,
+		genkitApp:         app,
+		stationConfig:     stationConfig,
+		instruction:       instruction,
+		debug:             debug,
+		writeOperations:   make(map[string]bool),
+		safetyMode:        true, // Always enable safety mode by default
+		callHistory:       make([]ToolCallHistory, 0),
+		sessionManager:    sessionMgr,
+		session:           sess,
+		toolSchemas:       make(map[string]*mcp.Tool),
+		standaloneMode:    false,
+		responseCache:     make(map[string]*mcp.CallToolResult),
+		responseCacheLock: sync.RWMutex{},
 	}, nil
 }
 
@@ -425,20 +459,22 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 	}
 
 	return &MCPFaker{
-		targetClient:    nil, // No target in standalone mode
-		genkitApp:       app,
-		stationConfig:   stationConfig,
-		instruction:     instruction,
-		debug:           debug,
-		writeOperations: make(map[string]bool),
-		safetyMode:      true,
-		callHistory:     make([]ToolCallHistory, 0),
-		sessionManager:  sessionMgr,
-		session:         nil, // Session created/loaded in Serve() after checking cache
-		toolSchemas:     make(map[string]*mcp.Tool),
-		standaloneMode:  true,
-		fakerID:         fakerID,
-		toolCache:       toolCache,
+		targetClient:      nil, // No target in standalone mode
+		genkitApp:         app,
+		stationConfig:     stationConfig,
+		instruction:       instruction,
+		debug:             debug,
+		writeOperations:   make(map[string]bool),
+		safetyMode:        true,
+		callHistory:       make([]ToolCallHistory, 0),
+		sessionManager:    sessionMgr,
+		session:           nil, // Session created/loaded in Serve() after checking cache
+		toolSchemas:       make(map[string]*mcp.Tool),
+		standaloneMode:    true,
+		fakerID:           fakerID,
+		toolCache:         toolCache,
+		responseCache:     make(map[string]*mcp.CallToolResult),
+		responseCacheLock: sync.RWMutex{},
 	}, nil
 }
 
@@ -701,6 +737,30 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 
 	args, _ := request.Params.Arguments.(map[string]interface{})
 
+	// Check response cache for deterministic behavior within session
+	cacheKey := generateCacheKey(request.Params.Name, args)
+	f.responseCacheLock.RLock()
+	if cachedResult, exists := f.responseCache[cacheKey]; exists {
+		f.responseCacheLock.RUnlock()
+		if f.debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] 💾 Cache HIT for %s (key: %s)\n", request.Params.Name, cacheKey)
+		}
+		span.SetAttributes(
+			attribute.Bool("faker.cache_hit", true),
+			attribute.String("faker.cache_key", cacheKey),
+		)
+		return cachedResult, nil
+	}
+	f.responseCacheLock.RUnlock()
+
+	if f.debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] 🔄 Cache MISS for %s (key: %s) - generating new response\n", request.Params.Name, cacheKey)
+	}
+	span.SetAttributes(
+		attribute.Bool("faker.cache_hit", false),
+		attribute.String("faker.cache_key", cacheKey),
+	)
+
 	// Check if this is a write operation and intercept it
 	if f.safetyMode && f.writeOperations[request.Params.Name] {
 		span.SetAttributes(
@@ -735,7 +795,8 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 		// Legacy: Also record in callHistory for backward compatibility
 		f.recordToolCall(request.Params.Name, args, mockResult)
 
-		return mockResult, nil
+		// Cache and return
+		return f.cacheAndReturn(cacheKey, mockResult)
 	}
 
 	// Read operation - check if we should synthesize based on write history
@@ -763,7 +824,8 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 					fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to record read event: %v\n", err)
 				}
 			}
-			return synthesizedResult, nil
+			// Cache and return
+			return f.cacheAndReturn(cacheKey, synthesizedResult)
 		}
 	}
 
@@ -796,7 +858,8 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 		// Record in callHistory for backward compatibility
 		f.recordToolCall(request.Params.Name, args, simulatedResult)
 
-		return simulatedResult, nil
+		// Cache and return
+		return f.cacheAndReturn(cacheKey, simulatedResult)
 	}
 
 	// Call the real target server for read operations (proxy mode only)
@@ -852,7 +915,8 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 			}
 		}
 
-		return simulatedResult, nil
+		// Cache and return
+		return f.cacheAndReturn(cacheKey, simulatedResult)
 	}
 
 	// If no AI enrichment or real call succeeded, handle normally
@@ -894,7 +958,8 @@ func (f *MCPFaker) handleToolCall(ctx context.Context, request mcp.CallToolReque
 	// Legacy: Also record in callHistory for backward compatibility
 	f.recordToolCall(request.Params.Name, args, enrichedResult)
 
-	return enrichedResult, nil
+	// Cache and return
+	return f.cacheAndReturn(cacheKey, enrichedResult)
 }
 
 // generateSimulatedResponse creates a completely simulated response when the real MCP call fails
