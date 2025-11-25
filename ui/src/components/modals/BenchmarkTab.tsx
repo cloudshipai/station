@@ -28,8 +28,17 @@ export const BenchmarkTab: React.FC<BenchmarkTabProps> = ({ runId }) => {
       
       // Calculate aggregate scores if metrics exist
       if (response.data.metrics && response.data.metrics.length > 0) {
-        const avgScore = response.data.metrics.reduce((sum, m) => sum + m.score, 0) / response.data.metrics.length;
-        const qualityScore = avgScore * 10;
+        // Calculate quality score properly: average of normalized metrics (already 0-10 scale)
+        let totalScore = 0;
+        response.data.metrics.forEach(m => {
+          // Invert scores for metrics where lower is better (hallucination, toxicity)
+          const isLowerBetter = m.metric_name === 'hallucination' || 
+                                m.metric_name === 'toxicity' || 
+                                m.metric_name === 'bias';
+          const normalizedScore = isLowerBetter ? (1.0 - m.score) * 10.0 : m.score * 10.0;
+          totalScore += normalizedScore;
+        });
+        const qualityScore = totalScore / response.data.metrics.length;
         const passCount = response.data.metrics.filter(m => m.passed).length;
         const productionReady = passCount === response.data.metrics.length;
         

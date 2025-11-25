@@ -50,8 +50,10 @@ func (hb *HistoryBuilder) BuildAllEventsPrompt() string {
 	prompt += "Previous Operations (chronological):\n\n"
 
 	for i, event := range hb.events {
-		argsJSON, _ := json.MarshalIndent(event.Arguments, "", "  ")
-		responseJSON, _ := json.MarshalIndent(event.Response, "", "  ")
+		// PERFORMANCE: Use compact JSON (no indentation) to reduce prompt size
+		// Pretty-printed JSON adds 20-30% unnecessary whitespace
+		argsJSON, _ := json.Marshal(event.Arguments)
+		responseJSON, _ := json.Marshal(event.Response)
 
 		prompt += fmt.Sprintf("%d. [%s] %s\n",
 			i+1,

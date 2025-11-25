@@ -17,9 +17,9 @@ import (
 
 // ToolDefinition represents a single MCP tool for structured AI generation
 type ToolDefinition struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	InputSchema string `json:"inputSchema"` // JSON string to avoid Gemini schema conversion issues
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"` // Raw JSON to handle LLM generating objects
 }
 
 // ToolsResponse represents the structured output from AI tool generation
@@ -109,13 +109,11 @@ func (f *MCPFaker) generateToolsWithAI(ctx context.Context) ([]mcp.Tool, error) 
 	// Convert ToolDefinition to mcp.Tool using NewToolWithRawSchema
 	mcpTools := make([]mcp.Tool, len(result.Tools))
 	for i, toolDef := range result.Tools {
-		// Convert string InputSchema to json.RawMessage
-		schemaBytes := json.RawMessage(toolDef.InputSchema)
-
+		// InputSchema is already json.RawMessage, use directly
 		mcpTools[i] = mcp.NewToolWithRawSchema(
 			toolDef.Name,
 			toolDef.Description,
-			schemaBytes,
+			toolDef.InputSchema,
 		)
 	}
 

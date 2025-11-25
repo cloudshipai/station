@@ -493,7 +493,30 @@ func (f *MCPFaker) Serve() error {
 								fmt.Fprintf(os.Stderr, "[FAKER] Loaded existing session: %s\n", cachedSessionID)
 							}
 						} else {
-							logFaker("[FAKER] ⚠️  Could not load cached session %s: %v\n", cachedSessionID, sessErr)
+							// Session doesn't exist (may have been cleared) - create a new one
+							logFaker("[FAKER] ⚠️  Could not load cached session %s: %v, creating new session\n", cachedSessionID, sessErr)
+							newSession, newSessErr := f.sessionManager.CreateSession(ctx, f.instruction)
+							if newSessErr != nil {
+								logFaker("[FAKER] ⚠️  Failed to create new session: %v\n", newSessErr)
+							} else {
+								f.session = newSession
+								logFaker("[FAKER] ✅ Created new session: %s\n", newSession.ID)
+								if f.debug {
+									fmt.Fprintf(os.Stderr, "[FAKER] Created new session: %s\n", newSession.ID)
+								}
+							}
+						}
+					} else if f.sessionManager != nil && f.session == nil {
+						// No cached session ID, create a fresh session
+						newSession, newSessErr := f.sessionManager.CreateSession(ctx, f.instruction)
+						if newSessErr != nil {
+							logFaker("[FAKER] ⚠️  Failed to create session: %v\n", newSessErr)
+						} else {
+							f.session = newSession
+							logFaker("[FAKER] ✅ Created new session (no cache): %s\n", newSession.ID)
+							if f.debug {
+								fmt.Fprintf(os.Stderr, "[FAKER] Created new session: %s\n", newSession.ID)
+							}
 						}
 					}
 				} else {
@@ -888,7 +911,7 @@ func (f *MCPFaker) generateSimulatedResponse(ctx context.Context, toolName strin
 		schemaInfo = fmt.Sprintf("\nTool schema: %s", string(schemaJSON))
 	}
 
-	// Get session history for consistency
+	// Get session history for consistency (LIMIT TO LAST 3 EVENTS FOR PERFORMANCE)
 	var sessionHistoryPrompt string
 	if f.session != nil && f.sessionManager != nil {
 		events, err := f.sessionManager.GetAllEvents(ctx, f.session.ID)
@@ -896,7 +919,17 @@ func (f *MCPFaker) generateSimulatedResponse(ctx context.Context, toolName strin
 		fmt.Fprintf(os.Stderr, "[FAKER-SESSION] Session ID: %s, Events fetched: %d, Error: %v\n",
 			f.session.ID, len(events), err)
 		if err == nil && len(events) > 0 {
-			builder := session.NewHistoryBuilder(events)
+			// PERFORMANCE FIX: Only use last 3 events to keep prompt size manageable
+			// Tests show: 13 events = 137KB, 3 events = 31KB (77% reduction)
+			const maxHistoryEvents = 3
+			limitedEvents := events
+			if len(events) > maxHistoryEvents {
+				limitedEvents = events[len(events)-maxHistoryEvents:]
+				fmt.Fprintf(os.Stderr, "[FAKER-SESSION] 📉 Limited history from %d to %d events (performance optimization)\n",
+					len(events), maxHistoryEvents)
+			}
+
+			builder := session.NewHistoryBuilder(limitedEvents)
 			sessionHistoryPrompt = "\n\n=== SESSION HISTORY (CRITICAL - READ CAREFULLY) ===\n\n" +
 				builder.BuildAllEventsPrompt() +
 				"\n\n=== CONSISTENCY RULES (MANDATORY) ===\n" +
@@ -905,7 +938,7 @@ func (f *MCPFaker) generateSimulatedResponse(ctx context.Context, toolName strin
 				"3. Do NOT invent new data - copy from the history above\n" +
 				"4. If you cannot maintain consistency, return an error instead of contradicting yourself\n" +
 				"5. Count carefully - if previous response listed 15 items, generate ALL 15 items, not a subset\n\n"
-			fmt.Fprintf(os.Stderr, "[FAKER-SESSION] ✅ Including session history in AI prompt (%d events)\n", len(events))
+			fmt.Fprintf(os.Stderr, "[FAKER-SESSION] ✅ Including session history in AI prompt (%d events)\n", len(limitedEvents))
 		} else {
 			fmt.Fprintf(os.Stderr, "[FAKER-SESSION] ⚠️  NO session history included (first call or error)\n")
 		}
