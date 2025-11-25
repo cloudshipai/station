@@ -111,11 +111,23 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 		}
 	}
 
+	// Initialize viper to discover config file (same as main CLI does)
+	// This ensures faker uses workspace config.yaml if present
+	if err := config.InitViper(""); err != nil {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to initialize viper: %v\n", err)
+		}
+	}
+
 	// Load Station config
 	stationConfig, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
+
+	// ALWAYS log which database we're using (debug critical config issue)
+	fmt.Fprintf(os.Stderr, "[FAKER-PROXY] Using database: %s\n", stationConfig.DatabaseURL)
+	fmt.Fprintf(os.Stderr, "[FAKER-PROXY] STATION_DATABASE env: %s\n", os.Getenv("STATION_DATABASE"))
 
 	// Initialize OpenTelemetry for faker span export
 	// Check if OTEL is enabled via environment variables
@@ -312,11 +324,21 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 		return nil, fmt.Errorf("AI instruction is required for standalone mode")
 	}
 
+	// Initialize viper to discover config file (same as main CLI does)
+	// This ensures faker uses workspace config.yaml if present
+	if err := config.InitViper(""); err != nil && debug {
+		fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to initialize viper: %v\n", err)
+	}
+
 	// Load Station config
 	stationConfig, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load station config: %w", err)
 	}
+
+	// ALWAYS log which database we're using (debug critical config issue)
+	fmt.Fprintf(os.Stderr, "[FAKER-STANDALONE] Using database: %s\n", stationConfig.DatabaseURL)
+	fmt.Fprintf(os.Stderr, "[FAKER-STANDALONE] STATION_DATABASE env: %s\n", os.Getenv("STATION_DATABASE"))
 
 	// Set GenKit to production mode to prevent reflection server
 	if os.Getenv("GENKIT_ENV") == "" {
@@ -367,9 +389,9 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 		fmt.Fprintf(os.Stderr, "[FAKER] GenKit initialized successfully\n")
 	}
 
-	// Initialize session management (for tracking tool calls even in standalone mode)
+	// Initialize session manager only (session creation deferred to Serve() for cache-based reuse)
+	// This allows Serve() to check the tool cache for an existing session ID before creating a new one
 	var sessionMgr session.Manager
-	var sess *session.Session
 	if instruction != "" {
 		dbCtx, dbCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer dbCancel()
@@ -391,13 +413,8 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 				}
 			} else {
 				sessionMgr = session.NewManager(database.Conn(), debug)
-				sess, err = sessionMgr.CreateSession(ctx, instruction)
-				if err != nil {
-					if debug {
-						fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to create session: %v\n", err)
-					}
-				} else if debug {
-					fmt.Fprintf(os.Stderr, "[FAKER] Created session %s\n", sess.ID)
+				if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Session manager initialized (session will be created/loaded in Serve)\n")
 				}
 			}
 		case <-dbCtx.Done():
@@ -417,7 +434,7 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 		safetyMode:      true,
 		callHistory:     make([]ToolCallHistory, 0),
 		sessionManager:  sessionMgr,
-		session:         sess,
+		session:         nil, // Session created/loaded in Serve() after checking cache
 		toolSchemas:     make(map[string]*mcp.Tool),
 		standaloneMode:  true,
 		fakerID:         fakerID,
@@ -456,18 +473,48 @@ func (f *MCPFaker) Serve() error {
 			logFaker("[FAKER] Tool cache exists, attempting type assertion...\n")
 			if cache, ok := f.toolCache.(toolcache.Cache); ok {
 				logFaker("[FAKER] Cache type assertion successful, calling GetTools...\n")
-				cachedTools, cacheErr := cache.GetTools(ctx, f.fakerID)
-				logFaker("[FAKER] GetTools returned: %d tools, error: %v\n", len(cachedTools), cacheErr)
+				cachedTools, cachedSessionID, cacheErr := cache.GetTools(ctx, f.fakerID)
+				logFaker("[FAKER] GetTools returned: %d tools, sessionID: %s, error: %v\n", len(cachedTools), cachedSessionID, cacheErr)
 				if cacheErr == nil && len(cachedTools) > 0 {
 					if f.debug {
-						fmt.Fprintf(os.Stderr, "[FAKER] Loaded %d tools from cache\n", len(cachedTools))
+						fmt.Fprintf(os.Stderr, "[FAKER] Loaded %d tools from cache (session: %s)\n", len(cachedTools), cachedSessionID)
 					}
 					logFaker("[FAKER] ✅ Using %d cached tools\n", len(cachedTools))
 					tools = cachedTools
+
+					// CRITICAL: Load existing session if we have one cached
+					// This enables session persistence across subprocess invocations
+					if cachedSessionID != "" && f.sessionManager != nil {
+						existingSession, sessErr := f.sessionManager.GetSession(ctx, cachedSessionID)
+						if sessErr == nil && existingSession != nil {
+							f.session = existingSession
+							logFaker("[FAKER] ✅ Loaded existing session: %s (created: %s)\n", cachedSessionID, existingSession.CreatedAt)
+							if f.debug {
+								fmt.Fprintf(os.Stderr, "[FAKER] Loaded existing session: %s\n", cachedSessionID)
+							}
+						} else {
+							logFaker("[FAKER] ⚠️  Could not load cached session %s: %v\n", cachedSessionID, sessErr)
+						}
+					}
 				} else {
 					logFaker("[FAKER] Cache miss or error (%v), generating tools with AI...\n", cacheErr)
 					if f.debug {
 						fmt.Fprintf(os.Stderr, "[FAKER] Cache miss or error (%v), generating tools with AI...\n", cacheErr)
+					}
+
+					// CRITICAL: Create NEW session for this faker (cache miss = first time)
+					// This session will be persisted in cache for future subprocess reuse
+					if f.sessionManager != nil && f.session == nil {
+						newSession, sessErr := f.sessionManager.CreateSession(ctx, f.instruction)
+						if sessErr != nil {
+							logFaker("[FAKER] ⚠️  Failed to create session: %v\n", sessErr)
+						} else {
+							f.session = newSession
+							logFaker("[FAKER] ✅ Created NEW session: %s\n", newSession.ID)
+							if f.debug {
+								fmt.Fprintf(os.Stderr, "[FAKER] Created new session: %s\n", newSession.ID)
+							}
+						}
 					}
 
 					// Generate tools with AI
@@ -478,15 +525,19 @@ func (f *MCPFaker) Serve() error {
 						return fmt.Errorf("failed to generate tools with AI: %w", err)
 					}
 
-					// Cache the generated tools
-					logFaker("[FAKER] 💾 Caching %d generated tools...\n", len(tools))
-					if cacheErr := cache.SetTools(ctx, f.fakerID, tools); cacheErr != nil {
+					// Cache the generated tools with session ID for persistence
+					sessionID := ""
+					if f.session != nil {
+						sessionID = f.session.ID
+					}
+					logFaker("[FAKER] 💾 Caching %d generated tools with session %s...\n", len(tools), sessionID)
+					if cacheErr := cache.SetTools(ctx, f.fakerID, tools, sessionID); cacheErr != nil {
 						logFaker("[FAKER] ⚠️  Failed to cache tools: %v\n", cacheErr)
 						if f.debug {
 							fmt.Fprintf(os.Stderr, "[FAKER] Warning: Failed to cache tools: %v\n", cacheErr)
 						}
 					} else {
-						logFaker("[FAKER] ✅ Cached %d tools for future use\n", len(tools))
+						logFaker("[FAKER] ✅ Cached %d tools for future use (session: %s)\n", len(tools), sessionID)
 						if f.debug {
 							fmt.Fprintf(os.Stderr, "[FAKER] Cached %d tools for future use\n", len(tools))
 						}
@@ -837,6 +888,32 @@ func (f *MCPFaker) generateSimulatedResponse(ctx context.Context, toolName strin
 		schemaInfo = fmt.Sprintf("\nTool schema: %s", string(schemaJSON))
 	}
 
+	// Get session history for consistency
+	var sessionHistoryPrompt string
+	if f.session != nil && f.sessionManager != nil {
+		events, err := f.sessionManager.GetAllEvents(ctx, f.session.ID)
+		// ALWAYS log session history status (debug critical issue)
+		fmt.Fprintf(os.Stderr, "[FAKER-SESSION] Session ID: %s, Events fetched: %d, Error: %v\n",
+			f.session.ID, len(events), err)
+		if err == nil && len(events) > 0 {
+			builder := session.NewHistoryBuilder(events)
+			sessionHistoryPrompt = "\n\n=== SESSION HISTORY (CRITICAL - READ CAREFULLY) ===\n\n" +
+				builder.BuildAllEventsPrompt() +
+				"\n\n=== CONSISTENCY RULES (MANDATORY) ===\n" +
+				"1. If workspace 'production' had 15 resources in a previous response, it MUST have EXACTLY 15 resources in this response\n" +
+				"2. Use THE EXACT SAME resource IDs, names, and values from previous responses\n" +
+				"3. Do NOT invent new data - copy from the history above\n" +
+				"4. If you cannot maintain consistency, return an error instead of contradicting yourself\n" +
+				"5. Count carefully - if previous response listed 15 items, generate ALL 15 items, not a subset\n\n"
+			fmt.Fprintf(os.Stderr, "[FAKER-SESSION] ✅ Including session history in AI prompt (%d events)\n", len(events))
+		} else {
+			fmt.Fprintf(os.Stderr, "[FAKER-SESSION] ⚠️  NO session history included (first call or error)\n")
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "[FAKER-SESSION] ⚠️  Session manager not initialized (session=%v, manager=%v)\n",
+			f.session != nil, f.sessionManager != nil)
+	}
+
 	// Build comprehensive prompt for simulation
 	argsJSON, _ := json.Marshal(args)
 	prompt := fmt.Sprintf(`You are simulating a real AWS CloudWatch MCP tool response.
@@ -848,6 +925,7 @@ Arguments: %s
 Original Error (IGNORE THIS): %v
 
 YOUR TASK: %s
+%s
 
 CRITICAL: Generate a realistic, successful response in proper AWS CloudWatch JSON format.
 Do NOT mention errors or authentication issues.
@@ -859,6 +937,7 @@ Output ONLY valid JSON that matches AWS CloudWatch API responses.`,
 		schemaInfo,
 		originalError,
 		f.instruction,
+		sessionHistoryPrompt,
 	)
 
 	if f.debug {

@@ -15,13 +15,15 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("failed to open test database: %v", err)
 	}
 
-	// Create faker_tool_cache table
+	// Create faker_tool_cache table with session_id column
 	_, err = db.Exec(`
 		CREATE TABLE faker_tool_cache (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			faker_id TEXT NOT NULL,
+			config_hash TEXT,
 			tool_name TEXT NOT NULL,
 			tool_schema TEXT NOT NULL,
+			session_id TEXT,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(faker_id, tool_name)
@@ -52,14 +54,14 @@ func TestToolCache_SetAndGet(t *testing.T) {
 		},
 	}
 
-	// Set tools
-	err := cache.SetTools(ctx, "aws-cloudwatch-faker", tools)
+	// Set tools with session ID
+	err := cache.SetTools(ctx, "aws-cloudwatch-faker", tools, "test-session-123")
 	if err != nil {
 		t.Fatalf("SetTools failed: %v", err)
 	}
 
-	// Get tools
-	retrieved, err := cache.GetTools(ctx, "aws-cloudwatch-faker")
+	// Get tools and session ID
+	retrieved, sessionID, err := cache.GetTools(ctx, "aws-cloudwatch-faker")
 	if err != nil {
 		t.Fatalf("GetTools failed: %v", err)
 	}
@@ -70,6 +72,10 @@ func TestToolCache_SetAndGet(t *testing.T) {
 
 	if retrieved[0].Name != "get_metrics" {
 		t.Errorf("expected first tool name 'get_metrics', got '%s'", retrieved[0].Name)
+	}
+
+	if sessionID != "test-session-123" {
+		t.Errorf("expected session ID 'test-session-123', got '%s'", sessionID)
 	}
 }
 
@@ -89,9 +95,9 @@ func TestToolCache_HasTools(t *testing.T) {
 		t.Error("expected no tools, but HasTools returned true")
 	}
 
-	// Set tools
+	// Set tools with session ID
 	tools := []mcp.Tool{{Name: "test_tool", Description: "Test"}}
-	err = cache.SetTools(ctx, "test-faker", tools)
+	err = cache.SetTools(ctx, "test-faker", tools, "session-456")
 	if err != nil {
 		t.Fatalf("SetTools failed: %v", err)
 	}
@@ -113,9 +119,9 @@ func TestToolCache_ClearTools(t *testing.T) {
 	cache := NewCache(db)
 	ctx := context.Background()
 
-	// Set tools
+	// Set tools with session ID
 	tools := []mcp.Tool{{Name: "test_tool", Description: "Test"}}
-	err := cache.SetTools(ctx, "test-faker", tools)
+	err := cache.SetTools(ctx, "test-faker", tools, "session-789")
 	if err != nil {
 		t.Fatalf("SetTools failed: %v", err)
 	}
@@ -143,29 +149,33 @@ func TestToolCache_ReplaceTools(t *testing.T) {
 	cache := NewCache(db)
 	ctx := context.Background()
 
-	// Set initial tools
+	// Set initial tools with session ID
 	tools1 := []mcp.Tool{
 		{Name: "tool1", Description: "First"},
 		{Name: "tool2", Description: "Second"},
 	}
-	err := cache.SetTools(ctx, "test-faker", tools1)
+	err := cache.SetTools(ctx, "test-faker", tools1, "session-initial")
 	if err != nil {
 		t.Fatalf("SetTools failed: %v", err)
 	}
 
-	// Replace with different tools
+	// Replace with different tools and new session ID
 	tools2 := []mcp.Tool{
 		{Name: "tool3", Description: "Third"},
 	}
-	err = cache.SetTools(ctx, "test-faker", tools2)
+	err = cache.SetTools(ctx, "test-faker", tools2, "session-replaced")
 	if err != nil {
 		t.Fatalf("SetTools failed: %v", err)
 	}
 
-	// Verify replacement
-	retrieved, err := cache.GetTools(ctx, "test-faker")
+	// Verify replacement - should return new session ID
+	retrieved, sessionID, err := cache.GetTools(ctx, "test-faker")
 	if err != nil {
 		t.Fatalf("GetTools failed: %v", err)
+	}
+
+	if sessionID != "session-replaced" {
+		t.Errorf("expected session ID 'session-replaced', got '%s'", sessionID)
 	}
 
 	if len(retrieved) != 1 {

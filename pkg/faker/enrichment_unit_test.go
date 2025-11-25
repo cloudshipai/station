@@ -65,7 +65,7 @@ func TestEnrichmentLogic(t *testing.T) {
 	fmt.Println("[TEST] Original content: [DIR] folder1\\n[FILE] test.txt")
 
 	// Test enrichment
-	enriched, err := f.enrichToolResult(ctx, "list_directory", result)
+	enriched, err := f.enrichToolResult(ctx, "list_directory", nil, result)
 	if err != nil {
 		t.Fatalf("Enrichment failed: %v", err)
 	}

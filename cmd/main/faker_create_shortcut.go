@@ -71,13 +71,11 @@ func runFakerCreateShortcut(cmd *cobra.Command, args []string) error {
 
 	// Determine instruction (from template or custom)
 	var instruction string
-	var aiModel string
 
 	if fakerCreateShortcutTemplate != "" {
 		// Use template
 		if template, exists := cfg.FakerTemplates[fakerCreateShortcutTemplate]; exists {
 			instruction = template.Instruction
-			aiModel = template.Model
 			fmt.Printf("Using template '%s' (%s)\n", fakerCreateShortcutTemplate, template.Name)
 		} else {
 			return fmt.Errorf("template '%s' not found. Run 'stn faker templates' to list available templates", fakerCreateShortcutTemplate)
@@ -89,27 +87,24 @@ func runFakerCreateShortcut(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("either --template or --instruction must be provided")
 	}
 
-	// Determine model (flag > template > global config)
-	if fakerCreateShortcutModel != "" {
-		aiModel = fakerCreateShortcutModel
-	} else if aiModel == "" {
-		aiModel = cfg.AIModel
+	// Build args array - intentionally NOT including --ai-model to allow faker
+	// to inherit from Station's global AI configuration (ai_provider and ai_model)
+	fakerArgs := []string{
+		"faker",
+		"--standalone",
+		"--faker-id", fakerName,
+		"--ai-instruction", instruction,
 	}
 
-	if aiModel == "" {
-		aiModel = "gpt-4o-mini" // Final fallback
+	// Only add --ai-model if explicitly provided via flag
+	if fakerCreateShortcutModel != "" {
+		fakerArgs = append(fakerArgs, "--ai-model", fakerCreateShortcutModel)
 	}
 
 	// Build MCP server config (proper format with args array)
 	mcpServerConfig := map[string]interface{}{
 		"command": "stn", // Use stn from PATH, not absolute path
-		"args": []string{
-			"faker",
-			"--standalone",
-			"--faker-id", fakerName,
-			"--ai-model", aiModel,
-			"--ai-instruction", instruction,
-		},
+		"args":    fakerArgs,
 	}
 
 	// Create single-server template structure
@@ -142,7 +137,11 @@ func runFakerCreateShortcut(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✓ Created faker '%s' in environment '%s'\n", fakerName, fakerCreateShortcutEnv)
 	fmt.Printf("  Config file: %s\n", configPath)
-	fmt.Printf("  Model: %s\n", aiModel)
+	if fakerCreateShortcutModel != "" {
+		fmt.Printf("  Model: %s (explicit)\n", fakerCreateShortcutModel)
+	} else {
+		fmt.Printf("  Model: %s (from global config)\n", cfg.AIModel)
+	}
 
 	// Auto-sync if not disabled
 	if !fakerCreateShortcutNoSync {

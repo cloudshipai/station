@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	fakerSession "station/pkg/faker/session"
+
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -19,7 +21,7 @@ func TestE2E_FilesystemWriteReadFlow(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, true)
+	sm := fakerSession.NewManager(db, true)
 	ctx := context.Background()
 
 	// Create faker session
@@ -162,7 +164,7 @@ func TestE2E_MultipleWritesReadConsistency(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, true)
+	sm := fakerSession.NewManager(db, true)
 	ctx := context.Background()
 
 	instruction := "Simulate AWS EC2 instance lifecycle management"
@@ -301,7 +303,7 @@ func TestE2E_SessionIsolation(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, true)
+	sm := fakerSession.NewManager(db, true)
 	ctx := context.Background()
 
 	// Create two separate sessions
@@ -309,7 +311,7 @@ func TestE2E_SessionIsolation(t *testing.T) {
 	session2, _ := sm.CreateSession(ctx, "Database operations")
 
 	// Record events in session 1
-	event1 := &FakerEvent{
+	event1 := &fakerSession.Event{
 		SessionID:     session1.ID,
 		ToolName:      "write_file",
 		Arguments:     map[string]interface{}{"path": "/tmp/file1.txt"},
@@ -320,7 +322,7 @@ func TestE2E_SessionIsolation(t *testing.T) {
 	sm.RecordEvent(ctx, event1)
 
 	// Record events in session 2
-	event2 := &FakerEvent{
+	event2 := &fakerSession.Event{
 		SessionID:     session2.ID,
 		ToolName:      "execute_sql",
 		Arguments:     map[string]interface{}{"query": "INSERT INTO users VALUES (1, 'Alice')"},
@@ -375,7 +377,7 @@ func TestE2E_LargeEventHistory(t *testing.T) {
 	db.Exec("PRAGMA journal_mode=WAL")
 	db.Exec("PRAGMA synchronous=NORMAL")
 
-	sm := NewSessionManager(db, false) // Disable debug for performance
+	sm := fakerSession.NewManager(db, false) // Disable debug for performance
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Large history test")
@@ -385,7 +387,7 @@ func TestE2E_LargeEventHistory(t *testing.T) {
 	numEvents := 100
 
 	for i := 0; i < numEvents; i++ {
-		event := &FakerEvent{
+		event := &fakerSession.Event{
 			SessionID: session.ID,
 			ToolName:  fmt.Sprintf("tool_%d", i%10),
 			Arguments: map[string]interface{}{
@@ -470,7 +472,7 @@ func TestE2E_ResponseFormatValidation(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, true)
+	sm := fakerSession.NewManager(db, true)
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Response format validation")

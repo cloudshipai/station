@@ -8,6 +8,7 @@ type CachedTool struct {
 	FakerID    string
 	ToolName   string
 	ToolSchema string // JSON-encoded mcp.Tool
+	SessionID  string // Faker session ID for consistency tracking
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }

@@ -175,11 +175,21 @@ func (j *JaegerService) GetUIURL() string {
 	return fmt.Sprintf("http://localhost:%d", j.uiPort)
 }
 
-// isAlreadyRunning checks if Jaeger is already running by trying to connect to UI
+// isAlreadyRunning checks if Jaeger is already running and healthy
 func (j *JaegerService) isAlreadyRunning() bool {
-	client := &http.Client{Timeout: 1 * time.Second}
+	// First check if container exists and is running
+	checkContainerCmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", j.containerName)
+	output, err := checkContainerCmd.Output()
+	if err != nil || string(output) != "true\n" {
+		return false
+	}
+
+	// Then verify UI is actually responding (not just port exposed)
+	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://localhost:%d", j.uiPort))
 	if err != nil {
+		// Container running but UI not responding - might be hung
+		logging.Info("   ⚠️  Jaeger container exists but UI not responding - will restart")
 		return false
 	}
 	defer resp.Body.Close()

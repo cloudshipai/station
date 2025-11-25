@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"station/pkg/faker/session"
@@ -167,17 +168,24 @@ func (f *MCPFaker) recordToolEvent(ctx context.Context, toolName string, argumen
 	// Extract response content for storage
 	var responseContent interface{}
 	if len(result.Content) > 0 {
-		// Store content as array of objects
-		contentArray := make([]map[string]interface{}, 0, len(result.Content))
+		// Store full content as JSON string for complete capture
+		// Convert MCP content to simple string representation
+		var textParts []string
 		for _, content := range result.Content {
 			if tc, ok := content.(*mcp.TextContent); ok {
-				contentArray = append(contentArray, map[string]interface{}{
-					"type": "text",
-					"text": tc.Text,
-				})
+				textParts = append(textParts, tc.Text)
+			} else if tc, ok := content.(mcp.TextContent); ok {
+				textParts = append(textParts, tc.Text)
 			}
 		}
-		responseContent = contentArray
+
+		// Store as single text string (easier for AI prompt building)
+		if len(textParts) > 0 {
+			responseContent = strings.Join(textParts, "\n")
+		} else {
+			// Fallback: store raw content as JSON
+			responseContent = result.Content
+		}
 	}
 
 	event := &session.Event{

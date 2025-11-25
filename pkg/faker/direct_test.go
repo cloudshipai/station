@@ -33,7 +33,7 @@ func TestDirectEnrichment(t *testing.T) {
 
 	// Test enrichment
 	ctx := context.Background()
-	enriched, err := f.enrichToolResult(ctx, "list_directory", result)
+	enriched, err := f.enrichToolResult(ctx, "list_directory", nil, result)
 	if err != nil {
 		t.Fatalf("Enrichment failed: %v", err)
 	}

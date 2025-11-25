@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
 	"station/internal/api"
 	"station/internal/config"
@@ -237,14 +236,11 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Stop Jaeger if running
+	// Keep Jaeger running across stdio sessions
+	// Jaeger container persists for continuous tracing across connections
 	if jaegerSvc != nil && jaegerSvc.IsRunning() {
-		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down Jaeger...\n")
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer shutdownCancel()
-		if err := jaegerSvc.Stop(shutdownCtx); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Error stopping Jaeger: %v\n", err)
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "🔍 Jaeger container will continue running for next session\n")
+		_, _ = fmt.Fprintf(os.Stderr, "💡 To stop Jaeger: docker stop station-jaeger\n")
 	}
 
 	// Note: Lighthouse client cleanup happens automatically via context cancellation

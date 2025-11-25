@@ -66,11 +66,12 @@ func (s *Server) handleFakerCreateStandalone(ctx context.Context, request mcp.Ca
 	}
 
 	// Build faker args using --standalone mode (matching example faker files)
+	// Note: --ai-model is intentionally NOT specified here to allow faker to inherit
+	// from Station's global AI configuration (ai_provider and ai_model in config.yaml)
 	fakerArgs := []string{
 		"faker",
 		"--standalone",
 		"--faker-id", fakerName,
-		"--ai-model", "gpt-4o-mini", // Uses Station's global AI model
 		"--ai-instruction", goal,
 	}
 	if debug {

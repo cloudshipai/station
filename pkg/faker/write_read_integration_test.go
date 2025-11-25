@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	fakerSession "station/pkg/faker/session"
+
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -14,7 +16,7 @@ func TestWriteInterception(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Test write interception")
@@ -71,14 +73,14 @@ func TestReadSynthesisWithWriteHistory(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	instruction := "Simulate filesystem with security reports"
 	session, _ := sm.CreateSession(ctx, instruction)
 
 	// Record write operation: create file
-	writeEvent := &FakerEvent{
+	writeEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "write_file",
 		Arguments: map[string]interface{}{
@@ -122,13 +124,13 @@ func TestMultipleWritesBeforeRead(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Simulate AWS EC2 management")
 
 	// Write 1: Create instance
-	createEvent := &FakerEvent{
+	createEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "create_ec2_instance",
 		Arguments: map[string]interface{}{
@@ -146,7 +148,7 @@ func TestMultipleWritesBeforeRead(t *testing.T) {
 	sm.RecordEvent(ctx, createEvent)
 
 	// Write 2: Start instance
-	startEvent := &FakerEvent{
+	startEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "start_instance",
 		Arguments: map[string]interface{}{
@@ -162,7 +164,7 @@ func TestMultipleWritesBeforeRead(t *testing.T) {
 	sm.RecordEvent(ctx, startEvent)
 
 	// Write 3: Tag instance
-	tagEvent := &FakerEvent{
+	tagEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "tag_resource",
 		Arguments: map[string]interface{}{
@@ -221,7 +223,7 @@ func TestShouldSynthesizeRead(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Test synthesis decision")
@@ -239,7 +241,7 @@ func TestShouldSynthesizeRead(t *testing.T) {
 	}
 
 	// Record a write operation
-	writeEvent := &FakerEvent{
+	writeEvent := &fakerSession.Event{
 		SessionID:     session.ID,
 		ToolName:      "create_resource",
 		Arguments:     map[string]interface{}{"name": "test"},
@@ -261,7 +263,7 @@ func TestReadEventRecording(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Test read recording")
@@ -306,7 +308,7 @@ func TestFilesystemWriteReadConsistency(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	instruction := `Simulate filesystem operations where:
@@ -319,7 +321,7 @@ func TestFilesystemWriteReadConsistency(t *testing.T) {
 	// Scenario: Security analyst creating report
 
 	// Step 1: Create directory
-	mkdirEvent := &FakerEvent{
+	mkdirEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "create_directory",
 		Arguments: map[string]interface{}{
@@ -334,7 +336,7 @@ func TestFilesystemWriteReadConsistency(t *testing.T) {
 	sm.RecordEvent(ctx, mkdirEvent)
 
 	// Step 2: Write initial report
-	writeEvent := &FakerEvent{
+	writeEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "write_file",
 		Arguments: map[string]interface{}{
@@ -342,7 +344,7 @@ func TestFilesystemWriteReadConsistency(t *testing.T) {
 			"content": "# Security Findings\n\n## Critical Issues\n- SQL Injection in /api/login",
 		},
 		Response: map[string]interface{}{
-			"success":    true,
+			"success":      true,
 			"bytesWritten": 65,
 		},
 		OperationType: "write",
@@ -351,7 +353,7 @@ func TestFilesystemWriteReadConsistency(t *testing.T) {
 	sm.RecordEvent(ctx, writeEvent)
 
 	// Step 3: Append to report
-	appendEvent := &FakerEvent{
+	appendEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "append_file",
 		Arguments: map[string]interface{}{
@@ -399,13 +401,13 @@ func TestDatabaseWriteReadConsistency(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Simulate database operations")
 
 	// Insert record
-	insertEvent := &FakerEvent{
+	insertEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "execute_sql",
 		Arguments: map[string]interface{}{
@@ -421,7 +423,7 @@ func TestDatabaseWriteReadConsistency(t *testing.T) {
 	sm.RecordEvent(ctx, insertEvent)
 
 	// Update record
-	updateEvent := &FakerEvent{
+	updateEvent := &fakerSession.Event{
 		SessionID: session.ID,
 		ToolName:  "execute_sql",
 		Arguments: map[string]interface{}{
@@ -458,7 +460,7 @@ func TestResponseShapePreservation(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	sm := NewSessionManager(db, false)
+	sm := fakerSession.NewManager(db, false)
 	ctx := context.Background()
 
 	session, _ := sm.CreateSession(ctx, "Test response shapes")

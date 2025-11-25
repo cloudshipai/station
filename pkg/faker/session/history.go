@@ -51,12 +51,14 @@ func (hb *HistoryBuilder) BuildAllEventsPrompt() string {
 
 	for i, event := range hb.events {
 		argsJSON, _ := json.MarshalIndent(event.Arguments, "", "  ")
+		responseJSON, _ := json.MarshalIndent(event.Response, "", "  ")
 
 		prompt += fmt.Sprintf("%d. [%s] %s\n",
 			i+1,
 			event.OperationType,
 			event.ToolName)
 		prompt += fmt.Sprintf("   Arguments: %s\n", string(argsJSON))
+		prompt += fmt.Sprintf("   Response: %s\n", string(responseJSON))
 		prompt += fmt.Sprintf("   Timestamp: %s\n\n",
 			event.Timestamp.Format("2006-01-02 15:04:05"))
 	}

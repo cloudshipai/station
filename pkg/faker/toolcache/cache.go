@@ -11,11 +11,11 @@ import (
 
 // Cache handles tool caching for standalone fakers
 type Cache interface {
-	// GetTools retrieves cached tools for a faker ID
-	GetTools(ctx context.Context, fakerID string) ([]mcp.Tool, error)
+	// GetTools retrieves cached tools for a faker ID and returns (tools, sessionID, error)
+	GetTools(ctx context.Context, fakerID string) ([]mcp.Tool, string, error)
 
-	// SetTools caches tools for a faker ID (replaces existing)
-	SetTools(ctx context.Context, fakerID string, tools []mcp.Tool) error
+	// SetTools caches tools for a faker ID (replaces existing) with session ID
+	SetTools(ctx context.Context, fakerID string, tools []mcp.Tool, sessionID string) error
 
 	// ClearTools removes all cached tools for a faker ID
 	ClearTools(ctx context.Context, fakerID string) error
@@ -34,11 +34,11 @@ func NewCache(db *sql.DB) Cache {
 	return &cache{db: db}
 }
 
-// GetTools retrieves cached tools for a faker ID (config hash)
-func (c *cache) GetTools(ctx context.Context, fakerID string) ([]mcp.Tool, error) {
+// GetTools retrieves cached tools for a faker ID (config hash) and session ID
+func (c *cache) GetTools(ctx context.Context, fakerID string) ([]mcp.Tool, string, error) {
 	// First try to find by config_hash (new deterministic key)
 	query := `
-		SELECT tool_name, tool_schema
+		SELECT tool_name, tool_schema, session_id
 		FROM faker_tool_cache
 		WHERE config_hash = ?
 		ORDER BY tool_name
@@ -46,27 +46,34 @@ func (c *cache) GetTools(ctx context.Context, fakerID string) ([]mcp.Tool, error
 
 	rows, err := c.db.QueryContext(ctx, query, fakerID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query cached tools: %w", err)
+		return nil, "", fmt.Errorf("failed to query cached tools: %w", err)
 	}
 	defer rows.Close()
 
 	var tools []mcp.Tool
+	var sessionID string
 	for rows.Next() {
 		var toolName, toolSchemaJSON string
-		if err := rows.Scan(&toolName, &toolSchemaJSON); err != nil {
-			return nil, fmt.Errorf("failed to scan tool row: %w", err)
+		var rowSessionID sql.NullString
+		if err := rows.Scan(&toolName, &toolSchemaJSON, &rowSessionID); err != nil {
+			return nil, "", fmt.Errorf("failed to scan tool row: %w", err)
+		}
+
+		// Get session ID from first row
+		if rowSessionID.Valid && sessionID == "" {
+			sessionID = rowSessionID.String
 		}
 
 		var tool mcp.Tool
 		if err := json.Unmarshal([]byte(toolSchemaJSON), &tool); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal tool schema for %s: %w", toolName, err)
+			return nil, "", fmt.Errorf("failed to unmarshal tool schema for %s: %w", toolName, err)
 		}
 
 		tools = append(tools, tool)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating tool rows: %w", err)
+		return nil, "", fmt.Errorf("error iterating tool rows: %w", err)
 	}
 
 	// If no tools found by config_hash, try legacy faker_id lookup
@@ -78,34 +85,35 @@ func (c *cache) GetTools(ctx context.Context, fakerID string) ([]mcp.Tool, error
 			ORDER BY tool_name
 		`, fakerID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query legacy cached tools: %w", err)
+			return nil, "", fmt.Errorf("failed to query legacy cached tools: %w", err)
 		}
 		defer rows.Close()
 
 		for rows.Next() {
 			var toolName, toolSchemaJSON string
 			if err := rows.Scan(&toolName, &toolSchemaJSON); err != nil {
-				return nil, fmt.Errorf("failed to scan legacy tool row: %w", err)
+				return nil, "", fmt.Errorf("failed to scan legacy tool row: %w", err)
 			}
 
 			var tool mcp.Tool
 			if err := json.Unmarshal([]byte(toolSchemaJSON), &tool); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal legacy tool schema for %s: %w", toolName, err)
+				return nil, "", fmt.Errorf("failed to unmarshal legacy tool schema for %s: %w", toolName, err)
 			}
 
 			tools = append(tools, tool)
 		}
 
 		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("error iterating legacy tool rows: %w", err)
+			return nil, "", fmt.Errorf("error iterating legacy tool rows: %w", err)
 		}
 	}
 
-	return tools, nil
+	// Return session ID captured from first row (empty for legacy entries)
+	return tools, sessionID, nil
 }
 
-// SetTools caches tools for a faker ID (config hash) - replaces existing
-func (c *cache) SetTools(ctx context.Context, fakerID string, tools []mcp.Tool) error {
+// SetTools caches tools for a faker ID (config hash) with session ID - replaces existing
+func (c *cache) SetTools(ctx context.Context, fakerID string, tools []mcp.Tool, sessionID string) error {
 	// Start transaction
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -118,10 +126,10 @@ func (c *cache) SetTools(ctx context.Context, fakerID string, tools []mcp.Tool) 
 		return fmt.Errorf("failed to clear existing tools: %w", err)
 	}
 
-	// Insert new tools with config_hash
+	// Insert new tools with config_hash and session_id
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO faker_tool_cache (faker_id, config_hash, tool_name, tool_schema, created_at, updated_at)
-		VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+		INSERT INTO faker_tool_cache (faker_id, config_hash, tool_name, tool_schema, session_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare insert statement: %w", err)
@@ -134,10 +142,9 @@ func (c *cache) SetTools(ctx context.Context, fakerID string, tools []mcp.Tool) 
 			return fmt.Errorf("failed to marshal tool schema for %s: %w", tool.Name, err)
 		}
 
-		// Store both faker_id (original user name) and config_hash (deterministic key)
-		// faker_id is kept for human readability in database
-		// config_hash is used as the actual lookup key
-		if _, err := stmt.ExecContext(ctx, fakerID, fakerID, tool.Name, string(toolSchemaJSON)); err != nil {
+		// Store faker_id, config_hash, tool data, and session_id
+		// session_id links cached tools to their generation session for history continuity
+		if _, err := stmt.ExecContext(ctx, fakerID, fakerID, tool.Name, string(toolSchemaJSON), sessionID); err != nil {
 			return fmt.Errorf("failed to insert tool %s: %w", tool.Name, err)
 		}
 	}

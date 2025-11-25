@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,6 +55,44 @@ type CloudShipConfig struct {
 	Endpoint          string `yaml:"endpoint"`            // Lighthouse gRPC endpoint
 	StationID         string `yaml:"station_id"`          // Station ID (auto-generated)
 	BundleRegistryURL string `yaml:"bundle_registry_url"` // Bundle registry API URL
+}
+
+// InitViper initializes viper to read config from the correct location
+// This must be called before Load() to ensure proper config file discovery
+func InitViper(cfgFile string) error {
+	if cfgFile != "" {
+		// Use explicitly provided config file
+		viper.SetConfigFile(cfgFile)
+	} else {
+		// Check for config file using the same logic as main CLI:
+		// 1. Check current working directory first
+		// 2. Fall back to XDG config directory (~/.config/station)
+		cwd, err := os.Getwd()
+		if err == nil {
+			// Try current directory first
+			if _, err := os.Stat(filepath.Join(cwd, "config.yaml")); err == nil {
+				viper.AddConfigPath(cwd)
+			}
+		}
+
+		// Also check XDG config directory
+		configDir := GetStationConfigDir()
+		viper.AddConfigPath(configDir)
+		viper.SetConfigType("yaml")
+		viper.SetConfigName("config")
+	}
+
+	// Read environment variables
+	viper.AutomaticEnv()
+	viper.SetEnvPrefix("STATION")
+	viper.BindEnv("encryption_key", "STATION_ENCRYPTION_KEY")
+
+	// Read config file if it exists
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Fprintf(os.Stderr, "[CONFIG] Using config file: %s\n", viper.ConfigFileUsed())
+	}
+
+	return nil
 }
 
 func Load() (*Config, error) {
@@ -159,6 +198,12 @@ func Load() (*Config, error) {
 	cfg.FakerTemplates = loadFakerTemplates()
 
 	// Environment variable overrides (take precedence over config file)
+	// CRITICAL: STATION_DATABASE must override everything (including viper config)
+	// This ensures faker subprocesses with STATION_DATABASE env var use the correct database
+	if stationDB := os.Getenv("STATION_DATABASE"); stationDB != "" {
+		cfg.DatabaseURL = stationDB
+	}
+
 	if envProvider := os.Getenv("STN_AI_PROVIDER"); envProvider != "" {
 		cfg.AIProvider = envProvider
 	}

@@ -342,11 +342,11 @@ func runMainServer() error {
 		}
 	}
 
-	// Stop Jaeger if running
+	// Keep Jaeger running across server restarts
+	// Jaeger container persists for continuous tracing across sessions
 	if jaegerSvc != nil && jaegerSvc.IsRunning() {
-		if err := jaegerSvc.Stop(shutdownCtx); err != nil {
-			log.Printf("Error stopping Jaeger: %v", err)
-		}
+		log.Printf("🔍 Jaeger container will continue running")
+		log.Printf("💡 To stop Jaeger: docker stop station-jaeger")
 	}
 
 	// Create done channel with aggressive timeout handling
