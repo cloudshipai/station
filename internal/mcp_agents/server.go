@@ -4,8 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"strings"
+
+	"station/internal/auth"
+	"station/internal/auth/oauth"
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/services"
+	"station/pkg/models"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -19,6 +26,7 @@ type DynamicAgentServer struct {
 	httpServer      *server.StreamableHTTPServer
 	localMode       bool
 	environmentName string
+	config          *config.Config
 }
 
 // NewDynamicAgentServer creates a new dynamic agent MCP server with environment filtering
@@ -28,6 +36,17 @@ func NewDynamicAgentServer(repos *repositories.Repositories, agentService servic
 		agentService:    agentService,
 		localMode:       localMode,
 		environmentName: environmentName,
+	}
+}
+
+// NewDynamicAgentServerWithConfig creates a new dynamic agent MCP server with config for OAuth
+func NewDynamicAgentServerWithConfig(repos *repositories.Repositories, agentService services.AgentServiceInterface, localMode bool, environmentName string, cfg *config.Config) *DynamicAgentServer {
+	return &DynamicAgentServer{
+		repos:           repos,
+		agentService:    agentService,
+		localMode:       localMode,
+		environmentName: environmentName,
+		config:          cfg,
 	}
 }
 
@@ -46,8 +65,20 @@ func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 		return err
 	}
 
-	// Start the HTTP server
-	das.httpServer = server.NewStreamableHTTPServer(das.mcpServer)
+	// Create OAuth handler if enabled
+	var oauthHandler *oauth.CloudShipOAuth
+	if das.config != nil && das.config.CloudShip.OAuth.Enabled {
+		oauthHandler = oauth.NewCloudShipOAuth(&das.config.CloudShip.OAuth)
+		log.Printf("Dynamic Agent MCP OAuth authentication enabled")
+	}
+
+	// Create HTTP context function for authentication
+	httpContextFunc := createDynamicAgentAuthContextFunc(das.repos, oauthHandler, das.localMode)
+
+	// Start the HTTP server with auth context
+	das.httpServer = server.NewStreamableHTTPServer(das.mcpServer,
+		server.WithHTTPContextFunc(httpContextFunc),
+	)
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	return das.httpServer.Start(addr)
 }
@@ -122,4 +153,66 @@ func (das *DynamicAgentServer) Shutdown(ctx context.Context) error {
 		return das.httpServer.Shutdown(ctx)
 	}
 	return nil
+}
+
+// createDynamicAgentAuthContextFunc creates an HTTPContextFunc that handles OAuth and API key auth
+func createDynamicAgentAuthContextFunc(repos *repositories.Repositories, oauthHandler *oauth.CloudShipOAuth, localMode bool) server.HTTPContextFunc {
+	return func(ctx context.Context, r *http.Request) context.Context {
+		// In local mode, create a default admin user context
+		if localMode {
+			defaultUser := &models.User{
+				ID:       1,
+				Username: "local",
+				IsAdmin:  true,
+			}
+			return context.WithValue(ctx, auth.UserKey, defaultUser)
+		}
+
+		// Extract Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			return ctx
+		}
+
+		// Must be Bearer token
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			return ctx
+		}
+
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if token == "" {
+			return ctx
+		}
+
+		// Try local API key first (sk-* prefix)
+		if strings.HasPrefix(token, "sk-") {
+			user, err := repos.Users.GetByAPIKey(token)
+			if err == nil {
+				log.Printf("Dynamic Agent MCP auth: authenticated via local API key (user: %s)", user.Username)
+				return context.WithValue(ctx, auth.UserKey, user)
+			}
+		}
+
+		// Try CloudShip OAuth if enabled
+		if oauthHandler != nil && oauthHandler.IsEnabled() {
+			tokenInfo, err := oauthHandler.ValidateToken(token)
+			if err == nil && tokenInfo.Active {
+				// Create a virtual user from OAuth claims
+				oauthUser := &models.User{
+					ID:       0,
+					Username: tokenInfo.Email,
+					IsAdmin:  false,
+				}
+				log.Printf("Dynamic Agent MCP auth: authenticated via CloudShip OAuth (user: %s, org: %s)", tokenInfo.Email, tokenInfo.OrgID)
+
+				ctx = context.WithValue(ctx, auth.UserKey, oauthUser)
+				ctx = context.WithValue(ctx, "cloudship_user_id", tokenInfo.UserID)
+				ctx = context.WithValue(ctx, "cloudship_org_id", tokenInfo.OrgID)
+				ctx = context.WithValue(ctx, "cloudship_email", tokenInfo.Email)
+				return ctx
+			}
+		}
+
+		return ctx
+	}
 }

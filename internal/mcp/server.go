@@ -50,7 +50,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 	toolDiscoverySvc := NewToolDiscoveryService(database, repos)
 	authService := auth.NewAuthService(repos)
 
-	// Create streamable HTTP server
+	// Create streamable HTTP server (no OAuth - management MCP is for local use only)
 	httpServer := server.NewStreamableHTTPServer(mcpServer)
 
 	log.Printf("MCP Server configured with streamable HTTP transport")
