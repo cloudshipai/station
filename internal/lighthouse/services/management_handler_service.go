@@ -557,8 +557,8 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 		logging.Info("Warning: Failed to update completed run %d: %v", runID, updateErr)
 	}
 
-	// Send COMPLETED status update on success
-	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_COMPLETED, "Agent execution completed successfully", 1)
+	// Send COMPLETED status update on success with the actual result
+	mhs.sendStatusUpdate(originalRequestId, executionID, proto.ExecutionStatus_EXECUTION_COMPLETED, result.Response, 1)
 
 	// Send completed run data to CloudShip via SendRun
 	runDetails, err := mhs.repos.AgentRuns.GetByIDWithDetails(ctx, runID)
