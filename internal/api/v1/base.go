@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"station/internal/auth"
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/internal/telemetry"
@@ -23,6 +24,7 @@ type APIHandlers struct {
 	agentExportService *services.AgentExportService
 	telemetryService   *telemetry.TelemetryService
 	localMode          bool
+	cfg                *config.Config // Config for OAuth settings
 }
 
 // NewAPIHandlers creates a new API handlers instance
@@ -41,6 +43,27 @@ func NewAPIHandlers(
 		agentExportService:   services.NewAgentExportService(repos),
 		telemetryService:     telemetryService,
 		localMode:            localMode,
+	}
+}
+
+// NewAPIHandlersWithConfig creates a new API handlers instance with config
+func NewAPIHandlersWithConfig(
+	repos *repositories.Repositories,
+	db *sql.DB,
+	toolDiscoveryService *services.ToolDiscoveryService,
+	telemetryService *telemetry.TelemetryService,
+	localMode bool,
+	cfg *config.Config,
+) *APIHandlers {
+	return &APIHandlers{
+		repos:                repos,
+		db:                   db,
+		agentService:         services.NewAgentService(repos),
+		toolDiscoveryService: toolDiscoveryService,
+		agentExportService:   services.NewAgentExportService(repos),
+		telemetryService:     telemetryService,
+		localMode:            localMode,
+		cfg:                  cfg,
 	}
 }
 
@@ -65,8 +88,13 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Add telemetry middleware
 	router.Use(h.telemetryMiddleware())
 
-	// Create auth middleware with local mode setting
-	authMiddleware := auth.NewAuthMiddlewareWithLocalMode(h.repos, h.localMode)
+	// Create auth middleware with local mode setting and OAuth support
+	var authMiddleware *auth.AuthMiddleware
+	if h.cfg != nil {
+		authMiddleware = auth.NewAuthMiddlewareWithOAuth(h.repos, h.localMode, h.cfg)
+	} else {
+		authMiddleware = auth.NewAuthMiddlewareWithLocalMode(h.repos, h.localMode)
+	}
 
 	// In server mode, all routes require authentication
 	if !h.localMode {
@@ -196,7 +224,17 @@ func (h *APIHandlers) requireAdminInServerMode() gin.HandlerFunc {
 			return
 		}
 
-		// Get user from context (should be set by auth middleware)
+		// Check auth type - CloudShip OAuth users get special handling
+		authType, _ := c.Get("auth_type")
+		if authType == "cloudship_oauth" {
+			// CloudShip OAuth users are authenticated via CloudShip
+			// They have read access to Station resources based on their org permissions
+			// For write operations, we could add additional checks here
+			c.Next()
+			return
+		}
+
+		// Get user from context (should be set by auth middleware for local users)
 		user, exists := auth.GetUserFromContext(c)
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})

@@ -128,12 +128,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// API v1 routes
 	v1Group := router.Group("/api/v1")
-	apiHandlers := v1.NewAPIHandlers(
+	apiHandlers := v1.NewAPIHandlersWithConfig(
 		s.repos,
 		s.db.Conn(),
 		s.toolDiscoveryService,
 		s.telemetryService,
 		s.localMode,
+		s.cfg, // Pass config for OAuth settings
 	)
 	apiHandlers.RegisterRoutes(v1Group)
 

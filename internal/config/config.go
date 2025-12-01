@@ -55,6 +55,19 @@ type CloudShipConfig struct {
 	Endpoint          string `yaml:"endpoint"`            // Lighthouse gRPC endpoint
 	StationID         string `yaml:"station_id"`          // Station ID (auto-generated)
 	BundleRegistryURL string `yaml:"bundle_registry_url"` // Bundle registry API URL
+	// OAuth settings for MCP authentication via CloudShip
+	OAuth OAuthConfig `yaml:"oauth"` // OAuth configuration
+}
+
+// OAuthConfig holds OAuth settings for CloudShip authentication
+type OAuthConfig struct {
+	Enabled      bool   `yaml:"enabled"`       // Enable OAuth authentication for MCP
+	ClientID     string `yaml:"client_id"`     // OAuth client ID from CloudShip
+	AuthURL      string `yaml:"auth_url"`      // CloudShip OAuth authorization URL
+	TokenURL     string `yaml:"token_url"`     // CloudShip OAuth token URL
+	IntrospectURL string `yaml:"introspect_url"` // CloudShip OAuth introspect URL
+	RedirectURI  string `yaml:"redirect_uri"`  // OAuth redirect URI (for auth code flow)
+	Scopes       string `yaml:"scopes"`        // OAuth scopes (space-separated)
 }
 
 // InitViper initializes viper to read config from the correct location
@@ -122,6 +135,15 @@ func Load() (*Config, error) {
 			Endpoint:          getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:50051"),
 			StationID:         getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
 			BundleRegistryURL: getEnvOrDefault("STN_CLOUDSHIP_BUNDLE_REGISTRY_URL", "https://api.cloudshipai.com"),
+			OAuth: OAuthConfig{
+				Enabled:       getEnvBoolOrDefault("STN_CLOUDSHIP_OAUTH_ENABLED", false),
+				ClientID:      getEnvOrDefault("STN_CLOUDSHIP_OAUTH_CLIENT_ID", ""),
+				AuthURL:       getEnvOrDefault("STN_CLOUDSHIP_OAUTH_AUTH_URL", "https://app.cloudshipai.com/oauth/authorize/"),
+				TokenURL:      getEnvOrDefault("STN_CLOUDSHIP_OAUTH_TOKEN_URL", "https://app.cloudshipai.com/oauth/token/"),
+				IntrospectURL: getEnvOrDefault("STN_CLOUDSHIP_OAUTH_INTROSPECT_URL", "https://app.cloudshipai.com/oauth/introspect/"),
+				RedirectURI:   getEnvOrDefault("STN_CLOUDSHIP_OAUTH_REDIRECT_URI", "http://localhost:8585/oauth/callback"),
+				Scopes:        getEnvOrDefault("STN_CLOUDSHIP_OAUTH_SCOPES", "read stations"),
+			},
 		},
 	}
 
@@ -192,6 +214,28 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("cloudship.bundle_registry_url") {
 		cfg.CloudShip.BundleRegistryURL = viper.GetString("cloudship.bundle_registry_url")
+	}
+	// OAuth configuration overrides
+	if viper.IsSet("cloudship.oauth.enabled") {
+		cfg.CloudShip.OAuth.Enabled = viper.GetBool("cloudship.oauth.enabled")
+	}
+	if viper.IsSet("cloudship.oauth.client_id") {
+		cfg.CloudShip.OAuth.ClientID = viper.GetString("cloudship.oauth.client_id")
+	}
+	if viper.IsSet("cloudship.oauth.auth_url") {
+		cfg.CloudShip.OAuth.AuthURL = viper.GetString("cloudship.oauth.auth_url")
+	}
+	if viper.IsSet("cloudship.oauth.token_url") {
+		cfg.CloudShip.OAuth.TokenURL = viper.GetString("cloudship.oauth.token_url")
+	}
+	if viper.IsSet("cloudship.oauth.introspect_url") {
+		cfg.CloudShip.OAuth.IntrospectURL = viper.GetString("cloudship.oauth.introspect_url")
+	}
+	if viper.IsSet("cloudship.oauth.redirect_uri") {
+		cfg.CloudShip.OAuth.RedirectURI = viper.GetString("cloudship.oauth.redirect_uri")
+	}
+	if viper.IsSet("cloudship.oauth.scopes") {
+		cfg.CloudShip.OAuth.Scopes = viper.GetString("cloudship.oauth.scopes")
 	}
 
 	// Load faker templates from config file
