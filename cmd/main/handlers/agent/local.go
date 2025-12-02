@@ -490,6 +490,18 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 	// Create agent service with Lighthouse integration
 	agentService := services.NewAgentService(repos, lighthouseClient)
 
+	// Initialize direct API memory client for CLI mode CloudShip memory integration
+	// CLI mode doesn't have a persistent management channel, so we use direct HTTP calls
+	if cfg.CloudShip.Enabled && cfg.CloudShip.APIURL != "" && cfg.CloudShip.RegistrationKey != "" {
+		memoryAPIClient := lighthouse.NewMemoryAPIClient(
+			cfg.CloudShip.APIURL,
+			cfg.CloudShip.RegistrationKey,
+			2*time.Second, // 2 second timeout per PRD
+		)
+		agentService.SetMemoryAPIClient(memoryAPIClient)
+		fmt.Printf("✅ CloudShip memory integration configured (direct API mode)\n")
+	}
+
 	// Get console user for execution tracking
 	consoleUser, err := repos.Users.GetByUsername("console")
 	if err != nil {

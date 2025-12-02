@@ -22,6 +22,7 @@ type AgentRun struct {
 	Metadata           map[string]string `json:"metadata"`
 	OutputSchema       string            `json:"output_schema,omitempty"`        // JSON schema for output format
 	OutputSchemaPreset string            `json:"output_schema_preset,omitempty"` // Preset name (e.g., "finops")
+	MemoryTopicKey     string            `json:"memory_topic_key,omitempty"`     // Memory topic for NATS publishing
 }
 
 // ToolCall represents a single tool execution within an agent run

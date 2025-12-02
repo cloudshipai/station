@@ -45,4 +45,7 @@ type AgentConfig struct {
 	ScheduleVariables  *string  `json:"schedule_variables,omitempty"`   // JSON object of variables for scheduled execution
 	App                string   `json:"app,omitempty"`                  // CloudShip data ingestion app classification
 	AppType            string   `json:"app_type,omitempty"`             // CloudShip data ingestion app_type classification
+	// CloudShip Memory Integration
+	MemoryTopicKey  *string `json:"memory_topic_key,omitempty"`  // Memory topic key for context injection (e.g., "customer-onboarding")
+	MemoryMaxTokens *int    `json:"memory_max_tokens,omitempty"` // Max tokens for memory context (default: 2000)
 }

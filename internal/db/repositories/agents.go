@@ -69,6 +69,16 @@ func convertAgentFromSQLc(agent queries.Agent) *models.Agent {
 		result.ScheduleVariables = &agent.ScheduleVariables.String
 	}
 
+	// CloudShip Memory Integration
+	if agent.MemoryTopicKey.Valid {
+		result.MemoryTopicKey = &agent.MemoryTopicKey.String
+	}
+
+	if agent.MemoryMaxTokens.Valid {
+		tokens := int(agent.MemoryMaxTokens.Int64)
+		result.MemoryMaxTokens = &tokens
+	}
+
 	if agent.CreatedAt.Valid {
 		result.CreatedAt = agent.CreatedAt.Time
 	}
@@ -355,6 +365,260 @@ func (r *AgentRepo) UpdateTx(tx *sql.Tx, id int64, name, description, prompt str
 
 	if appType != "" {
 		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
+	txQueries := r.queries.WithTx(tx)
+	return txQueries.UpdateAgent(context.Background(), params)
+}
+
+// CreateWithMemory creates agent with memory integration support
+func (r *AgentRepo) CreateWithMemory(name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) (*models.Agent, error) {
+	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
+
+	params := queries.CreateAgentParams{
+		Name:            name,
+		Description:     description,
+		Prompt:          prompt,
+		MaxSteps:        maxSteps,
+		EnvironmentID:   environmentID,
+		CreatedBy:       createdBy,
+		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
+		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
+	}
+
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
+	}
+
+	if cronSchedule != nil {
+		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
+	}
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
+	// Memory integration fields
+	if memoryTopicKey != nil && *memoryTopicKey != "" {
+		params.MemoryTopicKey = sql.NullString{String: *memoryTopicKey, Valid: true}
+	}
+
+	if memoryMaxTokens != nil {
+		params.MemoryMaxTokens = sql.NullInt64{Int64: int64(*memoryMaxTokens), Valid: true}
+	}
+
+	created, err := r.queries.CreateAgent(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertAgentFromSQLc(created), nil
+}
+
+// UpdateWithMemory updates agent with memory integration support
+func (r *AgentRepo) UpdateWithMemory(id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, scheduleVariables *string, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) error {
+	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
+
+	params := queries.UpdateAgentParams{
+		Name:            name,
+		Description:     description,
+		Prompt:          prompt,
+		MaxSteps:        maxSteps,
+		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
+		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
+		ID:              id,
+	}
+
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
+	}
+
+	if cronSchedule != nil {
+		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if scheduleVariables != nil {
+		params.ScheduleVariables = sql.NullString{String: *scheduleVariables, Valid: true}
+	}
+
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
+	}
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
+	// Memory integration fields
+	if memoryTopicKey != nil {
+		if *memoryTopicKey != "" {
+			params.MemoryTopicKey = sql.NullString{String: *memoryTopicKey, Valid: true}
+		} else {
+			// Explicitly clear memory topic if empty string passed
+			params.MemoryTopicKey = sql.NullString{String: "", Valid: false}
+		}
+	}
+
+	if memoryMaxTokens != nil {
+		params.MemoryMaxTokens = sql.NullInt64{Int64: int64(*memoryMaxTokens), Valid: true}
+	}
+
+	return r.queries.UpdateAgent(context.Background(), params)
+}
+
+// UpdateMemoryConfig updates only the memory configuration for an agent
+func (r *AgentRepo) UpdateMemoryConfig(id int64, memoryTopicKey *string, memoryMaxTokens *int) error {
+	// First get the existing agent to preserve other fields
+	agent, err := r.GetByID(id)
+	if err != nil {
+		return err
+	}
+
+	return r.UpdateWithMemory(
+		id,
+		agent.Name,
+		agent.Description,
+		agent.Prompt,
+		agent.MaxSteps,
+		agent.InputSchema,
+		agent.CronSchedule,
+		agent.ScheduleEnabled,
+		agent.ScheduleVariables,
+		agent.OutputSchema,
+		agent.OutputSchemaPreset,
+		agent.App,
+		agent.AppType,
+		memoryTopicKey,
+		memoryMaxTokens,
+	)
+}
+
+// CreateTxWithMemory creates agent with memory support within a transaction
+func (r *AgentRepo) CreateTxWithMemory(tx *sql.Tx, name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) (*models.Agent, error) {
+	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
+
+	params := queries.CreateAgentParams{
+		Name:            name,
+		Description:     description,
+		Prompt:          prompt,
+		MaxSteps:        maxSteps,
+		EnvironmentID:   environmentID,
+		CreatedBy:       createdBy,
+		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
+		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
+	}
+
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
+	}
+
+	if cronSchedule != nil {
+		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
+	}
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
+	// Memory integration fields
+	if memoryTopicKey != nil && *memoryTopicKey != "" {
+		params.MemoryTopicKey = sql.NullString{String: *memoryTopicKey, Valid: true}
+	}
+
+	if memoryMaxTokens != nil {
+		params.MemoryMaxTokens = sql.NullInt64{Int64: int64(*memoryMaxTokens), Valid: true}
+	}
+
+	txQueries := r.queries.WithTx(tx)
+	created, err := txQueries.CreateAgent(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertAgentFromSQLc(created), nil
+}
+
+// UpdateTxWithMemory updates agent with memory support within a transaction
+func (r *AgentRepo) UpdateTxWithMemory(tx *sql.Tx, id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) error {
+	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
+
+	params := queries.UpdateAgentParams{
+		Name:            name,
+		Description:     description,
+		Prompt:          prompt,
+		MaxSteps:        maxSteps,
+		IsScheduled:     sql.NullBool{Bool: isScheduled, Valid: true},
+		ScheduleEnabled: sql.NullBool{Bool: scheduleEnabled, Valid: true},
+		ID:              id,
+	}
+
+	if inputSchema != nil {
+		params.InputSchema = sql.NullString{String: *inputSchema, Valid: true}
+	}
+
+	if cronSchedule != nil {
+		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if outputSchema != nil {
+		params.OutputSchema = sql.NullString{String: *outputSchema, Valid: true}
+	}
+
+	if outputSchemaPreset != nil {
+		params.OutputSchemaPreset = sql.NullString{String: *outputSchemaPreset, Valid: true}
+	}
+
+	if app != "" {
+		params.App = sql.NullString{String: app, Valid: true}
+	}
+
+	if appType != "" {
+		params.AppSubtype = sql.NullString{String: appType, Valid: true}
+	}
+
+	// Memory integration fields
+	if memoryTopicKey != nil {
+		if *memoryTopicKey != "" {
+			params.MemoryTopicKey = sql.NullString{String: *memoryTopicKey, Valid: true}
+		} else {
+			params.MemoryTopicKey = sql.NullString{String: "", Valid: false}
+		}
+	}
+
+	if memoryMaxTokens != nil {
+		params.MemoryMaxTokens = sql.NullInt64{Int64: int64(*memoryMaxTokens), Valid: true}
 	}
 
 	txQueries := r.queries.WithTx(tx)

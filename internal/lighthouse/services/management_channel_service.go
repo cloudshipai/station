@@ -31,6 +31,7 @@ type ManagementChannelService struct {
 	connectionCancel  context.CancelFunc
 	currentStream     proto.LighthouseService_ManagementChannelClient
 	registrationState RegistrationState
+	memoryClient      *lighthouse.MemoryClient // For CloudShip memory integration
 }
 
 // NewManagementChannelService creates a new management channel service
@@ -44,7 +45,13 @@ func NewManagementChannelService(
 		managementHandler: managementHandler,
 		registrationKey:   registrationKey,
 		registrationState: RegistrationStateUnregistered,
+		memoryClient:      lighthouse.NewMemoryClient(2 * time.Second), // 2 second timeout per PRD
 	}
+}
+
+// GetMemoryClient returns the memory client for CloudShip memory integration
+func (mcs *ManagementChannelService) GetMemoryClient() *lighthouse.MemoryClient {
+	return mcs.memoryClient
 }
 
 // Start begins the management channel streaming connection
@@ -197,6 +204,12 @@ func (mcs *ManagementChannelService) establishConnection() error {
 	// Store stream reference for SendRun method
 	mcs.currentStream = stream
 
+	// Set stream on memory client for CloudShip memory integration
+	if mcs.memoryClient != nil {
+		mcs.memoryClient.SetStream(stream, mcs.registrationKey)
+		logging.Debug("Memory client stream configured for CloudShip integration")
+	}
+
 	// Send station registration message first
 	registrationMsg := &proto.ManagementMessage{
 		RequestId:       fmt.Sprintf("registration_%d", time.Now().Unix()),
@@ -223,6 +236,10 @@ func (mcs *ManagementChannelService) establishConnection() error {
 			logging.Error("Management channel receive error: %v", err)
 			// Clear stream reference on error
 			mcs.currentStream = nil
+			// Clear memory client stream
+			if mcs.memoryClient != nil {
+				mcs.memoryClient.ClearStream()
+			}
 			// Update global lighthouse status to disconnected
 			lighthouse.SetConnected(false, "")
 			lighthouse.SetRegistered(false, "")
@@ -252,8 +269,12 @@ func (mcs *ManagementChannelService) receiveMessages(stream proto.LighthouseServ
 
 			logging.Debug("Received management message: request_id=%s, is_response=%v", msg.RequestId, msg.IsResponse)
 
-			// Only process requests (not responses)
-			if !msg.IsResponse {
+			// Handle responses vs requests
+			if msg.IsResponse {
+				// Route responses to appropriate handlers
+				mcs.handleResponse(msg)
+			} else {
+				// Process incoming requests
 				go mcs.processRequest(stream, msg)
 			}
 			done <- nil
@@ -364,6 +385,24 @@ func (mcs *ManagementChannelService) SendStatusUpdate(statusMsg *proto.Managemen
 	}
 
 	return nil
+}
+
+// handleResponse routes responses to appropriate handlers
+func (mcs *ManagementChannelService) handleResponse(msg *proto.ManagementMessage) {
+	switch resp := msg.Message.(type) {
+	case *proto.ManagementMessage_GetMemoryContextResponse:
+		// Route memory context responses to the memory client
+		if mcs.memoryClient != nil {
+			mcs.memoryClient.HandleResponse(msg.RequestId, resp.GetMemoryContextResponse)
+		} else {
+			logging.Info("Received GetMemoryContextResponse but memory client not initialized")
+		}
+	case *proto.ManagementMessage_SendRunResponse:
+		// SendRun responses are fire-and-forget, just log
+		logging.Debug("Received SendRunResponse for request: %s, success: %v", msg.RequestId, msg.Success)
+	default:
+		logging.Debug("Received unhandled response type for request: %s", msg.RequestId)
+	}
 }
 
 // getRequestType returns a human-readable request type for logging

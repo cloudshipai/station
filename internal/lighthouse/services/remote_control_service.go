@@ -110,3 +110,12 @@ func (rcs *RemoteControlService) Stop() error {
 func (rcs *RemoteControlService) IsConnected() bool {
 	return rcs.lighthouseClient != nil && rcs.lighthouseClient.IsConnected()
 }
+
+// GetMemoryClient returns the memory client for CloudShip memory integration
+// This allows the agent execution engine to use CloudShip memory when connected
+func (rcs *RemoteControlService) GetMemoryClient() *lighthouse.MemoryClient {
+	if rcs.managementChannel != nil {
+		return rcs.managementChannel.GetMemoryClient()
+	}
+	return nil
+}

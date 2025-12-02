@@ -221,6 +221,12 @@ func runMainServer() error {
 			log.Printf("Warning: Failed to start remote control service: %v", err)
 		} else {
 			log.Printf("✅ Server mode remote control active - CloudShip can manage this Station")
+
+			// Wire up CloudShip memory client for memory integration
+			if memoryClient := remoteControlSvc.GetMemoryClient(); memoryClient != nil {
+				agentSvc.SetMemoryClient(memoryClient)
+				log.Printf("✅ CloudShip memory integration configured")
+			}
 		}
 	}
 

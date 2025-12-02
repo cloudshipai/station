@@ -50,6 +50,12 @@ func ConvertToLighthouseRun(agent *models.Agent, task string, runID int64, resul
 			}
 			return ""
 		}(),
+		MemoryTopicKey: func() string {
+			if agent.MemoryTopicKey != nil {
+				return *agent.MemoryTopicKey
+			}
+			return ""
+		}(),
 		Metadata: map[string]string{
 			"source":         "mcp",
 			"mode":           "stdio",

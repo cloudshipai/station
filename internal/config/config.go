@@ -55,6 +55,8 @@ type CloudShipConfig struct {
 	Endpoint          string `yaml:"endpoint"`            // Lighthouse gRPC endpoint
 	StationID         string `yaml:"station_id"`          // Station ID (auto-generated)
 	BundleRegistryURL string `yaml:"bundle_registry_url"` // Bundle registry API URL
+	APIURL            string `yaml:"api_url"`             // CloudShip Django API URL (for direct API calls)
+	APIKey            string `yaml:"api_key"`             // CloudShip API key for authentication
 	// OAuth settings for MCP authentication via CloudShip
 	OAuth OAuthConfig `yaml:"oauth"` // OAuth configuration
 }
@@ -214,6 +216,12 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("cloudship.bundle_registry_url") {
 		cfg.CloudShip.BundleRegistryURL = viper.GetString("cloudship.bundle_registry_url")
+	}
+	if viper.IsSet("cloudship.api_url") {
+		cfg.CloudShip.APIURL = viper.GetString("cloudship.api_url")
+	}
+	if viper.IsSet("cloudship.api_key") {
+		cfg.CloudShip.APIKey = viper.GetString("cloudship.api_key")
 	}
 	// OAuth configuration overrides
 	if viper.IsSet("cloudship.oauth.enabled") {

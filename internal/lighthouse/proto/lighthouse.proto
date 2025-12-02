@@ -4,7 +4,7 @@ package lighthouse.v1;
 option go_package = "./internal/proto";
 
 import "google/protobuf/timestamp.proto";
-import "internal/proto/data_ingestion.proto";
+import "internal/lighthouse/proto/data_ingestion.proto";
 
 // Lighthouse service for Station-CloudShip integration
 // Handles all three deployment modes: stdio, serve, cli
@@ -171,6 +171,7 @@ message LighthouseAgentRunData {
     google.protobuf.Timestamp completed_at = 13;
     map<string, string> metadata = 14;
     string station_version = 15;    // Station version for debugging/compatibility
+    string memory_topic_key = 16;   // Memory topic key if agent uses memory (for NATS publishing)
 }
 
 message LighthouseToolCall {
@@ -483,6 +484,9 @@ message ManagementMessage {
         GetAgentDetailsRequest get_agent_details_request = 18;
         UpdateAgentPromptRequest update_agent_prompt_request = 19;
 
+        // CloudShip Memory Integration
+        GetMemoryContextRequest get_memory_context_request = 14;
+
         // Response messages (can be sent by either Lighthouse or Station)
         ListAgentsManagementResponse list_agents_response = 20;
         ListToolsManagementResponse list_tools_response = 21;
@@ -493,6 +497,9 @@ message ManagementMessage {
         // NEW - agent configuration management responses
         GetAgentDetailsResponse get_agent_details_response = 28;
         UpdateAgentPromptResponse update_agent_prompt_response = 29;
+
+        // CloudShip Memory Integration response
+        GetMemoryContextResponse get_memory_context_response = 24;
 
         ManagementError error = 30;
 
@@ -684,6 +691,28 @@ message UpdateAgentPromptResponse {
     AgentConfig updated_agent = 3;
 }
 
+// ============================================================================
+// MEMORY CONTEXT MESSAGES (CloudShip Memory Integration)
+// ============================================================================
+
+// Request memory context from CloudShip (via mem0 integration)
+message GetMemoryContextRequest {
+    string registration_key = 1;  // Station registration key for routing
+    string topic_key = 2;         // Memory topic key (e.g., "customer-onboarding", "incident-response")
+    int32 max_tokens = 3;         // Maximum tokens to return (default: 2000)
+    string environment = 4;       // Environment name (optional)
+}
+
+// Memory context response from CloudShip
+message GetMemoryContextResponse {
+    bool success = 1;
+    string context = 2;           // Memory context content (formatted markdown or text)
+    int32 token_count = 3;        // Approximate token count of returned context
+    string topic_key = 4;         // Echo back the topic key
+    google.protobuf.Timestamp last_updated = 5;  // When the memory was last updated
+    string error_message = 6;     // Error message if success is false
+}
+
 // Error Handling
 message ManagementError {
     ErrorCode code = 1;
@@ -698,5 +727,7 @@ enum ErrorCode {
     EXECUTION_ERROR = 3;
     TIMEOUT_ERROR = 4;
     PERMISSION_DENIED = 5;
+    MEMORY_NOT_FOUND = 6;         // Memory topic not found
+    MEMORY_FETCH_ERROR = 7;       // Error fetching memory from mem0
 }
 
