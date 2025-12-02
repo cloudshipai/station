@@ -168,18 +168,20 @@ type UnderperformingAgent struct {
 
 // EvaluationInput contains all data needed for metric evaluation
 type EvaluationInput struct {
-	RunID          int64      `json:"run_id"`
-	AgentID        int64      `json:"agent_id"`
-	Task           string     `json:"task"`
-	FinalResponse  string     `json:"final_response"`
-	ToolCalls      []ToolCall `json:"tool_calls,omitempty"`
-	ExecutionSteps []string   `json:"execution_steps,omitempty"`
-	TraceID        string     `json:"trace_id,omitempty"`
-	Duration       float64    `json:"duration"`
-	Tokens         int        `json:"tokens"`
-	Cost           float64    `json:"cost"`
-	Status         string     `json:"status"`
-	Contexts       []string   `json:"contexts,omitempty"` // Extracted from tool outputs
+	RunID            int64      `json:"run_id"`
+	AgentID          int64      `json:"agent_id"`
+	AgentName        string     `json:"agent_name,omitempty"`        // For context in evaluations
+	AgentDescription string     `json:"agent_description,omitempty"` // Agent's purpose for context
+	Task             string     `json:"task"`
+	FinalResponse    string     `json:"final_response"`
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	ExecutionSteps   []string   `json:"execution_steps,omitempty"`
+	TraceID          string     `json:"trace_id,omitempty"`
+	Duration         float64    `json:"duration"`
+	Tokens           int        `json:"tokens"`
+	Cost             float64    `json:"cost"`
+	Status           string     `json:"status"`
+	Contexts         []string   `json:"contexts,omitempty"` // Extracted from tool outputs
 }
 
 // ToolCall represents a tool invocation with inputs and outputs

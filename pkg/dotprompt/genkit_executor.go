@@ -250,38 +250,51 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}
 	}
 
-	// Extract tool calls from conversation history
-	// resp.ToolRequests() only returns PENDING requests, not completed ones
-	// We need to count tool calls in the conversation history
+	// Extract tool calls AND tool responses from conversation history
+	// We need both for complete benchmark evaluation (request params + response output)
 	history := resp.History()
 	var toolCallsArray *models.JSONArray
 	var toolCallsInterface models.JSONArray
 
-	fmt.Printf("DEBUG: History has %d messages\n", len(history))
-	for i, msg := range history {
-		fmt.Printf("DEBUG: Message %d: Role=%v, ContentParts=%d\n", i, msg.Role, len(msg.Content))
-		// Check message content for tool requests
+	// First pass: collect all tool requests
+	toolRequestMap := make(map[string]map[string]interface{}) // Map by ref ID for matching responses
+
+	for _, msg := range history {
 		if msg.Content != nil && len(msg.Content) > 0 {
-			for j, part := range msg.Content {
-				fmt.Printf("DEBUG:   Part %d: IsToolRequest=%v, IsToolResponse=%v\n", j, part.IsToolRequest(), part.IsToolResponse())
+			for _, part := range msg.Content {
 				if part.IsToolRequest() {
 					toolReq := part.ToolRequest
-					fmt.Printf("DEBUG:     ToolRequest: %s\n", toolReq.Name)
-					toolCallsInterface = append(toolCallsInterface, map[string]interface{}{
+					toolCall := map[string]interface{}{
 						"tool_name":    toolReq.Name,
 						"parameters":   toolReq.Input,
 						"tool_call_id": toolReq.Ref,
-					})
+					}
+					toolRequestMap[toolReq.Ref] = toolCall
+					toolCallsInterface = append(toolCallsInterface, toolCall)
 				}
 			}
 		}
 	}
 
+	// Second pass: match tool responses to requests and add output
+	for _, msg := range history {
+		if msg.Content != nil && len(msg.Content) > 0 {
+			for _, part := range msg.Content {
+				if part.IsToolResponse() {
+					toolResp := part.ToolResponse
+					// Find the matching tool call and add the output
+					if toolCall, exists := toolRequestMap[toolResp.Ref]; exists {
+						toolCall["output"] = toolResp.Output
+					}
+				}
+			}
+		}
+	}
+
+	// Set tool calls array if we have any
 	if len(toolCallsInterface) > 0 {
 		toolCallsArray = &toolCallsInterface
 	}
-
-	fmt.Printf("DEBUG: Found %d tool calls in %d history messages\n", len(toolCallsInterface), len(history))
 
 	return &ExecutionResponse{
 		Success:    true,

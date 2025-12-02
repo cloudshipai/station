@@ -120,8 +120,20 @@ func (e *TaskCompletionEvaluator) summarizeToolCalls(toolCalls []ToolCall) strin
 
 // buildPrompt constructs the LLM evaluation prompt
 func (e *TaskCompletionEvaluator) buildPrompt(task, outcome string, input *EvaluationInput) string {
-	return fmt.Sprintf(`You are evaluating whether an AI agent successfully completed a task.
+	// Include agent context if available
+	agentContext := ""
+	if input.AgentName != "" || input.AgentDescription != "" {
+		agentContext = fmt.Sprintf(`
+AGENT CONTEXT:
+- Name: %s
+- Purpose: %s
 
+Consider the agent's intended purpose when evaluating task completion.
+`, input.AgentName, input.AgentDescription)
+	}
+
+	return fmt.Sprintf(`You are evaluating whether an AI agent successfully completed a task.
+%s
 TASK: Compare the desired task with what the agent actually accomplished and assign a completion score.
 
 IMPORTANT EVALUATION PRINCIPLES:
@@ -180,7 +192,7 @@ Return JSON with 'verdict' (0.0 to 1.0) and 'reason':
   "reason": "Your explanation here"
 }
 
-JSON:`, task, outcome, input.Duration, input.Tokens, input.Cost)
+JSON:`, agentContext, task, outcome, input.Duration, input.Tokens, input.Cost)
 }
 
 // ============================================================================
