@@ -1142,6 +1142,12 @@ func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails
 		lighthouseStatus = proto.LighthouseRunStatus_LIGHTHOUSE_RUN_STATUS_CANCELLED
 	}
 
+	// Lookup the agent's memory_topic_key for memory publishing
+	var memoryTopicKey string
+	if agent, err := mhs.repos.Agents.GetByID(runDetails.AgentID); err == nil && agent != nil && agent.MemoryTopicKey != nil {
+		memoryTopicKey = *agent.MemoryTopicKey
+	}
+
 	return &proto.LighthouseAgentRunData{
 		RunId:          fmt.Sprintf("run_%d", runDetails.ID),
 		AgentId:        fmt.Sprintf("agent_%d", runDetails.AgentID),
@@ -1158,5 +1164,6 @@ func (mhs *ManagementHandlerService) convertRunDetailsToProtoAgentRun(runDetails
 		CompletedAt:    completedAt,
 		Metadata:       metadata,
 		StationVersion: "v0.11.0",
+		MemoryTopicKey: memoryTopicKey, // For NATS memory publishing
 	}
 }
