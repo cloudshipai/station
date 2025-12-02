@@ -260,30 +260,7 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		logging.Info("Warning: benchmark evaluation failed (continuing with report): %v", err)
 	}
 
-	// 6. Evaluate team performance
-	teamEval, err := rg.evaluateTeamPerformance(ctx, teamCriteria, allRuns, agents)
-	if err != nil {
-		return rg.failReport(ctx, reportID, fmt.Errorf("failed to evaluate team: %w", err))
-	}
-
-	// 7. Save team evaluation results
-	criteriaScoresJSON, _ := json.Marshal(teamEval.CriteriaScores)
-	if err := rg.repos.Reports.UpdateTeamResults(ctx, queries.UpdateReportTeamResultsParams{
-		ID:                 reportID,
-		ExecutiveSummary:   sql.NullString{String: teamEval.Summary, Valid: true},
-		TeamScore:          sql.NullFloat64{Float64: teamEval.Score, Valid: true},
-		TeamReasoning:      sql.NullString{String: teamEval.Reasoning, Valid: true},
-		TeamCriteriaScores: sql.NullString{String: string(criteriaScoresJSON), Valid: true},
-	}); err != nil {
-		logging.Info("Failed to save team results: %v", err)
-	}
-
-	// 8. Update status: generating_agents
-	if err := rg.updateReportStatus(ctx, reportID, "generating_agents", 30, "Evaluating agents..."); err != nil {
-		logging.Info("Failed to update report status: %v", err)
-	}
-
-	// 9. Parse agent criteria (optional)
+	// 6. Parse agent criteria (optional) - moved before agent evaluation
 	agentCriteria := make(map[int64]map[string]EvaluationCriterion)
 	if report.AgentCriteria.Valid && report.AgentCriteria.String != "" {
 		var rawAgentCriteria map[string]map[string]EvaluationCriterion
@@ -298,12 +275,40 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		}
 	}
 
-	// 10. Evaluate agents in parallel
+	// 7. Update status: generating_agents (evaluate agents FIRST to get scores for team calc)
+	if err := rg.updateReportStatus(ctx, reportID, "generating_agents", 30, "Evaluating agents..."); err != nil {
+		logging.Info("Failed to update report status: %v", err)
+	}
+
+	// 8. Evaluate agents in parallel FIRST (needed for deterministic team score)
 	agentEvals := rg.evaluateAgentsParallel(ctx, reportID, agents, agentCriteria)
 
-	// 10.5. Calculate comprehensive team cost analysis
+	// 9. Calculate comprehensive team cost analysis
 	costAnalysis := rg.calculateTeamCostAnalysis(agentEvals, agents)
+
+	// 10. Update status: generating_team (now that we have agent scores)
+	if err := rg.updateReportStatus(ctx, reportID, "generating_team", 85, "Calculating team performance..."); err != nil {
+		logging.Info("Failed to update report status: %v", err)
+	}
+
+	// 11. Calculate team score deterministically from agent scores
+	teamEval, err := rg.evaluateTeamPerformanceFromAgentScores(ctx, teamCriteria, agentEvals, agents)
+	if err != nil {
+		return rg.failReport(ctx, reportID, fmt.Errorf("failed to evaluate team: %w", err))
+	}
 	teamEval.CostAnalysis = costAnalysis
+
+	// 12. Save team evaluation results
+	criteriaScoresJSON, _ := json.Marshal(teamEval.CriteriaScores)
+	if err := rg.repos.Reports.UpdateTeamResults(ctx, queries.UpdateReportTeamResultsParams{
+		ID:                 reportID,
+		ExecutiveSummary:   sql.NullString{String: teamEval.Summary, Valid: true},
+		TeamScore:          sql.NullFloat64{Float64: teamEval.Score, Valid: true},
+		TeamReasoning:      sql.NullString{String: teamEval.Reasoning, Valid: true},
+		TeamCriteriaScores: sql.NullString{String: string(criteriaScoresJSON), Valid: true},
+	}); err != nil {
+		logging.Info("Failed to save team results: %v", err)
+	}
 
 	// Log cost analysis summary
 	_ = costAnalysis // Use the cost analysis in teamEval
@@ -311,7 +316,7 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		costAnalysis.CurrentAvgCostPerRun,
 		costAnalysis.CurrentAvgCostPerRun*float64(len(agents))*30)
 
-	// 11. Save agent evaluation results
+	// 13. Save agent evaluation results
 	totalLLMTokens := int64(0)
 	totalLLMCost := float64(0)
 	agentReportsMap := make(map[string]interface{})
@@ -379,7 +384,7 @@ func (rg *ReportGenerator) GenerateReport(ctx context.Context, reportID int64) e
 		totalLLMCost += 0.001
 	}
 
-	// 12. Complete report
+	// 14. Complete report
 	agentReportsJSON, _ := json.Marshal(agentReportsMap)
 	duration := time.Since(startTime).Seconds()
 
@@ -474,6 +479,134 @@ func (rg *ReportGenerator) evaluateTeamPerformance(ctx context.Context, criteria
 	}
 
 	return &teamEval, nil
+}
+
+// evaluateTeamPerformanceFromAgentScores calculates team score deterministically from agent scores
+// then uses LLM only to generate the executive summary with full context
+func (rg *ReportGenerator) evaluateTeamPerformanceFromAgentScores(ctx context.Context, criteria TeamCriteria, agentEvals []AgentEvaluation, agents []models.Agent) (*TeamEvaluation, error) {
+	// Calculate deterministic team score from agent scores
+	var totalScore float64
+	var totalWeight float64
+	validAgents := 0
+
+	// Build agent performance summary for LLM context
+	agentSummaries := make([]string, 0, len(agentEvals))
+
+	for _, eval := range agentEvals {
+		if eval.Error != nil {
+			continue
+		}
+		validAgents++
+
+		// Default weight is 1.0 for each agent (could be enhanced with per-agent weights)
+		weight := 1.0
+		totalScore += eval.Score * weight
+		totalWeight += weight
+
+		// Build summary for this agent
+		summary := fmt.Sprintf("- %s: Score %.1f/10, Success Rate %.1f%%, %d runs analyzed",
+			eval.AgentName, eval.Score, eval.SuccessRate*100, eval.RunsAnalyzed)
+		if len(eval.Strengths) > 0 {
+			summary += fmt.Sprintf(", Strengths: %s", strings.Join(eval.Strengths[:min(2, len(eval.Strengths))], ", "))
+		}
+		if len(eval.Weaknesses) > 0 {
+			summary += fmt.Sprintf(", Weaknesses: %s", strings.Join(eval.Weaknesses[:min(2, len(eval.Weaknesses))], ", "))
+		}
+		agentSummaries = append(agentSummaries, summary)
+	}
+
+	// Calculate weighted average team score
+	var teamScore float64
+	if totalWeight > 0 {
+		teamScore = totalScore / totalWeight
+	}
+
+	logging.Info("Team score calculated: %.2f from %d valid agents (total weight: %.2f)",
+		teamScore, validAgents, totalWeight)
+
+	// Now use LLM to generate executive summary with full agent context
+	prompt := rg.buildTeamSummaryPrompt(criteria, teamScore, agentSummaries, agents)
+
+	response, err := rg.callLLMJudge(ctx, prompt)
+	if err != nil {
+		// Fallback: return basic evaluation without LLM summary
+		logging.Info("LLM summary generation failed, using fallback: %v", err)
+		return &TeamEvaluation{
+			Score:     teamScore,
+			Reasoning: fmt.Sprintf("Team score calculated as weighted average of %d agent scores.", validAgents),
+			Summary:   fmt.Sprintf("The team achieved an overall score of %.1f/10 based on %d evaluated agents.", teamScore, validAgents),
+		}, nil
+	}
+
+	cleanedResponse := stripMarkdownCodeBlocks(response)
+
+	var summaryResult struct {
+		Summary        string                    `json:"summary"`
+		Reasoning      string                    `json:"reasoning"`
+		CriteriaScores map[string]CriterionScore `json:"criteria_scores,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(cleanedResponse), &summaryResult); err != nil {
+		logging.Info("Failed to parse LLM summary, using fallback: %v", err)
+		return &TeamEvaluation{
+			Score:     teamScore,
+			Reasoning: fmt.Sprintf("Team score calculated as weighted average of %d agent scores.", validAgents),
+			Summary:   fmt.Sprintf("The team achieved an overall score of %.1f/10 based on %d evaluated agents.", teamScore, validAgents),
+		}, nil
+	}
+
+	return &TeamEvaluation{
+		Score:          teamScore, // Use calculated score, NOT LLM-generated
+		Reasoning:      summaryResult.Reasoning,
+		Summary:        summaryResult.Summary,
+		CriteriaScores: summaryResult.CriteriaScores,
+	}, nil
+}
+
+// buildTeamSummaryPrompt creates prompt for generating executive summary with pre-calculated score
+func (rg *ReportGenerator) buildTeamSummaryPrompt(criteria TeamCriteria, calculatedScore float64, agentSummaries []string, agents []models.Agent) string {
+	criteriaDesc := ""
+	for name, criterion := range criteria.Criteria {
+		criteriaDesc += fmt.Sprintf("- **%s** (weight: %.1f, threshold: %.1f): %s\n",
+			name, criterion.Weight, criterion.Threshold, criterion.Description)
+	}
+
+	return fmt.Sprintf(`You are an expert evaluator writing an executive summary for a team performance report.
+
+**Team Goal:**
+%s
+
+**Evaluation Criteria:**
+%s
+
+**CALCULATED Team Score: %.1f/10** (This score is pre-calculated from agent scores - DO NOT change it)
+
+**Agent Performance Summary:**
+%s
+
+**Instructions:**
+1. Write a professional executive summary (2-3 paragraphs) explaining the team's performance
+2. Reference specific agent strengths and weaknesses
+3. Provide actionable recommendations
+4. The team score of %.1f/10 is FIXED - explain WHY this score makes sense given the data
+
+**Output Format (JSON):**
+{
+  "summary": "<2-3 paragraph executive summary>",
+  "reasoning": "<1 paragraph explaining why the calculated score is appropriate>",
+  "criteria_scores": {
+    "criterion_name": {
+      "score": <float based on agent data>,
+      "reasoning": "<explanation>"
+    }
+  }
+}
+
+Be objective and data-driven. Reference specific agent performance metrics.`,
+		criteria.Goal,
+		criteriaDesc,
+		calculatedScore,
+		strings.Join(agentSummaries, "\n"),
+		calculatedScore)
 }
 
 // stripMarkdownCodeBlocks removes markdown code block delimiters and fixes common JSON issues
