@@ -660,19 +660,6 @@ export const MCPDirectoryPage: React.FC = () => {
     .sort();
   const categories = ['All', ...serverCategories];
 
-  useEffect(() => {
-    fetchEnvironments();
-    checkShipInstallation();
-    fetchDirectoryTemplates();
-  }, []);
-
-  // Fetch installed servers whenever environments change
-  useEffect(() => {
-    if (environments.length > 0) {
-      fetchInstalledServers();
-    }
-  }, [environments, fetchInstalledServers]);
-
   const fetchEnvironments = async () => {
     try {
       const response = await fetch('/api/v1/environments');
@@ -765,6 +752,19 @@ export const MCPDirectoryPage: React.FC = () => {
       console.error('Failed to fetch directory templates:', error);
     }
   };
+
+  useEffect(() => {
+    fetchEnvironments();
+    checkShipInstallation();
+    fetchDirectoryTemplates();
+  }, []);
+
+  // Fetch installed servers whenever environments change
+  useEffect(() => {
+    if (environments.length > 0) {
+      fetchInstalledServers();
+    }
+  }, [environments, fetchInstalledServers]);
 
   const handleAddServer = (server: MCPServer) => {
     setSelectedServer(server);
