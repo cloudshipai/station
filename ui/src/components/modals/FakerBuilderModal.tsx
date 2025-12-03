@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Wand2, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { X, Wand2, AlertCircle, CheckCircle, Loader, HelpCircle, Sparkles, Zap, GitBranch, Target, Shield } from 'lucide-react';
 import { apiClient } from '../../api/client';
+import { HelpModal } from '../ui/HelpModal';
 
 interface FakerBuilderModalProps {
   isOpen: boolean;
@@ -83,6 +84,7 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -191,24 +193,39 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white border border-gray-200/60 rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
+    <div 
+      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white border border-gray-200/60 rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200/60">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-50 rounded-lg">
-              <Wand2 className="h-5 w-5 text-purple-600" />
+            <div className="p-2 bg-gray-100 rounded-lg">
+              <Wand2 className="h-5 w-5 text-[#0084FF]" />
             </div>
             <h2 className="text-xl font-semibold text-gray-900">
               Create Faker
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-all"
-          >
-            <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsHelpModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">Help</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+            >
+              <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -365,6 +382,204 @@ export const FakerBuilderModal: React.FC<FakerBuilderModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        title="AI Faker"
+        pageDescription="Faker generates AI-powered mock MCP tools for rapid prototyping when real API credentials aren't available. It uses LLMs to simulate realistic API responses without making actual external calls."
+      >
+        <div className="space-y-6">
+          {/* What is Faker */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-[#0084FF]" />
+              What is Faker?
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Faker is an AI-powered mock tool generator that creates realistic MCP tool implementations without requiring real API credentials or making external API calls.
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Purpose</div>
+                  <div className="text-xs text-gray-600">Prototype agents with realistic tool responses before production integration</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">How It Works</div>
+                  <div className="text-xs text-gray-600">LLM generates contextually appropriate responses based on tool descriptions</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Why Use Faker */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Target className="h-5 w-5 text-[#0084FF]" />
+              Why Use Faker?
+            </h3>
+            <div className="space-y-2 text-sm text-gray-700">
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">No Credentials Required:</span> Develop and test agents without AWS, GCP, or third-party API keys</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Rapid Prototyping:</span> Test agent workflows instantly without waiting for API access or approvals</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Cost-Free Development:</span> No API usage costs during development and testing phases</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Realistic Responses:</span> AI generates contextually appropriate data matching real API behavior</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Safe Testing:</span> No risk of affecting production systems or incurring unexpected charges</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Creating a Faker */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Zap className="h-5 w-5 text-yellow-600" />
+              Creating a Faker
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Two ways to create Faker mock tools:
+              </div>
+              <div className="space-y-2">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-2 flex items-center gap-2">
+                    <div className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-semibold">Template</div>
+                    Pre-Built Tool Sets
+                  </div>
+                  <div className="text-xs text-gray-600 mb-2">
+                    Use curated templates for common APIs:
+                  </div>
+                  <div className="space-y-1 text-xs text-gray-600">
+                    <div>• <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">AWS FinOps</span> - Cost Explorer, Billing (~25 tools)</div>
+                    <div>• <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">GCP FinOps</span> - Cloud Billing, Cost Management (~22 tools)</div>
+                    <div>• <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">Azure FinOps</span> - Cost Management API (~20 tools)</div>
+                    <div>• <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">Datadog</span> - Metrics, Logs, Monitoring (~18 tools)</div>
+                    <div>• <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">Stripe</span> - Payment Processing (~15 tools)</div>
+                  </div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-2 flex items-center gap-2">
+                    <div className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded font-semibold">Custom</div>
+                    Build Your Own
+                  </div>
+                  <div className="text-xs text-gray-600 mb-2">
+                    Provide a natural language instruction describing the API you want to mock. The AI will generate appropriate tools.
+                  </div>
+                  <div className="bg-gray-900 text-gray-100 p-2 rounded font-mono text-xs">
+                    "Generate GitHub repository management tools including creating repos, managing issues, pull requests, and webhooks"
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Workflow */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <GitBranch className="h-5 w-5 text-[#0084FF]" />
+              Development Workflow
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">1</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Create Faker</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Choose template or write custom instruction, give it a name (e.g., <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">aws-costs-faker</span>)</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs flex items-center justify-center font-bold">2</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Sync Environment</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Faker auto-syncs after creation, generating mock tools in your environment</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">3</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Test with Agents</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Create agents that use the mock tools, develop and test workflows</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-600 text-white text-xs flex items-center justify-center font-bold">4</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Swap for Production</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Replace Faker with real MCP server when ready for production deployment</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Example Use Cases */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Target className="h-5 w-5 text-[#0084FF]" />
+              Example Use Cases
+            </h3>
+            <div className="space-y-2 text-sm text-gray-700">
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">FinOps Agent Development:</span> Test cloud cost analysis workflows without AWS/GCP access</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Payment Integration:</span> Prototype Stripe payment agents without live API keys</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Monitoring Bots:</span> Develop Datadog/observability agents before production deployment</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Demo & Training:</span> Show agent capabilities to stakeholders without sensitive credentials</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Important Notes */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              Important Notes
+            </div>
+            <ul className="space-y-1.5 text-sm text-gray-700">
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-600 flex-shrink-0 mt-1.5"></div>
+                <div>Faker responses are <span className="font-semibold">AI-generated and not real data</span></div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-600 flex-shrink-0 mt-1.5"></div>
+                <div>No actual API calls are made - responses are simulated</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-600 flex-shrink-0 mt-1.5"></div>
+                <div>Replace with real MCP servers for production workflows</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-600 flex-shrink-0 mt-1.5"></div>
+                <div>Best for prototyping, testing, and development environments</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </HelpModal>
     </div>
   );
 };

@@ -141,22 +141,9 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
     return `${(ms / 1000).toFixed(2)}s`;
   };
 
-  const getToolColor = (toolName: string): string => {
-    if (toolName.includes('get_') || toolName.includes('list_') || toolName.includes('read_')) {
-      return 'border-blue-200 bg-blue-50';
-    }
-    if (toolName.includes('cost') || toolName.includes('billing')) {
-      return 'border-green-200 bg-green-50';
-    }
-    if (toolName.includes('agent_')) {
-      return 'border-station-lavender-200 bg-station-lavender-50';
-    }
-    return 'border-gray-200 bg-gray-50';
-  };
-
   const getToolIconComponent = (toolName: string) => {
     const iconClass = "h-5 w-5";
-    if (toolName.includes('agent_')) return <Bot className={`${iconClass} text-station-lavender-600`} />;
+    if (toolName.includes('agent_')) return <Bot className={`${iconClass} text-purple-600`} />;
     if (toolName.includes('get_') || toolName.includes('list_')) return <BarChart2 className={`${iconClass} text-blue-600`} />;
     if (toolName.includes('cost') || toolName.includes('billing')) return <DollarSign className={`${iconClass} text-green-600`} />;
     if (toolName.includes('deployment')) return <Rocket className={`${iconClass} text-purple-600`} />;
@@ -174,10 +161,152 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <div className="text-red-600 mb-2">{error}</div>
-        <div className="text-gray-500 text-sm">
-          Tool call data may not be available for this run
+      <div className="max-w-4xl mx-auto py-6">
+        {/* Header */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Tool Calls</h2>
+          <p className="text-gray-600">MCP tools invoked during agent execution</p>
+        </div>
+
+        {/* Warning Banner */}
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-amber-800 font-medium">Jaeger tracing is not available</p>
+              <p className="text-sm text-amber-700 mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Benefits Section */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Why Enable Tool Call Tracking?</h3>
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Detailed Tool Inspection</p>
+                  <p className="text-sm text-gray-600">View input parameters and output results for every MCP tool call</p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Performance Metrics</p>
+                  <p className="text-sm text-gray-600">Track execution time for each tool call to optimize agent performance</p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Debugging Support</p>
+                  <p className="text-sm text-gray-600">Identify which tools were called and troubleshoot agent behavior</p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Usage Analytics</p>
+                  <p className="text-sm text-gray-600">See which MCP tools are used most frequently in your agents</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Installation Section */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Installation</h3>
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Step 1: Setup volume</span>
+                  <span className="text-xs text-gray-500">~10 sec</span>
+                </div>
+                <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                  <code className="text-xs text-green-400 font-mono block">
+                    docker volume create jaeger-badger-data
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block mt-1">
+                    docker run --rm -v jaeger-badger-data:/badger busybox chown -R 10001:10001 /badger
+                  </code>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Step 2: Start Jaeger</span>
+                  <span className="text-xs text-gray-500">~30 sec</span>
+                </div>
+                <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                  <code className="text-xs text-green-400 font-mono block">
+                    docker run -d --name jaeger \
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block">
+                    {'  '}-e SPAN_STORAGE_TYPE=badger \
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block">
+                    {'  '}-e BADGER_EPHEMERAL=false \
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block">
+                    {'  '}-e BADGER_DIRECTORY_VALUE=/badger/data \
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block">
+                    {'  '}-e BADGER_DIRECTORY_KEY=/badger/key \
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block">
+                    {'  '}-v jaeger-badger-data:/badger \
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block">
+                    {'  '}-p 16686:16686 -p 4317:4317 -p 4318:4318 \
+                  </code>
+                  <code className="text-xs text-green-400 font-mono block">
+                    {'  '}jaegertracing/all-in-one:latest
+                  </code>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Step 3: Refresh page</span>
+                  <span className="text-xs text-gray-500">instant</span>
+                </div>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh to Load Tool Calls
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -185,109 +314,123 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
 
   if (toolCalls.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="text-gray-600">No tool calls recorded for this run</div>
+      <div className="max-w-2xl mx-auto py-12 text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+          <Wrench className="h-8 w-8 text-gray-400" />
+        </div>
+        <p className="text-gray-600 font-medium">No Tool Calls</p>
+        <p className="text-gray-500 text-sm mt-1">This agent run didn't invoke any tools</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900 mb-2">Tool Calls</h2>
+        <p className="text-gray-600">MCP tools invoked during agent execution</p>
+      </div>
+
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <Wrench className="h-4 w-4 text-primary" />
-            <div className="text-sm text-gray-600">Total Tool Calls</div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-600">Total Calls</span>
+            <Wrench className="h-4 w-4 text-gray-400" />
           </div>
-          <div className="text-2xl font-semibold text-primary">{toolCalls.length}</div>
+          <div className="text-2xl font-bold text-gray-900">{toolCalls.length}</div>
         </div>
-        
-        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <Clock className="h-4 w-4 text-blue-600" />
-            <div className="text-sm text-gray-600">Total Tool Time</div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-600">Total Time</span>
+            <Clock className="h-4 w-4 text-gray-400" />
           </div>
-          <div className="text-2xl font-semibold text-blue-600">
+          <div className="text-2xl font-bold text-gray-900">
             {formatDuration(toolCalls.reduce((sum, call) => sum + call.duration, 0))}
           </div>
         </div>
 
-        <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <Zap className="h-4 w-4 text-green-600" />
-            <div className="text-sm text-gray-600">Avg Duration</div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-600">Avg Duration</span>
+            <Zap className="h-4 w-4 text-gray-400" />
           </div>
-          <div className="text-2xl font-semibold text-green-600">
+          <div className="text-2xl font-bold text-gray-900">
             {formatDuration(toolCalls.reduce((sum, call) => sum + call.duration, 0) / toolCalls.length)}
           </div>
         </div>
       </div>
 
       {/* Tool Call List */}
-      {toolCalls.map((call, index) => (
-        <div
-          key={call.spanID}
-          className={`border rounded-lg overflow-hidden transition-all shadow-sm hover:shadow-md ${getToolColor(call.toolName)}`}
-        >
+      <div className="space-y-3">
+        {toolCalls.map((call, index) => (
           <div
-            className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/50 transition-colors"
-            onClick={() => toggleExpand(call.spanID)}
+            key={call.spanID}
+            className="bg-white border border-gray-200 rounded-lg overflow-hidden transition-all shadow-sm hover:shadow-md"
           >
-            <div className="flex items-center gap-3 flex-1">
-              {getToolIconComponent(call.toolName)}
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 text-xs">#{index + 1}</span>
-                  <span className="text-gray-900 font-medium">{call.toolName}</span>
-                </div>
-                {call.error && (
-                  <div className="flex items-center gap-1 text-red-600 text-xs mt-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    {call.error}
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+              onClick={() => toggleExpand(call.spanID)}
+            >
+              <div className="flex items-center gap-3 flex-1">
+                {getToolIconComponent(call.toolName)}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 text-xs font-medium">#{index + 1}</span>
+                    <span className="text-gray-900 font-medium">{call.toolName}</span>
                   </div>
+                  {call.error && (
+                    <div className="flex items-center gap-1 text-red-600 text-xs mt-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {call.error}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
+                  <Clock className="h-3.5 w-3.5 text-gray-500" />
+                  <span className="text-gray-900 text-sm font-semibold">
+                    {formatDuration(call.duration)}
+                  </span>
+                </div>
+                {expandedCalls.has(call.spanID) ? (
+                  <ChevronUp className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-gray-400" />
                 )}
               </div>
             </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded border border-gray-200">
-                <Clock className="h-3 w-3 text-gray-600" />
-                <span className="text-gray-900 text-sm font-medium">
-                  {formatDuration(call.duration)}
-                </span>
-              </div>
-              {expandedCalls.has(call.spanID) ? (
-                <ChevronUp className="h-5 w-5 text-gray-600" />
-              ) : (
-                <ChevronDown className="h-5 w-5 text-gray-600" />
-              )}
-            </div>
-          </div>
 
-          {expandedCalls.has(call.spanID) && (
-            <div className="border-t border-gray-200 bg-white p-4 space-y-4">
+            {expandedCalls.has(call.spanID) && (
+              <div className="border-t border-gray-200 bg-gray-50 p-5 space-y-4">
               {/* Input Section */}
               {call.input && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-semibold text-gray-900">Input</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                      <Database className="h-4 w-4 text-gray-600" />
+                      Input
+                    </h4>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         copyToClipboard(JSON.stringify(call.input, null, 2), `${call.spanID}-input`);
                       }}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white hover:bg-gray-100 text-gray-700 rounded-lg border border-gray-200 transition-colors font-medium"
                     >
                       {copiedIndex === `${call.spanID}-input` ? (
-                        <><CheckCircle className="h-3 w-3" /> Copied</>
+                        <><CheckCircle className="h-3.5 w-3.5 text-green-600" /> Copied</>
                       ) : (
-                        <><Copy className="h-3 w-3" /> Copy</>
+                        <><Copy className="h-3.5 w-3.5" /> Copy</>
                       )}
                     </button>
                   </div>
-                  <div className="bg-gray-50 border border-gray-200 rounded p-4 max-h-80 overflow-auto">
-                    <pre className="text-xs text-gray-900 font-mono whitespace-pre-wrap break-words">
+                  <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-h-80 overflow-auto">
+                    <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(call.input, null, 2)}
                     </pre>
                   </div>
@@ -297,24 +440,27 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
               {/* Output Section */}
               {call.output && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-semibold text-gray-900">Output</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-gray-600" />
+                      Output
+                    </h4>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         copyToClipboard(JSON.stringify(call.output, null, 2), `${call.spanID}-output`);
                       }}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white hover:bg-gray-100 text-gray-700 rounded-lg border border-gray-200 transition-colors font-medium"
                     >
                       {copiedIndex === `${call.spanID}-output` ? (
-                        <><CheckCircle className="h-3 w-3" /> Copied</>
+                        <><CheckCircle className="h-3.5 w-3.5 text-green-600" /> Copied</>
                       ) : (
-                        <><Copy className="h-3 w-3" /> Copy</>
+                        <><Copy className="h-3.5 w-3.5" /> Copy</>
                       )}
                     </button>
                   </div>
-                  <div className="bg-gray-50 border border-gray-200 rounded p-4 max-h-[32rem] overflow-auto">
-                    <pre className="text-xs text-gray-900 font-mono whitespace-pre-wrap break-words">
+                  <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-h-[32rem] overflow-auto">
+                    <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(call.output, null, 2)}
                     </pre>
                   </div>
@@ -323,26 +469,26 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
 
               {/* Span Metadata - only show if no input/output */}
               {!call.input && !call.output && (
-                <div className="pt-4 border-t border-gray-200">
-                  <h4 className="text-xs font-semibold text-gray-700 mb-2">Span Metadata</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="text-gray-600">Span ID:</div>
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Span Metadata</h4>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="text-gray-600 font-medium">Span ID:</div>
                     <div className="text-gray-900 font-mono">{call.spanID.substring(0, 16)}...</div>
-                    
-                    <div className="text-gray-600">Operation:</div>
+
+                    <div className="text-gray-600 font-medium">Operation:</div>
                     <div className="text-gray-900">{call.operationName}</div>
-                    
+
                     {Object.keys(call.tags).length > 0 && (
                       <>
-                        <div className="text-gray-600 col-span-2 mt-2 mb-1">Available Tags:</div>
+                        <div className="text-gray-700 font-semibold col-span-2 mt-2 mb-1">Available Tags:</div>
                         {Object.entries(call.tags).slice(0, 8).map(([key, value]) => {
                           // Skip genkit internal tags for cleaner display
                           if (key.startsWith('otel.') || key.startsWith('span.')) return null;
                           const valStr = String(value);
                           return (
                             <React.Fragment key={key}>
-                              <div className="text-gray-600 pl-2 text-xs">{key}:</div>
-                              <div className="text-gray-900 font-mono text-xs break-all">
+                              <div className="text-gray-600 font-medium pl-2">{key}:</div>
+                              <div className="text-gray-900 font-mono break-all">
                                 {valStr.length > 100 ? `${valStr.substring(0, 100)}...` : valStr}
                               </div>
                             </React.Fragment>
@@ -353,10 +499,11 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

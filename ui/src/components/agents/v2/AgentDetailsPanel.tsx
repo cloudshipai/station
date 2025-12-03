@@ -249,8 +249,8 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
           )}
           
           {runs.length > 0 && (
-            <button 
-              className="w-full mt-4 py-2.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-50/50 hover:bg-gray-100 rounded-lg border border-gray-200 hover:border-gray-300 transition-all"
+            <button
+              className="w-full mt-4 py-2.5 text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 rounded-md border border-gray-300 transition-all shadow-sm"
               onClick={() => navigate('/runs')}
             >
               View All Runs →
@@ -261,8 +261,8 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
         {/* Schedule Section */}
         <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Schedule</h3>
-          <button 
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100 hover:border-gray-300 transition-all"
+          <button
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 text-sm font-medium rounded-md transition-all shadow-sm"
             onClick={() => onScheduleAgent(agent)}
           >
             <Calendar className="h-4 w-4" />

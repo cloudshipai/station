@@ -12,7 +12,12 @@
       },
       "metadata": {
         "category": "Database",
-        "notes": "For local PostgreSQL databases, use host.docker.internal:5432 instead of localhost:5432 when running Station in Docker"
+        "notes": "For local PostgreSQL databases, use host.docker.internal:5432 instead of localhost:5432 when running Station in Docker",
+        "logoUrl": "/logos/postgresql.svg",
+        "githubUrl": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres",
+        "toolSourceUrl": "https://www.postgresql.org/",
+        "docsUrl": "https://modelcontextprotocol.io/docs/tools/postgres",
+        "requiresApiKey": true
       }
     }
   }

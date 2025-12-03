@@ -11,7 +11,12 @@
       },
       "metadata": {
         "category": "Database",
-        "notes": "For local MySQL databases, use host.docker.internal:3306 instead of localhost:3306 when running Station in Docker"
+        "notes": "For local MySQL databases, use host.docker.internal:3306 instead of localhost:3306 when running Station in Docker",
+        "logoUrl": "/logos/mysql.svg",
+        "githubUrl": "https://github.com/benborla/mcp-server-mysql",
+        "toolSourceUrl": "https://www.mysql.com/",
+        "docsUrl": "https://dev.mysql.com/doc/",
+        "requiresApiKey": true
       }
     }
   }

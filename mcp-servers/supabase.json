@@ -13,7 +13,12 @@
         "SUPABASE_ACCESS_TOKEN": "{{ .SUPABASE_ACCESS_TOKEN }}"
       },
       "metadata": {
-        "category": "Database"
+        "category": "Database",
+        "logoUrl": "/logos/supabase.svg",
+        "githubUrl": "https://github.com/supabase-community/supabase-mcp",
+        "toolSourceUrl": "https://supabase.com",
+        "docsUrl": "https://supabase.com/docs/guides/getting-started/mcp",
+        "requiresApiKey": true
       }
     }
   }

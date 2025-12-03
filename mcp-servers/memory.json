@@ -8,7 +8,11 @@
         "@modelcontextprotocol/server-memory"
       ],
       "metadata": {
-        "category": "Productivity"
+        "category": "Productivity",
+        "logoUrl": "",
+        "githubUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+        "toolSourceUrl": "https://github.com/modelcontextprotocol/servers",
+        "docsUrl": "https://modelcontextprotocol.io/docs/tools/memory"
       }
     }
   }

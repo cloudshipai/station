@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { AlertCircle, X, Pin, List, GitBranch, BarChart3 } from 'lucide-react';
+import { AlertCircle, X, Pin, List, GitBranch, BarChart3, HelpCircle, Clock, Zap, DollarSign, Activity, ChevronRight, ChevronLeft } from 'lucide-react';
 import { TimelineControls } from './TimelineControls';
 import { TimelineLane } from './TimelineLane';
 import type { TimelineRun, TimeRangePreset } from '../../utils/timelineLayout';
@@ -12,6 +12,12 @@ import {
   formatTime,
   TIME_RANGE_PRESETS
 } from '../../utils/timelineLayout';
+import { HelpModal } from '../ui/HelpModal';
+
+interface TocItem {
+  id: string;
+  label: string;
+}
 
 interface SwimlanePageProps {
   runs: TimelineRun[];
@@ -20,10 +26,10 @@ interface SwimlanePageProps {
   onViewChange?: (view: 'list' | 'timeline' | 'stats') => void;
 }
 
-export const SwimlanePage: React.FC<SwimlanePageProps> = ({ 
-  runs, 
-  onRunClick, 
-  activeView = 'timeline', 
+export const SwimlanePage: React.FC<SwimlanePageProps> = ({
+  runs,
+  onRunClick,
+  activeView = 'timeline',
   onViewChange
 }) => {
   const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRangePreset>(TIME_RANGE_PRESETS[1]); // Last Day
@@ -32,10 +38,20 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
   const [highlightedRuns, setHighlightedRuns] = useState<Set<number>>(new Set());
   const [hoveredRun, setHoveredRun] = useState<TimelineRun | null>(null);
   const [pinnedRun, setPinnedRun] = useState<TimelineRun | null>(null);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Start collapsed
   const closeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Use pinned run if available, otherwise use hovered run
   const displayedRun = pinnedRun || hoveredRun;
+
+  // Define TOC items for help modal
+  const helpTocItems: TocItem[] = [
+    { id: 'run-metadata', label: 'Run Metadata' },
+    { id: 'three-views', label: 'Three Views' },
+    { id: 'audit-trail', label: 'Audit Trail' },
+    { id: 'use-cases', label: 'Use Cases' }
+  ];
 
   const handleRunHover = (run: TimelineRun | null) => {
     // Only update hover if nothing is pinned
@@ -49,8 +65,9 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
       }
       
       if (run) {
-        // Show preview on hover
+        // Show preview on hover and expand sidebar
         setHoveredRun(run);
+        setIsSidebarCollapsed(false);
       } else {
         // Delay closing to allow mouse to reach panel
         closeTimeoutRef.current = setTimeout(() => {
@@ -69,6 +86,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
       // Pin this run to keep panel open
       setPinnedRun(run);
       setHoveredRun(null);
+      setIsSidebarCollapsed(false); // Expand sidebar when pinning
     }
   };
 
@@ -76,6 +94,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
     console.log('Close button clicked');
     setPinnedRun(null);
     setHoveredRun(null);
+    setIsSidebarCollapsed(true); // Collapse sidebar when closing
   };
 
   // Filter runs by time range
@@ -280,7 +299,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
         {/* Header with view tabs on left */}
         <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
           <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
-          
+
           {onViewChange && (
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
@@ -318,23 +337,41 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
             </button>
           </div>
         )}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
+          >
+            <HelpCircle className="h-4 w-4" />
+            <span className="hidden sm:inline">Help</span>
+          </button>
+          <button
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
+            title={isSidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+          >
+            {isSidebarCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <span className="hidden sm:inline">{isSidebarCollapsed ? "Show" : "Hide"} Details</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Timeline Controls - Now outside the main content area */}
+      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+        <TimelineControls
+          selectedTimeRange={selectedTimeRange}
+          onTimeRangeChange={setSelectedTimeRange}
+          densityMetric={densityMetric}
+          onDensityMetricChange={setDensityMetric}
+          showP95={showP95}
+          onShowP95Change={setShowP95}
+        />
       </div>
 
       {/* Main timeline content area */}
       <div className="flex-1 flex bg-white relative overflow-hidden">
-        {/* Main content - always has space for right panel */}
-        <div className="flex-1 flex flex-col mr-80">
-          {/* Timeline Controls */}
-          <div className="flex items-center justify-end px-4 py-3 bg-white border-b border-gray-200">
-            <TimelineControls
-              selectedTimeRange={selectedTimeRange}
-              onTimeRangeChange={setSelectedTimeRange}
-              densityMetric={densityMetric}
-              onDensityMetricChange={setDensityMetric}
-              showP95={showP95}
-              onShowP95Change={setShowP95}
-            />
-          </div>
+        {/* Main content - removed fixed mr-80 */}
+        <div className="flex-1 flex flex-col">
 
       {/* Time Axis */}
       <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 border-b border-gray-200">
@@ -383,9 +420,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
         )}
       </div>
 
-      {/* Right Side Panel - Always visible */}
-      <div 
-        className="fixed right-0 top-0 h-full w-80 bg-white border-l-2 border-gray-200 shadow-2xl z-50"
+      {/* Right Side Panel - Absolute within parent */}
+      {!isSidebarCollapsed && (
+      <div
+        className="absolute right-0 top-0 h-full w-80 bg-white border-l-2 border-gray-200 shadow-xl z-40 transition-transform duration-300"
         onMouseEnter={() => {
           console.log('Panel mouse enter - clearing close timeout');
           // Clear any pending close timeout when mouse enters panel
@@ -513,7 +551,160 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
           </div>
         )}
       </div>
+      )}
       </div>
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        title="Agent Runs"
+        pageDescription="Debug agent failures, monitor AI costs, analyze performance bottlenecks, and maintain complete audit trails of every agent execution. Timeline visualizes concurrent runs, List provides detailed inspection, and Stats tracks usage trends and spend patterns."
+        tocItems={helpTocItems}
+      >
+        <div className="space-y-6">
+          {/* Run Tracking */}
+          <div id="run-metadata">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Run Tracking & Metadata</h3>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-[#0084FF] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-mono text-sm text-gray-900 mb-1">Execution Timing</div>
+                      <div className="text-xs text-gray-600">Start time, duration, end time</div>
+                      <div className="text-xs text-gray-600 mt-1">Tracks when agent executed and how long it took</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Activity className="h-5 w-5 text-[#0084FF] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-mono text-sm text-gray-900 mb-1">Tool Calls</div>
+                      <div className="text-xs text-gray-600">Every MCP tool invocation</div>
+                      <div className="text-xs text-gray-600 mt-1">Parameters, results, and tool-specific timing</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Zap className="h-5 w-5 text-[#0084FF] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-mono text-sm text-gray-900 mb-1">Token Usage</div>
+                      <div className="text-xs text-gray-600">Input/output tokens per LLM call</div>
+                      <div className="text-xs text-gray-600 mt-1">Track AI model usage and costs</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="h-5 w-5 text-[#0084FF] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-mono text-sm text-gray-900 mb-1">Cost Tracking</div>
+                      <div className="text-xs text-gray-600">Per-run AI API costs</div>
+                      <div className="text-xs text-gray-600 mt-1">Monitor spend across all agent executions</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-xs text-gray-600 font-mono bg-white border border-gray-300 px-3 py-2 rounded">
+                Example: Run #1234 - 12.5s duration, 3 tool calls, 2,140 tokens, $0.0034 cost
+              </div>
+            </div>
+          </div>
+
+          {/* Views Explanation */}
+          <div id="three-views">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Three Views of Run Data</h3>
+            <div className="space-y-3">
+              <div className="bg-white rounded border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <GitBranch className="h-4 w-4 text-gray-700" />
+                  <div className="font-mono text-sm text-gray-900">Timeline View</div>
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  <strong>Visualize when agents ran and for how long.</strong> Each agent gets a swimlane showing execution bars colored by token usage or cost. Hover over bars to see details, click to pin. Perfect for understanding concurrency, identifying bottlenecks, and seeing multi-agent coordination patterns.
+                </div>
+              </div>
+
+              <div className="bg-white rounded border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <List className="h-4 w-4 text-gray-700" />
+                  <div className="font-mono text-sm text-gray-900">List View</div>
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  <strong>Detailed tabular view of all runs.</strong> Shows agent name, status (completed/running/failed), duration, tokens, cost, tools used, and steps taken. Click any run to view full execution details including tool call parameters, results, and complete execution trace. Best for detailed inspection and debugging.
+                </div>
+              </div>
+
+              <div className="bg-white rounded border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <BarChart3 className="h-4 w-4 text-gray-700" />
+                  <div className="font-mono text-sm text-gray-900">Stats View</div>
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  <strong>Aggregated metrics across all runs.</strong> Shows total runs, success rates, average duration, total tokens consumed, total costs, most-used tools, and agent-by-agent statistics. Use this for understanding overall system performance, cost trends, and agent effectiveness.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Audit Trail */}
+          <div id="audit-trail">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Audit Trail & Compliance</h3>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <div className="text-sm text-gray-900 mb-2">Every agent execution is permanently tracked:</div>
+              <ul className="space-y-2 text-xs text-gray-700">
+                <li className="flex items-start gap-2">
+                  <span className="text-[#0084FF] font-bold">•</span>
+                  <div><strong>Which agent ran</strong> - Agent ID and name for attribution</div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#0084FF] font-bold">•</span>
+                  <div><strong>Which tools were called</strong> - Complete tool invocation history with parameters</div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#0084FF] font-bold">•</span>
+                  <div><strong>Full execution steps</strong> - Agent reasoning process and decision chain</div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#0084FF] font-bold">•</span>
+                  <div><strong>Token usage</strong> - LLM API calls with input/output token counts</div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#0084FF] font-bold">•</span>
+                  <div><strong>Success/failure status</strong> - Outcome with error messages if failed</div>
+                </li>
+              </ul>
+              <div className="mt-3 text-xs text-gray-600 bg-white border border-gray-300 px-3 py-2 rounded font-mono">
+                Query runs: stn runs list --agent "Cost Analyzer"<br/>
+                Inspect details: stn runs inspect &lt;run-id&gt; --verbose
+              </div>
+            </div>
+          </div>
+
+          {/* Use Cases */}
+          <div id="use-cases">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Common Use Cases</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="font-mono text-sm text-gray-900 mb-1">Debugging Failures</div>
+                <div className="text-xs text-gray-600">Click failed runs to see error messages, which tools failed, and execution steps leading to failure</div>
+              </div>
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="font-mono text-sm text-gray-900 mb-1">Cost Optimization</div>
+                <div className="text-xs text-gray-600">Stats view shows which agents consume most tokens. Optimize high-cost agents or switch models</div>
+              </div>
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="font-mono text-sm text-gray-900 mb-1">Performance Analysis</div>
+                <div className="text-xs text-gray-600">Timeline shows slow agents. Inspect tool calls to find bottlenecks (slow APIs, large file reads)</div>
+              </div>
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="font-mono text-sm text-gray-900 mb-1">Compliance & Audit</div>
+                <div className="text-xs text-gray-600">Export run history showing which agents accessed what data at what time for security reviews</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </HelpModal>
     </div>
   );
 };

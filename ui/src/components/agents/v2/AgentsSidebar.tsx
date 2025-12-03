@@ -34,16 +34,36 @@ export const AgentsSidebar: React.FC<AgentsSidebarProps> = ({ agents, selectedAg
       {/* Agent List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {filteredAgents.length === 0 ? (
-          <div className="text-center py-12 px-4 animate-in fade-in duration-300">
-            <Bot className="h-12 w-12 text-gray-300 mx-auto mb-3 animate-in zoom-in duration-500" />
-            <p className="text-sm text-gray-500 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">No agents found</p>
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="text-xs text-gray-600 hover:text-gray-900 mt-2 underline animate-in fade-in duration-500 delay-200"
-              >
-                Clear search
-              </button>
+          <div className="space-y-4">
+            {/* Empty State Message */}
+            <div className="text-center py-8 px-4 animate-in fade-in duration-300">
+              <Bot className="h-10 w-10 text-gray-300 mx-auto mb-2 animate-in zoom-in duration-500" />
+              <p className="text-sm text-gray-500 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">No agents found</p>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-xs text-gray-600 hover:text-gray-900 mt-2 underline animate-in fade-in duration-500 delay-200"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+
+            {/* Skeleton Placeholders */}
+            {!searchQuery && (
+              <div className="space-y-2 opacity-20">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-3.5 rounded-xl border border-gray-200 bg-white">
+                    <div className="flex items-start gap-3">
+                      <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                      <div className="flex-1 min-w-0">
+                        <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
+                        <div className="h-3 w-24 bg-gray-200 rounded"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         ) : (
