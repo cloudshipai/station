@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"station/cmd/main/handlers/common"
+	"station/internal/db/repositories"
 	"station/internal/services"
 )
 
@@ -16,12 +17,28 @@ import (
 // This creates API-compatible bundles that can be installed via the bundle API
 type UnifiedBundleHandler struct {
 	bundleService *services.BundleService
+	repos         *repositories.Repositories
 }
 
 // NewUnifiedBundleHandler creates a new unified bundle tools handler
 func NewUnifiedBundleHandler() *UnifiedBundleHandler {
 	return &UnifiedBundleHandler{
 		bundleService: services.NewBundleService(),
+		repos:         nil,
+	}
+}
+
+// NewUnifiedBundleHandlerWithRepos creates a handler with database support for reports
+func NewUnifiedBundleHandlerWithRepos(repos *repositories.Repositories) *UnifiedBundleHandler {
+	var bundleService *services.BundleService
+	if repos != nil {
+		bundleService = services.NewBundleServiceWithRepos(repos)
+	} else {
+		bundleService = services.NewBundleService()
+	}
+	return &UnifiedBundleHandler{
+		bundleService: bundleService,
+		repos:         repos,
 	}
 }
 
@@ -80,8 +97,20 @@ func (h *UnifiedBundleHandler) CreateBundle(ctx context.Context, req BundleEnvir
 		outputPath = fmt.Sprintf("%s.tar.gz", req.EnvironmentName)
 	}
 
-	// Create the bundle
-	tarData, err := h.bundleService.CreateBundle(envPath)
+	// Create the bundle (with reports if we have database access)
+	var tarData []byte
+	if h.repos != nil {
+		// Try to get environment ID for report export
+		env, envErr := h.repos.Environments.GetByName(req.EnvironmentName)
+		if envErr == nil {
+			tarData, err = h.bundleService.CreateBundleWithReports(envPath, env.ID)
+		} else {
+			// Fall back to regular bundle if we can't get the environment
+			tarData, err = h.bundleService.CreateBundle(envPath)
+		}
+	} else {
+		tarData, err = h.bundleService.CreateBundle(envPath)
+	}
 	if err != nil {
 		return &BundleResponse{
 			Success: false,
