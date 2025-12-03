@@ -58,29 +58,29 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
     if (obj.type === 'object' && obj.properties) {
       return (
         <div style={{ marginLeft: indent }} className="my-2">
-          <div className="text-tokyo-blue font-mono text-sm">{'{'}</div>
+          <div className="text-gray-700 font-mono text-sm">{'{'}</div>
           {Object.entries(obj.properties).map(([key, value]: [string, any]) => (
             <div key={key} className="ml-4 my-1">
               <div className="flex items-start gap-2">
-                <span className="text-tokyo-orange font-mono">{key}:</span>
+                <span className="text-gray-800 font-mono">{key}:</span>
                 <div className="flex-1">
                   {value.type && (
-                    <span className="text-tokyo-green text-xs bg-tokyo-bg px-1 rounded">
+                    <span className="text-gray-600 text-xs bg-gray-50 px-1 rounded border border-gray-200">
                       {value.type}
                     </span>
                   )}
                   {value.description && (
-                    <div className="text-tokyo-comment text-xs mt-1">
+                    <div className="text-gray-500 text-xs mt-1">
                       {value.description}
                     </div>
                   )}
                   {obj.required?.includes(key) && (
-                    <span className="text-tokyo-red text-xs ml-2">required</span>
+                    <span className="text-gray-700 text-xs ml-2 font-medium">required</span>
                   )}
                   {value.properties && renderSchemaPreview(value, level + 1)}
                   {value.items && (
                     <div className="ml-4">
-                      <span className="text-tokyo-comment text-xs">Array of:</span>
+                      <span className="text-gray-500 text-xs">Array of:</span>
                       {renderSchemaPreview(value.items, level + 1)}
                     </div>
                   )}
@@ -88,7 +88,7 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
               </div>
             </div>
           ))}
-          <div className="text-tokyo-blue font-mono text-sm">{'}'}</div>
+          <div className="text-gray-700 font-mono text-sm">{'}'}</div>
         </div>
       );
     }
@@ -96,17 +96,17 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
     if (obj.type === 'array' && obj.items) {
       return (
         <div style={{ marginLeft: indent }} className="my-2">
-          <div className="text-tokyo-comment text-sm">Array of:</div>
+          <div className="text-gray-500 text-sm">Array of:</div>
           {renderSchemaPreview(obj.items, level + 1)}
         </div>
       );
     }
 
     return (
-      <div style={{ marginLeft: indent }} className="text-tokyo-green text-sm">
+      <div style={{ marginLeft: indent }} className="text-gray-700 text-sm">
         {obj.type || 'any'}
         {obj.description && (
-          <div className="text-tokyo-comment text-xs mt-1">{obj.description}</div>
+          <div className="text-gray-500 text-xs mt-1">{obj.description}</div>
         )}
       </div>
     );
@@ -115,13 +115,13 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header with view mode toggle */}
-      <div className="flex items-center justify-between p-3 border-b border-tokyo-dark3 bg-tokyo-dark1 flex-shrink-0">
+      <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-white flex-shrink-0">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-mono text-tokyo-blue font-medium">Output Schema</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Output Schema</h3>
           {validationError ? (
-            <XCircle className="h-4 w-4 text-tokyo-red" />
+            <XCircle className="h-4 w-4 text-red-600" />
           ) : schema ? (
-            <CheckCircle className="h-4 w-4 text-tokyo-green" />
+            <CheckCircle className="h-4 w-4 text-green-600" />
           ) : null}
         </div>
 
@@ -129,17 +129,17 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
           <button
             onClick={formatSchema}
             disabled={!schema || !!validationError}
-            className="px-2 py-1 text-xs bg-tokyo-bg hover:bg-tokyo-dark3 text-tokyo-comment rounded transition-colors disabled:opacity-50"
+            className="px-2 py-1 text-xs bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 rounded transition-colors disabled:opacity-50"
           >
             Format
           </button>
-          <div className="flex items-center gap-1 bg-tokyo-bg rounded">
+          <div className="flex items-center gap-1 bg-white border border-gray-300 rounded">
             <button
               onClick={() => setViewMode('form')}
               className={`px-2 py-1 text-xs rounded transition-colors ${
                 viewMode === 'form'
-                  ? 'bg-tokyo-blue text-tokyo-bg'
-                  : 'text-tokyo-comment hover:text-tokyo-blue'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
               title="Form Builder"
             >
@@ -149,8 +149,8 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
               onClick={() => setViewMode('visual')}
               className={`px-2 py-1 text-xs rounded transition-colors ${
                 viewMode === 'visual'
-                  ? 'bg-tokyo-blue text-tokyo-bg'
-                  : 'text-tokyo-comment hover:text-tokyo-blue'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
               title="Visual Preview"
             >
@@ -160,8 +160,8 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
               onClick={() => setViewMode('code')}
               className={`px-2 py-1 text-xs rounded transition-colors ${
                 viewMode === 'code'
-                  ? 'bg-tokyo-blue text-tokyo-bg'
-                  : 'text-tokyo-comment hover:text-tokyo-blue'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
               title="Code Editor"
             >
@@ -173,15 +173,15 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
 
       {/* Validation error display */}
       {validationError && (
-        <div className="p-2 bg-tokyo-red bg-opacity-10 border-b border-tokyo-red flex-shrink-0">
-          <div className="text-xs text-tokyo-red font-mono">{validationError}</div>
+        <div className="p-2 bg-red-50 border-b border-red-200 flex-shrink-0">
+          <div className="text-xs text-red-700 font-mono">{validationError}</div>
         </div>
       )}
 
       {/* Content area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {viewMode === 'form' ? (
-          <div className="p-4 bg-tokyo-bg">
+          <div className="p-4 bg-white">
             <SchemaFormBuilder
               schemaObject={schemaObject}
               onChange={(newSchema) => onChange(JSON.stringify(newSchema, null, 2))}
@@ -208,16 +208,16 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
             }}
           />
         ) : (
-          <div className="h-full overflow-auto p-4 bg-tokyo-bg">
+          <div className="h-full overflow-auto p-4 bg-white">
             {schemaObject ? (
               <div>
-                <div className="text-tokyo-comment text-xs mb-3 font-mono">
+                <div className="text-gray-500 text-xs mb-3 font-mono">
                   Visual schema representation
                 </div>
                 {renderSchemaPreview(schemaObject)}
               </div>
             ) : (
-              <div className="text-tokyo-comment text-sm text-center mt-8">
+              <div className="text-gray-500 text-sm text-center mt-8">
                 {schema ? 'Invalid JSON schema' : 'No schema defined'}
               </div>
             )}
@@ -226,8 +226,8 @@ export const JsonSchemaEditor: React.FC<JsonSchemaEditorProps> = ({
       </div>
 
       {/* Helper text */}
-      <div className="p-2 border-t border-tokyo-dark3 bg-tokyo-dark1 flex-shrink-0">
-        <p className="text-tokyo-comment text-xs font-mono">
+      <div className="p-2 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+        <p className="text-gray-600 text-xs">
           {viewMode === 'form'
             ? '📝 Build schema using form controls'
             : viewMode === 'code'
@@ -316,7 +316,7 @@ const SchemaFormBuilder: React.FC<SchemaFormBuilderProps> = ({ schemaObject, onC
             };
             onChange(initialSchema);
           }}
-          className="px-4 py-2 bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg rounded font-mono text-sm transition-colors"
+          className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded font-medium text-sm transition-colors shadow-sm"
         >
           + Create New Schema
         </button>
@@ -327,10 +327,10 @@ const SchemaFormBuilder: React.FC<SchemaFormBuilderProps> = ({ schemaObject, onC
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-mono text-tokyo-blue">Schema Properties</h4>
+        <h4 className="text-sm font-semibold text-gray-900">Schema Properties</h4>
         <button
           onClick={addProperty}
-          className="px-3 py-1 bg-tokyo-green hover:bg-green-600 text-tokyo-bg rounded font-mono text-xs transition-colors"
+          className="px-3 py-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded font-medium text-xs transition-colors shadow-sm"
         >
           + Add Field
         </button>
@@ -349,7 +349,7 @@ const SchemaFormBuilder: React.FC<SchemaFormBuilderProps> = ({ schemaObject, onC
       ))}
 
       {Object.keys(properties).length === 0 && (
-        <div className="text-tokyo-comment text-sm text-center py-8">
+        <div className="text-gray-500 text-sm text-center py-8">
           No properties defined. Click "+ Add Field" to start building your schema.
         </div>
       )}
@@ -449,7 +449,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
 
   return (
-    <div className="bg-tokyo-dark1 rounded border border-tokyo-dark3 p-3 space-y-2">
+    <div className="bg-white rounded border border-gray-200 p-3 space-y-2 shadow-sm">
       <div className="flex items-start gap-2">
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-2">
@@ -458,13 +458,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               value={propName}
               onChange={(e) => setPropName(e.target.value)}
               onBlur={handleUpdate}
-              className="flex-1 px-2 py-1 bg-tokyo-bg border border-tokyo-dark3 rounded text-tokyo-blue font-mono text-sm focus:outline-none focus:border-tokyo-blue"
+              className="flex-1 px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 font-mono text-sm focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
               placeholder="field_name"
             />
             <select
               value={propType}
               onChange={(e) => handleTypeChange(e.target.value)}
-              className="px-2 py-1 bg-tokyo-bg border border-tokyo-dark3 rounded text-tokyo-green font-mono text-sm focus:outline-none focus:border-tokyo-blue"
+              className="px-2 py-1 bg-white border border-gray-300 rounded text-gray-700 font-mono text-sm focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
             >
               <option value="string">string</option>
               <option value="number">number</option>
@@ -475,7 +475,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             {(propType === 'object' || propType === 'array') && (
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="px-2 py-1 bg-tokyo-bg hover:bg-tokyo-dark3 border border-tokyo-dark3 rounded text-tokyo-comment text-xs transition-colors"
+                className="px-2 py-1 bg-white hover:bg-gray-50 border border-gray-300 rounded text-gray-600 text-xs transition-colors"
               >
                 {isExpanded ? '▼' : '▶'}
               </button>
@@ -486,10 +486,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             value={propDesc}
             onChange={(e) => setPropDesc(e.target.value)}
             onBlur={handleUpdate}
-            className="w-full px-2 py-1 bg-tokyo-bg border border-tokyo-dark3 rounded text-tokyo-comment text-xs focus:outline-none focus:border-tokyo-blue"
+            className="w-full px-2 py-1 bg-white border border-gray-300 rounded text-gray-600 text-xs focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
             placeholder="Description (optional)"
           />
-          <label className="flex items-center gap-2 text-xs text-tokyo-comment cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
             <input
               type="checkbox"
               checked={isRequired}
@@ -501,8 +501,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
           {/* Array item type selector */}
           {propType === 'array' && isExpanded && (
-            <div className="pl-4 border-l-2 border-tokyo-purple space-y-2">
-              <div className="text-xs text-tokyo-purple font-mono">Array Items:</div>
+            <div className="pl-4 border-l-2 border-gray-300 space-y-2">
+              <div className="text-xs text-gray-700 font-mono">Array Items:</div>
               <select
                 value={arrayItemType}
                 onChange={(e) => {
@@ -515,7 +515,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     });
                   }, 0);
                 }}
-                className="px-2 py-1 bg-tokyo-bg border border-tokyo-dark3 rounded text-tokyo-orange font-mono text-xs focus:outline-none focus:border-tokyo-blue"
+                className="px-2 py-1 bg-white border border-gray-300 rounded text-gray-700 font-mono text-xs focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
               >
                 <option value="string">string</option>
                 <option value="number">number</option>
@@ -527,29 +527,29 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
           {/* Nested object properties */}
           {propType === 'object' && isExpanded && (
-            <div className="pl-4 border-l-2 border-tokyo-orange space-y-2">
+            <div className="pl-4 border-l-2 border-gray-300 space-y-2">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-tokyo-orange font-mono">Object Properties:</div>
+                <div className="text-xs text-gray-700 font-mono">Object Properties:</div>
                 <button
                   onClick={addNestedProperty}
-                  className="px-2 py-0.5 bg-tokyo-orange hover:bg-orange-600 text-tokyo-bg rounded font-mono text-xs transition-colors"
+                  className="px-2 py-0.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded font-medium text-xs transition-colors shadow-sm"
                 >
                   + Add
                 </button>
               </div>
               {Object.entries(nestedProps).map(([nestedName, nestedConfig]: [string, any]) => (
-                <div key={nestedName} className="bg-tokyo-dark2 border border-tokyo-dark3 rounded p-2 space-y-1">
+                <div key={nestedName} className="bg-gray-50 border border-gray-200 rounded p-2 space-y-1">
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
                       defaultValue={nestedName}
                       onBlur={(e) => updateNestedProperty(nestedName, e.target.value, nestedConfig)}
-                      className="flex-1 px-2 py-1 bg-tokyo-bg border border-tokyo-blue7 rounded text-tokyo-cyan font-mono text-xs focus:outline-none focus:border-tokyo-orange"
+                      className="flex-1 px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 font-mono text-xs focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                     />
                     <select
                       value={nestedConfig.type}
                       onChange={(e) => updateNestedProperty(nestedName, nestedName, { ...nestedConfig, type: e.target.value })}
-                      className="px-2 py-1 bg-tokyo-bg border border-tokyo-blue7 rounded text-tokyo-green font-mono text-xs focus:outline-none focus:border-tokyo-orange"
+                      className="px-2 py-1 bg-white border border-gray-300 rounded text-gray-700 font-mono text-xs focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                     >
                       <option value="string">string</option>
                       <option value="number">number</option>
@@ -558,7 +558,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     </select>
                     <button
                       onClick={() => removeNestedProperty(nestedName)}
-                      className="px-1.5 py-0.5 bg-tokyo-red hover:bg-red-600 text-tokyo-bg rounded text-xs"
+                      className="px-1.5 py-0.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded text-xs transition-colors"
                     >
                       ×
                     </button>
@@ -566,7 +566,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 </div>
               ))}
               {Object.keys(nestedProps).length === 0 && (
-                <div className="text-xs text-tokyo-comment text-center py-2">
+                <div className="text-xs text-gray-500 text-center py-2">
                   No nested properties
                 </div>
               )}
@@ -575,7 +575,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         </div>
         <button
           onClick={onRemove}
-          className="px-2 py-1 bg-tokyo-red hover:bg-red-600 text-tokyo-bg rounded text-xs transition-colors"
+          className="px-2 py-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded text-xs transition-colors shadow-sm"
         >
           Remove
         </button>

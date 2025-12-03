@@ -4,7 +4,7 @@ import { useNodesState, useEdgesState, type NodeTypes } from '@xyflow/react';
 import { AgentsSidebar } from './AgentsSidebar';
 import { SimplifiedGraphCanvas } from './SimplifiedGraphCanvas';
 import { AgentDetailsPanel } from './AgentDetailsPanel';
-import { Settings, Play, BarChart2 } from 'lucide-react';
+import { Settings, Play, BarChart2, HelpCircle, Bot, Server, Wrench, Layers } from 'lucide-react';
 import { agentsApi } from '../../../api/station';
 import { RunAgentModal } from '../../modals/RunAgentModal';
 import { RunDetailsModal } from '../../modals/RunDetailsModal';
@@ -15,6 +15,7 @@ import { ExecutionOverlayNode } from '../../nodes/ExecutionOverlayNode';
 import { MCPNode, ToolNode } from '../../nodes/MCPNodes';
 import { ExecutionFlowNode } from '../../nodes/ExecutionFlowNode';
 import { EnvironmentContext } from '../../../contexts/EnvironmentContext';
+import { HelpModal } from '../../ui/HelpModal';
 
 const nodeTypes: NodeTypes = {
   agent: ExecutionOverlayNode,
@@ -46,6 +47,7 @@ export const AgentsLayout: React.FC = () => {
   const [mcpModalId, setMcpModalId] = useState<number | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleAgent, setScheduleAgent] = useState<any>(null);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   // Determine current environment from URL param
   useEffect(() => {
@@ -162,13 +164,13 @@ export const AgentsLayout: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-[#fafaf8]">
       {/* Top Navigation Bar - Minimal design */}
-      <div className="h-14 border-b border-gray-200/60 flex items-center justify-between px-6 bg-white/80 backdrop-blur-sm flex-shrink-0">
+      <div className="h-14 border-b border-gray-200 flex items-center justify-between px-6 bg-white flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-medium text-gray-900">Agents</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Agents</h1>
           {selectedAgent && (
             <>
               <div className="h-4 w-px bg-gray-300"></div>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm font-medium text-gray-700">
                 {selectedAgent.name}
               </span>
             </>
@@ -179,7 +181,7 @@ export const AgentsLayout: React.FC = () => {
           <select
             value={env || ''}
             onChange={(e) => handleEnvironmentChange(e.target.value)}
-            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 transition-colors"
+            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-900 text-sm font-medium rounded-md hover:border-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors shadow-sm"
           >
             {environments.map((environment: any) => (
               <option key={environment.id} value={environment.name.toLowerCase()}>
@@ -190,25 +192,33 @@ export const AgentsLayout: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
+            title="Learn about agents"
+          >
+            <HelpCircle className="h-4 w-4" />
+            <span className="hidden sm:inline">Help</span>
+          </button>
           {selectedAgent && (
             <>
-              <button 
+              <button
                 onClick={() => navigate(`/runs/${env}`)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:scale-105 rounded-lg transition-all duration-200 active:scale-95"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
               >
                 <BarChart2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Runs</span>
               </button>
-              <button 
+              <button
                 onClick={() => navigate(`/agent-editor/${selectedAgent.id}`)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:scale-105 rounded-lg transition-all duration-200 active:scale-95"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
               >
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">Configure</span>
               </button>
-              <button 
+              <button
                 onClick={() => handleRunAgent(selectedAgent)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 rounded-lg transition-all duration-200 active:scale-95 shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-all shadow-sm hover:shadow"
               >
                 <Play className="h-4 w-4" />
                 Run Agent
@@ -286,6 +296,151 @@ export const AgentsLayout: React.FC = () => {
           agent={scheduleAgent}
         />
       )}
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        title="Understanding Agents"
+        pageDescription={`This page displays all agents in the ${currentEnvironment?.name || 'selected'} environment. Agents are AI assistants that can perform tasks using LLMs and MCP tools. You can select an agent to view its configuration, tools, and execution history. Use the environment selector to switch between dev, staging, and production workspaces.`}
+      >
+        <div className="space-y-6">
+          {/* Architecture Diagram */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Agent Architecture</h3>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center justify-between gap-8">
+                {/* Agent */}
+                <div className="flex-1">
+                  <div className="bg-blue-600 rounded-lg p-4 text-center">
+                    <Bot className="h-8 w-8 text-white mx-auto mb-2" />
+                    <div className="font-mono text-sm text-white">Agent</div>
+                    <div className="text-xs text-blue-200 mt-1">LLM + Instructions</div>
+                  </div>
+                </div>
+
+                {/* Arrow */}
+                <div className="flex flex-col items-center">
+                  <div className="text-gray-500 text-xs mb-1">calls</div>
+                  <div className="w-16 h-px bg-gray-300"></div>
+                  <div className="text-gray-500 text-xs mt-1">tools</div>
+                </div>
+
+                {/* MCP Server */}
+                <div className="flex-1">
+                  <div className="bg-purple-600 rounded-lg p-4 text-center">
+                    <Server className="h-8 w-8 text-white mx-auto mb-2" />
+                    <div className="font-mono text-sm text-white">MCP Server</div>
+                    <div className="text-xs text-purple-200 mt-1">filesystem</div>
+                  </div>
+                </div>
+
+                {/* Arrow */}
+                <div className="flex flex-col items-center">
+                  <div className="text-gray-500 text-xs mb-1">provides</div>
+                  <div className="w-16 h-px bg-gray-300"></div>
+                </div>
+
+                {/* Tools */}
+                <div className="flex-1">
+                  <div className="bg-white border border-gray-300 rounded-lg p-4">
+                    <Wrench className="h-8 w-8 text-[#0084FF] mx-auto mb-2" />
+                    <div className="font-mono text-xs text-gray-700 space-y-1">
+                      <div>→ read_file</div>
+                      <div>→ write_file</div>
+                      <div>→ list_directory</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Execution Flow */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Execution Flow</h3>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-6 space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-mono text-sm">1</div>
+                <div className="flex-1">
+                  <div className="font-mono text-sm text-gray-900">Agent receives task</div>
+                  <div className="text-xs text-gray-700 mt-1 font-mono bg-white border border-gray-300 p-2 rounded">"Analyze files in /src directory"</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white font-mono text-sm">2</div>
+                <div className="flex-1">
+                  <div className="font-mono text-sm text-gray-900">Agent decides which tools to call</div>
+                  <div className="text-xs text-gray-700 mt-1 font-mono bg-white border border-gray-300 p-2 rounded">filesystem.list_directory("/src")</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-white font-mono text-sm">3</div>
+                <div className="flex-1">
+                  <div className="font-mono text-sm text-gray-900">MCP server executes securely</div>
+                  <div className="text-xs text-gray-700 mt-1 font-mono bg-white border border-gray-300 p-2 rounded">Returns: ["main.ts", "utils.ts", "types.ts"]</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-mono text-sm">4</div>
+                <div className="flex-1">
+                  <div className="font-mono text-sm text-gray-900">Agent continues until complete</div>
+                  <div className="text-xs text-gray-600 mt-1">Reads each file, analyzes code, returns summary</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Concepts */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Key Concepts</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bot className="h-5 w-5 text-[#0084FF]" />
+                  <div className="font-mono text-sm text-gray-900">Agents</div>
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  AI assistants with specific instructions, model configuration, and tool access. Isolated per environment.
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Server className="h-5 w-5 text-[#0084FF]" />
+                  <div className="font-mono text-sm text-gray-900">MCP Servers</div>
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  Protocol-compliant servers that expose tools. Handle auth, execution, and security.
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Wrench className="h-5 w-5 text-[#0084FF]" />
+                  <div className="font-mono text-sm text-gray-900">Tools</div>
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  Individual capabilities like read_file, sql_query, http_request. Called by agents during execution.
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Layers className="h-5 w-5 text-[#0084FF]" />
+                  <div className="font-mono text-sm text-gray-900">Environments</div>
+                </div>
+                <div className="text-xs text-gray-600 leading-relaxed">
+                  Isolated workspaces (dev/staging/prod) with their own agents, servers, and configurations.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </HelpModal>
     </div>
   );
 };

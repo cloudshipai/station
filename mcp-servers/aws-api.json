@@ -11,7 +11,12 @@
         "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}"
       },
       "metadata": {
-        "category": "Cloud & Infrastructure"
+        "category": "Cloud & Infrastructure",
+        "logoUrl": "/logos/aws.png",
+        "githubUrl": "https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server",
+        "toolSourceUrl": "https://aws.amazon.com",
+        "docsUrl": "https://docs.aws.amazon.com",
+        "requiresApiKey": true
       }
     }
   }

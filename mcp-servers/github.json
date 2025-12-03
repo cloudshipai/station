@@ -11,7 +11,12 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "{{ .GITHUB_PERSONAL_ACCESS_TOKEN }}"
       },
       "metadata": {
-        "category": "Development"
+        "category": "Development",
+        "logoUrl": "/logos/github.png",
+        "githubUrl": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/github",
+        "toolSourceUrl": "https://github.com",
+        "docsUrl": "https://modelcontextprotocol.io/docs/tools/github",
+        "requiresApiKey": true
       }
     }
   }

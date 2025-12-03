@@ -106,8 +106,14 @@ export const CopyEnvironmentModal: React.FC<CopyEnvironmentModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
-      <div className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-2xl w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden flex flex-col">
+    <div 
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]"
+      onClick={handleClose}
+    >
+      <div 
+        className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-2xl w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white rounded-t-lg">
           <div className="flex items-center gap-2">

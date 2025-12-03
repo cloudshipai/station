@@ -6,6 +6,11 @@
       "type": "http",
       "metadata": {
         "category": "Cloud & Infrastructure",
+        "logoUrl": "/logos/aws.png",
+        "githubUrl": "https://github.com/awslabs",
+        "toolSourceUrl": "https://aws.amazon.com",
+        "docsUrl": "https://docs.aws.amazon.com",
+        "requiresApiKey": false,
         "notes": "Remote MCP server - requires MCP client support for HTTP transport"
       }
     }

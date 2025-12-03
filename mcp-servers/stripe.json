@@ -12,7 +12,12 @@
         "STRIPE_SECRET_KEY": "{{ .STRIPE_SECRET_KEY }}"
       },
       "metadata": {
-        "category": "Financial"
+        "category": "Financial",
+        "logoUrl": "/logos/stripe.svg",
+        "githubUrl": "https://github.com/stripe/agent-toolkit",
+        "toolSourceUrl": "https://stripe.com",
+        "docsUrl": "https://docs.stripe.com/mcp",
+        "requiresApiKey": true
       }
     }
   }

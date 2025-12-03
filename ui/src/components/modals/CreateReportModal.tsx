@@ -256,8 +256,14 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-white border border-gray-200 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+    <div 
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white border border-gray-200 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between z-10">
           <div>
@@ -601,7 +607,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                   (step === 1 && !canProceedToStep2()) ||
                   (step === 2 && !canProceedToStep3())
                 }
-                className="flex items-center gap-2 px-4 py-2 bg-station-blue text-white hover:bg-blue-600 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next: {step === 1 ? 'Criteria' : 'Review'}
                 <ArrowRight className="h-4 w-4" />
@@ -610,7 +616,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
               <button
                 onClick={handleCreate}
                 disabled={loading}
-                className="px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Creating...' : 'Create & Generate Report'}
               </button>

@@ -9,7 +9,11 @@
         "/workspace"
       ],
       "metadata": {
-        "category": "Development"
+        "category": "Development",
+        "logoUrl": "",
+        "githubUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+        "toolSourceUrl": "https://github.com/modelcontextprotocol/servers",
+        "docsUrl": "https://modelcontextprotocol.io/docs/tools/filesystem"
       }
     }
   }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"station/internal/api"
 	"station/internal/config"
 	"station/internal/db"
@@ -93,9 +94,9 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize Jaeger if enabled (default: FALSE for serve, use --jaeger flag to enable)
+	// Initialize Jaeger if enabled (default: TRUE on Mac/Linux, FALSE on Windows)
 	var jaegerSvc *services.JaegerService
-	enableJaeger := false // Default to disabled for serve mode
+	enableJaeger := runtime.GOOS == "darwin" || runtime.GOOS == "linux" // Default enabled on Mac/Linux
 
 	// Check if explicitly enabled via flag
 	if viper.IsSet("jaeger") {

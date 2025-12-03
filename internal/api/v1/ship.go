@@ -7,16 +7,34 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// checkShipInstalled checks if Ship CLI is installed
+// checkShipInstalled checks if Ship CLI is installed and returns version if available
 func (h *APIHandlers) checkShipInstalled(c *gin.Context) {
-	// Try to run 'ship help' to check if Ship is installed (Ship doesn't support --version)
+	// Try to run 'ship help' to check if Ship is installed
 	cmd := exec.Command("ship", "help")
 	err := cmd.Run()
 
 	installed := err == nil
+	version := ""
+
+	if installed {
+		// Try to get version with 'ship version' command
+		versionCmd := exec.Command("ship", "version")
+		output, err := versionCmd.CombinedOutput()
+		if err == nil {
+			version = string(output)
+		} else {
+			// If 'ship version' doesn't work, try --version
+			versionCmd = exec.Command("ship", "--version")
+			output, err = versionCmd.CombinedOutput()
+			if err == nil {
+				version = string(output)
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"installed": installed,
+		"version":   version,
 	})
 }
 

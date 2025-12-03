@@ -11,7 +11,12 @@
         "GRAFANA_PASSWORD": "{{ .GRAFANA_PASSWORD }}"
       },
       "metadata": {
-        "category": "Monitoring"
+        "category": "Monitoring",
+        "logoUrl": "/logos/grafana.svg",
+        "githubUrl": "https://github.com/grafana/mcp-grafana",
+        "toolSourceUrl": "https://grafana.com",
+        "docsUrl": "https://grafana.com/docs/",
+        "requiresApiKey": true
       }
     }
   }

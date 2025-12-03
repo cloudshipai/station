@@ -86,10 +86,136 @@ const TimelineView: React.FC<TimelineViewProps> = ({ runId }) => {
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <div className="text-red-600 mb-2">{error}</div>
-        <div className="text-gray-500 text-sm">
-          Make sure Jaeger is running at http://localhost:16686
+      <div className="max-w-4xl mx-auto py-6">
+        {/* Header */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Execution Trace</h2>
+          <p className="text-gray-600">Detailed performance insights and debugging information</p>
+        </div>
+
+        {/* Warning Banner */}
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-amber-800 font-medium">Jaeger tracing is not available</p>
+              <p className="text-sm text-amber-700 mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Benefits */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Why Enable Tracing?</h3>
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Visual Timeline</p>
+                  <p className="text-sm text-gray-600">Interactive graph showing execution flow and timing</p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Performance Analysis</p>
+                  <p className="text-sm text-gray-600">Identify bottlenecks and optimize execution speed</p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Tool Call Inspection</p>
+                  <p className="text-sm text-gray-600">View parameters and responses for every tool call</p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Debug Information</p>
+                  <p className="text-sm text-gray-600">Trace errors and failures to exact operations</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Installation */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Installation</h3>
+
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Step 1: Setup volume</span>
+                  <span className="text-xs text-gray-500">~10 sec</span>
+                </div>
+                <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                  <code className="text-xs text-green-400 font-mono block">docker volume create jaeger-badger-data</code>
+                  <code className="text-xs text-green-400 font-mono block mt-1">docker run --rm -v jaeger-badger-data:/badger busybox chown -R 10001:10001 /badger</code>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Step 2: Start Jaeger</span>
+                  <span className="text-xs text-gray-500">~30 sec</span>
+                </div>
+                <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                  <code className="text-xs text-green-400 font-mono block">docker run -d --name station-jaeger \</code>
+                  <code className="text-xs text-gray-400 font-mono block ml-2">-e COLLECTOR_OTLP_ENABLED=true \</code>
+                  <code className="text-xs text-gray-400 font-mono block ml-2">-e SPAN_STORAGE_TYPE=badger \</code>
+                  <code className="text-xs text-gray-400 font-mono block ml-2">-e BADGER_EPHEMERAL=false \</code>
+                  <code className="text-xs text-gray-400 font-mono block ml-2">-v jaeger-badger-data:/badger \</code>
+                  <code className="text-xs text-gray-400 font-mono block ml-2">-p 16686:16686 -p 4318:4318 \</code>
+                  <code className="text-xs text-gray-400 font-mono block ml-2">jaegertracing/all-in-one:latest</code>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Step 3: Verify</span>
+                </div>
+                <a
+                  href="http://localhost:16686"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Open Jaeger UI
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-xs text-gray-600">
+                After Jaeger is running, <button onClick={() => window.location.reload()} className="text-blue-600 hover:text-blue-700 font-medium underline">refresh this page</button> to see the execution trace.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -303,8 +429,14 @@ export const RunDetailsModal: React.FC<RunDetailsModalProps> = ({ runId, isOpen,
   const toolCalls = runDetails?.tool_calls || [];
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
+    <div 
+      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">

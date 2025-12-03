@@ -2,9 +2,12 @@ package v1
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"station/internal/services"
@@ -33,6 +36,7 @@ func (h *APIHandlers) registerMCPManagementRoutes(envGroup *gin.RouterGroup) {
 func (h *APIHandlers) registerMCPDirectoryRoutes(router *gin.RouterGroup) {
 	router.GET("/directory/templates", h.listMCPDirectoryTemplates)
 	router.POST("/directory/templates/:template_id/install", h.installMCPDirectoryTemplate)
+	router.GET("/directory/proxy-image", h.proxyImage)
 }
 
 // listMCPServersForEnvironment lists all MCP servers for an environment
@@ -517,4 +521,69 @@ func (h *APIHandlers) installMCPDirectoryTemplate(c *gin.Context) {
 		"message": result.Message,
 		"result":  result,
 	})
+}
+
+// proxyImage proxies an image URL and serves it with CORS headers
+func (h *APIHandlers) proxyImage(c *gin.Context) {
+	imageURL := c.Query("url")
+	if imageURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing url parameter"})
+		return
+	}
+
+	// Validate URL
+	parsedURL, err := url.Parse(imageURL)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid URL"})
+		return
+	}
+
+	// Only allow http/https URLs
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only http/https URLs are allowed"})
+		return
+	}
+
+	// Fetch the image
+	resp, err := http.Get(imageURL)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch image"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Upstream returned status %d", resp.StatusCode)})
+		return
+	}
+
+	// Determine content type from response or URL
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		// Infer from URL extension
+		if strings.HasSuffix(imageURL, ".png") {
+			contentType = "image/png"
+		} else if strings.HasSuffix(imageURL, ".jpg") || strings.HasSuffix(imageURL, ".jpeg") {
+			contentType = "image/jpeg"
+		} else if strings.HasSuffix(imageURL, ".svg") {
+			contentType = "image/svg+xml"
+		} else if strings.HasSuffix(imageURL, ".gif") {
+			contentType = "image/gif"
+		} else {
+			contentType = "image/png" // Default
+		}
+	}
+
+	// Set CORS headers
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Allow-Methods", "GET")
+	c.Header("Content-Type", contentType)
+	c.Header("Cache-Control", "public, max-age=86400") // Cache for 24 hours
+
+	// Copy image data to response
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		// Response may have already been sent, just log
+		fmt.Printf("Error copying image data: %v\n", err)
+	}
 }

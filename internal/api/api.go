@@ -239,6 +239,43 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 		c.Data(http.StatusOK, "image/svg+xml", content)
 	})
 
+	// Handle logos directory
+	router.GET("/logos/*filepath", func(c *gin.Context) {
+		filepath := c.Param("filepath")
+		if len(filepath) > 0 && filepath[0] == '/' {
+			filepath = filepath[1:]
+		}
+		actualPath := "logos/" + filepath
+
+		file, err := uiFS.Open(actualPath)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Logo not found"})
+			return
+		}
+		defer func() { _ = file.Close() }()
+
+		content, err := io.ReadAll(file)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read logo"})
+			return
+		}
+
+		// Set appropriate content type based on file extension
+		if strings.HasSuffix(actualPath, ".svg") {
+			c.Header("Content-Type", "image/svg+xml")
+		} else if strings.HasSuffix(actualPath, ".png") {
+			c.Header("Content-Type", "image/png")
+		} else if strings.HasSuffix(actualPath, ".jpg") || strings.HasSuffix(actualPath, ".jpeg") {
+			c.Header("Content-Type", "image/jpeg")
+		} else if strings.HasSuffix(actualPath, ".gif") {
+			c.Header("Content-Type", "image/gif")
+		} else {
+			c.Header("Content-Type", "application/octet-stream")
+		}
+
+		c.Data(http.StatusOK, c.GetHeader("Content-Type"), content)
+	})
+
 	// Serve index.html for all other routes (SPA catch-all)
 	router.NoRoute(func(c *gin.Context) {
 		// Skip API routes

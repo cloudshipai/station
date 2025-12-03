@@ -8,7 +8,11 @@
         "@modelcontextprotocol/server-fetch"
       ],
       "metadata": {
-        "category": "Integration"
+        "category": "Integration",
+        "logoUrl": "",
+        "githubUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+        "toolSourceUrl": "https://github.com/modelcontextprotocol/servers",
+        "docsUrl": "https://modelcontextprotocol.io/docs/tools/fetch"
       }
     }
   }

@@ -42,8 +42,14 @@ export const MCPServerDetailsModal: React.FC<MCPServerDetailsModalProps> = ({ se
   if (!isOpen || !serverId) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300">
+    <div 
+      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white border border-gray-200 rounded-xl shadow-lg w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <Database className="h-6 w-6 text-primary" />

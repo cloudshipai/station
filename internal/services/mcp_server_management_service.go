@@ -347,6 +347,11 @@ type MCPDirectoryTemplate struct {
 	Env                 map[string]string `json:"env,omitempty"`
 	OpenAPISpec         string            `json:"openapiSpec,omitempty"`         // Name of the OpenAPI spec file
 	RequiresOpenAPISpec bool              `json:"requiresOpenAPISpec,omitempty"` // Whether this template requires an OpenAPI spec
+	LogoURL             string            `json:"logoUrl,omitempty"`             // Logo image URL
+	GithubURL           string            `json:"githubUrl,omitempty"`           // GitHub implementation URL
+	ToolSourceURL       string            `json:"toolSourceUrl,omitempty"`       // Original tool source URL
+	DocsURL             string            `json:"docsUrl,omitempty"`             // Documentation URL
+	RequiresAPIKey      bool              `json:"requiresApiKey,omitempty"`      // Whether API key is required
 }
 
 // GetMCPDirectoryTemplates reads all MCP server templates from the mcp-servers/ directory
@@ -411,6 +416,27 @@ func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryT
 				}
 			}
 
+			// Extract metadata fields from serverConfig.Metadata
+			var logoURL, githubURL, toolSourceURL, docsURL string
+			var requiresAPIKey bool
+			if serverConfig.Metadata != nil {
+				if val, ok := serverConfig.Metadata["logoUrl"].(string); ok {
+					logoURL = val
+				}
+				if val, ok := serverConfig.Metadata["githubUrl"].(string); ok {
+					githubURL = val
+				}
+				if val, ok := serverConfig.Metadata["toolSourceUrl"].(string); ok {
+					toolSourceURL = val
+				}
+				if val, ok := serverConfig.Metadata["docsUrl"].(string); ok {
+					docsURL = val
+				}
+				if val, ok := serverConfig.Metadata["requiresApiKey"].(bool); ok {
+					requiresAPIKey = val
+				}
+			}
+
 			template := MCPDirectoryTemplate{
 				ID:                  serverName,
 				Name:                serverName,
@@ -421,6 +447,11 @@ func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryT
 				Env:                 serverConfig.Env,
 				OpenAPISpec:         openapiSpec,
 				RequiresOpenAPISpec: requiresOpenAPISpec,
+				LogoURL:             logoURL,
+				GithubURL:           githubURL,
+				ToolSourceURL:       toolSourceURL,
+				DocsURL:             docsURL,
+				RequiresAPIKey:      requiresAPIKey,
 			}
 
 			templates = append(templates, template)

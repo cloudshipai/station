@@ -17,9 +17,10 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Bot, Server, Layers, MessageSquare, Users, Package, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket, Copy, BookOpen } from 'lucide-react';
+import { Bot, Server, Layers, MessageSquare, Users, Package, CircleCheck, Globe, Database, Edit, Eye, ArrowLeft, Save, X, Play, Plus, Archive, Trash2, Settings, Link, Download, FileText, AlertTriangle, ChevronDown, ChevronRight, Rocket, Copy, BookOpen, Terminal, GitBranch, HelpCircle, Wrench, Shield, Sparkles, Zap, Target, Cloud } from 'lucide-react';
 import yaml from 'js-yaml';
 import { MCPDirectoryPage } from './components/pages/MCPDirectoryPage';
+import { HelpModal } from './components/ui/HelpModal';
 import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
 import { ReportsPage } from './components/pages/ReportsPage';
@@ -45,8 +46,15 @@ import { AgentsCanvas as AgentsCanvasComponent } from './components/agents/Agent
 import { AgentsLayout } from './components/agents/v2/AgentsLayout';
 import { RunDetailsModal } from './components/modals/RunDetailsModal';
 import type { AgentRunWithDetails } from './types/station';
+import { Toast, useToast } from './components/ui/Toast';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
 
 import { EnvironmentContext, EnvironmentProvider } from './contexts/EnvironmentContext';
+
+interface TocItem {
+  id: string;
+  label: string;
+}
 
 const queryClient = new QueryClient();
 
@@ -181,11 +189,11 @@ const agentPageNodeTypes = {
 
 // Station Banner Component
 const StationBanner = () => (
-  <div className="flex items-center justify-center py-6">
-    <img 
-      src="/station-logo.png" 
-      alt="Station Logo" 
-      className="w-24 h-24"
+  <div className="flex items-center justify-center py-4">
+    <img
+      src="/station-logo.png"
+      alt="Station Logo"
+      className="h-36 w-auto object-contain"
     />
   </div>
 );
@@ -298,27 +306,27 @@ const Layout = ({ children }: any) => {
   return (
     <div className="flex h-screen bg-white">
       {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+      <div className="w-52 bg-white border-r border-gray-200 flex flex-col">
         {/* Header */}
         <div className="border-b border-gray-200">
           <StationBanner />
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 bg-white mt-4">
+        <nav className="flex-1 p-3 bg-white mt-3">
           <ul className="space-y-1">
             {sidebarItems.map((item) => (
               <li key={item.id}>
                 <button
                   onClick={() => navigate(item.path)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                     currentPage === item.id
                       ? 'bg-blue-50 text-station-blue font-medium'
                       : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{item.label}</span>
                 </button>
               </li>
             ))}
@@ -326,7 +334,7 @@ const Layout = ({ children }: any) => {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200 bg-white">
+        <div className="p-3 border-t border-gray-200 bg-white">
           <CloudShipStatus />
         </div>
       </div>
@@ -895,6 +903,13 @@ const MCPServersPage = () => {
   const [openAPISpec, setOpenAPISpec] = useState('');
   const [activeTab, setActiveTab] = useState<'mcp' | 'openapi'>('mcp');
   const environmentContext = React.useContext(EnvironmentContext);
+  const { toast, showToast, hideToast } = useToast();
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    serverName: string;
+    serverId: number;
+  }>({ isOpen: false, serverName: '', serverId: 0 });
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   // Function to open MCP server details modal
   const openMCPServerModal = (serverId: number) => {
@@ -908,10 +923,16 @@ const MCPServersPage = () => {
   };
 
   // Function to delete MCP server
-  const handleDeleteMCPServer = async (serverId: number, serverName: string) => {
-    if (!confirm(`Are you sure you want to delete the MCP server "${serverName}"? This will remove it from both the database and any template files, and clean up associated records.`)) {
-      return;
-    }
+  const handleDeleteMCPServer = (serverId: number, serverName: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      serverName,
+      serverId
+    });
+  };
+
+  const confirmDeleteMCPServer = async () => {
+    const { serverId, serverName } = confirmDialog;
 
     try {
       // Call the individual server delete endpoint which handles both DB and template cleanup
@@ -922,13 +943,13 @@ const MCPServersPage = () => {
 
       // Show success message with details if available
       if (response.data?.template_deleted) {
-        alert(`MCP server "${serverName}" deleted successfully from both database and template files.`);
+        showToast(`MCP server "${serverName}" deleted successfully from both database and template files.`, 'success');
       } else {
-        alert(`MCP server "${serverName}" deleted successfully from database. ${response.data?.template_cleanup_note || ''}`);
+        showToast(`MCP server "${serverName}" deleted successfully from database. ${response.data?.template_cleanup_note || ''}`, 'success');
       }
     } catch (error) {
       console.error('Failed to delete MCP server:', error);
-      alert('Failed to delete MCP server. Check console for details.');
+      showToast('Failed to delete MCP server. Check console for details.', 'error');
     }
   };
 
@@ -1011,11 +1032,11 @@ const MCPServersPage = () => {
 
         setIsRawConfigModalOpen(true);
       } else {
-        alert('Failed to fetch raw config');
+        showToast('Failed to fetch raw config', 'error');
       }
     } catch (error) {
       console.error('Failed to fetch raw config:', error);
-      alert('Failed to fetch raw config. Check console for details.');
+      showToast('Failed to fetch raw config. Check console for details.', 'error');
     }
   };
 
@@ -1023,7 +1044,7 @@ const MCPServersPage = () => {
   const handleSaveRawConfig = async () => {
     try {
       if (!selectedServerId) {
-        alert('No server selected');
+        showToast('No server selected', 'error');
         return;
       }
 
@@ -1034,7 +1055,7 @@ const MCPServersPage = () => {
       try {
         JSON.parse(contentToSave);
       } catch (jsonError) {
-        alert('Invalid JSON format. Please check your configuration.');
+        showToast('Invalid JSON format. Please check your configuration.', 'error');
         return;
       }
 
@@ -1045,7 +1066,7 @@ const MCPServersPage = () => {
         const serverName = serverNameMatch ? serverNameMatch[1] : null;
 
         if (!serverName || !syncEnvironmentName) {
-          alert('Failed to determine server name or environment');
+          showToast('Failed to determine server name or environment', 'error');
           return;
         }
 
@@ -1062,7 +1083,7 @@ const MCPServersPage = () => {
           setIsRawConfigModalOpen(false);
           setIsSyncModalOpen(true);
         } else {
-          alert('Failed to save OpenAPI spec');
+          showToast('Failed to save OpenAPI spec', 'error');
         }
       } else {
         // Update regular MCP server config
@@ -1075,12 +1096,12 @@ const MCPServersPage = () => {
           setIsRawConfigModalOpen(false);
           setIsSyncModalOpen(true);
         } else {
-          alert('Failed to save server config');
+          showToast('Failed to save server config', 'error');
         }
       }
     } catch (error) {
       console.error('Failed to save config:', error);
-      alert('Failed to save config. Check console for details.');
+      showToast('Failed to save config. Check console for details.', 'error');
     }
   };
 
@@ -1143,7 +1164,15 @@ const MCPServersPage = () => {
     <div className="h-full flex flex-col bg-tokyo-bg">
       <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">MCP Servers</h1>
+          <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">
+            MCP Servers
+            {currentEnvironment && (
+              <>
+                <span className="text-tokyo-comment mx-2">in</span>
+                <span className="text-tokyo-fg">{currentEnvironment.name}</span>
+              </>
+            )}
+          </h1>
           {environments.length > 0 && currentEnvironment && (
             <select
               value={currentEnvironment.id || ''}
@@ -1161,6 +1190,14 @@ const MCPServersPage = () => {
             </select>
           )}
         </div>
+        <button
+          onClick={() => setIsHelpModalOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-tokyo-cyan bg-tokyo-bg hover:bg-tokyo-dark2 border border-tokyo-blue7 rounded-md transition-all"
+          title="Learn about MCP servers"
+        >
+          <HelpCircle className="h-4 w-4" />
+          <span className="hidden sm:inline">Help</span>
+        </button>
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         {filteredServers.length === 0 ? (
@@ -1180,28 +1217,28 @@ const MCPServersPage = () => {
           <div className="grid gap-4 max-h-full overflow-y-auto">
             {filteredServers.map((server) => (
               <div key={server.id} className="p-4 bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg shadow-tokyo relative group">
-                {/* Action buttons - appear on hover */}
-                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
+                {/* Action buttons - always visible */}
+                <div className="absolute top-3 right-3 flex gap-1.5">
                   <button
                     onClick={() => openMCPServerModal(server.id)}
-                    className="p-1 rounded bg-tokyo-cyan hover:bg-tokyo-blue text-tokyo-bg"
+                    className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all hover:shadow-md"
                     title="View server details"
                   >
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-4 w-4" strokeWidth={2} />
                   </button>
                   <button
                     onClick={() => handleViewRawServerConfig(server.id, server.name)}
-                    className="p-1 rounded bg-tokyo-orange hover:bg-orange-600 text-tokyo-bg"
+                    className="p-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white shadow-sm transition-all hover:shadow-md"
                     title="Edit server config"
                   >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="h-4 w-4" strokeWidth={2} />
                   </button>
                   <button
                     onClick={() => handleDeleteMCPServer(server.id, server.name)}
-                    className="p-1 rounded bg-tokyo-red hover:bg-red-600 text-tokyo-bg"
+                    className="p-2 rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-all hover:shadow-md"
                     title="Delete MCP server"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" strokeWidth={2} />
                   </button>
                 </div>
 
@@ -1259,6 +1296,218 @@ const MCPServersPage = () => {
         environment={syncEnvironmentName}
         onSyncComplete={() => fetchMCPServers()}
       />
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDeleteMCPServer}
+        title="Delete MCP Server"
+        message={`Are you sure you want to delete the MCP server "${confirmDialog.serverName}"? This will remove it from both the database and any template files, and clean up associated records.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      )}
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        title="Understanding MCP Servers"
+        pageDescription={`This page displays all MCP (Model Context Protocol) servers in the ${currentEnvironment?.name || 'selected'} environment. MCP servers provide tools that your agents can use - like filesystem operations, database queries, HTTP requests, or security scanning. You can add new servers, view their available tools, and manage which servers are accessible to agents in this environment.`}
+      >
+        <div className="space-y-6">
+          {/* MCP Protocol Diagram */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3">MCP Protocol Flow</h3>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+              <div className="grid grid-cols-3 gap-6">
+                {/* Filesystem Server */}
+                <div className="space-y-3">
+                  <div className="bg-purple-600 rounded-lg p-3 text-center">
+                    <Server className="h-6 w-6 text-white mx-auto mb-1" />
+                    <div className="font-mono text-xs text-white">filesystem</div>
+                  </div>
+                  <div className="bg-gray-100 rounded p-2 space-y-1">
+                    <div className="text-xs font-mono text-green-600">→ read_file</div>
+                    <div className="text-xs font-mono text-green-600">→ write_file</div>
+                    <div className="text-xs font-mono text-green-600">→ list_directory</div>
+                  </div>
+                </div>
+
+                {/* Database Server */}
+                <div className="space-y-3">
+                  <div className="bg-blue-600 rounded-lg p-3 text-center">
+                    <Database className="h-6 w-6 text-white mx-auto mb-1" />
+                    <div className="font-mono text-xs text-white">postgres</div>
+                  </div>
+                  <div className="bg-gray-100 rounded p-2 space-y-1">
+                    <div className="text-xs font-mono text-cyan-600">→ sql_query</div>
+                    <div className="text-xs font-mono text-cyan-600">→ list_tables</div>
+                    <div className="text-xs font-mono text-cyan-600">→ describe_table</div>
+                  </div>
+                </div>
+
+                {/* API Server */}
+                <div className="space-y-3">
+                  <div className="bg-orange-600 rounded-lg p-3 text-center">
+                    <Globe className="h-6 w-6 text-white mx-auto mb-1" />
+                    <div className="font-mono text-xs text-white">http</div>
+                  </div>
+                  <div className="bg-gray-100 rounded p-2 space-y-1">
+                    <div className="text-xs font-mono text-orange-600">→ http_get</div>
+                    <div className="text-xs font-mono text-orange-600">→ http_post</div>
+                    <div className="text-xs font-mono text-orange-600">→ http_put</div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-xs text-gray-600 text-center font-mono">
+                Each server exposes tools via Model Context Protocol
+              </div>
+            </div>
+          </div>
+
+          {/* Tool Lifecycle */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Tool Lifecycle</h3>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded bg-purple-600 flex items-center justify-center font-mono text-sm text-white">1</div>
+                  <div className="flex-1">
+                    <div className="font-mono text-sm text-gray-900">Server connects to Station</div>
+                    <div className="text-xs text-gray-600 mt-0.5 font-mono bg-white border border-gray-300 px-2 py-1 rounded inline-block">npx @modelcontextprotocol/server-filesystem</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded bg-blue-600 flex items-center justify-center font-mono text-sm text-white">2</div>
+                  <div className="flex-1">
+                    <div className="font-mono text-sm text-gray-900">Tools discovered & registered</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Station queries available tools via MCP protocol</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded bg-green-600 flex items-center justify-center font-mono text-sm text-white">3</div>
+                  <div className="flex-1">
+                    <div className="font-mono text-sm text-gray-900">Agent calls tool during execution</div>
+                    <div className="text-xs text-gray-600 mt-0.5 font-mono bg-white border border-gray-300 px-2 py-1 rounded inline-block">filesystem.read_file("/data/config.json")</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded bg-orange-600 flex items-center justify-center font-mono text-sm text-white">4</div>
+                  <div className="flex-1">
+                    <div className="font-mono text-sm text-gray-900">Server executes & returns result</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Secure execution with proper permissions</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Environment Isolation */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Environment Isolation</h3>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg p-4 border-l-4 border-blue-500">
+                  <div className="font-mono text-sm text-blue-600 mb-2">dev</div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Server className="h-3 w-3 text-gray-600" />
+                      <div className="text-xs text-gray-700 font-mono">filesystem</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Server className="h-3 w-3 text-gray-600" />
+                      <div className="text-xs text-gray-700 font-mono">postgres-dev</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 border-l-4 border-yellow-500">
+                  <div className="font-mono text-sm text-yellow-600 mb-2">staging</div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Server className="h-3 w-3 text-gray-600" />
+                      <div className="text-xs text-gray-700 font-mono">postgres-staging</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Server className="h-3 w-3 text-gray-600" />
+                      <div className="text-xs text-gray-700 font-mono">api-staging</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 border-l-4 border-red-500">
+                  <div className="font-mono text-sm text-red-600 mb-2">production</div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Server className="h-3 w-3 text-gray-600" />
+                      <div className="text-xs text-gray-700 font-mono">postgres-prod</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-3 w-3 text-red-600" />
+                      <div className="text-xs text-gray-700 font-mono">restricted access</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-xs text-gray-600 font-mono">
+                Agents in "dev" cannot access "production" servers
+              </div>
+            </div>
+          </div>
+
+          {/* Common Servers */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Common MCP Servers</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Server className="h-4 w-4 text-purple-600" />
+                  <div className="font-mono text-sm text-gray-900">@modelcontextprotocol/server-filesystem</div>
+                </div>
+                <div className="text-xs text-gray-600">File and directory operations</div>
+              </div>
+
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Database className="h-4 w-4 text-blue-600" />
+                  <div className="font-mono text-sm text-gray-900">@modelcontextprotocol/server-postgres</div>
+                </div>
+                <div className="text-xs text-gray-600">SQL database queries</div>
+              </div>
+
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Globe className="h-4 w-4 text-orange-600" />
+                  <div className="font-mono text-sm text-gray-900">@modelcontextprotocol/server-fetch</div>
+                </div>
+                <div className="text-xs text-gray-600">HTTP requests and APIs</div>
+              </div>
+
+              <div className="bg-white rounded border border-gray-200 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Terminal className="h-4 w-4 text-green-600" />
+                  <div className="font-mono text-sm text-gray-900">ship mcp security</div>
+                </div>
+                <div className="text-xs text-gray-600">Security scanning tools</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </HelpModal>
     </div>
   );
 };
@@ -1405,6 +1654,12 @@ const EnvironmentsPage = () => {
   const [selectedEnvironment, setSelectedEnvironment] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [rebuildingGraph, setRebuildingGraph] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
+  const [confirmDeleteEnv, setConfirmDeleteEnv] = useState<{
+    isOpen: boolean;
+    environmentName: string;
+    environmentId: number;
+  }>({ isOpen: false, environmentName: '', environmentId: 0 });
 
   // Modal states
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -1418,6 +1673,17 @@ const EnvironmentsPage = () => {
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [copySourceEnvId, setCopySourceEnvId] = useState<number | null>(null);
   const [copySourceEnvName, setCopySourceEnvName] = useState<string>('');
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  // Define TOC items for help modal
+  const envHelpTocItems: TocItem[] = [
+    { id: 'multi-env-isolation', label: 'Multi-Environment' },
+    { id: 'template-variables', label: 'Template Variables' },
+    { id: 'environment-graph', label: 'Environment Graph' },
+    { id: 'key-actions', label: 'Key Actions' },
+    { id: 'use-cases', label: 'Use Cases' },
+    { id: 'best-practices-env', label: 'Best Practices' }
+  ];
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1468,10 +1734,16 @@ const EnvironmentsPage = () => {
   };
 
   // Function to delete environment
-  const handleDeleteEnvironment = async (environmentId: number, environmentName: string) => {
-    if (!confirm(`Are you sure you want to delete the environment "${environmentName}"? This will remove all associated agents, MCP servers, and file-based configurations. This action cannot be undone.`)) {
-      return;
-    }
+  const handleDeleteEnvironment = (environmentId: number, environmentName: string) => {
+    setConfirmDeleteEnv({
+      isOpen: true,
+      environmentName,
+      environmentId
+    });
+  };
+
+  const confirmDeleteEnvironment = async () => {
+    const { environmentId, environmentName } = confirmDeleteEnv;
 
     try {
       // Call the new unified API endpoint
@@ -1489,10 +1761,10 @@ const EnvironmentsPage = () => {
         setSelectedEnvironment(null);
       }
 
-      alert(`Environment "${environmentName}" deleted successfully`);
+      showToast(`Environment "${environmentName}" deleted successfully`, 'success');
     } catch (error) {
       console.error('Failed to delete environment:', error);
-      alert('Failed to delete environment. Check console for details.');
+      showToast('Failed to delete environment. Check console for details.', 'error');
     }
   };
 
@@ -1722,11 +1994,20 @@ const EnvironmentsPage = () => {
         {/* Action Buttons */}
         {selectedEnvironment && (
           <div className="p-6 space-y-3">
-            <h3 className="text-sm font-medium text-gray-700 mb-4">Actions</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-700">Actions</h3>
+              <button
+                onClick={() => setIsHelpModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                Help
+              </button>
+            </div>
 
             <button
               onClick={handleSyncEnvironment}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-station-blue text-white hover:bg-blue-600 rounded text-sm font-medium transition-colors shadow-sm"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <Play className="h-4 w-4" />
               <span>Sync Environment</span>
@@ -1734,7 +2015,7 @@ const EnvironmentsPage = () => {
 
             <button
               onClick={handleVariables}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-cyan-600 text-white hover:bg-cyan-700 rounded text-sm font-medium transition-colors shadow-sm"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <FileText className="h-4 w-4" />
               <span>Edit Variables</span>
@@ -1742,7 +2023,7 @@ const EnvironmentsPage = () => {
 
             <button
               onClick={handleAddServer}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white hover:bg-green-700 rounded text-sm font-medium transition-colors shadow-sm"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
             >
               <Plus className="h-4 w-4" />
               <span>Add MCP Server</span>
@@ -1753,7 +2034,7 @@ const EnvironmentsPage = () => {
 
               <button
                 onClick={handleDeploy}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-purple-600 text-white hover:bg-purple-700 rounded text-sm font-medium transition-colors shadow-sm"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
               >
                 <Rocket className="h-4 w-4" />
                 <span>Deploy Template</span>
@@ -1761,7 +2042,7 @@ const EnvironmentsPage = () => {
 
               <button
                 onClick={handleBuildImage}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-orange-600 text-white hover:bg-orange-700 rounded text-sm font-medium transition-colors shadow-sm mt-2"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm mt-2"
               >
                 <Package className="h-4 w-4" />
                 <span>Build Docker Image</span>
@@ -1769,7 +2050,7 @@ const EnvironmentsPage = () => {
 
               <button
                 onClick={handleBundleEnvironment}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-yellow-600 text-white hover:bg-yellow-700 rounded text-sm font-medium transition-colors shadow-sm mt-2"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm mt-2"
               >
                 <Archive className="h-4 w-4" />
                 <span>Create Bundle</span>
@@ -1871,6 +2152,222 @@ const EnvironmentsPage = () => {
         />
       )}
 
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDeleteEnv.isOpen}
+        onClose={() => setConfirmDeleteEnv({ ...confirmDeleteEnv, isOpen: false })}
+        onConfirm={confirmDeleteEnvironment}
+        title="Delete Environment"
+        message={`Are you sure you want to delete the environment "${confirmDeleteEnv.environmentName}"? This will remove all associated agents, MCP servers, and file-based configurations. This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        title="Environments"
+        pageDescription="Isolate agents, MCP servers, and tools across deployment contexts (dev, staging, prod) with environment-specific configurations, template variables, and separate execution spaces."
+        tocItems={envHelpTocItems}
+      >
+        <div className="space-y-6">
+          {/* What are Environments */}
+          <div id="multi-env-isolation">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Globe className="h-5 w-5 text-blue-600" />
+              Multi-Environment Isolation
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Development</div>
+                  <div className="text-xs text-gray-600">Local testing with PROJECT_ROOT=/home/user/dev</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Staging</div>
+                  <div className="text-xs text-gray-600">Pre-production with PROJECT_ROOT=/var/staging</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Production</div>
+                  <div className="text-xs text-gray-600">Live deployment with PROJECT_ROOT=/app/prod</div>
+                </div>
+              </div>
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Each environment has isolated agents, MCP servers, and tools. Agents in <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">dev</span> cannot access tools from <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">prod</span>, ensuring clean separation.
+              </div>
+            </div>
+          </div>
+
+          {/* Template Variables */}
+          <div id="template-variables">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-cyan-600" />
+              Template Variables
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Template variables use Go template syntax to inject environment-specific values into MCP server configurations:
+              </div>
+              <div className="bg-white border border-gray-200 rounded p-3 font-mono text-xs">
+                <div className="text-gray-500 mb-2">variables.yml</div>
+                <div className="text-gray-900">PROJECT_ROOT: /home/user/myapp</div>
+                <div className="text-gray-900">API_ENDPOINT: https://api.staging.example.com</div>
+                <div className="text-gray-900 mt-3 mb-1 text-gray-500">template.json</div>
+                <div className="text-gray-900">"args": ["npx", "-y", "@modelcontextprotocol/server-filesystem", {'"{{ .PROJECT_ROOT }}"'}]</div>
+              </div>
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Variables are resolved at sync time, allowing the same template to work across dev/staging/prod with different paths and URLs.
+              </div>
+            </div>
+          </div>
+
+          {/* Environment Graph */}
+          <div id="environment-graph">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <GitBranch className="h-5 w-5 text-purple-600" />
+              Environment Graph
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                The graph visualizes the relationships in your environment:
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Environment Node</div>
+                  <div className="text-xs text-gray-600">Central hub connecting agents and MCP servers</div>
+                </div>
+                <div className="bg-purple-50 border border-purple-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Agent Nodes</div>
+                  <div className="text-xs text-gray-600">AI agents with their execution status</div>
+                </div>
+                <div className="bg-cyan-50 border border-cyan-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">MCP Server Nodes</div>
+                  <div className="text-xs text-gray-600">Connected tool servers and their capabilities</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Actions */}
+          <div id="key-actions">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Zap className="h-5 w-5 text-yellow-600" />
+              Key Actions
+            </h3>
+            <div className="space-y-2">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-start gap-3">
+                  <Play className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">Sync Environment</div>
+                    <div className="text-xs text-gray-600 mt-1">Resolves template variables and activates MCP servers. Run after changing variables.yml or template.json.</div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-start gap-3">
+                  <FileText className="h-4 w-4 text-cyan-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">Edit Variables</div>
+                    <div className="text-xs text-gray-600 mt-1">Modify variables.yml to change environment-specific values like PROJECT_ROOT, API_ENDPOINT, DATABASE_URL.</div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-start gap-3">
+                  <Plus className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">Add MCP Server</div>
+                    <div className="text-xs text-gray-600 mt-1">Connect new tool servers (filesystem, cloud APIs, databases) to your environment.</div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-start gap-3">
+                  <Archive className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">Create Bundle</div>
+                    <div className="text-xs text-gray-600 mt-1">Package environment into shareable tar.gz with agents, MCP configs, and variables template.</div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-start gap-3">
+                  <Package className="h-4 w-4 text-orange-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">Build Docker Image</div>
+                    <div className="text-xs text-gray-600 mt-1">Create containerized deployment with environment pre-configured for Kubernetes/Docker production.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Common Use Cases */}
+          <div id="use-cases">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Target className="h-5 w-5 text-green-600" />
+              Common Use Cases
+            </h3>
+            <div className="space-y-2 text-sm text-gray-700">
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Local Development:</span> Create <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">dev</span> environment with PROJECT_ROOT pointing to local workspace</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Team Collaboration:</span> Share bundles with teammates - they install and customize variables for their setup</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">CI/CD Pipelines:</span> Deploy production environment with Docker image containing agents and MCP configs</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Tool Isolation:</span> Keep sensitive production tools (AWS, databases) separate from dev/staging environments</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Best Practices */}
+          <div id="best-practices-env" className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-blue-600" />
+              Best Practices
+            </div>
+            <ul className="space-y-1.5 text-sm text-gray-700">
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Always run <span className="font-mono bg-white px-1.5 py-0.5 rounded text-xs">stn sync</span> after editing variables.yml or template.json</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Use descriptive variable names: PROJECT_ROOT, API_ENDPOINT, DATABASE_URL (not x, path, url)</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Never commit secrets to variables.yml - use environment variables for API keys and credentials</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Test bundles locally before sharing - verify template variables work with different values</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </HelpModal>
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      )}
+
     </div>
   );
 };
@@ -1879,6 +2376,17 @@ const EnvironmentsPage = () => {
 const BundlesPage = () => {
   const [loading, setLoading] = useState(true);
   const [bundles, setBundles] = useState<any[]>([]);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  // Define TOC items for help modal
+  const bundleHelpTocItems: TocItem[] = [
+    { id: 'bundle-contents', label: 'Bundle Contents' },
+    { id: 'creating-bundles', label: 'Creating Bundles' },
+    { id: 'installing-bundles', label: 'Installing Bundles' },
+    { id: 'gitops-workflow', label: 'GitOps Workflow' },
+    { id: 'use-cases-bundles', label: 'Use Cases' },
+    { id: 'best-practices-bundles', label: 'Best Practices' }
+  ];
 
   useEffect(() => {
     const fetchBundles = async () => {
@@ -1904,16 +2412,66 @@ const BundlesPage = () => {
   }
 
   return (
-    <div className="h-full p-6 bg-tokyo-bg">
-      <h1 className="text-2xl font-mono font-semibold text-tokyo-blue mb-6">Agent Bundles</h1>
-
-      {bundles.length === 0 ? (
-        <div className="text-center">
-          <Package className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-          <div className="text-tokyo-fg font-mono text-lg mb-2">No bundles found</div>
-          <div className="text-tokyo-comment font-mono text-sm">Agent bundles will appear here</div>
+    <div className="h-full p-6 bg-gray-50 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8 flex items-start justify-between">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Agent Bundles</h1>
+            <p className="text-gray-600">Pre-configured agent templates for common workflows and integrations</p>
+          </div>
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Help
+          </button>
         </div>
-      ) : (
+
+        {bundles.length === 0 ? (
+          <div className="space-y-6">
+            {/* Empty State Message */}
+            <div className="bg-white rounded-lg border border-gray-200 p-8 shadow-sm text-center">
+              <Package className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">No bundles found</h2>
+              <p className="text-sm text-gray-400 max-w-md mx-auto">
+                Bundles are pre-configured collections of agents, MCP servers, and tools. Click "What are Bundles?" above to learn how to install or create them.
+              </p>
+            </div>
+
+            {/* Skeleton Placeholders */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 opacity-25">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-5 w-5 bg-gray-200 rounded"></div>
+                    <div className="h-5 w-40 bg-gray-200 rounded"></div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <div className="h-4 w-12 bg-gray-200 rounded"></div>
+                      <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="flex justify-between">
+                      <div className="h-4 w-12 bg-gray-200 rounded"></div>
+                      <div className="h-4 w-20 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="flex justify-between">
+                      <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                      <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="h-3 w-10 bg-gray-200 rounded mb-1"></div>
+                      <div className="h-12 bg-gray-100 rounded"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {bundles.map((bundle, index) => (
             <div key={index} className="bg-tokyo-dark1 border border-tokyo-orange7 rounded-lg p-4 hover:border-tokyo-orange transition-colors">
@@ -1955,6 +2513,200 @@ const BundlesPage = () => {
           ))}
         </div>
       )}
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        title="Agent Bundles"
+        pageDescription="Shareable packages with pre-configured agents, MCP servers, and templates. Enable GitOps workflows and distribute agent setups across teams and environments."
+        tocItems={bundleHelpTocItems}
+      >
+        <div className="space-y-6">
+          {/* What's in a Bundle */}
+          <div id="bundle-contents">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Package className="h-5 w-5 text-[#0084FF]" />
+              Bundle Contents
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-gray-600" />
+                    Agent Prompts
+                  </div>
+                  <div className="text-xs text-gray-600">Complete agent definitions with system prompts, tools, and configurations</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1 flex items-center gap-2">
+                    <Server className="h-4 w-4 text-gray-600" />
+                    MCP Servers
+                  </div>
+                  <div className="text-xs text-gray-600">Server definitions with connection settings and tool registrations</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-gray-600" />
+                    Template Variables
+                  </div>
+                  <div className="text-xs text-gray-600">Environment-specific variables (PROJECT_ROOT, API_ENDPOINT, etc.)</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1 flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-gray-600" />
+                    Tool Assignments
+                  </div>
+                  <div className="text-xs text-gray-600">Pre-configured tool permissions and access controls</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Creating Bundles */}
+          <div id="creating-bundles">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Archive className="h-5 w-5 text-[#0084FF]" />
+              Creating Bundles
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Bundles are created from existing environments and packaged as tar.gz files:
+              </div>
+              <div className="bg-gray-900 text-gray-100 p-3 rounded-md font-mono text-xs space-y-2">
+                <div className="text-gray-400"># Create bundle from environment</div>
+                <div>$ stn bundle create production</div>
+                <div className="text-gray-400 mt-3"># Custom output path</div>
+                <div>$ stn bundle create dev --output my-agents.tar.gz</div>
+              </div>
+              <div className="text-sm text-gray-700 leading-relaxed">
+                The resulting tar.gz contains your environment's <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">agents/</span>, <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">template.json</span>, and <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">variables.yml</span> ready for distribution.
+              </div>
+            </div>
+          </div>
+
+          {/* Installing Bundles */}
+          <div id="installing-bundles">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Download className="h-5 w-5 text-[#0084FF]" />
+              Installing Bundles
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Install bundles from local files, URLs, or the Station registry:
+              </div>
+              <div className="bg-gray-900 text-gray-100 p-3 rounded-md font-mono text-xs space-y-2">
+                <div className="text-gray-400"># From local file</div>
+                <div>$ stn bundle install ./my-bundle.tar.gz new-env</div>
+                <div className="text-gray-400 mt-3"># From URL</div>
+                <div>$ stn bundle install https://example.com/bundle.tar.gz prod</div>
+                <div className="text-gray-400 mt-3"># From Station registry</div>
+                <div>$ stn template install security-scanner-bundle</div>
+              </div>
+              <div className="text-sm text-gray-700 leading-relaxed">
+                After installation, you'll be prompted to configure template variables (PROJECT_ROOT, etc.) for your environment.
+              </div>
+            </div>
+          </div>
+
+          {/* Bundle Workflow */}
+          <div id="gitops-workflow">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <GitBranch className="h-5 w-5 text-[#0084FF]" />
+              GitOps Workflow
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">1</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Develop Locally</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Create and test agents in your <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">dev</span> environment</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs flex items-center justify-center font-bold">2</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Create Bundle</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Package environment into tar.gz with <span className="font-mono bg-gray-100 px-1 py-0.5 rounded text-xs">stn bundle create</span></div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">3</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Version Control</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Commit bundle to Git or upload to registry for team distribution</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-600 text-white text-xs flex items-center justify-center font-bold">4</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Deploy Anywhere</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Team installs bundle and customizes variables for their environments</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Common Use Cases */}
+          <div id="use-cases-bundles">
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Target className="h-5 w-5 text-[#0084FF]" />
+              Common Use Cases
+            </h3>
+            <div className="space-y-2 text-sm text-gray-700">
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Team Onboarding:</span> New developers install team's agent bundle and customize for their workspace</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">CI/CD Pipelines:</span> Deploy security/testing agents to pipeline environments with production configs</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Registry Publishing:</span> Share proven agent configurations with the community via Station registry</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-600 flex-shrink-0 mt-1.5"></div>
+                <div><span className="font-medium">Multi-Environment Sync:</span> Keep dev/staging/prod environments in sync with identical agent setups</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Best Practices */}
+          <div id="best-practices-bundles" className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-blue-600" />
+              Best Practices
+            </div>
+            <ul className="space-y-1.5 text-sm text-gray-700">
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Document required template variables in bundle README with example values</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Test bundles on clean environments before sharing with team or publishing</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Version your bundles (v1.0.0) and maintain changelog for breaking changes</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Never include secrets in bundles - use template variables for sensitive values</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0 mt-1.5"></div>
+                <div>Include example agents and clear documentation for bundle recipients</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </HelpModal>
+      </div>
     </div>
   );
 };
@@ -2072,50 +2824,50 @@ const AgentEditor = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-tokyo-bg flex items-center justify-center">
-        <div className="text-tokyo-comment">Loading agent configuration...</div>
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-gray-600">Loading agent configuration...</div>
       </div>
     );
   }
 
   if (error && !agentData) {
     return (
-      <div className="min-h-screen bg-tokyo-bg flex items-center justify-center">
-        <div className="text-tokyo-red">{error}</div>
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-red-600">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-tokyo-bg">
+    <div className="min-h-screen bg-white">
       {/* Header with breadcrumbs */}
-      <div className="bg-tokyo-dark1 border-b border-tokyo-dark3 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={handleBack}
-              className="flex items-center gap-2 text-tokyo-comment hover:text-tokyo-blue transition-colors"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Agents</span>
             </button>
-            <div className="text-tokyo-comment">/</div>
-            <h1 className="text-xl font-mono text-tokyo-blue font-bold">
+            <div className="text-gray-400">/</div>
+            <h1 className="text-xl font-semibold text-gray-900">
               Edit Agent: {agentData?.name || 'Unknown'}
             </h1>
           </div>
 
           <div className="flex items-center gap-3">
             {saveSuccess && (
-              <div className="text-sm text-tokyo-green">Saved successfully!</div>
+              <div className="text-sm text-green-600">Saved successfully!</div>
             )}
             {error && (
-              <div className="text-sm text-tokyo-red">{error}</div>
+              <div className="text-sm text-red-600">{error}</div>
             )}
             <button
               onClick={handleSave}
               disabled={saving || !schemaValid}
-              className="flex items-center gap-2 px-4 py-2 bg-tokyo-blue hover:bg-tokyo-blue5 text-tokyo-bg rounded-lg font-medium transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
             >
               <Save className="h-4 w-4" />
               {saving ? 'Saving...' : 'Save Changes'}
@@ -2125,7 +2877,7 @@ const AgentEditor = () => {
 
         {/* Agent description */}
         {agentData?.description && (
-          <div className="mt-2 text-sm text-tokyo-comment">
+          <div className="mt-2 text-sm text-gray-600">
             {agentData.description}
           </div>
         )}
@@ -2135,11 +2887,11 @@ const AgentEditor = () => {
       <div className="flex-1 p-6">
         <div className="grid grid-cols-2 gap-4 h-[calc(100vh-200px)]">
           {/* Left column: YAML Editor */}
-          <div className="bg-tokyo-dark1 rounded-lg border border-tokyo-dark3 flex flex-col">
-            <div className="p-4 border-b border-tokyo-dark3">
-              <h2 className="text-lg font-mono text-tokyo-blue">Agent Configuration</h2>
-              <p className="text-sm text-tokyo-comment mt-1">
-                Edit the agent's prompt file. After saving, run <code className="bg-tokyo-bg px-1 rounded text-tokyo-orange">stn sync {agentData?.environment_name || 'environment'}</code> to apply.
+          <div className="bg-white rounded-lg border border-gray-200 flex flex-col shadow-sm">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Agent Configuration</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Edit the agent's prompt file. After saving, run <code className="bg-gray-50 px-1 rounded text-gray-800 border border-gray-200">stn sync {agentData?.environment_name || 'environment'}</code> to apply.
               </p>
             </div>
 
@@ -2166,7 +2918,7 @@ const AgentEditor = () => {
           </div>
 
           {/* Right column: JSON Schema Editor */}
-          <div className="bg-tokyo-dark1 rounded-lg border border-tokyo-dark3 flex flex-col overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden shadow-sm">
             <JsonSchemaEditor
               schema={outputSchema}
               onChange={handleSchemaChange}
@@ -2332,6 +3084,7 @@ const VariablesEditorModal = ({
   const [variables, setVariables] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
 
   useEffect(() => {
     if (isOpen && environmentId) {
@@ -2357,11 +3110,11 @@ const VariablesEditorModal = ({
       const response = await apiClient.put(`/environments/${environmentId}/variables`, {
         content: variables
       });
-      alert(response.data.message);
+      showToast(response.data.message || 'Variables saved successfully', 'success');
       onClose();
     } catch (error: any) {
       console.error('Failed to save variables:', error);
-      alert(error.response?.data?.error || 'Failed to save variables');
+      showToast(error.response?.data?.error || 'Failed to save variables', 'error');
     } finally {
       setSaving(false);
     }
@@ -2455,6 +3208,15 @@ const VariablesEditorModal = ({
           )}
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      )}
     </div>
   );
 };
@@ -2468,6 +3230,7 @@ const SettingsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [configObj, setConfigObj] = useState<any>({});
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     ai: true,
     cloudship: false,
@@ -2559,26 +3322,35 @@ const SettingsPage = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-tokyo-bg">
-      <div className="flex items-center justify-between p-4 border-b border-tokyo-blue7 bg-tokyo-bg-dark">
+    <div className="h-full flex flex-col bg-gray-50">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
         <div>
-          <h1 className="text-xl font-mono font-semibold text-tokyo-cyan">Settings</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
           {configPath && (
-            <p className="text-xs text-tokyo-comment font-mono mt-1">{configPath}</p>
+            <p className="text-xs text-gray-600 mt-1 font-mono">{configPath}</p>
           )}
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-4 py-2 bg-tokyo-blue hover:bg-tokyo-blue5 disabled:bg-tokyo-blue7 text-tokyo-bg rounded font-mono text-sm transition-colors"
-        >
-          {saving ? 'Saving...' : 'Save Config'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Help
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2.5 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded-md font-medium text-sm transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving...' : 'Save Config'}
+          </button>
+        </div>
       </div>
 
       {/* Warning Banner */}
-      <div className="bg-tokyo-orange7 border-b border-tokyo-orange p-3">
-        <div className="flex items-center gap-2 text-tokyo-orange font-mono text-sm">
+      <div className="bg-amber-50 border-b border-amber-200 p-3">
+        <div className="flex items-center gap-2 text-amber-700 text-sm">
           <AlertTriangle className="h-4 w-4" />
           <span>Station needs to be restarted to apply configuration changes</span>
         </div>
@@ -2586,8 +3358,8 @@ const SettingsPage = () => {
 
       {/* Success/Error Messages */}
       {success && (
-        <div className="bg-tokyo-green7 border-b border-tokyo-green p-3">
-          <div className="flex items-center gap-2 text-tokyo-green font-mono text-sm">
+        <div className="bg-green-50 border-b border-green-200 p-3">
+          <div className="flex items-center gap-2 text-green-700 text-sm">
             <CircleCheck className="h-4 w-4" />
             <span>Config file saved successfully. Restart Station to apply changes.</span>
           </div>
@@ -2595,8 +3367,8 @@ const SettingsPage = () => {
       )}
 
       {error && (
-        <div className="bg-tokyo-red7 border-b border-tokyo-red p-3">
-          <div className="flex items-center gap-2 text-tokyo-red font-mono text-sm">
+        <div className="bg-red-50 border-b border-red-200 p-3">
+          <div className="flex items-center gap-2 text-red-700 text-sm">
             <AlertTriangle className="h-4 w-4" />
             <span>{error}</span>
           </div>
@@ -2606,13 +3378,13 @@ const SettingsPage = () => {
       <div className="flex-1 flex overflow-hidden">
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-tokyo-comment font-mono">Loading config...</div>
+            <div className="text-gray-600">Loading config...</div>
           </div>
         ) : (
           <>
             {/* Left: YAML Editor */}
-            <div className="flex-1 border-r border-tokyo-blue7 p-4">
-              <h2 className="text-sm font-mono font-semibold text-tokyo-cyan mb-2">Raw Configuration</h2>
+            <div className="flex-1 border-r border-gray-200 p-4 bg-white">
+              <h2 className="text-sm font-semibold text-gray-900 mb-2">Raw Configuration</h2>
               <div className="h-[calc(100%-32px)]">
                 <Editor
                   height="100%"
@@ -2634,26 +3406,26 @@ const SettingsPage = () => {
             </div>
 
             {/* Right: Form Sections */}
-            <div className="w-96 overflow-y-auto p-4 bg-tokyo-bg-dark">
-              <h2 className="text-sm font-mono font-semibold text-tokyo-cyan mb-4">Quick Settings</h2>
+            <div className="w-96 overflow-y-auto p-4 bg-white border-l border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4">Quick Settings</h2>
 
               {/* AI Provider Section */}
               <div className="mb-4">
                 <button
                   onClick={() => toggleSection('ai')}
-                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-blue7 rounded font-mono text-sm text-tokyo-blue hover:bg-tokyo-dark2"
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   <span>AI Provider</span>
                   {expandedSections.ai ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </button>
                 {expandedSections.ai && (
-                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-blue7 rounded">
+                  <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Provider</label>
+                      <label className="block text-xs text-gray-600 mb-1">Provider</label>
                       <select
                         value={configObj.ai_provider || 'openai'}
                         onChange={(e) => updateConfig({ ai_provider: e.target.value })}
-                        className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       >
                         <option value="openai">OpenAI</option>
                         <option value="gemini">Google Gemini</option>
@@ -2662,23 +3434,23 @@ const SettingsPage = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Model</label>
+                      <label className="block text-xs text-gray-600 mb-1">Model</label>
                       <input
                         type="text"
                         value={configObj.ai_model || ''}
                         onChange={(e) => updateConfig({ ai_model: e.target.value })}
                         placeholder="gpt-4o-mini"
-                        className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Base URL (optional)</label>
+                      <label className="block text-xs text-gray-600 mb-1">Base URL (optional)</label>
                       <input
                         type="text"
                         value={configObj.ai_base_url || ''}
                         onChange={(e) => updateConfig({ ai_base_url: e.target.value })}
                         placeholder="https://api.openai.com/v1"
-                        className="w-full bg-tokyo-bg border border-tokyo-blue7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                   </div>
@@ -2689,59 +3461,59 @@ const SettingsPage = () => {
               <div className="mb-4">
                 <button
                   onClick={() => toggleSection('cloudship')}
-                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-purple7 rounded font-mono text-sm text-tokyo-purple hover:bg-tokyo-dark2"
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   <span>CloudShip Integration</span>
                   {expandedSections.cloudship ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </button>
                 {expandedSections.cloudship && (
-                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-purple7 rounded">
+                  <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs text-tokyo-comment font-mono">Enabled</label>
+                      <label className="text-xs text-gray-600">Enabled</label>
                       <input
                         type="checkbox"
                         checked={configObj.cloudship?.enabled || false}
                         onChange={(e) => updateCloudShipConfig({ enabled: e.target.checked })}
-                        className="bg-tokyo-bg border border-tokyo-purple7"
+                        className="bg-white border border-gray-300"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Registration Key</label>
+                      <label className="block text-xs text-gray-600 mb-1">Registration Key</label>
                       <input
                         type="password"
                         value={configObj.cloudship?.registration_key || ''}
                         onChange={(e) => updateCloudShipConfig({ registration_key: e.target.value })}
                         placeholder="Enter CloudShip key"
-                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Endpoint</label>
+                      <label className="block text-xs text-gray-600 mb-1">Endpoint</label>
                       <input
                         type="text"
                         value={configObj.cloudship?.endpoint || ''}
                         onChange={(e) => updateCloudShipConfig({ endpoint: e.target.value })}
                         placeholder="lighthouse.cloudshipai.com:50051"
-                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Bundle Registry URL</label>
+                      <label className="block text-xs text-gray-600 mb-1">Bundle Registry URL</label>
                       <input
                         type="text"
                         value={configObj.cloudship?.bundle_registry_url || ''}
                         onChange={(e) => updateCloudShipConfig({ bundle_registry_url: e.target.value })}
                         placeholder="https://api.cloudshipai.com"
-                        className="w-full bg-tokyo-bg border border-tokyo-purple7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Station ID (auto-generated)</label>
+                      <label className="block text-xs text-gray-600 mb-1">Station ID (auto-generated)</label>
                       <input
                         type="text"
                         value={configObj.cloudship?.station_id || ''}
                         disabled
-                        className="w-full bg-tokyo-dark2 border border-tokyo-purple7 text-tokyo-comment font-mono text-sm p-2 rounded"
+                        className="w-full bg-gray-100 border border-gray-300 text-gray-500 font-mono text-sm p-2 rounded"
                       />
                     </div>
                   </div>
@@ -2752,38 +3524,38 @@ const SettingsPage = () => {
               <div className="mb-4">
                 <button
                   onClick={() => toggleSection('ports')}
-                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-green7 rounded font-mono text-sm text-tokyo-green hover:bg-tokyo-dark2"
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   <span>Server Ports</span>
                   {expandedSections.ports ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </button>
                 {expandedSections.ports && (
-                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-green7 rounded">
+                  <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">API Port</label>
+                      <label className="block text-xs text-gray-600 mb-1">API Port</label>
                       <input
                         type="number"
                         value={configObj.api_port || 8585}
                         onChange={(e) => updateConfig({ api_port: parseInt(e.target.value) })}
-                        className="w-full bg-tokyo-bg border border-tokyo-green7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">MCP Port</label>
+                      <label className="block text-xs text-gray-600 mb-1">MCP Port</label>
                       <input
                         type="number"
                         value={configObj.mcp_port || 3000}
                         onChange={(e) => updateConfig({ mcp_port: parseInt(e.target.value) })}
-                        className="w-full bg-tokyo-bg border border-tokyo-green7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">SSH Port</label>
+                      <label className="block text-xs text-gray-600 mb-1">SSH Port</label>
                       <input
                         type="number"
                         value={configObj.ssh_port || 2222}
                         onChange={(e) => updateConfig({ ssh_port: parseInt(e.target.value) })}
-                        className="w-full bg-tokyo-bg border border-tokyo-green7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                   </div>
@@ -2794,47 +3566,47 @@ const SettingsPage = () => {
               <div className="mb-4">
                 <button
                   onClick={() => toggleSection('other')}
-                  className="w-full flex items-center justify-between p-2 bg-tokyo-dark1 border border-tokyo-orange7 rounded font-mono text-sm text-tokyo-orange hover:bg-tokyo-dark2"
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   <span>Other Settings</span>
                   {expandedSections.other ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </button>
                 {expandedSections.other && (
-                  <div className="mt-2 space-y-3 p-3 bg-tokyo-dark1 border border-tokyo-orange7 rounded">
+                  <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Admin Username</label>
+                      <label className="block text-xs text-gray-600 mb-1">Admin Username</label>
                       <input
                         type="text"
                         value={configObj.admin_username || 'admin'}
                         onChange={(e) => updateConfig({ admin_username: e.target.value })}
-                        className="w-full bg-tokyo-bg border border-tokyo-orange7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-xs text-tokyo-comment font-mono">Debug Mode</label>
+                      <label className="text-xs text-gray-600">Debug Mode</label>
                       <input
                         type="checkbox"
                         checked={configObj.debug || false}
                         onChange={(e) => updateConfig({ debug: e.target.checked })}
-                        className="bg-tokyo-bg border border-tokyo-orange7"
+                        className="bg-white border border-gray-300"
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-xs text-tokyo-comment font-mono">Telemetry</label>
+                      <label className="text-xs text-gray-600">Telemetry</label>
                       <input
                         type="checkbox"
                         checked={configObj.telemetry_enabled !== false}
                         onChange={(e) => updateConfig({ telemetry_enabled: e.target.checked })}
-                        className="bg-tokyo-bg border border-tokyo-orange7"
+                        className="bg-white border border-gray-300"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-tokyo-comment font-mono mb-1">Database URL</label>
+                      <label className="block text-xs text-gray-600 mb-1">Database URL</label>
                       <input
                         type="text"
                         value={configObj.database_url || ''}
                         onChange={(e) => updateConfig({ database_url: e.target.value })}
-                        className="w-full bg-tokyo-bg border border-tokyo-orange7 text-tokyo-fg font-mono text-sm p-2 rounded"
+                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
                   </div>
@@ -2844,6 +3616,193 @@ const SettingsPage = () => {
           </>
         )}
       </div>
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        title="Settings"
+        pageDescription="Configure Station's core behavior including AI provider settings, CloudShip integration, server ports, and system-wide preferences. Changes require Station restart to take effect."
+      >
+        <div className="space-y-6">
+          {/* Configuration File */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-gray-600" />
+              Configuration File
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Station uses a YAML configuration file for system settings. Default location: <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">~/.config/station/station.yml</span>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-700">
+                    <span className="font-semibold">Important:</span> Station must be restarted after saving configuration changes for them to take effect.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Configuration */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-gray-600" />
+              AI Configuration
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Configure AI model provider settings for agent execution:
+              </div>
+              <div className="space-y-2">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">API Keys</div>
+                  <div className="text-xs text-gray-600">Set <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">OPENAI_API_KEY</span>, <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">GEMINI_API_KEY</span>, or <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">ANTHROPIC_API_KEY</span> environment variables</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Default Model</div>
+                  <div className="text-xs text-gray-600">Model used when agents don't specify: <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">gpt-4o-mini</span>, <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">gemini-2.0-flash-exp</span>, <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">claude-3-5-sonnet-latest</span></div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Temperature</div>
+                  <div className="text-xs text-gray-600">Controls randomness (0.0-2.0). Lower values = more deterministic responses</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CloudShip Integration */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Cloud className="h-5 w-5 text-gray-600" />
+              CloudShip Integration
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                CloudShip provides OAuth authentication for secure MCP tool access:
+              </div>
+              <div className="space-y-2">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">OAuth URL</div>
+                  <div className="text-xs text-gray-600">CloudShip OAuth endpoint for token validation</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Required Scopes</div>
+                  <div className="text-xs text-gray-600">OAuth scopes needed for MCP authentication</div>
+                </div>
+              </div>
+              <div className="text-sm text-gray-700 leading-relaxed">
+                Used by Dynamic Agent MCP server to authenticate CloudShip clients securely.
+              </div>
+            </div>
+          </div>
+
+          {/* Server Ports */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Server className="h-5 w-5 text-gray-600" />
+              Server Ports
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">HTTP Server</div>
+                  <div className="text-xs text-gray-600 mb-2">Default: <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">8580</span></div>
+                  <div className="text-xs text-gray-600">Web UI and REST API</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">MCP Server</div>
+                  <div className="text-xs text-gray-600 mb-2">Default: <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">8586</span></div>
+                  <div className="text-xs text-gray-600">MCP protocol stdio transport</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Other Settings */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Settings className="h-5 w-5 text-gray-600" />
+              System Settings
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="space-y-2">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Admin Username</div>
+                  <div className="text-xs text-gray-600">Username for admin operations (currently not enforced)</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Debug Mode</div>
+                  <div className="text-xs text-gray-600">Enable verbose logging for troubleshooting</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Telemetry</div>
+                  <div className="text-xs text-gray-600">Send anonymous usage statistics to improve Station (if enabled)</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Database URL</div>
+                  <div className="text-xs text-gray-600">SQLite database location: <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">~/.config/station/station.db</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Editing Modes */}
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Wrench className="h-5 w-5 text-gray-600" />
+              Configuration Editing
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-sm text-gray-700 leading-relaxed">
+                The Settings page provides two editing modes:
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Visual Editor</div>
+                  <div className="text-xs text-gray-600">Form-based editing with collapsible sections for common settings</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 text-sm mb-1">Raw YAML Editor</div>
+                  <div className="text-xs text-gray-600">Direct YAML editing with syntax highlighting for advanced configuration</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Best Practices */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-gray-600" />
+              Best Practices
+            </div>
+            <ul className="space-y-1.5 text-sm text-gray-700">
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0 mt-1.5"></div>
+                <div>Always restart Station after saving configuration changes</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0 mt-1.5"></div>
+                <div>Never commit API keys to station.yml - use environment variables instead</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0 mt-1.5"></div>
+                <div>Back up station.yml before making significant changes</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0 mt-1.5"></div>
+                <div>Validate YAML syntax before saving to avoid startup errors</div>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0 mt-1.5"></div>
+                <div>Use Debug Mode when troubleshooting agent execution or MCP connection issues</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </HelpModal>
     </div>
   );
 };

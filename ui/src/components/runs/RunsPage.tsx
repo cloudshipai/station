@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Play, BarChart3, List, GitBranch } from 'lucide-react';
+import { Play, BarChart3, List, GitBranch, HelpCircle, Clock, Zap, DollarSign, Activity } from 'lucide-react';
 import { RunsList } from './RunsList';
 import { Pagination } from './Pagination';
 import { StatsTab } from './StatsTab';
 import { SwimlanePage } from './SwimlanePage';
 import { agentRunsApi } from '../../api/station';
 import type { TimelineRun } from '../../utils/timelineLayout';
+import { HelpModal } from '../ui/HelpModal';
 
 interface Run {
   id: number;
@@ -34,6 +35,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
   const [runs, setRuns] = useState<Run[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'timeline' | 'stats'>('timeline');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const runsPerPage = 20;
 
   // Fetch all runs (not filtered by environment)
@@ -108,13 +110,33 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
               </div>
             </div>
             {runs.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center bg-white">
-                <div className="text-center">
-                  <Play className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                  <div className="text-gray-900 text-lg mb-2">No agent runs found</div>
+              <div className="flex-1 bg-white p-4 space-y-4">
+                {/* Empty State Message */}
+                <div className="text-center py-8">
+                  <Play className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <div className="text-gray-900 text-lg mb-1">No agent runs found</div>
                   <div className="text-gray-500 text-sm">
                     Agent executions will appear here when agents are run
                   </div>
+                </div>
+
+                {/* Skeleton Placeholders */}
+                <div className="grid gap-4 opacity-25">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="h-5 w-48 bg-gray-200 rounded"></div>
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                          <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex gap-4">
+                        <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                        <div className="h-4 w-28 bg-gray-200 rounded"></div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : (

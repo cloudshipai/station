@@ -357,6 +357,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Ensure STATION_CONFIG_DIR is set for proper paths
 	dockerArgs = append(dockerArgs, "-e", "STATION_CONFIG_DIR=/home/station/.config/station")
 
+	// Enable dev mode to start API server (management UI)
+	dockerArgs = append(dockerArgs, "-e", "STN_DEV_MODE=true")
+
 	// Set working directory
 	dockerArgs = append(dockerArgs, "-w", "/workspace")
 

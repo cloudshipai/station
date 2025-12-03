@@ -8,7 +8,10 @@
         "@wonderwhy-er/desktop-commander@latest"
       ],
       "metadata": {
-        "category": "Development"
+        "category": "Development",
+        "logoUrl": "https://avatars.githubusercontent.com/u/1459110?v=4",
+        "githubUrl": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
+        "docsUrl": "https://github.com/wonderwhy-er/DesktopCommanderMCP#readme"
       }
     }
   }

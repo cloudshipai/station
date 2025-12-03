@@ -10,6 +10,14 @@
       "env": {
         "SLACK_BOT_TOKEN": "{{ .SLACK_BOT_TOKEN }}",
         "SLACK_TEAM_ID": "{{ .SLACK_TEAM_ID }}"
+      },
+      "metadata": {
+        "category": "Communication",
+        "logoUrl": "/logos/slack.png",
+        "githubUrl": "https://github.com/zencoderai/slack-mcp-server",
+        "toolSourceUrl": "https://slack.com",
+        "docsUrl": "https://api.slack.com/",
+        "requiresApiKey": true
       }
     }
   }

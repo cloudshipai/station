@@ -12,7 +12,12 @@
         "GEMINI_API_KEY": "{{ .GEMINI_API_KEY }}"
       },
       "metadata": {
-        "category": "Automation"
+        "category": "Automation",
+        "logoUrl": "/logos/browserbase.svg",
+        "githubUrl": "https://github.com/browserbase/mcp-server-browserbase",
+        "toolSourceUrl": "https://www.browserbase.com",
+        "docsUrl": "https://docs.browserbase.com/",
+        "requiresApiKey": true
       }
     }
   }
