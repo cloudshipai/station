@@ -102,10 +102,21 @@ func runBundleCreate(cmd *cobra.Command, args []string) error {
 	environmentName := args[0]
 	outputPath, _ := cmd.Flags().GetString("output")
 
-	// Get Station config root
-	configRoot, err := common.GetStationConfigRoot()
+	// Load Station config to get workspace and database URL
+	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("failed to get station config root: %w", err)
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	// Use workspace from config if set, otherwise use default config root
+	var configRoot string
+	if cfg.Workspace != "" {
+		configRoot = cfg.Workspace
+	} else {
+		configRoot, err = common.GetStationConfigRoot()
+		if err != nil {
+			return fmt.Errorf("failed to get station config root: %w", err)
+		}
 	}
 
 	// Environment directory path
@@ -124,8 +135,18 @@ func runBundleCreate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("🗂️  Bundling environment: %s\n", environmentName)
 	fmt.Printf("📂 Source path: %s\n", envPath)
 
-	// Create bundle service
-	bundleService := services.NewBundleService()
+	// Initialize database connection for report export
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	// Initialize repositories
+	repos := repositories.New(database)
+
+	// Create bundle service with repos for report export
+	bundleService := services.NewBundleServiceWithRepos(repos)
 
 	// Validate environment
 	if err := bundleService.ValidateEnvironment(envPath); err != nil {
@@ -145,8 +166,17 @@ func runBundleCreate(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   📄 %d other file(s): %v\n", len(bundleInfo.OtherFiles), bundleInfo.OtherFiles)
 	}
 
-	// Create tar.gz bundle using the same logic as the API
-	tarData, err := bundleService.CreateBundle(envPath)
+	// Get environment ID for report export
+	env, err := repos.Environments.GetByName(environmentName)
+	var tarData []byte
+	if err == nil {
+		// Environment found in database, export with reports
+		fmt.Printf("   📊 Exporting reports from environment ID %d\n", env.ID)
+		tarData, err = bundleService.CreateBundleWithReports(envPath, env.ID)
+	} else {
+		// No database entry, create bundle without reports
+		tarData, err = bundleService.CreateBundle(envPath)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create bundle: %w", err)
 	}

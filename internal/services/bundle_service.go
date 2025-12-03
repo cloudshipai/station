@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -195,9 +197,32 @@ func nullTimeValue(nt interface{}) string {
 }
 
 func getStringField(v interface{}) (string, bool) {
-	// Use reflection to handle sql.NullString
 	if v == nil {
 		return "", false
+	}
+	// Handle sql.NullString directly
+	if ns, ok := v.(sql.NullString); ok {
+		if ns.Valid {
+			return ns.String, true
+		}
+		return "", false
+	}
+	// Use reflection for other NullString-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		// Look for String and Valid fields
+		stringField := rv.FieldByName("String")
+		validField := rv.FieldByName("Valid")
+		if stringField.IsValid() && validField.IsValid() {
+			if validField.Bool() {
+				return stringField.String(), true
+			}
+			return "", false
+		}
+	}
+	// Fallback to string conversion
+	if s, ok := v.(string); ok {
+		return s, true
 	}
 	return fmt.Sprintf("%v", v), true
 }
@@ -205,6 +230,22 @@ func getStringField(v interface{}) (string, bool) {
 func getFloat64Field(v interface{}) (float64, bool) {
 	if v == nil {
 		return 0, false
+	}
+	// Handle sql.NullFloat64 directly
+	if nf, ok := v.(sql.NullFloat64); ok {
+		if nf.Valid {
+			return nf.Float64, true
+		}
+		return 0, false
+	}
+	// Use reflection for other NullFloat64-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		floatField := rv.FieldByName("Float64")
+		validField := rv.FieldByName("Valid")
+		if floatField.IsValid() && validField.IsValid() && validField.Bool() {
+			return floatField.Float(), true
+		}
 	}
 	if f, ok := v.(float64); ok {
 		return f, true
@@ -216,6 +257,22 @@ func getInt64Field(v interface{}) (int64, bool) {
 	if v == nil {
 		return 0, false
 	}
+	// Handle sql.NullInt64 directly
+	if ni, ok := v.(sql.NullInt64); ok {
+		if ni.Valid {
+			return ni.Int64, true
+		}
+		return 0, false
+	}
+	// Use reflection for other NullInt64-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		intField := rv.FieldByName("Int64")
+		validField := rv.FieldByName("Valid")
+		if intField.IsValid() && validField.IsValid() && validField.Bool() {
+			return intField.Int(), true
+		}
+	}
 	if i, ok := v.(int64); ok {
 		return i, true
 	}
@@ -225,6 +282,24 @@ func getInt64Field(v interface{}) (int64, bool) {
 func getTimeField(v interface{}) (time.Time, bool) {
 	if v == nil {
 		return time.Time{}, false
+	}
+	// Handle sql.NullTime directly
+	if nt, ok := v.(sql.NullTime); ok {
+		if nt.Valid {
+			return nt.Time, true
+		}
+		return time.Time{}, false
+	}
+	// Use reflection for other NullTime-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		timeField := rv.FieldByName("Time")
+		validField := rv.FieldByName("Valid")
+		if timeField.IsValid() && validField.IsValid() && validField.Bool() {
+			if t, ok := timeField.Interface().(time.Time); ok {
+				return t, true
+			}
+		}
 	}
 	if t, ok := v.(time.Time); ok {
 		return t, true

@@ -76,7 +76,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		config:             cfg,
 		localMode:          localMode,
 		agentExportService: services.NewAgentExportService(repos),
-		bundleHandler:      NewUnifiedBundleHandler(),
+		bundleHandler:      NewUnifiedBundleHandlerWithRepos(repos),
 		schemaRegistry:     schemas.NewSchemaRegistry(),
 		schedulerService:   schedulerService,
 		benchmarkService:   benchmarkService,

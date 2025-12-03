@@ -89,5 +89,24 @@ func (s *Server) handleDeleteEnvironment(ctx context.Context, request mcp.CallTo
 }
 
 func (s *Server) handleCreateBundleFromEnvironment(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultError("Bundle creation functionality not implemented in MCP mode"), nil
+	environmentName, err := req.RequireString("environmentName")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'environmentName' parameter: %v", err)), nil
+	}
+
+	outputPath := req.GetString("outputPath", "")
+
+	// Use the unified bundle handler (which now has database access for reports)
+	bundleReq := BundleEnvironmentRequest{
+		EnvironmentName: environmentName,
+		OutputPath:      outputPath,
+	}
+
+	response, err := s.bundleHandler.CreateBundle(ctx, bundleReq)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Bundle creation failed: %v", err)), nil
+	}
+
+	resultJSON, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
 }
