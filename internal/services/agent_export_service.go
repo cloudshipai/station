@@ -126,6 +126,15 @@ metadata:
 
 	content += fmt.Sprintf("\nmodel: gpt-4o-mini\nmax_steps: %d", agent.MaxSteps)
 
+	// Add CloudShip memory integration if configured
+	if agent.MemoryTopicKey != nil && *agent.MemoryTopicKey != "" {
+		content += "\ncloudshipai:"
+		content += fmt.Sprintf("\n  memory: \"%s\"", *agent.MemoryTopicKey)
+		if agent.MemoryMaxTokens != nil && *agent.MemoryMaxTokens > 0 {
+			content += fmt.Sprintf("\n  memory_max_tokens: %d", *agent.MemoryMaxTokens)
+		}
+	}
+
 	// Add tools if any
 	if len(toolNames) > 0 {
 		content += "\ntools:\n"

@@ -32,6 +32,13 @@ type DotPromptConfig struct {
 	MaxSteps     int64                  `yaml:"max_steps"`     // Top-level max_steps field
 	App          string                 `yaml:"app"`           // CloudShip app classification
 	AppType      string                 `yaml:"app_type"`      // CloudShip app_type (maps to app_subtype in DB)
+	CloudShipAI  CloudShipAIConfig      `yaml:"cloudshipai"`   // CloudShip memory integration
+}
+
+// CloudShipAIConfig represents CloudShip-specific configuration in frontmatter
+type CloudShipAIConfig struct {
+	Memory          string `yaml:"memory"`            // Memory topic key for context injection
+	MemoryMaxTokens int    `yaml:"memory_max_tokens"` // Max tokens for memory context (default: 2000)
 }
 
 // syncAgents handles synchronization of agent .prompt files
@@ -262,6 +269,16 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		return nil, fmt.Errorf("failed to extract output schema: %w", err)
 	}
 
+	// Extract CloudShip memory configuration
+	var memoryTopicKey *string
+	var memoryMaxTokens *int
+	if config.CloudShipAI.Memory != "" {
+		memoryTopicKey = &config.CloudShipAI.Memory
+	}
+	if config.CloudShipAI.MemoryMaxTokens > 0 {
+		memoryMaxTokens = &config.CloudShipAI.MemoryMaxTokens
+	}
+
 	// Start transaction for atomic agent creation + tool assignment
 	tx, err := s.repos.BeginTx()
 	if err != nil {
@@ -269,8 +286,8 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 	}
 	defer tx.Rollback()
 
-	// Create agent using individual parameters within transaction
-	createdAgent, err := s.repos.Agents.CreateTx(
+	// Create agent using individual parameters within transaction (with memory support)
+	createdAgent, err := s.repos.Agents.CreateTxWithMemory(
 		tx,
 		agentName,
 		description,
@@ -285,6 +302,8 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
 		app,                // app - CloudShip app classification
 		appType,            // appType - CloudShip app_type classification
+		memoryTopicKey,     // memoryTopicKey - CloudShip memory integration
+		memoryMaxTokens,    // memoryMaxTokens - CloudShip memory max tokens
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -374,6 +393,16 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		return nil, fmt.Errorf("failed to extract output schema: %w", err)
 	}
 
+	// Extract CloudShip memory configuration
+	var memoryTopicKey *string
+	var memoryMaxTokens *int
+	if config.CloudShipAI.Memory != "" {
+		memoryTopicKey = &config.CloudShipAI.Memory
+	}
+	if config.CloudShipAI.MemoryMaxTokens > 0 {
+		memoryMaxTokens = &config.CloudShipAI.MemoryMaxTokens
+	}
+
 	// Check if anything actually changed
 	needsUpdate := false
 	if existingAgent.Prompt != promptContent {
@@ -422,6 +451,32 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		newOutputPresetStr = *outputSchemaPreset
 	}
 	if currentOutputPresetStr != newOutputPresetStr {
+		needsUpdate = true
+	}
+
+	// Check if memory topic key changed
+	currentMemoryTopicKey := ""
+	if existingAgent.MemoryTopicKey != nil {
+		currentMemoryTopicKey = *existingAgent.MemoryTopicKey
+	}
+	newMemoryTopicKey := ""
+	if memoryTopicKey != nil {
+		newMemoryTopicKey = *memoryTopicKey
+	}
+	if currentMemoryTopicKey != newMemoryTopicKey {
+		needsUpdate = true
+	}
+
+	// Check if memory max tokens changed
+	currentMemoryMaxTokens := 0
+	if existingAgent.MemoryMaxTokens != nil {
+		currentMemoryMaxTokens = *existingAgent.MemoryMaxTokens
+	}
+	newMemoryMaxTokens := 0
+	if memoryMaxTokens != nil {
+		newMemoryMaxTokens = *memoryMaxTokens
+	}
+	if currentMemoryMaxTokens != newMemoryMaxTokens {
 		needsUpdate = true
 	}
 
@@ -501,7 +556,7 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 
 	// Update agent metadata if needed
 	if needsUpdate {
-		err = s.repos.Agents.UpdateTx(
+		err = s.repos.Agents.UpdateTxWithMemory(
 			tx,
 			existingAgent.ID,
 			existingAgent.Name,
@@ -515,6 +570,8 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
 			app,                // app - CloudShip app classification
 			appType,            // appType - CloudShip app_type classification
+			memoryTopicKey,     // memoryTopicKey - CloudShip memory integration
+			memoryMaxTokens,    // memoryMaxTokens - CloudShip memory max tokens
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update agent: %w", err)

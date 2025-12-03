@@ -75,7 +75,7 @@ func (j *Judge) GetModelName() string {
 // Helper Functions
 // ============================================================================
 
-// extractJSON attempts to extract JSON from markdown code blocks
+// extractJSON attempts to extract JSON from markdown code blocks and fix common issues
 func extractJSON(response string) string {
 	// Remove common markdown wrappers
 	cleaned := response
@@ -94,7 +94,51 @@ func extractJSON(response string) string {
 		}
 	}
 
+	// Fix invalid escape sequences (e.g., LaTeX \( and \) which should be \\( and \\))
+	cleaned = fixInvalidEscapes(cleaned)
+
 	return trimSpace(cleaned)
+}
+
+// fixInvalidEscapes fixes common invalid escape sequences in JSON strings
+// LLMs often output LaTeX-style escapes like \( and \) which are invalid in JSON
+func fixInvalidEscapes(s string) string {
+	result := make([]byte, 0, len(s)*2)
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+
+		if escaped {
+			// Previous char was backslash - check if this is a valid JSON escape
+			validEscapes := map[byte]bool{
+				'"': true, '\\': true, '/': true, 'b': true,
+				'f': true, 'n': true, 'r': true, 't': true, 'u': true,
+			}
+			if inString && !validEscapes[c] {
+				// Invalid escape - double the backslash to make it a literal backslash
+				result = append(result, '\\')
+			}
+			result = append(result, c)
+			escaped = false
+			continue
+		}
+
+		if c == '\\' {
+			escaped = true
+			result = append(result, c)
+			continue
+		}
+
+		if c == '"' && !escaped {
+			inString = !inString
+		}
+
+		result = append(result, c)
+	}
+
+	return string(result)
 }
 
 func findIndex(s, substr string) int {

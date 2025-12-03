@@ -95,6 +95,16 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError("app and app_type parameters require output_schema or output_schema_preset to be provided (structured output needed for data ingestion)"), nil
 	}
 
+	// Extract CloudShip memory integration parameters
+	var memoryTopicKey *string
+	var memoryMaxTokens *int
+	if memoryTopic := request.GetString("memory_topic", ""); memoryTopic != "" {
+		memoryTopicKey = &memoryTopic
+	}
+	if memoryTokens := request.GetInt("memory_max_tokens", 0); memoryTokens > 0 {
+		memoryMaxTokens = &memoryTokens
+	}
+
 	// Extract tool_names array if provided
 	var toolNames []string
 	if request.Params.Arguments != nil {
@@ -125,6 +135,8 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		OutputSchemaPreset: outputSchemaPreset,
 		App:                app,
 		AppType:            appType,
+		MemoryTopicKey:     memoryTopicKey,
+		MemoryMaxTokens:    memoryMaxTokens,
 	}
 
 	createdAgent, err := s.agentService.CreateAgent(ctx, config)
@@ -297,8 +309,22 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 	app := request.GetString("app", existingAgent.App)
 	appType := request.GetString("app_type", existingAgent.AppType)
 
-	// Update the agent
-	err = s.repos.Agents.Update(
+	// Extract CloudShip memory integration parameters
+	var memoryTopicKey *string
+	var memoryMaxTokens *int
+	if memoryTopic := request.GetString("memory_topic", ""); memoryTopic != "" {
+		memoryTopicKey = &memoryTopic
+	} else if existingAgent.MemoryTopicKey != nil {
+		memoryTopicKey = existingAgent.MemoryTopicKey
+	}
+	if memoryTokens := request.GetInt("memory_max_tokens", 0); memoryTokens > 0 {
+		memoryMaxTokens = &memoryTokens
+	} else if existingAgent.MemoryMaxTokens != nil {
+		memoryMaxTokens = existingAgent.MemoryMaxTokens
+	}
+
+	// Update the agent with memory support
+	err = s.repos.Agents.UpdateWithMemory(
 		agentID,
 		name,
 		description,
@@ -310,8 +336,10 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		existingAgent.ScheduleVariables, // Keep existing schedule variables
 		outputSchema,
 		outputSchemaPreset,
-		app,     // CloudShip app classification
-		appType, // CloudShip app_type classification
+		app,             // CloudShip app classification
+		appType,         // CloudShip app_type classification
+		memoryTopicKey,  // CloudShip memory topic key
+		memoryMaxTokens, // CloudShip memory max tokens
 	)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent: %v", err)), nil

@@ -136,6 +136,9 @@ CREATE TABLE agents (
     next_scheduled_run DATETIME DEFAULT NULL,
     schedule_enabled BOOLEAN DEFAULT FALSE,
     schedule_variables TEXT DEFAULT NULL, -- JSON object of variables for scheduled execution
+    -- CloudShip Memory Integration
+    memory_topic_key TEXT DEFAULT NULL, -- Memory topic key for context injection (e.g., sre-prod-core)
+    memory_max_tokens INTEGER DEFAULT 2000, -- Max tokens for memory context injection
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (environment_id) REFERENCES environments (id),

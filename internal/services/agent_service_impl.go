@@ -79,6 +79,22 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 	return service
 }
 
+// SetMemoryClient sets the CloudShip memory client for memory integration
+// This should be called after the ManagementChannel connects to CloudShip
+func (s *AgentService) SetMemoryClient(mc *lighthouse.MemoryClient) {
+	if s.executionEngine != nil {
+		s.executionEngine.SetMemoryClient(mc)
+	}
+}
+
+// SetMemoryAPIClient sets the direct API memory client for CLI mode
+// This should be called for CLI executions where there's no management channel
+func (s *AgentService) SetMemoryAPIClient(apiClient *lighthouse.MemoryAPIClient) {
+	if s.executionEngine != nil {
+		s.executionEngine.SetMemoryAPIClient(apiClient)
+	}
+}
+
 // NewAgentServiceWithLighthouse creates a new agent service with Lighthouse integration
 func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseClient *lighthouse.LighthouseClient) *AgentService {
 	service := &AgentService{
@@ -406,8 +422,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		return nil, fmt.Errorf("agent name cannot be empty")
 	}
 
-	// Create agent using repository
-	agent, err := s.repos.Agents.Create(
+	// Create agent using repository with memory support
+	agent, err := s.repos.Agents.CreateWithMemory(
 		config.Name,
 		config.Description,
 		config.Prompt,
@@ -421,6 +437,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, config *AgentConfig) (*m
 		config.OutputSchemaPreset,
 		config.App,
 		config.AppType,
+		config.MemoryTopicKey,
+		config.MemoryMaxTokens,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -459,21 +477,23 @@ func (s *AgentService) ListAgentsByEnvironment(ctx context.Context, environmentI
 
 // UpdateAgent updates an agent's configuration
 func (s *AgentService) UpdateAgent(ctx context.Context, agentID int64, config *AgentConfig) (*models.Agent, error) {
-	// Update agent using repository
-	err := s.repos.Agents.Update(
+	// Update agent using repository with memory support
+	err := s.repos.Agents.UpdateWithMemory(
 		agentID,
 		config.Name,
 		config.Description,
 		config.Prompt,
 		config.MaxSteps,
-		nil, // input_schema - not set in basic config
+		config.InputSchema,
 		config.CronSchedule,
 		config.ScheduleEnabled,
 		config.ScheduleVariables,
-		nil, // outputSchema - not supported in basic config yet
-		nil, // outputSchemaPreset - not supported in basic config yet
+		config.OutputSchema,
+		config.OutputSchemaPreset,
 		config.App,
 		config.AppType,
+		config.MemoryTopicKey,
+		config.MemoryMaxTokens,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)

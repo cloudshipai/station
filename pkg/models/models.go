@@ -79,8 +79,11 @@ type Agent struct {
 	NextScheduledRun   *time.Time `json:"next_scheduled_run,omitempty" db:"next_scheduled_run"`
 	ScheduleEnabled    bool       `json:"schedule_enabled" db:"schedule_enabled"`
 	ScheduleVariables  *string    `json:"schedule_variables,omitempty" db:"schedule_variables"`
-	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
+	// CloudShip Memory Integration
+	MemoryTopicKey  *string `json:"memory_topic_key,omitempty" db:"memory_topic_key"`   // Memory topic key for context injection
+	MemoryMaxTokens *int    `json:"memory_max_tokens,omitempty" db:"memory_max_tokens"` // Max tokens for memory context (default: 2000)
+	CreatedAt       time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // AgentTool represents the many-to-many relationship between agents and tools (environment-specific)

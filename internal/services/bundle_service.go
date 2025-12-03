@@ -4,12 +4,15 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -44,6 +47,281 @@ func (s *BundleService) CreateBundle(environmentPath string) ([]byte, error) {
 	return s.createTarGz(environmentPath)
 }
 
+// CreateBundleWithReports creates a bundle and exports reports from the database first
+func (s *BundleService) CreateBundleWithReports(environmentPath string, environmentID int64) ([]byte, error) {
+	// Export reports from database to files if we have repos
+	if s.repos != nil {
+		if err := s.exportReportsToFiles(environmentPath, environmentID); err != nil {
+			// Log but don't fail - reports are optional
+			fmt.Printf("Warning: failed to export reports: %v\n", err)
+		}
+	}
+	return s.createTarGz(environmentPath)
+}
+
+// exportReportsToFiles exports all completed reports for an environment to JSON files
+func (s *BundleService) exportReportsToFiles(environmentPath string, environmentID int64) error {
+	if s.repos == nil {
+		return fmt.Errorf("database connection required for report export")
+	}
+
+	// Create reports directory
+	reportsDir := filepath.Join(environmentPath, "reports")
+	if err := os.MkdirAll(reportsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create reports directory: %w", err)
+	}
+
+	// Get all completed reports for this environment
+	ctx := context.Background()
+	reports, err := s.repos.Reports.ListByEnvironment(ctx, environmentID)
+	if err != nil {
+		return fmt.Errorf("failed to list reports: %w", err)
+	}
+
+	for _, report := range reports {
+		if report.Status != "completed" {
+			continue
+		}
+
+		// Get full report with agent details
+		fullReport, err := s.repos.Reports.GetByID(ctx, report.ID)
+		if err != nil {
+			continue
+		}
+
+		// Get agent details for this report
+		agentDetails, err := s.repos.Reports.GetAgentReportDetails(ctx, report.ID)
+		if err != nil {
+			agentDetails = nil // Continue without agent details
+		}
+
+		// Build export structure
+		exportData := map[string]interface{}{
+			"id":                     fullReport.ID,
+			"name":                   fullReport.Name,
+			"description":            nullStringValue(fullReport.Description),
+			"environment_id":         fullReport.EnvironmentID,
+			"status":                 fullReport.Status,
+			"team_criteria":          fullReport.TeamCriteria,
+			"agent_criteria":         nullStringValue(fullReport.AgentCriteria),
+			"executive_summary":      nullStringValue(fullReport.ExecutiveSummary),
+			"team_score":             nullFloat64Value(fullReport.TeamScore),
+			"team_reasoning":         nullStringValue(fullReport.TeamReasoning),
+			"team_criteria_scores":   nullStringValue(fullReport.TeamCriteriaScores),
+			"total_runs_analyzed":    nullInt64Value(fullReport.TotalRunsAnalyzed),
+			"total_agents_analyzed":  nullInt64Value(fullReport.TotalAgentsAnalyzed),
+			"generation_completed_at": nullTimeValue(fullReport.GenerationCompletedAt),
+			"judge_model":            nullStringValue(fullReport.JudgeModel),
+			"created_at":             fullReport.CreatedAt,
+		}
+
+		if agentDetails != nil {
+			exportData["agent_details"] = agentDetails
+		}
+
+		// Write to file
+		jsonData, err := json.MarshalIndent(exportData, "", "  ")
+		if err != nil {
+			continue
+		}
+
+		filename := fmt.Sprintf("report-%d-%s.json", report.ID, sanitizeFilename(report.Name))
+		if err := os.WriteFile(filepath.Join(reportsDir, filename), jsonData, 0644); err != nil {
+			continue
+		}
+	}
+
+	return nil
+}
+
+// Helper functions for null types
+func nullStringValue(ns interface{}) string {
+	if ns == nil {
+		return ""
+	}
+	switch v := ns.(type) {
+	case string:
+		return v
+	default:
+		// Handle sql.NullString-like types
+		if str, ok := getStringField(v); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+func nullFloat64Value(nf interface{}) float64 {
+	if nf == nil {
+		return 0
+	}
+	switch v := nf.(type) {
+	case float64:
+		return v
+	default:
+		if f, ok := getFloat64Field(v); ok {
+			return f
+		}
+	}
+	return 0
+}
+
+func nullInt64Value(ni interface{}) int64 {
+	if ni == nil {
+		return 0
+	}
+	switch v := ni.(type) {
+	case int64:
+		return v
+	default:
+		if i, ok := getInt64Field(v); ok {
+			return i
+		}
+	}
+	return 0
+}
+
+func nullTimeValue(nt interface{}) string {
+	if nt == nil {
+		return ""
+	}
+	switch v := nt.(type) {
+	case time.Time:
+		return v.Format(time.RFC3339)
+	default:
+		if t, ok := getTimeField(v); ok {
+			return t.Format(time.RFC3339)
+		}
+	}
+	return ""
+}
+
+func getStringField(v interface{}) (string, bool) {
+	if v == nil {
+		return "", false
+	}
+	// Handle sql.NullString directly
+	if ns, ok := v.(sql.NullString); ok {
+		if ns.Valid {
+			return ns.String, true
+		}
+		return "", false
+	}
+	// Use reflection for other NullString-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		// Look for String and Valid fields
+		stringField := rv.FieldByName("String")
+		validField := rv.FieldByName("Valid")
+		if stringField.IsValid() && validField.IsValid() {
+			if validField.Bool() {
+				return stringField.String(), true
+			}
+			return "", false
+		}
+	}
+	// Fallback to string conversion
+	if s, ok := v.(string); ok {
+		return s, true
+	}
+	return fmt.Sprintf("%v", v), true
+}
+
+func getFloat64Field(v interface{}) (float64, bool) {
+	if v == nil {
+		return 0, false
+	}
+	// Handle sql.NullFloat64 directly
+	if nf, ok := v.(sql.NullFloat64); ok {
+		if nf.Valid {
+			return nf.Float64, true
+		}
+		return 0, false
+	}
+	// Use reflection for other NullFloat64-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		floatField := rv.FieldByName("Float64")
+		validField := rv.FieldByName("Valid")
+		if floatField.IsValid() && validField.IsValid() && validField.Bool() {
+			return floatField.Float(), true
+		}
+	}
+	if f, ok := v.(float64); ok {
+		return f, true
+	}
+	return 0, false
+}
+
+func getInt64Field(v interface{}) (int64, bool) {
+	if v == nil {
+		return 0, false
+	}
+	// Handle sql.NullInt64 directly
+	if ni, ok := v.(sql.NullInt64); ok {
+		if ni.Valid {
+			return ni.Int64, true
+		}
+		return 0, false
+	}
+	// Use reflection for other NullInt64-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		intField := rv.FieldByName("Int64")
+		validField := rv.FieldByName("Valid")
+		if intField.IsValid() && validField.IsValid() && validField.Bool() {
+			return intField.Int(), true
+		}
+	}
+	if i, ok := v.(int64); ok {
+		return i, true
+	}
+	return 0, false
+}
+
+func getTimeField(v interface{}) (time.Time, bool) {
+	if v == nil {
+		return time.Time{}, false
+	}
+	// Handle sql.NullTime directly
+	if nt, ok := v.(sql.NullTime); ok {
+		if nt.Valid {
+			return nt.Time, true
+		}
+		return time.Time{}, false
+	}
+	// Use reflection for other NullTime-like types
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Struct {
+		timeField := rv.FieldByName("Time")
+		validField := rv.FieldByName("Valid")
+		if timeField.IsValid() && validField.IsValid() && validField.Bool() {
+			if t, ok := timeField.Interface().(time.Time); ok {
+				return t, true
+			}
+		}
+	}
+	if t, ok := v.(time.Time); ok {
+		return t, true
+	}
+	return time.Time{}, false
+}
+
+func sanitizeFilename(name string) string {
+	// Replace spaces and special chars with underscores
+	result := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, name)
+	// Limit length
+	if len(result) > 50 {
+		result = result[:50]
+	}
+	return strings.ToLower(result)
+}
+
 // generateManifest creates a bundle manifest by analyzing the environment directory
 func (s *BundleService) generateManifest(sourceDir string) (*BundleManifest, error) {
 	// Extract environment name from path
@@ -63,6 +341,8 @@ func (s *BundleService) generateManifest(sourceDir string) (*BundleManifest, err
 		Tools:                 []ToolManifestInfo{},
 		AgentMCPRelationships: []AgentMCPRelationship{},
 		RequiredVariables:     []VariableRequirement{},
+		Reports:               []ReportManifestInfo{},
+		Datasets:              []DatasetManifestInfo{},
 	}
 
 	// Parse agent files
@@ -121,7 +401,142 @@ func (s *BundleService) generateManifest(sourceDir string) (*BundleManifest, err
 		}
 	}
 
+	// Parse datasets directory
+	datasetsDir := filepath.Join(sourceDir, "datasets")
+	if _, err := os.Stat(datasetsDir); err == nil {
+		datasets, err := os.ReadDir(datasetsDir)
+		if err == nil {
+			for _, dataset := range datasets {
+				if dataset.IsDir() {
+					datasetInfo, err := s.parseDatasetDir(filepath.Join(datasetsDir, dataset.Name()))
+					if err == nil {
+						manifest.Datasets = append(manifest.Datasets, *datasetInfo)
+					}
+				}
+			}
+		}
+	}
+
+	// Parse reports directory (exported reports)
+	reportsDir := filepath.Join(sourceDir, "reports")
+	if _, err := os.Stat(reportsDir); err == nil {
+		reports, err := os.ReadDir(reportsDir)
+		if err == nil {
+			for _, report := range reports {
+				if strings.HasSuffix(report.Name(), ".json") {
+					reportInfo, err := s.parseReportFile(filepath.Join(reportsDir, report.Name()))
+					if err == nil {
+						manifest.Reports = append(manifest.Reports, *reportInfo)
+					}
+				}
+			}
+		}
+	}
+
 	return manifest, nil
+}
+
+// parseDatasetDir extracts metadata from a dataset directory
+func (s *BundleService) parseDatasetDir(dirPath string) (*DatasetManifestInfo, error) {
+	datasetFile := filepath.Join(dirPath, "dataset.json")
+	data, err := os.ReadFile(datasetFile)
+	if err != nil {
+		return nil, err
+	}
+
+	// Dataset structure has metadata nested
+	var dataset struct {
+		Metadata struct {
+			AgentID       int64  `json:"agent_id"`
+			AgentName     string `json:"agent_name"`
+			GeneratedAt   string `json:"generated_at"`
+			TotalRuns     int    `json:"total_runs"`
+			ScenarioCount int    `json:"scenario_count"`
+		} `json:"metadata"`
+		Runs []struct {
+			RunID int64 `json:"run_id"`
+		} `json:"runs"`
+	}
+
+	if err := json.Unmarshal(data, &dataset); err != nil {
+		return nil, err
+	}
+
+	runCount := len(dataset.Runs)
+	if runCount == 0 {
+		runCount = dataset.Metadata.TotalRuns
+	}
+
+	info := &DatasetManifestInfo{
+		Path:          filepath.Base(dirPath),
+		AgentID:       dataset.Metadata.AgentID,
+		AgentName:     dataset.Metadata.AgentName,
+		RunCount:      runCount,
+		ScenarioCount: dataset.Metadata.ScenarioCount,
+		CreatedAt:     dataset.Metadata.GeneratedAt,
+	}
+
+	// Check for analysis.json
+	if _, err := os.Stat(filepath.Join(dirPath, "analysis.json")); err == nil {
+		info.HasAnalysis = true
+	}
+
+	// Check for llm_evaluation.json and extract quality score
+	llmEvalFile := filepath.Join(dirPath, "llm_evaluation.json")
+	if llmEvalData, err := os.ReadFile(llmEvalFile); err == nil {
+		info.HasLLMEval = true
+		var llmEval struct {
+			AggregateScores struct {
+				OverallQuality float64 `json:"overall_quality"`
+			} `json:"aggregate_scores"`
+		}
+		if err := json.Unmarshal(llmEvalData, &llmEval); err == nil && llmEval.AggregateScores.OverallQuality > 0 {
+			info.QualityScore = &llmEval.AggregateScores.OverallQuality
+		}
+	}
+
+	return info, nil
+}
+
+// parseReportFile extracts metadata from an exported report JSON file
+func (s *BundleService) parseReportFile(filePath string) (*ReportManifestInfo, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var report struct {
+		ID               int64   `json:"id"`
+		Name             string  `json:"name"`
+		Description      string  `json:"description"`
+		Status           string  `json:"status"`
+		TeamScore        float64 `json:"team_score"`
+		AgentsAnalyzed   int     `json:"total_agents_analyzed"`
+		RunsAnalyzed     int     `json:"total_runs_analyzed"`
+		GeneratedAt      string  `json:"generation_completed_at"`
+		ExecutiveSummary string  `json:"executive_summary"`
+	}
+
+	if err := json.Unmarshal(data, &report); err != nil {
+		return nil, err
+	}
+
+	info := &ReportManifestInfo{
+		ID:               report.ID,
+		Name:             report.Name,
+		Description:      report.Description,
+		Status:           report.Status,
+		AgentsAnalyzed:   report.AgentsAnalyzed,
+		RunsAnalyzed:     report.RunsAnalyzed,
+		GeneratedAt:      report.GeneratedAt,
+		ExecutiveSummary: report.ExecutiveSummary,
+	}
+
+	if report.TeamScore > 0 {
+		info.TeamScore = &report.TeamScore
+	}
+
+	return info, nil
 }
 
 // parseAgentFile extracts metadata from a .prompt file
@@ -485,6 +900,34 @@ type BundleManifest struct {
 	Tools                 []ToolManifestInfo      `json:"tools"`
 	AgentMCPRelationships []AgentMCPRelationship  `json:"agent_mcp_relationships"`
 	RequiredVariables     []VariableRequirement   `json:"required_variables"`
+	Reports               []ReportManifestInfo    `json:"reports,omitempty"`
+	Datasets              []DatasetManifestInfo   `json:"datasets,omitempty"`
+}
+
+// ReportManifestInfo contains report metadata for the manifest
+type ReportManifestInfo struct {
+	ID               int64    `json:"id"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description,omitempty"`
+	Status           string   `json:"status"`
+	TeamScore        *float64 `json:"team_score,omitempty"`
+	AgentsAnalyzed   int      `json:"agents_analyzed"`
+	RunsAnalyzed     int      `json:"runs_analyzed"`
+	GeneratedAt      string   `json:"generated_at,omitempty"`
+	ExecutiveSummary string   `json:"executive_summary,omitempty"`
+}
+
+// DatasetManifestInfo contains dataset metadata for the manifest
+type DatasetManifestInfo struct {
+	Path           string `json:"path"`
+	AgentID        int64  `json:"agent_id"`
+	AgentName      string `json:"agent_name"`
+	RunCount       int    `json:"run_count"`
+	ScenarioCount  int    `json:"scenario_count,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	HasAnalysis    bool   `json:"has_analysis"`
+	HasLLMEval     bool   `json:"has_llm_evaluation"`
+	QualityScore   *float64 `json:"quality_score,omitempty"`
 }
 
 // BundleMetadata contains high-level bundle information

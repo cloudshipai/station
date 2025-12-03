@@ -114,8 +114,11 @@ func (a *Analyzer) loadRunData(ctx context.Context, runID int64) (*EvaluationInp
 			ar.execution_steps,
 			COALESCE(ar.duration_seconds, 0.0),
 			COALESCE(ar.total_tokens, 0),
-			ar.status
+			ar.status,
+			COALESCE(a.name, ''),
+			COALESCE(a.description, '')
 		FROM agent_runs ar
+		LEFT JOIN agents a ON ar.agent_id = a.id
 		WHERE ar.id = ?
 	`
 
@@ -132,16 +135,12 @@ func (a *Analyzer) loadRunData(ctx context.Context, runID int64) (*EvaluationInp
 		&input.Duration,
 		&input.Tokens,
 		&input.Status,
+		&input.AgentName,
+		&input.AgentDescription,
 	)
 
 	// Cost not tracked in current schema
 	input.Cost = 0.0
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to query run: %w", err)
-	}
-
-	// Note: trace_id column not available in current schema
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to query run: %w", err)
@@ -290,15 +289,9 @@ func (a *Analyzer) evaluateTaskCompletion(ctx context.Context, input *Evaluation
 }
 
 func (a *Analyzer) evaluateFaithfulness(ctx context.Context, input *EvaluationInput) (MetricResult, error) {
-	// Faithfulness uses same logic as hallucination for now
-	// TODO: Implement separate faithfulness metric with claims extraction
-	evaluator := NewHallucinationEvaluator(a.judge)
-	result, err := evaluator.Evaluate(ctx, input)
-	if err != nil {
-		return MetricResult{}, err
-	}
-	result.MetricType = MetricFaithfulness
-	return result, nil
+	// Use dedicated faithfulness evaluator that checks if claims are grounded in context
+	evaluator := NewFaithfulnessEvaluator(a.judge)
+	return evaluator.Evaluate(ctx, input)
 }
 
 func (a *Analyzer) evaluateToxicity(ctx context.Context, input *EvaluationInput) (MetricResult, error) {

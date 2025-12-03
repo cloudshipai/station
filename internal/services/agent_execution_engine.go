@@ -53,6 +53,8 @@ type AgentExecutionEngine struct {
 	lighthouseClient         *lighthouse.LighthouseClient // For CloudShip integration
 	deploymentContextService *DeploymentContextService    // For gathering deployment context
 	activeMCPClients         []*mcp.GenkitMCPClient       // Store active connections for cleanup after execution
+	memoryClient             *lighthouse.MemoryClient     // For CloudShip memory integration (serve/stdio mode)
+	memoryAPIClient          *lighthouse.MemoryAPIClient  // For CloudShip memory integration (CLI mode - direct API)
 }
 
 // NewAgentExecutionEngine creates a new agent execution engine
@@ -87,6 +89,24 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 func (aee *AgentExecutionEngine) SetTelemetryService(ts *TelemetryService) {
 	aee.telemetryService = ts
 	logging.Debug("OTEL telemetry service configured for agent execution engine")
+}
+
+// SetMemoryClient sets the CloudShip memory client for memory integration
+// This should be called when the ManagementChannel connects to CloudShip
+func (aee *AgentExecutionEngine) SetMemoryClient(mc *lighthouse.MemoryClient) {
+	aee.memoryClient = mc
+	if mc != nil {
+		logging.Info("CloudShip memory client configured for agent execution engine")
+	}
+}
+
+// SetMemoryAPIClient sets the direct API memory client for CLI mode
+// This should be called for CLI executions where there's no management channel
+func (aee *AgentExecutionEngine) SetMemoryAPIClient(apiClient *lighthouse.MemoryAPIClient) {
+	aee.memoryAPIClient = apiClient
+	if apiClient != nil {
+		logging.Info("CloudShip memory API client configured for agent execution engine (CLI mode)")
+	}
 }
 
 // ExecuteAgent executes an agent using the unified execution architecture
@@ -385,6 +405,48 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	// Add current run ID to context for trace correlation
 	ctx = WithCurrentRunID(ctx, runID)
 
+	// Inject CloudShip memory context if agent has memory configured
+	logging.Info("[MEMORY DEBUG] Agent '%s' (ID: %d) MemoryTopicKey=%v", agent.Name, agent.ID, agent.MemoryTopicKey)
+	if agent.MemoryTopicKey != nil && *agent.MemoryTopicKey != "" {
+		logging.Info("[MEMORY DEBUG] Processing memory for topic '%s'", *agent.MemoryTopicKey)
+		maxTokens := 2000 // Default max tokens
+		if agent.MemoryMaxTokens != nil && *agent.MemoryMaxTokens > 0 {
+			maxTokens = *agent.MemoryMaxTokens
+		}
+
+		// Create memory service with CloudShip integration if memory client is available
+		var memoryService *MemoryService
+		if aee.memoryClient != nil {
+			memoryService = NewMemoryServiceWithClient(aee.memoryClient)
+		} else {
+			memoryService = NewMemoryService()
+		}
+		// Also set API client for CLI mode direct API calls
+		if aee.memoryAPIClient != nil {
+			memoryService.SetMemoryAPIClient(aee.memoryAPIClient)
+		}
+		memoryCtx := memoryService.GetMemoryContext(ctx, *agent.MemoryTopicKey, maxTokens)
+
+		if memoryCtx.Error != nil {
+			logging.Info("Warning: Failed to get memory context for topic '%s': %v", *agent.MemoryTopicKey, memoryCtx.Error)
+		} else if memoryCtx.Content != "" {
+			// Initialize userVariables if nil
+			if userVariables == nil {
+				userVariables = make(map[string]interface{})
+			}
+			userVariables["cloudship_memory"] = memoryCtx.Content
+			logging.Info("Injected memory context for topic '%s' (%d tokens, source: %s)", 
+				memoryCtx.TopicKey, memoryCtx.TokenCount, memoryCtx.Source)
+		} else {
+			// Memory topic exists but no content yet - inject empty string
+			if userVariables == nil {
+				userVariables = make(map[string]interface{})
+			}
+			userVariables["cloudship_memory"] = ""
+			logging.Debug("Memory topic '%s' exists but has no content yet", *agent.MemoryTopicKey)
+		}
+	}
+
 	// Use clean, unified dotprompt.Execute() execution path with context for timeout protection
 	response, err := executor.ExecuteAgent(ctx, *agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 
@@ -537,7 +599,7 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 
 	// Convert AgentExecutionResult to types.AgentRun for Lighthouse
 	agentRun := aee.convertToAgentRun(agent, task, runID, startTime, result)
-	logging.Info("🆔 [SENDRUN TRACKER] Generated run_uuid=%s for station_run_id=%d agent='%s'", agentRun.ID, runID, agent.Name)
+	logging.Info("🆔 [SENDRUN TRACKER] Generated run_uuid=%s for station_run_id=%d agent='%s' memory_topic_key='%s'", agentRun.ID, runID, agent.Name, agentRun.MemoryTopicKey)
 
 	// Determine deployment mode and send appropriate data
 	mode := aee.lighthouseClient.GetMode()
@@ -732,6 +794,12 @@ func (aee *AgentExecutionEngine) convertToAgentRun(agent *models.Agent, task str
 		OutputSchemaPreset: func() string {
 			if agent.OutputSchemaPreset != nil {
 				return *agent.OutputSchemaPreset
+			}
+			return ""
+		}(),
+		MemoryTopicKey: func() string {
+			if agent.MemoryTopicKey != nil {
+				return *agent.MemoryTopicKey
 			}
 			return ""
 		}(),

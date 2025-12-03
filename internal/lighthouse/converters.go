@@ -52,7 +52,8 @@ func convertAgentRunToProto(run *types.AgentRun) *proto.LighthouseAgentRunData {
 		StartedAt:      timestampFromTime(run.StartedAt),
 		CompletedAt:    timestampFromTime(run.CompletedAt),
 		Metadata:       metadata,
-		StationVersion: "v0.11.0", // Station version for debugging/compatibility
+		StationVersion: "v0.11.0",         // Station version for debugging/compatibility
+		MemoryTopicKey: run.MemoryTopicKey, // Memory topic for NATS publishing
 	}
 }
 
