@@ -2030,27 +2030,11 @@ const EnvironmentsPage = () => {
             </button>
 
             <div className="border-t border-gray-200 pt-3 mt-3">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Deployment</h3>
-
-              <button
-                onClick={handleDeploy}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
-              >
-                <Rocket className="h-4 w-4" />
-                <span>Deploy Template</span>
-              </button>
-
-              <button
-                onClick={handleBuildImage}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm mt-2"
-              >
-                <Package className="h-4 w-4" />
-                <span>Build Docker Image</span>
-              </button>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Bundle</h3>
 
               <button
                 onClick={handleBundleEnvironment}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm mt-2"
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
               >
                 <Archive className="h-4 w-4" />
                 <span>Create Bundle</span>
@@ -2290,15 +2274,6 @@ const EnvironmentsPage = () => {
                   <div>
                     <div className="font-medium text-gray-900 text-sm">Create Bundle</div>
                     <div className="text-xs text-gray-600 mt-1">Package environment into shareable tar.gz with agents, MCP configs, and variables template.</div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-start gap-3">
-                  <Package className="h-4 w-4 text-orange-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-gray-900 text-sm">Build Docker Image</div>
-                    <div className="text-xs text-gray-600 mt-1">Create containerized deployment with environment pre-configured for Kubernetes/Docker production.</div>
                   </div>
                 </div>
               </div>
@@ -3123,46 +3098,50 @@ const VariablesEditorModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-tokyo-bg-dark border border-tokyo-blue7 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-mono font-semibold text-tokyo-cyan">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-4xl w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white rounded-t-lg">
+          <h2 className="text-lg font-semibold text-gray-900">
             Environment Variables - {environmentName}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-tokyo-bg-highlight rounded transition-colors"
+          <button 
+            onClick={onClose} 
+            className="text-gray-500 hover:text-gray-900 transition-colors"
           >
-            <X className="h-5 w-5 text-tokyo-comment hover:text-tokyo-fg" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Content */}
+        <div className="p-6 space-y-4 overflow-y-auto flex-1 bg-white">
           {/* Warning Banner */}
-          <div className="mb-4 p-4 border-2 border-tokyo-orange rounded">
-            <p className="text-tokyo-orange text-sm font-mono">
-              ⚠️ Important: These variables are local to your machine and will NOT be included in bundles or Docker images.
-              They are for local development only.
+          <div className="bg-blue-50 border border-blue-200 rounded p-4">
+            <p className="text-sm text-gray-700">
+              <strong>⚠️ Important:</strong> These variables are local to your machine and will NOT be included in bundles or Docker images. They are for local development only.
             </p>
           </div>
 
-          <div className="mb-4">
-            <p className="text-tokyo-comment text-sm font-mono">
-              Edit the variables.yml file for this environment.
-              After saving, run 'stn sync' to apply changes to your MCP servers.
-            </p>
-          </div>
+          <p className="text-gray-600 text-sm">
+            Edit the variables.yml file for this environment. After saving, run 'stn sync' to apply changes to your MCP servers.
+          </p>
 
           {loading ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-tokyo-comment font-mono">Loading variables...</p>
+            <div className="flex-1 flex items-center justify-center py-12">
+              <p className="text-gray-500">Loading variables...</p>
             </div>
           ) : (
             <>
               {/* Monaco Editor */}
-              <div className="flex-1 border border-tokyo-blue7 rounded overflow-hidden min-h-[500px]">
+              <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '400px' }}>
                 <Editor
-                  height="500px"
+                  height="400px"
                   defaultLanguage="yaml"
                   value={variables}
                   onChange={(value) => setVariables(value || '')}
@@ -3182,30 +3161,32 @@ const VariablesEditorModal = ({
                   }}
                 />
               </div>
-
-              {/* Action Buttons */}
-              <div className="flex justify-between items-center mt-6 pt-4 border-t border-tokyo-blue7">
-                <div className="text-tokyo-comment text-sm font-mono">
-                  💡 After saving, run 'stn sync' to apply variable changes
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={onClose}
-                    className="px-4 py-2 bg-tokyo-comment hover:bg-gray-600 text-tokyo-bg rounded font-mono text-sm transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="px-4 py-2 bg-tokyo-green hover:bg-green-600 text-tokyo-bg rounded font-mono text-sm transition-colors disabled:opacity-50"
-                  >
-                    {saving ? 'Saving...' : 'Save Variables'}
-                  </button>
-                </div>
-              </div>
             </>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-200 bg-white">
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-gray-500 text-sm">
+              💡 After saving, run 'stn sync' to apply variable changes
+            </div>
+          </div>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 bg-cyan-600 text-white rounded font-medium hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {saving ? 'Saving...' : 'Save Variables'}
+            </button>
+          </div>
         </div>
       </div>
 

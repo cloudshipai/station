@@ -15,7 +15,15 @@ inputs:
     required: false
   
   bundle-url:
-    description: 'Bundle URL (required if source-type=bundle)'
+    description: 'Bundle URL (required if source-type=bundle and bundle-id not set)'
+    required: false
+  
+  bundle-id:
+    description: 'CloudShip bundle ID (UUID). Alternative to bundle-url when source-type=bundle'
+    required: false
+  
+  cloudship-api-key:
+    description: 'CloudShip API key for downloading bundles by ID'
     required: false
   
   image-name:
@@ -75,14 +83,49 @@ runs:
         
         if [ "$SOURCE_TYPE" = "bundle" ]; then
           BUNDLE_URL="${{ inputs.bundle-url }}"
-          if [ -z "$BUNDLE_URL" ]; then
-            echo "❌ Error: bundle-url required when source-type=bundle"
+          BUNDLE_ID="${{ inputs.bundle-id }}"
+          CLOUDSHIP_API_KEY="${{ inputs.cloudship-api-key }}"
+          
+          # Determine download method
+          if [ -n "$BUNDLE_ID" ]; then
+            # Download from CloudShip by bundle ID
+            if [ -z "$CLOUDSHIP_API_KEY" ]; then
+              echo "❌ Error: cloudship-api-key required when using bundle-id"
+              exit 1
+            fi
+            
+            CLOUDSHIP_API_URL="${CLOUDSHIP_API_URL:-https://app.cloudshipai.com}"
+            DOWNLOAD_URL="${CLOUDSHIP_API_URL}/api/public/bundles/${BUNDLE_ID}/download/"
+            
+            echo "📦 Downloading bundle from CloudShip: $BUNDLE_ID"
+            mkdir -p /tmp/station-bundle
+            
+            HTTP_CODE=$(curl -sS -w "%{http_code}" \
+              -H "X-Registration-Key: ${CLOUDSHIP_API_KEY}" \
+              -o /tmp/station-bundle/bundle.tar.gz \
+              "$DOWNLOAD_URL")
+            
+            if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+              echo "❌ Error: Unauthorized - check your CloudShip API key"
+              exit 1
+            elif [ "$HTTP_CODE" = "404" ]; then
+              echo "❌ Error: Bundle not found: $BUNDLE_ID"
+              exit 1
+            elif [ "$HTTP_CODE" != "200" ]; then
+              echo "❌ Error: CloudShip API error (HTTP $HTTP_CODE)"
+              exit 1
+            fi
+            
+          elif [ -n "$BUNDLE_URL" ]; then
+            # Download from URL
+            echo "📦 Downloading bundle: $BUNDLE_URL"
+            mkdir -p /tmp/station-bundle
+            curl -fsSL "$BUNDLE_URL" -o /tmp/station-bundle/bundle.tar.gz
+            
+          else
+            echo "❌ Error: bundle-url or bundle-id required when source-type=bundle"
             exit 1
           fi
-          
-          echo "📦 Downloading bundle: $BUNDLE_URL"
-          mkdir -p /tmp/station-bundle
-          curl -fsSL "$BUNDLE_URL" -o /tmp/station-bundle/bundle.tar.gz
           
           echo "📂 Extracting bundle..."
           cd /tmp/station-bundle

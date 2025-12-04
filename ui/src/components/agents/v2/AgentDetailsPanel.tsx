@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, Trash2, ExternalLink, Clock, CheckCircle, XCircle, PlayCircle, Loader2, HelpCircle, Calendar } from 'lucide-react';
+import { Copy, Trash2, ExternalLink, Clock, CheckCircle, XCircle, PlayCircle, Loader2, HelpCircle, Calendar, Database } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { agentRunsApi, agentsApi } from '../../../api/station';
 import type { Agent, AgentRun } from '../../../types/station';
@@ -161,6 +161,46 @@ export const AgentDetailsPanel: React.FC<AgentDetailsPanelProps> = ({ agent, onR
             </div>
           </div>
         </section>
+
+        {/* Memory Section - Only show if memory is configured */}
+        {agent.memory_topic_key && (
+          <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
+            <div className="flex items-center gap-2 mb-4">
+              <Database className="h-4 w-4 text-purple-600" />
+              <h3 className="text-sm font-semibold text-gray-900">Memory</h3>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-gray-600">Topic Key</label>
+                  <span className="text-xs text-gray-900 font-mono bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200">
+                    {agent.memory_topic_key}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  This agent has access to shared memory context from CloudShip
+                </p>
+              </div>
+              
+              {agent.memory_max_tokens && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-medium text-gray-600">Max Tokens</label>
+                    <span className="text-xs text-gray-900 font-mono bg-gray-50 px-2.5 py-1 rounded-md border border-gray-200">
+                      {agent.memory_max_tokens.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full transition-all" 
+                      style={{ width: `${Math.min((agent.memory_max_tokens / 8000) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Tools Section - Clean card */}
         <section className="bg-white rounded-xl border border-gray-200/60 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">

@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"station/cmd/main/handlers/common"
@@ -50,14 +52,25 @@ Examples:
 // Bundle install subcommand
 var bundleInstallCmd = &cobra.Command{
 	Use:   "install <bundle-source> <environment-name>",
-	Short: "Install a bundle from URL or file path",
-	Long: `Install a bundle from a remote URL or local file path.
-This uses the same installation logic as the Station UI.
+	Short: "Install a bundle from CloudShip, URL, or file path",
+	Long: `Install a bundle from CloudShip (by ID), a remote URL, or local file path.
+
+The bundle source can be:
+  - CloudShip Bundle ID (UUID format): Downloads from your CloudShip account
+  - URL (http/https): Downloads from the URL
+  - File path: Uses the local file
+
+For CloudShip bundles, you must be authenticated. Run 'stn auth login' first.
 
 Examples:
+  # Install from CloudShip bundle ID
+  stn bundle install e26b414a-f076-4135-927f-810bc1dc892a finops
+
+  # Install from URL
   stn bundle install https://github.com/cloudshipai/registry/releases/download/v1.0.0/devops-security-bundle.tar.gz security
-  stn bundle install ./my-bundle.tar.gz production
-  stn bundle install /path/to/bundle.tar.gz development`,
+
+  # Install from local file
+  stn bundle install ./my-bundle.tar.gz production`,
 	Args: cobra.ExactArgs(2),
 	RunE: runBundleInstall,
 }
@@ -198,7 +211,22 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 	bundleSource := args[0]
 	environmentName := args[1]
 
-	fmt.Printf("📦 Installing bundle from: %s\n", bundleSource)
+	// Check if bundleSource is a CloudShip bundle ID (UUID format)
+	if isUUID(bundleSource) {
+		fmt.Printf("📦 Downloading bundle from CloudShip: %s\n", bundleSource)
+		
+		// Download from CloudShip
+		downloadedPath, err := downloadBundleFromCloudShip(bundleSource)
+		if err != nil {
+			return fmt.Errorf("failed to download bundle from CloudShip: %w", err)
+		}
+		defer os.Remove(downloadedPath) // Clean up temp file
+		
+		bundleSource = downloadedPath
+		fmt.Printf("✅ Bundle downloaded successfully\n")
+	} else {
+		fmt.Printf("📦 Installing bundle from: %s\n", bundleSource)
+	}
 
 	// Load Station config to get database URL
 	cfg, err := config.Load()
@@ -237,6 +265,74 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// isUUID checks if a string matches UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+func isUUID(s string) bool {
+	// UUID regex pattern
+	uuidPattern := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
+	matched, _ := regexp.MatchString(uuidPattern, s)
+	return matched
+}
+
+// downloadBundleFromCloudShip downloads a bundle from CloudShip by ID
+func downloadBundleFromCloudShip(bundleID string) (string, error) {
+	// Get auth header (Bearer token or Registration Key)
+	headerName, headerValue, err := GetCloudShipAuthHeader()
+	if err != nil {
+		return "", fmt.Errorf("authentication required: %w\nRun 'stn auth login' to authenticate", err)
+	}
+	
+	// Get API URL
+	apiURL := GetCloudShipAPIURL()
+	
+	// Build download URL (trailing slash required by CloudShip API)
+	downloadURL := fmt.Sprintf("%s/api/public/bundles/%s/download/", apiURL, bundleID)
+	
+	// Create request
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set(headerName, headerValue)
+	
+	// Make request
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to CloudShip: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return "", fmt.Errorf("unauthorized - check your API key")
+	}
+	
+	if resp.StatusCode == 404 {
+		return "", fmt.Errorf("bundle not found: %s", bundleID)
+	}
+	
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("CloudShip API error (status %d)", resp.StatusCode)
+	}
+	
+	// Create temp file
+	tmpFile, err := os.CreateTemp("", "station-bundle-*.tar.gz")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	
+	// Copy response body to temp file
+	_, err = io.Copy(tmpFile, resp.Body)
+	if err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to download bundle: %w", err)
+	}
+	
+	tmpFile.Close()
+	return tmpFile.Name(), nil
+}
+
 // CloudShip upload response
 type CloudShipUploadResponse struct {
 	BundleID     string `json:"bundle_id"`
@@ -264,9 +360,17 @@ func runBundleShare(cmd *cobra.Command, args []string) error {
 
 	// Use bundle registry URL from config (can be overridden by flag)
 	apiURL, _ := cmd.Flags().GetString("api-url")
-	if apiURL == "https://api.cloudshipai.com" && cfg.CloudShip.BundleRegistryURL != "" {
-		// If flag is default and config has a value, use config
-		apiURL = cfg.CloudShip.BundleRegistryURL
+	flagIsDefault := apiURL == "https://api.cloudshipai.com"
+	
+	if flagIsDefault {
+		// Flag wasn't overridden, determine URL from config
+		// Priority: APIURL (explicit config) > BundleRegistryURL (may be default)
+		if cfg.CloudShip.APIURL != "" {
+			apiURL = cfg.CloudShip.APIURL
+		} else if cfg.CloudShip.BundleRegistryURL != "" && cfg.CloudShip.BundleRegistryURL != "https://api.cloudshipai.com" {
+			apiURL = cfg.CloudShip.BundleRegistryURL
+		}
+		// else keep the default
 	}
 
 	registrationKey := cfg.CloudShip.RegistrationKey
@@ -323,7 +427,7 @@ func runBundleShare(cmd *cobra.Command, args []string) error {
 	}
 
 	// Upload to CloudShip
-	fmt.Printf("☁️  Uploading to CloudShip...\n")
+	fmt.Printf("☁️  Uploading to CloudShip at %s...\n", apiURL)
 
 	response, err := uploadBundleToCloudShip(apiURL, registrationKey, bundlePath)
 	if err != nil {
@@ -365,7 +469,7 @@ func uploadBundleToCloudShip(apiURL, registrationKey, bundlePath string) (*Cloud
 	writer.Close()
 
 	// Create HTTP request
-	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload", strings.TrimSuffix(apiURL, "/"))
+	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload/", strings.TrimSuffix(apiURL, "/"))
 	req, err := http.NewRequest("POST", uploadURL, body)
 	if err != nil {
 		return nil, err

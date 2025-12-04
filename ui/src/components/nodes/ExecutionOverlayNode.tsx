@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Bot, Settings, Network, Users, Clock, Play, Zap } from 'lucide-react';
+import { Bot, Settings, Network, Users, Clock, Play, Zap, Database } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { Agent } from '../../types/station';
 import type { AgentHierarchyInfo} from '../../utils/agentHierarchy';
@@ -176,12 +176,20 @@ export const ExecutionOverlayNode: React.FC<HierarchicalAgentNodeProps> = ({ dat
           <span className="text-gray-500">
             {agent.max_steps} max steps
           </span>
-          {agent.is_scheduled && (
-            <div className="flex items-center gap-1 text-green-600">
-              <Clock className="w-3 h-3" />
-              <span>Scheduled</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {agent.memory_topic_key && (
+              <div className="flex items-center gap-1 text-purple-600" title={`Memory: ${agent.memory_topic_key}`}>
+                <Database className="w-3 h-3" />
+                <span>Memory</span>
+              </div>
+            )}
+            {agent.is_scheduled && (
+              <div className="flex items-center gap-1 text-green-600">
+                <Clock className="w-3 h-3" />
+                <span>Scheduled</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* MICRO-TIMELINE: Inline execution visualization */}

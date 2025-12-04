@@ -63,9 +63,11 @@ Creates distributable `.tar.gz` bundles from Station environments with metadata.
 Builds production-ready Docker images from Station environments or bundles.
 
 **Inputs:**
-- `source-type`: **Required** - `environment` (local) or `bundle` (URL)
+- `source-type`: **Required** - `environment` (local) or `bundle` (URL/ID)
 - `environment`: Environment name (required if `source-type=environment`)
-- `bundle-url`: Bundle URL (required if `source-type=bundle`)
+- `bundle-url`: Bundle URL (required if `source-type=bundle` and no `bundle-id`)
+- `bundle-id`: CloudShip bundle ID (UUID) - alternative to `bundle-url`
+- `cloudship-api-key`: API key for CloudShip bundle downloads (required with `bundle-id`)
 - `image-name`: **Required** - Docker image name
 - `image-tag`: Image tag (default: `latest`)
 - `registry`: Container registry (default: `ghcr.io`)
@@ -101,6 +103,21 @@ Builds production-ready Docker images from Station environments or bundles.
     image-name: 'station-production'
     image-tag: 'v1.0.0'
     push: 'true'
+```
+
+**Example Usage (from CloudShip bundle ID):**
+```yaml
+- name: Build from CloudShip Bundle
+  uses: cloudshipai/station/.github/actions/build-image@main
+  with:
+    source-type: 'bundle'
+    bundle-id: 'e26b414a-f076-4135-927f-810bc1dc892a'
+    cloudship-api-key: ${{ secrets.CLOUDSHIP_API_KEY }}
+    image-name: 'station-production'
+    image-tag: 'v1.0.0'
+    push: 'true'
+    registry-username: ${{ github.actor }}
+    registry-password: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ---
@@ -175,12 +192,54 @@ jobs:
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-### Example 3: Customer Deployment (Bundle URL → Image)
+### Example 3: Customer Deployment (CloudShip Bundle → Image)
 
-Perfect for consulting firms delivering agent bundles to customers:
+Perfect for deploying bundles from CloudShip:
 
 ```yaml
-name: Deploy Customer Bundle
+name: Deploy CloudShip Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: 'CloudShip bundle ID (UUID)'
+        required: true
+      version:
+        description: 'Version tag'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    
+    steps:
+      - name: Build from CloudShip Bundle
+        uses: cloudshipai/station/.github/actions/build-image@main
+        with:
+          source-type: 'bundle'
+          bundle-id: ${{ inputs.bundle_id }}
+          cloudship-api-key: ${{ secrets.CLOUDSHIP_API_KEY }}
+          image-name: '${{ github.repository_owner }}/station-production'
+          image-tag: ${{ inputs.version }}
+          push: 'true'
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl set image deployment/station \
+            station=${{ github.repository_owner }}/station-production:${{ inputs.version }}
+```
+
+### Example 4: Customer Deployment (Bundle URL → Image)
+
+For bundles distributed via direct URL:
+
+```yaml
+name: Deploy Bundle from URL
 
 on:
   workflow_dispatch:

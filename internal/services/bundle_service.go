@@ -1118,8 +1118,30 @@ func (s *BundleService) downloadBundle(url, bundlesDir string) (string, error) {
 		filename = fmt.Sprintf("%s.tar.gz", bundleName)
 	}
 
+	// Create HTTP request to support authentication headers
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	// Check if this is a CloudShip URL and add authentication if needed
+	cfg, cfgErr := config.Load()
+	if cfgErr == nil && cfg.CloudShip.Enabled && cfg.CloudShip.RegistrationKey != "" {
+		// Check if URL matches CloudShip API URL or bundle registry
+		isCloudShipURL := false
+		if cfg.CloudShip.APIURL != "" && strings.Contains(url, cfg.CloudShip.APIURL) {
+			isCloudShipURL = true
+		} else if cfg.CloudShip.BundleRegistryURL != "" && strings.Contains(url, cfg.CloudShip.BundleRegistryURL) {
+			isCloudShipURL = true
+		}
+		if isCloudShipURL {
+			req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+		}
+	}
+
 	// Download the file
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to download bundle: %v", err)
 	}

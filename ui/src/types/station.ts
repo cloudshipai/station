@@ -20,6 +20,9 @@ export interface Agent {
   is_scheduled: boolean;
   schedule_enabled: boolean;
   cron_schedule?: string;
+  memory_topic_key?: string;
+  memory_max_tokens?: number;
+  model?: string;
   created_at: string;
   updated_at: string;
 }

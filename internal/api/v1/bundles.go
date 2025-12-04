@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"station/internal/config"
+	"station/internal/services"
 )
 
 // Bundle request structure
@@ -76,15 +78,27 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[Bundle] Environment directory exists, creating tar.gz bundle")
+	log.Printf("[Bundle] Environment directory exists, creating tar.gz bundle with manifest")
 
-	// Create tar.gz bundle
-	tarData, err := createTarGz(envPath)
-	if err != nil {
-		log.Printf("[Bundle] ERROR: Failed to create tar.gz: %v", err)
+	// Use BundleService for proper bundle creation with manifest, reports, and datasets
+	bundleService := services.NewBundleServiceWithRepos(h.repos)
+	
+	// Try to get environment ID for report export
+	var tarData []byte
+	var bundleErr error
+	env, envErr := h.repos.Environments.GetByName(req.Environment)
+	if envErr == nil && env != nil {
+		// Export reports and create bundle with full metadata
+		tarData, bundleErr = bundleService.CreateBundleWithReports(envPath, env.ID)
+	} else {
+		// Fall back to basic bundle without reports
+		tarData, bundleErr = bundleService.CreateBundle(envPath)
+	}
+	if bundleErr != nil {
+		log.Printf("[Bundle] ERROR: Failed to create bundle: %v", bundleErr)
 		c.JSON(http.StatusInternalServerError, BundleResponse{
 			Success: false,
-			Error:   fmt.Sprintf("Failed to create bundle: %v", err),
+			Error:   fmt.Sprintf("Failed to create bundle: %v", bundleErr),
 		})
 		return
 	}
@@ -170,8 +184,9 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 			return
 		}
 
-		// Use CloudShip bundle registry URL from config
-		apiURL := cfg.CloudShip.BundleRegistryURL
+		// Use CloudShip API URL from config
+		// Priority: APIURL (explicit user config) > default
+		apiURL := cfg.CloudShip.APIURL
 		if apiURL == "" {
 			apiURL = "https://api.cloudshipai.com"
 		}
@@ -179,8 +194,16 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 		log.Printf("[Bundle] CloudShip API URL: %s", apiURL)
 		log.Printf("[Bundle] Registration key length: %d", len(cfg.CloudShip.RegistrationKey))
 
+		// Determine bundle name for CloudShip
+		// Use environment name for versioning, but randomize "default" since everyone has one
+		bundleName := req.Environment
+		if bundleName == "default" {
+			bundleName = fmt.Sprintf("default-%s", uuid.New().String()[:8])
+			log.Printf("[Bundle] Environment is 'default', using unique name: %s", bundleName)
+		}
+
 		// Upload to CloudShip
-		cloudShipResp, err := uploadToCloudShip(tarData, fmt.Sprintf("%s.tar.gz", req.Environment), apiURL, cfg.CloudShip.RegistrationKey)
+		cloudShipResp, err := uploadToCloudShip(tarData, fmt.Sprintf("%s.tar.gz", bundleName), apiURL, cfg.CloudShip.RegistrationKey)
 		if err != nil {
 			log.Printf("[Bundle] ERROR: CloudShip upload failed: %v", err)
 			c.JSON(http.StatusInternalServerError, BundleResponse{
@@ -367,7 +390,7 @@ func uploadToCloudShip(tarData []byte, filename, apiURL, registrationKey string)
 	}
 
 	// Create the request
-	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload", strings.TrimSuffix(apiURL, "/"))
+	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload/", strings.TrimSuffix(apiURL, "/"))
 	log.Printf("[CloudShip] Upload URL: %s", uploadURL)
 	log.Printf("[CloudShip] Content-Type: %s", writer.FormDataContentType())
 	log.Printf("[CloudShip] Request size: %d bytes", buf.Len())
@@ -551,11 +574,25 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 
 	// Check if this is a CloudShip URL and add authentication if needed
 	cfg, err := config.Load()
+	log.Printf("[DownloadBundle] Config loaded - CloudShip enabled: %v, APIURL: %s, RegistrationKey len: %d", 
+		cfg.CloudShip.Enabled, cfg.CloudShip.APIURL, len(cfg.CloudShip.RegistrationKey))
 	if err == nil && cfg.CloudShip.Enabled && cfg.CloudShip.RegistrationKey != "" {
-		// Check if URL matches CloudShip bundle registry
-		if cfg.CloudShip.BundleRegistryURL != "" && strings.Contains(url, cfg.CloudShip.BundleRegistryURL) {
+		// Check if URL matches CloudShip API URL or bundle registry
+		isCloudShipURL := false
+		log.Printf("[DownloadBundle] Checking if URL '%s' contains APIURL '%s' or BundleRegistryURL '%s'",
+			url, cfg.CloudShip.APIURL, cfg.CloudShip.BundleRegistryURL)
+		if cfg.CloudShip.APIURL != "" && strings.Contains(url, cfg.CloudShip.APIURL) {
+			isCloudShipURL = true
+			log.Printf("[DownloadBundle] Matched APIURL")
+		} else if cfg.CloudShip.BundleRegistryURL != "" && strings.Contains(url, cfg.CloudShip.BundleRegistryURL) {
+			isCloudShipURL = true
+			log.Printf("[DownloadBundle] Matched BundleRegistryURL")
+		}
+		if isCloudShipURL {
 			log.Printf("[DownloadBundle] Detected CloudShip URL, adding authentication header")
 			req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+		} else {
+			log.Printf("[DownloadBundle] URL did not match CloudShip patterns")
 		}
 	}
 
@@ -818,14 +855,15 @@ func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
 		return
 	}
 
-	// Use CloudShip bundle registry URL from config
-	apiURL := cfg.CloudShip.BundleRegistryURL
+	// Use CloudShip API URL from config
+	// Priority: APIURL (explicit user config) > default
+	apiURL := cfg.CloudShip.APIURL
 	if apiURL == "" {
 		apiURL = "https://api.cloudshipai.com"
 	}
 
 	// Fetch bundles from CloudShip
-	listURL := fmt.Sprintf("%s/api/public/bundles", strings.TrimSuffix(apiURL, "/"))
+	listURL := fmt.Sprintf("%s/api/public/bundles/", strings.TrimSuffix(apiURL, "/"))
 	req, err := http.NewRequest("GET", listURL, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, CloudShipBundleListResponse{

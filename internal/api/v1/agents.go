@@ -103,17 +103,19 @@ func (h *APIHandlers) listAgents(c *gin.Context) {
 	enrichedAgents := make([]map[string]interface{}, len(agents))
 	for i, agent := range agents {
 		agentMap := map[string]interface{}{
-			"id":               agent.ID,
-			"name":             agent.Name,
-			"description":      agent.Description,
-			"environment_id":   agent.EnvironmentID,
-			"max_steps":        agent.MaxSteps,
-			"created_at":       agent.CreatedAt,
-			"updated_at":       agent.UpdatedAt,
-			"prompt":           agent.Prompt,
-			"schedule_enabled": agent.ScheduleEnabled,
-			"cron_schedule":    agent.CronSchedule,
-			"is_scheduled":     agent.IsScheduled,
+			"id":                agent.ID,
+			"name":              agent.Name,
+			"description":       agent.Description,
+			"environment_id":    agent.EnvironmentID,
+			"max_steps":         agent.MaxSteps,
+			"created_at":        agent.CreatedAt,
+			"updated_at":        agent.UpdatedAt,
+			"prompt":            agent.Prompt,
+			"schedule_enabled":  agent.ScheduleEnabled,
+			"cron_schedule":     agent.CronSchedule,
+			"is_scheduled":      agent.IsScheduled,
+			"memory_topic_key":  agent.MemoryTopicKey,
+			"memory_max_tokens": agent.MemoryMaxTokens,
 		}
 
 		// Add child agents if any exist

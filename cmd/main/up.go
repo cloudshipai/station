@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,17 +34,22 @@ This command:
 - Stores all configuration in Docker volume (isolated from host)
 - Mounts your workspace directory with correct file permissions
 - Automatically configures .mcp.json for Claude integration
-- Exposes ports for MCP (3000), Dynamic MCP (3030), UI (8585)
+- Exposes ports for API (8585), MCP (8586), Dynamic Agent MCP (8587)
 
 Key Features:
 - Config management via UI (restart container to apply changes)
 - Workspace files maintain your user ownership (no root permission issues)
 - Data persists across container restarts in Docker volume
+- Install bundles directly from CloudShip with --bundle flag
 
 Examples:
   # Basic usage
   stn up                                    # Start with current directory as workspace
   stn up --workspace ~/code                 # Use specific directory as workspace
+
+  # Start with a CloudShip bundle (instant sandbox)
+  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a
+  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a --provider openai -e AWS_ACCESS_KEY_ID=$AWS_KEY
 
   # First-time setup with configuration (uses environment variables)
   stn up --provider openai --ship           # Init with OpenAI (requires OPENAI_API_KEY env var)
@@ -58,6 +65,10 @@ Examples:
   # Advanced options
   stn up --upgrade                          # Rebuild container image first
   stn up --env CUSTOM_VAR=value            # Pass additional env vars
+
+To reset and start fresh with a new bundle:
+  stn down --remove-volumes
+  stn up --bundle <new-bundle-id>
 `,
 	RunE: runUp,
 }
@@ -71,13 +82,16 @@ func init() {
 	upCmd.Flags().String("environment", "default", "Station environment to use in develop mode (e.g., default, production, security)")
 
 	// Init flags for first-time setup
-	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, custom)")
-	upCmd.Flags().String("model", "", "AI model to use (e.g., gpt-4o-mini, gemini-2.0-flash-exp)")
+	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, anthropic, custom). Defaults to openai")
+	upCmd.Flags().String("model", "", "AI model to use (e.g., gpt-4o-mini, gemini-2.0-flash-exp). Defaults based on provider")
 	upCmd.Flags().String("api-key", "", "API key for AI provider (alternative to environment variables)")
 	upCmd.Flags().String("base-url", "", "Custom base URL for OpenAI-compatible endpoints")
 	upCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
 	upCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
 	upCmd.Flags().Bool("jaeger", true, "Auto-launch Jaeger for distributed tracing (default: true)")
+
+	// Bundle flag for instant sandbox
+	upCmd.Flags().String("bundle", "", "CloudShip bundle ID or URL to install and run")
 
 	rootCmd.AddCommand(upCmd)
 }
@@ -184,6 +198,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 	gid := os.Getgid()
 
 	// Initialize the container volume if needed
+	// Check for --bundle flag
+	bundleSource, _ := cmd.Flags().GetString("bundle")
+
 	if needsInit {
 		fmt.Printf("🔧 Initializing Station in container volume...\n")
 
@@ -260,6 +277,125 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Printf("✅ Station initialized in container volume\n")
+	}
+
+	// Install bundle if specified
+	if bundleSource != "" {
+		fmt.Printf("📦 Installing bundle: %s\n", bundleSource)
+
+		// If it's a UUID, download from CloudShip first
+		var bundlePath string
+		if isUUID(bundleSource) {
+			fmt.Printf("   Downloading from CloudShip...\n")
+			downloadedPath, err := downloadBundleFromCloudShip(bundleSource)
+			if err != nil {
+				return fmt.Errorf("failed to download bundle from CloudShip: %w\n\nMake sure you're authenticated with 'stn auth login'", err)
+			}
+			defer os.Remove(downloadedPath) // Clean up temp file
+			bundlePath = downloadedPath
+		} else if strings.HasPrefix(bundleSource, "http://") || strings.HasPrefix(bundleSource, "https://") {
+			// Download from URL to temp file
+			fmt.Printf("   Downloading from URL...\n")
+			resp, err := http.Get(bundleSource)
+			if err != nil {
+				return fmt.Errorf("failed to download bundle: %w", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("failed to download bundle: HTTP %d", resp.StatusCode)
+			}
+
+			tmpFile, err := os.CreateTemp("", "station-bundle-*.tar.gz")
+			if err != nil {
+				return fmt.Errorf("failed to create temp file: %w", err)
+			}
+			defer os.Remove(tmpFile.Name())
+
+			if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+				tmpFile.Close()
+				return fmt.Errorf("failed to save bundle: %w", err)
+			}
+			tmpFile.Close()
+			bundlePath = tmpFile.Name()
+		} else {
+			// Assume it's a local file path
+			if _, err := os.Stat(bundleSource); os.IsNotExist(err) {
+				return fmt.Errorf("bundle file not found: %s", bundleSource)
+			}
+			bundlePath = bundleSource
+		}
+
+		// Install bundle into container volume using docker run
+		// The bundle will be installed to the "bundle" environment to avoid conflicts
+		fmt.Printf("   Installing bundle into container...\n")
+
+		// Copy bundle to container volume via docker cp to a temp location,
+		// then install with stn bundle install
+		installArgs := []string{
+			"run", "--rm",
+			"-v", "station-config:/home/station/.config/station",
+			"-e", "HOME=/home/station",
+			"-e", "STATION_CONFIG_DIR=/home/station/.config/station",
+		}
+
+		// Mount the bundle file into the container
+		bundleMount := fmt.Sprintf("%s:/tmp/bundle.tar.gz:ro", bundlePath)
+		installArgs = append(installArgs, "-v", bundleMount)
+
+		// Pass through AI provider env vars for bundle sync
+		aiEnvVars := []string{
+			"OPENAI_API_KEY",
+			"ANTHROPIC_API_KEY",
+			"GOOGLE_API_KEY",
+			"GEMINI_API_KEY",
+			"STN_AI_API_KEY",
+		}
+		for _, envVar := range aiEnvVars {
+			if value := os.Getenv(envVar); value != "" {
+				installArgs = append(installArgs, "-e", fmt.Sprintf("%s=%s", envVar, value))
+			}
+		}
+
+		// Run bundle install command - use "bundle" environment to avoid conflicts with default
+		installArgs = append(installArgs, imageName, "stn", "bundle", "install", "/tmp/bundle.tar.gz", "bundle")
+
+		installCmd := dockerCommand(installArgs...)
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+
+		if err := installCmd.Run(); err != nil {
+			return fmt.Errorf("failed to install bundle: %w", err)
+		}
+
+		// Sync the environment to register MCP tools
+		fmt.Printf("   Syncing environment...\n")
+		syncArgs := []string{
+			"run", "--rm",
+			"-v", "station-config:/home/station/.config/station",
+			"-e", "HOME=/home/station",
+			"-e", "STATION_CONFIG_DIR=/home/station/.config/station",
+		}
+
+		// Pass through AI provider env vars for sync
+		for _, envVar := range aiEnvVars {
+			if value := os.Getenv(envVar); value != "" {
+				syncArgs = append(syncArgs, "-e", fmt.Sprintf("%s=%s", envVar, value))
+			}
+		}
+
+		syncArgs = append(syncArgs, imageName, "stn", "sync", "bundle")
+
+		syncCmd := dockerCommand(syncArgs...)
+		syncCmd.Stdout = os.Stdout
+		syncCmd.Stderr = os.Stderr
+
+		if err := syncCmd.Run(); err != nil {
+			// Sync might fail if MCP servers aren't available yet, but that's okay
+			fmt.Printf("⚠️  Bundle sync had issues (MCP servers may start when container runs)\n")
+		}
+
+		fmt.Printf("✅ Bundle installed successfully!\n")
 	}
 
 	// Prepare Docker run command
