@@ -1,6 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { X, Package, Download, Copy, AlertCircle, Cloud } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Package, Download, Copy, AlertCircle, Cloud, Star, Building2, User, Search, CheckCircle, Globe } from 'lucide-react';
 import { apiClient } from '../../api/client';
+
+interface Bundle {
+  id: string;
+  bundle_id?: string;
+  name: string;
+  slug?: string;
+  description?: string;
+  version?: string;
+  size?: number;
+  download_count?: number;
+  is_official?: boolean;
+  is_public?: boolean;
+  is_own?: boolean;
+  uploaded_at?: string;
+  download_url?: string;
+  processing_status?: string;
+  organization?: string;
+}
 
 interface InstallBundleModalProps {
   isOpen: boolean;
@@ -20,9 +38,11 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
   const [installSuccess, setInstallSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installDetails, setInstallDetails] = useState<any>(null);
-  const [cloudShipBundles, setCloudShipBundles] = useState<any[]>([]);
+  const [cloudShipBundles, setCloudShipBundles] = useState<Bundle[]>([]);
   const [loadingBundles, setLoadingBundles] = useState(false);
   const [selectedCloudShipBundle, setSelectedCloudShipBundle] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'official' | 'organization' | 'all'>('official');
 
   // Load CloudShip bundles when modal opens and CloudShip source is selected
   useEffect(() => {
@@ -30,6 +50,22 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
       loadCloudShipBundles();
     }
   }, [isOpen, bundleSource]);
+
+  // Auto-fill environment name when bundle is selected
+  useEffect(() => {
+    if (selectedCloudShipBundle && !environmentName) {
+      const bundle = cloudShipBundles.find(b => (b.bundle_id || b.id) === selectedCloudShipBundle);
+      if (bundle) {
+        // Use bundle name as default environment name, sanitized
+        const suggestedName = bundle.name
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '');
+        setEnvironmentName(suggestedName || 'my-environment');
+      }
+    }
+  }, [selectedCloudShipBundle, cloudShipBundles]);
 
   const loadCloudShipBundles = async () => {
     try {
@@ -45,6 +81,40 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
     }
   };
 
+  // Filter and categorize bundles
+  const { officialBundles, orgBundles, filteredBundles } = useMemo(() => {
+    // Only show completed bundles
+    const completedBundles = cloudShipBundles.filter(b => b.processing_status === 'completed');
+    
+    const official = completedBundles.filter(b => b.is_official);
+    const org = completedBundles.filter(b => b.is_own && !b.is_official);
+    
+    // Apply search filter
+    const searchLower = searchQuery.toLowerCase();
+    const filterBySearch = (bundles: Bundle[]) => {
+      if (!searchQuery) return bundles;
+      return bundles.filter(b => 
+        b.name?.toLowerCase().includes(searchLower) ||
+        b.description?.toLowerCase().includes(searchLower)
+      );
+    };
+
+    let filtered: Bundle[] = [];
+    if (activeTab === 'official') {
+      filtered = filterBySearch(official);
+    } else if (activeTab === 'organization') {
+      filtered = filterBySearch(org);
+    } else {
+      filtered = filterBySearch(completedBundles);
+    }
+
+    return {
+      officialBundles: official,
+      orgBundles: org,
+      filteredBundles: filtered,
+    };
+  }, [cloudShipBundles, searchQuery, activeTab]);
+
   const handleClose = () => {
     if (!installing) {
       setBundleLocation('');
@@ -53,6 +123,8 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
       setError(null);
       setInstallDetails(null);
       setSelectedCloudShipBundle('');
+      setSearchQuery('');
+      setActiveTab('official');
       onClose();
     }
   };
@@ -63,20 +135,17 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
     // If CloudShip source, use the selected bundle's download URL
     if (bundleSource === 'cloudship') {
       if (!selectedCloudShipBundle) {
-        setError('Please select a bundle from your organization');
+        setError('Please select a bundle');
         return;
       }
       const selectedBundle = cloudShipBundles.find(b =>
         b.bundle_id === selectedCloudShipBundle || b.id === selectedCloudShipBundle
       );
       if (!selectedBundle) {
-        console.log('Available bundles:', cloudShipBundles);
-        console.log('Selected bundle ID:', selectedCloudShipBundle);
-        setError(`Selected bundle not found. Available: ${cloudShipBundles.length} bundles`);
+        setError('Selected bundle not found');
         return;
       }
-      // Use the absolute download_url from backend (backend converts relative to absolute)
-      finalBundleLocation = selectedBundle.download_url;
+      finalBundleLocation = selectedBundle.download_url || '';
     }
 
     if (!finalBundleLocation.trim() || !environmentName.trim()) {
@@ -104,6 +173,20 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
     }
   };
 
+  const formatSize = (bytes?: number) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString();
+  };
+
+  const selectedBundle = cloudShipBundles.find(b => (b.bundle_id || b.id) === selectedCloudShipBundle);
+
   if (!isOpen) return null;
 
   return (
@@ -112,10 +195,10 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="bg-white border border-gray-200 rounded-lg w-full max-w-md p-6 shadow-xl"
+        className="bg-white border border-gray-200 rounded-lg w-full max-w-lg p-6 shadow-xl max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Install Bundle</h2>
           <button
             onClick={handleClose}
@@ -142,7 +225,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 relative group">
               <button
                 onClick={() => navigator.clipboard.writeText(`stn sync ${environmentName}`)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-station-blue hover:bg-blue-600 text-white"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded bg-blue-600 hover:bg-blue-700 text-white"
                 title={`Copy sync command: stn sync ${environmentName}`}
               >
                 <Copy className="h-3 w-3" />
@@ -153,13 +236,13 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
             </div>
             <button
               onClick={handleClose}
-              className="mt-4 px-4 py-2 bg-station-blue text-white hover:bg-blue-600 rounded text-sm transition-colors"
+              className="mt-4 px-4 py-2 bg-gray-900 text-white hover:bg-gray-800 rounded text-sm transition-colors"
             >
               Close
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">
                 <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -167,6 +250,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
               </div>
             )}
 
+            {/* Source Selection */}
             <div>
               <label className="block text-sm text-gray-700 mb-2 font-medium">
                 Bundle Source
@@ -178,7 +262,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     value="cloudship"
                     checked={bundleSource === 'cloudship'}
                     onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
-                    className="text-station-blue focus:ring-station-blue"
+                    className="text-blue-600 focus:ring-blue-600"
                   />
                   <span className="text-sm text-gray-900 flex items-center gap-1">
                     <Cloud className="h-3 w-3" />
@@ -191,7 +275,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     value="url"
                     checked={bundleSource === 'url'}
                     onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
-                    className="text-station-blue focus:ring-station-blue"
+                    className="text-blue-600 focus:ring-blue-600"
                   />
                   <span className="text-sm text-gray-900">URL</span>
                 </label>
@@ -201,7 +285,7 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     value="file"
                     checked={bundleSource === 'file'}
                     onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
-                    className="text-station-blue focus:ring-station-blue"
+                    className="text-blue-600 focus:ring-blue-600"
                   />
                   <span className="text-sm text-gray-900">File Path</span>
                 </label>
@@ -209,41 +293,133 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
             </div>
 
             {bundleSource === 'cloudship' ? (
-              <div>
-                <label htmlFor="cloudship-bundle" className="block text-sm text-gray-700 mb-2 font-medium">
-                  Organization Bundle
-                </label>
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                {/* Tabs */}
+                <div className="flex border-b border-gray-200 mb-3">
+                  <button
+                    onClick={() => setActiveTab('official')}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'official'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                    Official ({officialBundles.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('organization')}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'organization'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    My Bundles ({orgBundles.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('all')}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'all'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                    All
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search bundles..."
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Bundle List */}
                 {loadingBundles ? (
-                  <div className="w-full bg-gray-50 border border-gray-300 text-gray-600 px-3 py-2 rounded flex items-center gap-2">
-                    <div className="animate-spin h-4 w-4 border-2 border-station-blue border-t-transparent rounded-full"></div>
+                  <div className="flex items-center justify-center py-8 text-gray-500">
+                    <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
                     Loading bundles...
                   </div>
-                ) : cloudShipBundles.length === 0 ? (
-                  <div className="w-full bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded text-sm">
-                    No bundles found in your organization
+                ) : filteredBundles.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 text-sm">
+                    {searchQuery ? 'No bundles match your search' : 'No bundles available'}
                   </div>
                 ) : (
-                  <select
-                    id="cloudship-bundle"
-                    value={selectedCloudShipBundle}
-                    onChange={(e) => setSelectedCloudShipBundle(e.target.value)}
-                    className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue transition-colors"
-                    disabled={installing}
-                  >
-                    <option value="">Select a bundle...</option>
-                    {cloudShipBundles.map((bundle) => {
-                      // Try multiple fields for name: name, filename (without .tar.gz), or fallback to version
-                      const rawName = bundle.name || bundle.filename?.replace('.tar.gz', '').replace('.tar', '') || `Bundle v${bundle.version || '1.0.0'}`;
-                      const uploadDate = bundle.uploaded_at ? new Date(bundle.uploaded_at).toLocaleDateString() : '';
-                      const displayText = `${rawName} - ${uploadDate}`;
-
+                  <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1">
+                    {filteredBundles.map((bundle) => {
+                      const bundleId = bundle.bundle_id || bundle.id;
+                      const isSelected = selectedCloudShipBundle === bundleId;
+                      
                       return (
-                        <option key={bundle.bundle_id || bundle.id} value={bundle.bundle_id || bundle.id}>
-                          {displayText}
-                        </option>
+                        <button
+                          key={bundleId}
+                          onClick={() => setSelectedCloudShipBundle(bundleId)}
+                          className={`w-full text-left p-3 rounded-lg border transition-all ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900 truncate">
+                                  {bundle.name}
+                                </span>
+                                {bundle.is_official && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded">
+                                    <Star className="h-2.5 w-2.5" />
+                                    Official
+                                  </span>
+                                )}
+                                {bundle.is_public && !bundle.is_official && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded">
+                                    <Globe className="h-2.5 w-2.5" />
+                                    Public
+                                  </span>
+                                )}
+                              </div>
+                              {bundle.description && (
+                                <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                  {bundle.description}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-400">
+                                {bundle.version && <span>v{bundle.version}</span>}
+                                {bundle.size && <span>{formatSize(bundle.size)}</span>}
+                                {bundle.uploaded_at && <span>{formatDate(bundle.uploaded_at)}</span>}
+                                {bundle.download_count !== undefined && bundle.download_count > 0 && (
+                                  <span>{bundle.download_count} downloads</span>
+                                )}
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <CheckCircle className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                            )}
+                          </div>
+                        </button>
                       );
                     })}
-                  </select>
+                  </div>
+                )}
+
+                {/* Selected Bundle Preview */}
+                {selectedBundle && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="text-xs text-blue-700">
+                      <span className="font-medium">Selected:</span> {selectedBundle.name}
+                      {selectedBundle.version && <span className="ml-1 text-blue-500">v{selectedBundle.version}</span>}
+                    </div>
+                  </div>
                 )}
               </div>
             ) : (
@@ -257,12 +433,13 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                   value={bundleLocation}
                   onChange={(e) => setBundleLocation(e.target.value)}
                   placeholder={bundleSource === 'url' ? 'https://example.com/bundle.tar.gz' : '/path/to/bundle.tar.gz'}
-                  className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue placeholder:text-gray-400 transition-colors"
+                  className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 placeholder:text-gray-400 transition-colors"
                   disabled={installing}
                 />
               </div>
             )}
 
+            {/* Environment Name */}
             <div>
               <label htmlFor="environment-name" className="block text-sm text-gray-700 mb-2 font-medium">
                 Environment Name
@@ -273,12 +450,16 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                 value={environmentName}
                 onChange={(e) => setEnvironmentName(e.target.value)}
                 placeholder="my-environment"
-                className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue placeholder:text-gray-400 transition-colors"
+                className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 placeholder:text-gray-400 transition-colors"
                 disabled={installing}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                The bundle will be installed to this environment
+              </p>
             </div>
 
-            <div className="flex space-x-3 mt-6">
+            {/* Actions */}
+            <div className="flex space-x-3 pt-2">
               <button
                 onClick={handleClose}
                 disabled={installing}
