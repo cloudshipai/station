@@ -821,6 +821,11 @@ ssh_host_key.pub
 		}
 	}
 
+	// Create Jaeger docker-compose file for optional telemetry
+	if _, err := handlers.EnsureJaegerComposeFile(); err != nil {
+		logging.Info("⚠️  Failed to create Jaeger docker-compose: %v", err)
+	}
+
 	fmt.Printf("\n🎉 Station initialized successfully!\n\n")
 	fmt.Printf("📁 Config file: %s\n", configFile)
 	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
@@ -862,6 +867,9 @@ ssh_host_key.pub
 		fmt.Printf("   • Visit http://localhost:8585 to add MCP tools and manage bundles\n")
 		fmt.Printf("   • Use 'stn mcp list' to see your MCP configurations\n")
 		fmt.Printf("   • Create and manage agents via Claude Code/Cursor using Station's MCP tools\n")
+		fmt.Printf("\n🔍 Telemetry (optional):\n")
+		fmt.Printf("   • Run 'stn jaeger up' to start Jaeger for distributed tracing\n")
+		fmt.Printf("   • View traces at http://localhost:16686\n")
 
 		// Show GitHub Actions info if workflows were created
 		if configPath != "" {

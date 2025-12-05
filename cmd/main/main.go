@@ -67,7 +67,7 @@ func init() {
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(mockCmd)
 	rootCmd.AddCommand(fakerCmd)
-	rootCmd.AddCommand(handlers.NewJaegerCleanCmd())
+	rootCmd.AddCommand(handlers.NewJaegerCmd())
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 
