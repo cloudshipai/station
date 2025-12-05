@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -998,6 +999,12 @@ type BundleInstallResult struct {
 // InstallBundle installs a bundle from URL or file path to create a new environment
 // Uses EnvironmentManagementService to properly create both database and filesystem
 func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*BundleInstallResult, error) {
+	return s.InstallBundleWithOptions(bundleLocation, environmentName, false)
+}
+
+// InstallBundleWithOptions installs a bundle with optional force flag
+// When force is true, it merges bundle contents into existing environment
+func (s *BundleService) InstallBundleWithOptions(bundleLocation, environmentName string, force bool) (*BundleInstallResult, error) {
 	// Use config root to respect workspace configuration
 	configRoot := config.GetConfigRoot()
 
@@ -1037,45 +1044,67 @@ func (s *BundleService) InstallBundle(bundleLocation, environmentName string) (*
 	envDir := config.GetEnvironmentDir(environmentName)
 
 	// Check if environment already exists (filesystem check)
+	envExists := false
 	if _, err := os.Stat(envDir); !os.IsNotExist(err) {
-		return &BundleInstallResult{
-			Success: false,
-			Error:   fmt.Sprintf("Environment '%s' already exists", environmentName),
-		}, fmt.Errorf("environment already exists: %s", environmentName)
-	}
-
-	// Create environment using proper service layer if repos are available
-	if s.repos != nil {
-		// Use EnvironmentManagementService for full database + filesystem creation
-		envService := NewEnvironmentManagementService(s.repos)
-		description := fmt.Sprintf("Environment created from bundle installation")
-
-		environment, result, err := envService.CreateEnvironment(environmentName, &description, 1)
-		if err != nil || !result.Success {
-			errorMsg := result.Message
-			if errorMsg == "" && err != nil {
-				errorMsg = err.Error()
-			}
+		if !force {
 			return &BundleInstallResult{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to create environment: %s", errorMsg),
-			}, err
+				Error:   fmt.Sprintf("Environment '%s' already exists. Use --force to replace it.", environmentName),
+			}, fmt.Errorf("environment already exists: %s", environmentName)
+		}
+		envExists = true
+		log.Printf("Environment '%s' exists, replacing with bundle contents (force=true)", environmentName)
+		
+		// Clear existing environment contents (agents/, mcp-configs/, etc.)
+		// Keep the directory itself but remove contents
+		entries, err := os.ReadDir(envDir)
+		if err == nil {
+			for _, entry := range entries {
+				entryPath := filepath.Join(envDir, entry.Name())
+				if err := os.RemoveAll(entryPath); err != nil {
+					log.Printf("Warning: failed to remove %s: %v", entryPath, err)
+				}
+			}
+			log.Printf("Cleared existing environment contents in %s", envDir)
+		}
+	}
+
+	// Create environment using proper service layer if repos are available (skip if env exists)
+	if s.repos != nil {
+		envService := NewEnvironmentManagementService(s.repos)
+		
+		// Only create environment record if it doesn't exist
+		if !envExists {
+			description := fmt.Sprintf("Environment created from bundle installation")
+			_, result, err := envService.CreateEnvironment(environmentName, &description, 1)
+			if err != nil || !result.Success {
+				errorMsg := result.Message
+				if errorMsg == "" && err != nil {
+					errorMsg = err.Error()
+				}
+				return &BundleInstallResult{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to create environment: %s", errorMsg),
+				}, err
+			}
 		}
 
-		// Extract bundle to environment directory
+		// Extract bundle to environment directory (replaces existing content)
 		agentCount, mcpCount, err := s.extractBundle(bundlePath, envDir)
 		if err != nil {
-			// Clean up environment if extraction failed
-			envService.DeleteEnvironmentByID(environment.ID)
 			return &BundleInstallResult{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to extract bundle: %v", err),
 			}, err
 		}
 
+		action := "installed"
+		if envExists {
+			action = "merged"
+		}
 		return &BundleInstallResult{
 			Success:         true,
-			Message:         fmt.Sprintf("Bundle installed successfully to environment '%s'", environmentName),
+			Message:         fmt.Sprintf("Bundle %s successfully to environment '%s'", action, environmentName),
 			EnvironmentName: environmentName,
 			BundlePath:      bundlePath,
 			InstalledAgents: agentCount,

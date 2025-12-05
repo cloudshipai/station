@@ -101,6 +101,9 @@ func init() {
 	bundleCreateCmd.Flags().String("output", "", "Output path for bundle (defaults to <environment>.tar.gz)")
 	bundleCreateCmd.Flags().Bool("local", true, "Save bundle locally (always true for CLI)")
 
+	// Add flags to install subcommand
+	bundleInstallCmd.Flags().Bool("force", false, "Overwrite existing environment (merges bundle contents)")
+
 	// Add flags to share subcommand
 	bundleShareCmd.Flags().String("api-url", "https://api.cloudshipai.com", "CloudShip API URL")
 	bundleShareCmd.Flags().Bool("keep-local", false, "Keep the local bundle file after upload (only for environment uploads)")
@@ -210,6 +213,7 @@ func runBundleCreate(cmd *cobra.Command, args []string) error {
 func runBundleInstall(cmd *cobra.Command, args []string) error {
 	bundleSource := args[0]
 	environmentName := args[1]
+	force, _ := cmd.Flags().GetBool("force")
 
 	// Check if bundleSource is a CloudShip bundle ID (UUID format)
 	if isUUID(bundleSource) {
@@ -246,7 +250,7 @@ func runBundleInstall(cmd *cobra.Command, args []string) error {
 
 	// Use BundleService with repos for full database + filesystem support
 	bundleService := services.NewBundleServiceWithRepos(repos)
-	result, err := bundleService.InstallBundle(bundleSource, environmentName)
+	result, err := bundleService.InstallBundleWithOptions(bundleSource, environmentName, force)
 	if err != nil || !result.Success {
 		errorMsg := result.Error
 		if errorMsg == "" && err != nil {

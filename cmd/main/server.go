@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"runtime"
+
 	"station/internal/api"
 	"station/internal/config"
 	"station/internal/db"
@@ -94,35 +94,8 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize Jaeger if enabled (default: TRUE on Mac/Linux, FALSE on Windows)
-	var jaegerSvc *services.JaegerService
-	enableJaeger := runtime.GOOS == "darwin" || runtime.GOOS == "linux" // Default enabled on Mac/Linux
-
-	// Check if explicitly enabled via flag
-	if viper.IsSet("jaeger") {
-		enableJaeger = viper.GetBool("jaeger")
-		log.Printf("🔍 Jaeger flag explicitly set to: %v", enableJaeger)
-	}
-
-	// Environment variable override
-	if os.Getenv("STATION_AUTO_JAEGER") == "true" {
-		enableJaeger = true
-		log.Printf("🔍 STATION_AUTO_JAEGER=true, enabling Jaeger")
-	} else if os.Getenv("STATION_AUTO_JAEGER") == "false" {
-		enableJaeger = false
-		log.Printf("🔍 STATION_AUTO_JAEGER=false, disabling Jaeger")
-	}
-
-	log.Printf("🔍 Jaeger enabled for serve mode: %v", enableJaeger)
-	if enableJaeger {
-		jaegerSvc = services.NewJaegerService(&services.JaegerConfig{})
-		if err := jaegerSvc.Start(ctx); err != nil {
-			log.Printf("Warning: Failed to start Jaeger: %v", err)
-		} else {
-			// Set OTEL endpoint for automatic trace export
-			os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", jaegerSvc.GetOTLPEndpoint())
-		}
-	}
+	// Jaeger/OTEL tracing is configured via config.yaml otel_endpoint
+	// Run Jaeger separately if needed: docker run -d -p 16686:16686 -p 4317:4317 -p 4318:4318 jaegertracing/all-in-one:latest
 
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
@@ -349,12 +322,7 @@ func runMainServer() error {
 		}
 	}
 
-	// Keep Jaeger running across server restarts
-	// Jaeger container persists for continuous tracing across sessions
-	if jaegerSvc != nil && jaegerSvc.IsRunning() {
-		log.Printf("🔍 Jaeger container will continue running")
-		log.Printf("💡 To stop Jaeger: docker stop station-jaeger")
-	}
+	// Jaeger/tracing managed externally via config.yaml otel_endpoint
 
 	// Create done channel with aggressive timeout handling
 	done := make(chan struct{})

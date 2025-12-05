@@ -211,6 +211,10 @@ func Load() (*Config, error) {
 	if viper.IsSet("cloudship.endpoint") {
 		cfg.CloudShip.Endpoint = viper.GetString("cloudship.endpoint")
 	}
+	// Also check for lighthouse_url (legacy/alternative config key)
+	if viper.IsSet("cloudship.lighthouse_url") {
+		cfg.CloudShip.Endpoint = viper.GetString("cloudship.lighthouse_url")
+	}
 	if viper.IsSet("cloudship.station_id") {
 		cfg.CloudShip.StationID = viper.GetString("cloudship.station_id")
 	}

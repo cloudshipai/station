@@ -571,7 +571,19 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cloudshipaiKey = os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY")
 	}
 
-	// Check OTEL configuration
+	// Check existing config to avoid interactive mode and load existing values
+	_, err := os.Stat(configFile)
+	configExists := err == nil
+
+	// If config exists, load it into viper FIRST to preserve existing values
+	// (e.g., otel_endpoint with host.docker.internal from stn up --bundle workflow)
+	if configExists {
+		viper.SetConfigFile(configFile)
+		viper.SetConfigType("yaml")
+		_ = viper.ReadInConfig() // Ignore error, we'll use defaults if it fails
+	}
+
+	// Check OTEL configuration (priority: CLI flag > env var > existing config > default)
 	otelEndpoint, _ := cmd.Flags().GetString("otel-endpoint")
 	// Default telemetry to TRUE (we ship with Jaeger integration)
 	telemetryEnabled := true
@@ -583,14 +595,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if otelEndpoint == "" {
 		otelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	}
+	// Check existing config value (for stn up --bundle workflow where config is pre-copied)
+	if otelEndpoint == "" && viper.GetString("otel_endpoint") != "" {
+		otelEndpoint = viper.GetString("otel_endpoint")
+	}
 	// Default to local Jaeger endpoint if not specified
 	if otelEndpoint == "" {
 		otelEndpoint = "http://localhost:4318"
 	}
-
-	// Check existing config to avoid interactive mode
-	_, err := os.Stat(configFile)
-	configExists := err == nil
 
 	fmt.Printf("🔧 Initializing Station configuration...\n")
 	fmt.Printf("Config file: %s\n", configFile)

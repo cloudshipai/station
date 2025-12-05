@@ -41,15 +41,19 @@ Key Features:
 - Workspace files maintain your user ownership (no root permission issues)
 - Data persists across container restarts in Docker volume
 - Install bundles directly from CloudShip with --bundle flag
+- Auto-imports host config from ~/.config/station when using --bundle
 
 Examples:
   # Basic usage
   stn up                                    # Start with current directory as workspace
   stn up --workspace ~/code                 # Use specific directory as workspace
 
-  # Start with a CloudShip bundle (instant sandbox)
-  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a
-  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a --provider openai -e AWS_ACCESS_KEY_ID=$AWS_KEY
+  # Start with a CloudShip bundle (uses ~/.config/station/config.yaml if exists)
+  stn init --provider openai                # One-time setup on host
+  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a   # No --provider needed!
+  
+  # Bundle with additional env vars
+  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a -e AWS_ACCESS_KEY_ID=$AWS_KEY
 
   # First-time setup with configuration (uses environment variables)
   stn up --provider openai --ship           # Init with OpenAI (requires OPENAI_API_KEY env var)
@@ -88,7 +92,8 @@ func init() {
 	upCmd.Flags().String("base-url", "", "Custom base URL for OpenAI-compatible endpoints")
 	upCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
 	upCmd.Flags().BoolP("yes", "y", false, "Use defaults without interactive prompts")
-	upCmd.Flags().Bool("jaeger", true, "Auto-launch Jaeger for distributed tracing (default: true)")
+	// Removed --jaeger flag - Jaeger should be run separately via docker-compose or standalone container
+	// Station exports traces to OTEL endpoint configured in config.yaml (otel_endpoint)
 
 	// Bundle flag for instant sandbox
 	upCmd.Flags().String("bundle", "", "CloudShip bundle ID or URL to install and run")
@@ -202,6 +207,64 @@ func runUp(cmd *cobra.Command, args []string) error {
 	bundleSource, _ := cmd.Flags().GetString("bundle")
 
 	if needsInit {
+		// Check if host has existing Station config we can use
+		hostConfigDir := filepath.Join(os.Getenv("HOME"), ".config", "station")
+		hostConfigFile := filepath.Join(hostConfigDir, "config.yaml")
+		hostConfigExists := false
+		if _, err := os.Stat(hostConfigFile); err == nil {
+			hostConfigExists = true
+		}
+
+		// If --bundle is passed and host config exists, copy host config to container
+		// This allows users to run `stn init` once and reuse config for all containers
+		if bundleSource != "" && hostConfigExists {
+			fmt.Printf("📋 Found local Station config at %s\n", hostConfigDir)
+			fmt.Printf("🔧 Importing host configuration to container...\n")
+
+			// Read host config to extract provider and model settings
+			hostConfig, err := readConfigFile(hostConfigFile)
+			if err != nil {
+				log.Printf("Warning: Failed to read host config: %v (will use defaults)", err)
+			} else {
+				// Extract provider and model from host config for init
+				if p, ok := hostConfig["ai_provider"].(string); ok && p != "" {
+					cmd.Flags().Set("provider", p)
+				}
+				if m, ok := hostConfig["ai_model"].(string); ok && m != "" {
+					cmd.Flags().Set("model", m)
+				}
+				fmt.Printf("   Using provider: %s, model: %s from host config\n",
+					hostConfig["ai_provider"], hostConfig["ai_model"])
+			}
+
+			// Copy config to container and fix paths + localhost URLs for Docker networking
+			// - database_url: point to container path
+			// - workspace: point to container path
+			// - localhost URLs: rewrite to host.docker.internal for Docker networking
+			fmt.Printf("   Copying config and fixing paths for container...\n")
+			copyArgs := []string{
+				"run", "--rm",
+				"-v", "station-config:/home/station/.config/station",
+				"-v", fmt.Sprintf("%s:/host-config:ro", hostConfigDir),
+				imageName,
+				"sh", "-c", `cp /host-config/config.yaml /home/station/.config/station/config.yaml && \
+					sed -i 's|database_url:.*|database_url: /home/station/.config/station/station.db|' /home/station/.config/station/config.yaml && \
+					sed -i 's|workspace:.*|workspace: /home/station/.config/station|' /home/station/.config/station/config.yaml && \
+					sed -i 's|localhost:|host.docker.internal:|g' /home/station/.config/station/config.yaml && \
+					sed -i 's|127\.0\.0\.1:|host.docker.internal:|g' /home/station/.config/station/config.yaml`,
+			}
+
+			copyCmd := dockerCommand(copyArgs...)
+			if err := copyCmd.Run(); err != nil {
+				log.Printf("Warning: Failed to copy host config: %v (will use defaults)", err)
+			} else {
+				fmt.Printf("   ✅ Config copied with localhost → host.docker.internal\n")
+			}
+			// Still need to run init to create database schema, but settings come from host config
+		}
+	}
+
+	if needsInit {
 		fmt.Printf("🔧 Initializing Station in container volume...\n")
 
 		// Get init parameters from flags or defaults
@@ -211,6 +274,11 @@ func runUp(cmd *cobra.Command, args []string) error {
 		baseURL, _ := cmd.Flags().GetString("base-url")
 		ship, _ := cmd.Flags().GetBool("ship")
 		useDefaults, _ := cmd.Flags().GetBool("yes")
+
+		// If --bundle is passed, implicitly use defaults (no interactive prompts)
+		if bundleSource != "" {
+			useDefaults = true
+		}
 
 		// Default to openai if not specified
 		if provider == "" {
@@ -326,9 +394,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 			bundlePath = bundleSource
 		}
 
-		// Install bundle into container volume using docker run
-		// The bundle will be installed to the "bundle" environment to avoid conflicts
-		fmt.Printf("   Installing bundle into container...\n")
+		// Install bundle into the default environment so it becomes the primary sandbox
+		fmt.Printf("   Installing bundle into default environment...\n")
 
 		// Copy bundle to container volume via docker cp to a temp location,
 		// then install with stn bundle install
@@ -357,8 +424,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// Run bundle install command - use "bundle" environment to avoid conflicts with default
-		installArgs = append(installArgs, imageName, "stn", "bundle", "install", "/tmp/bundle.tar.gz", "bundle")
+		// Install bundle into "default" environment - this makes the bundle the primary sandbox
+		installArgs = append(installArgs, imageName, "stn", "bundle", "install", "/tmp/bundle.tar.gz", "default", "--force")
 
 		installCmd := dockerCommand(installArgs...)
 		installCmd.Stdout = os.Stdout
@@ -368,8 +435,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to install bundle: %w", err)
 		}
 
-		// Sync the environment to register MCP tools
-		fmt.Printf("   Syncing environment...\n")
+		// Sync the default environment to register MCP tools
+		fmt.Printf("   Syncing default environment...\n")
 		syncArgs := []string{
 			"run", "--rm",
 			"-v", "station-config:/home/station/.config/station",
@@ -384,7 +451,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		syncArgs = append(syncArgs, imageName, "stn", "sync", "bundle")
+		syncArgs = append(syncArgs, imageName, "stn", "sync", "default")
 
 		syncCmd := dockerCommand(syncArgs...)
 		syncCmd.Stdout = os.Stdout
@@ -395,7 +462,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 			fmt.Printf("⚠️  Bundle sync had issues (MCP servers may start when container runs)\n")
 		}
 
-		fmt.Printf("✅ Bundle installed successfully!\n")
+		fmt.Printf("✅ Bundle installed to default environment!\n")
 	}
 
 	// Prepare Docker run command
@@ -464,8 +531,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Port mappings
 	dockerArgs = append(dockerArgs,
 		"-p", "8586:8586", // MCP
-		"-p", "3030:3030", // Dynamic Agent MCP
-		"-p", "3002:3002", // MCP Agents
+		"-p", "8587:8587", // Dynamic Agent MCP (MCPPort+1)
 		"-p", "8585:8585", // UI/API
 	)
 
@@ -474,11 +540,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 		dockerArgs = append(dockerArgs, "-p", "4000:4000") // Genkit Developer UI
 	}
 
-	// Add Jaeger UI port if --jaeger flag is set (default: true)
-	enableJaegerPort, _ := cmd.Flags().GetBool("jaeger")
-	if enableJaegerPort {
-		dockerArgs = append(dockerArgs, "-p", "16686:16686") // Jaeger UI
-	}
+	// Note: Jaeger UI port (16686) not mapped - run Jaeger separately if needed
+	// Station exports traces to otel_endpoint configured in config.yaml
 
 	// Environment variables
 	if err := addEnvironmentVariables(&dockerArgs, cmd); err != nil {
@@ -504,13 +567,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 		environment, _ := cmd.Flags().GetString("environment")
 		dockerArgs = append(dockerArgs, imageName, "genkit", "start", "--non-interactive", "--", "stn", "develop", "--env", environment)
 	} else {
-		// Check if Jaeger should be enabled (default: true)
-		enableJaeger, _ := cmd.Flags().GetBool("jaeger")
-		if enableJaeger {
-			dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586", "--jaeger")
-		} else {
-			dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586")
-		}
+		// Telemetry enabled via config.yaml otel_endpoint - no --jaeger flag needed
+		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586")
 	}
 
 	// Run the container
@@ -538,15 +596,13 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\n✅ Station server started successfully!\n")
 	fmt.Printf("🔗 MCP: http://localhost:8586/mcp\n")
-	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:3030/mcp\n")
+	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:8587/mcp\n")
 	fmt.Printf("🔗 UI:  http://localhost:8585\n")
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
 
 	// Show Jaeger URL if enabled
-	jaegerEnabled, _ := cmd.Flags().GetBool("jaeger")
-	if jaegerEnabled {
-		fmt.Printf("🔍 Jaeger UI: http://localhost:16686 (tracing enabled)\n")
-	}
+	// Telemetry info - Jaeger should be run separately if needed
+	fmt.Printf("💡 Telemetry exports to OTEL endpoint in config (run Jaeger separately if needed)\n")
 
 	if developMode {
 		environment, _ := cmd.Flags().GetString("environment")
@@ -721,11 +777,21 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 		"AWS_PROFILE",
 	}
 
-	// CloudShip integration
+	// CloudShip/Lighthouse integration (for registration and remote control)
 	cloudshipKeys := []string{
-		"STN_CLOUDSHIPAI_KEY",
-		"STN_CLOUDSHIPAI_ENDPOINT",
+		"STN_CLOUDSHIP_ENABLED",
+		"STN_CLOUDSHIP_KEY",
+		"STN_CLOUDSHIP_ENDPOINT",
+		"STN_CLOUDSHIP_STATION_ID",
 		"CLOUDSHIP_API_KEY",
+		"CLOUDSHIPAI_REGISTRATION_KEY",
+	}
+
+	// OpenTelemetry for distributed tracing
+	otelKeys := []string{
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_SERVICE_NAME",
+		"OTEL_TRACES_EXPORTER",
 	}
 
 	// Other tool-specific keys
@@ -739,6 +805,7 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 	// Combine all keys
 	allKeys := append(aiKeys, awsKeys...)
 	allKeys = append(allKeys, cloudshipKeys...)
+	allKeys = append(allKeys, otelKeys...)
 	allKeys = append(allKeys, otherKeys...)
 
 	// Pass through environment variables that exist

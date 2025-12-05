@@ -590,7 +590,12 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 		}
 		if isCloudShipURL {
 			log.Printf("[DownloadBundle] Detected CloudShip URL, adding authentication header")
-			req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+	// Set auth header - prefer API key (Bearer), fall back to Registration Key
+	if cfg.CloudShip.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
+	} else {
+		req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+	}
 		} else {
 			log.Printf("[DownloadBundle] URL did not match CloudShip patterns")
 		}
@@ -846,11 +851,11 @@ func (h *APIHandlers) listCloudShipBundles(c *gin.Context) {
 		return
 	}
 
-	// Check if CloudShip is configured
-	if !cfg.CloudShip.Enabled || cfg.CloudShip.RegistrationKey == "" {
+	// Check if CloudShip is configured - need at least one auth method
+	if !cfg.CloudShip.Enabled || (cfg.CloudShip.RegistrationKey == "" && cfg.CloudShip.APIKey == "") {
 		c.JSON(http.StatusBadRequest, CloudShipBundleListResponse{
 			Success: false,
-			Error:   "CloudShip is not configured. Please enable CloudShip and set registration key in config",
+			Error:   "CloudShip is not configured. Please enable CloudShip and set registration key or API key in config",
 		})
 		return
 	}

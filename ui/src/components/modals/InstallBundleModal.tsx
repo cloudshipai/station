@@ -13,11 +13,12 @@ interface Bundle {
   download_count?: number;
   is_official?: boolean;
   is_public?: boolean;
-  is_own?: boolean;
+  is_deprecated?: boolean;
+  ownership?: 'org' | 'personal' | 'official' | 'other';
   uploaded_at?: string;
   download_url?: string;
   processing_status?: string;
-  organization?: string;
+  sha256?: string;
 }
 
 interface InstallBundleModalProps {
@@ -83,11 +84,18 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
 
   // Filter and categorize bundles
   const { officialBundles, orgBundles, filteredBundles } = useMemo(() => {
-    // Only show completed bundles
+    // Only show completed bundles (not failed or pending)
     const completedBundles = cloudShipBundles.filter(b => b.processing_status === 'completed');
     
-    const official = completedBundles.filter(b => b.is_official);
-    const org = completedBundles.filter(b => b.is_own && !b.is_official);
+    // Official bundles: is_official=true OR ownership='official'
+    const official = completedBundles.filter(b => b.is_official || b.ownership === 'official');
+    
+    // Organization/Personal bundles: ownership='org' or 'personal' (and not official)
+    const org = completedBundles.filter(b => 
+      !b.is_official && 
+      b.ownership !== 'official' && 
+      (b.ownership === 'org' || b.ownership === 'personal')
+    );
     
     // Apply search filter
     const searchLower = searchQuery.toLowerCase();

@@ -39,7 +39,7 @@ including agent management, file operations, and system resources.`,
 func init() {
 	stdioCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
 	stdioCmd.Flags().Bool("core", false, "Run in core mode - MCP server only, no API server or ports (ideal for containers)")
-	stdioCmd.Flags().Bool("jaeger", true, "Auto-launch Jaeger for distributed tracing (default: true)")
+	// Jaeger removed - run separately if needed. Tracing configured via config.yaml otel_endpoint
 	rootCmd.AddCommand(stdioCmd)
 }
 
@@ -57,21 +57,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize Jaeger if enabled (default: true)
-	jaegerCtx := context.Background()
-	var jaegerSvc *services.JaegerService
-	enableJaeger, _ := cmd.Flags().GetBool("jaeger")
-	if enableJaeger || os.Getenv("STATION_AUTO_JAEGER") == "true" {
-		jaegerSvc = services.NewJaegerService(&services.JaegerConfig{})
-		if err := jaegerSvc.Start(jaegerCtx); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to start Jaeger: %v\n", err)
-		} else {
-			// Set OTEL endpoint for automatic trace export
-			os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", jaegerSvc.GetOTLPEndpoint())
-			_, _ = fmt.Fprintf(os.Stderr, "🔍 Jaeger UI: %s\n", jaegerSvc.GetUIURL())
-			_, _ = fmt.Fprintf(os.Stderr, "🔍 OTLP endpoint: %s\n", jaegerSvc.GetOTLPEndpoint())
-		}
-	}
+	// Jaeger/OTEL tracing configured via config.yaml otel_endpoint - run Jaeger separately if needed
 
 	// Setup debug logging to file if in dev mode
 	if devMode {
@@ -242,12 +228,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Keep Jaeger running across stdio sessions
-	// Jaeger container persists for continuous tracing across connections
-	if jaegerSvc != nil && jaegerSvc.IsRunning() {
-		_, _ = fmt.Fprintf(os.Stderr, "🔍 Jaeger container will continue running for next session\n")
-		_, _ = fmt.Fprintf(os.Stderr, "💡 To stop Jaeger: docker stop station-jaeger\n")
-	}
+	// Jaeger/tracing managed externally via config.yaml otel_endpoint
 
 	// Note: Lighthouse client cleanup happens automatically via context cancellation
 

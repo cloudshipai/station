@@ -39,7 +39,7 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
   const [hoveredRun, setHoveredRun] = useState<TimelineRun | null>(null);
   const [pinnedRun, setPinnedRun] = useState<TimelineRun | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Start collapsed
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // Start open
   const closeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Use pinned run if available, otherwise use hovered run
@@ -370,8 +370,8 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
 
       {/* Main timeline content area */}
       <div className="flex-1 flex bg-white relative overflow-hidden">
-        {/* Main content - removed fixed mr-80 */}
-        <div className="flex-1 flex flex-col">
+        {/* Main content - reserve space for right panel when visible */}
+        <div className={`flex-1 flex flex-col ${!isSidebarCollapsed ? 'mr-80' : ''}`}>
 
       {/* Time Axis */}
       <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 border-b border-gray-200">
@@ -420,10 +420,10 @@ export const SwimlanePage: React.FC<SwimlanePageProps> = ({
         )}
       </div>
 
-      {/* Right Side Panel - Absolute within parent */}
+      {/* Right Side Panel - Fixed position */}
       {!isSidebarCollapsed && (
       <div
-        className="absolute right-0 top-0 h-full w-80 bg-white border-l-2 border-gray-200 shadow-xl z-40 transition-transform duration-300"
+        className="fixed right-0 top-[145px] bottom-0 w-80 bg-white border-l-2 border-gray-200 shadow-xl overflow-y-auto"
         onMouseEnter={() => {
           console.log('Panel mouse enter - clearing close timeout');
           // Clear any pending close timeout when mouse enters panel
