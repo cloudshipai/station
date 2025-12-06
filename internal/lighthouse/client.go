@@ -77,10 +77,17 @@ func NewLighthouseClient(config *LighthouseConfig, mode DeploymentMode) (*Lighth
 		return client, nil // Not fatal - graceful degradation
 	}
 
-	// Attempt registration
-	if err := client.register(); err != nil {
-		logging.Info("Failed to register with CloudShip: %v (continuing without cloud integration)", err)
-		return client, nil // Not fatal - graceful degradation
+	// V2 flow: Skip RegisterStation RPC when station name is configured
+	// Registration will happen via StationAuth message on ManagementChannel
+	if config.StationName != "" {
+		logging.Info("V2 auth flow enabled (station_name=%s) - skipping RegisterStation RPC", config.StationName)
+		// Don't call register() - v2 auth happens via ManagementChannel
+	} else {
+		// V1 legacy flow: Call RegisterStation RPC
+		if err := client.register(); err != nil {
+			logging.Info("Failed to register with CloudShip: %v (continuing without cloud integration)", err)
+			return client, nil // Not fatal - graceful degradation
+		}
 	}
 
 	// Start background workers for buffered operations
@@ -95,6 +102,14 @@ func (lc *LighthouseClient) GetMode() DeploymentMode {
 		return ModeUnknown
 	}
 	return lc.mode
+}
+
+// GetEnvironment returns the configured environment name
+func (lc *LighthouseClient) GetEnvironment() string {
+	if lc == nil || lc.config == nil {
+		return "default"
+	}
+	return lc.config.Environment
 }
 
 // generateStationID generates a simple station ID
@@ -139,8 +154,10 @@ func InitializeLighthouseFromConfig(cfg *config.Config, mode DeploymentMode) (*L
 		Endpoint:        cfg.CloudShip.Endpoint,
 		RegistrationKey: cfg.CloudShip.RegistrationKey,
 		StationID:       cfg.CloudShip.StationID,
-		TLS:             true,      // Default to TLS for production
-		Environment:     "default", // TODO: make configurable
+		StationName:     cfg.CloudShip.Name, // V2: user-defined station name
+		StationTags:     cfg.CloudShip.Tags, // V2: user-defined tags
+		TLS:             true,               // Default to TLS for production
+		Environment:     "default",          // TODO: make configurable
 	}
 
 	// Apply defaults

@@ -358,6 +358,70 @@ func (RegistrationStatus) EnumDescriptor() ([]byte, []int) {
 	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{5}
 }
 
+type DisconnectReason int32
+
+const (
+	DisconnectReason_DISCONNECT_REASON_UNSPECIFIED       DisconnectReason = 0
+	DisconnectReason_DISCONNECT_REASON_REPLACED          DisconnectReason = 1 // Another connection with same station name
+	DisconnectReason_DISCONNECT_REASON_AUTH_FAILED       DisconnectReason = 2 // Authentication failed
+	DisconnectReason_DISCONNECT_REASON_KEY_REVOKED       DisconnectReason = 3 // Registration key was revoked/deleted
+	DisconnectReason_DISCONNECT_REASON_LIMIT_REACHED     DisconnectReason = 4 // Max stations per key limit reached
+	DisconnectReason_DISCONNECT_REASON_SHUTDOWN          DisconnectReason = 5 // Lighthouse is shutting down
+	DisconnectReason_DISCONNECT_REASON_HEARTBEAT_TIMEOUT DisconnectReason = 6 // Station didn't send heartbeat in time
+	DisconnectReason_DISCONNECT_REASON_ERROR             DisconnectReason = 7 // Internal error
+)
+
+// Enum value maps for DisconnectReason.
+var (
+	DisconnectReason_name = map[int32]string{
+		0: "DISCONNECT_REASON_UNSPECIFIED",
+		1: "DISCONNECT_REASON_REPLACED",
+		2: "DISCONNECT_REASON_AUTH_FAILED",
+		3: "DISCONNECT_REASON_KEY_REVOKED",
+		4: "DISCONNECT_REASON_LIMIT_REACHED",
+		5: "DISCONNECT_REASON_SHUTDOWN",
+		6: "DISCONNECT_REASON_HEARTBEAT_TIMEOUT",
+		7: "DISCONNECT_REASON_ERROR",
+	}
+	DisconnectReason_value = map[string]int32{
+		"DISCONNECT_REASON_UNSPECIFIED":       0,
+		"DISCONNECT_REASON_REPLACED":          1,
+		"DISCONNECT_REASON_AUTH_FAILED":       2,
+		"DISCONNECT_REASON_KEY_REVOKED":       3,
+		"DISCONNECT_REASON_LIMIT_REACHED":     4,
+		"DISCONNECT_REASON_SHUTDOWN":          5,
+		"DISCONNECT_REASON_HEARTBEAT_TIMEOUT": 6,
+		"DISCONNECT_REASON_ERROR":             7,
+	}
+)
+
+func (x DisconnectReason) Enum() *DisconnectReason {
+	p := new(DisconnectReason)
+	*p = x
+	return p
+}
+
+func (x DisconnectReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DisconnectReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[6].Descriptor()
+}
+
+func (DisconnectReason) Type() protoreflect.EnumType {
+	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[6]
+}
+
+func (x DisconnectReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DisconnectReason.Descriptor instead.
+func (DisconnectReason) EnumDescriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{6}
+}
+
 type AgentStatus int32
 
 const (
@@ -394,11 +458,11 @@ func (x AgentStatus) String() string {
 }
 
 func (AgentStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[6].Descriptor()
+	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[7].Descriptor()
 }
 
 func (AgentStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[6]
+	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[7]
 }
 
 func (x AgentStatus) Number() protoreflect.EnumNumber {
@@ -407,7 +471,7 @@ func (x AgentStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AgentStatus.Descriptor instead.
 func (AgentStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{6}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{7}
 }
 
 type ExecutionStatus int32
@@ -449,11 +513,11 @@ func (x ExecutionStatus) String() string {
 }
 
 func (ExecutionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[7].Descriptor()
+	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[8].Descriptor()
 }
 
 func (ExecutionStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[7]
+	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[8]
 }
 
 func (x ExecutionStatus) Number() protoreflect.EnumNumber {
@@ -462,7 +526,7 @@ func (x ExecutionStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ExecutionStatus.Descriptor instead.
 func (ExecutionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{7}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{8}
 }
 
 type LighthouseSystemHealth int32
@@ -501,11 +565,11 @@ func (x LighthouseSystemHealth) String() string {
 }
 
 func (LighthouseSystemHealth) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[8].Descriptor()
+	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[9].Descriptor()
 }
 
 func (LighthouseSystemHealth) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[8]
+	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[9]
 }
 
 func (x LighthouseSystemHealth) Number() protoreflect.EnumNumber {
@@ -514,7 +578,7 @@ func (x LighthouseSystemHealth) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LighthouseSystemHealth.Descriptor instead.
 func (LighthouseSystemHealth) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{8}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{9}
 }
 
 type ConnectionStatus int32
@@ -553,11 +617,11 @@ func (x ConnectionStatus) String() string {
 }
 
 func (ConnectionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[9].Descriptor()
+	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[10].Descriptor()
 }
 
 func (ConnectionStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[9]
+	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[10]
 }
 
 func (x ConnectionStatus) Number() protoreflect.EnumNumber {
@@ -566,7 +630,7 @@ func (x ConnectionStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConnectionStatus.Descriptor instead.
 func (ConnectionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{9}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{10}
 }
 
 type ErrorCode int32
@@ -617,11 +681,11 @@ func (x ErrorCode) String() string {
 }
 
 func (ErrorCode) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[10].Descriptor()
+	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[11].Descriptor()
 }
 
 func (ErrorCode) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[10]
+	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[11]
 }
 
 func (x ErrorCode) Number() protoreflect.EnumNumber {
@@ -630,7 +694,7 @@ func (x ErrorCode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ErrorCode.Descriptor instead.
 func (ErrorCode) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{10}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{11}
 }
 
 type RegisterStationRequest struct {
@@ -3920,6 +3984,9 @@ type ManagementMessage struct {
 	//	*ManagementMessage_GetMemoryContextResponse
 	//	*ManagementMessage_Error
 	//	*ManagementMessage_StationRegistration
+	//	*ManagementMessage_StationAuth
+	//	*ManagementMessage_AuthResult
+	//	*ManagementMessage_Disconnect
 	Message       isManagementMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4152,6 +4219,33 @@ func (x *ManagementMessage) GetStationRegistration() *StationRegistrationMessage
 	return nil
 }
 
+func (x *ManagementMessage) GetStationAuth() *StationAuth {
+	if x != nil {
+		if x, ok := x.Message.(*ManagementMessage_StationAuth); ok {
+			return x.StationAuth
+		}
+	}
+	return nil
+}
+
+func (x *ManagementMessage) GetAuthResult() *AuthResult {
+	if x != nil {
+		if x, ok := x.Message.(*ManagementMessage_AuthResult); ok {
+			return x.AuthResult
+		}
+	}
+	return nil
+}
+
+func (x *ManagementMessage) GetDisconnect() *Disconnect {
+	if x != nil {
+		if x, ok := x.Message.(*ManagementMessage_Disconnect); ok {
+			return x.Disconnect
+		}
+	}
+	return nil
+}
+
 type isManagementMessage_Message interface {
 	isManagementMessage_Message()
 }
@@ -4231,8 +4325,21 @@ type ManagementMessage_Error struct {
 }
 
 type ManagementMessage_StationRegistration struct {
-	// Special messages
+	// Special messages (v1 - legacy)
 	StationRegistration *StationRegistrationMessage `protobuf:"bytes,31,opt,name=station_registration,json=stationRegistration,proto3,oneof"`
+}
+
+type ManagementMessage_StationAuth struct {
+	// Station Management v2 messages
+	StationAuth *StationAuth `protobuf:"bytes,32,opt,name=station_auth,json=stationAuth,proto3,oneof"` // v2: Station auth (first message from station)
+}
+
+type ManagementMessage_AuthResult struct {
+	AuthResult *AuthResult `protobuf:"bytes,33,opt,name=auth_result,json=authResult,proto3,oneof"` // v2: Auth result (response to StationAuth)
+}
+
+type ManagementMessage_Disconnect struct {
+	Disconnect *Disconnect `protobuf:"bytes,34,opt,name=disconnect,proto3,oneof"` // v2: Server-initiated disconnect
 }
 
 func (*ManagementMessage_ListAgentsRequest) isManagementMessage_Message() {}
@@ -4271,7 +4378,13 @@ func (*ManagementMessage_Error) isManagementMessage_Message() {}
 
 func (*ManagementMessage_StationRegistration) isManagementMessage_Message() {}
 
-// Station registration for management channel
+func (*ManagementMessage_StationAuth) isManagementMessage_Message() {}
+
+func (*ManagementMessage_AuthResult) isManagementMessage_Message() {}
+
+func (*ManagementMessage_Disconnect) isManagementMessage_Message() {}
+
+// Station registration for management channel (v1 - legacy)
 type StationRegistrationMessage struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // Station registration key (REQUIRED for routing)
@@ -4316,6 +4429,373 @@ func (x *StationRegistrationMessage) GetRegistrationKey() string {
 	return ""
 }
 
+// Station auth message (v2) - first message on ManagementChannel
+// Contains full station identity and capabilities for v2 auth flow
+type StationAuth struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // CloudShip registration key (REQUIRED)
+	Name            string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                              // User-defined unique station name (REQUIRED)
+	Tags            []string               `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`                                              // User-defined tags for filtering ["production", "us-east-1"]
+	Hostname        string                 `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`                                      // Machine hostname
+	Version         string                 `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`                                        // Station CLI version
+	Os              string                 `protobuf:"bytes,6,opt,name=os,proto3" json:"os,omitempty"`                                                  // Operating system (linux, darwin, windows)
+	Arch            string                 `protobuf:"bytes,7,opt,name=arch,proto3" json:"arch,omitempty"`                                              // CPU architecture (amd64, arm64)
+	Environment     string                 `protobuf:"bytes,8,opt,name=environment,proto3" json:"environment,omitempty"`                                // Default environment name
+	// Cached capabilities for quick access (optional, can be fetched later)
+	Agents     []*AgentInfo     `protobuf:"bytes,9,rep,name=agents,proto3" json:"agents,omitempty"`
+	Tools      []*ToolInfo      `protobuf:"bytes,10,rep,name=tools,proto3" json:"tools,omitempty"`
+	McpServers []*MCPServerInfo `protobuf:"bytes,11,rep,name=mcp_servers,json=mcpServers,proto3" json:"mcp_servers,omitempty"`
+	// Hardware info (optional)
+	HardwareInfo  map[string]string `protobuf:"bytes,12,rep,name=hardware_info,json=hardwareInfo,proto3" json:"hardware_info,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StationAuth) Reset() {
+	*x = StationAuth{}
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StationAuth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StationAuth) ProtoMessage() {}
+
+func (x *StationAuth) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StationAuth.ProtoReflect.Descriptor instead.
+func (*StationAuth) Descriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *StationAuth) GetRegistrationKey() string {
+	if x != nil {
+		return x.RegistrationKey
+	}
+	return ""
+}
+
+func (x *StationAuth) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *StationAuth) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *StationAuth) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *StationAuth) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *StationAuth) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *StationAuth) GetArch() string {
+	if x != nil {
+		return x.Arch
+	}
+	return ""
+}
+
+func (x *StationAuth) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *StationAuth) GetAgents() []*AgentInfo {
+	if x != nil {
+		return x.Agents
+	}
+	return nil
+}
+
+func (x *StationAuth) GetTools() []*ToolInfo {
+	if x != nil {
+		return x.Tools
+	}
+	return nil
+}
+
+func (x *StationAuth) GetMcpServers() []*MCPServerInfo {
+	if x != nil {
+		return x.McpServers
+	}
+	return nil
+}
+
+func (x *StationAuth) GetHardwareInfo() map[string]string {
+	if x != nil {
+		return x.HardwareInfo
+	}
+	return nil
+}
+
+// MCP Server info for station capabilities
+type MCPServerInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Command       string                 `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	Args          []string               `protobuf:"bytes,3,rep,name=args,proto3" json:"args,omitempty"`
+	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	ToolCount     int32                  `protobuf:"varint,5,opt,name=tool_count,json=toolCount,proto3" json:"tool_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MCPServerInfo) Reset() {
+	*x = MCPServerInfo{}
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPServerInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPServerInfo) ProtoMessage() {}
+
+func (x *MCPServerInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPServerInfo.ProtoReflect.Descriptor instead.
+func (*MCPServerInfo) Descriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *MCPServerInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MCPServerInfo) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *MCPServerInfo) GetArgs() []string {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+func (x *MCPServerInfo) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *MCPServerInfo) GetToolCount() int32 {
+	if x != nil {
+		return x.ToolCount
+	}
+	return 0
+}
+
+// Auth result sent back to station after StationAuth
+type AuthResult struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Success             bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error               string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`                                                           // Error message if success is false
+	StationId           string                 `protobuf:"bytes,3,opt,name=station_id,json=stationId,proto3" json:"station_id,omitempty"`                                  // Database station ID (UUID)
+	Name                string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`                                                             // Confirmed station name
+	HeartbeatIntervalMs int64                  `protobuf:"varint,5,opt,name=heartbeat_interval_ms,json=heartbeatIntervalMs,proto3" json:"heartbeat_interval_ms,omitempty"` // Recommended heartbeat interval (default: 60000ms)
+	ReplacedExisting    bool                   `protobuf:"varint,6,opt,name=replaced_existing,json=replacedExisting,proto3" json:"replaced_existing,omitempty"`            // True if this auth replaced an existing connection
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *AuthResult) Reset() {
+	*x = AuthResult{}
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthResult) ProtoMessage() {}
+
+func (x *AuthResult) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthResult.ProtoReflect.Descriptor instead.
+func (*AuthResult) Descriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *AuthResult) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *AuthResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *AuthResult) GetStationId() string {
+	if x != nil {
+		return x.StationId
+	}
+	return ""
+}
+
+func (x *AuthResult) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AuthResult) GetHeartbeatIntervalMs() int64 {
+	if x != nil {
+		return x.HeartbeatIntervalMs
+	}
+	return 0
+}
+
+func (x *AuthResult) GetReplacedExisting() bool {
+	if x != nil {
+		return x.ReplacedExisting
+	}
+	return false
+}
+
+// Disconnect message - server-initiated disconnection
+type Disconnect struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Reason           string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`                                                // Human-readable reason for disconnect
+	Code             DisconnectReason       `protobuf:"varint,2,opt,name=code,proto3,enum=lighthouse.v1.DisconnectReason" json:"code,omitempty"`               // Machine-readable disconnect code
+	ShouldReconnect  bool                   `protobuf:"varint,3,opt,name=should_reconnect,json=shouldReconnect,proto3" json:"should_reconnect,omitempty"`      // Hint: should station attempt to reconnect?
+	ReconnectDelayMs int64                  `protobuf:"varint,4,opt,name=reconnect_delay_ms,json=reconnectDelayMs,proto3" json:"reconnect_delay_ms,omitempty"` // If should_reconnect, wait this long before retry
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Disconnect) Reset() {
+	*x = Disconnect{}
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Disconnect) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Disconnect) ProtoMessage() {}
+
+func (x *Disconnect) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Disconnect.ProtoReflect.Descriptor instead.
+func (*Disconnect) Descriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *Disconnect) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *Disconnect) GetCode() DisconnectReason {
+	if x != nil {
+		return x.Code
+	}
+	return DisconnectReason_DISCONNECT_REASON_UNSPECIFIED
+}
+
+func (x *Disconnect) GetShouldReconnect() bool {
+	if x != nil {
+		return x.ShouldReconnect
+	}
+	return false
+}
+
+func (x *Disconnect) GetReconnectDelayMs() int64 {
+	if x != nil {
+		return x.ReconnectDelayMs
+	}
+	return 0
+}
+
 // List Agents
 type ListAgentsManagementRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -4326,7 +4806,7 @@ type ListAgentsManagementRequest struct {
 
 func (x *ListAgentsManagementRequest) Reset() {
 	*x = ListAgentsManagementRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[46]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4338,7 +4818,7 @@ func (x *ListAgentsManagementRequest) String() string {
 func (*ListAgentsManagementRequest) ProtoMessage() {}
 
 func (x *ListAgentsManagementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[46]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4351,7 +4831,7 @@ func (x *ListAgentsManagementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsManagementRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsManagementRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{46}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListAgentsManagementRequest) GetEnvironment() string {
@@ -4371,7 +4851,7 @@ type ListAgentsManagementResponse struct {
 
 func (x *ListAgentsManagementResponse) Reset() {
 	*x = ListAgentsManagementResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[47]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4383,7 +4863,7 @@ func (x *ListAgentsManagementResponse) String() string {
 func (*ListAgentsManagementResponse) ProtoMessage() {}
 
 func (x *ListAgentsManagementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[47]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4396,7 +4876,7 @@ func (x *ListAgentsManagementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsManagementResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsManagementResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{47}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListAgentsManagementResponse) GetAgents() []*AgentInfo {
@@ -4434,7 +4914,7 @@ type AgentInfo struct {
 
 func (x *AgentInfo) Reset() {
 	*x = AgentInfo{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[48]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4446,7 +4926,7 @@ func (x *AgentInfo) String() string {
 func (*AgentInfo) ProtoMessage() {}
 
 func (x *AgentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[48]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4459,7 +4939,7 @@ func (x *AgentInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentInfo.ProtoReflect.Descriptor instead.
 func (*AgentInfo) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{48}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *AgentInfo) GetId() string {
@@ -4563,7 +5043,7 @@ type ListToolsManagementRequest struct {
 
 func (x *ListToolsManagementRequest) Reset() {
 	*x = ListToolsManagementRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[49]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4575,7 +5055,7 @@ func (x *ListToolsManagementRequest) String() string {
 func (*ListToolsManagementRequest) ProtoMessage() {}
 
 func (x *ListToolsManagementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[49]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4588,7 +5068,7 @@ func (x *ListToolsManagementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsManagementRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsManagementRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{49}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListToolsManagementRequest) GetEnvironment() string {
@@ -4610,7 +5090,7 @@ type ListToolsManagementResponse struct {
 
 func (x *ListToolsManagementResponse) Reset() {
 	*x = ListToolsManagementResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[50]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4622,7 +5102,7 @@ func (x *ListToolsManagementResponse) String() string {
 func (*ListToolsManagementResponse) ProtoMessage() {}
 
 func (x *ListToolsManagementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[50]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4635,7 +5115,7 @@ func (x *ListToolsManagementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsManagementResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsManagementResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{50}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListToolsManagementResponse) GetTools() []*ToolInfo {
@@ -4675,7 +5155,7 @@ type GetEnvironmentsRequest struct {
 
 func (x *GetEnvironmentsRequest) Reset() {
 	*x = GetEnvironmentsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[51]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4687,7 +5167,7 @@ func (x *GetEnvironmentsRequest) String() string {
 func (*GetEnvironmentsRequest) ProtoMessage() {}
 
 func (x *GetEnvironmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[51]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4700,7 +5180,7 @@ func (x *GetEnvironmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvironmentsRequest.ProtoReflect.Descriptor instead.
 func (*GetEnvironmentsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{51}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{55}
 }
 
 type GetEnvironmentsResponse struct {
@@ -4712,7 +5192,7 @@ type GetEnvironmentsResponse struct {
 
 func (x *GetEnvironmentsResponse) Reset() {
 	*x = GetEnvironmentsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[52]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4724,7 +5204,7 @@ func (x *GetEnvironmentsResponse) String() string {
 func (*GetEnvironmentsResponse) ProtoMessage() {}
 
 func (x *GetEnvironmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[52]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4737,7 +5217,7 @@ func (x *GetEnvironmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvironmentsResponse.ProtoReflect.Descriptor instead.
 func (*GetEnvironmentsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{52}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetEnvironmentsResponse) GetEnvironments() []*EnvironmentInfo {
@@ -4761,7 +5241,7 @@ type EnvironmentInfo struct {
 
 func (x *EnvironmentInfo) Reset() {
 	*x = EnvironmentInfo{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[53]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4773,7 +5253,7 @@ func (x *EnvironmentInfo) String() string {
 func (*EnvironmentInfo) ProtoMessage() {}
 
 func (x *EnvironmentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[53]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4786,7 +5266,7 @@ func (x *EnvironmentInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentInfo.ProtoReflect.Descriptor instead.
 func (*EnvironmentInfo) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{53}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *EnvironmentInfo) GetName() string {
@@ -4846,7 +5326,7 @@ type ExecuteAgentManagementRequest struct {
 
 func (x *ExecuteAgentManagementRequest) Reset() {
 	*x = ExecuteAgentManagementRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[54]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4858,7 +5338,7 @@ func (x *ExecuteAgentManagementRequest) String() string {
 func (*ExecuteAgentManagementRequest) ProtoMessage() {}
 
 func (x *ExecuteAgentManagementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[54]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4871,7 +5351,7 @@ func (x *ExecuteAgentManagementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentManagementRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentManagementRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{54}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ExecuteAgentManagementRequest) GetAgentId() string {
@@ -4932,7 +5412,7 @@ type ExecuteAgentManagementResponse struct {
 
 func (x *ExecuteAgentManagementResponse) Reset() {
 	*x = ExecuteAgentManagementResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[55]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4944,7 +5424,7 @@ func (x *ExecuteAgentManagementResponse) String() string {
 func (*ExecuteAgentManagementResponse) ProtoMessage() {}
 
 func (x *ExecuteAgentManagementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[55]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4957,7 +5437,7 @@ func (x *ExecuteAgentManagementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentManagementResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentManagementResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{55}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ExecuteAgentManagementResponse) GetExecutionId() string {
@@ -5025,7 +5505,7 @@ type GetSystemStatusRequest struct {
 
 func (x *GetSystemStatusRequest) Reset() {
 	*x = GetSystemStatusRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[56]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5037,7 +5517,7 @@ func (x *GetSystemStatusRequest) String() string {
 func (*GetSystemStatusRequest) ProtoMessage() {}
 
 func (x *GetSystemStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[56]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5050,7 +5530,7 @@ func (x *GetSystemStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSystemStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetSystemStatusRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{56}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{60}
 }
 
 type GetSystemStatusResponse struct {
@@ -5067,7 +5547,7 @@ type GetSystemStatusResponse struct {
 
 func (x *GetSystemStatusResponse) Reset() {
 	*x = GetSystemStatusResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[57]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5079,7 +5559,7 @@ func (x *GetSystemStatusResponse) String() string {
 func (*GetSystemStatusResponse) ProtoMessage() {}
 
 func (x *GetSystemStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[57]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5092,7 +5572,7 @@ func (x *GetSystemStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSystemStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetSystemStatusResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{57}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GetSystemStatusResponse) GetHealth() LighthouseSystemHealth {
@@ -5152,7 +5632,7 @@ type ActiveExecution struct {
 
 func (x *ActiveExecution) Reset() {
 	*x = ActiveExecution{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[58]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5164,7 +5644,7 @@ func (x *ActiveExecution) String() string {
 func (*ActiveExecution) ProtoMessage() {}
 
 func (x *ActiveExecution) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[58]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5177,7 +5657,7 @@ func (x *ActiveExecution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActiveExecution.ProtoReflect.Descriptor instead.
 func (*ActiveExecution) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{58}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ActiveExecution) GetExecutionId() string {
@@ -5238,7 +5718,7 @@ type ListActiveRunsRequest struct {
 
 func (x *ListActiveRunsRequest) Reset() {
 	*x = ListActiveRunsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[59]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5250,7 +5730,7 @@ func (x *ListActiveRunsRequest) String() string {
 func (*ListActiveRunsRequest) ProtoMessage() {}
 
 func (x *ListActiveRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[59]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5263,7 +5743,7 @@ func (x *ListActiveRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActiveRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListActiveRunsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{59}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{63}
 }
 
 type ListActiveRunsResponse struct {
@@ -5276,7 +5756,7 @@ type ListActiveRunsResponse struct {
 
 func (x *ListActiveRunsResponse) Reset() {
 	*x = ListActiveRunsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[60]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5288,7 +5768,7 @@ func (x *ListActiveRunsResponse) String() string {
 func (*ListActiveRunsResponse) ProtoMessage() {}
 
 func (x *ListActiveRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[60]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5301,7 +5781,7 @@ func (x *ListActiveRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActiveRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListActiveRunsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{60}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ListActiveRunsResponse) GetActiveRuns() []*ActiveExecution {
@@ -5328,7 +5808,7 @@ type CancelExecutionRequest struct {
 
 func (x *CancelExecutionRequest) Reset() {
 	*x = CancelExecutionRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[61]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5340,7 +5820,7 @@ func (x *CancelExecutionRequest) String() string {
 func (*CancelExecutionRequest) ProtoMessage() {}
 
 func (x *CancelExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[61]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5353,7 +5833,7 @@ func (x *CancelExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelExecutionRequest.ProtoReflect.Descriptor instead.
 func (*CancelExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{61}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *CancelExecutionRequest) GetExecutionId() string {
@@ -5373,7 +5853,7 @@ type CancelExecutionResponse struct {
 
 func (x *CancelExecutionResponse) Reset() {
 	*x = CancelExecutionResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[62]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5385,7 +5865,7 @@ func (x *CancelExecutionResponse) String() string {
 func (*CancelExecutionResponse) ProtoMessage() {}
 
 func (x *CancelExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[62]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5398,7 +5878,7 @@ func (x *CancelExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelExecutionResponse.ProtoReflect.Descriptor instead.
 func (*CancelExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{62}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *CancelExecutionResponse) GetCancelled() bool {
@@ -5427,7 +5907,7 @@ type GetAgentDetailsRequest struct {
 
 func (x *GetAgentDetailsRequest) Reset() {
 	*x = GetAgentDetailsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[63]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5439,7 +5919,7 @@ func (x *GetAgentDetailsRequest) String() string {
 func (*GetAgentDetailsRequest) ProtoMessage() {}
 
 func (x *GetAgentDetailsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[63]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5452,7 +5932,7 @@ func (x *GetAgentDetailsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentDetailsRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentDetailsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{63}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *GetAgentDetailsRequest) GetRegistrationKey() string {
@@ -5485,7 +5965,7 @@ type GetAgentDetailsResponse struct {
 
 func (x *GetAgentDetailsResponse) Reset() {
 	*x = GetAgentDetailsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[64]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5497,7 +5977,7 @@ func (x *GetAgentDetailsResponse) String() string {
 func (*GetAgentDetailsResponse) ProtoMessage() {}
 
 func (x *GetAgentDetailsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[64]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5510,7 +5990,7 @@ func (x *GetAgentDetailsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentDetailsResponse.ProtoReflect.Descriptor instead.
 func (*GetAgentDetailsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{64}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *GetAgentDetailsResponse) GetAgent() *AgentConfig {
@@ -5532,7 +6012,7 @@ type UpdateAgentPromptRequest struct {
 
 func (x *UpdateAgentPromptRequest) Reset() {
 	*x = UpdateAgentPromptRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[65]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5544,7 +6024,7 @@ func (x *UpdateAgentPromptRequest) String() string {
 func (*UpdateAgentPromptRequest) ProtoMessage() {}
 
 func (x *UpdateAgentPromptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[65]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5557,7 +6037,7 @@ func (x *UpdateAgentPromptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentPromptRequest.ProtoReflect.Descriptor instead.
 func (*UpdateAgentPromptRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{65}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *UpdateAgentPromptRequest) GetRegistrationKey() string {
@@ -5599,7 +6079,7 @@ type UpdateAgentPromptResponse struct {
 
 func (x *UpdateAgentPromptResponse) Reset() {
 	*x = UpdateAgentPromptResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[66]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5611,7 +6091,7 @@ func (x *UpdateAgentPromptResponse) String() string {
 func (*UpdateAgentPromptResponse) ProtoMessage() {}
 
 func (x *UpdateAgentPromptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[66]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5624,7 +6104,7 @@ func (x *UpdateAgentPromptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentPromptResponse.ProtoReflect.Descriptor instead.
 func (*UpdateAgentPromptResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{66}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *UpdateAgentPromptResponse) GetSuccess() bool {
@@ -5661,7 +6141,7 @@ type GetMemoryContextRequest struct {
 
 func (x *GetMemoryContextRequest) Reset() {
 	*x = GetMemoryContextRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[67]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5673,7 +6153,7 @@ func (x *GetMemoryContextRequest) String() string {
 func (*GetMemoryContextRequest) ProtoMessage() {}
 
 func (x *GetMemoryContextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[67]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5686,7 +6166,7 @@ func (x *GetMemoryContextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMemoryContextRequest.ProtoReflect.Descriptor instead.
 func (*GetMemoryContextRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{67}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *GetMemoryContextRequest) GetRegistrationKey() string {
@@ -5732,7 +6212,7 @@ type GetMemoryContextResponse struct {
 
 func (x *GetMemoryContextResponse) Reset() {
 	*x = GetMemoryContextResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[68]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5744,7 +6224,7 @@ func (x *GetMemoryContextResponse) String() string {
 func (*GetMemoryContextResponse) ProtoMessage() {}
 
 func (x *GetMemoryContextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[68]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5757,7 +6237,7 @@ func (x *GetMemoryContextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMemoryContextResponse.ProtoReflect.Descriptor instead.
 func (*GetMemoryContextResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{68}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *GetMemoryContextResponse) GetSuccess() bool {
@@ -5814,7 +6294,7 @@ type ManagementError struct {
 
 func (x *ManagementError) Reset() {
 	*x = ManagementError{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[69]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5826,7 +6306,7 @@ func (x *ManagementError) String() string {
 func (*ManagementError) ProtoMessage() {}
 
 func (x *ManagementError) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[69]
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5839,7 +6319,7 @@ func (x *ManagementError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagementError.ProtoReflect.Descriptor instead.
 func (*ManagementError) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{69}
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ManagementError) GetCode() ErrorCode {
@@ -5859,6 +6339,146 @@ func (x *ManagementError) GetMessage() string {
 func (x *ManagementError) GetDetails() string {
 	if x != nil {
 		return x.Details
+	}
+	return ""
+}
+
+type DebugRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DebugRequest) Reset() {
+	*x = DebugRequest{}
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DebugRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DebugRequest) ProtoMessage() {}
+
+func (x *DebugRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DebugRequest.ProtoReflect.Descriptor instead.
+func (*DebugRequest) Descriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{74}
+}
+
+type TestStationRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *TestStationRequest) Reset() {
+	*x = TestStationRequest{}
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[75]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestStationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestStationRequest) ProtoMessage() {}
+
+func (x *TestStationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[75]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestStationRequest.ProtoReflect.Descriptor instead.
+func (*TestStationRequest) Descriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{75}
+}
+
+func (x *TestStationRequest) GetRegistrationKey() string {
+	if x != nil {
+		return x.RegistrationKey
+	}
+	return ""
+}
+
+type DebugResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Data          string                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"` // JSON-encoded response data
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DebugResponse) Reset() {
+	*x = DebugResponse{}
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DebugResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DebugResponse) ProtoMessage() {}
+
+func (x *DebugResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[76]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DebugResponse.ProtoReflect.Descriptor instead.
+func (*DebugResponse) Descriptor() ([]byte, []int) {
+	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{76}
+}
+
+func (x *DebugResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DebugResponse) GetData() string {
+	if x != nil {
+		return x.Data
+	}
+	return ""
+}
+
+func (x *DebugResponse) GetError() string {
+	if x != nil {
+		return x.Error
 	}
 	return ""
 }
@@ -6192,7 +6812,7 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\x0eExecutionError\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x125\n" +
-	"\berror_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aerrorAt\"\xd3\x0e\n" +
+	"\berror_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aerrorAt\"\x8f\x10\n" +
 	"\x11ManagementMessage\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12)\n" +
@@ -6218,10 +6838,56 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\x1cupdate_agent_prompt_response\x18\x1d \x01(\v2(.lighthouse.v1.UpdateAgentPromptResponseH\x00R\x19updateAgentPromptResponse\x12h\n" +
 	"\x1bget_memory_context_response\x18\x18 \x01(\v2'.lighthouse.v1.GetMemoryContextResponseH\x00R\x18getMemoryContextResponse\x126\n" +
 	"\x05error\x18\x1e \x01(\v2\x1e.lighthouse.v1.ManagementErrorH\x00R\x05error\x12^\n" +
-	"\x14station_registration\x18\x1f \x01(\v2).lighthouse.v1.StationRegistrationMessageH\x00R\x13stationRegistrationB\t\n" +
+	"\x14station_registration\x18\x1f \x01(\v2).lighthouse.v1.StationRegistrationMessageH\x00R\x13stationRegistration\x12?\n" +
+	"\fstation_auth\x18  \x01(\v2\x1a.lighthouse.v1.StationAuthH\x00R\vstationAuth\x12<\n" +
+	"\vauth_result\x18! \x01(\v2\x19.lighthouse.v1.AuthResultH\x00R\n" +
+	"authResult\x12;\n" +
+	"\n" +
+	"disconnect\x18\" \x01(\v2\x19.lighthouse.v1.DisconnectH\x00R\n" +
+	"disconnectB\t\n" +
 	"\amessage\"G\n" +
 	"\x1aStationRegistrationMessage\x12)\n" +
-	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\"?\n" +
+	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\"\x90\x04\n" +
+	"\vStationAuth\x12)\n" +
+	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\x12\x1a\n" +
+	"\bhostname\x18\x04 \x01(\tR\bhostname\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\tR\aversion\x12\x0e\n" +
+	"\x02os\x18\x06 \x01(\tR\x02os\x12\x12\n" +
+	"\x04arch\x18\a \x01(\tR\x04arch\x12 \n" +
+	"\venvironment\x18\b \x01(\tR\venvironment\x120\n" +
+	"\x06agents\x18\t \x03(\v2\x18.lighthouse.v1.AgentInfoR\x06agents\x12-\n" +
+	"\x05tools\x18\n" +
+	" \x03(\v2\x17.lighthouse.v1.ToolInfoR\x05tools\x12=\n" +
+	"\vmcp_servers\x18\v \x03(\v2\x1c.lighthouse.v1.MCPServerInfoR\n" +
+	"mcpServers\x12Q\n" +
+	"\rhardware_info\x18\f \x03(\v2,.lighthouse.v1.StationAuth.HardwareInfoEntryR\fhardwareInfo\x1a?\n" +
+	"\x11HardwareInfoEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8a\x01\n" +
+	"\rMCPServerInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\acommand\x18\x02 \x01(\tR\acommand\x12\x12\n" +
+	"\x04args\x18\x03 \x03(\tR\x04args\x12\x18\n" +
+	"\aenabled\x18\x04 \x01(\bR\aenabled\x12\x1d\n" +
+	"\n" +
+	"tool_count\x18\x05 \x01(\x05R\ttoolCount\"\xd0\x01\n" +
+	"\n" +
+	"AuthResult\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1d\n" +
+	"\n" +
+	"station_id\x18\x03 \x01(\tR\tstationId\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x122\n" +
+	"\x15heartbeat_interval_ms\x18\x05 \x01(\x03R\x13heartbeatIntervalMs\x12+\n" +
+	"\x11replaced_existing\x18\x06 \x01(\bR\x10replacedExisting\"\xb2\x01\n" +
+	"\n" +
+	"Disconnect\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\x123\n" +
+	"\x04code\x18\x02 \x01(\x0e2\x1f.lighthouse.v1.DisconnectReasonR\x04code\x12)\n" +
+	"\x10should_reconnect\x18\x03 \x01(\bR\x0fshouldReconnect\x12,\n" +
+	"\x12reconnect_delay_ms\x18\x04 \x01(\x03R\x10reconnectDelayMs\"?\n" +
 	"\x1bListAgentsManagementRequest\x12 \n" +
 	"\venvironment\x18\x01 \x01(\tR\venvironment\"s\n" +
 	"\x1cListAgentsManagementResponse\x120\n" +
@@ -6354,7 +7020,14 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\x0fManagementError\x12,\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x18.lighthouse.v1.ErrorCodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x18\n" +
-	"\adetails\x18\x03 \x01(\tR\adetails*\x80\x01\n" +
+	"\adetails\x18\x03 \x01(\tR\adetails\"\x0e\n" +
+	"\fDebugRequest\"?\n" +
+	"\x12TestStationRequest\x12)\n" +
+	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\"S\n" +
+	"\rDebugResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\tR\x04data\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error*\x80\x01\n" +
 	"\x0eDeploymentMode\x12\x1f\n" +
 	"\x1bDEPLOYMENT_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DEPLOYMENT_MODE_STDIO\x10\x01\x12\x19\n" +
@@ -6390,7 +7063,16 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	" REGISTRATION_STATUS_UNREGISTERED\x10\x01\x12\"\n" +
 	"\x1eREGISTRATION_STATUS_REGISTERED\x10\x02\x12#\n" +
 	"\x1fREGISTRATION_STATUS_INVALID_KEY\x10\x03\x12$\n" +
-	" REGISTRATION_STATUS_RATE_LIMITED\x10\x04*s\n" +
+	" REGISTRATION_STATUS_RATE_LIMITED\x10\x04*\xa6\x02\n" +
+	"\x10DisconnectReason\x12!\n" +
+	"\x1dDISCONNECT_REASON_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aDISCONNECT_REASON_REPLACED\x10\x01\x12!\n" +
+	"\x1dDISCONNECT_REASON_AUTH_FAILED\x10\x02\x12!\n" +
+	"\x1dDISCONNECT_REASON_KEY_REVOKED\x10\x03\x12#\n" +
+	"\x1fDISCONNECT_REASON_LIMIT_REACHED\x10\x04\x12\x1e\n" +
+	"\x1aDISCONNECT_REASON_SHUTDOWN\x10\x05\x12'\n" +
+	"#DISCONNECT_REASON_HEARTBEAT_TIMEOUT\x10\x06\x12\x1b\n" +
+	"\x17DISCONNECT_REASON_ERROR\x10\a*s\n" +
 	"\vAgentStatus\x12\x17\n" +
 	"\x13AGENT_STATUS_ACTIVE\x10\x00\x12\x19\n" +
 	"\x15AGENT_STATUS_INACTIVE\x10\x01\x12\x18\n" +
@@ -6439,7 +7121,11 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\bCallTool\x12\x1e.lighthouse.v1.CallToolRequest\x1a\x1f.lighthouse.v1.CallToolResponse\x12Q\n" +
 	"\n" +
 	"ListAgents\x12 .lighthouse.v1.ListAgentsRequest\x1a!.lighthouse.v1.ListAgentsResponse\x12W\n" +
-	"\fExecuteAgent\x12\".lighthouse.v1.ExecuteAgentRequest\x1a#.lighthouse.v1.ExecuteAgentResponseB\x12Z\x10./internal/protob\x06proto3"
+	"\fExecuteAgent\x12\".lighthouse.v1.ExecuteAgentRequest\x1a#.lighthouse.v1.ExecuteAgentResponse2\x92\x02\n" +
+	"\fDebugService\x12N\n" +
+	"\x11GetActiveStations\x12\x1b.lighthouse.v1.DebugRequest\x1a\x1c.lighthouse.v1.DebugResponse\x12X\n" +
+	"\x1bGetActiveManagementChannels\x12\x1b.lighthouse.v1.DebugRequest\x1a\x1c.lighthouse.v1.DebugResponse\x12X\n" +
+	"\x15TestStationConnection\x12!.lighthouse.v1.TestStationRequest\x1a\x1c.lighthouse.v1.DebugResponseB#Z!station/internal/lighthouse/protob\x06proto3"
 
 var (
 	file_internal_lighthouse_proto_lighthouse_proto_rawDescOnce sync.Once
@@ -6453,8 +7139,8 @@ func file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP() []byte {
 	return file_internal_lighthouse_proto_lighthouse_proto_rawDescData
 }
 
-var file_internal_lighthouse_proto_lighthouse_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
-var file_internal_lighthouse_proto_lighthouse_proto_msgTypes = make([]protoimpl.MessageInfo, 87)
+var file_internal_lighthouse_proto_lighthouse_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
+var file_internal_lighthouse_proto_lighthouse_proto_msgTypes = make([]protoimpl.MessageInfo, 95)
 var file_internal_lighthouse_proto_lighthouse_proto_goTypes = []any{
 	(DeploymentMode)(0),                    // 0: lighthouse.v1.DeploymentMode
 	(LighthouseRunStatus)(0),               // 1: lighthouse.v1.LighthouseRunStatus
@@ -6462,254 +7148,277 @@ var file_internal_lighthouse_proto_lighthouse_proto_goTypes = []any{
 	(StepType)(0),                          // 3: lighthouse.v1.StepType
 	(SystemStatus)(0),                      // 4: lighthouse.v1.SystemStatus
 	(RegistrationStatus)(0),                // 5: lighthouse.v1.RegistrationStatus
-	(AgentStatus)(0),                       // 6: lighthouse.v1.AgentStatus
-	(ExecutionStatus)(0),                   // 7: lighthouse.v1.ExecutionStatus
-	(LighthouseSystemHealth)(0),            // 8: lighthouse.v1.LighthouseSystemHealth
-	(ConnectionStatus)(0),                  // 9: lighthouse.v1.ConnectionStatus
-	(ErrorCode)(0),                         // 10: lighthouse.v1.ErrorCode
-	(*RegisterStationRequest)(nil),         // 11: lighthouse.v1.RegisterStationRequest
-	(*RegisterStationResponse)(nil),        // 12: lighthouse.v1.RegisterStationResponse
-	(*StationCapabilities)(nil),            // 13: lighthouse.v1.StationCapabilities
-	(*CloudShipConfig)(nil),                // 14: lighthouse.v1.CloudShipConfig
-	(*SendRunRequest)(nil),                 // 15: lighthouse.v1.SendRunRequest
-	(*SendRunResponse)(nil),                // 16: lighthouse.v1.SendRunResponse
-	(*LighthouseAgentRunData)(nil),         // 17: lighthouse.v1.LighthouseAgentRunData
-	(*LighthouseToolCall)(nil),             // 18: lighthouse.v1.LighthouseToolCall
-	(*ExecutionStep)(nil),                  // 19: lighthouse.v1.ExecutionStep
-	(*LighthouseTokenUsage)(nil),           // 20: lighthouse.v1.LighthouseTokenUsage
-	(*EphemeralSnapshotRequest)(nil),       // 21: lighthouse.v1.EphemeralSnapshotRequest
-	(*EphemeralSnapshotResponse)(nil),      // 22: lighthouse.v1.EphemeralSnapshotResponse
-	(*DeploymentContext)(nil),              // 23: lighthouse.v1.DeploymentContext
-	(*SystemSnapshot)(nil),                 // 24: lighthouse.v1.SystemSnapshot
-	(*SyncConfigRequest)(nil),              // 25: lighthouse.v1.SyncConfigRequest
-	(*SyncConfigResponse)(nil),             // 26: lighthouse.v1.SyncConfigResponse
-	(*AgentConfig)(nil),                    // 27: lighthouse.v1.AgentConfig
-	(*MCPConfig)(nil),                      // 28: lighthouse.v1.MCPConfig
-	(*ToolInfo)(nil),                       // 29: lighthouse.v1.ToolInfo
-	(*ConnectRequest)(nil),                 // 30: lighthouse.v1.ConnectRequest
-	(*CloudShipCommand)(nil),               // 31: lighthouse.v1.CloudShipCommand
-	(*CreateAgentCommand)(nil),             // 32: lighthouse.v1.CreateAgentCommand
-	(*UpdateAgentCommand)(nil),             // 33: lighthouse.v1.UpdateAgentCommand
-	(*DeleteAgentCommand)(nil),             // 34: lighthouse.v1.DeleteAgentCommand
-	(*SyncMCPServersCommand)(nil),          // 35: lighthouse.v1.SyncMCPServersCommand
-	(*ExecuteAgentCommand)(nil),            // 36: lighthouse.v1.ExecuteAgentCommand
-	(*GetEnvironmentCommand)(nil),          // 37: lighthouse.v1.GetEnvironmentCommand
-	(*ListAgentsCommand)(nil),              // 38: lighthouse.v1.ListAgentsCommand
-	(*SystemHealthRequest)(nil),            // 39: lighthouse.v1.SystemHealthRequest
-	(*SystemHealthResponse)(nil),           // 40: lighthouse.v1.SystemHealthResponse
-	(*SystemMetrics)(nil),                  // 41: lighthouse.v1.SystemMetrics
-	(*HeartbeatRequest)(nil),               // 42: lighthouse.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil),              // 43: lighthouse.v1.HeartbeatResponse
-	(*ListToolsRequest)(nil),               // 44: lighthouse.v1.ListToolsRequest
-	(*ListToolsResponse)(nil),              // 45: lighthouse.v1.ListToolsResponse
-	(*CallToolRequest)(nil),                // 46: lighthouse.v1.CallToolRequest
-	(*CallToolResponse)(nil),               // 47: lighthouse.v1.CallToolResponse
-	(*ListAgentsRequest)(nil),              // 48: lighthouse.v1.ListAgentsRequest
-	(*ListAgentsResponse)(nil),             // 49: lighthouse.v1.ListAgentsResponse
-	(*ExecuteAgentRequest)(nil),            // 50: lighthouse.v1.ExecuteAgentRequest
-	(*ExecuteAgentResponse)(nil),           // 51: lighthouse.v1.ExecuteAgentResponse
-	(*ExecutionStarted)(nil),               // 52: lighthouse.v1.ExecutionStarted
-	(*ExecutionCompleted)(nil),             // 53: lighthouse.v1.ExecutionCompleted
-	(*ExecutionError)(nil),                 // 54: lighthouse.v1.ExecutionError
-	(*ManagementMessage)(nil),              // 55: lighthouse.v1.ManagementMessage
-	(*StationRegistrationMessage)(nil),     // 56: lighthouse.v1.StationRegistrationMessage
-	(*ListAgentsManagementRequest)(nil),    // 57: lighthouse.v1.ListAgentsManagementRequest
-	(*ListAgentsManagementResponse)(nil),   // 58: lighthouse.v1.ListAgentsManagementResponse
-	(*AgentInfo)(nil),                      // 59: lighthouse.v1.AgentInfo
-	(*ListToolsManagementRequest)(nil),     // 60: lighthouse.v1.ListToolsManagementRequest
-	(*ListToolsManagementResponse)(nil),    // 61: lighthouse.v1.ListToolsManagementResponse
-	(*GetEnvironmentsRequest)(nil),         // 62: lighthouse.v1.GetEnvironmentsRequest
-	(*GetEnvironmentsResponse)(nil),        // 63: lighthouse.v1.GetEnvironmentsResponse
-	(*EnvironmentInfo)(nil),                // 64: lighthouse.v1.EnvironmentInfo
-	(*ExecuteAgentManagementRequest)(nil),  // 65: lighthouse.v1.ExecuteAgentManagementRequest
-	(*ExecuteAgentManagementResponse)(nil), // 66: lighthouse.v1.ExecuteAgentManagementResponse
-	(*GetSystemStatusRequest)(nil),         // 67: lighthouse.v1.GetSystemStatusRequest
-	(*GetSystemStatusResponse)(nil),        // 68: lighthouse.v1.GetSystemStatusResponse
-	(*ActiveExecution)(nil),                // 69: lighthouse.v1.ActiveExecution
-	(*ListActiveRunsRequest)(nil),          // 70: lighthouse.v1.ListActiveRunsRequest
-	(*ListActiveRunsResponse)(nil),         // 71: lighthouse.v1.ListActiveRunsResponse
-	(*CancelExecutionRequest)(nil),         // 72: lighthouse.v1.CancelExecutionRequest
-	(*CancelExecutionResponse)(nil),        // 73: lighthouse.v1.CancelExecutionResponse
-	(*GetAgentDetailsRequest)(nil),         // 74: lighthouse.v1.GetAgentDetailsRequest
-	(*GetAgentDetailsResponse)(nil),        // 75: lighthouse.v1.GetAgentDetailsResponse
-	(*UpdateAgentPromptRequest)(nil),       // 76: lighthouse.v1.UpdateAgentPromptRequest
-	(*UpdateAgentPromptResponse)(nil),      // 77: lighthouse.v1.UpdateAgentPromptResponse
-	(*GetMemoryContextRequest)(nil),        // 78: lighthouse.v1.GetMemoryContextRequest
-	(*GetMemoryContextResponse)(nil),       // 79: lighthouse.v1.GetMemoryContextResponse
-	(*ManagementError)(nil),                // 80: lighthouse.v1.ManagementError
-	nil,                                    // 81: lighthouse.v1.RegisterStationRequest.MetadataEntry
-	nil,                                    // 82: lighthouse.v1.CloudShipConfig.SettingsEntry
-	nil,                                    // 83: lighthouse.v1.SendRunRequest.LabelsEntry
-	nil,                                    // 84: lighthouse.v1.LighthouseAgentRunData.MetadataEntry
-	nil,                                    // 85: lighthouse.v1.LighthouseToolCall.ParametersEntry
-	nil,                                    // 86: lighthouse.v1.DeploymentContext.EnvVarsEntry
-	nil,                                    // 87: lighthouse.v1.SystemSnapshot.VariablesEntry
-	nil,                                    // 88: lighthouse.v1.SyncConfigRequest.VariablesEntry
-	nil,                                    // 89: lighthouse.v1.AgentConfig.VariablesEntry
-	nil,                                    // 90: lighthouse.v1.MCPConfig.EnvVarsEntry
-	nil,                                    // 91: lighthouse.v1.MCPConfig.VariablesEntry
-	nil,                                    // 92: lighthouse.v1.ExecuteAgentCommand.VariablesEntry
-	nil,                                    // 93: lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
-	nil,                                    // 94: lighthouse.v1.CallToolRequest.ParametersEntry
-	nil,                                    // 95: lighthouse.v1.ExecuteAgentRequest.VariablesEntry
-	nil,                                    // 96: lighthouse.v1.EnvironmentInfo.VariablesEntry
-	nil,                                    // 97: lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
-	(*timestamp.Timestamp)(nil),            // 98: google.protobuf.Timestamp
-	(*IngestDataRequest)(nil),              // 99: lighthouse.v1.IngestDataRequest
-	(*IngestDataResponse)(nil),             // 100: lighthouse.v1.IngestDataResponse
+	(DisconnectReason)(0),                  // 6: lighthouse.v1.DisconnectReason
+	(AgentStatus)(0),                       // 7: lighthouse.v1.AgentStatus
+	(ExecutionStatus)(0),                   // 8: lighthouse.v1.ExecutionStatus
+	(LighthouseSystemHealth)(0),            // 9: lighthouse.v1.LighthouseSystemHealth
+	(ConnectionStatus)(0),                  // 10: lighthouse.v1.ConnectionStatus
+	(ErrorCode)(0),                         // 11: lighthouse.v1.ErrorCode
+	(*RegisterStationRequest)(nil),         // 12: lighthouse.v1.RegisterStationRequest
+	(*RegisterStationResponse)(nil),        // 13: lighthouse.v1.RegisterStationResponse
+	(*StationCapabilities)(nil),            // 14: lighthouse.v1.StationCapabilities
+	(*CloudShipConfig)(nil),                // 15: lighthouse.v1.CloudShipConfig
+	(*SendRunRequest)(nil),                 // 16: lighthouse.v1.SendRunRequest
+	(*SendRunResponse)(nil),                // 17: lighthouse.v1.SendRunResponse
+	(*LighthouseAgentRunData)(nil),         // 18: lighthouse.v1.LighthouseAgentRunData
+	(*LighthouseToolCall)(nil),             // 19: lighthouse.v1.LighthouseToolCall
+	(*ExecutionStep)(nil),                  // 20: lighthouse.v1.ExecutionStep
+	(*LighthouseTokenUsage)(nil),           // 21: lighthouse.v1.LighthouseTokenUsage
+	(*EphemeralSnapshotRequest)(nil),       // 22: lighthouse.v1.EphemeralSnapshotRequest
+	(*EphemeralSnapshotResponse)(nil),      // 23: lighthouse.v1.EphemeralSnapshotResponse
+	(*DeploymentContext)(nil),              // 24: lighthouse.v1.DeploymentContext
+	(*SystemSnapshot)(nil),                 // 25: lighthouse.v1.SystemSnapshot
+	(*SyncConfigRequest)(nil),              // 26: lighthouse.v1.SyncConfigRequest
+	(*SyncConfigResponse)(nil),             // 27: lighthouse.v1.SyncConfigResponse
+	(*AgentConfig)(nil),                    // 28: lighthouse.v1.AgentConfig
+	(*MCPConfig)(nil),                      // 29: lighthouse.v1.MCPConfig
+	(*ToolInfo)(nil),                       // 30: lighthouse.v1.ToolInfo
+	(*ConnectRequest)(nil),                 // 31: lighthouse.v1.ConnectRequest
+	(*CloudShipCommand)(nil),               // 32: lighthouse.v1.CloudShipCommand
+	(*CreateAgentCommand)(nil),             // 33: lighthouse.v1.CreateAgentCommand
+	(*UpdateAgentCommand)(nil),             // 34: lighthouse.v1.UpdateAgentCommand
+	(*DeleteAgentCommand)(nil),             // 35: lighthouse.v1.DeleteAgentCommand
+	(*SyncMCPServersCommand)(nil),          // 36: lighthouse.v1.SyncMCPServersCommand
+	(*ExecuteAgentCommand)(nil),            // 37: lighthouse.v1.ExecuteAgentCommand
+	(*GetEnvironmentCommand)(nil),          // 38: lighthouse.v1.GetEnvironmentCommand
+	(*ListAgentsCommand)(nil),              // 39: lighthouse.v1.ListAgentsCommand
+	(*SystemHealthRequest)(nil),            // 40: lighthouse.v1.SystemHealthRequest
+	(*SystemHealthResponse)(nil),           // 41: lighthouse.v1.SystemHealthResponse
+	(*SystemMetrics)(nil),                  // 42: lighthouse.v1.SystemMetrics
+	(*HeartbeatRequest)(nil),               // 43: lighthouse.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil),              // 44: lighthouse.v1.HeartbeatResponse
+	(*ListToolsRequest)(nil),               // 45: lighthouse.v1.ListToolsRequest
+	(*ListToolsResponse)(nil),              // 46: lighthouse.v1.ListToolsResponse
+	(*CallToolRequest)(nil),                // 47: lighthouse.v1.CallToolRequest
+	(*CallToolResponse)(nil),               // 48: lighthouse.v1.CallToolResponse
+	(*ListAgentsRequest)(nil),              // 49: lighthouse.v1.ListAgentsRequest
+	(*ListAgentsResponse)(nil),             // 50: lighthouse.v1.ListAgentsResponse
+	(*ExecuteAgentRequest)(nil),            // 51: lighthouse.v1.ExecuteAgentRequest
+	(*ExecuteAgentResponse)(nil),           // 52: lighthouse.v1.ExecuteAgentResponse
+	(*ExecutionStarted)(nil),               // 53: lighthouse.v1.ExecutionStarted
+	(*ExecutionCompleted)(nil),             // 54: lighthouse.v1.ExecutionCompleted
+	(*ExecutionError)(nil),                 // 55: lighthouse.v1.ExecutionError
+	(*ManagementMessage)(nil),              // 56: lighthouse.v1.ManagementMessage
+	(*StationRegistrationMessage)(nil),     // 57: lighthouse.v1.StationRegistrationMessage
+	(*StationAuth)(nil),                    // 58: lighthouse.v1.StationAuth
+	(*MCPServerInfo)(nil),                  // 59: lighthouse.v1.MCPServerInfo
+	(*AuthResult)(nil),                     // 60: lighthouse.v1.AuthResult
+	(*Disconnect)(nil),                     // 61: lighthouse.v1.Disconnect
+	(*ListAgentsManagementRequest)(nil),    // 62: lighthouse.v1.ListAgentsManagementRequest
+	(*ListAgentsManagementResponse)(nil),   // 63: lighthouse.v1.ListAgentsManagementResponse
+	(*AgentInfo)(nil),                      // 64: lighthouse.v1.AgentInfo
+	(*ListToolsManagementRequest)(nil),     // 65: lighthouse.v1.ListToolsManagementRequest
+	(*ListToolsManagementResponse)(nil),    // 66: lighthouse.v1.ListToolsManagementResponse
+	(*GetEnvironmentsRequest)(nil),         // 67: lighthouse.v1.GetEnvironmentsRequest
+	(*GetEnvironmentsResponse)(nil),        // 68: lighthouse.v1.GetEnvironmentsResponse
+	(*EnvironmentInfo)(nil),                // 69: lighthouse.v1.EnvironmentInfo
+	(*ExecuteAgentManagementRequest)(nil),  // 70: lighthouse.v1.ExecuteAgentManagementRequest
+	(*ExecuteAgentManagementResponse)(nil), // 71: lighthouse.v1.ExecuteAgentManagementResponse
+	(*GetSystemStatusRequest)(nil),         // 72: lighthouse.v1.GetSystemStatusRequest
+	(*GetSystemStatusResponse)(nil),        // 73: lighthouse.v1.GetSystemStatusResponse
+	(*ActiveExecution)(nil),                // 74: lighthouse.v1.ActiveExecution
+	(*ListActiveRunsRequest)(nil),          // 75: lighthouse.v1.ListActiveRunsRequest
+	(*ListActiveRunsResponse)(nil),         // 76: lighthouse.v1.ListActiveRunsResponse
+	(*CancelExecutionRequest)(nil),         // 77: lighthouse.v1.CancelExecutionRequest
+	(*CancelExecutionResponse)(nil),        // 78: lighthouse.v1.CancelExecutionResponse
+	(*GetAgentDetailsRequest)(nil),         // 79: lighthouse.v1.GetAgentDetailsRequest
+	(*GetAgentDetailsResponse)(nil),        // 80: lighthouse.v1.GetAgentDetailsResponse
+	(*UpdateAgentPromptRequest)(nil),       // 81: lighthouse.v1.UpdateAgentPromptRequest
+	(*UpdateAgentPromptResponse)(nil),      // 82: lighthouse.v1.UpdateAgentPromptResponse
+	(*GetMemoryContextRequest)(nil),        // 83: lighthouse.v1.GetMemoryContextRequest
+	(*GetMemoryContextResponse)(nil),       // 84: lighthouse.v1.GetMemoryContextResponse
+	(*ManagementError)(nil),                // 85: lighthouse.v1.ManagementError
+	(*DebugRequest)(nil),                   // 86: lighthouse.v1.DebugRequest
+	(*TestStationRequest)(nil),             // 87: lighthouse.v1.TestStationRequest
+	(*DebugResponse)(nil),                  // 88: lighthouse.v1.DebugResponse
+	nil,                                    // 89: lighthouse.v1.RegisterStationRequest.MetadataEntry
+	nil,                                    // 90: lighthouse.v1.CloudShipConfig.SettingsEntry
+	nil,                                    // 91: lighthouse.v1.SendRunRequest.LabelsEntry
+	nil,                                    // 92: lighthouse.v1.LighthouseAgentRunData.MetadataEntry
+	nil,                                    // 93: lighthouse.v1.LighthouseToolCall.ParametersEntry
+	nil,                                    // 94: lighthouse.v1.DeploymentContext.EnvVarsEntry
+	nil,                                    // 95: lighthouse.v1.SystemSnapshot.VariablesEntry
+	nil,                                    // 96: lighthouse.v1.SyncConfigRequest.VariablesEntry
+	nil,                                    // 97: lighthouse.v1.AgentConfig.VariablesEntry
+	nil,                                    // 98: lighthouse.v1.MCPConfig.EnvVarsEntry
+	nil,                                    // 99: lighthouse.v1.MCPConfig.VariablesEntry
+	nil,                                    // 100: lighthouse.v1.ExecuteAgentCommand.VariablesEntry
+	nil,                                    // 101: lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
+	nil,                                    // 102: lighthouse.v1.CallToolRequest.ParametersEntry
+	nil,                                    // 103: lighthouse.v1.ExecuteAgentRequest.VariablesEntry
+	nil,                                    // 104: lighthouse.v1.StationAuth.HardwareInfoEntry
+	nil,                                    // 105: lighthouse.v1.EnvironmentInfo.VariablesEntry
+	nil,                                    // 106: lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
+	(*timestamp.Timestamp)(nil),            // 107: google.protobuf.Timestamp
+	(*IngestDataRequest)(nil),              // 108: lighthouse.v1.IngestDataRequest
+	(*IngestDataResponse)(nil),             // 109: lighthouse.v1.IngestDataResponse
 }
 var file_internal_lighthouse_proto_lighthouse_proto_depIdxs = []int32{
 	0,   // 0: lighthouse.v1.RegisterStationRequest.mode:type_name -> lighthouse.v1.DeploymentMode
-	13,  // 1: lighthouse.v1.RegisterStationRequest.capabilities:type_name -> lighthouse.v1.StationCapabilities
-	81,  // 2: lighthouse.v1.RegisterStationRequest.metadata:type_name -> lighthouse.v1.RegisterStationRequest.MetadataEntry
+	14,  // 1: lighthouse.v1.RegisterStationRequest.capabilities:type_name -> lighthouse.v1.StationCapabilities
+	89,  // 2: lighthouse.v1.RegisterStationRequest.metadata:type_name -> lighthouse.v1.RegisterStationRequest.MetadataEntry
 	5,   // 3: lighthouse.v1.RegisterStationResponse.status:type_name -> lighthouse.v1.RegistrationStatus
-	14,  // 4: lighthouse.v1.RegisterStationResponse.cloudship_config:type_name -> lighthouse.v1.CloudShipConfig
-	82,  // 5: lighthouse.v1.CloudShipConfig.settings:type_name -> lighthouse.v1.CloudShipConfig.SettingsEntry
+	15,  // 4: lighthouse.v1.RegisterStationResponse.cloudship_config:type_name -> lighthouse.v1.CloudShipConfig
+	90,  // 5: lighthouse.v1.CloudShipConfig.settings:type_name -> lighthouse.v1.CloudShipConfig.SettingsEntry
 	0,   // 6: lighthouse.v1.SendRunRequest.mode:type_name -> lighthouse.v1.DeploymentMode
 	2,   // 7: lighthouse.v1.SendRunRequest.source:type_name -> lighthouse.v1.RunSource
-	17,  // 8: lighthouse.v1.SendRunRequest.run_data:type_name -> lighthouse.v1.LighthouseAgentRunData
-	83,  // 9: lighthouse.v1.SendRunRequest.labels:type_name -> lighthouse.v1.SendRunRequest.LabelsEntry
-	18,  // 10: lighthouse.v1.LighthouseAgentRunData.tool_calls:type_name -> lighthouse.v1.LighthouseToolCall
-	19,  // 11: lighthouse.v1.LighthouseAgentRunData.execution_steps:type_name -> lighthouse.v1.ExecutionStep
-	20,  // 12: lighthouse.v1.LighthouseAgentRunData.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
+	18,  // 8: lighthouse.v1.SendRunRequest.run_data:type_name -> lighthouse.v1.LighthouseAgentRunData
+	91,  // 9: lighthouse.v1.SendRunRequest.labels:type_name -> lighthouse.v1.SendRunRequest.LabelsEntry
+	19,  // 10: lighthouse.v1.LighthouseAgentRunData.tool_calls:type_name -> lighthouse.v1.LighthouseToolCall
+	20,  // 11: lighthouse.v1.LighthouseAgentRunData.execution_steps:type_name -> lighthouse.v1.ExecutionStep
+	21,  // 12: lighthouse.v1.LighthouseAgentRunData.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
 	1,   // 13: lighthouse.v1.LighthouseAgentRunData.status:type_name -> lighthouse.v1.LighthouseRunStatus
-	98,  // 14: lighthouse.v1.LighthouseAgentRunData.started_at:type_name -> google.protobuf.Timestamp
-	98,  // 15: lighthouse.v1.LighthouseAgentRunData.completed_at:type_name -> google.protobuf.Timestamp
-	84,  // 16: lighthouse.v1.LighthouseAgentRunData.metadata:type_name -> lighthouse.v1.LighthouseAgentRunData.MetadataEntry
-	85,  // 17: lighthouse.v1.LighthouseToolCall.parameters:type_name -> lighthouse.v1.LighthouseToolCall.ParametersEntry
-	98,  // 18: lighthouse.v1.LighthouseToolCall.timestamp:type_name -> google.protobuf.Timestamp
+	107, // 14: lighthouse.v1.LighthouseAgentRunData.started_at:type_name -> google.protobuf.Timestamp
+	107, // 15: lighthouse.v1.LighthouseAgentRunData.completed_at:type_name -> google.protobuf.Timestamp
+	92,  // 16: lighthouse.v1.LighthouseAgentRunData.metadata:type_name -> lighthouse.v1.LighthouseAgentRunData.MetadataEntry
+	93,  // 17: lighthouse.v1.LighthouseToolCall.parameters:type_name -> lighthouse.v1.LighthouseToolCall.ParametersEntry
+	107, // 18: lighthouse.v1.LighthouseToolCall.timestamp:type_name -> google.protobuf.Timestamp
 	3,   // 19: lighthouse.v1.ExecutionStep.type:type_name -> lighthouse.v1.StepType
-	98,  // 20: lighthouse.v1.ExecutionStep.timestamp:type_name -> google.protobuf.Timestamp
+	107, // 20: lighthouse.v1.ExecutionStep.timestamp:type_name -> google.protobuf.Timestamp
 	2,   // 21: lighthouse.v1.EphemeralSnapshotRequest.source:type_name -> lighthouse.v1.RunSource
-	23,  // 22: lighthouse.v1.EphemeralSnapshotRequest.context:type_name -> lighthouse.v1.DeploymentContext
-	17,  // 23: lighthouse.v1.EphemeralSnapshotRequest.run_data:type_name -> lighthouse.v1.LighthouseAgentRunData
-	24,  // 24: lighthouse.v1.EphemeralSnapshotRequest.system:type_name -> lighthouse.v1.SystemSnapshot
-	86,  // 25: lighthouse.v1.DeploymentContext.env_vars:type_name -> lighthouse.v1.DeploymentContext.EnvVarsEntry
-	27,  // 26: lighthouse.v1.SystemSnapshot.agents:type_name -> lighthouse.v1.AgentConfig
-	28,  // 27: lighthouse.v1.SystemSnapshot.mcp_servers:type_name -> lighthouse.v1.MCPConfig
-	87,  // 28: lighthouse.v1.SystemSnapshot.variables:type_name -> lighthouse.v1.SystemSnapshot.VariablesEntry
-	29,  // 29: lighthouse.v1.SystemSnapshot.available_tools:type_name -> lighthouse.v1.ToolInfo
-	41,  // 30: lighthouse.v1.SystemSnapshot.metrics:type_name -> lighthouse.v1.SystemMetrics
-	27,  // 31: lighthouse.v1.SyncConfigRequest.agents:type_name -> lighthouse.v1.AgentConfig
-	28,  // 32: lighthouse.v1.SyncConfigRequest.mcp_servers:type_name -> lighthouse.v1.MCPConfig
-	88,  // 33: lighthouse.v1.SyncConfigRequest.variables:type_name -> lighthouse.v1.SyncConfigRequest.VariablesEntry
-	89,  // 34: lighthouse.v1.AgentConfig.variables:type_name -> lighthouse.v1.AgentConfig.VariablesEntry
-	98,  // 35: lighthouse.v1.AgentConfig.created_at:type_name -> google.protobuf.Timestamp
-	98,  // 36: lighthouse.v1.AgentConfig.updated_at:type_name -> google.protobuf.Timestamp
-	90,  // 37: lighthouse.v1.MCPConfig.env_vars:type_name -> lighthouse.v1.MCPConfig.EnvVarsEntry
-	91,  // 38: lighthouse.v1.MCPConfig.variables:type_name -> lighthouse.v1.MCPConfig.VariablesEntry
-	98,  // 39: lighthouse.v1.MCPConfig.created_at:type_name -> google.protobuf.Timestamp
-	98,  // 40: lighthouse.v1.MCPConfig.updated_at:type_name -> google.protobuf.Timestamp
-	41,  // 41: lighthouse.v1.ConnectRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
-	32,  // 42: lighthouse.v1.CloudShipCommand.create_agent:type_name -> lighthouse.v1.CreateAgentCommand
-	33,  // 43: lighthouse.v1.CloudShipCommand.update_agent:type_name -> lighthouse.v1.UpdateAgentCommand
-	34,  // 44: lighthouse.v1.CloudShipCommand.delete_agent:type_name -> lighthouse.v1.DeleteAgentCommand
-	35,  // 45: lighthouse.v1.CloudShipCommand.sync_mcp:type_name -> lighthouse.v1.SyncMCPServersCommand
-	36,  // 46: lighthouse.v1.CloudShipCommand.execute_agent:type_name -> lighthouse.v1.ExecuteAgentCommand
-	37,  // 47: lighthouse.v1.CloudShipCommand.get_env:type_name -> lighthouse.v1.GetEnvironmentCommand
-	38,  // 48: lighthouse.v1.CloudShipCommand.list_agents:type_name -> lighthouse.v1.ListAgentsCommand
-	27,  // 49: lighthouse.v1.CreateAgentCommand.config:type_name -> lighthouse.v1.AgentConfig
-	27,  // 50: lighthouse.v1.UpdateAgentCommand.config:type_name -> lighthouse.v1.AgentConfig
-	28,  // 51: lighthouse.v1.SyncMCPServersCommand.mcp_servers:type_name -> lighthouse.v1.MCPConfig
-	92,  // 52: lighthouse.v1.ExecuteAgentCommand.variables:type_name -> lighthouse.v1.ExecuteAgentCommand.VariablesEntry
+	24,  // 22: lighthouse.v1.EphemeralSnapshotRequest.context:type_name -> lighthouse.v1.DeploymentContext
+	18,  // 23: lighthouse.v1.EphemeralSnapshotRequest.run_data:type_name -> lighthouse.v1.LighthouseAgentRunData
+	25,  // 24: lighthouse.v1.EphemeralSnapshotRequest.system:type_name -> lighthouse.v1.SystemSnapshot
+	94,  // 25: lighthouse.v1.DeploymentContext.env_vars:type_name -> lighthouse.v1.DeploymentContext.EnvVarsEntry
+	28,  // 26: lighthouse.v1.SystemSnapshot.agents:type_name -> lighthouse.v1.AgentConfig
+	29,  // 27: lighthouse.v1.SystemSnapshot.mcp_servers:type_name -> lighthouse.v1.MCPConfig
+	95,  // 28: lighthouse.v1.SystemSnapshot.variables:type_name -> lighthouse.v1.SystemSnapshot.VariablesEntry
+	30,  // 29: lighthouse.v1.SystemSnapshot.available_tools:type_name -> lighthouse.v1.ToolInfo
+	42,  // 30: lighthouse.v1.SystemSnapshot.metrics:type_name -> lighthouse.v1.SystemMetrics
+	28,  // 31: lighthouse.v1.SyncConfigRequest.agents:type_name -> lighthouse.v1.AgentConfig
+	29,  // 32: lighthouse.v1.SyncConfigRequest.mcp_servers:type_name -> lighthouse.v1.MCPConfig
+	96,  // 33: lighthouse.v1.SyncConfigRequest.variables:type_name -> lighthouse.v1.SyncConfigRequest.VariablesEntry
+	97,  // 34: lighthouse.v1.AgentConfig.variables:type_name -> lighthouse.v1.AgentConfig.VariablesEntry
+	107, // 35: lighthouse.v1.AgentConfig.created_at:type_name -> google.protobuf.Timestamp
+	107, // 36: lighthouse.v1.AgentConfig.updated_at:type_name -> google.protobuf.Timestamp
+	98,  // 37: lighthouse.v1.MCPConfig.env_vars:type_name -> lighthouse.v1.MCPConfig.EnvVarsEntry
+	99,  // 38: lighthouse.v1.MCPConfig.variables:type_name -> lighthouse.v1.MCPConfig.VariablesEntry
+	107, // 39: lighthouse.v1.MCPConfig.created_at:type_name -> google.protobuf.Timestamp
+	107, // 40: lighthouse.v1.MCPConfig.updated_at:type_name -> google.protobuf.Timestamp
+	42,  // 41: lighthouse.v1.ConnectRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
+	33,  // 42: lighthouse.v1.CloudShipCommand.create_agent:type_name -> lighthouse.v1.CreateAgentCommand
+	34,  // 43: lighthouse.v1.CloudShipCommand.update_agent:type_name -> lighthouse.v1.UpdateAgentCommand
+	35,  // 44: lighthouse.v1.CloudShipCommand.delete_agent:type_name -> lighthouse.v1.DeleteAgentCommand
+	36,  // 45: lighthouse.v1.CloudShipCommand.sync_mcp:type_name -> lighthouse.v1.SyncMCPServersCommand
+	37,  // 46: lighthouse.v1.CloudShipCommand.execute_agent:type_name -> lighthouse.v1.ExecuteAgentCommand
+	38,  // 47: lighthouse.v1.CloudShipCommand.get_env:type_name -> lighthouse.v1.GetEnvironmentCommand
+	39,  // 48: lighthouse.v1.CloudShipCommand.list_agents:type_name -> lighthouse.v1.ListAgentsCommand
+	28,  // 49: lighthouse.v1.CreateAgentCommand.config:type_name -> lighthouse.v1.AgentConfig
+	28,  // 50: lighthouse.v1.UpdateAgentCommand.config:type_name -> lighthouse.v1.AgentConfig
+	29,  // 51: lighthouse.v1.SyncMCPServersCommand.mcp_servers:type_name -> lighthouse.v1.MCPConfig
+	100, // 52: lighthouse.v1.ExecuteAgentCommand.variables:type_name -> lighthouse.v1.ExecuteAgentCommand.VariablesEntry
 	4,   // 53: lighthouse.v1.SystemHealthRequest.status:type_name -> lighthouse.v1.SystemStatus
-	41,  // 54: lighthouse.v1.SystemHealthRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
-	98,  // 55: lighthouse.v1.SystemHealthRequest.timestamp:type_name -> google.protobuf.Timestamp
-	93,  // 56: lighthouse.v1.SystemMetrics.additional_metrics:type_name -> lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
+	42,  // 54: lighthouse.v1.SystemHealthRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
+	107, // 55: lighthouse.v1.SystemHealthRequest.timestamp:type_name -> google.protobuf.Timestamp
+	101, // 56: lighthouse.v1.SystemMetrics.additional_metrics:type_name -> lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
 	4,   // 57: lighthouse.v1.HeartbeatRequest.status:type_name -> lighthouse.v1.SystemStatus
-	41,  // 58: lighthouse.v1.HeartbeatRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
-	98,  // 59: lighthouse.v1.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
-	14,  // 60: lighthouse.v1.HeartbeatResponse.updated_config:type_name -> lighthouse.v1.CloudShipConfig
-	29,  // 61: lighthouse.v1.ListToolsResponse.tools:type_name -> lighthouse.v1.ToolInfo
-	94,  // 62: lighthouse.v1.CallToolRequest.parameters:type_name -> lighthouse.v1.CallToolRequest.ParametersEntry
-	27,  // 63: lighthouse.v1.ListAgentsResponse.agents:type_name -> lighthouse.v1.AgentConfig
-	95,  // 64: lighthouse.v1.ExecuteAgentRequest.variables:type_name -> lighthouse.v1.ExecuteAgentRequest.VariablesEntry
-	52,  // 65: lighthouse.v1.ExecuteAgentResponse.started:type_name -> lighthouse.v1.ExecutionStarted
-	19,  // 66: lighthouse.v1.ExecuteAgentResponse.step:type_name -> lighthouse.v1.ExecutionStep
-	53,  // 67: lighthouse.v1.ExecuteAgentResponse.completed:type_name -> lighthouse.v1.ExecutionCompleted
-	54,  // 68: lighthouse.v1.ExecuteAgentResponse.error:type_name -> lighthouse.v1.ExecutionError
-	98,  // 69: lighthouse.v1.ExecutionStarted.started_at:type_name -> google.protobuf.Timestamp
-	20,  // 70: lighthouse.v1.ExecutionCompleted.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
-	98,  // 71: lighthouse.v1.ExecutionCompleted.completed_at:type_name -> google.protobuf.Timestamp
-	98,  // 72: lighthouse.v1.ExecutionError.error_at:type_name -> google.protobuf.Timestamp
-	57,  // 73: lighthouse.v1.ManagementMessage.list_agents_request:type_name -> lighthouse.v1.ListAgentsManagementRequest
-	60,  // 74: lighthouse.v1.ManagementMessage.list_tools_request:type_name -> lighthouse.v1.ListToolsManagementRequest
-	62,  // 75: lighthouse.v1.ManagementMessage.get_environments_request:type_name -> lighthouse.v1.GetEnvironmentsRequest
-	65,  // 76: lighthouse.v1.ManagementMessage.execute_agent_request:type_name -> lighthouse.v1.ExecuteAgentManagementRequest
-	15,  // 77: lighthouse.v1.ManagementMessage.send_run_request:type_name -> lighthouse.v1.SendRunRequest
-	74,  // 78: lighthouse.v1.ManagementMessage.get_agent_details_request:type_name -> lighthouse.v1.GetAgentDetailsRequest
-	76,  // 79: lighthouse.v1.ManagementMessage.update_agent_prompt_request:type_name -> lighthouse.v1.UpdateAgentPromptRequest
-	78,  // 80: lighthouse.v1.ManagementMessage.get_memory_context_request:type_name -> lighthouse.v1.GetMemoryContextRequest
-	58,  // 81: lighthouse.v1.ManagementMessage.list_agents_response:type_name -> lighthouse.v1.ListAgentsManagementResponse
-	61,  // 82: lighthouse.v1.ManagementMessage.list_tools_response:type_name -> lighthouse.v1.ListToolsManagementResponse
-	63,  // 83: lighthouse.v1.ManagementMessage.get_environments_response:type_name -> lighthouse.v1.GetEnvironmentsResponse
-	66,  // 84: lighthouse.v1.ManagementMessage.execute_agent_response:type_name -> lighthouse.v1.ExecuteAgentManagementResponse
-	16,  // 85: lighthouse.v1.ManagementMessage.send_run_response:type_name -> lighthouse.v1.SendRunResponse
-	75,  // 86: lighthouse.v1.ManagementMessage.get_agent_details_response:type_name -> lighthouse.v1.GetAgentDetailsResponse
-	77,  // 87: lighthouse.v1.ManagementMessage.update_agent_prompt_response:type_name -> lighthouse.v1.UpdateAgentPromptResponse
-	79,  // 88: lighthouse.v1.ManagementMessage.get_memory_context_response:type_name -> lighthouse.v1.GetMemoryContextResponse
-	80,  // 89: lighthouse.v1.ManagementMessage.error:type_name -> lighthouse.v1.ManagementError
-	56,  // 90: lighthouse.v1.ManagementMessage.station_registration:type_name -> lighthouse.v1.StationRegistrationMessage
-	59,  // 91: lighthouse.v1.ListAgentsManagementResponse.agents:type_name -> lighthouse.v1.AgentInfo
-	98,  // 92: lighthouse.v1.AgentInfo.created_at:type_name -> google.protobuf.Timestamp
-	98,  // 93: lighthouse.v1.AgentInfo.updated_at:type_name -> google.protobuf.Timestamp
-	6,   // 94: lighthouse.v1.AgentInfo.status:type_name -> lighthouse.v1.AgentStatus
-	29,  // 95: lighthouse.v1.ListToolsManagementResponse.tools:type_name -> lighthouse.v1.ToolInfo
-	64,  // 96: lighthouse.v1.GetEnvironmentsResponse.environments:type_name -> lighthouse.v1.EnvironmentInfo
-	96,  // 97: lighthouse.v1.EnvironmentInfo.variables:type_name -> lighthouse.v1.EnvironmentInfo.VariablesEntry
-	97,  // 98: lighthouse.v1.ExecuteAgentManagementRequest.variables:type_name -> lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
-	7,   // 99: lighthouse.v1.ExecuteAgentManagementResponse.status:type_name -> lighthouse.v1.ExecutionStatus
-	18,  // 100: lighthouse.v1.ExecuteAgentManagementResponse.tool_calls:type_name -> lighthouse.v1.LighthouseToolCall
-	20,  // 101: lighthouse.v1.ExecuteAgentManagementResponse.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
-	98,  // 102: lighthouse.v1.ExecuteAgentManagementResponse.timestamp:type_name -> google.protobuf.Timestamp
-	8,   // 103: lighthouse.v1.GetSystemStatusResponse.health:type_name -> lighthouse.v1.LighthouseSystemHealth
-	41,  // 104: lighthouse.v1.GetSystemStatusResponse.metrics:type_name -> lighthouse.v1.SystemMetrics
-	69,  // 105: lighthouse.v1.GetSystemStatusResponse.active_executions:type_name -> lighthouse.v1.ActiveExecution
-	9,   // 106: lighthouse.v1.GetSystemStatusResponse.lighthouse_connection:type_name -> lighthouse.v1.ConnectionStatus
-	7,   // 107: lighthouse.v1.ActiveExecution.status:type_name -> lighthouse.v1.ExecutionStatus
-	98,  // 108: lighthouse.v1.ActiveExecution.started_at:type_name -> google.protobuf.Timestamp
-	69,  // 109: lighthouse.v1.ListActiveRunsResponse.active_runs:type_name -> lighthouse.v1.ActiveExecution
-	27,  // 110: lighthouse.v1.GetAgentDetailsResponse.agent:type_name -> lighthouse.v1.AgentConfig
-	27,  // 111: lighthouse.v1.UpdateAgentPromptResponse.updated_agent:type_name -> lighthouse.v1.AgentConfig
-	98,  // 112: lighthouse.v1.GetMemoryContextResponse.last_updated:type_name -> google.protobuf.Timestamp
-	10,  // 113: lighthouse.v1.ManagementError.code:type_name -> lighthouse.v1.ErrorCode
-	11,  // 114: lighthouse.v1.LighthouseService.RegisterStation:input_type -> lighthouse.v1.RegisterStationRequest
-	42,  // 115: lighthouse.v1.LighthouseService.Heartbeat:input_type -> lighthouse.v1.HeartbeatRequest
-	15,  // 116: lighthouse.v1.LighthouseService.SendRun:input_type -> lighthouse.v1.SendRunRequest
-	15,  // 117: lighthouse.v1.LighthouseService.SendRunStream:input_type -> lighthouse.v1.SendRunRequest
-	21,  // 118: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:input_type -> lighthouse.v1.EphemeralSnapshotRequest
-	30,  // 119: lighthouse.v1.LighthouseService.Connect:input_type -> lighthouse.v1.ConnectRequest
-	25,  // 120: lighthouse.v1.LighthouseService.SyncConfiguration:input_type -> lighthouse.v1.SyncConfigRequest
-	55,  // 121: lighthouse.v1.LighthouseService.ManagementChannel:input_type -> lighthouse.v1.ManagementMessage
-	74,  // 122: lighthouse.v1.LighthouseService.GetAgentDetails:input_type -> lighthouse.v1.GetAgentDetailsRequest
-	76,  // 123: lighthouse.v1.LighthouseService.UpdateAgentPrompt:input_type -> lighthouse.v1.UpdateAgentPromptRequest
-	39,  // 124: lighthouse.v1.LighthouseService.SendSystemHealth:input_type -> lighthouse.v1.SystemHealthRequest
-	99,  // 125: lighthouse.v1.LighthouseService.IngestData:input_type -> lighthouse.v1.IngestDataRequest
-	44,  // 126: lighthouse.v1.LighthouseService.ListTools:input_type -> lighthouse.v1.ListToolsRequest
-	46,  // 127: lighthouse.v1.LighthouseService.CallTool:input_type -> lighthouse.v1.CallToolRequest
-	48,  // 128: lighthouse.v1.LighthouseService.ListAgents:input_type -> lighthouse.v1.ListAgentsRequest
-	50,  // 129: lighthouse.v1.LighthouseService.ExecuteAgent:input_type -> lighthouse.v1.ExecuteAgentRequest
-	12,  // 130: lighthouse.v1.LighthouseService.RegisterStation:output_type -> lighthouse.v1.RegisterStationResponse
-	43,  // 131: lighthouse.v1.LighthouseService.Heartbeat:output_type -> lighthouse.v1.HeartbeatResponse
-	16,  // 132: lighthouse.v1.LighthouseService.SendRun:output_type -> lighthouse.v1.SendRunResponse
-	16,  // 133: lighthouse.v1.LighthouseService.SendRunStream:output_type -> lighthouse.v1.SendRunResponse
-	22,  // 134: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:output_type -> lighthouse.v1.EphemeralSnapshotResponse
-	31,  // 135: lighthouse.v1.LighthouseService.Connect:output_type -> lighthouse.v1.CloudShipCommand
-	26,  // 136: lighthouse.v1.LighthouseService.SyncConfiguration:output_type -> lighthouse.v1.SyncConfigResponse
-	55,  // 137: lighthouse.v1.LighthouseService.ManagementChannel:output_type -> lighthouse.v1.ManagementMessage
-	75,  // 138: lighthouse.v1.LighthouseService.GetAgentDetails:output_type -> lighthouse.v1.GetAgentDetailsResponse
-	77,  // 139: lighthouse.v1.LighthouseService.UpdateAgentPrompt:output_type -> lighthouse.v1.UpdateAgentPromptResponse
-	40,  // 140: lighthouse.v1.LighthouseService.SendSystemHealth:output_type -> lighthouse.v1.SystemHealthResponse
-	100, // 141: lighthouse.v1.LighthouseService.IngestData:output_type -> lighthouse.v1.IngestDataResponse
-	45,  // 142: lighthouse.v1.LighthouseService.ListTools:output_type -> lighthouse.v1.ListToolsResponse
-	47,  // 143: lighthouse.v1.LighthouseService.CallTool:output_type -> lighthouse.v1.CallToolResponse
-	49,  // 144: lighthouse.v1.LighthouseService.ListAgents:output_type -> lighthouse.v1.ListAgentsResponse
-	51,  // 145: lighthouse.v1.LighthouseService.ExecuteAgent:output_type -> lighthouse.v1.ExecuteAgentResponse
-	130, // [130:146] is the sub-list for method output_type
-	114, // [114:130] is the sub-list for method input_type
-	114, // [114:114] is the sub-list for extension type_name
-	114, // [114:114] is the sub-list for extension extendee
-	0,   // [0:114] is the sub-list for field type_name
+	42,  // 58: lighthouse.v1.HeartbeatRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
+	107, // 59: lighthouse.v1.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	15,  // 60: lighthouse.v1.HeartbeatResponse.updated_config:type_name -> lighthouse.v1.CloudShipConfig
+	30,  // 61: lighthouse.v1.ListToolsResponse.tools:type_name -> lighthouse.v1.ToolInfo
+	102, // 62: lighthouse.v1.CallToolRequest.parameters:type_name -> lighthouse.v1.CallToolRequest.ParametersEntry
+	28,  // 63: lighthouse.v1.ListAgentsResponse.agents:type_name -> lighthouse.v1.AgentConfig
+	103, // 64: lighthouse.v1.ExecuteAgentRequest.variables:type_name -> lighthouse.v1.ExecuteAgentRequest.VariablesEntry
+	53,  // 65: lighthouse.v1.ExecuteAgentResponse.started:type_name -> lighthouse.v1.ExecutionStarted
+	20,  // 66: lighthouse.v1.ExecuteAgentResponse.step:type_name -> lighthouse.v1.ExecutionStep
+	54,  // 67: lighthouse.v1.ExecuteAgentResponse.completed:type_name -> lighthouse.v1.ExecutionCompleted
+	55,  // 68: lighthouse.v1.ExecuteAgentResponse.error:type_name -> lighthouse.v1.ExecutionError
+	107, // 69: lighthouse.v1.ExecutionStarted.started_at:type_name -> google.protobuf.Timestamp
+	21,  // 70: lighthouse.v1.ExecutionCompleted.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
+	107, // 71: lighthouse.v1.ExecutionCompleted.completed_at:type_name -> google.protobuf.Timestamp
+	107, // 72: lighthouse.v1.ExecutionError.error_at:type_name -> google.protobuf.Timestamp
+	62,  // 73: lighthouse.v1.ManagementMessage.list_agents_request:type_name -> lighthouse.v1.ListAgentsManagementRequest
+	65,  // 74: lighthouse.v1.ManagementMessage.list_tools_request:type_name -> lighthouse.v1.ListToolsManagementRequest
+	67,  // 75: lighthouse.v1.ManagementMessage.get_environments_request:type_name -> lighthouse.v1.GetEnvironmentsRequest
+	70,  // 76: lighthouse.v1.ManagementMessage.execute_agent_request:type_name -> lighthouse.v1.ExecuteAgentManagementRequest
+	16,  // 77: lighthouse.v1.ManagementMessage.send_run_request:type_name -> lighthouse.v1.SendRunRequest
+	79,  // 78: lighthouse.v1.ManagementMessage.get_agent_details_request:type_name -> lighthouse.v1.GetAgentDetailsRequest
+	81,  // 79: lighthouse.v1.ManagementMessage.update_agent_prompt_request:type_name -> lighthouse.v1.UpdateAgentPromptRequest
+	83,  // 80: lighthouse.v1.ManagementMessage.get_memory_context_request:type_name -> lighthouse.v1.GetMemoryContextRequest
+	63,  // 81: lighthouse.v1.ManagementMessage.list_agents_response:type_name -> lighthouse.v1.ListAgentsManagementResponse
+	66,  // 82: lighthouse.v1.ManagementMessage.list_tools_response:type_name -> lighthouse.v1.ListToolsManagementResponse
+	68,  // 83: lighthouse.v1.ManagementMessage.get_environments_response:type_name -> lighthouse.v1.GetEnvironmentsResponse
+	71,  // 84: lighthouse.v1.ManagementMessage.execute_agent_response:type_name -> lighthouse.v1.ExecuteAgentManagementResponse
+	17,  // 85: lighthouse.v1.ManagementMessage.send_run_response:type_name -> lighthouse.v1.SendRunResponse
+	80,  // 86: lighthouse.v1.ManagementMessage.get_agent_details_response:type_name -> lighthouse.v1.GetAgentDetailsResponse
+	82,  // 87: lighthouse.v1.ManagementMessage.update_agent_prompt_response:type_name -> lighthouse.v1.UpdateAgentPromptResponse
+	84,  // 88: lighthouse.v1.ManagementMessage.get_memory_context_response:type_name -> lighthouse.v1.GetMemoryContextResponse
+	85,  // 89: lighthouse.v1.ManagementMessage.error:type_name -> lighthouse.v1.ManagementError
+	57,  // 90: lighthouse.v1.ManagementMessage.station_registration:type_name -> lighthouse.v1.StationRegistrationMessage
+	58,  // 91: lighthouse.v1.ManagementMessage.station_auth:type_name -> lighthouse.v1.StationAuth
+	60,  // 92: lighthouse.v1.ManagementMessage.auth_result:type_name -> lighthouse.v1.AuthResult
+	61,  // 93: lighthouse.v1.ManagementMessage.disconnect:type_name -> lighthouse.v1.Disconnect
+	64,  // 94: lighthouse.v1.StationAuth.agents:type_name -> lighthouse.v1.AgentInfo
+	30,  // 95: lighthouse.v1.StationAuth.tools:type_name -> lighthouse.v1.ToolInfo
+	59,  // 96: lighthouse.v1.StationAuth.mcp_servers:type_name -> lighthouse.v1.MCPServerInfo
+	104, // 97: lighthouse.v1.StationAuth.hardware_info:type_name -> lighthouse.v1.StationAuth.HardwareInfoEntry
+	6,   // 98: lighthouse.v1.Disconnect.code:type_name -> lighthouse.v1.DisconnectReason
+	64,  // 99: lighthouse.v1.ListAgentsManagementResponse.agents:type_name -> lighthouse.v1.AgentInfo
+	107, // 100: lighthouse.v1.AgentInfo.created_at:type_name -> google.protobuf.Timestamp
+	107, // 101: lighthouse.v1.AgentInfo.updated_at:type_name -> google.protobuf.Timestamp
+	7,   // 102: lighthouse.v1.AgentInfo.status:type_name -> lighthouse.v1.AgentStatus
+	30,  // 103: lighthouse.v1.ListToolsManagementResponse.tools:type_name -> lighthouse.v1.ToolInfo
+	69,  // 104: lighthouse.v1.GetEnvironmentsResponse.environments:type_name -> lighthouse.v1.EnvironmentInfo
+	105, // 105: lighthouse.v1.EnvironmentInfo.variables:type_name -> lighthouse.v1.EnvironmentInfo.VariablesEntry
+	106, // 106: lighthouse.v1.ExecuteAgentManagementRequest.variables:type_name -> lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
+	8,   // 107: lighthouse.v1.ExecuteAgentManagementResponse.status:type_name -> lighthouse.v1.ExecutionStatus
+	19,  // 108: lighthouse.v1.ExecuteAgentManagementResponse.tool_calls:type_name -> lighthouse.v1.LighthouseToolCall
+	21,  // 109: lighthouse.v1.ExecuteAgentManagementResponse.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
+	107, // 110: lighthouse.v1.ExecuteAgentManagementResponse.timestamp:type_name -> google.protobuf.Timestamp
+	9,   // 111: lighthouse.v1.GetSystemStatusResponse.health:type_name -> lighthouse.v1.LighthouseSystemHealth
+	42,  // 112: lighthouse.v1.GetSystemStatusResponse.metrics:type_name -> lighthouse.v1.SystemMetrics
+	74,  // 113: lighthouse.v1.GetSystemStatusResponse.active_executions:type_name -> lighthouse.v1.ActiveExecution
+	10,  // 114: lighthouse.v1.GetSystemStatusResponse.lighthouse_connection:type_name -> lighthouse.v1.ConnectionStatus
+	8,   // 115: lighthouse.v1.ActiveExecution.status:type_name -> lighthouse.v1.ExecutionStatus
+	107, // 116: lighthouse.v1.ActiveExecution.started_at:type_name -> google.protobuf.Timestamp
+	74,  // 117: lighthouse.v1.ListActiveRunsResponse.active_runs:type_name -> lighthouse.v1.ActiveExecution
+	28,  // 118: lighthouse.v1.GetAgentDetailsResponse.agent:type_name -> lighthouse.v1.AgentConfig
+	28,  // 119: lighthouse.v1.UpdateAgentPromptResponse.updated_agent:type_name -> lighthouse.v1.AgentConfig
+	107, // 120: lighthouse.v1.GetMemoryContextResponse.last_updated:type_name -> google.protobuf.Timestamp
+	11,  // 121: lighthouse.v1.ManagementError.code:type_name -> lighthouse.v1.ErrorCode
+	12,  // 122: lighthouse.v1.LighthouseService.RegisterStation:input_type -> lighthouse.v1.RegisterStationRequest
+	43,  // 123: lighthouse.v1.LighthouseService.Heartbeat:input_type -> lighthouse.v1.HeartbeatRequest
+	16,  // 124: lighthouse.v1.LighthouseService.SendRun:input_type -> lighthouse.v1.SendRunRequest
+	16,  // 125: lighthouse.v1.LighthouseService.SendRunStream:input_type -> lighthouse.v1.SendRunRequest
+	22,  // 126: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:input_type -> lighthouse.v1.EphemeralSnapshotRequest
+	31,  // 127: lighthouse.v1.LighthouseService.Connect:input_type -> lighthouse.v1.ConnectRequest
+	26,  // 128: lighthouse.v1.LighthouseService.SyncConfiguration:input_type -> lighthouse.v1.SyncConfigRequest
+	56,  // 129: lighthouse.v1.LighthouseService.ManagementChannel:input_type -> lighthouse.v1.ManagementMessage
+	79,  // 130: lighthouse.v1.LighthouseService.GetAgentDetails:input_type -> lighthouse.v1.GetAgentDetailsRequest
+	81,  // 131: lighthouse.v1.LighthouseService.UpdateAgentPrompt:input_type -> lighthouse.v1.UpdateAgentPromptRequest
+	40,  // 132: lighthouse.v1.LighthouseService.SendSystemHealth:input_type -> lighthouse.v1.SystemHealthRequest
+	108, // 133: lighthouse.v1.LighthouseService.IngestData:input_type -> lighthouse.v1.IngestDataRequest
+	45,  // 134: lighthouse.v1.LighthouseService.ListTools:input_type -> lighthouse.v1.ListToolsRequest
+	47,  // 135: lighthouse.v1.LighthouseService.CallTool:input_type -> lighthouse.v1.CallToolRequest
+	49,  // 136: lighthouse.v1.LighthouseService.ListAgents:input_type -> lighthouse.v1.ListAgentsRequest
+	51,  // 137: lighthouse.v1.LighthouseService.ExecuteAgent:input_type -> lighthouse.v1.ExecuteAgentRequest
+	86,  // 138: lighthouse.v1.DebugService.GetActiveStations:input_type -> lighthouse.v1.DebugRequest
+	86,  // 139: lighthouse.v1.DebugService.GetActiveManagementChannels:input_type -> lighthouse.v1.DebugRequest
+	87,  // 140: lighthouse.v1.DebugService.TestStationConnection:input_type -> lighthouse.v1.TestStationRequest
+	13,  // 141: lighthouse.v1.LighthouseService.RegisterStation:output_type -> lighthouse.v1.RegisterStationResponse
+	44,  // 142: lighthouse.v1.LighthouseService.Heartbeat:output_type -> lighthouse.v1.HeartbeatResponse
+	17,  // 143: lighthouse.v1.LighthouseService.SendRun:output_type -> lighthouse.v1.SendRunResponse
+	17,  // 144: lighthouse.v1.LighthouseService.SendRunStream:output_type -> lighthouse.v1.SendRunResponse
+	23,  // 145: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:output_type -> lighthouse.v1.EphemeralSnapshotResponse
+	32,  // 146: lighthouse.v1.LighthouseService.Connect:output_type -> lighthouse.v1.CloudShipCommand
+	27,  // 147: lighthouse.v1.LighthouseService.SyncConfiguration:output_type -> lighthouse.v1.SyncConfigResponse
+	56,  // 148: lighthouse.v1.LighthouseService.ManagementChannel:output_type -> lighthouse.v1.ManagementMessage
+	80,  // 149: lighthouse.v1.LighthouseService.GetAgentDetails:output_type -> lighthouse.v1.GetAgentDetailsResponse
+	82,  // 150: lighthouse.v1.LighthouseService.UpdateAgentPrompt:output_type -> lighthouse.v1.UpdateAgentPromptResponse
+	41,  // 151: lighthouse.v1.LighthouseService.SendSystemHealth:output_type -> lighthouse.v1.SystemHealthResponse
+	109, // 152: lighthouse.v1.LighthouseService.IngestData:output_type -> lighthouse.v1.IngestDataResponse
+	46,  // 153: lighthouse.v1.LighthouseService.ListTools:output_type -> lighthouse.v1.ListToolsResponse
+	48,  // 154: lighthouse.v1.LighthouseService.CallTool:output_type -> lighthouse.v1.CallToolResponse
+	50,  // 155: lighthouse.v1.LighthouseService.ListAgents:output_type -> lighthouse.v1.ListAgentsResponse
+	52,  // 156: lighthouse.v1.LighthouseService.ExecuteAgent:output_type -> lighthouse.v1.ExecuteAgentResponse
+	88,  // 157: lighthouse.v1.DebugService.GetActiveStations:output_type -> lighthouse.v1.DebugResponse
+	88,  // 158: lighthouse.v1.DebugService.GetActiveManagementChannels:output_type -> lighthouse.v1.DebugResponse
+	88,  // 159: lighthouse.v1.DebugService.TestStationConnection:output_type -> lighthouse.v1.DebugResponse
+	141, // [141:160] is the sub-list for method output_type
+	122, // [122:141] is the sub-list for method input_type
+	122, // [122:122] is the sub-list for extension type_name
+	122, // [122:122] is the sub-list for extension extendee
+	0,   // [0:122] is the sub-list for field type_name
 }
 
 func init() { file_internal_lighthouse_proto_lighthouse_proto_init() }
@@ -6752,16 +7461,19 @@ func file_internal_lighthouse_proto_lighthouse_proto_init() {
 		(*ManagementMessage_GetMemoryContextResponse)(nil),
 		(*ManagementMessage_Error)(nil),
 		(*ManagementMessage_StationRegistration)(nil),
+		(*ManagementMessage_StationAuth)(nil),
+		(*ManagementMessage_AuthResult)(nil),
+		(*ManagementMessage_Disconnect)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_lighthouse_proto_lighthouse_proto_rawDesc), len(file_internal_lighthouse_proto_lighthouse_proto_rawDesc)),
-			NumEnums:      11,
-			NumMessages:   87,
+			NumEnums:      12,
+			NumMessages:   95,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_internal_lighthouse_proto_lighthouse_proto_goTypes,
 		DependencyIndexes: file_internal_lighthouse_proto_lighthouse_proto_depIdxs,

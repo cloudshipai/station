@@ -116,12 +116,24 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	var remoteControlSvc *lighthouseServices.RemoteControlService
 	if lighthouseClient != nil && (lighthouseClient.GetMode() == lighthouse.ModeServe || lighthouseClient.GetMode() == lighthouse.ModeStdio) {
 		log.Printf("🌐 Initializing stdio mode remote control via CloudShip")
-		remoteControlSvc = lighthouseServices.NewRemoteControlService(
+
+		// Use v2 config if station name is provided
+		remoteControlConfig := lighthouseServices.RemoteControlConfig{
+			RegistrationKey: cfg.CloudShip.RegistrationKey,
+			Environment:     "default", // TODO: use actual environment name
+			StationName:     cfg.CloudShip.Name,
+			StationTags:     cfg.CloudShip.Tags,
+		}
+
+		if cfg.CloudShip.Name != "" {
+			log.Printf("🚀 Using v2 auth flow: station_name=%s tags=%v", cfg.CloudShip.Name, cfg.CloudShip.Tags)
+		}
+
+		remoteControlSvc = lighthouseServices.NewRemoteControlServiceWithConfig(
 			lighthouseClient,
 			agentSvc,
 			repos,
-			cfg.CloudShip.RegistrationKey,
-			"default", // TODO: use actual environment name
+			remoteControlConfig,
 		)
 
 		// Start remote control service with long-lived context to keep management channel active

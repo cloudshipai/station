@@ -50,26 +50,28 @@ type FakerTemplate struct {
 
 // CloudShipConfig holds CloudShip Lighthouse integration settings
 type CloudShipConfig struct {
-	Enabled           bool   `yaml:"enabled"`             // Enable CloudShip integration
-	RegistrationKey   string `yaml:"registration_key"`    // CloudShip registration key
-	Endpoint          string `yaml:"endpoint"`            // Lighthouse gRPC endpoint
-	StationID         string `yaml:"station_id"`          // Station ID (auto-generated)
-	BundleRegistryURL string `yaml:"bundle_registry_url"` // Bundle registry API URL
-	APIURL            string `yaml:"api_url"`             // CloudShip Django API URL (for direct API calls)
-	APIKey            string `yaml:"api_key"`             // CloudShip API key for authentication
+	Enabled           bool     `yaml:"enabled"`             // Enable CloudShip integration
+	RegistrationKey   string   `yaml:"registration_key"`    // CloudShip registration key
+	Endpoint          string   `yaml:"endpoint"`            // Lighthouse gRPC endpoint
+	StationID         string   `yaml:"station_id"`          // Station ID (auto-generated, legacy v1)
+	Name              string   `yaml:"name"`                // Station name (required for v2, unique across org)
+	Tags              []string `yaml:"tags"`                // User-defined tags for filtering ["production", "us-east-1"]
+	BundleRegistryURL string   `yaml:"bundle_registry_url"` // Bundle registry API URL
+	APIURL            string   `yaml:"api_url"`             // CloudShip Django API URL (for direct API calls)
+	APIKey            string   `yaml:"api_key"`             // CloudShip API key for authentication
 	// OAuth settings for MCP authentication via CloudShip
 	OAuth OAuthConfig `yaml:"oauth"` // OAuth configuration
 }
 
 // OAuthConfig holds OAuth settings for CloudShip authentication
 type OAuthConfig struct {
-	Enabled      bool   `yaml:"enabled"`       // Enable OAuth authentication for MCP
-	ClientID     string `yaml:"client_id"`     // OAuth client ID from CloudShip
-	AuthURL      string `yaml:"auth_url"`      // CloudShip OAuth authorization URL
-	TokenURL     string `yaml:"token_url"`     // CloudShip OAuth token URL
+	Enabled       bool   `yaml:"enabled"`        // Enable OAuth authentication for MCP
+	ClientID      string `yaml:"client_id"`      // OAuth client ID from CloudShip
+	AuthURL       string `yaml:"auth_url"`       // CloudShip OAuth authorization URL
+	TokenURL      string `yaml:"token_url"`      // CloudShip OAuth token URL
 	IntrospectURL string `yaml:"introspect_url"` // CloudShip OAuth introspect URL
-	RedirectURI  string `yaml:"redirect_uri"`  // OAuth redirect URI (for auth code flow)
-	Scopes       string `yaml:"scopes"`        // OAuth scopes (space-separated)
+	RedirectURI   string `yaml:"redirect_uri"`   // OAuth redirect URI (for auth code flow)
+	Scopes        string `yaml:"scopes"`         // OAuth scopes (space-separated)
 }
 
 // InitViper initializes viper to read config from the correct location
@@ -217,6 +219,12 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("cloudship.station_id") {
 		cfg.CloudShip.StationID = viper.GetString("cloudship.station_id")
+	}
+	if viper.IsSet("cloudship.name") {
+		cfg.CloudShip.Name = viper.GetString("cloudship.name")
+	}
+	if viper.IsSet("cloudship.tags") {
+		cfg.CloudShip.Tags = viper.GetStringSlice("cloudship.tags")
 	}
 	if viper.IsSet("cloudship.bundle_registry_url") {
 		cfg.CloudShip.BundleRegistryURL = viper.GetString("cloudship.bundle_registry_url")

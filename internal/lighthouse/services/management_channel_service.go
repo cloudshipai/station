@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -12,6 +14,23 @@ import (
 	"station/internal/lighthouse/proto"
 	"station/internal/logging"
 )
+
+// Helper functions for runtime info (at package level to avoid method receiver issues)
+func getHostnameHelper() (string, error) {
+	return os.Hostname()
+}
+
+func getRuntimeOS() string {
+	return runtime.GOOS
+}
+
+func getRuntimeArch() string {
+	return runtime.GOARCH
+}
+
+func getRuntimeVersion() string {
+	return runtime.Version()
+}
 
 // RegistrationState represents the current registration status
 type RegistrationState int
@@ -27,11 +46,23 @@ type ManagementChannelService struct {
 	lighthouseClient  *lighthouse.LighthouseClient
 	managementHandler *ManagementHandlerService
 	registrationKey   string
+	stationName       string   // v2: user-defined unique station name
+	stationTags       []string // v2: user-defined tags for filtering
 	connectionCtx     context.Context
 	connectionCancel  context.CancelFunc
 	currentStream     proto.LighthouseService_ManagementChannelClient
 	registrationState RegistrationState
 	memoryClient      *lighthouse.MemoryClient // For CloudShip memory integration
+	useV2Auth         bool                     // True if using v2 StationAuth flow
+	stationID         string                   // Station ID returned by AuthResult (v2)
+	heartbeatInterval time.Duration            // Heartbeat interval from AuthResult (v2)
+}
+
+// ManagementChannelConfig holds configuration for the management channel service
+type ManagementChannelConfig struct {
+	RegistrationKey string
+	StationName     string   // v2: required for v2 auth flow
+	StationTags     []string // v2: optional user-defined tags
 }
 
 // NewManagementChannelService creates a new management channel service
@@ -46,6 +77,29 @@ func NewManagementChannelService(
 		registrationKey:   registrationKey,
 		registrationState: RegistrationStateUnregistered,
 		memoryClient:      lighthouse.NewMemoryClient(2 * time.Second), // 2 second timeout per PRD
+		useV2Auth:         false,                                       // Default to v1 for backward compatibility
+	}
+}
+
+// NewManagementChannelServiceV2 creates a new management channel service with v2 auth support
+func NewManagementChannelServiceV2(
+	lighthouseClient *lighthouse.LighthouseClient,
+	managementHandler *ManagementHandlerService,
+	config ManagementChannelConfig,
+) *ManagementChannelService {
+	// Use v2 auth if station name is provided
+	useV2 := config.StationName != ""
+
+	return &ManagementChannelService{
+		lighthouseClient:  lighthouseClient,
+		managementHandler: managementHandler,
+		registrationKey:   config.RegistrationKey,
+		stationName:       config.StationName,
+		stationTags:       config.StationTags,
+		registrationState: RegistrationStateUnregistered,
+		memoryClient:      lighthouse.NewMemoryClient(2 * time.Second),
+		useV2Auth:         useV2,
+		heartbeatInterval: 60 * time.Second, // Default, will be updated by AuthResult
 	}
 }
 
@@ -154,39 +208,44 @@ func (mcs *ManagementChannelService) maintainConnection() {
 func (mcs *ManagementChannelService) establishConnection() error {
 	logging.Info("Establishing ManagementChannel stream with CloudShip")
 
-	// 🚨 CRITICAL FIX: Ensure RegisterStation completed BEFORE opening ManagementChannel
-	// This fixes the "station not found in ConnectionManager" error when containers restart
-
-	// First ensure the underlying lighthouse client is connected
+	// First ensure the underlying lighthouse client is connected (gRPC connection only)
 	if !mcs.lighthouseClient.IsConnected() {
-		logging.Info("LighthouseClient not connected, attempting reconnection...")
-		if err := mcs.lighthouseClient.Reconnect(); err != nil {
-			logging.Error("Failed to reconnect lighthouse client: %v", err)
-			return fmt.Errorf("failed to reconnect lighthouse client: %w", err)
+		logging.Info("LighthouseClient not connected, attempting connection...")
+		if err := mcs.lighthouseClient.ConnectOnly(); err != nil {
+			logging.Error("Failed to connect lighthouse client: %v", err)
+			return fmt.Errorf("failed to connect lighthouse client: %w", err)
 		}
-		logging.Info("Successfully reconnected LighthouseClient")
+		logging.Info("Successfully connected LighthouseClient")
 	} else {
-		logging.Debug("LighthouseClient already connected, proceeding with registration check")
+		logging.Debug("LighthouseClient already connected")
 	}
 
-	// ✅ REQUIRED: Verify RegisterStation completed successfully before opening stream
-	// CloudShip requirement: Station MUST call RegisterStation gRPC before ManagementChannel
-	if !mcs.lighthouseClient.IsRegistered() {
-		logging.Info("Station not registered, attempting registration before opening ManagementChannel...")
-		// Registration is handled in NewLighthouseClient, but might have failed
-		// In server mode with container recreation, we need to re-register
-		if err := mcs.lighthouseClient.Reconnect(); err != nil {
-			logging.Error("Failed to register station: %v", err)
-			return fmt.Errorf("station registration required before ManagementChannel: %w", err)
-		}
-
-		// Verify registration succeeded
-		if !mcs.lighthouseClient.IsRegistered() {
-			return fmt.Errorf("station registration failed - cannot open ManagementChannel without successful RegisterStation call")
-		}
-		logging.Info("✅ Station successfully registered, proceeding with ManagementChannel")
+	// V2 AUTH FLOW: Skip RegisterStation entirely - use StationAuth on ManagementChannel
+	if mcs.useV2Auth {
+		logging.Info("🚀 Using v2 auth flow: station_name=%s tags=%v", mcs.stationName, mcs.stationTags)
+		// V2 flow: go directly to ManagementChannel with StationAuth
+		// No RegisterStation RPC needed - auth happens via StationAuth message
 	} else {
-		logging.Debug("✅ Station already registered, proceeding with ManagementChannel stream creation")
+		// V1 LEGACY FLOW: Require RegisterStation before ManagementChannel
+		// ✅ REQUIRED: Verify RegisterStation completed successfully before opening stream
+		// CloudShip requirement: Station MUST call RegisterStation gRPC before ManagementChannel
+		if !mcs.lighthouseClient.IsRegistered() {
+			logging.Info("Station not registered (v1 flow), attempting registration before opening ManagementChannel...")
+			// Registration is handled in NewLighthouseClient, but might have failed
+			// In server mode with container recreation, we need to re-register
+			if err := mcs.lighthouseClient.Reconnect(); err != nil {
+				logging.Error("Failed to register station: %v", err)
+				return fmt.Errorf("station registration required before ManagementChannel: %w", err)
+			}
+
+			// Verify registration succeeded
+			if !mcs.lighthouseClient.IsRegistered() {
+				return fmt.Errorf("station registration failed - cannot open ManagementChannel without successful RegisterStation call")
+			}
+			logging.Info("✅ Station successfully registered (v1), proceeding with ManagementChannel")
+		} else {
+			logging.Debug("✅ Station already registered (v1), proceeding with ManagementChannel stream creation")
+		}
 	}
 
 	// Create independent stream context that doesn't get canceled during normal operations
@@ -210,24 +269,33 @@ func (mcs *ManagementChannelService) establishConnection() error {
 		logging.Debug("Memory client stream configured for CloudShip integration")
 	}
 
-	// Send station registration message first
-	registrationMsg := &proto.ManagementMessage{
-		RequestId:       fmt.Sprintf("registration_%d", time.Now().Unix()),
-		RegistrationKey: mcs.registrationKey,
-		IsResponse:      false,
-		Success:         true,
-		Message: &proto.ManagementMessage_StationRegistration{
-			StationRegistration: &proto.StationRegistrationMessage{
-				RegistrationKey: mcs.registrationKey,
+	// Send auth message based on version
+	if mcs.useV2Auth {
+		// v2 auth flow: send StationAuth with full station identity
+		if err := mcs.sendV2Auth(stream); err != nil {
+			mcs.currentStream = nil
+			return fmt.Errorf("failed to send v2 auth: %w", err)
+		}
+	} else {
+		// v1 auth flow: send StationRegistrationMessage (legacy)
+		registrationMsg := &proto.ManagementMessage{
+			RequestId:       fmt.Sprintf("registration_%d", time.Now().Unix()),
+			RegistrationKey: mcs.registrationKey,
+			IsResponse:      false,
+			Success:         true,
+			Message: &proto.ManagementMessage_StationRegistration{
+				StationRegistration: &proto.StationRegistrationMessage{
+					RegistrationKey: mcs.registrationKey,
+				},
 			},
-		},
-	}
+		}
 
-	if err := stream.Send(registrationMsg); err != nil {
-		return fmt.Errorf("failed to send station registration: %w", err)
-	}
+		if err := stream.Send(registrationMsg); err != nil {
+			return fmt.Errorf("failed to send station registration: %w", err)
+		}
 
-	logging.Info("Sent station registration to CloudShip")
+		logging.Info("Sent station registration to CloudShip (v1 flow)")
+	}
 
 	// Start goroutine for receiving messages from CloudShip
 	// This goroutine will run independently and handle connection errors
@@ -390,6 +458,12 @@ func (mcs *ManagementChannelService) SendStatusUpdate(statusMsg *proto.Managemen
 // handleResponse routes responses to appropriate handlers
 func (mcs *ManagementChannelService) handleResponse(msg *proto.ManagementMessage) {
 	switch resp := msg.Message.(type) {
+	case *proto.ManagementMessage_AuthResult:
+		// v2 auth response
+		mcs.handleAuthResult(resp.AuthResult)
+	case *proto.ManagementMessage_Disconnect:
+		// Server-initiated disconnect
+		mcs.handleDisconnect(resp.Disconnect)
 	case *proto.ManagementMessage_GetMemoryContextResponse:
 		// Route memory context responses to the memory client
 		if mcs.memoryClient != nil {
@@ -418,6 +492,8 @@ func (mcs *ManagementChannelService) getRequestType(msg *proto.ManagementMessage
 		return "ExecuteAgent"
 	case *proto.ManagementMessage_StationRegistration:
 		return "StationRegistration"
+	case *proto.ManagementMessage_StationAuth:
+		return "StationAuth"
 	case *proto.ManagementMessage_SendRunRequest:
 		return "SendRun"
 	case *proto.ManagementMessage_GetAgentDetailsRequest:
@@ -427,4 +503,154 @@ func (mcs *ManagementChannelService) getRequestType(msg *proto.ManagementMessage
 	default:
 		return "Unknown"
 	}
+}
+
+// ============================================================================
+// V2 AUTH FLOW METHODS
+// ============================================================================
+
+// sendV2Auth sends the StationAuth message for v2 authentication
+func (mcs *ManagementChannelService) sendV2Auth(stream proto.LighthouseService_ManagementChannelClient) error {
+	logging.Info("Sending v2 StationAuth: name=%s tags=%v", mcs.stationName, mcs.stationTags)
+
+	// Build StationAuth message with full station identity
+	authMsg := &proto.ManagementMessage{
+		RequestId:       fmt.Sprintf("auth_%d", time.Now().Unix()),
+		RegistrationKey: mcs.registrationKey,
+		IsResponse:      false,
+		Success:         true,
+		Message: &proto.ManagementMessage_StationAuth{
+			StationAuth: mcs.buildStationAuth(),
+		},
+	}
+
+	if err := stream.Send(authMsg); err != nil {
+		return fmt.Errorf("failed to send StationAuth: %w", err)
+	}
+
+	logging.Info("Sent StationAuth to CloudShip (v2 flow), waiting for AuthResult...")
+	return nil
+}
+
+// buildStationAuth constructs the StationAuth protobuf message
+func (mcs *ManagementChannelService) buildStationAuth() *proto.StationAuth {
+	hostname := mcs.getHostname()
+	version := mcs.getVersion()
+
+	return &proto.StationAuth{
+		RegistrationKey: mcs.registrationKey,
+		Name:            mcs.stationName,
+		Tags:            mcs.stationTags,
+		Hostname:        hostname,
+		Version:         version,
+		Os:              mcs.getOS(),
+		Arch:            mcs.getArch(),
+		Environment:     mcs.lighthouseClient.GetEnvironment(),
+		// Note: agents, tools, and mcp_servers can be added later if needed
+		// For now, CloudShip can fetch these via ListAgents/ListTools
+		HardwareInfo: map[string]string{
+			"go_version": mcs.getGoVersion(),
+		},
+	}
+}
+
+// handleAuthResult processes the AuthResult response from CloudShip
+func (mcs *ManagementChannelService) handleAuthResult(result *proto.AuthResult) {
+	if result.Success {
+		mcs.stationID = result.StationId
+		if result.HeartbeatIntervalMs > 0 {
+			mcs.heartbeatInterval = time.Duration(result.HeartbeatIntervalMs) * time.Millisecond
+		}
+		mcs.registrationState = RegistrationStateRegistered
+
+		logging.Info("V2 auth successful: station_id=%s name=%s heartbeat_interval=%v replaced_existing=%v",
+			result.StationId, result.Name, mcs.heartbeatInterval, result.ReplacedExisting)
+
+		// Update global lighthouse status
+		lighthouse.SetConnected(true, "cloudship")
+		lighthouse.SetRegistered(true, mcs.registrationKey)
+	} else {
+		logging.Error("V2 auth failed: %s", result.Error)
+
+		// Check if this is a limit rejection
+		if strings.Contains(result.Error, "limit") || strings.Contains(result.Error, "max_stations") {
+			mcs.registrationState = RegistrationStateRejectedLimit
+		}
+
+		// Clear stream on auth failure
+		mcs.currentStream = nil
+		if mcs.memoryClient != nil {
+			mcs.memoryClient.ClearStream()
+		}
+	}
+}
+
+// handleDisconnect processes server-initiated disconnect messages
+func (mcs *ManagementChannelService) handleDisconnect(disconnect *proto.Disconnect) {
+	logging.Info("Received disconnect from CloudShip: reason=%s code=%v should_reconnect=%v delay=%dms",
+		disconnect.Reason, disconnect.Code, disconnect.ShouldReconnect, disconnect.ReconnectDelayMs)
+
+	// Clear current connection state
+	mcs.currentStream = nil
+	if mcs.memoryClient != nil {
+		mcs.memoryClient.ClearStream()
+	}
+
+	// Update global status
+	lighthouse.SetConnected(false, "")
+	lighthouse.SetRegistered(false, "")
+
+	// Handle different disconnect reasons
+	switch disconnect.Code {
+	case proto.DisconnectReason_DISCONNECT_REASON_REPLACED:
+		// Another station with same name connected - enter rejected state briefly
+		logging.Info("Station was replaced by another connection with same name")
+		mcs.registrationState = RegistrationStateRejectedLimit
+	case proto.DisconnectReason_DISCONNECT_REASON_AUTH_FAILED:
+		logging.Error("Authentication failed - check registration key")
+		mcs.registrationState = RegistrationStateRejectedLimit
+	case proto.DisconnectReason_DISCONNECT_REASON_KEY_REVOKED:
+		logging.Error("Registration key was revoked - contact administrator")
+		mcs.registrationState = RegistrationStateRejectedLimit
+	case proto.DisconnectReason_DISCONNECT_REASON_LIMIT_REACHED:
+		logging.Error("Max stations limit reached for registration key")
+		mcs.registrationState = RegistrationStateRejectedLimit
+	case proto.DisconnectReason_DISCONNECT_REASON_SHUTDOWN:
+		logging.Info("CloudShip is shutting down, will attempt reconnection")
+		mcs.registrationState = RegistrationStateUnregistered
+	case proto.DisconnectReason_DISCONNECT_REASON_HEARTBEAT_TIMEOUT:
+		logging.Info("Heartbeat timeout, will attempt reconnection")
+		mcs.registrationState = RegistrationStateUnregistered
+	default:
+		mcs.registrationState = RegistrationStateUnregistered
+	}
+
+	// If reconnection is suggested, the maintainConnection loop will handle it
+	// based on the registrationState
+}
+
+// Helper methods for getting station metadata
+func (mcs *ManagementChannelService) getHostname() string {
+	// Import os package - will be done at top of file
+	hostname, err := getHostnameHelper()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
+}
+
+func (mcs *ManagementChannelService) getVersion() string {
+	return "v0.11.0" // TODO: get from version package
+}
+
+func (mcs *ManagementChannelService) getOS() string {
+	return getRuntimeOS()
+}
+
+func (mcs *ManagementChannelService) getArch() string {
+	return getRuntimeArch()
+}
+
+func (mcs *ManagementChannelService) getGoVersion() string {
+	return getRuntimeVersion()
 }

@@ -182,12 +182,24 @@ func runMainServer() error {
 	var remoteControlSvc *lighthouseServices.RemoteControlService
 	if lighthouseClient != nil && lighthouseClient.GetMode() == lighthouse.ModeServe {
 		log.Printf("🌐 Initializing server mode remote control via CloudShip")
-		remoteControlSvc = lighthouseServices.NewRemoteControlService(
+
+		// Use v2 config if station name is provided
+		remoteControlConfig := lighthouseServices.RemoteControlConfig{
+			RegistrationKey: cfg.CloudShip.RegistrationKey,
+			Environment:     environmentName,
+			StationName:     cfg.CloudShip.Name,
+			StationTags:     cfg.CloudShip.Tags,
+		}
+
+		if cfg.CloudShip.Name != "" {
+			log.Printf("🚀 Using v2 auth flow: station_name=%s tags=%v", cfg.CloudShip.Name, cfg.CloudShip.Tags)
+		}
+
+		remoteControlSvc = lighthouseServices.NewRemoteControlServiceWithConfig(
 			lighthouseClient,
 			agentSvc,
 			repos,
-			cfg.CloudShip.RegistrationKey,
-			environmentName, // Use actual environment name
+			remoteControlConfig,
 		)
 
 		// Start remote control service

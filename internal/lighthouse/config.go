@@ -33,8 +33,12 @@ type LighthouseConfig struct {
 	// Core connection settings
 	Endpoint        string `yaml:"endpoint"`         // lighthouse.cloudship.ai:443
 	RegistrationKey string `yaml:"registration_key"` // CloudShip registration key
-	StationID       string `yaml:"station_id"`       // Generated station ID
+	StationID       string `yaml:"station_id"`       // Generated station ID (legacy v1)
 	TLS             bool   `yaml:"tls"`              // Enable TLS (default: true)
+
+	// V2 auth settings (when Name is set, v2 flow is used)
+	StationName string   `yaml:"station_name"` // User-defined unique station name (v2)
+	StationTags []string `yaml:"station_tags"` // User-defined tags for filtering (v2)
 
 	// Optional settings
 	Environment    string        `yaml:"environment"`     // Environment name (default: "default")

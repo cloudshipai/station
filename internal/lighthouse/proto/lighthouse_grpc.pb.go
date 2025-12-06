@@ -696,3 +696,191 @@ var LighthouseService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "internal/lighthouse/proto/lighthouse.proto",
 }
+
+const (
+	DebugService_GetActiveStations_FullMethodName           = "/lighthouse.v1.DebugService/GetActiveStations"
+	DebugService_GetActiveManagementChannels_FullMethodName = "/lighthouse.v1.DebugService/GetActiveManagementChannels"
+	DebugService_TestStationConnection_FullMethodName       = "/lighthouse.v1.DebugService/TestStationConnection"
+)
+
+// DebugServiceClient is the client API for DebugService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Debug service for lighthouse introspection and troubleshooting
+type DebugServiceClient interface {
+	// Get all active stations that lighthouse knows about
+	GetActiveStations(ctx context.Context, in *DebugRequest, opts ...grpc.CallOption) (*DebugResponse, error)
+	// Get all active management channels
+	GetActiveManagementChannels(ctx context.Context, in *DebugRequest, opts ...grpc.CallOption) (*DebugResponse, error)
+	// Test if a specific station is reachable
+	TestStationConnection(ctx context.Context, in *TestStationRequest, opts ...grpc.CallOption) (*DebugResponse, error)
+}
+
+type debugServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewDebugServiceClient(cc grpc.ClientConnInterface) DebugServiceClient {
+	return &debugServiceClient{cc}
+}
+
+func (c *debugServiceClient) GetActiveStations(ctx context.Context, in *DebugRequest, opts ...grpc.CallOption) (*DebugResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DebugResponse)
+	err := c.cc.Invoke(ctx, DebugService_GetActiveStations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *debugServiceClient) GetActiveManagementChannels(ctx context.Context, in *DebugRequest, opts ...grpc.CallOption) (*DebugResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DebugResponse)
+	err := c.cc.Invoke(ctx, DebugService_GetActiveManagementChannels_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *debugServiceClient) TestStationConnection(ctx context.Context, in *TestStationRequest, opts ...grpc.CallOption) (*DebugResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DebugResponse)
+	err := c.cc.Invoke(ctx, DebugService_TestStationConnection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DebugServiceServer is the server API for DebugService service.
+// All implementations must embed UnimplementedDebugServiceServer
+// for forward compatibility.
+//
+// Debug service for lighthouse introspection and troubleshooting
+type DebugServiceServer interface {
+	// Get all active stations that lighthouse knows about
+	GetActiveStations(context.Context, *DebugRequest) (*DebugResponse, error)
+	// Get all active management channels
+	GetActiveManagementChannels(context.Context, *DebugRequest) (*DebugResponse, error)
+	// Test if a specific station is reachable
+	TestStationConnection(context.Context, *TestStationRequest) (*DebugResponse, error)
+	mustEmbedUnimplementedDebugServiceServer()
+}
+
+// UnimplementedDebugServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedDebugServiceServer struct{}
+
+func (UnimplementedDebugServiceServer) GetActiveStations(context.Context, *DebugRequest) (*DebugResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetActiveStations not implemented")
+}
+func (UnimplementedDebugServiceServer) GetActiveManagementChannels(context.Context, *DebugRequest) (*DebugResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetActiveManagementChannels not implemented")
+}
+func (UnimplementedDebugServiceServer) TestStationConnection(context.Context, *TestStationRequest) (*DebugResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TestStationConnection not implemented")
+}
+func (UnimplementedDebugServiceServer) mustEmbedUnimplementedDebugServiceServer() {}
+func (UnimplementedDebugServiceServer) testEmbeddedByValue()                      {}
+
+// UnsafeDebugServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to DebugServiceServer will
+// result in compilation errors.
+type UnsafeDebugServiceServer interface {
+	mustEmbedUnimplementedDebugServiceServer()
+}
+
+func RegisterDebugServiceServer(s grpc.ServiceRegistrar, srv DebugServiceServer) {
+	// If the following call pancis, it indicates UnimplementedDebugServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&DebugService_ServiceDesc, srv)
+}
+
+func _DebugService_GetActiveStations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DebugRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DebugServiceServer).GetActiveStations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DebugService_GetActiveStations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DebugServiceServer).GetActiveStations(ctx, req.(*DebugRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DebugService_GetActiveManagementChannels_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DebugRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DebugServiceServer).GetActiveManagementChannels(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DebugService_GetActiveManagementChannels_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DebugServiceServer).GetActiveManagementChannels(ctx, req.(*DebugRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DebugService_TestStationConnection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TestStationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DebugServiceServer).TestStationConnection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DebugService_TestStationConnection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DebugServiceServer).TestStationConnection(ctx, req.(*TestStationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// DebugService_ServiceDesc is the grpc.ServiceDesc for DebugService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var DebugService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "lighthouse.v1.DebugService",
+	HandlerType: (*DebugServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetActiveStations",
+			Handler:    _DebugService_GetActiveStations_Handler,
+		},
+		{
+			MethodName: "GetActiveManagementChannels",
+			Handler:    _DebugService_GetActiveManagementChannels_Handler,
+		},
+		{
+			MethodName: "TestStationConnection",
+			Handler:    _DebugService_TestStationConnection_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "internal/lighthouse/proto/lighthouse.proto",
+}

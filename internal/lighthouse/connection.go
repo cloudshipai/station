@@ -38,6 +38,9 @@ func (lc *LighthouseClient) connect() error {
 	}
 	opts = append(opts, grpc.WithKeepaliveParams(keepaliveParams))
 
+	// Block until connection is ready (required for IsConnected() to work)
+	opts = append(opts, grpc.WithBlock())
+
 	// Connect with timeout
 	connectCtx, cancel := context.WithTimeout(lc.ctx, lc.config.ConnectTimeout)
 	defer cancel()
@@ -56,10 +59,40 @@ func (lc *LighthouseClient) connect() error {
 
 // IsConnected returns true if connected to Lighthouse
 func (lc *LighthouseClient) IsConnected() bool {
-	if lc == nil || lc.conn == nil {
+	if lc == nil {
+		logging.Debug("IsConnected: client is nil")
 		return false
 	}
-	return lc.conn.GetState().String() == "READY"
+	if lc.conn == nil {
+		logging.Debug("IsConnected: conn is nil")
+		return false
+	}
+	state := lc.conn.GetState().String()
+	logging.Debug("IsConnected: conn state is %s", state)
+	return state == "READY"
+}
+
+// ConnectOnly establishes gRPC connection without registration
+// This is used by v2 auth flow where registration happens via StationAuth message
+func (lc *LighthouseClient) ConnectOnly() error {
+	if lc == nil {
+		return fmt.Errorf("lighthouse client is nil")
+	}
+
+	// Close existing connection if present
+	if lc.conn != nil {
+		lc.conn.Close()
+		lc.conn = nil
+		lc.client = nil
+	}
+
+	// Establish connection only (no registration)
+	if err := lc.connect(); err != nil {
+		return fmt.Errorf("failed to connect: %v", err)
+	}
+
+	logging.Info("Successfully connected to CloudShip Lighthouse (v2 - no registration RPC)")
+	return nil
 }
 
 // Reconnect re-establishes connection and registration with CloudShip Lighthouse

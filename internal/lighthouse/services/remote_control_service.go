@@ -8,6 +8,14 @@ import (
 	"station/internal/services"
 )
 
+// RemoteControlConfig holds configuration for the remote control service
+type RemoteControlConfig struct {
+	RegistrationKey string
+	Environment     string
+	StationName     string   // v2: user-defined unique station name
+	StationTags     []string // v2: optional tags for filtering
+}
+
 // RemoteControlService orchestrates server mode remote control functionality
 // This service manages the ManagementChannel and command handling for CloudShip remote control.
 type RemoteControlService struct {
@@ -26,15 +34,49 @@ func NewRemoteControlService(
 	registrationKey string,
 	environment string,
 ) *RemoteControlService {
-	// Create management channel service first (new architecture)
-	managementChannel := NewManagementChannelService(
+	// Create with empty v2 config for backward compatibility
+	return NewRemoteControlServiceWithConfig(
 		lighthouseClient,
-		nil, // Will set handler after creating it
-		registrationKey,
+		agentService,
+		repos,
+		RemoteControlConfig{
+			RegistrationKey: registrationKey,
+			Environment:     environment,
+		},
 	)
+}
+
+// NewRemoteControlServiceWithConfig creates a new remote control service with full v2 config
+func NewRemoteControlServiceWithConfig(
+	lighthouseClient *lighthouse.LighthouseClient,
+	agentService services.AgentServiceInterface,
+	repos *repositories.Repositories,
+	config RemoteControlConfig,
+) *RemoteControlService {
+	var managementChannel *ManagementChannelService
+
+	// Use v2 constructor if station name is provided
+	if config.StationName != "" {
+		managementChannel = NewManagementChannelServiceV2(
+			lighthouseClient,
+			nil, // Will set handler after creating it
+			ManagementChannelConfig{
+				RegistrationKey: config.RegistrationKey,
+				StationName:     config.StationName,
+				StationTags:     config.StationTags,
+			},
+		)
+	} else {
+		// Use v1 constructor for backward compatibility
+		managementChannel = NewManagementChannelService(
+			lighthouseClient,
+			nil, // Will set handler after creating it
+			config.RegistrationKey,
+		)
+	}
 
 	// Create management handler service with management channel reference for SendRun
-	managementHandler := NewManagementHandlerServiceWithChannel(agentService, repos, lighthouseClient, registrationKey, managementChannel)
+	managementHandler := NewManagementHandlerServiceWithChannel(agentService, repos, lighthouseClient, config.RegistrationKey, managementChannel)
 
 	// Set the handler in the management channel
 	managementChannel.managementHandler = managementHandler
@@ -46,16 +88,16 @@ func NewRemoteControlService(
 	// 	lighthouseClient,
 	// 	commandHandler,
 	// 	metricsService,
-	// 	registrationKey,
-	// 	environment,
+	// 	config.RegistrationKey,
+	// 	config.Environment,
 	// )
 
 	return &RemoteControlService{
 		lighthouseClient:  lighthouseClient,
 		managementChannel: managementChannel,
 		managementHandler: managementHandler,
-		registrationKey:   registrationKey,
-		environment:       environment,
+		registrationKey:   config.RegistrationKey,
+		environment:       config.Environment,
 	}
 }
 

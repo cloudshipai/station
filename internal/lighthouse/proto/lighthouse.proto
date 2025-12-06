@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package lighthouse.v1;
-option go_package = "./internal/proto";
+option go_package = "station/internal/lighthouse/proto";
 
 import "google/protobuf/timestamp.proto";
 import "internal/lighthouse/proto/data_ingestion.proto";
@@ -503,14 +503,82 @@ message ManagementMessage {
 
         ManagementError error = 30;
 
-        // Special messages
+        // Special messages (v1 - legacy)
         StationRegistrationMessage station_registration = 31;
+
+        // Station Management v2 messages
+        StationAuth station_auth = 32;          // v2: Station auth (first message from station)
+        AuthResult auth_result = 33;            // v2: Auth result (response to StationAuth)
+        Disconnect disconnect = 34;             // v2: Server-initiated disconnect
     }
 }
 
-// Station registration for management channel
+// Station registration for management channel (v1 - legacy)
 message StationRegistrationMessage {
     string registration_key = 1;     // Station registration key (REQUIRED for routing)
+}
+
+// ============================================================================
+// STATION MANAGEMENT V2 MESSAGES
+// ============================================================================
+
+// Station auth message (v2) - first message on ManagementChannel
+// Contains full station identity and capabilities for v2 auth flow
+message StationAuth {
+    string registration_key = 1;     // CloudShip registration key (REQUIRED)
+    string name = 2;                 // User-defined unique station name (REQUIRED)
+    repeated string tags = 3;        // User-defined tags for filtering ["production", "us-east-1"]
+    string hostname = 4;             // Machine hostname
+    string version = 5;              // Station CLI version
+    string os = 6;                   // Operating system (linux, darwin, windows)
+    string arch = 7;                 // CPU architecture (amd64, arm64)
+    string environment = 8;          // Default environment name
+    
+    // Cached capabilities for quick access (optional, can be fetched later)
+    repeated AgentInfo agents = 9;
+    repeated ToolInfo tools = 10;
+    repeated MCPServerInfo mcp_servers = 11;
+    
+    // Hardware info (optional)
+    map<string, string> hardware_info = 12;
+}
+
+// MCP Server info for station capabilities
+message MCPServerInfo {
+    string name = 1;
+    string command = 2;
+    repeated string args = 3;
+    bool enabled = 4;
+    int32 tool_count = 5;
+}
+
+// Auth result sent back to station after StationAuth
+message AuthResult {
+    bool success = 1;
+    string error = 2;                // Error message if success is false
+    string station_id = 3;           // Database station ID (UUID)
+    string name = 4;                 // Confirmed station name
+    int64 heartbeat_interval_ms = 5; // Recommended heartbeat interval (default: 60000ms)
+    bool replaced_existing = 6;      // True if this auth replaced an existing connection
+}
+
+// Disconnect message - server-initiated disconnection
+message Disconnect {
+    string reason = 1;               // Human-readable reason for disconnect
+    DisconnectReason code = 2;       // Machine-readable disconnect code
+    bool should_reconnect = 3;       // Hint: should station attempt to reconnect?
+    int64 reconnect_delay_ms = 4;    // If should_reconnect, wait this long before retry
+}
+
+enum DisconnectReason {
+    DISCONNECT_REASON_UNSPECIFIED = 0;
+    DISCONNECT_REASON_REPLACED = 1;         // Another connection with same station name
+    DISCONNECT_REASON_AUTH_FAILED = 2;      // Authentication failed
+    DISCONNECT_REASON_KEY_REVOKED = 3;      // Registration key was revoked/deleted
+    DISCONNECT_REASON_LIMIT_REACHED = 4;    // Max stations per key limit reached
+    DISCONNECT_REASON_SHUTDOWN = 5;         // Lighthouse is shutting down
+    DISCONNECT_REASON_HEARTBEAT_TIMEOUT = 6; // Station didn't send heartbeat in time
+    DISCONNECT_REASON_ERROR = 7;            // Internal error
 }
 
 // ============================================================================
@@ -729,5 +797,35 @@ enum ErrorCode {
     PERMISSION_DENIED = 5;
     MEMORY_NOT_FOUND = 6;         // Memory topic not found
     MEMORY_FETCH_ERROR = 7;       // Error fetching memory from mem0
+}
+
+// ============================================================================
+// DEBUG SERVICE MESSAGES (Internal Introspection)
+// ============================================================================
+
+// Debug service for lighthouse introspection and troubleshooting
+service DebugService {
+    // Get all active stations that lighthouse knows about
+    rpc GetActiveStations(DebugRequest) returns (DebugResponse);
+
+    // Get all active management channels
+    rpc GetActiveManagementChannels(DebugRequest) returns (DebugResponse);
+
+    // Test if a specific station is reachable
+    rpc TestStationConnection(TestStationRequest) returns (DebugResponse);
+}
+
+message DebugRequest {
+    // Empty request - returns all available information
+}
+
+message TestStationRequest {
+    string registration_key = 1;
+}
+
+message DebugResponse {
+    bool success = 1;
+    string data = 2;  // JSON-encoded response data
+    string error = 3;
 }
 

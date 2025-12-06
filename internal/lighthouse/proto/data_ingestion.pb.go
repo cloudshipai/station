@@ -2493,7 +2493,7 @@ const file_internal_lighthouse_proto_data_ingestion_proto_rawDesc = "" +
 	"IngestData\x12 .lighthouse.v1.IngestDataRequest\x1a!.lighthouse.v1.IngestDataResponse\x12T\n" +
 	"\vIngestBatch\x12!.lighthouse.v1.IngestBatchRequest\x1a\".lighthouse.v1.IngestBatchResponse\x12W\n" +
 	"\fIngestStream\x12 .lighthouse.v1.IngestDataRequest\x1a!.lighthouse.v1.IngestDataResponse(\x010\x01\x12c\n" +
-	"\x12GetIngestionStatus\x12%.lighthouse.v1.IngestionStatusRequest\x1a&.lighthouse.v1.IngestionStatusResponseB\x12Z\x10./internal/protob\x06proto3"
+	"\x12GetIngestionStatus\x12%.lighthouse.v1.IngestionStatusRequest\x1a&.lighthouse.v1.IngestionStatusResponseB#Z!station/internal/lighthouse/protob\x06proto3"
 
 var (
 	file_internal_lighthouse_proto_data_ingestion_proto_rawDescOnce sync.Once
