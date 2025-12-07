@@ -59,6 +59,7 @@ type CloudShipConfig struct {
 	BundleRegistryURL string   `yaml:"bundle_registry_url"` // Bundle registry API URL
 	APIURL            string   `yaml:"api_url"`             // CloudShip Django API URL (for direct API calls)
 	APIKey            string   `yaml:"api_key"`             // CloudShip API key for authentication
+	BaseURL           string   `yaml:"base_url"`            // CloudShip base URL for OAuth discovery (default: https://app.cloudshipai.com)
 	// OAuth settings for MCP authentication via CloudShip
 	OAuth OAuthConfig `yaml:"oauth"` // OAuth configuration
 }
@@ -139,6 +140,7 @@ func Load() (*Config, error) {
 			Endpoint:          getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:50051"),
 			StationID:         getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
 			BundleRegistryURL: getEnvOrDefault("STN_CLOUDSHIP_BUNDLE_REGISTRY_URL", "https://api.cloudshipai.com"),
+			BaseURL:           getEnvOrDefault("STN_CLOUDSHIP_BASE_URL", "https://app.cloudshipai.com"),
 			OAuth: OAuthConfig{
 				Enabled:       getEnvBoolOrDefault("STN_CLOUDSHIP_OAUTH_ENABLED", false),
 				ClientID:      getEnvOrDefault("STN_CLOUDSHIP_OAUTH_CLIENT_ID", ""),
@@ -234,6 +236,9 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("cloudship.api_key") {
 		cfg.CloudShip.APIKey = viper.GetString("cloudship.api_key")
+	}
+	if viper.IsSet("cloudship.base_url") {
+		cfg.CloudShip.BaseURL = viper.GetString("cloudship.base_url")
 	}
 	// OAuth configuration overrides
 	if viper.IsSet("cloudship.oauth.enabled") {

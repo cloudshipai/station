@@ -1041,6 +1041,169 @@ otel_endpoint: "http://your-collector:4318"
 
 ---
 
+## CloudShip Integration
+
+Connect your Station to [CloudShip](https://cloudshipai.com) for centralized management, OAuth authentication, and team collaboration.
+
+### Why CloudShip?
+
+- **Centralized Management** - Manage multiple Stations from a single dashboard
+- **OAuth Authentication** - Secure MCP access with CloudShip user accounts
+- **Team Collaboration** - Share agents with your organization members
+- **Audit Trail** - Track all Station connections and executions
+
+### Who Can Access Your Station?
+
+With CloudShip OAuth enabled, only users who:
+1. Have a **CloudShip account**
+2. Are **members of your organization**
+3. Successfully **authenticate via OAuth**
+
+...can access your Station's agents through MCP. This lets you share powerful agents with your team while keeping them secure.
+
+### Quick Setup
+
+1. **Get a Registration Key** from your CloudShip dashboard at `Settings > Stations`
+
+2. **Configure your Station** (`config.yaml`):
+   ```yaml
+   cloudship:
+     enabled: true
+     registration_key: "your-registration-key"
+     name: "my-station"           # Unique name for this station
+     tags: ["production", "us-east-1"]
+   ```
+
+3. **Start Station** - It will automatically connect to CloudShip:
+   ```bash
+   stn serve
+   # Output: Successfully registered with CloudShip management channel
+   ```
+
+### OAuth Authentication for MCP
+
+When CloudShip OAuth is enabled, MCP clients (Claude Desktop, Cursor, etc.) authenticate through CloudShip before accessing your Station's agents.
+
+**Setup (Station Admin):**
+1. Create an OAuth App in CloudShip (Settings > OAuth Apps)
+2. Configure Station with `oauth.enabled: true` and `oauth.client_id`
+3. Invite team members to your CloudShip organization
+
+**Usage (Team Members):**
+1. Point MCP client to your Station's Dynamic Agent MCP URL (port 8587)
+2. Browser opens for CloudShip login
+3. Approve access → Done! Now you can use the agents.
+
+**How it works:**
+
+```
+MCP Client                    Station                      CloudShip
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |<----- 401 Unauthorized ---|                             |
+    |       WWW-Authenticate:   |                             |
+    |       Bearer resource_metadata="..."                    |
+    |                           |                             |
+    |------- [OAuth Discovery] ------------------------------>|
+    |<------ [Authorization Server Metadata] -----------------|
+    |                           |                             |
+    |------- [Browser Login] -------------------------------->|
+    |<------ [Authorization Code] ----------------------------|
+    |                           |                             |
+    |------- [Token Exchange] ------------------------------->|
+    |<------ [Access Token] ----------------------------------|
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |  Authorization: Bearer    |------ Validate Token ------>|
+    |                           |<------ {active: true} ------|
+    |<----- MCP Response -------|                             |
+```
+
+**Enable OAuth** (`config.yaml`):
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-key"
+  name: "my-station"
+  oauth:
+    enabled: true
+    client_id: "your-oauth-client-id"  # From CloudShip OAuth Apps
+```
+
+**MCP Client Configuration** (Claude Desktop / Cursor):
+```json
+{
+  "mcpServers": {
+    "my-station": {
+      "url": "https://my-station.example.com:8587/mcp"
+    }
+  }
+}
+```
+
+> **Note:** Port 8587 is the Dynamic Agent MCP server. Port 8586 is the standard MCP server.
+
+When the MCP client connects, it will:
+1. Receive a 401 with OAuth discovery URL
+2. Open CloudShip login in your browser
+3. After authentication, automatically retry with the access token
+
+### Configuration Reference
+
+```yaml
+cloudship:
+  # Enable CloudShip integration
+  enabled: true
+  
+  # Registration key from CloudShip dashboard
+  registration_key: "sk-..."
+  
+  # Unique station name (required for multi-station support)
+  name: "production-us-east"
+  
+  # Tags for filtering and organization
+  tags: ["production", "us-east-1", "sre-team"]
+  
+  # CloudShip endpoints (defaults shown - usually no need to change)
+  endpoint: "lighthouse.cloudshipai.com:50051"
+  base_url: "https://app.cloudshipai.com"
+  
+  # OAuth settings for MCP authentication
+  oauth:
+    enabled: false                    # Enable OAuth for MCP
+    client_id: ""                     # OAuth client ID from CloudShip
+    # These are auto-configured from base_url:
+    # auth_url: "https://app.cloudshipai.com/oauth/authorize/"
+    # token_url: "https://app.cloudshipai.com/oauth/token/"
+    # introspect_url: "https://app.cloudshipai.com/oauth/introspect/"
+```
+
+### Development Setup
+
+For local development with CloudShip:
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-dev-key"
+  name: "dev-station"
+  endpoint: "localhost:50051"           # Local Lighthouse
+  base_url: "http://localhost:8000"     # Local Django
+  oauth:
+    enabled: true
+    client_id: "your-dev-client-id"
+    introspect_url: "http://localhost:8000/oauth/introspect/"
+```
+
+### Security Notes
+
+- **Registration keys** should be kept secret - they authorize Station connections
+- **OAuth tokens** are validated on every MCP request via CloudShip introspection
+- **PKCE** is required for all OAuth flows (S256 code challenge)
+- Station caches validated tokens for 5 minutes to reduce introspection calls
+
+---
+
 ## Database Persistence & Replication
 
 Station uses SQLite by default, with support for cloud databases and continuous backup for production deployments.

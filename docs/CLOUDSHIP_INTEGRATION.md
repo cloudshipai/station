@@ -238,6 +238,258 @@ Or in config:
 debug: true
 ```
 
+## OAuth Authentication for MCP
+
+When you expose your Station's MCP server to external clients (Claude Desktop, Cursor, etc.), you can require CloudShip OAuth authentication. This ensures only authorized CloudShip users in your organization can access your Station's agents.
+
+### Who Can Access Your Station?
+
+With OAuth enabled, users must:
+1. **Have a CloudShip account** at [cloudshipai.com](https://cloudshipai.com)
+2. **Be a member of your organization** (invited via CloudShip dashboard)
+3. **Authenticate via the OAuth flow** when connecting
+
+This means you can share your Station's agents with your team while keeping them secure from unauthorized access.
+
+### Setup Overview
+
+| Step | Who | What |
+|------|-----|------|
+| 1 | **Station Admin** | Create OAuth App in CloudShip |
+| 2 | **Station Admin** | Configure Station with OAuth enabled |
+| 3 | **Station Admin** | Invite team members to CloudShip org |
+| 4 | **Team Member** | Connect MCP client → Browser login → Access agents |
+
+### How It Works
+
+1. **MCP client connects** to Station without authentication
+2. **Station returns 401** with `WWW-Authenticate` header pointing to CloudShip
+3. **Client discovers OAuth endpoints** via CloudShip's well-known URLs
+4. **Client opens browser** to CloudShip login
+5. **User authenticates** and approves access
+6. **Client receives token** and reconnects to Station
+7. **Station validates token** via CloudShip introspection
+8. **MCP request proceeds** with authenticated user context
+
+```
+MCP Client                    Station                      CloudShip
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |<----- 401 Unauthorized ---|                             |
+    |       WWW-Authenticate:   |                             |
+    |       Bearer resource_metadata=                         |
+    |       "https://app.cloudshipai.com/.well-known/oauth-protected-resource"
+    |                           |                             |
+    |------- GET /.well-known/oauth-protected-resource ------>|
+    |<------ {"authorization_servers": ["cloudshipai.com"]} --|
+    |                           |                             |
+    |------- GET /.well-known/oauth-authorization-server ---->|
+    |<------ {endpoints, scopes, pkce_methods, ...} ----------|
+    |                           |                             |
+    |------- GET /oauth/authorize/?... ---------------------->|
+    |<------ [Browser: Login + Consent] ----------------------|
+    |<------ 302 callback?code=XXX ---------------------------|
+    |                           |                             |
+    |------- POST /oauth/token/ {code, code_verifier} ------->|
+    |<------ {access_token, refresh_token, expires_in} -------|
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |  Authorization: Bearer    |------ POST /oauth/introspect/
+    |                           |<------ {active:true, user_id, org_id, email}
+    |<----- MCP Response -------|                             |
+```
+
+### Enabling OAuth
+
+#### Step 1: Create an OAuth Application in CloudShip
+
+**Option A: Via Django Admin**
+1. Log in to CloudShip admin at `/cshipai-admin/`
+2. Go to **OAuth2 Provider > Applications**
+3. Click **Add Application**
+4. Fill in:
+   - **Name**: e.g., "Station MCP Client"
+   - **Client type**: Public
+   - **Authorization grant type**: Authorization code
+   - **Redirect URIs**: `http://localhost:8585/oauth/callback` (add your production URL too)
+5. Save and note the **Client ID**
+
+**Option B: Via CLI**
+```bash
+cd cloudshipai/backend
+uv run python manage.py create_oauth_app \
+  --name "Station MCP Client" \
+  --user-email your@email.com \
+  --client-type public \
+  --redirect-uris "http://localhost:8585/oauth/callback"
+```
+
+#### Step 2: Configure Station
+
+Add OAuth settings to your `config.yaml`:
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-registration-key"
+  name: "my-station"
+  base_url: "https://app.cloudshipai.com"  # OAuth discovery base
+  oauth:
+    enabled: true
+    client_id: "your-oauth-client-id"      # From Step 1
+```
+
+#### Step 3: Invite Team Members to Your Organization
+
+1. Go to CloudShip dashboard
+2. Navigate to **Settings > Team**
+3. Click **Invite Member**
+4. Enter their email address
+5. They'll receive an invitation to join your organization
+
+Only users who are members of your organization can authenticate and access your Station's agents.
+
+#### Step 4: Start Station
+
+```bash
+stn serve --config config.yaml
+# Note: OAuth is only enforced when local_mode is false
+```
+
+#### Step 5: Team Members Connect
+
+When a team member configures their MCP client to connect to your Station:
+
+1. **First connection** → Station returns 401 with OAuth discovery URL
+2. **Browser opens** → CloudShip login page
+3. **User logs in** → With their CloudShip account (must be in your org)
+4. **Consent screen** → "Authorize Station MCP Client to access..."
+5. **Token issued** → MCP client reconnects with Bearer token
+6. **Access granted** → User can now call your Station's agents
+
+### OAuth Configuration Reference
+
+```yaml
+cloudship:
+  # Base URL for OAuth discovery (well-known endpoints)
+  base_url: "https://app.cloudshipai.com"
+  
+  oauth:
+    # Enable OAuth authentication for MCP endpoints
+    enabled: true
+    
+    # OAuth client ID from CloudShip OAuth Apps
+    client_id: "your-client-id"
+    
+    # Optional: Override OAuth endpoints (auto-derived from base_url)
+    auth_url: "https://app.cloudshipai.com/oauth/authorize/"
+    token_url: "https://app.cloudshipai.com/oauth/token/"
+    introspect_url: "https://app.cloudshipai.com/oauth/introspect/"
+    
+    # Optional: Redirect URI for auth code flow
+    redirect_uri: "http://localhost:8585/oauth/callback"
+    
+    # Optional: OAuth scopes to request
+    scopes: "read stations"
+```
+
+### MCP Client Configuration
+
+MCP clients automatically discover OAuth configuration from Station's 401 response. No special configuration needed - just point to your Station's MCP endpoint:
+
+**Claude Desktop** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "my-station": {
+      "url": "https://my-station.example.com:8587/mcp"
+    }
+  }
+}
+```
+
+**Cursor** (`.mcp.json`):
+```json
+{
+  "mcpServers": {
+    "my-station": {
+      "url": "https://my-station.example.com:8587/mcp"
+    }
+  }
+}
+```
+
+> **Port Reference:**
+> - **8585** - Station API (REST)
+> - **8586** - Standard MCP Server
+> - **8587** - Dynamic Agent MCP Server (OAuth-protected when enabled)
+
+When the client first connects, it will receive a 401 and automatically:
+1. Discover CloudShip OAuth endpoints
+2. Open your browser for login
+3. Complete the OAuth flow
+4. Reconnect with the access token
+
+### Local API Key Authentication
+
+For local development or scripts, you can also use Station's local API keys (prefix `sk-`):
+
+```bash
+# Get API key from Station
+curl http://localhost:8585/api/v1/users/me -H "Authorization: Bearer sk-your-local-api-key"
+
+# Use with MCP
+curl http://localhost:8586/mcp \
+  -H "Authorization: Bearer sk-your-local-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+### Token Validation
+
+Station validates OAuth tokens by calling CloudShip's introspection endpoint. The response includes:
+
+```json
+{
+  "active": true,
+  "scope": "read stations",
+  "client_id": "...",
+  "token_type": "Bearer",
+  "exp": 1765128225,
+  "user_id": "uuid-of-cloudship-user",
+  "email": "user@example.com",
+  "org_id": "uuid-of-organization"
+}
+```
+
+Station caches validated tokens for 5 minutes to reduce introspection calls.
+
+### Security Notes
+
+- **PKCE Required**: CloudShip enforces PKCE (Proof Key for Code Exchange) with S256 for all authorization code flows
+- **Token Expiration**: Access tokens expire after 1 hour; use refresh tokens for long-lived sessions
+- **Introspection**: Every MCP request validates the token (with caching)
+- **Org Scoping**: The `org_id` in the token can be used to scope agent access
+
+### Development Setup
+
+For local development with CloudShip OAuth:
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-dev-key"
+  name: "dev-station"
+  endpoint: "localhost:50051"           # Local Lighthouse
+  base_url: "http://localhost:8000"     # Local Django
+  oauth:
+    enabled: true
+    client_id: "your-dev-client-id"
+    introspect_url: "http://localhost:8000/oauth/introspect/"
+```
+
+---
+
 ## Security
 
 ### TLS
