@@ -169,7 +169,7 @@ require (
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/openai/openai-go v1.8.2
-	github.com/posthog/posthog-go v1.6.1
+	github.com/posthog/posthog-go v1.6.12
 	github.com/pressly/goose/v3 v3.24.3
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/afero v1.12.0
