@@ -45,7 +45,6 @@ ai_model: gpt-4o-mini
 cloudship:
   enabled: true
   registration_key: "YOUR_REGISTRATION_KEY_HERE"
-  endpoint: "lighthouse.cloudshipai.com:50051"
   
   # Required: Unique station name (must be unique across all stations)
   name: "prod-east-1"
@@ -63,8 +62,9 @@ cloudship:
 |--------|----------|---------|-------------|
 | `enabled` | No | `false` | Enable CloudShip integration |
 | `registration_key` | Yes | - | Your CloudShip registration key |
-| `endpoint` | No | `lighthouse.cloudshipai.com:50051` | Lighthouse gRPC endpoint |
-| `use_tls` | No | `true` | Use TLS for connection |
+| `endpoint` | No | `lighthouse.cloudshipai.com:443` | Lighthouse gRPC endpoint |
+| `use_tls` | No | `true` | Use TLS for connection (required for production) |
+| `skip_tls_verify` | No | `false` | Skip TLS certificate verification (for local dev only) |
 | `name` | Yes | - | Unique station name (user-defined) |
 | `tags` | No | `[]` | Tags for filtering/organization |
 
@@ -128,7 +128,7 @@ The station will connect to CloudShip in the background while serving MCP reques
 
 Check the logs for:
 ```
-Connected to CloudShip Lighthouse at lighthouse.cloudshipai.com:50051
+Connected to CloudShip Lighthouse at lighthouse.cloudshipai.com:443 (TLS)
 Successfully registered with CloudShip management channel
 V2 auth successful: station_id=... name=prod-east-1 heartbeat_interval=1m0s
 ```
@@ -215,9 +215,9 @@ If you start a station with the same `name` as an existing online station:
 
 ### Connection timeout
 
-- Check network connectivity to `lighthouse.cloudshipai.com:50051`
-- Verify firewall allows outbound gRPC (port 50051)
-- Try with `use_tls: false` for debugging
+- Check network connectivity to `lighthouse.cloudshipai.com:443`
+- Verify firewall allows outbound HTTPS/gRPC (port 443)
+- For local development with local Lighthouse, use `endpoint: "localhost:50051"` and `use_tls: false`
 
 ### Station shows offline in dashboard
 
@@ -494,7 +494,14 @@ cloudship:
 
 ### TLS
 
-All connections use TLS by default. The station validates the Lighthouse server certificate.
+All connections to CloudShip use TLS by default on port 443. The Lighthouse server uses a valid Let's Encrypt certificate managed by Fly.io, so no special certificate configuration is needed.
+
+For local development with a local Lighthouse instance:
+```yaml
+cloudship:
+  endpoint: "localhost:50051"
+  use_tls: false  # Local Lighthouse runs without TLS
+```
 
 ### Registration Key
 

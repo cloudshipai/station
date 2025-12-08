@@ -50,16 +50,18 @@ type FakerTemplate struct {
 
 // CloudShipConfig holds CloudShip Lighthouse integration settings
 type CloudShipConfig struct {
-	Enabled           bool     `yaml:"enabled"`             // Enable CloudShip integration
-	RegistrationKey   string   `yaml:"registration_key"`    // CloudShip registration key
-	Endpoint          string   `yaml:"endpoint"`            // Lighthouse gRPC endpoint
-	StationID         string   `yaml:"station_id"`          // Station ID (auto-generated, legacy v1)
-	Name              string   `yaml:"name"`                // Station name (required for v2, unique across org)
-	Tags              []string `yaml:"tags"`                // User-defined tags for filtering ["production", "us-east-1"]
-	BundleRegistryURL string   `yaml:"bundle_registry_url"` // Bundle registry API URL
-	APIURL            string   `yaml:"api_url"`             // CloudShip Django API URL (for direct API calls)
-	APIKey            string   `yaml:"api_key"`             // CloudShip API key for authentication
-	BaseURL           string   `yaml:"base_url"`            // CloudShip base URL for OAuth discovery (default: https://app.cloudshipai.com)
+	Enabled            bool     `yaml:"enabled"`             // Enable CloudShip integration
+	RegistrationKey    string   `yaml:"registration_key"`    // CloudShip registration key
+	Endpoint           string   `yaml:"endpoint"`            // Lighthouse gRPC endpoint
+	UseTLS             bool     `yaml:"use_tls"`             // Use TLS for gRPC connection (default: false)
+	InsecureSkipVerify bool     `yaml:"skip_tls_verify"`     // Skip TLS certificate verification (for self-signed certs)
+	StationID          string   `yaml:"station_id"`          // Station ID (auto-generated, legacy v1)
+	Name               string   `yaml:"name"`                // Station name (required for v2, unique across org)
+	Tags               []string `yaml:"tags"`                // User-defined tags for filtering ["production", "us-east-1"]
+	BundleRegistryURL  string   `yaml:"bundle_registry_url"` // Bundle registry API URL
+	APIURL             string   `yaml:"api_url"`             // CloudShip Django API URL (for direct API calls)
+	APIKey             string   `yaml:"api_key"`             // CloudShip API key for authentication
+	BaseURL            string   `yaml:"base_url"`            // CloudShip base URL for OAuth discovery (default: https://app.cloudshipai.com)
 	// OAuth settings for MCP authentication via CloudShip
 	OAuth OAuthConfig `yaml:"oauth"` // OAuth configuration
 }
@@ -134,10 +136,12 @@ func Load() (*Config, error) {
 		AIModel:    getAIModelDefault(),                          // Provider-specific defaults
 		AIBaseURL:  getEnvOrDefault("STN_AI_BASE_URL", ""),       // Empty means use provider default
 		// CloudShip Integration (disabled by default)
+		// When enabled, connects to Lighthouse via TLS on port 443 (managed by Fly.io)
 		CloudShip: CloudShipConfig{
 			Enabled:           getEnvBoolOrDefault("STN_CLOUDSHIP_ENABLED", false),
 			RegistrationKey:   getEnvOrDefault("STN_CLOUDSHIP_KEY", ""),
-			Endpoint:          getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:50051"),
+			Endpoint:          getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:443"),
+			UseTLS:            getEnvBoolOrDefault("STN_CLOUDSHIP_USE_TLS", true), // TLS enabled by default for production
 			StationID:         getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
 			BundleRegistryURL: getEnvOrDefault("STN_CLOUDSHIP_BUNDLE_REGISTRY_URL", "https://api.cloudshipai.com"),
 			BaseURL:           getEnvOrDefault("STN_CLOUDSHIP_BASE_URL", "https://app.cloudshipai.com"),
@@ -218,6 +222,13 @@ func Load() (*Config, error) {
 	// Also check for lighthouse_url (legacy/alternative config key)
 	if viper.IsSet("cloudship.lighthouse_url") {
 		cfg.CloudShip.Endpoint = viper.GetString("cloudship.lighthouse_url")
+	}
+	// TLS configuration
+	if viper.IsSet("cloudship.use_tls") {
+		cfg.CloudShip.UseTLS = viper.GetBool("cloudship.use_tls")
+	}
+	if viper.IsSet("cloudship.skip_tls_verify") {
+		cfg.CloudShip.InsecureSkipVerify = viper.GetBool("cloudship.skip_tls_verify")
 	}
 	if viper.IsSet("cloudship.station_id") {
 		cfg.CloudShip.StationID = viper.GetString("cloudship.station_id")

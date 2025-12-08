@@ -151,24 +151,28 @@ func InitializeLighthouseFromConfig(cfg *config.Config, mode DeploymentMode) (*L
 	}
 
 	lighthouseConfig := &LighthouseConfig{
-		Endpoint:        cfg.CloudShip.Endpoint,
-		RegistrationKey: cfg.CloudShip.RegistrationKey,
-		StationID:       cfg.CloudShip.StationID,
-		StationName:     cfg.CloudShip.Name, // V2: user-defined station name
-		StationTags:     cfg.CloudShip.Tags, // V2: user-defined tags
-		TLS:             true,               // Default to TLS for production
-		Environment:     "default",          // TODO: make configurable
+		Endpoint:           cfg.CloudShip.Endpoint,
+		RegistrationKey:    cfg.CloudShip.RegistrationKey,
+		StationID:          cfg.CloudShip.StationID,
+		StationName:        cfg.CloudShip.Name,               // V2: user-defined station name
+		StationTags:        cfg.CloudShip.Tags,               // V2: user-defined tags
+		TLS:                cfg.CloudShip.UseTLS,             // Use TLS setting from config
+		InsecureSkipVerify: cfg.CloudShip.InsecureSkipVerify, // Skip TLS verification for self-signed certs
+		Environment:        "default",                        // TODO: make configurable
 	}
+
+	logging.Info("Lighthouse config: endpoint=%s, TLS=%v, InsecureSkipVerify=%v",
+		lighthouseConfig.Endpoint, lighthouseConfig.TLS, lighthouseConfig.InsecureSkipVerify)
 
 	// Apply defaults
 	if lighthouseConfig.Endpoint == "" {
-		lighthouseConfig.Endpoint = "lighthouse.cloudshipai.com:50051"
+		lighthouseConfig.Endpoint = "lighthouse.cloudshipai.com:443"
+		lighthouseConfig.TLS = true // Default to TLS for production
 	}
 
-	// Disable TLS for localhost testing and port 50051 (standard insecure gRPC port)
-	if strings.Contains(lighthouseConfig.Endpoint, "localhost:") ||
-		strings.Contains(lighthouseConfig.Endpoint, "127.0.0.1:") ||
-		strings.Contains(lighthouseConfig.Endpoint, ":50051") {
+	// Disable TLS for localhost testing (unless explicitly enabled)
+	if !cfg.CloudShip.UseTLS && (strings.Contains(lighthouseConfig.Endpoint, "localhost:") ||
+		strings.Contains(lighthouseConfig.Endpoint, "127.0.0.1:")) {
 		lighthouseConfig.TLS = false
 	}
 

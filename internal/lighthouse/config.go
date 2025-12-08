@@ -31,10 +31,11 @@ func (mode DeploymentMode) String() string {
 // LighthouseConfig holds configuration for connecting to CloudShip Lighthouse
 type LighthouseConfig struct {
 	// Core connection settings
-	Endpoint        string `yaml:"endpoint"`         // lighthouse.cloudship.ai:443
-	RegistrationKey string `yaml:"registration_key"` // CloudShip registration key
-	StationID       string `yaml:"station_id"`       // Generated station ID (legacy v1)
-	TLS             bool   `yaml:"tls"`              // Enable TLS (default: true)
+	Endpoint           string `yaml:"endpoint"`             // lighthouse.cloudship.ai:443
+	RegistrationKey    string `yaml:"registration_key"`     // CloudShip registration key
+	StationID          string `yaml:"station_id"`           // Generated station ID (legacy v1)
+	TLS                bool   `yaml:"tls"`                  // Enable TLS (default: true)
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"` // Skip TLS certificate verification (for self-signed certs)
 
 	// V2 auth settings (when Name is set, v2 flow is used)
 	StationName string   `yaml:"station_name"` // User-defined unique station name (v2)

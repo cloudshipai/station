@@ -22,7 +22,11 @@ func (lc *LighthouseClient) connect() error {
 	// Configure TLS
 	if lc.config.TLS {
 		tlsConfig := &tls.Config{
-			ServerName: strings.Split(lc.config.Endpoint, ":")[0],
+			ServerName:         strings.Split(lc.config.Endpoint, ":")[0],
+			InsecureSkipVerify: lc.config.InsecureSkipVerify,
+		}
+		if lc.config.InsecureSkipVerify {
+			logging.Info("⚠️ TLS certificate verification disabled - not recommended for production")
 		}
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {

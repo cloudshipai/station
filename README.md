@@ -1165,7 +1165,8 @@ cloudship:
   tags: ["production", "us-east-1", "sre-team"]
   
   # CloudShip endpoints (defaults shown - usually no need to change)
-  endpoint: "lighthouse.cloudshipai.com:50051"
+  endpoint: "lighthouse.cloudshipai.com:443"  # TLS-secured gRPC endpoint
+  use_tls: true                               # TLS enabled by default
   base_url: "https://app.cloudshipai.com"
   
   # OAuth settings for MCP authentication
@@ -1180,19 +1181,30 @@ cloudship:
 
 ### Development Setup
 
-For local development with CloudShip:
+For local development with a local Lighthouse instance:
 
 ```yaml
 cloudship:
   enabled: true
   registration_key: "your-dev-key"
   name: "dev-station"
-  endpoint: "localhost:50051"           # Local Lighthouse
+  endpoint: "localhost:50051"           # Local Lighthouse (no TLS)
+  use_tls: false                        # Disable TLS for local development
   base_url: "http://localhost:8000"     # Local Django
   oauth:
     enabled: true
     client_id: "your-dev-client-id"
     introspect_url: "http://localhost:8000/oauth/introspect/"
+```
+
+For connecting to **production CloudShip** during development (recommended):
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-registration-key"
+  name: "dev-station"
+  # Uses defaults: endpoint=lighthouse.cloudshipai.com:443, use_tls=true
 ```
 
 ### Security Notes
