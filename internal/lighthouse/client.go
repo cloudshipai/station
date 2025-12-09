@@ -36,6 +36,9 @@ type LighthouseClient struct {
 	// Buffering for reliability
 	runBuffer    chan *proto.SendRunRequest
 	healthBuffer chan *proto.SystemHealthRequest
+
+	// Reconnection callback - called when heartbeat is rejected indicating ManagementChannel is dead
+	onReconnectNeeded func()
 }
 
 // NewLighthouseClient creates a new Lighthouse client
@@ -112,6 +115,26 @@ func (lc *LighthouseClient) GetEnvironment() string {
 	return lc.config.Environment
 }
 
+// SetReconnectCallback sets a callback function that will be called when
+// heartbeat rejection indicates the ManagementChannel needs reconnection.
+// This allows the ManagementChannelService to be notified when the connection is dead.
+func (lc *LighthouseClient) SetReconnectCallback(callback func()) {
+	lc.mu.Lock()
+	defer lc.mu.Unlock()
+	lc.onReconnectNeeded = callback
+}
+
+// triggerReconnect calls the reconnection callback if set
+func (lc *LighthouseClient) triggerReconnect() {
+	lc.mu.RLock()
+	callback := lc.onReconnectNeeded
+	lc.mu.RUnlock()
+
+	if callback != nil {
+		callback()
+	}
+}
+
 // generateStationID generates a simple station ID
 func generateStationID() string {
 	hostname, _ := os.Hostname()
@@ -123,7 +146,7 @@ func (lc *LighthouseClient) getStationCapabilities() *proto.StationCapabilities 
 	return &proto.StationCapabilities{
 		CanExecuteAgents:      true,
 		HasMcpServers:         true,
-		SupportsBidirectional: lc.mode == ModeServe || lc.mode == ModeStdio,
+		SupportsBidirectional: lc.mode == ModeServe, // stdio mode doesn't connect to platform
 		Environments:          []string{lc.config.Environment},
 		AgentCount:            0, // TODO: get actual count
 		ToolCount:             0, // TODO: get actual count

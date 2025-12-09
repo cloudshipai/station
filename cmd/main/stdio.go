@@ -112,10 +112,11 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Initialize agent service with Lighthouse integration (same as server mode)
 	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
 
-	// Initialize remote control service for bidirectional management (same as server mode)
+	// Initialize remote control service for bidirectional management (serve mode only)
+	// Note: stdio mode does NOT connect to CloudShip platform - it's for local MCP integration only
 	var remoteControlSvc *lighthouseServices.RemoteControlService
-	if lighthouseClient != nil && (lighthouseClient.GetMode() == lighthouse.ModeServe || lighthouseClient.GetMode() == lighthouse.ModeStdio) {
-		log.Printf("🌐 Initializing stdio mode remote control via CloudShip")
+	if lighthouseClient != nil && lighthouseClient.GetMode() == lighthouse.ModeServe {
+		log.Printf("🌐 Initializing server mode remote control via CloudShip")
 
 		// Use v2 config if station name is provided
 		remoteControlConfig := lighthouseServices.RemoteControlConfig{
@@ -140,7 +141,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		if err := remoteControlSvc.Start(longLivedCtx); err != nil {
 			log.Printf("Warning: Failed to start remote control service: %v", err)
 		} else {
-			log.Printf("✅ Stdio mode remote control active - CloudShip can manage this Station")
+			log.Printf("✅ Server mode remote control active - CloudShip can manage this Station")
 
 			// Wire up CloudShip memory client for memory integration
 			if memoryClient := remoteControlSvc.GetMemoryClient(); memoryClient != nil {

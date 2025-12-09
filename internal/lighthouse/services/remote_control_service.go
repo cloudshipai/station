@@ -81,6 +81,14 @@ func NewRemoteControlServiceWithConfig(
 	// Set the handler in the management channel
 	managementChannel.managementHandler = managementHandler
 
+	// Wire up reconnect callback: when heartbeat is rejected with "not registered",
+	// the LighthouseClient calls this callback to force ManagementChannel reconnection.
+	// This fixes the bug where ManagementChannel dies silently but heartbeat keeps running.
+	lighthouseClient.SetReconnectCallback(func() {
+		logging.Info("Reconnect callback triggered by heartbeat rejection")
+		managementChannel.ForceReconnect()
+	})
+
 	// Legacy streaming service disabled - CloudShip team only implemented ManagementChannel
 	// metricsService := NewMetricsService()
 	// commandHandler := NewCommandHandlerService(agentService, metricsService, repos, lighthouseClient)
@@ -111,9 +119,9 @@ func (rcs *RemoteControlService) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Verify supported mode (serve or stdio)
-	if rcs.lighthouseClient.GetMode() != lighthouse.ModeServe && rcs.lighthouseClient.GetMode() != lighthouse.ModeStdio {
-		logging.Info("Station not in supported mode (serve/stdio) - remote control functionality will be disabled")
+	// Verify supported mode (serve only - stdio mode doesn't connect to platform)
+	if rcs.lighthouseClient.GetMode() != lighthouse.ModeServe {
+		logging.Info("Station not in serve mode - remote control functionality will be disabled")
 		return nil
 	}
 

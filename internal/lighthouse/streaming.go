@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"station/internal/lighthouse/proto"
 	"station/internal/logging"
+	"strings"
 	"time"
 )
 
@@ -58,8 +59,8 @@ func (lc *LighthouseClient) startBackgroundWorkers() {
 		}
 	}()
 
-	// Health data worker (serve mode and stdio mode)
-	if lc.mode == ModeServe || lc.mode == ModeStdio {
+	// Health data worker (serve mode only - stdio mode doesn't connect to platform)
+	if lc.mode == ModeServe {
 		lc.wg.Add(1)
 		go func() {
 			defer lc.wg.Done()
@@ -72,29 +73,28 @@ func (lc *LighthouseClient) startBackgroundWorkers() {
 				}
 			}
 		}()
-
-		// NOTE: Heartbeat worker removed for stdio/serve modes to prevent "too_many_pings" issue
-		// Management channel handles connection health and reconnection automatically
-		// This eliminates dual heartbeat conflict with management channel keepalives
 	}
 
-	// Heartbeat worker (all modes - required for Lighthouse status tracking)
+	// Heartbeat worker (serve mode only - required for Lighthouse status tracking)
 	// Heartbeat is separate from management channel and required to keep station marked as online
-	lc.wg.Add(1)
-	go func() {
-		defer lc.wg.Done()
-		ticker := time.NewTicker(lc.config.HeartbeatInterval)
-		defer ticker.Stop()
+	// Note: stdio mode does NOT send heartbeats - it's for local MCP integration only
+	if lc.mode == ModeServe {
+		lc.wg.Add(1)
+		go func() {
+			defer lc.wg.Done()
+			ticker := time.NewTicker(lc.config.HeartbeatInterval)
+			defer ticker.Stop()
 
-		for {
-			select {
-			case <-lc.ctx.Done():
-				return
-			case <-ticker.C:
-				lc.sendHeartbeat()
+			for {
+				select {
+				case <-lc.ctx.Done():
+					return
+				case <-ticker.C:
+					lc.sendHeartbeat()
+				}
 			}
-		}
-	}()
+		}()
+	}
 }
 
 // sendRunSync sends run data synchronously (internal)
@@ -144,6 +144,8 @@ func (lc *LighthouseClient) sendHealthSync(req *proto.SystemHealthRequest) {
 // sendHeartbeat sends periodic heartbeat to Lighthouse
 // Required for all modes to keep station marked as online in CloudShip UI
 // Separate from management channel which handles bidirectional communication
+// Also serves as a health check - if heartbeat is rejected with "not registered",
+// it signals that the ManagementChannel is dead and needs reconnection.
 func (lc *LighthouseClient) sendHeartbeat() {
 	if !lc.IsConnected() {
 		return
@@ -167,6 +169,12 @@ func (lc *LighthouseClient) sendHeartbeat() {
 
 	if !resp.Success {
 		logging.Info("CloudShip heartbeat rejected: %s", resp.Message)
+		// If heartbeat is rejected with "not registered", the ManagementChannel is dead
+		// Trigger reconnection callback to force ManagementChannel to reconnect
+		if strings.Contains(resp.Message, "not registered") || strings.Contains(resp.Message, "Station not registered") {
+			logging.Info("Heartbeat rejection indicates ManagementChannel is dead - triggering reconnection")
+			lc.triggerReconnect()
+		}
 	} else {
 		logging.Debug("Heartbeat sent successfully to CloudShip")
 	}

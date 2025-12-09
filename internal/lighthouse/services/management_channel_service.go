@@ -455,6 +455,32 @@ func (mcs *ManagementChannelService) SendStatusUpdate(statusMsg *proto.Managemen
 	return nil
 }
 
+// ForceReconnect clears the current stream to trigger reconnection.
+// This is called by the LighthouseClient when heartbeat is rejected with "not registered",
+// indicating the ManagementChannel is dead but the station didn't detect it.
+func (mcs *ManagementChannelService) ForceReconnect() {
+	logging.Info("ForceReconnect called - clearing current stream to trigger reconnection")
+
+	// Clear the current stream - this will cause maintainConnection loop to reconnect
+	if mcs.currentStream != nil {
+		mcs.currentStream = nil
+	}
+
+	// Clear memory client stream
+	if mcs.memoryClient != nil {
+		mcs.memoryClient.ClearStream()
+	}
+
+	// Update global status to disconnected
+	lighthouse.SetConnected(false, "")
+	lighthouse.SetRegistered(false, "")
+
+	// Reset registration state so we can reconnect
+	mcs.registrationState = RegistrationStateUnregistered
+
+	logging.Info("ManagementChannel stream cleared - reconnection will be attempted by maintainConnection loop")
+}
+
 // handleResponse routes responses to appropriate handlers
 func (mcs *ManagementChannelService) handleResponse(msg *proto.ManagementMessage) {
 	switch resp := msg.Message.(type) {
