@@ -143,6 +143,7 @@ func Load() (*Config, error) {
 			Endpoint:          getEnvOrDefault("STN_CLOUDSHIP_ENDPOINT", "lighthouse.cloudshipai.com:443"),
 			UseTLS:            getEnvBoolOrDefault("STN_CLOUDSHIP_USE_TLS", true), // TLS enabled by default for production
 			StationID:         getEnvOrDefault("STN_CLOUDSHIP_STATION_ID", ""),
+			Name:              getEnvOrDefault("STN_CLOUDSHIP_NAME", ""), // v2: user-defined station name
 			BundleRegistryURL: getEnvOrDefault("STN_CLOUDSHIP_BUNDLE_REGISTRY_URL", "https://api.cloudshipai.com"),
 			BaseURL:           getEnvOrDefault("STN_CLOUDSHIP_BASE_URL", "https://app.cloudshipai.com"),
 			OAuth: OAuthConfig{

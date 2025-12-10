@@ -802,6 +802,7 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 		"STN_CLOUDSHIP_KEY",
 		"STN_CLOUDSHIP_ENDPOINT",
 		"STN_CLOUDSHIP_STATION_ID",
+		"STN_CLOUDSHIP_NAME", // v2: user-defined station name for CloudShip
 		"STN_CLOUDSHIP_BASE_URL",
 		"CLOUDSHIP_API_KEY",
 		"CLOUDSHIPAI_REGISTRATION_KEY",

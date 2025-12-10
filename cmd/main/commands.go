@@ -402,6 +402,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if envCloudShipStationID := os.Getenv("STN_CLOUDSHIP_STATION_ID"); envCloudShipStationID != "" && viper.GetString("cloudship.station_id") == "" {
 		viper.Set("cloudship.station_id", envCloudShipStationID)
 	}
+	if envCloudShipName := os.Getenv("STN_CLOUDSHIP_NAME"); envCloudShipName != "" && viper.GetString("cloudship.name") == "" {
+		viper.Set("cloudship.name", envCloudShipName)
+	}
 	if envCloudShipBaseURL := os.Getenv("STN_CLOUDSHIP_BASE_URL"); envCloudShipBaseURL != "" && viper.GetString("cloudship.base_url") == "" {
 		viper.Set("cloudship.base_url", envCloudShipBaseURL)
 	}
