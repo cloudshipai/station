@@ -213,6 +213,10 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 
 	// CloudShip lighthouse status
 	router.GET("/lighthouse/status", h.LighthouseStatusHandler)
+
+	// Version routes (public - no auth required for checking updates)
+	versionGroup := router.Group("/version")
+	h.registerVersionRoutes(versionGroup)
 }
 
 // requireAdminInServerMode is a middleware that requires admin privileges in server mode

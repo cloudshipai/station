@@ -31,6 +31,7 @@ import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, sy
 import { apiClient } from './api/client';
 import { getLayoutedNodes, layoutElements } from './utils/layoutUtils';
 import CloudShipStatus from './components/CloudShipStatus';
+import VersionStatus from './components/VersionStatus';
 import { RunsPage as RunsPageComponent } from './components/runs/RunsPage';
 import { SyncModal } from './components/sync/SyncModal';
 import { AddServerModal } from './components/modals/AddServerModal';
@@ -334,7 +335,8 @@ const Layout = ({ children }: any) => {
         </nav>
 
         {/* Footer */}
-        <div className="p-3 border-t border-gray-200 bg-white">
+        <div className="p-3 border-t border-gray-200 bg-white space-y-2">
+          <VersionStatus />
           <CloudShipStatus />
         </div>
       </div>

@@ -180,6 +180,42 @@ export const tracesApi = {
     apiClient.get<{trace_id: string, trace: JaegerTrace, error?: string}>(`/traces/trace/${traceId}`),
 };
 
+// Version API types
+export interface VersionInfo {
+  current_version: string;
+  latest_version: string;
+  update_available: boolean;
+  release_url?: string;
+  release_notes?: string;
+  published_at?: string;
+  checked_at: string;
+}
+
+export interface CurrentVersionInfo {
+  version: string;
+  build_time: string;
+  go_version: string;
+  go_arch: string;
+  go_os: string;
+  compiler: string;
+  is_dev: boolean;
+}
+
+export interface UpdateResult {
+  success: boolean;
+  message: string;
+  previous_version?: string;
+  new_version?: string;
+  error?: string;
+}
+
+// Version API
+export const versionApi = {
+  getCurrent: () => apiClient.get<CurrentVersionInfo>('/version'),
+  checkForUpdates: () => apiClient.get<VersionInfo>('/version/check'),
+  performUpdate: () => apiClient.post<UpdateResult>('/version/update'),
+};
+
 // Reports API
 export const reportsApi = {
   getAll: (params?: { environment_id?: number; limit?: number; offset?: number }) => {

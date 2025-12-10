@@ -45,6 +45,7 @@ import (
 	"station/internal/services"
 	"station/internal/telemetry"
 	"station/internal/ui"
+	"station/internal/version"
 	// "station/pkg/crypto" // Removed - no longer needed for file-based configs
 )
 
@@ -169,7 +170,7 @@ func (s *Server) healthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"service": "station-api",
-		"version": "1.0.0",
+		"version": version.GetVersion(),
 	})
 }
 

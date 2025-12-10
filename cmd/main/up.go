@@ -242,19 +242,38 @@ func runUp(cmd *cobra.Command, args []string) error {
 			// - workspace: point to container path
 			// - localhost URLs: rewrite to host.docker.internal for Docker networking
 			fmt.Printf("   Copying config and fixing paths for container...\n")
+
+			// Build sed command to fix paths
+			sedCmd := `cp /host-config/config.yaml /home/station/.config/station/config.yaml && \
+					sed -i 's|database_url:.*|database_url: /home/station/.config/station/station.db|' /home/station/.config/station/config.yaml && \
+					sed -i 's|workspace:.*|workspace: /home/station/.config/station|' /home/station/.config/station/config.yaml && \
+					sed -i 's|localhost:|host.docker.internal:|g' /home/station/.config/station/config.yaml && \
+					sed -i 's|127\.0\.0\.1:|host.docker.internal:|g' /home/station/.config/station/config.yaml`
+
+			// Check if STATION_LOCAL_MODE is set - check both env var and --env flags
+			localModeOverride := os.Getenv("STATION_LOCAL_MODE")
+			// Also check --env flags for STATION_LOCAL_MODE
+			envVars, _ := cmd.Flags().GetStringSlice("env")
+			for _, envVar := range envVars {
+				if strings.HasPrefix(envVar, "STATION_LOCAL_MODE=") {
+					localModeOverride = strings.TrimPrefix(envVar, "STATION_LOCAL_MODE=")
+					break
+				}
+			}
+			if localModeOverride != "" {
+				sedCmd += fmt.Sprintf(` && sed -i 's|local_mode:.*|local_mode: %s|' /home/station/.config/station/config.yaml`, localModeOverride)
+			}
+
 			copyArgs := []string{
 				"run", "--rm",
 				"-v", "station-config:/home/station/.config/station",
 				"-v", fmt.Sprintf("%s:/host-config:ro", hostConfigDir),
 				imageName,
-				"sh", "-c", `cp /host-config/config.yaml /home/station/.config/station/config.yaml && \
-					sed -i 's|database_url:.*|database_url: /home/station/.config/station/station.db|' /home/station/.config/station/config.yaml && \
-					sed -i 's|workspace:.*|workspace: /home/station/.config/station|' /home/station/.config/station/config.yaml && \
-					sed -i 's|localhost:|host.docker.internal:|g' /home/station/.config/station/config.yaml && \
-					sed -i 's|127\.0\.0\.1:|host.docker.internal:|g' /home/station/.config/station/config.yaml`,
+				"sh", "-c", sedCmd,
 			}
 
 			copyCmd := dockerCommand(copyArgs...)
+			copyCmd.Stderr = os.Stderr // Show any errors
 			if err := copyCmd.Run(); err != nil {
 				log.Printf("Warning: Failed to copy host config: %v (will use defaults)", err)
 			} else {
@@ -783,8 +802,25 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 		"STN_CLOUDSHIP_KEY",
 		"STN_CLOUDSHIP_ENDPOINT",
 		"STN_CLOUDSHIP_STATION_ID",
+		"STN_CLOUDSHIP_BASE_URL",
 		"CLOUDSHIP_API_KEY",
 		"CLOUDSHIPAI_REGISTRATION_KEY",
+	}
+
+	// CloudShip OAuth settings (for MCP authentication via CloudShip)
+	oauthKeys := []string{
+		"STN_CLOUDSHIP_OAUTH_ENABLED",
+		"STN_CLOUDSHIP_OAUTH_CLIENT_ID",
+		"STN_CLOUDSHIP_OAUTH_AUTH_URL",
+		"STN_CLOUDSHIP_OAUTH_TOKEN_URL",
+		"STN_CLOUDSHIP_OAUTH_INTROSPECT_URL",
+		"STN_CLOUDSHIP_OAUTH_REDIRECT_URI",
+		"STN_CLOUDSHIP_OAUTH_SCOPES",
+	}
+
+	// Station mode control
+	modeKeys := []string{
+		"STATION_LOCAL_MODE", // Set to "false" to enable OAuth authentication
 	}
 
 	// OpenTelemetry for distributed tracing
@@ -805,6 +841,8 @@ func addEnvironmentVariables(dockerArgs *[]string, cmd *cobra.Command) error {
 	// Combine all keys
 	allKeys := append(aiKeys, awsKeys...)
 	allKeys = append(allKeys, cloudshipKeys...)
+	allKeys = append(allKeys, oauthKeys...)
+	allKeys = append(allKeys, modeKeys...)
 	allKeys = append(allKeys, otelKeys...)
 	allKeys = append(allKeys, otherKeys...)
 

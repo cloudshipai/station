@@ -402,6 +402,32 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if envCloudShipStationID := os.Getenv("STN_CLOUDSHIP_STATION_ID"); envCloudShipStationID != "" && viper.GetString("cloudship.station_id") == "" {
 		viper.Set("cloudship.station_id", envCloudShipStationID)
 	}
+	if envCloudShipBaseURL := os.Getenv("STN_CLOUDSHIP_BASE_URL"); envCloudShipBaseURL != "" && viper.GetString("cloudship.base_url") == "" {
+		viper.Set("cloudship.base_url", envCloudShipBaseURL)
+	}
+
+	// CloudShip OAuth configuration via environment variables
+	if envOAuthEnabled := os.Getenv("STN_CLOUDSHIP_OAUTH_ENABLED"); envOAuthEnabled != "" && !viper.IsSet("cloudship.oauth.enabled") {
+		viper.Set("cloudship.oauth.enabled", envOAuthEnabled == "true")
+	}
+	if envOAuthClientID := os.Getenv("STN_CLOUDSHIP_OAUTH_CLIENT_ID"); envOAuthClientID != "" && viper.GetString("cloudship.oauth.client_id") == "" {
+		viper.Set("cloudship.oauth.client_id", envOAuthClientID)
+	}
+	if envOAuthAuthURL := os.Getenv("STN_CLOUDSHIP_OAUTH_AUTH_URL"); envOAuthAuthURL != "" && viper.GetString("cloudship.oauth.auth_url") == "" {
+		viper.Set("cloudship.oauth.auth_url", envOAuthAuthURL)
+	}
+	if envOAuthTokenURL := os.Getenv("STN_CLOUDSHIP_OAUTH_TOKEN_URL"); envOAuthTokenURL != "" && viper.GetString("cloudship.oauth.token_url") == "" {
+		viper.Set("cloudship.oauth.token_url", envOAuthTokenURL)
+	}
+	if envOAuthIntrospectURL := os.Getenv("STN_CLOUDSHIP_OAUTH_INTROSPECT_URL"); envOAuthIntrospectURL != "" && viper.GetString("cloudship.oauth.introspect_url") == "" {
+		viper.Set("cloudship.oauth.introspect_url", envOAuthIntrospectURL)
+	}
+	if envOAuthRedirectURI := os.Getenv("STN_CLOUDSHIP_OAUTH_REDIRECT_URI"); envOAuthRedirectURI != "" && viper.GetString("cloudship.oauth.redirect_uri") == "" {
+		viper.Set("cloudship.oauth.redirect_uri", envOAuthRedirectURI)
+	}
+	if envOAuthScopes := os.Getenv("STN_CLOUDSHIP_OAUTH_SCOPES"); envOAuthScopes != "" && viper.GetString("cloudship.oauth.scopes") == "" {
+		viper.Set("cloudship.oauth.scopes", envOAuthScopes)
+	}
 
 	fmt.Printf("MCP Port: %d\n", viper.GetInt("mcp_port"))
 	fmt.Printf("API Port: %d\n", viper.GetInt("api_port"))
@@ -480,7 +506,8 @@ func autoInitializeConfig(configFile, configDir string) error {
 	viper.Set("ssh_port", getEnvIntOrDefault("STATION_SSH_PORT", 2222))
 	viper.Set("telemetry_enabled", getEnvBoolOrDefault("STATION_TELEMETRY_ENABLED", false))
 	viper.Set("debug", getEnvBoolOrDefault("STATION_DEBUG", false))
-	viper.Set("local_mode", true) // Always local mode for containers
+	// Local mode can be disabled via STATION_LOCAL_MODE=false to enable OAuth authentication
+	viper.Set("local_mode", getEnvBoolOrDefault("STATION_LOCAL_MODE", true))
 
 	// Write config file
 	viper.SetConfigFile(configFile)
@@ -683,7 +710,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	viper.Set("ssh_host_key_path", "./ssh_host_key")
 	viper.Set("admin_username", "admin")
 	viper.Set("debug", false)
-	viper.Set("local_mode", true) // Default to local mode
+	// Only set local_mode if not already configured (preserve value from config file or env var)
+	if !viper.IsSet("local_mode") {
+		viper.Set("local_mode", true) // Default to local mode
+	}
 
 	// Set AI provider configuration
 	if !configExists {
