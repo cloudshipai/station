@@ -1,10 +1,10 @@
 syntax = "proto3";
 
 package lighthouse.v1;
-option go_package = "station/internal/lighthouse/proto";
+option go_package = "./internal/proto";
 
 import "google/protobuf/timestamp.proto";
-import "internal/lighthouse/proto/data_ingestion.proto";
+import "internal/proto/data_ingestion.proto";
 
 // Lighthouse service for Station-CloudShip integration
 // Handles all three deployment modes: stdio, serve, cli
@@ -42,6 +42,9 @@ service LighthouseService {
     rpc CallTool(CallToolRequest) returns (CallToolResponse);
     rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
     rpc ExecuteAgent(ExecuteAgentRequest) returns (ExecuteAgentResponse);
+    
+    // Station Discovery (Multi-station support)
+    rpc ListStations(ListStationsRequest) returns (ListStationsResponse);
 }
 
 // Deployment mode enumeration
@@ -397,6 +400,7 @@ message HeartbeatResponse {
 message ListToolsRequest {
     string registration_key = 1;
     string environment = 2;
+    string station_name = 3;  // Optional: specific station name (for multi-station routing)
 }
 
 message ListToolsResponse {
@@ -408,6 +412,7 @@ message CallToolRequest {
     string environment = 2;
     string tool_name = 3;
     map<string, string> parameters = 4;
+    string station_name = 5;  // Optional: specific station name (for multi-station routing)
 }
 
 message CallToolResponse {
@@ -419,6 +424,7 @@ message CallToolResponse {
 message ListAgentsRequest {
     string registration_key = 1;
     string environment = 2;
+    string station_name = 3;  // Optional: specific station name (for multi-station routing)
 }
 
 message ListAgentsResponse {
@@ -431,6 +437,7 @@ message ExecuteAgentRequest {
     string agent_id = 3;
     string task = 4;
     map<string, string> variables = 5;
+    string station_name = 6;  // Optional: specific station name (for multi-station routing)
 }
 
 message ExecuteAgentResponse {
@@ -560,6 +567,7 @@ message AuthResult {
     string name = 4;                 // Confirmed station name
     int64 heartbeat_interval_ms = 5; // Recommended heartbeat interval (default: 60000ms)
     bool replaced_existing = 6;      // True if this auth replaced an existing connection
+    string org_id = 7;               // Organization ID (UUID) for multi-tenant filtering
 }
 
 // Disconnect message - server-initiated disconnection
@@ -740,6 +748,7 @@ message GetAgentDetailsRequest {
     string registration_key = 1;  // Station registration key for routing
     string agent_id = 2;
     string environment = 3;
+    string station_name = 4;  // Optional: specific station name for multi-station routing
 }
 
 message GetAgentDetailsResponse {
@@ -751,6 +760,7 @@ message UpdateAgentPromptRequest {
     string agent_id = 2;
     string environment = 3;
     string new_prompt = 4;
+    string station_name = 5;  // Optional: specific station name for multi-station routing
 }
 
 message UpdateAgentPromptResponse {
@@ -827,5 +837,42 @@ message DebugResponse {
     bool success = 1;
     string data = 2;  // JSON-encoded response data
     string error = 3;
+}
+
+// ============================================================================
+// STATION DISCOVERY MESSAGES (Multi-station support)
+// ============================================================================
+
+// Request to list all stations connected with a registration key
+message ListStationsRequest {
+    string registration_key = 1;  // Registration key to list stations for
+}
+
+// Response containing all stations for a registration key
+message ListStationsResponse {
+    repeated StationInfo stations = 1;
+    int32 total_stations = 2;
+    int32 online_stations = 3;
+}
+
+// Detailed information about a connected station
+message StationInfo {
+    string station_id = 1;        // Database station ID (UUID)
+    string name = 2;              // User-defined unique station name
+    string registration_key = 3;  // Registration key this station uses
+    repeated string tags = 4;     // User-defined tags ["production", "us-east-1"]
+    string hostname = 5;          // Machine hostname
+    string version = 6;           // Station CLI version
+    string os = 7;                // Operating system
+    string arch = 8;              // CPU architecture
+    string default_environment = 9; // Default environment name
+    bool is_online = 10;          // Whether station is currently connected
+    google.protobuf.Timestamp last_heartbeat = 11;  // Last heartbeat time
+    google.protobuf.Timestamp connected_at = 12;    // Connection time
+    
+    // Cached capabilities (may be stale, use ListAgents/ListTools for live data)
+    int32 agent_count = 13;
+    int32 tool_count = 14;
+    int32 mcp_server_count = 15;
 }
 

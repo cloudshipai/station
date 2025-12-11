@@ -52,10 +52,12 @@ type ManagementChannelService struct {
 	connectionCancel  context.CancelFunc
 	currentStream     proto.LighthouseService_ManagementChannelClient
 	registrationState RegistrationState
-	memoryClient      *lighthouse.MemoryClient // For CloudShip memory integration
-	useV2Auth         bool                     // True if using v2 StationAuth flow
-	stationID         string                   // Station ID returned by AuthResult (v2)
-	heartbeatInterval time.Duration            // Heartbeat interval from AuthResult (v2)
+	memoryClient      *lighthouse.MemoryClient                   // For CloudShip memory integration
+	useV2Auth         bool                                       // True if using v2 StationAuth flow
+	stationID         string                                     // Station ID returned by AuthResult (v2)
+	orgID             string                                     // Organization ID returned by AuthResult (v2) for telemetry
+	heartbeatInterval time.Duration                              // Heartbeat interval from AuthResult (v2)
+	onAuthSuccess     func(stationID, stationName, orgID string) // Callback when auth succeeds
 }
 
 // ManagementChannelConfig holds configuration for the management channel service
@@ -106,6 +108,27 @@ func NewManagementChannelServiceV2(
 // GetMemoryClient returns the memory client for CloudShip memory integration
 func (mcs *ManagementChannelService) GetMemoryClient() *lighthouse.MemoryClient {
 	return mcs.memoryClient
+}
+
+// GetStationID returns the station ID assigned by CloudShip after authentication
+func (mcs *ManagementChannelService) GetStationID() string {
+	return mcs.stationID
+}
+
+// GetOrgID returns the organization ID from CloudShip for telemetry filtering
+func (mcs *ManagementChannelService) GetOrgID() string {
+	return mcs.orgID
+}
+
+// GetStationName returns the station name
+func (mcs *ManagementChannelService) GetStationName() string {
+	return mcs.stationName
+}
+
+// SetOnAuthSuccess sets a callback to be invoked when CloudShip auth succeeds
+// This is used to update TelemetryService with station/org info for trace filtering
+func (mcs *ManagementChannelService) SetOnAuthSuccess(callback func(stationID, stationName, orgID string)) {
+	mcs.onAuthSuccess = callback
 }
 
 // Start begins the management channel streaming connection
@@ -584,17 +607,23 @@ func (mcs *ManagementChannelService) buildStationAuth() *proto.StationAuth {
 func (mcs *ManagementChannelService) handleAuthResult(result *proto.AuthResult) {
 	if result.Success {
 		mcs.stationID = result.StationId
+		mcs.orgID = result.OrgId // Capture org ID for telemetry filtering
 		if result.HeartbeatIntervalMs > 0 {
 			mcs.heartbeatInterval = time.Duration(result.HeartbeatIntervalMs) * time.Millisecond
 		}
 		mcs.registrationState = RegistrationStateRegistered
 
-		logging.Info("V2 auth successful: station_id=%s name=%s heartbeat_interval=%v replaced_existing=%v",
-			result.StationId, result.Name, mcs.heartbeatInterval, result.ReplacedExisting)
+		logging.Info("V2 auth successful: station_id=%s name=%s org_id=%s heartbeat_interval=%v replaced_existing=%v",
+			result.StationId, result.Name, result.OrgId, mcs.heartbeatInterval, result.ReplacedExisting)
 
 		// Update global lighthouse status
 		lighthouse.SetConnected(true, "cloudship")
 		lighthouse.SetRegistered(true, mcs.registrationKey)
+
+		// Notify callback (used for telemetry service to get org_id)
+		if mcs.onAuthSuccess != nil {
+			mcs.onAuthSuccess(mcs.stationID, mcs.stationName, mcs.orgID)
+		}
 	} else {
 		logging.Error("V2 auth failed: %s", result.Error)
 

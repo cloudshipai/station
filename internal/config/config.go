@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -15,17 +16,14 @@ var (
 )
 
 type Config struct {
-	DatabaseURL      string
-	SSHPort          int
-	MCPPort          int
-	APIPort          int
-	SSHHostKeyPath   string
-	AdminUsername    string
-	Environment      string
-	TelemetryEnabled bool
-	OTELEndpoint     string // OpenTelemetry OTLP endpoint for exporting traces
-	JaegerQueryURL   string // Jaeger Query API endpoint for fetching traces
-	Debug            bool   // Debug mode enables verbose logging
+	DatabaseURL    string
+	SSHPort        int
+	MCPPort        int
+	APIPort        int
+	SSHHostKeyPath string
+	AdminUsername  string
+	Environment    string
+	Debug          bool // Debug mode enables verbose logging
 	// Workspace Configuration
 	Workspace string // Custom workspace path (overrides XDG paths)
 	// AI Provider Configuration
@@ -35,9 +33,16 @@ type Config struct {
 	AIBaseURL  string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
 	// CloudShip Integration
 	CloudShip CloudShipConfig
+	// Telemetry Configuration (distributed tracing)
+	Telemetry TelemetryConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
+
+	// Legacy fields (deprecated, use Telemetry struct instead)
+	TelemetryEnabled bool   // Deprecated: use Telemetry.Enabled
+	OTELEndpoint     string // Deprecated: use Telemetry.Endpoint
+	JaegerQueryURL   string // Deprecated: use Telemetry.JaegerQueryURL
 }
 
 // FakerTemplate defines a reusable faker configuration
@@ -75,6 +80,57 @@ type OAuthConfig struct {
 	IntrospectURL string `yaml:"introspect_url"` // CloudShip OAuth introspect URL
 	RedirectURI   string `yaml:"redirect_uri"`   // OAuth redirect URI (for auth code flow)
 	Scopes        string `yaml:"scopes"`         // OAuth scopes (space-separated)
+}
+
+// TelemetryProvider defines the type of telemetry backend
+type TelemetryProvider string
+
+const (
+	// TelemetryProviderNone disables telemetry export
+	TelemetryProviderNone TelemetryProvider = "none"
+	// TelemetryProviderJaeger uses local Jaeger (no auth, http://localhost:4318)
+	TelemetryProviderJaeger TelemetryProvider = "jaeger"
+	// TelemetryProviderOTLP uses a custom OTLP endpoint with optional auth
+	TelemetryProviderOTLP TelemetryProvider = "otlp"
+	// TelemetryProviderCloudShip uses CloudShip's managed telemetry (telemetry.cloudshipai.com)
+	TelemetryProviderCloudShip TelemetryProvider = "cloudship"
+)
+
+// TelemetryConfig holds configuration for distributed tracing
+type TelemetryConfig struct {
+	// Enabled controls whether telemetry is active (default: true)
+	Enabled bool `yaml:"enabled"`
+
+	// Provider determines the telemetry backend: "none", "jaeger", "otlp", "cloudship"
+	// - "none": Disable trace export
+	// - "jaeger": Local Jaeger at http://localhost:4318 (no auth)
+	// - "otlp": Custom OTLP endpoint (set Endpoint and optional Headers)
+	// - "cloudship": CloudShip managed telemetry (uses registration key for auth)
+	Provider TelemetryProvider `yaml:"provider"`
+
+	// Endpoint is the OTLP endpoint URL (used for "otlp" and "jaeger" providers)
+	// Examples:
+	//   - http://localhost:4318 (local Jaeger)
+	//   - https://otel-collector.example.com:4318 (custom OTLP)
+	// For "cloudship" provider, this is automatically set to telemetry.cloudshipai.com
+	Endpoint string `yaml:"endpoint"`
+
+	// Headers are custom HTTP headers to send with OTLP requests (for "otlp" provider)
+	// Example: {"Authorization": "Bearer my-token"}
+	Headers map[string]string `yaml:"headers"`
+
+	// JaegerQueryURL is the Jaeger Query API endpoint for fetching traces (UI/API)
+	// Default: http://localhost:16686
+	JaegerQueryURL string `yaml:"jaeger_query_url"`
+
+	// ServiceName overrides the default service name in traces (default: "station")
+	ServiceName string `yaml:"service_name"`
+
+	// Environment tag added to all traces (default: "development")
+	Environment string `yaml:"environment"`
+
+	// SampleRate controls trace sampling (0.0 to 1.0, default: 1.0 for dev, 0.1 for prod)
+	SampleRate float64 `yaml:"sample_rate"`
 }
 
 // InitViper initializes viper to read config from the correct location
@@ -117,17 +173,14 @@ func InitViper(cfgFile string) error {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		DatabaseURL:      getEnvOrDefault("DATABASE_URL", GetDatabasePath()),
-		SSHPort:          getEnvIntOrDefault("SSH_PORT", 2222),
-		MCPPort:          getEnvIntOrDefault("MCP_PORT", 8586),
-		APIPort:          getEnvIntOrDefault("API_PORT", 8585),
-		SSHHostKeyPath:   getEnvOrDefault("SSH_HOST_KEY_PATH", "./ssh_host_key"),
-		AdminUsername:    getEnvOrDefault("ADMIN_USERNAME", "admin"),
-		Environment:      getEnvOrDefault("ENVIRONMENT", "development"),
-		TelemetryEnabled: getEnvBoolOrDefault("TELEMETRY_ENABLED", true),                          // Default enabled with opt-out
-		OTELEndpoint:     getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"), // Default to local Jaeger
-		JaegerQueryURL:   getEnvOrDefault("JAEGER_QUERY_URL", "http://localhost:16686"),           // Default to local Jaeger Query
-		Debug:            getEnvBoolOrDefault("STN_DEBUG", false),                                 // Default to info level
+		DatabaseURL:    getEnvOrDefault("DATABASE_URL", GetDatabasePath()),
+		SSHPort:        getEnvIntOrDefault("SSH_PORT", 2222),
+		MCPPort:        getEnvIntOrDefault("MCP_PORT", 8586),
+		APIPort:        getEnvIntOrDefault("API_PORT", 8585),
+		SSHHostKeyPath: getEnvOrDefault("SSH_HOST_KEY_PATH", "./ssh_host_key"),
+		AdminUsername:  getEnvOrDefault("ADMIN_USERNAME", "admin"),
+		Environment:    getEnvOrDefault("ENVIRONMENT", "development"),
+		Debug:          getEnvBoolOrDefault("STN_DEBUG", false), // Default to info level
 		// Workspace Configuration
 		Workspace: getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults
@@ -156,6 +209,21 @@ func Load() (*Config, error) {
 				Scopes:        getEnvOrDefault("STN_CLOUDSHIP_OAUTH_SCOPES", "read stations"),
 			},
 		},
+		// Telemetry Configuration - defaults for local Jaeger development
+		Telemetry: TelemetryConfig{
+			Enabled:        true,                     // Default enabled
+			Provider:       TelemetryProviderJaeger,  // Default to local Jaeger
+			Endpoint:       "http://localhost:4318",  // Default OTLP endpoint
+			JaegerQueryURL: "http://localhost:16686", // Default Jaeger Query UI
+			ServiceName:    "station",                // Default service name
+			Environment:    "development",            // Default environment
+			SampleRate:     1.0,                      // Sample everything in dev
+			Headers:        make(map[string]string),
+		},
+		// Legacy fields for backward compatibility
+		TelemetryEnabled: true,
+		OTELEndpoint:     "http://localhost:4318",
+		JaegerQueryURL:   "http://localhost:16686",
 	}
 
 	// Override with values from config file (if available) using Viper
@@ -275,6 +343,55 @@ func Load() (*Config, error) {
 		cfg.CloudShip.OAuth.Scopes = viper.GetString("cloudship.oauth.scopes")
 	}
 
+	// Telemetry configuration overrides from config file
+	if viper.IsSet("telemetry.enabled") {
+		cfg.Telemetry.Enabled = viper.GetBool("telemetry.enabled")
+	}
+	if viper.IsSet("telemetry.provider") {
+		cfg.Telemetry.Provider = TelemetryProvider(viper.GetString("telemetry.provider"))
+	}
+	if viper.IsSet("telemetry.endpoint") {
+		cfg.Telemetry.Endpoint = viper.GetString("telemetry.endpoint")
+	}
+	if viper.IsSet("telemetry.headers") {
+		cfg.Telemetry.Headers = viper.GetStringMapString("telemetry.headers")
+	}
+	if viper.IsSet("telemetry.jaeger_query_url") {
+		cfg.Telemetry.JaegerQueryURL = viper.GetString("telemetry.jaeger_query_url")
+	}
+	if viper.IsSet("telemetry.service_name") {
+		cfg.Telemetry.ServiceName = viper.GetString("telemetry.service_name")
+	}
+	if viper.IsSet("telemetry.environment") {
+		cfg.Telemetry.Environment = viper.GetString("telemetry.environment")
+	}
+	if viper.IsSet("telemetry.sample_rate") {
+		cfg.Telemetry.SampleRate = viper.GetFloat64("telemetry.sample_rate")
+	}
+
+	// Legacy config support: migrate old fields to new Telemetry struct
+	if viper.IsSet("telemetry_enabled") {
+		cfg.TelemetryEnabled = viper.GetBool("telemetry_enabled")
+		cfg.Telemetry.Enabled = cfg.TelemetryEnabled
+	}
+	if viper.IsSet("otel_endpoint") {
+		cfg.OTELEndpoint = viper.GetString("otel_endpoint")
+		// Auto-detect provider from endpoint
+		endpoint := cfg.OTELEndpoint
+		if strings.Contains(endpoint, "telemetry.cloudshipai.com") {
+			cfg.Telemetry.Provider = TelemetryProviderCloudShip
+		} else if strings.Contains(endpoint, "localhost") || strings.Contains(endpoint, "127.0.0.1") {
+			cfg.Telemetry.Provider = TelemetryProviderJaeger
+		} else {
+			cfg.Telemetry.Provider = TelemetryProviderOTLP
+		}
+		cfg.Telemetry.Endpoint = endpoint
+	}
+	if viper.IsSet("jaeger_query_url") {
+		cfg.JaegerQueryURL = viper.GetString("jaeger_query_url")
+		cfg.Telemetry.JaegerQueryURL = cfg.JaegerQueryURL
+	}
+
 	// Load faker templates from config file
 	cfg.FakerTemplates = loadFakerTemplates()
 
@@ -293,6 +410,33 @@ func Load() (*Config, error) {
 	}
 	if envBaseURL := os.Getenv("STN_AI_BASE_URL"); envBaseURL != "" {
 		cfg.AIBaseURL = envBaseURL
+	}
+
+	// Telemetry environment variable overrides (take precedence over config file)
+	if envEnabled := os.Getenv("STN_TELEMETRY_ENABLED"); envEnabled != "" {
+		if boolValue, err := strconv.ParseBool(envEnabled); err == nil {
+			cfg.Telemetry.Enabled = boolValue
+		}
+	}
+	if envProvider := os.Getenv("STN_TELEMETRY_PROVIDER"); envProvider != "" {
+		cfg.Telemetry.Provider = TelemetryProvider(envProvider)
+	}
+	if envEndpoint := os.Getenv("STN_TELEMETRY_ENDPOINT"); envEndpoint != "" {
+		cfg.Telemetry.Endpoint = envEndpoint
+	}
+	if envJaegerURL := os.Getenv("STN_TELEMETRY_JAEGER_QUERY_URL"); envJaegerURL != "" {
+		cfg.Telemetry.JaegerQueryURL = envJaegerURL
+	}
+	if envServiceName := os.Getenv("STN_TELEMETRY_SERVICE_NAME"); envServiceName != "" {
+		cfg.Telemetry.ServiceName = envServiceName
+	}
+	if envEnvironment := os.Getenv("STN_TELEMETRY_ENVIRONMENT"); envEnvironment != "" {
+		cfg.Telemetry.Environment = envEnvironment
+	}
+	if envSampleRate := os.Getenv("STN_TELEMETRY_SAMPLE_RATE"); envSampleRate != "" {
+		if floatValue, err := strconv.ParseFloat(envSampleRate, 64); err == nil {
+			cfg.Telemetry.SampleRate = floatValue
+		}
 	}
 
 	// Store loaded config for use by path helpers
@@ -411,6 +555,15 @@ func getEnvBoolOrDefault(key string, defaultValue bool) bool {
 	if value := os.Getenv(key); value != "" {
 		if boolValue, err := strconv.ParseBool(value); err == nil {
 			return boolValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvFloatOrDefault(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatValue
 		}
 	}
 	return defaultValue

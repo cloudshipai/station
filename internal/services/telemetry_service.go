@@ -17,11 +17,16 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
+	"station/internal/config"
+	"station/internal/logging"
 )
 
 const (
 	serviceName    = "station"
 	serviceVersion = "0.2.7"
+
+	// CloudShip telemetry endpoint
+	cloudShipTelemetryEndpoint = "telemetry.cloudshipai.com"
 )
 
 // TelemetryService manages OpenTelemetry initialization and instrumentation
@@ -40,26 +45,114 @@ type TelemetryService struct {
 }
 
 // TelemetryConfig holds configuration for telemetry services
+// This wraps config.TelemetryConfig and adds runtime fields
 type TelemetryConfig struct {
-	Enabled      bool
-	OTLPEndpoint string
-	ServiceName  string
-	Environment  string
+	Enabled     bool
+	Provider    config.TelemetryProvider
+	Endpoint    string            // OTLP endpoint URL
+	Headers     map[string]string // Custom headers (for OTLP provider)
+	ServiceName string
+	Environment string
+	SampleRate  float64
+
+	// CloudShip telemetry authentication (used when Provider = "cloudship")
+	CloudShipAPIKey string // Registration key for CloudShip telemetry endpoint
+
+	// CloudShip resource attributes (added to all traces for filtering)
+	StationName string // Station name for trace filtering
+	StationID   string // Station ID (UUID) for trace filtering
+	OrgID       string // Organization ID for multi-tenant filtering
 }
 
-// NewTelemetryService creates a new telemetry service with configuration
-func NewTelemetryService(config *TelemetryConfig) *TelemetryService {
-	// Set defaults if nil config provided
-	if config == nil {
-		config = &TelemetryConfig{
+// CloudShipInfo holds CloudShip-specific information for telemetry
+type CloudShipInfo struct {
+	RegistrationKey string
+	StationName     string
+	StationID       string
+	OrgID           string
+}
+
+// NewTelemetryConfigFromConfig creates a TelemetryConfig from config.TelemetryConfig
+func NewTelemetryConfigFromConfig(cfg *config.TelemetryConfig, cloudShipInfo *CloudShipInfo) *TelemetryConfig {
+	if cfg == nil {
+		return &TelemetryConfig{
 			Enabled:     true,
+			Provider:    config.TelemetryProviderJaeger,
+			Endpoint:    "http://localhost:4318",
 			ServiceName: serviceName,
 			Environment: "development",
+			SampleRate:  1.0,
+			Headers:     make(map[string]string),
 		}
 	}
 
+	tc := &TelemetryConfig{
+		Enabled:     cfg.Enabled,
+		Provider:    cfg.Provider,
+		Endpoint:    cfg.Endpoint,
+		Headers:     cfg.Headers,
+		ServiceName: cfg.ServiceName,
+		Environment: cfg.Environment,
+		SampleRate:  cfg.SampleRate,
+	}
+
+	// Set defaults
+	if tc.ServiceName == "" {
+		tc.ServiceName = serviceName
+	}
+	if tc.Environment == "" {
+		tc.Environment = "development"
+	}
+	if tc.SampleRate <= 0 {
+		tc.SampleRate = 1.0
+	}
+	if tc.Headers == nil {
+		tc.Headers = make(map[string]string)
+	}
+
+	// Apply CloudShip info if provided
+	if cloudShipInfo != nil {
+		tc.CloudShipAPIKey = cloudShipInfo.RegistrationKey
+		tc.StationName = cloudShipInfo.StationName
+		tc.StationID = cloudShipInfo.StationID
+		tc.OrgID = cloudShipInfo.OrgID
+	}
+
+	// Handle CloudShip provider
+	if tc.Provider == config.TelemetryProviderCloudShip {
+		tc.Endpoint = "https://" + cloudShipTelemetryEndpoint
+	}
+
+	// Handle Jaeger provider defaults
+	if tc.Provider == config.TelemetryProviderJaeger && tc.Endpoint == "" {
+		tc.Endpoint = "http://localhost:4318"
+	}
+
+	return tc
+}
+
+// NewTelemetryService creates a new telemetry service with configuration
+func NewTelemetryService(cfg *TelemetryConfig) *TelemetryService {
+	// Set defaults if nil config provided
+	if cfg == nil {
+		cfg = &TelemetryConfig{
+			Enabled:     true,
+			Provider:    config.TelemetryProviderJaeger,
+			Endpoint:    "http://localhost:4318",
+			ServiceName: serviceName,
+			Environment: "development",
+			SampleRate:  1.0,
+			Headers:     make(map[string]string),
+		}
+	}
+
+	// Ensure Headers map is initialized
+	if cfg.Headers == nil {
+		cfg.Headers = make(map[string]string)
+	}
+
 	return &TelemetryService{
-		config: config,
+		config: cfg,
 	}
 }
 
@@ -76,12 +169,26 @@ func (ts *TelemetryService) Initialize(ctx context.Context) error {
 		serviceName = "station"
 	}
 
+	// Build resource attributes
+	resourceAttrs := []attribute.KeyValue{
+		semconv.ServiceNameKey.String(serviceName),
+		semconv.ServiceVersionKey.String(serviceVersion),
+		semconv.DeploymentEnvironmentKey.String(ts.config.Environment),
+	}
+
+	// Add CloudShip-specific attributes for filtering in the platform UI
+	if ts.config.StationName != "" {
+		resourceAttrs = append(resourceAttrs, attribute.String("cloudship.station_name", ts.config.StationName))
+	}
+	if ts.config.StationID != "" {
+		resourceAttrs = append(resourceAttrs, attribute.String("cloudship.station_id", ts.config.StationID))
+	}
+	if ts.config.OrgID != "" {
+		resourceAttrs = append(resourceAttrs, attribute.String("cloudship.org_id", ts.config.OrgID))
+	}
+
 	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(serviceName),
-			semconv.ServiceVersionKey.String(serviceVersion),
-			semconv.DeploymentEnvironmentKey.String(ts.config.Environment),
-		),
+		resource.WithAttributes(resourceAttrs...),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create OTEL resource: %w", err)
@@ -116,39 +223,123 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 	var exporter sdktrace.SpanExporter
 	var err error
 
-	// Use OTLP endpoint from configuration with fallback to environment variables
-	otlpEndpoint := ts.config.OTLPEndpoint
-	if otlpEndpoint == "" {
-		otlpEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-		if otlpEndpoint == "" {
-			otlpEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
-		}
-	}
+	// Determine exporter based on provider configuration
+	switch ts.config.Provider {
+	case config.TelemetryProviderNone:
+		// Telemetry disabled - use no-op exporter
+		exporter = &noOpExporter{}
 
-	if otlpEndpoint != "" {
-		// Use OTLP exporter (production)
-		if os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL") == "grpc" {
-			exporter, err = otlptracegrpc.New(ctx)
+	case config.TelemetryProviderJaeger:
+		// Local Jaeger - HTTP, no auth, insecure
+		endpoint := ts.config.Endpoint
+		if endpoint == "" {
+			endpoint = "http://localhost:4318"
+		}
+		endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+
+		opts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpoint(endpoint),
+			otlptracehttp.WithInsecure(), // Jaeger local is always insecure
+		}
+		exporter, err = otlptracehttp.New(ctx, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Jaeger OTLP exporter: %w", err)
+		}
+
+	case config.TelemetryProviderCloudShip:
+		// CloudShip managed telemetry - HTTPS with registration key auth
+		endpoint := cloudShipTelemetryEndpoint
+		opts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpoint(endpoint),
+			// TLS is automatic for non-insecure connections
+		}
+
+		// Add CloudShip API key header (registration key)
+		if ts.config.CloudShipAPIKey != "" {
+			opts = append(opts, otlptracehttp.WithHeaders(map[string]string{
+				"X-CloudShip-API-Key": ts.config.CloudShipAPIKey,
+			}))
+		}
+
+		exporter, err = otlptracehttp.New(ctx, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create CloudShip OTLP exporter: %w", err)
+		}
+
+	case config.TelemetryProviderOTLP:
+		// Custom OTLP endpoint - user provides endpoint and optional headers
+		endpoint := ts.config.Endpoint
+		if endpoint == "" {
+			// Fall back to environment variables
+			endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+			if endpoint == "" {
+				endpoint = os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+			}
+		}
+
+		if endpoint == "" {
+			// No endpoint configured - use no-op
+			exporter = &noOpExporter{}
 		} else {
-			// Parse the endpoint URL to extract just the host:port
-			endpoint := otlpEndpoint
-			if strings.HasPrefix(endpoint, "http://") {
-				endpoint = strings.TrimPrefix(endpoint, "http://")
-			} else if strings.HasPrefix(endpoint, "https://") {
-				endpoint = strings.TrimPrefix(endpoint, "https://")
+			// Check if gRPC protocol is requested
+			if os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL") == "grpc" {
+				exporter, err = otlptracegrpc.New(ctx)
+			} else {
+				// Parse the endpoint URL to extract just the host:port
+				useHTTPS := strings.HasPrefix(endpoint, "https://")
+				endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+
+				opts := []otlptracehttp.Option{
+					otlptracehttp.WithEndpoint(endpoint),
+				}
+
+				// Use TLS for HTTPS endpoints
+				if !useHTTPS {
+					opts = append(opts, otlptracehttp.WithInsecure())
+				}
+
+				// Add custom headers if configured
+				if len(ts.config.Headers) > 0 {
+					opts = append(opts, otlptracehttp.WithHeaders(ts.config.Headers))
+				}
+
+				exporter, err = otlptracehttp.New(ctx, opts...)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to create custom OTLP exporter: %w", err)
+			}
+		}
+
+	default:
+		// Unknown provider - try to auto-detect from endpoint or use no-op
+		endpoint := ts.config.Endpoint
+		if endpoint == "" {
+			exporter = &noOpExporter{}
+		} else {
+			// Auto-detect based on endpoint
+			useHTTPS := strings.HasPrefix(endpoint, "https://")
+			endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+
+			opts := []otlptracehttp.Option{
+				otlptracehttp.WithEndpoint(endpoint),
 			}
 
-			exporter, err = otlptracehttp.New(ctx,
-				otlptracehttp.WithEndpoint(endpoint),
-				otlptracehttp.WithInsecure(), // Use HTTP instead of HTTPS for localhost
-			)
+			if !useHTTPS {
+				opts = append(opts, otlptracehttp.WithInsecure())
+			}
+
+			// Add CloudShip key if configured
+			if ts.config.CloudShipAPIKey != "" {
+				opts = append(opts, otlptracehttp.WithHeaders(map[string]string{
+					"X-CloudShip-API-Key": ts.config.CloudShipAPIKey,
+				}))
+			}
+
+			exporter, err = otlptracehttp.New(ctx, opts...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
+			}
 		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
-		}
-	} else {
-		// Development mode - use no-op exporter to avoid log spam
-		exporter = &noOpExporter{}
 	}
 
 	// Create trace provider with resource and exporter - optimized for immediate export
@@ -222,8 +413,16 @@ func (ts *TelemetryService) initMetrics() error {
 
 // getSampler returns the appropriate sampling strategy
 func (ts *TelemetryService) getSampler() sdktrace.Sampler {
-	// In production, we might want to sample less aggressively
-	env := getEnvironment()
+	// Use configured sample rate if set
+	if ts.config != nil && ts.config.SampleRate > 0 && ts.config.SampleRate < 1.0 {
+		return sdktrace.TraceIDRatioBased(ts.config.SampleRate)
+	}
+
+	// Fall back to environment-based defaults
+	env := ts.config.Environment
+	if env == "" {
+		env = getEnvironment()
+	}
 	switch env {
 	case "production":
 		return sdktrace.TraceIDRatioBased(0.1) // Sample 10% in production
@@ -234,6 +433,19 @@ func (ts *TelemetryService) getSampler() sdktrace.Sampler {
 	}
 }
 
+// SetCloudShipInfo updates the CloudShip info after authentication
+// This is called when ManagementChannel receives AuthResult from CloudShip
+// Since OTEL resources are immutable, we store this and add to each span
+func (ts *TelemetryService) SetCloudShipInfo(stationID, stationName, orgID string) {
+	if ts.config == nil {
+		return
+	}
+	ts.config.StationID = stationID
+	ts.config.StationName = stationName
+	ts.config.OrgID = orgID
+	logging.Info("Telemetry CloudShip info updated: station_id=%s station_name=%s org_id=%s", stationID, stationName, orgID)
+}
+
 // StartSpan creates a new span with common attributes
 func (ts *TelemetryService) StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	// Return no-op span if tracer is not initialized (telemetry disabled)
@@ -241,6 +453,21 @@ func (ts *TelemetryService) StartSpan(ctx context.Context, name string, opts ...
 		return ctx, trace.SpanFromContext(ctx)
 	}
 	ctx, span := ts.tracer.Start(ctx, name, opts...)
+
+	// Add CloudShip attributes to every span for filtering
+	// This is needed because resources are set at init time before CloudShip auth
+	if ts.config != nil {
+		if ts.config.StationID != "" {
+			span.SetAttributes(attribute.String("cloudship.station_id", ts.config.StationID))
+		}
+		if ts.config.StationName != "" {
+			span.SetAttributes(attribute.String("cloudship.station_name", ts.config.StationName))
+		}
+		if ts.config.OrgID != "" {
+			span.SetAttributes(attribute.String("cloudship.org_id", ts.config.OrgID))
+		}
+	}
+
 	return ctx, span
 }
 

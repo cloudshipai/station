@@ -67,6 +67,29 @@ func NewAPIHandlersWithConfig(
 	}
 }
 
+// NewAPIHandlersWithAgentService creates API handlers with an existing agent service
+// This ensures CloudShip telemetry info (org_id, station_id) is propagated to traces
+func NewAPIHandlersWithAgentService(
+	repos *repositories.Repositories,
+	db *sql.DB,
+	toolDiscoveryService *services.ToolDiscoveryService,
+	telemetryService *telemetry.TelemetryService,
+	localMode bool,
+	cfg *config.Config,
+	agentService *services.AgentService,
+) *APIHandlers {
+	return &APIHandlers{
+		repos:                repos,
+		db:                   db,
+		agentService:         agentService, // Use provided agent service with CloudShip telemetry
+		toolDiscoveryService: toolDiscoveryService,
+		agentExportService:   services.NewAgentExportService(repos),
+		telemetryService:     telemetryService,
+		localMode:            localMode,
+		cfg:                  cfg,
+	}
+}
+
 // telemetryMiddleware tracks API requests
 func (h *APIHandlers) telemetryMiddleware() gin.HandlerFunc {
 	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {

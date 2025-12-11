@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.12.4
-// source: internal/lighthouse/proto/data_ingestion.proto
+// source: internal/proto/data_ingestion.proto
 
 package proto
 
@@ -234,5 +234,5 @@ var DataIngestionService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "internal/lighthouse/proto/data_ingestion.proto",
+	Metadata: "internal/proto/data_ingestion.proto",
 }

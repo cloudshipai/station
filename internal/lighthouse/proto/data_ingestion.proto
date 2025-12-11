@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package lighthouse.v1;
-option go_package = "station/internal/lighthouse/proto";
+option go_package = "./internal/proto";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";

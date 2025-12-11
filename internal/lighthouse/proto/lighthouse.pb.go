@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.8
 // 	protoc        v3.12.4
-// source: internal/lighthouse/proto/lighthouse.proto
+// source: internal/proto/lighthouse.proto
 
 package proto
 
@@ -59,11 +59,11 @@ func (x DeploymentMode) String() string {
 }
 
 func (DeploymentMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[0].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[0].Descriptor()
 }
 
 func (DeploymentMode) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[0]
+	return &file_internal_proto_lighthouse_proto_enumTypes[0]
 }
 
 func (x DeploymentMode) Number() protoreflect.EnumNumber {
@@ -72,7 +72,7 @@ func (x DeploymentMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DeploymentMode.Descriptor instead.
 func (DeploymentMode) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{0}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{0}
 }
 
 // Run status enumeration (legacy - use data_ingestion.RunStatus for new code)
@@ -124,11 +124,11 @@ func (x LighthouseRunStatus) String() string {
 }
 
 func (LighthouseRunStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[1].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[1].Descriptor()
 }
 
 func (LighthouseRunStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[1]
+	return &file_internal_proto_lighthouse_proto_enumTypes[1]
 }
 
 func (x LighthouseRunStatus) Number() protoreflect.EnumNumber {
@@ -137,7 +137,7 @@ func (x LighthouseRunStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LighthouseRunStatus.Descriptor instead.
 func (LighthouseRunStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{1}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{1}
 }
 
 // Run source enumeration
@@ -177,11 +177,11 @@ func (x RunSource) String() string {
 }
 
 func (RunSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[2].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[2].Descriptor()
 }
 
 func (RunSource) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[2]
+	return &file_internal_proto_lighthouse_proto_enumTypes[2]
 }
 
 func (x RunSource) Number() protoreflect.EnumNumber {
@@ -190,7 +190,7 @@ func (x RunSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RunSource.Descriptor instead.
 func (RunSource) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{2}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{2}
 }
 
 // Step type enumeration
@@ -230,11 +230,11 @@ func (x StepType) String() string {
 }
 
 func (StepType) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[3].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[3].Descriptor()
 }
 
 func (StepType) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[3]
+	return &file_internal_proto_lighthouse_proto_enumTypes[3]
 }
 
 func (x StepType) Number() protoreflect.EnumNumber {
@@ -243,7 +243,7 @@ func (x StepType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StepType.Descriptor instead.
 func (StepType) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{3}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{3}
 }
 
 // System status enumeration
@@ -286,11 +286,11 @@ func (x SystemStatus) String() string {
 }
 
 func (SystemStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[4].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[4].Descriptor()
 }
 
 func (SystemStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[4]
+	return &file_internal_proto_lighthouse_proto_enumTypes[4]
 }
 
 func (x SystemStatus) Number() protoreflect.EnumNumber {
@@ -299,7 +299,7 @@ func (x SystemStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SystemStatus.Descriptor instead.
 func (SystemStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{4}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{4}
 }
 
 // Registration status enumeration
@@ -342,11 +342,11 @@ func (x RegistrationStatus) String() string {
 }
 
 func (RegistrationStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[5].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[5].Descriptor()
 }
 
 func (RegistrationStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[5]
+	return &file_internal_proto_lighthouse_proto_enumTypes[5]
 }
 
 func (x RegistrationStatus) Number() protoreflect.EnumNumber {
@@ -355,7 +355,7 @@ func (x RegistrationStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RegistrationStatus.Descriptor instead.
 func (RegistrationStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{5}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{5}
 }
 
 type DisconnectReason int32
@@ -406,11 +406,11 @@ func (x DisconnectReason) String() string {
 }
 
 func (DisconnectReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[6].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[6].Descriptor()
 }
 
 func (DisconnectReason) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[6]
+	return &file_internal_proto_lighthouse_proto_enumTypes[6]
 }
 
 func (x DisconnectReason) Number() protoreflect.EnumNumber {
@@ -419,7 +419,7 @@ func (x DisconnectReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DisconnectReason.Descriptor instead.
 func (DisconnectReason) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{6}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{6}
 }
 
 type AgentStatus int32
@@ -458,11 +458,11 @@ func (x AgentStatus) String() string {
 }
 
 func (AgentStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[7].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[7].Descriptor()
 }
 
 func (AgentStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[7]
+	return &file_internal_proto_lighthouse_proto_enumTypes[7]
 }
 
 func (x AgentStatus) Number() protoreflect.EnumNumber {
@@ -471,7 +471,7 @@ func (x AgentStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AgentStatus.Descriptor instead.
 func (AgentStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{7}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{7}
 }
 
 type ExecutionStatus int32
@@ -513,11 +513,11 @@ func (x ExecutionStatus) String() string {
 }
 
 func (ExecutionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[8].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[8].Descriptor()
 }
 
 func (ExecutionStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[8]
+	return &file_internal_proto_lighthouse_proto_enumTypes[8]
 }
 
 func (x ExecutionStatus) Number() protoreflect.EnumNumber {
@@ -526,7 +526,7 @@ func (x ExecutionStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ExecutionStatus.Descriptor instead.
 func (ExecutionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{8}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{8}
 }
 
 type LighthouseSystemHealth int32
@@ -565,11 +565,11 @@ func (x LighthouseSystemHealth) String() string {
 }
 
 func (LighthouseSystemHealth) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[9].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[9].Descriptor()
 }
 
 func (LighthouseSystemHealth) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[9]
+	return &file_internal_proto_lighthouse_proto_enumTypes[9]
 }
 
 func (x LighthouseSystemHealth) Number() protoreflect.EnumNumber {
@@ -578,7 +578,7 @@ func (x LighthouseSystemHealth) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LighthouseSystemHealth.Descriptor instead.
 func (LighthouseSystemHealth) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{9}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{9}
 }
 
 type ConnectionStatus int32
@@ -617,11 +617,11 @@ func (x ConnectionStatus) String() string {
 }
 
 func (ConnectionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[10].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[10].Descriptor()
 }
 
 func (ConnectionStatus) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[10]
+	return &file_internal_proto_lighthouse_proto_enumTypes[10]
 }
 
 func (x ConnectionStatus) Number() protoreflect.EnumNumber {
@@ -630,7 +630,7 @@ func (x ConnectionStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConnectionStatus.Descriptor instead.
 func (ConnectionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{10}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{10}
 }
 
 type ErrorCode int32
@@ -681,11 +681,11 @@ func (x ErrorCode) String() string {
 }
 
 func (ErrorCode) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_lighthouse_proto_lighthouse_proto_enumTypes[11].Descriptor()
+	return file_internal_proto_lighthouse_proto_enumTypes[11].Descriptor()
 }
 
 func (ErrorCode) Type() protoreflect.EnumType {
-	return &file_internal_lighthouse_proto_lighthouse_proto_enumTypes[11]
+	return &file_internal_proto_lighthouse_proto_enumTypes[11]
 }
 
 func (x ErrorCode) Number() protoreflect.EnumNumber {
@@ -694,7 +694,7 @@ func (x ErrorCode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ErrorCode.Descriptor instead.
 func (ErrorCode) EnumDescriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{11}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{11}
 }
 
 type RegisterStationRequest struct {
@@ -712,7 +712,7 @@ type RegisterStationRequest struct {
 
 func (x *RegisterStationRequest) Reset() {
 	*x = RegisterStationRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[0]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +724,7 @@ func (x *RegisterStationRequest) String() string {
 func (*RegisterStationRequest) ProtoMessage() {}
 
 func (x *RegisterStationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[0]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +737,7 @@ func (x *RegisterStationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterStationRequest.ProtoReflect.Descriptor instead.
 func (*RegisterStationRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{0}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *RegisterStationRequest) GetStationId() string {
@@ -802,7 +802,7 @@ type RegisterStationResponse struct {
 
 func (x *RegisterStationResponse) Reset() {
 	*x = RegisterStationResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[1]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -814,7 +814,7 @@ func (x *RegisterStationResponse) String() string {
 func (*RegisterStationResponse) ProtoMessage() {}
 
 func (x *RegisterStationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[1]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -827,7 +827,7 @@ func (x *RegisterStationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterStationResponse.ProtoReflect.Descriptor instead.
 func (*RegisterStationResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{1}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *RegisterStationResponse) GetSuccess() bool {
@@ -879,7 +879,7 @@ type StationCapabilities struct {
 
 func (x *StationCapabilities) Reset() {
 	*x = StationCapabilities{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[2]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -891,7 +891,7 @@ func (x *StationCapabilities) String() string {
 func (*StationCapabilities) ProtoMessage() {}
 
 func (x *StationCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[2]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -904,7 +904,7 @@ func (x *StationCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StationCapabilities.ProtoReflect.Descriptor instead.
 func (*StationCapabilities) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{2}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StationCapabilities) GetCanExecuteAgents() bool {
@@ -961,7 +961,7 @@ type CloudShipConfig struct {
 
 func (x *CloudShipConfig) Reset() {
 	*x = CloudShipConfig{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[3]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -973,7 +973,7 @@ func (x *CloudShipConfig) String() string {
 func (*CloudShipConfig) ProtoMessage() {}
 
 func (x *CloudShipConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[3]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -986,7 +986,7 @@ func (x *CloudShipConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloudShipConfig.ProtoReflect.Descriptor instead.
 func (*CloudShipConfig) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{3}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CloudShipConfig) GetEndpoint() string {
@@ -1031,7 +1031,7 @@ type SendRunRequest struct {
 
 func (x *SendRunRequest) Reset() {
 	*x = SendRunRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[4]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1043,7 +1043,7 @@ func (x *SendRunRequest) String() string {
 func (*SendRunRequest) ProtoMessage() {}
 
 func (x *SendRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[4]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1056,7 +1056,7 @@ func (x *SendRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendRunRequest.ProtoReflect.Descriptor instead.
 func (*SendRunRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{4}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SendRunRequest) GetRegistrationKey() string {
@@ -1112,7 +1112,7 @@ type SendRunResponse struct {
 
 func (x *SendRunResponse) Reset() {
 	*x = SendRunResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[5]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1124,7 +1124,7 @@ func (x *SendRunResponse) String() string {
 func (*SendRunResponse) ProtoMessage() {}
 
 func (x *SendRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[5]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1137,7 +1137,7 @@ func (x *SendRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendRunResponse.ProtoReflect.Descriptor instead.
 func (*SendRunResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{5}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SendRunResponse) GetSuccess() bool {
@@ -1185,7 +1185,7 @@ type LighthouseAgentRunData struct {
 
 func (x *LighthouseAgentRunData) Reset() {
 	*x = LighthouseAgentRunData{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[6]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1197,7 +1197,7 @@ func (x *LighthouseAgentRunData) String() string {
 func (*LighthouseAgentRunData) ProtoMessage() {}
 
 func (x *LighthouseAgentRunData) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[6]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1210,7 +1210,7 @@ func (x *LighthouseAgentRunData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LighthouseAgentRunData.ProtoReflect.Descriptor instead.
 func (*LighthouseAgentRunData) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{6}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *LighthouseAgentRunData) GetRunId() string {
@@ -1339,7 +1339,7 @@ type LighthouseToolCall struct {
 
 func (x *LighthouseToolCall) Reset() {
 	*x = LighthouseToolCall{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[7]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1351,7 +1351,7 @@ func (x *LighthouseToolCall) String() string {
 func (*LighthouseToolCall) ProtoMessage() {}
 
 func (x *LighthouseToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[7]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1364,7 +1364,7 @@ func (x *LighthouseToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LighthouseToolCall.ProtoReflect.Descriptor instead.
 func (*LighthouseToolCall) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{7}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *LighthouseToolCall) GetToolName() string {
@@ -1422,7 +1422,7 @@ type ExecutionStep struct {
 
 func (x *ExecutionStep) Reset() {
 	*x = ExecutionStep{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[8]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1434,7 +1434,7 @@ func (x *ExecutionStep) String() string {
 func (*ExecutionStep) ProtoMessage() {}
 
 func (x *ExecutionStep) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[8]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1447,7 +1447,7 @@ func (x *ExecutionStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionStep.ProtoReflect.Descriptor instead.
 func (*ExecutionStep) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{8}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ExecutionStep) GetStepNumber() int32 {
@@ -1497,7 +1497,7 @@ type LighthouseTokenUsage struct {
 
 func (x *LighthouseTokenUsage) Reset() {
 	*x = LighthouseTokenUsage{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[9]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1509,7 +1509,7 @@ func (x *LighthouseTokenUsage) String() string {
 func (*LighthouseTokenUsage) ProtoMessage() {}
 
 func (x *LighthouseTokenUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[9]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1522,7 +1522,7 @@ func (x *LighthouseTokenUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LighthouseTokenUsage.ProtoReflect.Descriptor instead.
 func (*LighthouseTokenUsage) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{9}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LighthouseTokenUsage) GetPromptTokens() int32 {
@@ -1567,7 +1567,7 @@ type EphemeralSnapshotRequest struct {
 
 func (x *EphemeralSnapshotRequest) Reset() {
 	*x = EphemeralSnapshotRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[10]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1579,7 +1579,7 @@ func (x *EphemeralSnapshotRequest) String() string {
 func (*EphemeralSnapshotRequest) ProtoMessage() {}
 
 func (x *EphemeralSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[10]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1592,7 +1592,7 @@ func (x *EphemeralSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EphemeralSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*EphemeralSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{10}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *EphemeralSnapshotRequest) GetRegistrationKey() string {
@@ -1648,7 +1648,7 @@ type EphemeralSnapshotResponse struct {
 
 func (x *EphemeralSnapshotResponse) Reset() {
 	*x = EphemeralSnapshotResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[11]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +1660,7 @@ func (x *EphemeralSnapshotResponse) String() string {
 func (*EphemeralSnapshotResponse) ProtoMessage() {}
 
 func (x *EphemeralSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[11]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +1673,7 @@ func (x *EphemeralSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EphemeralSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*EphemeralSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{11}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *EphemeralSnapshotResponse) GetSuccess() bool {
@@ -1712,7 +1712,7 @@ type DeploymentContext struct {
 
 func (x *DeploymentContext) Reset() {
 	*x = DeploymentContext{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[12]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1724,7 +1724,7 @@ func (x *DeploymentContext) String() string {
 func (*DeploymentContext) ProtoMessage() {}
 
 func (x *DeploymentContext) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[12]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1737,7 +1737,7 @@ func (x *DeploymentContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentContext.ProtoReflect.Descriptor instead.
 func (*DeploymentContext) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{12}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DeploymentContext) GetCommandLine() string {
@@ -1802,7 +1802,7 @@ type SystemSnapshot struct {
 
 func (x *SystemSnapshot) Reset() {
 	*x = SystemSnapshot{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[13]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1814,7 +1814,7 @@ func (x *SystemSnapshot) String() string {
 func (*SystemSnapshot) ProtoMessage() {}
 
 func (x *SystemSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[13]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1827,7 +1827,7 @@ func (x *SystemSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemSnapshot.ProtoReflect.Descriptor instead.
 func (*SystemSnapshot) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{13}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SystemSnapshot) GetAgents() []*AgentConfig {
@@ -1878,7 +1878,7 @@ type SyncConfigRequest struct {
 
 func (x *SyncConfigRequest) Reset() {
 	*x = SyncConfigRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[14]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1890,7 +1890,7 @@ func (x *SyncConfigRequest) String() string {
 func (*SyncConfigRequest) ProtoMessage() {}
 
 func (x *SyncConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[14]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1903,7 +1903,7 @@ func (x *SyncConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncConfigRequest.ProtoReflect.Descriptor instead.
 func (*SyncConfigRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{14}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SyncConfigRequest) GetRegistrationKey() string {
@@ -1953,7 +1953,7 @@ type SyncConfigResponse struct {
 
 func (x *SyncConfigResponse) Reset() {
 	*x = SyncConfigResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[15]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1965,7 +1965,7 @@ func (x *SyncConfigResponse) String() string {
 func (*SyncConfigResponse) ProtoMessage() {}
 
 func (x *SyncConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[15]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +1978,7 @@ func (x *SyncConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncConfigResponse.ProtoReflect.Descriptor instead.
 func (*SyncConfigResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{15}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SyncConfigResponse) GetSuccess() bool {
@@ -2028,7 +2028,7 @@ type AgentConfig struct {
 
 func (x *AgentConfig) Reset() {
 	*x = AgentConfig{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[16]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2040,7 +2040,7 @@ func (x *AgentConfig) String() string {
 func (*AgentConfig) ProtoMessage() {}
 
 func (x *AgentConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[16]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2053,7 +2053,7 @@ func (x *AgentConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentConfig.ProtoReflect.Descriptor instead.
 func (*AgentConfig) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{16}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AgentConfig) GetId() string {
@@ -2149,7 +2149,7 @@ type MCPConfig struct {
 
 func (x *MCPConfig) Reset() {
 	*x = MCPConfig{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[17]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2161,7 +2161,7 @@ func (x *MCPConfig) String() string {
 func (*MCPConfig) ProtoMessage() {}
 
 func (x *MCPConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[17]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2174,7 +2174,7 @@ func (x *MCPConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPConfig.ProtoReflect.Descriptor instead.
 func (*MCPConfig) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{17}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *MCPConfig) GetName() string {
@@ -2245,7 +2245,7 @@ type ToolInfo struct {
 
 func (x *ToolInfo) Reset() {
 	*x = ToolInfo{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[18]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2257,7 +2257,7 @@ func (x *ToolInfo) String() string {
 func (*ToolInfo) ProtoMessage() {}
 
 func (x *ToolInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[18]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2270,7 +2270,7 @@ func (x *ToolInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolInfo.ProtoReflect.Descriptor instead.
 func (*ToolInfo) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{18}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ToolInfo) GetName() string {
@@ -2312,7 +2312,7 @@ type ConnectRequest struct {
 
 func (x *ConnectRequest) Reset() {
 	*x = ConnectRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[19]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2324,7 +2324,7 @@ func (x *ConnectRequest) String() string {
 func (*ConnectRequest) ProtoMessage() {}
 
 func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[19]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2337,7 +2337,7 @@ func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectRequest.ProtoReflect.Descriptor instead.
 func (*ConnectRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{19}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ConnectRequest) GetRegistrationKey() string {
@@ -2379,7 +2379,7 @@ type CloudShipCommand struct {
 
 func (x *CloudShipCommand) Reset() {
 	*x = CloudShipCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[20]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2391,7 +2391,7 @@ func (x *CloudShipCommand) String() string {
 func (*CloudShipCommand) ProtoMessage() {}
 
 func (x *CloudShipCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[20]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2404,7 +2404,7 @@ func (x *CloudShipCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloudShipCommand.ProtoReflect.Descriptor instead.
 func (*CloudShipCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{20}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CloudShipCommand) GetCommand() isCloudShipCommand_Command {
@@ -2533,7 +2533,7 @@ type CreateAgentCommand struct {
 
 func (x *CreateAgentCommand) Reset() {
 	*x = CreateAgentCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[21]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2545,7 +2545,7 @@ func (x *CreateAgentCommand) String() string {
 func (*CreateAgentCommand) ProtoMessage() {}
 
 func (x *CreateAgentCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[21]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2558,7 +2558,7 @@ func (x *CreateAgentCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAgentCommand.ProtoReflect.Descriptor instead.
 func (*CreateAgentCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{21}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CreateAgentCommand) GetAgentId() string {
@@ -2585,7 +2585,7 @@ type UpdateAgentCommand struct {
 
 func (x *UpdateAgentCommand) Reset() {
 	*x = UpdateAgentCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[22]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2597,7 +2597,7 @@ func (x *UpdateAgentCommand) String() string {
 func (*UpdateAgentCommand) ProtoMessage() {}
 
 func (x *UpdateAgentCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[22]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2610,7 +2610,7 @@ func (x *UpdateAgentCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentCommand.ProtoReflect.Descriptor instead.
 func (*UpdateAgentCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{22}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UpdateAgentCommand) GetAgentId() string {
@@ -2636,7 +2636,7 @@ type DeleteAgentCommand struct {
 
 func (x *DeleteAgentCommand) Reset() {
 	*x = DeleteAgentCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[23]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2648,7 +2648,7 @@ func (x *DeleteAgentCommand) String() string {
 func (*DeleteAgentCommand) ProtoMessage() {}
 
 func (x *DeleteAgentCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[23]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2661,7 +2661,7 @@ func (x *DeleteAgentCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAgentCommand.ProtoReflect.Descriptor instead.
 func (*DeleteAgentCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{23}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DeleteAgentCommand) GetAgentId() string {
@@ -2680,7 +2680,7 @@ type SyncMCPServersCommand struct {
 
 func (x *SyncMCPServersCommand) Reset() {
 	*x = SyncMCPServersCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[24]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2692,7 +2692,7 @@ func (x *SyncMCPServersCommand) String() string {
 func (*SyncMCPServersCommand) ProtoMessage() {}
 
 func (x *SyncMCPServersCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[24]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2705,7 +2705,7 @@ func (x *SyncMCPServersCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncMCPServersCommand.ProtoReflect.Descriptor instead.
 func (*SyncMCPServersCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{24}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SyncMCPServersCommand) GetMcpServers() []*MCPConfig {
@@ -2727,7 +2727,7 @@ type ExecuteAgentCommand struct {
 
 func (x *ExecuteAgentCommand) Reset() {
 	*x = ExecuteAgentCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[25]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2739,7 +2739,7 @@ func (x *ExecuteAgentCommand) String() string {
 func (*ExecuteAgentCommand) ProtoMessage() {}
 
 func (x *ExecuteAgentCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[25]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2752,7 +2752,7 @@ func (x *ExecuteAgentCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentCommand.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{25}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ExecuteAgentCommand) GetAgentId() string {
@@ -2792,7 +2792,7 @@ type GetEnvironmentCommand struct {
 
 func (x *GetEnvironmentCommand) Reset() {
 	*x = GetEnvironmentCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[26]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2804,7 +2804,7 @@ func (x *GetEnvironmentCommand) String() string {
 func (*GetEnvironmentCommand) ProtoMessage() {}
 
 func (x *GetEnvironmentCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[26]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2817,7 +2817,7 @@ func (x *GetEnvironmentCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvironmentCommand.ProtoReflect.Descriptor instead.
 func (*GetEnvironmentCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{26}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetEnvironmentCommand) GetEnvironment() string {
@@ -2837,7 +2837,7 @@ type ListAgentsCommand struct {
 
 func (x *ListAgentsCommand) Reset() {
 	*x = ListAgentsCommand{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[27]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2849,7 +2849,7 @@ func (x *ListAgentsCommand) String() string {
 func (*ListAgentsCommand) ProtoMessage() {}
 
 func (x *ListAgentsCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[27]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2862,7 +2862,7 @@ func (x *ListAgentsCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsCommand.ProtoReflect.Descriptor instead.
 func (*ListAgentsCommand) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{27}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListAgentsCommand) GetEnvironment() string {
@@ -2892,7 +2892,7 @@ type SystemHealthRequest struct {
 
 func (x *SystemHealthRequest) Reset() {
 	*x = SystemHealthRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[28]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2904,7 +2904,7 @@ func (x *SystemHealthRequest) String() string {
 func (*SystemHealthRequest) ProtoMessage() {}
 
 func (x *SystemHealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[28]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2917,7 +2917,7 @@ func (x *SystemHealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemHealthRequest.ProtoReflect.Descriptor instead.
 func (*SystemHealthRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{28}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SystemHealthRequest) GetRegistrationKey() string {
@@ -2965,7 +2965,7 @@ type SystemHealthResponse struct {
 
 func (x *SystemHealthResponse) Reset() {
 	*x = SystemHealthResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[29]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2977,7 +2977,7 @@ func (x *SystemHealthResponse) String() string {
 func (*SystemHealthResponse) ProtoMessage() {}
 
 func (x *SystemHealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[29]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2990,7 +2990,7 @@ func (x *SystemHealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemHealthResponse.ProtoReflect.Descriptor instead.
 func (*SystemHealthResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{29}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SystemHealthResponse) GetSuccess() bool {
@@ -3024,7 +3024,7 @@ type SystemMetrics struct {
 
 func (x *SystemMetrics) Reset() {
 	*x = SystemMetrics{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[30]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3036,7 +3036,7 @@ func (x *SystemMetrics) String() string {
 func (*SystemMetrics) ProtoMessage() {}
 
 func (x *SystemMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[30]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3049,7 +3049,7 @@ func (x *SystemMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemMetrics.ProtoReflect.Descriptor instead.
 func (*SystemMetrics) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{30}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *SystemMetrics) GetCpuUsagePercent() float64 {
@@ -3128,7 +3128,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[31]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3140,7 +3140,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[31]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3153,7 +3153,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{31}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *HeartbeatRequest) GetRegistrationKey() string {
@@ -3203,7 +3203,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[32]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3215,7 +3215,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[32]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3228,7 +3228,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{32}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *HeartbeatResponse) GetSuccess() bool {
@@ -3263,13 +3263,14 @@ type ListToolsRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"`
 	Environment     string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
+	StationName     string                 `protobuf:"bytes,3,opt,name=station_name,json=stationName,proto3" json:"station_name,omitempty"` // Optional: specific station name (for multi-station routing)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListToolsRequest) Reset() {
 	*x = ListToolsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[33]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3281,7 +3282,7 @@ func (x *ListToolsRequest) String() string {
 func (*ListToolsRequest) ProtoMessage() {}
 
 func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[33]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3294,7 +3295,7 @@ func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{33}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListToolsRequest) GetRegistrationKey() string {
@@ -3311,6 +3312,13 @@ func (x *ListToolsRequest) GetEnvironment() string {
 	return ""
 }
 
+func (x *ListToolsRequest) GetStationName() string {
+	if x != nil {
+		return x.StationName
+	}
+	return ""
+}
+
 type ListToolsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tools         []*ToolInfo            `protobuf:"bytes,1,rep,name=tools,proto3" json:"tools,omitempty"`
@@ -3320,7 +3328,7 @@ type ListToolsResponse struct {
 
 func (x *ListToolsResponse) Reset() {
 	*x = ListToolsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[34]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3332,7 +3340,7 @@ func (x *ListToolsResponse) String() string {
 func (*ListToolsResponse) ProtoMessage() {}
 
 func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[34]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3345,7 +3353,7 @@ func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{34}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListToolsResponse) GetTools() []*ToolInfo {
@@ -3361,13 +3369,14 @@ type CallToolRequest struct {
 	Environment     string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
 	ToolName        string                 `protobuf:"bytes,3,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
 	Parameters      map[string]string      `protobuf:"bytes,4,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	StationName     string                 `protobuf:"bytes,5,opt,name=station_name,json=stationName,proto3" json:"station_name,omitempty"` // Optional: specific station name (for multi-station routing)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CallToolRequest) Reset() {
 	*x = CallToolRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[35]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3379,7 +3388,7 @@ func (x *CallToolRequest) String() string {
 func (*CallToolRequest) ProtoMessage() {}
 
 func (x *CallToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[35]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3392,7 +3401,7 @@ func (x *CallToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallToolRequest.ProtoReflect.Descriptor instead.
 func (*CallToolRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{35}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CallToolRequest) GetRegistrationKey() string {
@@ -3423,6 +3432,13 @@ func (x *CallToolRequest) GetParameters() map[string]string {
 	return nil
 }
 
+func (x *CallToolRequest) GetStationName() string {
+	if x != nil {
+		return x.StationName
+	}
+	return ""
+}
+
 type CallToolResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -3434,7 +3450,7 @@ type CallToolResponse struct {
 
 func (x *CallToolResponse) Reset() {
 	*x = CallToolResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[36]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3446,7 +3462,7 @@ func (x *CallToolResponse) String() string {
 func (*CallToolResponse) ProtoMessage() {}
 
 func (x *CallToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[36]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3459,7 +3475,7 @@ func (x *CallToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallToolResponse.ProtoReflect.Descriptor instead.
 func (*CallToolResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{36}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CallToolResponse) GetSuccess() bool {
@@ -3487,13 +3503,14 @@ type ListAgentsRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"`
 	Environment     string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
+	StationName     string                 `protobuf:"bytes,3,opt,name=station_name,json=stationName,proto3" json:"station_name,omitempty"` // Optional: specific station name (for multi-station routing)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListAgentsRequest) Reset() {
 	*x = ListAgentsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[37]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3505,7 +3522,7 @@ func (x *ListAgentsRequest) String() string {
 func (*ListAgentsRequest) ProtoMessage() {}
 
 func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[37]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3518,7 +3535,7 @@ func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{37}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListAgentsRequest) GetRegistrationKey() string {
@@ -3535,6 +3552,13 @@ func (x *ListAgentsRequest) GetEnvironment() string {
 	return ""
 }
 
+func (x *ListAgentsRequest) GetStationName() string {
+	if x != nil {
+		return x.StationName
+	}
+	return ""
+}
+
 type ListAgentsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Agents        []*AgentConfig         `protobuf:"bytes,1,rep,name=agents,proto3" json:"agents,omitempty"`
@@ -3544,7 +3568,7 @@ type ListAgentsResponse struct {
 
 func (x *ListAgentsResponse) Reset() {
 	*x = ListAgentsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[38]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3556,7 +3580,7 @@ func (x *ListAgentsResponse) String() string {
 func (*ListAgentsResponse) ProtoMessage() {}
 
 func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[38]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3569,7 +3593,7 @@ func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{38}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ListAgentsResponse) GetAgents() []*AgentConfig {
@@ -3586,13 +3610,14 @@ type ExecuteAgentRequest struct {
 	AgentId         string                 `protobuf:"bytes,3,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	Task            string                 `protobuf:"bytes,4,opt,name=task,proto3" json:"task,omitempty"`
 	Variables       map[string]string      `protobuf:"bytes,5,rep,name=variables,proto3" json:"variables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	StationName     string                 `protobuf:"bytes,6,opt,name=station_name,json=stationName,proto3" json:"station_name,omitempty"` // Optional: specific station name (for multi-station routing)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ExecuteAgentRequest) Reset() {
 	*x = ExecuteAgentRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[39]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3604,7 +3629,7 @@ func (x *ExecuteAgentRequest) String() string {
 func (*ExecuteAgentRequest) ProtoMessage() {}
 
 func (x *ExecuteAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[39]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3617,7 +3642,7 @@ func (x *ExecuteAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{39}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ExecuteAgentRequest) GetRegistrationKey() string {
@@ -3655,6 +3680,13 @@ func (x *ExecuteAgentRequest) GetVariables() map[string]string {
 	return nil
 }
 
+func (x *ExecuteAgentRequest) GetStationName() string {
+	if x != nil {
+		return x.StationName
+	}
+	return ""
+}
+
 type ExecuteAgentResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Response:
@@ -3670,7 +3702,7 @@ type ExecuteAgentResponse struct {
 
 func (x *ExecuteAgentResponse) Reset() {
 	*x = ExecuteAgentResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[40]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3682,7 +3714,7 @@ func (x *ExecuteAgentResponse) String() string {
 func (*ExecuteAgentResponse) ProtoMessage() {}
 
 func (x *ExecuteAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[40]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3695,7 +3727,7 @@ func (x *ExecuteAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{40}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ExecuteAgentResponse) GetResponse() isExecuteAgentResponse_Response {
@@ -3779,7 +3811,7 @@ type ExecutionStarted struct {
 
 func (x *ExecutionStarted) Reset() {
 	*x = ExecutionStarted{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[41]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3791,7 +3823,7 @@ func (x *ExecutionStarted) String() string {
 func (*ExecutionStarted) ProtoMessage() {}
 
 func (x *ExecutionStarted) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[41]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3804,7 +3836,7 @@ func (x *ExecutionStarted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionStarted.ProtoReflect.Descriptor instead.
 func (*ExecutionStarted) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{41}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ExecutionStarted) GetRunId() string {
@@ -3834,7 +3866,7 @@ type ExecutionCompleted struct {
 
 func (x *ExecutionCompleted) Reset() {
 	*x = ExecutionCompleted{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[42]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3846,7 +3878,7 @@ func (x *ExecutionCompleted) String() string {
 func (*ExecutionCompleted) ProtoMessage() {}
 
 func (x *ExecutionCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[42]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3859,7 +3891,7 @@ func (x *ExecutionCompleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionCompleted.ProtoReflect.Descriptor instead.
 func (*ExecutionCompleted) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{42}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ExecutionCompleted) GetRunId() string {
@@ -3908,7 +3940,7 @@ type ExecutionError struct {
 
 func (x *ExecutionError) Reset() {
 	*x = ExecutionError{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[43]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3920,7 +3952,7 @@ func (x *ExecutionError) String() string {
 func (*ExecutionError) ProtoMessage() {}
 
 func (x *ExecutionError) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[43]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3933,7 +3965,7 @@ func (x *ExecutionError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionError.ProtoReflect.Descriptor instead.
 func (*ExecutionError) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{43}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ExecutionError) GetRunId() string {
@@ -3994,7 +4026,7 @@ type ManagementMessage struct {
 
 func (x *ManagementMessage) Reset() {
 	*x = ManagementMessage{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[44]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4006,7 +4038,7 @@ func (x *ManagementMessage) String() string {
 func (*ManagementMessage) ProtoMessage() {}
 
 func (x *ManagementMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[44]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4019,7 +4051,7 @@ func (x *ManagementMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagementMessage.ProtoReflect.Descriptor instead.
 func (*ManagementMessage) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{44}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ManagementMessage) GetRequestId() string {
@@ -4394,7 +4426,7 @@ type StationRegistrationMessage struct {
 
 func (x *StationRegistrationMessage) Reset() {
 	*x = StationRegistrationMessage{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[45]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4406,7 +4438,7 @@ func (x *StationRegistrationMessage) String() string {
 func (*StationRegistrationMessage) ProtoMessage() {}
 
 func (x *StationRegistrationMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[45]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4419,7 +4451,7 @@ func (x *StationRegistrationMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StationRegistrationMessage.ProtoReflect.Descriptor instead.
 func (*StationRegistrationMessage) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{45}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *StationRegistrationMessage) GetRegistrationKey() string {
@@ -4453,7 +4485,7 @@ type StationAuth struct {
 
 func (x *StationAuth) Reset() {
 	*x = StationAuth{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[46]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4465,7 +4497,7 @@ func (x *StationAuth) String() string {
 func (*StationAuth) ProtoMessage() {}
 
 func (x *StationAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[46]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4478,7 +4510,7 @@ func (x *StationAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StationAuth.ProtoReflect.Descriptor instead.
 func (*StationAuth) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{46}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *StationAuth) GetRegistrationKey() string {
@@ -4579,7 +4611,7 @@ type MCPServerInfo struct {
 
 func (x *MCPServerInfo) Reset() {
 	*x = MCPServerInfo{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[47]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4591,7 +4623,7 @@ func (x *MCPServerInfo) String() string {
 func (*MCPServerInfo) ProtoMessage() {}
 
 func (x *MCPServerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[47]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4604,7 +4636,7 @@ func (x *MCPServerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPServerInfo.ProtoReflect.Descriptor instead.
 func (*MCPServerInfo) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{47}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *MCPServerInfo) GetName() string {
@@ -4651,13 +4683,14 @@ type AuthResult struct {
 	Name                string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`                                                             // Confirmed station name
 	HeartbeatIntervalMs int64                  `protobuf:"varint,5,opt,name=heartbeat_interval_ms,json=heartbeatIntervalMs,proto3" json:"heartbeat_interval_ms,omitempty"` // Recommended heartbeat interval (default: 60000ms)
 	ReplacedExisting    bool                   `protobuf:"varint,6,opt,name=replaced_existing,json=replacedExisting,proto3" json:"replaced_existing,omitempty"`            // True if this auth replaced an existing connection
+	OrgId               string                 `protobuf:"bytes,7,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`                                              // Organization ID (UUID) for multi-tenant filtering
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
 func (x *AuthResult) Reset() {
 	*x = AuthResult{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[48]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4669,7 +4702,7 @@ func (x *AuthResult) String() string {
 func (*AuthResult) ProtoMessage() {}
 
 func (x *AuthResult) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[48]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4682,7 +4715,7 @@ func (x *AuthResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthResult.ProtoReflect.Descriptor instead.
 func (*AuthResult) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{48}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *AuthResult) GetSuccess() bool {
@@ -4727,6 +4760,13 @@ func (x *AuthResult) GetReplacedExisting() bool {
 	return false
 }
 
+func (x *AuthResult) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
 // Disconnect message - server-initiated disconnection
 type Disconnect struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -4740,7 +4780,7 @@ type Disconnect struct {
 
 func (x *Disconnect) Reset() {
 	*x = Disconnect{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[49]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4752,7 +4792,7 @@ func (x *Disconnect) String() string {
 func (*Disconnect) ProtoMessage() {}
 
 func (x *Disconnect) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[49]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4765,7 +4805,7 @@ func (x *Disconnect) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Disconnect.ProtoReflect.Descriptor instead.
 func (*Disconnect) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{49}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *Disconnect) GetReason() string {
@@ -4806,7 +4846,7 @@ type ListAgentsManagementRequest struct {
 
 func (x *ListAgentsManagementRequest) Reset() {
 	*x = ListAgentsManagementRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[50]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4818,7 +4858,7 @@ func (x *ListAgentsManagementRequest) String() string {
 func (*ListAgentsManagementRequest) ProtoMessage() {}
 
 func (x *ListAgentsManagementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[50]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4831,7 +4871,7 @@ func (x *ListAgentsManagementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsManagementRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsManagementRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{50}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListAgentsManagementRequest) GetEnvironment() string {
@@ -4851,7 +4891,7 @@ type ListAgentsManagementResponse struct {
 
 func (x *ListAgentsManagementResponse) Reset() {
 	*x = ListAgentsManagementResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[51]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4863,7 +4903,7 @@ func (x *ListAgentsManagementResponse) String() string {
 func (*ListAgentsManagementResponse) ProtoMessage() {}
 
 func (x *ListAgentsManagementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[51]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4876,7 +4916,7 @@ func (x *ListAgentsManagementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsManagementResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsManagementResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{51}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListAgentsManagementResponse) GetAgents() []*AgentInfo {
@@ -4914,7 +4954,7 @@ type AgentInfo struct {
 
 func (x *AgentInfo) Reset() {
 	*x = AgentInfo{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[52]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4926,7 +4966,7 @@ func (x *AgentInfo) String() string {
 func (*AgentInfo) ProtoMessage() {}
 
 func (x *AgentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[52]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4939,7 +4979,7 @@ func (x *AgentInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentInfo.ProtoReflect.Descriptor instead.
 func (*AgentInfo) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{52}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *AgentInfo) GetId() string {
@@ -5043,7 +5083,7 @@ type ListToolsManagementRequest struct {
 
 func (x *ListToolsManagementRequest) Reset() {
 	*x = ListToolsManagementRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[53]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5055,7 +5095,7 @@ func (x *ListToolsManagementRequest) String() string {
 func (*ListToolsManagementRequest) ProtoMessage() {}
 
 func (x *ListToolsManagementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[53]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5068,7 +5108,7 @@ func (x *ListToolsManagementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsManagementRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsManagementRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{53}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListToolsManagementRequest) GetEnvironment() string {
@@ -5090,7 +5130,7 @@ type ListToolsManagementResponse struct {
 
 func (x *ListToolsManagementResponse) Reset() {
 	*x = ListToolsManagementResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[54]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5102,7 +5142,7 @@ func (x *ListToolsManagementResponse) String() string {
 func (*ListToolsManagementResponse) ProtoMessage() {}
 
 func (x *ListToolsManagementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[54]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5115,7 +5155,7 @@ func (x *ListToolsManagementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsManagementResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsManagementResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{54}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListToolsManagementResponse) GetTools() []*ToolInfo {
@@ -5155,7 +5195,7 @@ type GetEnvironmentsRequest struct {
 
 func (x *GetEnvironmentsRequest) Reset() {
 	*x = GetEnvironmentsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[55]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5167,7 +5207,7 @@ func (x *GetEnvironmentsRequest) String() string {
 func (*GetEnvironmentsRequest) ProtoMessage() {}
 
 func (x *GetEnvironmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[55]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5180,7 +5220,7 @@ func (x *GetEnvironmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvironmentsRequest.ProtoReflect.Descriptor instead.
 func (*GetEnvironmentsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{55}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{55}
 }
 
 type GetEnvironmentsResponse struct {
@@ -5192,7 +5232,7 @@ type GetEnvironmentsResponse struct {
 
 func (x *GetEnvironmentsResponse) Reset() {
 	*x = GetEnvironmentsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[56]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5204,7 +5244,7 @@ func (x *GetEnvironmentsResponse) String() string {
 func (*GetEnvironmentsResponse) ProtoMessage() {}
 
 func (x *GetEnvironmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[56]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5217,7 +5257,7 @@ func (x *GetEnvironmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvironmentsResponse.ProtoReflect.Descriptor instead.
 func (*GetEnvironmentsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{56}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetEnvironmentsResponse) GetEnvironments() []*EnvironmentInfo {
@@ -5241,7 +5281,7 @@ type EnvironmentInfo struct {
 
 func (x *EnvironmentInfo) Reset() {
 	*x = EnvironmentInfo{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[57]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5253,7 +5293,7 @@ func (x *EnvironmentInfo) String() string {
 func (*EnvironmentInfo) ProtoMessage() {}
 
 func (x *EnvironmentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[57]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5266,7 +5306,7 @@ func (x *EnvironmentInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentInfo.ProtoReflect.Descriptor instead.
 func (*EnvironmentInfo) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{57}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *EnvironmentInfo) GetName() string {
@@ -5326,7 +5366,7 @@ type ExecuteAgentManagementRequest struct {
 
 func (x *ExecuteAgentManagementRequest) Reset() {
 	*x = ExecuteAgentManagementRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[58]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5338,7 +5378,7 @@ func (x *ExecuteAgentManagementRequest) String() string {
 func (*ExecuteAgentManagementRequest) ProtoMessage() {}
 
 func (x *ExecuteAgentManagementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[58]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5351,7 +5391,7 @@ func (x *ExecuteAgentManagementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentManagementRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentManagementRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{58}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ExecuteAgentManagementRequest) GetAgentId() string {
@@ -5412,7 +5452,7 @@ type ExecuteAgentManagementResponse struct {
 
 func (x *ExecuteAgentManagementResponse) Reset() {
 	*x = ExecuteAgentManagementResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[59]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5424,7 +5464,7 @@ func (x *ExecuteAgentManagementResponse) String() string {
 func (*ExecuteAgentManagementResponse) ProtoMessage() {}
 
 func (x *ExecuteAgentManagementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[59]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5437,7 +5477,7 @@ func (x *ExecuteAgentManagementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentManagementResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentManagementResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{59}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ExecuteAgentManagementResponse) GetExecutionId() string {
@@ -5505,7 +5545,7 @@ type GetSystemStatusRequest struct {
 
 func (x *GetSystemStatusRequest) Reset() {
 	*x = GetSystemStatusRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[60]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5517,7 +5557,7 @@ func (x *GetSystemStatusRequest) String() string {
 func (*GetSystemStatusRequest) ProtoMessage() {}
 
 func (x *GetSystemStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[60]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5530,7 +5570,7 @@ func (x *GetSystemStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSystemStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetSystemStatusRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{60}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{60}
 }
 
 type GetSystemStatusResponse struct {
@@ -5547,7 +5587,7 @@ type GetSystemStatusResponse struct {
 
 func (x *GetSystemStatusResponse) Reset() {
 	*x = GetSystemStatusResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[61]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5559,7 +5599,7 @@ func (x *GetSystemStatusResponse) String() string {
 func (*GetSystemStatusResponse) ProtoMessage() {}
 
 func (x *GetSystemStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[61]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5572,7 +5612,7 @@ func (x *GetSystemStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSystemStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetSystemStatusResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{61}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GetSystemStatusResponse) GetHealth() LighthouseSystemHealth {
@@ -5632,7 +5672,7 @@ type ActiveExecution struct {
 
 func (x *ActiveExecution) Reset() {
 	*x = ActiveExecution{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[62]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5644,7 +5684,7 @@ func (x *ActiveExecution) String() string {
 func (*ActiveExecution) ProtoMessage() {}
 
 func (x *ActiveExecution) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[62]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5657,7 +5697,7 @@ func (x *ActiveExecution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActiveExecution.ProtoReflect.Descriptor instead.
 func (*ActiveExecution) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{62}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ActiveExecution) GetExecutionId() string {
@@ -5718,7 +5758,7 @@ type ListActiveRunsRequest struct {
 
 func (x *ListActiveRunsRequest) Reset() {
 	*x = ListActiveRunsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[63]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5730,7 +5770,7 @@ func (x *ListActiveRunsRequest) String() string {
 func (*ListActiveRunsRequest) ProtoMessage() {}
 
 func (x *ListActiveRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[63]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5743,7 +5783,7 @@ func (x *ListActiveRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActiveRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListActiveRunsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{63}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{63}
 }
 
 type ListActiveRunsResponse struct {
@@ -5756,7 +5796,7 @@ type ListActiveRunsResponse struct {
 
 func (x *ListActiveRunsResponse) Reset() {
 	*x = ListActiveRunsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[64]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5768,7 +5808,7 @@ func (x *ListActiveRunsResponse) String() string {
 func (*ListActiveRunsResponse) ProtoMessage() {}
 
 func (x *ListActiveRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[64]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5781,7 +5821,7 @@ func (x *ListActiveRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActiveRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListActiveRunsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{64}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ListActiveRunsResponse) GetActiveRuns() []*ActiveExecution {
@@ -5808,7 +5848,7 @@ type CancelExecutionRequest struct {
 
 func (x *CancelExecutionRequest) Reset() {
 	*x = CancelExecutionRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[65]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5820,7 +5860,7 @@ func (x *CancelExecutionRequest) String() string {
 func (*CancelExecutionRequest) ProtoMessage() {}
 
 func (x *CancelExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[65]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5833,7 +5873,7 @@ func (x *CancelExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelExecutionRequest.ProtoReflect.Descriptor instead.
 func (*CancelExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{65}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *CancelExecutionRequest) GetExecutionId() string {
@@ -5853,7 +5893,7 @@ type CancelExecutionResponse struct {
 
 func (x *CancelExecutionResponse) Reset() {
 	*x = CancelExecutionResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[66]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5865,7 +5905,7 @@ func (x *CancelExecutionResponse) String() string {
 func (*CancelExecutionResponse) ProtoMessage() {}
 
 func (x *CancelExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[66]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5878,7 +5918,7 @@ func (x *CancelExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelExecutionResponse.ProtoReflect.Descriptor instead.
 func (*CancelExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{66}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *CancelExecutionResponse) GetCancelled() bool {
@@ -5901,13 +5941,14 @@ type GetAgentDetailsRequest struct {
 	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // Station registration key for routing
 	AgentId         string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	Environment     string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	StationName     string                 `protobuf:"bytes,4,opt,name=station_name,json=stationName,proto3" json:"station_name,omitempty"` // Optional: specific station name for multi-station routing
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetAgentDetailsRequest) Reset() {
 	*x = GetAgentDetailsRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[67]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5919,7 +5960,7 @@ func (x *GetAgentDetailsRequest) String() string {
 func (*GetAgentDetailsRequest) ProtoMessage() {}
 
 func (x *GetAgentDetailsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[67]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5932,7 +5973,7 @@ func (x *GetAgentDetailsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentDetailsRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentDetailsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{67}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *GetAgentDetailsRequest) GetRegistrationKey() string {
@@ -5956,6 +5997,13 @@ func (x *GetAgentDetailsRequest) GetEnvironment() string {
 	return ""
 }
 
+func (x *GetAgentDetailsRequest) GetStationName() string {
+	if x != nil {
+		return x.StationName
+	}
+	return ""
+}
+
 type GetAgentDetailsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Agent         *AgentConfig           `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
@@ -5965,7 +6013,7 @@ type GetAgentDetailsResponse struct {
 
 func (x *GetAgentDetailsResponse) Reset() {
 	*x = GetAgentDetailsResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[68]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5977,7 +6025,7 @@ func (x *GetAgentDetailsResponse) String() string {
 func (*GetAgentDetailsResponse) ProtoMessage() {}
 
 func (x *GetAgentDetailsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[68]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5990,7 +6038,7 @@ func (x *GetAgentDetailsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentDetailsResponse.ProtoReflect.Descriptor instead.
 func (*GetAgentDetailsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{68}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *GetAgentDetailsResponse) GetAgent() *AgentConfig {
@@ -6006,13 +6054,14 @@ type UpdateAgentPromptRequest struct {
 	AgentId         string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	Environment     string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
 	NewPrompt       string                 `protobuf:"bytes,4,opt,name=new_prompt,json=newPrompt,proto3" json:"new_prompt,omitempty"`
+	StationName     string                 `protobuf:"bytes,5,opt,name=station_name,json=stationName,proto3" json:"station_name,omitempty"` // Optional: specific station name for multi-station routing
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateAgentPromptRequest) Reset() {
 	*x = UpdateAgentPromptRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[69]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6024,7 +6073,7 @@ func (x *UpdateAgentPromptRequest) String() string {
 func (*UpdateAgentPromptRequest) ProtoMessage() {}
 
 func (x *UpdateAgentPromptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[69]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6037,7 +6086,7 @@ func (x *UpdateAgentPromptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentPromptRequest.ProtoReflect.Descriptor instead.
 func (*UpdateAgentPromptRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{69}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *UpdateAgentPromptRequest) GetRegistrationKey() string {
@@ -6068,6 +6117,13 @@ func (x *UpdateAgentPromptRequest) GetNewPrompt() string {
 	return ""
 }
 
+func (x *UpdateAgentPromptRequest) GetStationName() string {
+	if x != nil {
+		return x.StationName
+	}
+	return ""
+}
+
 type UpdateAgentPromptResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -6079,7 +6135,7 @@ type UpdateAgentPromptResponse struct {
 
 func (x *UpdateAgentPromptResponse) Reset() {
 	*x = UpdateAgentPromptResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[70]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6091,7 +6147,7 @@ func (x *UpdateAgentPromptResponse) String() string {
 func (*UpdateAgentPromptResponse) ProtoMessage() {}
 
 func (x *UpdateAgentPromptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[70]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6104,7 +6160,7 @@ func (x *UpdateAgentPromptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentPromptResponse.ProtoReflect.Descriptor instead.
 func (*UpdateAgentPromptResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{70}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *UpdateAgentPromptResponse) GetSuccess() bool {
@@ -6141,7 +6197,7 @@ type GetMemoryContextRequest struct {
 
 func (x *GetMemoryContextRequest) Reset() {
 	*x = GetMemoryContextRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[71]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6153,7 +6209,7 @@ func (x *GetMemoryContextRequest) String() string {
 func (*GetMemoryContextRequest) ProtoMessage() {}
 
 func (x *GetMemoryContextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[71]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6166,7 +6222,7 @@ func (x *GetMemoryContextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMemoryContextRequest.ProtoReflect.Descriptor instead.
 func (*GetMemoryContextRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{71}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *GetMemoryContextRequest) GetRegistrationKey() string {
@@ -6212,7 +6268,7 @@ type GetMemoryContextResponse struct {
 
 func (x *GetMemoryContextResponse) Reset() {
 	*x = GetMemoryContextResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[72]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6224,7 +6280,7 @@ func (x *GetMemoryContextResponse) String() string {
 func (*GetMemoryContextResponse) ProtoMessage() {}
 
 func (x *GetMemoryContextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[72]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6237,7 +6293,7 @@ func (x *GetMemoryContextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMemoryContextResponse.ProtoReflect.Descriptor instead.
 func (*GetMemoryContextResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{72}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *GetMemoryContextResponse) GetSuccess() bool {
@@ -6294,7 +6350,7 @@ type ManagementError struct {
 
 func (x *ManagementError) Reset() {
 	*x = ManagementError{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[73]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6306,7 +6362,7 @@ func (x *ManagementError) String() string {
 func (*ManagementError) ProtoMessage() {}
 
 func (x *ManagementError) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[73]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6319,7 +6375,7 @@ func (x *ManagementError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagementError.ProtoReflect.Descriptor instead.
 func (*ManagementError) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{73}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ManagementError) GetCode() ErrorCode {
@@ -6351,7 +6407,7 @@ type DebugRequest struct {
 
 func (x *DebugRequest) Reset() {
 	*x = DebugRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[74]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6363,7 +6419,7 @@ func (x *DebugRequest) String() string {
 func (*DebugRequest) ProtoMessage() {}
 
 func (x *DebugRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[74]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6376,7 +6432,7 @@ func (x *DebugRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugRequest.ProtoReflect.Descriptor instead.
 func (*DebugRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{74}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{74}
 }
 
 type TestStationRequest struct {
@@ -6388,7 +6444,7 @@ type TestStationRequest struct {
 
 func (x *TestStationRequest) Reset() {
 	*x = TestStationRequest{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[75]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6400,7 +6456,7 @@ func (x *TestStationRequest) String() string {
 func (*TestStationRequest) ProtoMessage() {}
 
 func (x *TestStationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[75]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6413,7 +6469,7 @@ func (x *TestStationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestStationRequest.ProtoReflect.Descriptor instead.
 func (*TestStationRequest) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{75}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *TestStationRequest) GetRegistrationKey() string {
@@ -6434,7 +6490,7 @@ type DebugResponse struct {
 
 func (x *DebugResponse) Reset() {
 	*x = DebugResponse{}
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[76]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6446,7 +6502,7 @@ func (x *DebugResponse) String() string {
 func (*DebugResponse) ProtoMessage() {}
 
 func (x *DebugResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_lighthouse_proto_lighthouse_proto_msgTypes[76]
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6459,7 +6515,7 @@ func (x *DebugResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugResponse.ProtoReflect.Descriptor instead.
 func (*DebugResponse) Descriptor() ([]byte, []int) {
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP(), []int{76}
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *DebugResponse) GetSuccess() bool {
@@ -6483,11 +6539,275 @@ func (x *DebugResponse) GetError() string {
 	return ""
 }
 
-var File_internal_lighthouse_proto_lighthouse_proto protoreflect.FileDescriptor
+// Request to list all stations connected with a registration key
+type ListStationsRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	RegistrationKey string                 `protobuf:"bytes,1,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"` // Registration key to list stations for
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
 
-const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
+func (x *ListStationsRequest) Reset() {
+	*x = ListStationsRequest{}
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStationsRequest) ProtoMessage() {}
+
+func (x *ListStationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStationsRequest.ProtoReflect.Descriptor instead.
+func (*ListStationsRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{77}
+}
+
+func (x *ListStationsRequest) GetRegistrationKey() string {
+	if x != nil {
+		return x.RegistrationKey
+	}
+	return ""
+}
+
+// Response containing all stations for a registration key
+type ListStationsResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Stations       []*StationInfo         `protobuf:"bytes,1,rep,name=stations,proto3" json:"stations,omitempty"`
+	TotalStations  int32                  `protobuf:"varint,2,opt,name=total_stations,json=totalStations,proto3" json:"total_stations,omitempty"`
+	OnlineStations int32                  `protobuf:"varint,3,opt,name=online_stations,json=onlineStations,proto3" json:"online_stations,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListStationsResponse) Reset() {
+	*x = ListStationsResponse{}
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStationsResponse) ProtoMessage() {}
+
+func (x *ListStationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStationsResponse.ProtoReflect.Descriptor instead.
+func (*ListStationsResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *ListStationsResponse) GetStations() []*StationInfo {
+	if x != nil {
+		return x.Stations
+	}
+	return nil
+}
+
+func (x *ListStationsResponse) GetTotalStations() int32 {
+	if x != nil {
+		return x.TotalStations
+	}
+	return 0
+}
+
+func (x *ListStationsResponse) GetOnlineStations() int32 {
+	if x != nil {
+		return x.OnlineStations
+	}
+	return 0
+}
+
+// Detailed information about a connected station
+type StationInfo struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	StationId          string                 `protobuf:"bytes,1,opt,name=station_id,json=stationId,proto3" json:"station_id,omitempty"`                            // Database station ID (UUID)
+	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                       // User-defined unique station name
+	RegistrationKey    string                 `protobuf:"bytes,3,opt,name=registration_key,json=registrationKey,proto3" json:"registration_key,omitempty"`          // Registration key this station uses
+	Tags               []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`                                                       // User-defined tags ["production", "us-east-1"]
+	Hostname           string                 `protobuf:"bytes,5,opt,name=hostname,proto3" json:"hostname,omitempty"`                                               // Machine hostname
+	Version            string                 `protobuf:"bytes,6,opt,name=version,proto3" json:"version,omitempty"`                                                 // Station CLI version
+	Os                 string                 `protobuf:"bytes,7,opt,name=os,proto3" json:"os,omitempty"`                                                           // Operating system
+	Arch               string                 `protobuf:"bytes,8,opt,name=arch,proto3" json:"arch,omitempty"`                                                       // CPU architecture
+	DefaultEnvironment string                 `protobuf:"bytes,9,opt,name=default_environment,json=defaultEnvironment,proto3" json:"default_environment,omitempty"` // Default environment name
+	IsOnline           bool                   `protobuf:"varint,10,opt,name=is_online,json=isOnline,proto3" json:"is_online,omitempty"`                             // Whether station is currently connected
+	LastHeartbeat      *timestamp.Timestamp   `protobuf:"bytes,11,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat,omitempty"`               // Last heartbeat time
+	ConnectedAt        *timestamp.Timestamp   `protobuf:"bytes,12,opt,name=connected_at,json=connectedAt,proto3" json:"connected_at,omitempty"`                     // Connection time
+	// Cached capabilities (may be stale, use ListAgents/ListTools for live data)
+	AgentCount     int32 `protobuf:"varint,13,opt,name=agent_count,json=agentCount,proto3" json:"agent_count,omitempty"`
+	ToolCount      int32 `protobuf:"varint,14,opt,name=tool_count,json=toolCount,proto3" json:"tool_count,omitempty"`
+	McpServerCount int32 `protobuf:"varint,15,opt,name=mcp_server_count,json=mcpServerCount,proto3" json:"mcp_server_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *StationInfo) Reset() {
+	*x = StationInfo{}
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StationInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StationInfo) ProtoMessage() {}
+
+func (x *StationInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_lighthouse_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StationInfo.ProtoReflect.Descriptor instead.
+func (*StationInfo) Descriptor() ([]byte, []int) {
+	return file_internal_proto_lighthouse_proto_rawDescGZIP(), []int{79}
+}
+
+func (x *StationInfo) GetStationId() string {
+	if x != nil {
+		return x.StationId
+	}
+	return ""
+}
+
+func (x *StationInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *StationInfo) GetRegistrationKey() string {
+	if x != nil {
+		return x.RegistrationKey
+	}
+	return ""
+}
+
+func (x *StationInfo) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *StationInfo) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *StationInfo) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *StationInfo) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *StationInfo) GetArch() string {
+	if x != nil {
+		return x.Arch
+	}
+	return ""
+}
+
+func (x *StationInfo) GetDefaultEnvironment() string {
+	if x != nil {
+		return x.DefaultEnvironment
+	}
+	return ""
+}
+
+func (x *StationInfo) GetIsOnline() bool {
+	if x != nil {
+		return x.IsOnline
+	}
+	return false
+}
+
+func (x *StationInfo) GetLastHeartbeat() *timestamp.Timestamp {
+	if x != nil {
+		return x.LastHeartbeat
+	}
+	return nil
+}
+
+func (x *StationInfo) GetConnectedAt() *timestamp.Timestamp {
+	if x != nil {
+		return x.ConnectedAt
+	}
+	return nil
+}
+
+func (x *StationInfo) GetAgentCount() int32 {
+	if x != nil {
+		return x.AgentCount
+	}
+	return 0
+}
+
+func (x *StationInfo) GetToolCount() int32 {
+	if x != nil {
+		return x.ToolCount
+	}
+	return 0
+}
+
+func (x *StationInfo) GetMcpServerCount() int32 {
+	if x != nil {
+		return x.McpServerCount
+	}
+	return 0
+}
+
+var File_internal_proto_lighthouse_proto protoreflect.FileDescriptor
+
+const file_internal_proto_lighthouse_proto_rawDesc = "" +
 	"\n" +
-	"*internal/lighthouse/proto/lighthouse.proto\x12\rlighthouse.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.internal/lighthouse/proto/data_ingestion.proto\"\xaf\x03\n" +
+	"\x1finternal/proto/lighthouse.proto\x12\rlighthouse.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a#internal/proto/data_ingestion.proto\"\xaf\x03\n" +
 	"\x16RegisterStationRequest\x12\x1d\n" +
 	"\n" +
 	"station_id\x18\x01 \x01(\tR\tstationId\x12)\n" +
@@ -6756,37 +7076,41 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12)\n" +
 	"\x10pending_commands\x18\x03 \x03(\tR\x0fpendingCommands\x12E\n" +
-	"\x0eupdated_config\x18\x04 \x01(\v2\x1e.lighthouse.v1.CloudShipConfigR\rupdatedConfig\"_\n" +
+	"\x0eupdated_config\x18\x04 \x01(\v2\x1e.lighthouse.v1.CloudShipConfigR\rupdatedConfig\"\x82\x01\n" +
 	"\x10ListToolsRequest\x12)\n" +
 	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12 \n" +
-	"\venvironment\x18\x02 \x01(\tR\venvironment\"B\n" +
+	"\venvironment\x18\x02 \x01(\tR\venvironment\x12!\n" +
+	"\fstation_name\x18\x03 \x01(\tR\vstationName\"B\n" +
 	"\x11ListToolsResponse\x12-\n" +
-	"\x05tools\x18\x01 \x03(\v2\x17.lighthouse.v1.ToolInfoR\x05tools\"\x8a\x02\n" +
+	"\x05tools\x18\x01 \x03(\v2\x17.lighthouse.v1.ToolInfoR\x05tools\"\xad\x02\n" +
 	"\x0fCallToolRequest\x12)\n" +
 	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12 \n" +
 	"\venvironment\x18\x02 \x01(\tR\venvironment\x12\x1b\n" +
 	"\ttool_name\x18\x03 \x01(\tR\btoolName\x12N\n" +
 	"\n" +
 	"parameters\x18\x04 \x03(\v2..lighthouse.v1.CallToolRequest.ParametersEntryR\n" +
-	"parameters\x1a=\n" +
+	"parameters\x12!\n" +
+	"\fstation_name\x18\x05 \x01(\tR\vstationName\x1a=\n" +
 	"\x0fParametersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"i\n" +
 	"\x10CallToolResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\tR\x06result\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"`\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\x83\x01\n" +
 	"\x11ListAgentsRequest\x12)\n" +
 	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12 \n" +
-	"\venvironment\x18\x02 \x01(\tR\venvironment\"H\n" +
+	"\venvironment\x18\x02 \x01(\tR\venvironment\x12!\n" +
+	"\fstation_name\x18\x03 \x01(\tR\vstationName\"H\n" +
 	"\x12ListAgentsResponse\x122\n" +
-	"\x06agents\x18\x01 \x03(\v2\x1a.lighthouse.v1.AgentConfigR\x06agents\"\xa0\x02\n" +
+	"\x06agents\x18\x01 \x03(\v2\x1a.lighthouse.v1.AgentConfigR\x06agents\"\xc3\x02\n" +
 	"\x13ExecuteAgentRequest\x12)\n" +
 	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12 \n" +
 	"\venvironment\x18\x02 \x01(\tR\venvironment\x12\x19\n" +
 	"\bagent_id\x18\x03 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04task\x18\x04 \x01(\tR\x04task\x12O\n" +
-	"\tvariables\x18\x05 \x03(\v21.lighthouse.v1.ExecuteAgentRequest.VariablesEntryR\tvariables\x1a<\n" +
+	"\tvariables\x18\x05 \x03(\v21.lighthouse.v1.ExecuteAgentRequest.VariablesEntryR\tvariables\x12!\n" +
+	"\fstation_name\x18\x06 \x01(\tR\vstationName\x1a<\n" +
 	"\x0eVariablesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8d\x02\n" +
@@ -6872,7 +7196,7 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\x04args\x18\x03 \x03(\tR\x04args\x12\x18\n" +
 	"\aenabled\x18\x04 \x01(\bR\aenabled\x12\x1d\n" +
 	"\n" +
-	"tool_count\x18\x05 \x01(\x05R\ttoolCount\"\xd0\x01\n" +
+	"tool_count\x18\x05 \x01(\x05R\ttoolCount\"\xe7\x01\n" +
 	"\n" +
 	"AuthResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
@@ -6881,7 +7205,8 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"station_id\x18\x03 \x01(\tR\tstationId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x122\n" +
 	"\x15heartbeat_interval_ms\x18\x05 \x01(\x03R\x13heartbeatIntervalMs\x12+\n" +
-	"\x11replaced_existing\x18\x06 \x01(\bR\x10replacedExisting\"\xb2\x01\n" +
+	"\x11replaced_existing\x18\x06 \x01(\bR\x10replacedExisting\x12\x15\n" +
+	"\x06org_id\x18\a \x01(\tR\x05orgId\"\xb2\x01\n" +
 	"\n" +
 	"Disconnect\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x123\n" +
@@ -6986,19 +7311,21 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\fexecution_id\x18\x01 \x01(\tR\vexecutionId\"Q\n" +
 	"\x17CancelExecutionResponse\x12\x1c\n" +
 	"\tcancelled\x18\x01 \x01(\bR\tcancelled\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x80\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xa3\x01\n" +
 	"\x16GetAgentDetailsRequest\x12)\n" +
 	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12 \n" +
-	"\venvironment\x18\x03 \x01(\tR\venvironment\"K\n" +
+	"\venvironment\x18\x03 \x01(\tR\venvironment\x12!\n" +
+	"\fstation_name\x18\x04 \x01(\tR\vstationName\"K\n" +
 	"\x17GetAgentDetailsResponse\x120\n" +
-	"\x05agent\x18\x01 \x01(\v2\x1a.lighthouse.v1.AgentConfigR\x05agent\"\xa1\x01\n" +
+	"\x05agent\x18\x01 \x01(\v2\x1a.lighthouse.v1.AgentConfigR\x05agent\"\xc4\x01\n" +
 	"\x18UpdateAgentPromptRequest\x12)\n" +
 	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12 \n" +
 	"\venvironment\x18\x03 \x01(\tR\venvironment\x12\x1d\n" +
 	"\n" +
-	"new_prompt\x18\x04 \x01(\tR\tnewPrompt\"\x90\x01\n" +
+	"new_prompt\x18\x04 \x01(\tR\tnewPrompt\x12!\n" +
+	"\fstation_name\x18\x05 \x01(\tR\vstationName\"\x90\x01\n" +
 	"\x19UpdateAgentPromptResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12?\n" +
@@ -7027,7 +7354,33 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\rDebugResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\tR\x04data\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error*\x80\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"@\n" +
+	"\x13ListStationsRequest\x12)\n" +
+	"\x10registration_key\x18\x01 \x01(\tR\x0fregistrationKey\"\x9e\x01\n" +
+	"\x14ListStationsResponse\x126\n" +
+	"\bstations\x18\x01 \x03(\v2\x1a.lighthouse.v1.StationInfoR\bstations\x12%\n" +
+	"\x0etotal_stations\x18\x02 \x01(\x05R\rtotalStations\x12'\n" +
+	"\x0fonline_stations\x18\x03 \x01(\x05R\x0eonlineStations\"\x93\x04\n" +
+	"\vStationInfo\x12\x1d\n" +
+	"\n" +
+	"station_id\x18\x01 \x01(\tR\tstationId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12)\n" +
+	"\x10registration_key\x18\x03 \x01(\tR\x0fregistrationKey\x12\x12\n" +
+	"\x04tags\x18\x04 \x03(\tR\x04tags\x12\x1a\n" +
+	"\bhostname\x18\x05 \x01(\tR\bhostname\x12\x18\n" +
+	"\aversion\x18\x06 \x01(\tR\aversion\x12\x0e\n" +
+	"\x02os\x18\a \x01(\tR\x02os\x12\x12\n" +
+	"\x04arch\x18\b \x01(\tR\x04arch\x12/\n" +
+	"\x13default_environment\x18\t \x01(\tR\x12defaultEnvironment\x12\x1b\n" +
+	"\tis_online\x18\n" +
+	" \x01(\bR\bisOnline\x12A\n" +
+	"\x0elast_heartbeat\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\rlastHeartbeat\x12=\n" +
+	"\fconnected_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vconnectedAt\x12\x1f\n" +
+	"\vagent_count\x18\r \x01(\x05R\n" +
+	"agentCount\x12\x1d\n" +
+	"\n" +
+	"tool_count\x18\x0e \x01(\x05R\ttoolCount\x12(\n" +
+	"\x10mcp_server_count\x18\x0f \x01(\x05R\x0emcpServerCount*\x80\x01\n" +
 	"\x0eDeploymentMode\x12\x1f\n" +
 	"\x1bDEPLOYMENT_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DEPLOYMENT_MODE_STDIO\x10\x01\x12\x19\n" +
@@ -7102,7 +7455,7 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\rTIMEOUT_ERROR\x10\x04\x12\x15\n" +
 	"\x11PERMISSION_DENIED\x10\x05\x12\x14\n" +
 	"\x10MEMORY_NOT_FOUND\x10\x06\x12\x16\n" +
-	"\x12MEMORY_FETCH_ERROR\x10\a2\x98\v\n" +
+	"\x12MEMORY_FETCH_ERROR\x10\a2\xf1\v\n" +
 	"\x11LighthouseService\x12`\n" +
 	"\x0fRegisterStation\x12%.lighthouse.v1.RegisterStationRequest\x1a&.lighthouse.v1.RegisterStationResponse\x12N\n" +
 	"\tHeartbeat\x12\x1f.lighthouse.v1.HeartbeatRequest\x1a .lighthouse.v1.HeartbeatResponse\x12H\n" +
@@ -7121,27 +7474,28 @@ const file_internal_lighthouse_proto_lighthouse_proto_rawDesc = "" +
 	"\bCallTool\x12\x1e.lighthouse.v1.CallToolRequest\x1a\x1f.lighthouse.v1.CallToolResponse\x12Q\n" +
 	"\n" +
 	"ListAgents\x12 .lighthouse.v1.ListAgentsRequest\x1a!.lighthouse.v1.ListAgentsResponse\x12W\n" +
-	"\fExecuteAgent\x12\".lighthouse.v1.ExecuteAgentRequest\x1a#.lighthouse.v1.ExecuteAgentResponse2\x92\x02\n" +
+	"\fExecuteAgent\x12\".lighthouse.v1.ExecuteAgentRequest\x1a#.lighthouse.v1.ExecuteAgentResponse\x12W\n" +
+	"\fListStations\x12\".lighthouse.v1.ListStationsRequest\x1a#.lighthouse.v1.ListStationsResponse2\x92\x02\n" +
 	"\fDebugService\x12N\n" +
 	"\x11GetActiveStations\x12\x1b.lighthouse.v1.DebugRequest\x1a\x1c.lighthouse.v1.DebugResponse\x12X\n" +
 	"\x1bGetActiveManagementChannels\x12\x1b.lighthouse.v1.DebugRequest\x1a\x1c.lighthouse.v1.DebugResponse\x12X\n" +
-	"\x15TestStationConnection\x12!.lighthouse.v1.TestStationRequest\x1a\x1c.lighthouse.v1.DebugResponseB#Z!station/internal/lighthouse/protob\x06proto3"
+	"\x15TestStationConnection\x12!.lighthouse.v1.TestStationRequest\x1a\x1c.lighthouse.v1.DebugResponseB\x12Z\x10./internal/protob\x06proto3"
 
 var (
-	file_internal_lighthouse_proto_lighthouse_proto_rawDescOnce sync.Once
-	file_internal_lighthouse_proto_lighthouse_proto_rawDescData []byte
+	file_internal_proto_lighthouse_proto_rawDescOnce sync.Once
+	file_internal_proto_lighthouse_proto_rawDescData []byte
 )
 
-func file_internal_lighthouse_proto_lighthouse_proto_rawDescGZIP() []byte {
-	file_internal_lighthouse_proto_lighthouse_proto_rawDescOnce.Do(func() {
-		file_internal_lighthouse_proto_lighthouse_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_lighthouse_proto_lighthouse_proto_rawDesc), len(file_internal_lighthouse_proto_lighthouse_proto_rawDesc)))
+func file_internal_proto_lighthouse_proto_rawDescGZIP() []byte {
+	file_internal_proto_lighthouse_proto_rawDescOnce.Do(func() {
+		file_internal_proto_lighthouse_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_proto_lighthouse_proto_rawDesc), len(file_internal_proto_lighthouse_proto_rawDesc)))
 	})
-	return file_internal_lighthouse_proto_lighthouse_proto_rawDescData
+	return file_internal_proto_lighthouse_proto_rawDescData
 }
 
-var file_internal_lighthouse_proto_lighthouse_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_internal_lighthouse_proto_lighthouse_proto_msgTypes = make([]protoimpl.MessageInfo, 95)
-var file_internal_lighthouse_proto_lighthouse_proto_goTypes = []any{
+var file_internal_proto_lighthouse_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
+var file_internal_proto_lighthouse_proto_msgTypes = make([]protoimpl.MessageInfo, 98)
+var file_internal_proto_lighthouse_proto_goTypes = []any{
 	(DeploymentMode)(0),                    // 0: lighthouse.v1.DeploymentMode
 	(LighthouseRunStatus)(0),               // 1: lighthouse.v1.LighthouseRunStatus
 	(RunSource)(0),                         // 2: lighthouse.v1.RunSource
@@ -7231,70 +7585,73 @@ var file_internal_lighthouse_proto_lighthouse_proto_goTypes = []any{
 	(*DebugRequest)(nil),                   // 86: lighthouse.v1.DebugRequest
 	(*TestStationRequest)(nil),             // 87: lighthouse.v1.TestStationRequest
 	(*DebugResponse)(nil),                  // 88: lighthouse.v1.DebugResponse
-	nil,                                    // 89: lighthouse.v1.RegisterStationRequest.MetadataEntry
-	nil,                                    // 90: lighthouse.v1.CloudShipConfig.SettingsEntry
-	nil,                                    // 91: lighthouse.v1.SendRunRequest.LabelsEntry
-	nil,                                    // 92: lighthouse.v1.LighthouseAgentRunData.MetadataEntry
-	nil,                                    // 93: lighthouse.v1.LighthouseToolCall.ParametersEntry
-	nil,                                    // 94: lighthouse.v1.DeploymentContext.EnvVarsEntry
-	nil,                                    // 95: lighthouse.v1.SystemSnapshot.VariablesEntry
-	nil,                                    // 96: lighthouse.v1.SyncConfigRequest.VariablesEntry
-	nil,                                    // 97: lighthouse.v1.AgentConfig.VariablesEntry
-	nil,                                    // 98: lighthouse.v1.MCPConfig.EnvVarsEntry
-	nil,                                    // 99: lighthouse.v1.MCPConfig.VariablesEntry
-	nil,                                    // 100: lighthouse.v1.ExecuteAgentCommand.VariablesEntry
-	nil,                                    // 101: lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
-	nil,                                    // 102: lighthouse.v1.CallToolRequest.ParametersEntry
-	nil,                                    // 103: lighthouse.v1.ExecuteAgentRequest.VariablesEntry
-	nil,                                    // 104: lighthouse.v1.StationAuth.HardwareInfoEntry
-	nil,                                    // 105: lighthouse.v1.EnvironmentInfo.VariablesEntry
-	nil,                                    // 106: lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
-	(*timestamp.Timestamp)(nil),            // 107: google.protobuf.Timestamp
-	(*IngestDataRequest)(nil),              // 108: lighthouse.v1.IngestDataRequest
-	(*IngestDataResponse)(nil),             // 109: lighthouse.v1.IngestDataResponse
+	(*ListStationsRequest)(nil),            // 89: lighthouse.v1.ListStationsRequest
+	(*ListStationsResponse)(nil),           // 90: lighthouse.v1.ListStationsResponse
+	(*StationInfo)(nil),                    // 91: lighthouse.v1.StationInfo
+	nil,                                    // 92: lighthouse.v1.RegisterStationRequest.MetadataEntry
+	nil,                                    // 93: lighthouse.v1.CloudShipConfig.SettingsEntry
+	nil,                                    // 94: lighthouse.v1.SendRunRequest.LabelsEntry
+	nil,                                    // 95: lighthouse.v1.LighthouseAgentRunData.MetadataEntry
+	nil,                                    // 96: lighthouse.v1.LighthouseToolCall.ParametersEntry
+	nil,                                    // 97: lighthouse.v1.DeploymentContext.EnvVarsEntry
+	nil,                                    // 98: lighthouse.v1.SystemSnapshot.VariablesEntry
+	nil,                                    // 99: lighthouse.v1.SyncConfigRequest.VariablesEntry
+	nil,                                    // 100: lighthouse.v1.AgentConfig.VariablesEntry
+	nil,                                    // 101: lighthouse.v1.MCPConfig.EnvVarsEntry
+	nil,                                    // 102: lighthouse.v1.MCPConfig.VariablesEntry
+	nil,                                    // 103: lighthouse.v1.ExecuteAgentCommand.VariablesEntry
+	nil,                                    // 104: lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
+	nil,                                    // 105: lighthouse.v1.CallToolRequest.ParametersEntry
+	nil,                                    // 106: lighthouse.v1.ExecuteAgentRequest.VariablesEntry
+	nil,                                    // 107: lighthouse.v1.StationAuth.HardwareInfoEntry
+	nil,                                    // 108: lighthouse.v1.EnvironmentInfo.VariablesEntry
+	nil,                                    // 109: lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
+	(*timestamp.Timestamp)(nil),            // 110: google.protobuf.Timestamp
+	(*IngestDataRequest)(nil),              // 111: lighthouse.v1.IngestDataRequest
+	(*IngestDataResponse)(nil),             // 112: lighthouse.v1.IngestDataResponse
 }
-var file_internal_lighthouse_proto_lighthouse_proto_depIdxs = []int32{
+var file_internal_proto_lighthouse_proto_depIdxs = []int32{
 	0,   // 0: lighthouse.v1.RegisterStationRequest.mode:type_name -> lighthouse.v1.DeploymentMode
 	14,  // 1: lighthouse.v1.RegisterStationRequest.capabilities:type_name -> lighthouse.v1.StationCapabilities
-	89,  // 2: lighthouse.v1.RegisterStationRequest.metadata:type_name -> lighthouse.v1.RegisterStationRequest.MetadataEntry
+	92,  // 2: lighthouse.v1.RegisterStationRequest.metadata:type_name -> lighthouse.v1.RegisterStationRequest.MetadataEntry
 	5,   // 3: lighthouse.v1.RegisterStationResponse.status:type_name -> lighthouse.v1.RegistrationStatus
 	15,  // 4: lighthouse.v1.RegisterStationResponse.cloudship_config:type_name -> lighthouse.v1.CloudShipConfig
-	90,  // 5: lighthouse.v1.CloudShipConfig.settings:type_name -> lighthouse.v1.CloudShipConfig.SettingsEntry
+	93,  // 5: lighthouse.v1.CloudShipConfig.settings:type_name -> lighthouse.v1.CloudShipConfig.SettingsEntry
 	0,   // 6: lighthouse.v1.SendRunRequest.mode:type_name -> lighthouse.v1.DeploymentMode
 	2,   // 7: lighthouse.v1.SendRunRequest.source:type_name -> lighthouse.v1.RunSource
 	18,  // 8: lighthouse.v1.SendRunRequest.run_data:type_name -> lighthouse.v1.LighthouseAgentRunData
-	91,  // 9: lighthouse.v1.SendRunRequest.labels:type_name -> lighthouse.v1.SendRunRequest.LabelsEntry
+	94,  // 9: lighthouse.v1.SendRunRequest.labels:type_name -> lighthouse.v1.SendRunRequest.LabelsEntry
 	19,  // 10: lighthouse.v1.LighthouseAgentRunData.tool_calls:type_name -> lighthouse.v1.LighthouseToolCall
 	20,  // 11: lighthouse.v1.LighthouseAgentRunData.execution_steps:type_name -> lighthouse.v1.ExecutionStep
 	21,  // 12: lighthouse.v1.LighthouseAgentRunData.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
 	1,   // 13: lighthouse.v1.LighthouseAgentRunData.status:type_name -> lighthouse.v1.LighthouseRunStatus
-	107, // 14: lighthouse.v1.LighthouseAgentRunData.started_at:type_name -> google.protobuf.Timestamp
-	107, // 15: lighthouse.v1.LighthouseAgentRunData.completed_at:type_name -> google.protobuf.Timestamp
-	92,  // 16: lighthouse.v1.LighthouseAgentRunData.metadata:type_name -> lighthouse.v1.LighthouseAgentRunData.MetadataEntry
-	93,  // 17: lighthouse.v1.LighthouseToolCall.parameters:type_name -> lighthouse.v1.LighthouseToolCall.ParametersEntry
-	107, // 18: lighthouse.v1.LighthouseToolCall.timestamp:type_name -> google.protobuf.Timestamp
+	110, // 14: lighthouse.v1.LighthouseAgentRunData.started_at:type_name -> google.protobuf.Timestamp
+	110, // 15: lighthouse.v1.LighthouseAgentRunData.completed_at:type_name -> google.protobuf.Timestamp
+	95,  // 16: lighthouse.v1.LighthouseAgentRunData.metadata:type_name -> lighthouse.v1.LighthouseAgentRunData.MetadataEntry
+	96,  // 17: lighthouse.v1.LighthouseToolCall.parameters:type_name -> lighthouse.v1.LighthouseToolCall.ParametersEntry
+	110, // 18: lighthouse.v1.LighthouseToolCall.timestamp:type_name -> google.protobuf.Timestamp
 	3,   // 19: lighthouse.v1.ExecutionStep.type:type_name -> lighthouse.v1.StepType
-	107, // 20: lighthouse.v1.ExecutionStep.timestamp:type_name -> google.protobuf.Timestamp
+	110, // 20: lighthouse.v1.ExecutionStep.timestamp:type_name -> google.protobuf.Timestamp
 	2,   // 21: lighthouse.v1.EphemeralSnapshotRequest.source:type_name -> lighthouse.v1.RunSource
 	24,  // 22: lighthouse.v1.EphemeralSnapshotRequest.context:type_name -> lighthouse.v1.DeploymentContext
 	18,  // 23: lighthouse.v1.EphemeralSnapshotRequest.run_data:type_name -> lighthouse.v1.LighthouseAgentRunData
 	25,  // 24: lighthouse.v1.EphemeralSnapshotRequest.system:type_name -> lighthouse.v1.SystemSnapshot
-	94,  // 25: lighthouse.v1.DeploymentContext.env_vars:type_name -> lighthouse.v1.DeploymentContext.EnvVarsEntry
+	97,  // 25: lighthouse.v1.DeploymentContext.env_vars:type_name -> lighthouse.v1.DeploymentContext.EnvVarsEntry
 	28,  // 26: lighthouse.v1.SystemSnapshot.agents:type_name -> lighthouse.v1.AgentConfig
 	29,  // 27: lighthouse.v1.SystemSnapshot.mcp_servers:type_name -> lighthouse.v1.MCPConfig
-	95,  // 28: lighthouse.v1.SystemSnapshot.variables:type_name -> lighthouse.v1.SystemSnapshot.VariablesEntry
+	98,  // 28: lighthouse.v1.SystemSnapshot.variables:type_name -> lighthouse.v1.SystemSnapshot.VariablesEntry
 	30,  // 29: lighthouse.v1.SystemSnapshot.available_tools:type_name -> lighthouse.v1.ToolInfo
 	42,  // 30: lighthouse.v1.SystemSnapshot.metrics:type_name -> lighthouse.v1.SystemMetrics
 	28,  // 31: lighthouse.v1.SyncConfigRequest.agents:type_name -> lighthouse.v1.AgentConfig
 	29,  // 32: lighthouse.v1.SyncConfigRequest.mcp_servers:type_name -> lighthouse.v1.MCPConfig
-	96,  // 33: lighthouse.v1.SyncConfigRequest.variables:type_name -> lighthouse.v1.SyncConfigRequest.VariablesEntry
-	97,  // 34: lighthouse.v1.AgentConfig.variables:type_name -> lighthouse.v1.AgentConfig.VariablesEntry
-	107, // 35: lighthouse.v1.AgentConfig.created_at:type_name -> google.protobuf.Timestamp
-	107, // 36: lighthouse.v1.AgentConfig.updated_at:type_name -> google.protobuf.Timestamp
-	98,  // 37: lighthouse.v1.MCPConfig.env_vars:type_name -> lighthouse.v1.MCPConfig.EnvVarsEntry
-	99,  // 38: lighthouse.v1.MCPConfig.variables:type_name -> lighthouse.v1.MCPConfig.VariablesEntry
-	107, // 39: lighthouse.v1.MCPConfig.created_at:type_name -> google.protobuf.Timestamp
-	107, // 40: lighthouse.v1.MCPConfig.updated_at:type_name -> google.protobuf.Timestamp
+	99,  // 33: lighthouse.v1.SyncConfigRequest.variables:type_name -> lighthouse.v1.SyncConfigRequest.VariablesEntry
+	100, // 34: lighthouse.v1.AgentConfig.variables:type_name -> lighthouse.v1.AgentConfig.VariablesEntry
+	110, // 35: lighthouse.v1.AgentConfig.created_at:type_name -> google.protobuf.Timestamp
+	110, // 36: lighthouse.v1.AgentConfig.updated_at:type_name -> google.protobuf.Timestamp
+	101, // 37: lighthouse.v1.MCPConfig.env_vars:type_name -> lighthouse.v1.MCPConfig.EnvVarsEntry
+	102, // 38: lighthouse.v1.MCPConfig.variables:type_name -> lighthouse.v1.MCPConfig.VariablesEntry
+	110, // 39: lighthouse.v1.MCPConfig.created_at:type_name -> google.protobuf.Timestamp
+	110, // 40: lighthouse.v1.MCPConfig.updated_at:type_name -> google.protobuf.Timestamp
 	42,  // 41: lighthouse.v1.ConnectRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
 	33,  // 42: lighthouse.v1.CloudShipCommand.create_agent:type_name -> lighthouse.v1.CreateAgentCommand
 	34,  // 43: lighthouse.v1.CloudShipCommand.update_agent:type_name -> lighthouse.v1.UpdateAgentCommand
@@ -7306,27 +7663,27 @@ var file_internal_lighthouse_proto_lighthouse_proto_depIdxs = []int32{
 	28,  // 49: lighthouse.v1.CreateAgentCommand.config:type_name -> lighthouse.v1.AgentConfig
 	28,  // 50: lighthouse.v1.UpdateAgentCommand.config:type_name -> lighthouse.v1.AgentConfig
 	29,  // 51: lighthouse.v1.SyncMCPServersCommand.mcp_servers:type_name -> lighthouse.v1.MCPConfig
-	100, // 52: lighthouse.v1.ExecuteAgentCommand.variables:type_name -> lighthouse.v1.ExecuteAgentCommand.VariablesEntry
+	103, // 52: lighthouse.v1.ExecuteAgentCommand.variables:type_name -> lighthouse.v1.ExecuteAgentCommand.VariablesEntry
 	4,   // 53: lighthouse.v1.SystemHealthRequest.status:type_name -> lighthouse.v1.SystemStatus
 	42,  // 54: lighthouse.v1.SystemHealthRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
-	107, // 55: lighthouse.v1.SystemHealthRequest.timestamp:type_name -> google.protobuf.Timestamp
-	101, // 56: lighthouse.v1.SystemMetrics.additional_metrics:type_name -> lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
+	110, // 55: lighthouse.v1.SystemHealthRequest.timestamp:type_name -> google.protobuf.Timestamp
+	104, // 56: lighthouse.v1.SystemMetrics.additional_metrics:type_name -> lighthouse.v1.SystemMetrics.AdditionalMetricsEntry
 	4,   // 57: lighthouse.v1.HeartbeatRequest.status:type_name -> lighthouse.v1.SystemStatus
 	42,  // 58: lighthouse.v1.HeartbeatRequest.metrics:type_name -> lighthouse.v1.SystemMetrics
-	107, // 59: lighthouse.v1.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	110, // 59: lighthouse.v1.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
 	15,  // 60: lighthouse.v1.HeartbeatResponse.updated_config:type_name -> lighthouse.v1.CloudShipConfig
 	30,  // 61: lighthouse.v1.ListToolsResponse.tools:type_name -> lighthouse.v1.ToolInfo
-	102, // 62: lighthouse.v1.CallToolRequest.parameters:type_name -> lighthouse.v1.CallToolRequest.ParametersEntry
+	105, // 62: lighthouse.v1.CallToolRequest.parameters:type_name -> lighthouse.v1.CallToolRequest.ParametersEntry
 	28,  // 63: lighthouse.v1.ListAgentsResponse.agents:type_name -> lighthouse.v1.AgentConfig
-	103, // 64: lighthouse.v1.ExecuteAgentRequest.variables:type_name -> lighthouse.v1.ExecuteAgentRequest.VariablesEntry
+	106, // 64: lighthouse.v1.ExecuteAgentRequest.variables:type_name -> lighthouse.v1.ExecuteAgentRequest.VariablesEntry
 	53,  // 65: lighthouse.v1.ExecuteAgentResponse.started:type_name -> lighthouse.v1.ExecutionStarted
 	20,  // 66: lighthouse.v1.ExecuteAgentResponse.step:type_name -> lighthouse.v1.ExecutionStep
 	54,  // 67: lighthouse.v1.ExecuteAgentResponse.completed:type_name -> lighthouse.v1.ExecutionCompleted
 	55,  // 68: lighthouse.v1.ExecuteAgentResponse.error:type_name -> lighthouse.v1.ExecutionError
-	107, // 69: lighthouse.v1.ExecutionStarted.started_at:type_name -> google.protobuf.Timestamp
+	110, // 69: lighthouse.v1.ExecutionStarted.started_at:type_name -> google.protobuf.Timestamp
 	21,  // 70: lighthouse.v1.ExecutionCompleted.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
-	107, // 71: lighthouse.v1.ExecutionCompleted.completed_at:type_name -> google.protobuf.Timestamp
-	107, // 72: lighthouse.v1.ExecutionError.error_at:type_name -> google.protobuf.Timestamp
+	110, // 71: lighthouse.v1.ExecutionCompleted.completed_at:type_name -> google.protobuf.Timestamp
+	110, // 72: lighthouse.v1.ExecutionError.error_at:type_name -> google.protobuf.Timestamp
 	62,  // 73: lighthouse.v1.ManagementMessage.list_agents_request:type_name -> lighthouse.v1.ListAgentsManagementRequest
 	65,  // 74: lighthouse.v1.ManagementMessage.list_tools_request:type_name -> lighthouse.v1.ListToolsManagementRequest
 	67,  // 75: lighthouse.v1.ManagementMessage.get_environments_request:type_name -> lighthouse.v1.GetEnvironmentsRequest
@@ -7351,83 +7708,88 @@ var file_internal_lighthouse_proto_lighthouse_proto_depIdxs = []int32{
 	64,  // 94: lighthouse.v1.StationAuth.agents:type_name -> lighthouse.v1.AgentInfo
 	30,  // 95: lighthouse.v1.StationAuth.tools:type_name -> lighthouse.v1.ToolInfo
 	59,  // 96: lighthouse.v1.StationAuth.mcp_servers:type_name -> lighthouse.v1.MCPServerInfo
-	104, // 97: lighthouse.v1.StationAuth.hardware_info:type_name -> lighthouse.v1.StationAuth.HardwareInfoEntry
+	107, // 97: lighthouse.v1.StationAuth.hardware_info:type_name -> lighthouse.v1.StationAuth.HardwareInfoEntry
 	6,   // 98: lighthouse.v1.Disconnect.code:type_name -> lighthouse.v1.DisconnectReason
 	64,  // 99: lighthouse.v1.ListAgentsManagementResponse.agents:type_name -> lighthouse.v1.AgentInfo
-	107, // 100: lighthouse.v1.AgentInfo.created_at:type_name -> google.protobuf.Timestamp
-	107, // 101: lighthouse.v1.AgentInfo.updated_at:type_name -> google.protobuf.Timestamp
+	110, // 100: lighthouse.v1.AgentInfo.created_at:type_name -> google.protobuf.Timestamp
+	110, // 101: lighthouse.v1.AgentInfo.updated_at:type_name -> google.protobuf.Timestamp
 	7,   // 102: lighthouse.v1.AgentInfo.status:type_name -> lighthouse.v1.AgentStatus
 	30,  // 103: lighthouse.v1.ListToolsManagementResponse.tools:type_name -> lighthouse.v1.ToolInfo
 	69,  // 104: lighthouse.v1.GetEnvironmentsResponse.environments:type_name -> lighthouse.v1.EnvironmentInfo
-	105, // 105: lighthouse.v1.EnvironmentInfo.variables:type_name -> lighthouse.v1.EnvironmentInfo.VariablesEntry
-	106, // 106: lighthouse.v1.ExecuteAgentManagementRequest.variables:type_name -> lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
+	108, // 105: lighthouse.v1.EnvironmentInfo.variables:type_name -> lighthouse.v1.EnvironmentInfo.VariablesEntry
+	109, // 106: lighthouse.v1.ExecuteAgentManagementRequest.variables:type_name -> lighthouse.v1.ExecuteAgentManagementRequest.VariablesEntry
 	8,   // 107: lighthouse.v1.ExecuteAgentManagementResponse.status:type_name -> lighthouse.v1.ExecutionStatus
 	19,  // 108: lighthouse.v1.ExecuteAgentManagementResponse.tool_calls:type_name -> lighthouse.v1.LighthouseToolCall
 	21,  // 109: lighthouse.v1.ExecuteAgentManagementResponse.token_usage:type_name -> lighthouse.v1.LighthouseTokenUsage
-	107, // 110: lighthouse.v1.ExecuteAgentManagementResponse.timestamp:type_name -> google.protobuf.Timestamp
+	110, // 110: lighthouse.v1.ExecuteAgentManagementResponse.timestamp:type_name -> google.protobuf.Timestamp
 	9,   // 111: lighthouse.v1.GetSystemStatusResponse.health:type_name -> lighthouse.v1.LighthouseSystemHealth
 	42,  // 112: lighthouse.v1.GetSystemStatusResponse.metrics:type_name -> lighthouse.v1.SystemMetrics
 	74,  // 113: lighthouse.v1.GetSystemStatusResponse.active_executions:type_name -> lighthouse.v1.ActiveExecution
 	10,  // 114: lighthouse.v1.GetSystemStatusResponse.lighthouse_connection:type_name -> lighthouse.v1.ConnectionStatus
 	8,   // 115: lighthouse.v1.ActiveExecution.status:type_name -> lighthouse.v1.ExecutionStatus
-	107, // 116: lighthouse.v1.ActiveExecution.started_at:type_name -> google.protobuf.Timestamp
+	110, // 116: lighthouse.v1.ActiveExecution.started_at:type_name -> google.protobuf.Timestamp
 	74,  // 117: lighthouse.v1.ListActiveRunsResponse.active_runs:type_name -> lighthouse.v1.ActiveExecution
 	28,  // 118: lighthouse.v1.GetAgentDetailsResponse.agent:type_name -> lighthouse.v1.AgentConfig
 	28,  // 119: lighthouse.v1.UpdateAgentPromptResponse.updated_agent:type_name -> lighthouse.v1.AgentConfig
-	107, // 120: lighthouse.v1.GetMemoryContextResponse.last_updated:type_name -> google.protobuf.Timestamp
+	110, // 120: lighthouse.v1.GetMemoryContextResponse.last_updated:type_name -> google.protobuf.Timestamp
 	11,  // 121: lighthouse.v1.ManagementError.code:type_name -> lighthouse.v1.ErrorCode
-	12,  // 122: lighthouse.v1.LighthouseService.RegisterStation:input_type -> lighthouse.v1.RegisterStationRequest
-	43,  // 123: lighthouse.v1.LighthouseService.Heartbeat:input_type -> lighthouse.v1.HeartbeatRequest
-	16,  // 124: lighthouse.v1.LighthouseService.SendRun:input_type -> lighthouse.v1.SendRunRequest
-	16,  // 125: lighthouse.v1.LighthouseService.SendRunStream:input_type -> lighthouse.v1.SendRunRequest
-	22,  // 126: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:input_type -> lighthouse.v1.EphemeralSnapshotRequest
-	31,  // 127: lighthouse.v1.LighthouseService.Connect:input_type -> lighthouse.v1.ConnectRequest
-	26,  // 128: lighthouse.v1.LighthouseService.SyncConfiguration:input_type -> lighthouse.v1.SyncConfigRequest
-	56,  // 129: lighthouse.v1.LighthouseService.ManagementChannel:input_type -> lighthouse.v1.ManagementMessage
-	79,  // 130: lighthouse.v1.LighthouseService.GetAgentDetails:input_type -> lighthouse.v1.GetAgentDetailsRequest
-	81,  // 131: lighthouse.v1.LighthouseService.UpdateAgentPrompt:input_type -> lighthouse.v1.UpdateAgentPromptRequest
-	40,  // 132: lighthouse.v1.LighthouseService.SendSystemHealth:input_type -> lighthouse.v1.SystemHealthRequest
-	108, // 133: lighthouse.v1.LighthouseService.IngestData:input_type -> lighthouse.v1.IngestDataRequest
-	45,  // 134: lighthouse.v1.LighthouseService.ListTools:input_type -> lighthouse.v1.ListToolsRequest
-	47,  // 135: lighthouse.v1.LighthouseService.CallTool:input_type -> lighthouse.v1.CallToolRequest
-	49,  // 136: lighthouse.v1.LighthouseService.ListAgents:input_type -> lighthouse.v1.ListAgentsRequest
-	51,  // 137: lighthouse.v1.LighthouseService.ExecuteAgent:input_type -> lighthouse.v1.ExecuteAgentRequest
-	86,  // 138: lighthouse.v1.DebugService.GetActiveStations:input_type -> lighthouse.v1.DebugRequest
-	86,  // 139: lighthouse.v1.DebugService.GetActiveManagementChannels:input_type -> lighthouse.v1.DebugRequest
-	87,  // 140: lighthouse.v1.DebugService.TestStationConnection:input_type -> lighthouse.v1.TestStationRequest
-	13,  // 141: lighthouse.v1.LighthouseService.RegisterStation:output_type -> lighthouse.v1.RegisterStationResponse
-	44,  // 142: lighthouse.v1.LighthouseService.Heartbeat:output_type -> lighthouse.v1.HeartbeatResponse
-	17,  // 143: lighthouse.v1.LighthouseService.SendRun:output_type -> lighthouse.v1.SendRunResponse
-	17,  // 144: lighthouse.v1.LighthouseService.SendRunStream:output_type -> lighthouse.v1.SendRunResponse
-	23,  // 145: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:output_type -> lighthouse.v1.EphemeralSnapshotResponse
-	32,  // 146: lighthouse.v1.LighthouseService.Connect:output_type -> lighthouse.v1.CloudShipCommand
-	27,  // 147: lighthouse.v1.LighthouseService.SyncConfiguration:output_type -> lighthouse.v1.SyncConfigResponse
-	56,  // 148: lighthouse.v1.LighthouseService.ManagementChannel:output_type -> lighthouse.v1.ManagementMessage
-	80,  // 149: lighthouse.v1.LighthouseService.GetAgentDetails:output_type -> lighthouse.v1.GetAgentDetailsResponse
-	82,  // 150: lighthouse.v1.LighthouseService.UpdateAgentPrompt:output_type -> lighthouse.v1.UpdateAgentPromptResponse
-	41,  // 151: lighthouse.v1.LighthouseService.SendSystemHealth:output_type -> lighthouse.v1.SystemHealthResponse
-	109, // 152: lighthouse.v1.LighthouseService.IngestData:output_type -> lighthouse.v1.IngestDataResponse
-	46,  // 153: lighthouse.v1.LighthouseService.ListTools:output_type -> lighthouse.v1.ListToolsResponse
-	48,  // 154: lighthouse.v1.LighthouseService.CallTool:output_type -> lighthouse.v1.CallToolResponse
-	50,  // 155: lighthouse.v1.LighthouseService.ListAgents:output_type -> lighthouse.v1.ListAgentsResponse
-	52,  // 156: lighthouse.v1.LighthouseService.ExecuteAgent:output_type -> lighthouse.v1.ExecuteAgentResponse
-	88,  // 157: lighthouse.v1.DebugService.GetActiveStations:output_type -> lighthouse.v1.DebugResponse
-	88,  // 158: lighthouse.v1.DebugService.GetActiveManagementChannels:output_type -> lighthouse.v1.DebugResponse
-	88,  // 159: lighthouse.v1.DebugService.TestStationConnection:output_type -> lighthouse.v1.DebugResponse
-	141, // [141:160] is the sub-list for method output_type
-	122, // [122:141] is the sub-list for method input_type
-	122, // [122:122] is the sub-list for extension type_name
-	122, // [122:122] is the sub-list for extension extendee
-	0,   // [0:122] is the sub-list for field type_name
+	91,  // 122: lighthouse.v1.ListStationsResponse.stations:type_name -> lighthouse.v1.StationInfo
+	110, // 123: lighthouse.v1.StationInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	110, // 124: lighthouse.v1.StationInfo.connected_at:type_name -> google.protobuf.Timestamp
+	12,  // 125: lighthouse.v1.LighthouseService.RegisterStation:input_type -> lighthouse.v1.RegisterStationRequest
+	43,  // 126: lighthouse.v1.LighthouseService.Heartbeat:input_type -> lighthouse.v1.HeartbeatRequest
+	16,  // 127: lighthouse.v1.LighthouseService.SendRun:input_type -> lighthouse.v1.SendRunRequest
+	16,  // 128: lighthouse.v1.LighthouseService.SendRunStream:input_type -> lighthouse.v1.SendRunRequest
+	22,  // 129: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:input_type -> lighthouse.v1.EphemeralSnapshotRequest
+	31,  // 130: lighthouse.v1.LighthouseService.Connect:input_type -> lighthouse.v1.ConnectRequest
+	26,  // 131: lighthouse.v1.LighthouseService.SyncConfiguration:input_type -> lighthouse.v1.SyncConfigRequest
+	56,  // 132: lighthouse.v1.LighthouseService.ManagementChannel:input_type -> lighthouse.v1.ManagementMessage
+	79,  // 133: lighthouse.v1.LighthouseService.GetAgentDetails:input_type -> lighthouse.v1.GetAgentDetailsRequest
+	81,  // 134: lighthouse.v1.LighthouseService.UpdateAgentPrompt:input_type -> lighthouse.v1.UpdateAgentPromptRequest
+	40,  // 135: lighthouse.v1.LighthouseService.SendSystemHealth:input_type -> lighthouse.v1.SystemHealthRequest
+	111, // 136: lighthouse.v1.LighthouseService.IngestData:input_type -> lighthouse.v1.IngestDataRequest
+	45,  // 137: lighthouse.v1.LighthouseService.ListTools:input_type -> lighthouse.v1.ListToolsRequest
+	47,  // 138: lighthouse.v1.LighthouseService.CallTool:input_type -> lighthouse.v1.CallToolRequest
+	49,  // 139: lighthouse.v1.LighthouseService.ListAgents:input_type -> lighthouse.v1.ListAgentsRequest
+	51,  // 140: lighthouse.v1.LighthouseService.ExecuteAgent:input_type -> lighthouse.v1.ExecuteAgentRequest
+	89,  // 141: lighthouse.v1.LighthouseService.ListStations:input_type -> lighthouse.v1.ListStationsRequest
+	86,  // 142: lighthouse.v1.DebugService.GetActiveStations:input_type -> lighthouse.v1.DebugRequest
+	86,  // 143: lighthouse.v1.DebugService.GetActiveManagementChannels:input_type -> lighthouse.v1.DebugRequest
+	87,  // 144: lighthouse.v1.DebugService.TestStationConnection:input_type -> lighthouse.v1.TestStationRequest
+	13,  // 145: lighthouse.v1.LighthouseService.RegisterStation:output_type -> lighthouse.v1.RegisterStationResponse
+	44,  // 146: lighthouse.v1.LighthouseService.Heartbeat:output_type -> lighthouse.v1.HeartbeatResponse
+	17,  // 147: lighthouse.v1.LighthouseService.SendRun:output_type -> lighthouse.v1.SendRunResponse
+	17,  // 148: lighthouse.v1.LighthouseService.SendRunStream:output_type -> lighthouse.v1.SendRunResponse
+	23,  // 149: lighthouse.v1.LighthouseService.SendEphemeralSnapshot:output_type -> lighthouse.v1.EphemeralSnapshotResponse
+	32,  // 150: lighthouse.v1.LighthouseService.Connect:output_type -> lighthouse.v1.CloudShipCommand
+	27,  // 151: lighthouse.v1.LighthouseService.SyncConfiguration:output_type -> lighthouse.v1.SyncConfigResponse
+	56,  // 152: lighthouse.v1.LighthouseService.ManagementChannel:output_type -> lighthouse.v1.ManagementMessage
+	80,  // 153: lighthouse.v1.LighthouseService.GetAgentDetails:output_type -> lighthouse.v1.GetAgentDetailsResponse
+	82,  // 154: lighthouse.v1.LighthouseService.UpdateAgentPrompt:output_type -> lighthouse.v1.UpdateAgentPromptResponse
+	41,  // 155: lighthouse.v1.LighthouseService.SendSystemHealth:output_type -> lighthouse.v1.SystemHealthResponse
+	112, // 156: lighthouse.v1.LighthouseService.IngestData:output_type -> lighthouse.v1.IngestDataResponse
+	46,  // 157: lighthouse.v1.LighthouseService.ListTools:output_type -> lighthouse.v1.ListToolsResponse
+	48,  // 158: lighthouse.v1.LighthouseService.CallTool:output_type -> lighthouse.v1.CallToolResponse
+	50,  // 159: lighthouse.v1.LighthouseService.ListAgents:output_type -> lighthouse.v1.ListAgentsResponse
+	52,  // 160: lighthouse.v1.LighthouseService.ExecuteAgent:output_type -> lighthouse.v1.ExecuteAgentResponse
+	90,  // 161: lighthouse.v1.LighthouseService.ListStations:output_type -> lighthouse.v1.ListStationsResponse
+	88,  // 162: lighthouse.v1.DebugService.GetActiveStations:output_type -> lighthouse.v1.DebugResponse
+	88,  // 163: lighthouse.v1.DebugService.GetActiveManagementChannels:output_type -> lighthouse.v1.DebugResponse
+	88,  // 164: lighthouse.v1.DebugService.TestStationConnection:output_type -> lighthouse.v1.DebugResponse
+	145, // [145:165] is the sub-list for method output_type
+	125, // [125:145] is the sub-list for method input_type
+	125, // [125:125] is the sub-list for extension type_name
+	125, // [125:125] is the sub-list for extension extendee
+	0,   // [0:125] is the sub-list for field type_name
 }
 
-func init() { file_internal_lighthouse_proto_lighthouse_proto_init() }
-func file_internal_lighthouse_proto_lighthouse_proto_init() {
-	if File_internal_lighthouse_proto_lighthouse_proto != nil {
+func init() { file_internal_proto_lighthouse_proto_init() }
+func file_internal_proto_lighthouse_proto_init() {
+	if File_internal_proto_lighthouse_proto != nil {
 		return
 	}
-	file_internal_lighthouse_proto_data_ingestion_proto_init()
-	file_internal_lighthouse_proto_lighthouse_proto_msgTypes[20].OneofWrappers = []any{
+	file_internal_proto_data_ingestion_proto_init()
+	file_internal_proto_lighthouse_proto_msgTypes[20].OneofWrappers = []any{
 		(*CloudShipCommand_CreateAgent)(nil),
 		(*CloudShipCommand_UpdateAgent)(nil),
 		(*CloudShipCommand_DeleteAgent)(nil),
@@ -7436,13 +7798,13 @@ func file_internal_lighthouse_proto_lighthouse_proto_init() {
 		(*CloudShipCommand_GetEnv)(nil),
 		(*CloudShipCommand_ListAgents)(nil),
 	}
-	file_internal_lighthouse_proto_lighthouse_proto_msgTypes[40].OneofWrappers = []any{
+	file_internal_proto_lighthouse_proto_msgTypes[40].OneofWrappers = []any{
 		(*ExecuteAgentResponse_Started)(nil),
 		(*ExecuteAgentResponse_Step)(nil),
 		(*ExecuteAgentResponse_Completed)(nil),
 		(*ExecuteAgentResponse_Error)(nil),
 	}
-	file_internal_lighthouse_proto_lighthouse_proto_msgTypes[44].OneofWrappers = []any{
+	file_internal_proto_lighthouse_proto_msgTypes[44].OneofWrappers = []any{
 		(*ManagementMessage_ListAgentsRequest)(nil),
 		(*ManagementMessage_ListToolsRequest)(nil),
 		(*ManagementMessage_GetEnvironmentsRequest)(nil),
@@ -7469,18 +7831,18 @@ func file_internal_lighthouse_proto_lighthouse_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_lighthouse_proto_lighthouse_proto_rawDesc), len(file_internal_lighthouse_proto_lighthouse_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_lighthouse_proto_rawDesc), len(file_internal_proto_lighthouse_proto_rawDesc)),
 			NumEnums:      12,
-			NumMessages:   95,
+			NumMessages:   98,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
-		GoTypes:           file_internal_lighthouse_proto_lighthouse_proto_goTypes,
-		DependencyIndexes: file_internal_lighthouse_proto_lighthouse_proto_depIdxs,
-		EnumInfos:         file_internal_lighthouse_proto_lighthouse_proto_enumTypes,
-		MessageInfos:      file_internal_lighthouse_proto_lighthouse_proto_msgTypes,
+		GoTypes:           file_internal_proto_lighthouse_proto_goTypes,
+		DependencyIndexes: file_internal_proto_lighthouse_proto_depIdxs,
+		EnumInfos:         file_internal_proto_lighthouse_proto_enumTypes,
+		MessageInfos:      file_internal_proto_lighthouse_proto_msgTypes,
 	}.Build()
-	File_internal_lighthouse_proto_lighthouse_proto = out.File
-	file_internal_lighthouse_proto_lighthouse_proto_goTypes = nil
-	file_internal_lighthouse_proto_lighthouse_proto_depIdxs = nil
+	File_internal_proto_lighthouse_proto = out.File
+	file_internal_proto_lighthouse_proto_goTypes = nil
+	file_internal_proto_lighthouse_proto_depIdxs = nil
 }

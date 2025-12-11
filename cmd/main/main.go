@@ -323,39 +323,41 @@ func initOTELTelemetry() {
 	}
 
 	// Check if telemetry is enabled (priority: CLI flag > config file)
-	telemetryEnabled := enableOTEL || cfg.TelemetryEnabled
+	telemetryEnabled := enableOTEL || cfg.Telemetry.Enabled || cfg.TelemetryEnabled
 	if !telemetryEnabled {
-		logging.Debug("OTEL telemetry disabled (use --enable-telemetry flag or set telemetry_enabled: true in config)")
+		logging.Debug("OTEL telemetry disabled (use --enable-telemetry flag or set telemetry.enabled: true in config)")
 		return
 	}
 
-	// Check if OTEL endpoint is configured (priority: CLI flag > env var > config > default)
-	endpoint := otelEndpoint
-	if endpoint == "" {
-		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	}
-	if endpoint == "" {
-		endpoint = cfg.OTELEndpoint
-	}
-	if endpoint == "" {
-		endpoint = "http://localhost:4318" // Default to local Jaeger
-	}
-
-	logging.Info("🔭 OTEL telemetry enabled - exporting to %s", endpoint)
-
-	// Determine environment from config or default to development
-	environment := "development"
-	if cfg.CloudShip.RegistrationKey != "" {
-		environment = "production"
+	// Build CloudShip info for telemetry
+	// Use station name from config for resource attributes
+	var cloudShipInfo *services.CloudShipInfo
+	if cfg.CloudShip.RegistrationKey != "" || cfg.CloudShip.Name != "" {
+		cloudShipInfo = &services.CloudShipInfo{
+			RegistrationKey: cfg.CloudShip.RegistrationKey,
+			StationName:     cfg.CloudShip.Name,      // Use configured station name
+			StationID:       cfg.CloudShip.StationID, // Use configured station ID (if any)
+			// OrgID populated when connected to CloudShip (not in config)
+		}
 	}
 
-	// Create OTEL telemetry configuration
-	otelConfig := &services.TelemetryConfig{
-		Enabled:      true,
-		OTLPEndpoint: endpoint,
-		ServiceName:  "station",
-		Environment:  environment,
+	// Build telemetry config from the new struct
+	otelConfig := services.NewTelemetryConfigFromConfig(&cfg.Telemetry, cloudShipInfo)
+
+	// CLI flag overrides take precedence
+	if otelEndpoint != "" {
+		otelConfig.Endpoint = otelEndpoint
+		otelConfig.Provider = config.TelemetryProviderOTLP
 	}
+
+	// Environment variable override (for backward compatibility)
+	if envEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); envEndpoint != "" && otelEndpoint == "" {
+		otelConfig.Endpoint = envEndpoint
+		otelConfig.Provider = config.TelemetryProviderOTLP
+	}
+
+	// Log the provider being used
+	logging.Info("🔭 OTEL telemetry enabled - provider=%s, endpoint=%s", otelConfig.Provider, otelConfig.Endpoint)
 
 	// Initialize OTEL telemetry service
 	otelTelemetryService = services.NewTelemetryService(otelConfig)
@@ -366,7 +368,7 @@ func initOTELTelemetry() {
 		return
 	}
 
-	logging.Debug("OTEL telemetry initialized successfully (endpoint: %s, service: %s)", endpoint, otelConfig.ServiceName)
+	logging.Debug("OTEL telemetry initialized successfully (provider: %s, endpoint: %s, service: %s)", otelConfig.Provider, otelConfig.Endpoint, otelConfig.ServiceName)
 }
 
 func getXDGConfigDir() string {

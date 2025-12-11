@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.12.4
-// source: internal/lighthouse/proto/lighthouse.proto
+// source: internal/proto/lighthouse.proto
 
 package proto
 
@@ -35,6 +35,7 @@ const (
 	LighthouseService_CallTool_FullMethodName              = "/lighthouse.v1.LighthouseService/CallTool"
 	LighthouseService_ListAgents_FullMethodName            = "/lighthouse.v1.LighthouseService/ListAgents"
 	LighthouseService_ExecuteAgent_FullMethodName          = "/lighthouse.v1.LighthouseService/ExecuteAgent"
+	LighthouseService_ListStations_FullMethodName          = "/lighthouse.v1.LighthouseService/ListStations"
 )
 
 // LighthouseServiceClient is the client API for LighthouseService service.
@@ -69,6 +70,8 @@ type LighthouseServiceClient interface {
 	CallTool(ctx context.Context, in *CallToolRequest, opts ...grpc.CallOption) (*CallToolResponse, error)
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
 	ExecuteAgent(ctx context.Context, in *ExecuteAgentRequest, opts ...grpc.CallOption) (*ExecuteAgentResponse, error)
+	// Station Discovery (Multi-station support)
+	ListStations(ctx context.Context, in *ListStationsRequest, opts ...grpc.CallOption) (*ListStationsResponse, error)
 }
 
 type lighthouseServiceClient struct {
@@ -248,6 +251,16 @@ func (c *lighthouseServiceClient) ExecuteAgent(ctx context.Context, in *ExecuteA
 	return out, nil
 }
 
+func (c *lighthouseServiceClient) ListStations(ctx context.Context, in *ListStationsRequest, opts ...grpc.CallOption) (*ListStationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListStationsResponse)
+	err := c.cc.Invoke(ctx, LighthouseService_ListStations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LighthouseServiceServer is the server API for LighthouseService service.
 // All implementations must embed UnimplementedLighthouseServiceServer
 // for forward compatibility.
@@ -280,6 +293,8 @@ type LighthouseServiceServer interface {
 	CallTool(context.Context, *CallToolRequest) (*CallToolResponse, error)
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
 	ExecuteAgent(context.Context, *ExecuteAgentRequest) (*ExecuteAgentResponse, error)
+	// Station Discovery (Multi-station support)
+	ListStations(context.Context, *ListStationsRequest) (*ListStationsResponse, error)
 	mustEmbedUnimplementedLighthouseServiceServer()
 }
 
@@ -337,6 +352,9 @@ func (UnimplementedLighthouseServiceServer) ListAgents(context.Context, *ListAge
 }
 func (UnimplementedLighthouseServiceServer) ExecuteAgent(context.Context, *ExecuteAgentRequest) (*ExecuteAgentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteAgent not implemented")
+}
+func (UnimplementedLighthouseServiceServer) ListStations(context.Context, *ListStationsRequest) (*ListStationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListStations not implemented")
 }
 func (UnimplementedLighthouseServiceServer) mustEmbedUnimplementedLighthouseServiceServer() {}
 func (UnimplementedLighthouseServiceServer) testEmbeddedByValue()                           {}
@@ -614,6 +632,24 @@ func _LighthouseService_ExecuteAgent_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LighthouseService_ListStations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListStationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LighthouseServiceServer).ListStations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LighthouseService_ListStations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LighthouseServiceServer).ListStations(ctx, req.(*ListStationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LighthouseService_ServiceDesc is the grpc.ServiceDesc for LighthouseService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -673,6 +709,10 @@ var LighthouseService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ExecuteAgent",
 			Handler:    _LighthouseService_ExecuteAgent_Handler,
 		},
+		{
+			MethodName: "ListStations",
+			Handler:    _LighthouseService_ListStations_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -694,7 +734,7 @@ var LighthouseService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "internal/lighthouse/proto/lighthouse.proto",
+	Metadata: "internal/proto/lighthouse.proto",
 }
 
 const (
@@ -882,5 +922,5 @@ var DebugService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "internal/lighthouse/proto/lighthouse.proto",
+	Metadata: "internal/proto/lighthouse.proto",
 }

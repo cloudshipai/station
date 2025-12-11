@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"station/internal/config"
 )
 
 // TestNewTelemetryService tests telemetry service creation
@@ -23,10 +25,11 @@ func TestNewTelemetryService(t *testing.T) {
 		{
 			name: "Create with custom config",
 			config: &TelemetryConfig{
-				Enabled:      true,
-				ServiceName:  "test-station",
-				Environment:  "test",
-				OTLPEndpoint: "localhost:4318",
+				Enabled:     true,
+				ServiceName: "test-station",
+				Environment: "test",
+				Provider:    config.TelemetryProviderJaeger,
+				Endpoint:    "localhost:4318",
 			},
 			expectNil:   false,
 			description: "Should create service with custom config",
@@ -383,17 +386,18 @@ func TestTelemetryConfigStructure(t *testing.T) {
 		{
 			name: "All fields populated",
 			config: TelemetryConfig{
-				Enabled:      true,
-				OTLPEndpoint: "localhost:4318",
-				ServiceName:  "station-test",
-				Environment:  "test",
+				Enabled:     true,
+				Provider:    config.TelemetryProviderJaeger,
+				Endpoint:    "localhost:4318",
+				ServiceName: "station-test",
+				Environment: "test",
 			},
 			validate: func(t *testing.T, cfg *TelemetryConfig) {
 				if !cfg.Enabled {
 					t.Error("Enabled should be true")
 				}
-				if cfg.OTLPEndpoint == "" {
-					t.Error("OTLPEndpoint should not be empty")
+				if cfg.Endpoint == "" {
+					t.Error("Endpoint should not be empty")
 				}
 				if cfg.ServiceName == "" {
 					t.Error("ServiceName should not be empty")

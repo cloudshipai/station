@@ -38,21 +38,35 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 	if err != nil {
 		log.Printf("Warning: Failed to load config for telemetry: %v", err)
 		// Use default config
-		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
+		cfg = &config.Config{
+			Telemetry: config.TelemetryConfig{
+				Enabled:  true,
+				Provider: config.TelemetryProviderJaeger,
+			},
+			Environment: "development",
+		}
 	}
 
-	// Check for runtime OTEL endpoint (set by Jaeger service after startup)
-	otelEndpoint := cfg.OTELEndpoint
+	// Build CloudShip info for telemetry
+	// Use station name/ID from config for resource attributes
+	var cloudShipInfo *CloudShipInfo
+	if cfg.CloudShip.RegistrationKey != "" || cfg.CloudShip.Name != "" {
+		cloudShipInfo = &CloudShipInfo{
+			RegistrationKey: cfg.CloudShip.RegistrationKey,
+			StationName:     cfg.CloudShip.Name,      // Use configured station name
+			StationID:       cfg.CloudShip.StationID, // Use configured station ID (if any)
+			// OrgID populated when connected to CloudShip (not in config)
+		}
+	}
+
+	// Build telemetry config from the new struct
+	telemetryConfig := NewTelemetryConfigFromConfig(&cfg.Telemetry, cloudShipInfo)
+
+	// Allow runtime OTEL endpoint override (for backward compatibility)
 	if runtimeEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); runtimeEndpoint != "" {
-		otelEndpoint = runtimeEndpoint
-		log.Printf("🔍 Using runtime OTEL endpoint: %s", otelEndpoint)
-	}
-
-	telemetryConfig := &TelemetryConfig{
-		Enabled:      cfg.TelemetryEnabled,
-		OTLPEndpoint: otelEndpoint,
-		ServiceName:  "station",
-		Environment:  cfg.Environment,
+		telemetryConfig.Endpoint = runtimeEndpoint
+		telemetryConfig.Provider = config.TelemetryProviderOTLP // Use generic OTLP for runtime override
+		log.Printf("🔍 Using runtime OTEL endpoint: %s", runtimeEndpoint)
 	}
 
 	service.telemetry = NewTelemetryService(telemetryConfig)
@@ -60,7 +74,7 @@ func NewAgentService(repos *repositories.Repositories, lighthouseClient ...*ligh
 		log.Printf("⚠️  Warning: Failed to initialize telemetry: %v", err)
 		// Continue without telemetry rather than failing
 	} else {
-		log.Printf("✅ Telemetry service initialized (enabled=%v, endpoint=%s)", telemetryConfig.Enabled, telemetryConfig.OTLPEndpoint)
+		log.Printf("✅ Telemetry service initialized (provider=%s, endpoint=%s)", telemetryConfig.Provider, telemetryConfig.Endpoint)
 	}
 
 	// Create execution engine with self-reference and optional lighthouse client
@@ -107,21 +121,33 @@ func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseC
 	if err != nil {
 		log.Printf("Warning: Failed to load config for telemetry: %v", err)
 		// Use default config
-		cfg = &config.Config{TelemetryEnabled: true, Environment: "development"}
+		cfg = &config.Config{
+			Telemetry: config.TelemetryConfig{
+				Enabled:  true,
+				Provider: config.TelemetryProviderJaeger,
+			},
+			Environment: "development",
+		}
 	}
 
-	// Check for runtime OTEL endpoint (set by Jaeger service after startup)
-	otelEndpoint := cfg.OTELEndpoint
+	// Build CloudShip info for telemetry
+	var cloudShipInfoForLH *CloudShipInfo
+	if cfg.CloudShip.RegistrationKey != "" || cfg.CloudShip.Name != "" {
+		cloudShipInfoForLH = &CloudShipInfo{
+			RegistrationKey: cfg.CloudShip.RegistrationKey,
+			StationName:     cfg.CloudShip.Name, // Use configured station name
+			// StationID, OrgID populated later when connected to CloudShip via callback
+		}
+	}
+
+	// Build telemetry config from the new struct
+	telemetryConfig := NewTelemetryConfigFromConfig(&cfg.Telemetry, cloudShipInfoForLH)
+
+	// Allow runtime OTEL endpoint override (for backward compatibility)
 	if runtimeEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); runtimeEndpoint != "" {
-		otelEndpoint = runtimeEndpoint
-		log.Printf("🔍 Using runtime OTEL endpoint: %s", otelEndpoint)
-	}
-
-	telemetryConfig := &TelemetryConfig{
-		Enabled:      cfg.TelemetryEnabled,
-		OTLPEndpoint: otelEndpoint,
-		ServiceName:  "station",
-		Environment:  cfg.Environment,
+		telemetryConfig.Endpoint = runtimeEndpoint
+		telemetryConfig.Provider = config.TelemetryProviderOTLP // Use generic OTLP for runtime override
+		log.Printf("🔍 Using runtime OTEL endpoint: %s", runtimeEndpoint)
 	}
 
 	service.telemetry = NewTelemetryService(telemetryConfig)
@@ -129,7 +155,7 @@ func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseC
 		log.Printf("⚠️  Warning: Failed to initialize telemetry: %v", err)
 		// Continue without telemetry rather than failing
 	} else {
-		log.Printf("✅ Telemetry service initialized (enabled=%v, endpoint=%s)", telemetryConfig.Enabled, telemetryConfig.OTLPEndpoint)
+		log.Printf("✅ Telemetry service initialized (provider=%s, endpoint=%s)", telemetryConfig.Provider, telemetryConfig.Endpoint)
 	}
 
 	// Create execution engine with Lighthouse client integration
@@ -652,4 +678,16 @@ func (s *AgentService) validateToolEnvironment(toolID int64, expectedEnvironment
 // GetExecutionEngine returns the execution engine for direct access (used by CLI)
 func (s *AgentService) GetExecutionEngine() *AgentExecutionEngine {
 	return s.executionEngine
+}
+
+// SetTelemetryCloudShipInfo updates the CloudShip info in the telemetry service
+// This is called when the station authenticates with CloudShip to propagate org_id/station_id
+func (s *AgentService) SetTelemetryCloudShipInfo(stationID, stationName, orgID string) {
+	if s.telemetry != nil {
+		s.telemetry.SetCloudShipInfo(stationID, stationName, orgID)
+	}
+	// Also update execution engine's telemetry directly (in case it's a different instance)
+	if s.executionEngine != nil && s.executionEngine.telemetryService != nil {
+		s.executionEngine.telemetryService.SetCloudShipInfo(stationID, stationName, orgID)
+	}
 }

@@ -202,6 +202,19 @@ func runMainServer() error {
 			remoteControlConfig,
 		)
 
+		// Wire up auth callback to update telemetry with CloudShip info (org_id, station_id)
+		// This ensures traces are tagged with org/station for multi-tenant filtering
+		// NOTE: We update BOTH the global otelTelemetryService AND the agentSvc's internal telemetry
+		remoteControlSvc.SetOnAuthSuccess(func(stationID, stationName, orgID string) {
+			// Update global telemetry service (used by non-agent spans)
+			if otelTelemetryService != nil {
+				otelTelemetryService.SetCloudShipInfo(stationID, stationName, orgID)
+			}
+			// Update agent service's telemetry (used by agent execution spans)
+			agentSvc.SetTelemetryCloudShipInfo(stationID, stationName, orgID)
+		})
+		log.Printf("✅ Telemetry auth callback configured for CloudShip trace filtering")
+
 		// Start remote control service
 		if err := remoteControlSvc.Start(ctx); err != nil {
 			log.Printf("Warning: Failed to start remote control service: %v", err)
@@ -235,6 +248,8 @@ func runMainServer() error {
 
 	// Set services for the API server
 	apiServer.SetServices(toolDiscoveryService)
+	// Share agent service with API server so CloudShip telemetry info propagates to traces
+	apiServer.SetAgentService(agentSvc)
 
 	// Check if dev mode is enabled (default: false for production deployments)
 	devMode := os.Getenv("STN_DEV_MODE") == "true"

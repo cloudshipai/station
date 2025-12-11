@@ -169,3 +169,11 @@ func (rcs *RemoteControlService) GetMemoryClient() *lighthouse.MemoryClient {
 	}
 	return nil
 }
+
+// SetOnAuthSuccess sets a callback to be invoked when CloudShip auth succeeds
+// This is used to update TelemetryService with station/org info for trace filtering
+func (rcs *RemoteControlService) SetOnAuthSuccess(callback func(stationID, stationName, orgID string)) {
+	if rcs.managementChannel != nil {
+		rcs.managementChannel.SetOnAuthSuccess(callback)
+	}
+}
