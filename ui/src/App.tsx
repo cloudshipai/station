@@ -3640,6 +3640,48 @@ const SettingsPage = () => {
                     {/* Endpoint - always show when enabled */}
                     {configObj.telemetry?.enabled !== false && (
                       <>
+                        {/* Quick preset buttons */}
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Quick Setup</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateTelemetryConfig({ endpoint: 'http://localhost:4318' })}
+                              className={`flex-1 px-2 py-1.5 text-xs font-medium rounded border transition-colors ${
+                                configObj.telemetry?.endpoint === 'http://localhost:4318' || !configObj.telemetry?.endpoint
+                                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              Local Jaeger
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateTelemetryConfig({ endpoint: 'https://telemetry.cloudshipai.com/v1/traces' })}
+                              className={`flex-1 px-2 py-1.5 text-xs font-medium rounded border transition-colors ${
+                                configObj.telemetry?.endpoint === 'https://telemetry.cloudshipai.com/v1/traces'
+                                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              CloudShip
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateTelemetryConfig({ endpoint: '' })}
+                              className={`flex-1 px-2 py-1.5 text-xs font-medium rounded border transition-colors ${
+                                configObj.telemetry?.endpoint && 
+                                configObj.telemetry?.endpoint !== 'http://localhost:4318' &&
+                                configObj.telemetry?.endpoint !== 'https://telemetry.cloudshipai.com/v1/traces'
+                                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              Custom
+                            </button>
+                          </div>
+                        </div>
+
                         <div>
                           <label className="block text-xs text-gray-600 mb-1">Endpoint</label>
                           <input
@@ -3649,11 +3691,17 @@ const SettingsPage = () => {
                             placeholder="http://localhost:4318"
                             className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                           />
-                          <p className="text-[10px] text-gray-400 mt-1">OTLP HTTP endpoint (Jaeger, Grafana Cloud, Datadog, etc.)</p>
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {configObj.telemetry?.endpoint === 'https://telemetry.cloudshipai.com/v1/traces' 
+                              ? 'CloudShip managed telemetry (uses registration key for auth)'
+                              : 'OTLP HTTP endpoint (Jaeger, Grafana Cloud, Datadog, etc.)'}
+                          </p>
                         </div>
 
-                        {/* Auth Header - show if endpoint is not localhost */}
-                        {configObj.telemetry?.endpoint && !configObj.telemetry?.endpoint.includes('localhost') && (
+                        {/* Auth Header - show if endpoint is not localhost and not cloudship */}
+                        {configObj.telemetry?.endpoint && 
+                         !configObj.telemetry?.endpoint.includes('localhost') &&
+                         !configObj.telemetry?.endpoint.includes('cloudshipai.com') && (
                           <div>
                             <label className="block text-xs text-gray-600 mb-1">Authorization Header</label>
                             <input

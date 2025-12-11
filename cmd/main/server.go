@@ -94,8 +94,10 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Jaeger/OTEL tracing is configured via config.yaml otel_endpoint
-	// Run Jaeger separately if needed: docker run -d -p 16686:16686 -p 4317:4317 -p 4318:4318 jaegertracing/all-in-one:latest
+	// Apply smart telemetry defaults based on CloudShip connection status
+	// - With CloudShip registration key: use telemetry.cloudshipai.com
+	// - Without CloudShip: use local Jaeger (localhost:4318)
+	cfg.ApplyTelemetryDefaults(false) // false = serve mode, not stdio
 
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {

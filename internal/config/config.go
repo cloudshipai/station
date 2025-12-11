@@ -94,6 +94,13 @@ const (
 	TelemetryProviderOTLP TelemetryProvider = "otlp"
 	// TelemetryProviderCloudShip uses CloudShip's managed telemetry (telemetry.cloudshipai.com)
 	TelemetryProviderCloudShip TelemetryProvider = "cloudship"
+
+	// CloudShipTelemetryEndpoint is the managed OTLP endpoint for CloudShip users
+	CloudShipTelemetryEndpoint = "https://telemetry.cloudshipai.com/v1/traces"
+	// LocalJaegerEndpoint is the default local Jaeger OTLP endpoint
+	LocalJaegerEndpoint = "http://localhost:4318"
+	// LocalJaegerQueryURL is the default local Jaeger UI URL
+	LocalJaegerQueryURL = "http://localhost:16686"
 )
 
 // TelemetryConfig holds configuration for distributed tracing
@@ -210,20 +217,22 @@ func Load() (*Config, error) {
 			},
 		},
 		// Telemetry Configuration - defaults for local Jaeger development
+		// Note: ApplyTelemetryDefaults() should be called after Load() to apply smart defaults
+		// based on runtime mode (stdio vs serve) and CloudShip connection status
 		Telemetry: TelemetryConfig{
-			Enabled:        true,                     // Default enabled
-			Provider:       TelemetryProviderJaeger,  // Default to local Jaeger
-			Endpoint:       "http://localhost:4318",  // Default OTLP endpoint
-			JaegerQueryURL: "http://localhost:16686", // Default Jaeger Query UI
-			ServiceName:    "station",                // Default service name
-			Environment:    "development",            // Default environment
-			SampleRate:     1.0,                      // Sample everything in dev
+			Enabled:        true,                    // Default enabled
+			Provider:       TelemetryProviderJaeger, // Default to local Jaeger (may be overridden)
+			Endpoint:       LocalJaegerEndpoint,     // Default OTLP endpoint
+			JaegerQueryURL: LocalJaegerQueryURL,     // Default Jaeger Query UI
+			ServiceName:    "station",               // Default service name
+			Environment:    "development",           // Default environment
+			SampleRate:     1.0,                     // Sample everything in dev
 			Headers:        make(map[string]string),
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,
-		OTELEndpoint:     "http://localhost:4318",
-		JaegerQueryURL:   "http://localhost:16686",
+		OTELEndpoint:     LocalJaegerEndpoint,
+		JaegerQueryURL:   LocalJaegerQueryURL,
 	}
 
 	// Override with values from config file (if available) using Viper
@@ -443,6 +452,52 @@ func Load() (*Config, error) {
 	loadedConfig = cfg
 
 	return cfg, nil
+}
+
+// ApplyTelemetryDefaults applies smart defaults for telemetry based on runtime mode.
+//
+// Logic:
+//   - stdio mode: Default to local Jaeger (localhost:4318) for development
+//   - serve mode with CloudShip registration key + telemetry enabled + no custom endpoint:
+//     Default to CloudShip managed telemetry (telemetry.cloudshipai.com)
+//   - serve mode without CloudShip: Default to local Jaeger
+//
+// This should be called after Load() in the command handlers.
+func (cfg *Config) ApplyTelemetryDefaults(isStdioMode bool) {
+	// Skip if telemetry is disabled
+	if !cfg.Telemetry.Enabled {
+		return
+	}
+
+	// Check if user has explicitly set an endpoint (via config file or env var)
+	userSetEndpoint := viper.IsSet("telemetry.endpoint") || os.Getenv("STN_TELEMETRY_ENDPOINT") != ""
+
+	if isStdioMode {
+		// stdio mode: always use local Jaeger for development
+		if !userSetEndpoint {
+			cfg.Telemetry.Provider = TelemetryProviderJaeger
+			cfg.Telemetry.Endpoint = LocalJaegerEndpoint
+			cfg.Telemetry.JaegerQueryURL = LocalJaegerQueryURL
+			cfg.Telemetry.Environment = "development"
+			cfg.Telemetry.SampleRate = 1.0 // Sample everything in dev
+		}
+	} else {
+		// serve mode: check for CloudShip integration
+		hasCloudShipKey := cfg.CloudShip.Enabled && cfg.CloudShip.RegistrationKey != ""
+
+		if hasCloudShipKey && !userSetEndpoint {
+			// CloudShip connected + no custom endpoint = use CloudShip telemetry
+			cfg.Telemetry.Provider = TelemetryProviderCloudShip
+			cfg.Telemetry.Endpoint = CloudShipTelemetryEndpoint
+			cfg.Telemetry.Environment = "production"
+			cfg.Telemetry.SampleRate = 1.0 // Sample everything, CloudShip handles storage
+		} else if !userSetEndpoint {
+			// No CloudShip, no custom endpoint = default to local Jaeger
+			cfg.Telemetry.Provider = TelemetryProviderJaeger
+			cfg.Telemetry.Endpoint = LocalJaegerEndpoint
+			cfg.Telemetry.JaegerQueryURL = LocalJaegerQueryURL
+		}
+	}
 }
 
 // loadFakerTemplates loads faker templates from config file and merges with built-in templates

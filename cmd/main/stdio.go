@@ -57,7 +57,9 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Jaeger/OTEL tracing configured via config.yaml otel_endpoint - run Jaeger separately if needed
+	// Apply smart telemetry defaults for stdio mode (local development)
+	// - Always uses local Jaeger (localhost:4318) unless explicitly overridden
+	cfg.ApplyTelemetryDefaults(true) // true = stdio mode
 
 	// Setup debug logging to file if in dev mode
 	if devMode {
