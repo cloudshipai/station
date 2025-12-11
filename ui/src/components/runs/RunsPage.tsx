@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Play, BarChart3, List, GitBranch, HelpCircle, Clock, Zap, DollarSign, Activity } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Play, BarChart3, List, GitBranch, HelpCircle, Clock, Zap, DollarSign, Activity, Filter, Trash2, X, AlertTriangle } from 'lucide-react';
 import { RunsList } from './RunsList';
 import { Pagination } from './Pagination';
 import { StatsTab } from './StatsTab';
@@ -12,7 +12,7 @@ interface Run {
   id: number;
   agent_id: number;
   agent_name: string;
-  status: 'completed' | 'running' | 'failed';
+  status: 'completed' | 'running' | 'failed' | 'pending';
   duration_seconds?: number;
   started_at: string;
   total_tokens?: number;
@@ -26,6 +26,8 @@ interface Run {
   environment_id?: number;
 }
 
+type StatusFilter = '' | 'completed' | 'running' | 'failed' | 'pending';
+
 interface RunsPageProps {
   onRunClick: (runId: number) => void;
   refreshTrigger?: any;
@@ -36,22 +38,38 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
   const [activeTab, setActiveTab] = useState<'list' | 'timeline' | 'stats'>('timeline');
   const [currentPage, setCurrentPage] = useState(1);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
+  const [totalCount, setTotalCount] = useState(0);
+  const [selectedRuns, setSelectedRuns] = useState<Set<number>>(new Set());
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteMode, setDeleteMode] = useState<'selected' | 'filtered' | 'all'>('selected');
+  const [isDeleting, setIsDeleting] = useState(false);
   const runsPerPage = 20;
 
-  // Fetch all runs (not filtered by environment)
-  useEffect(() => {
-    const fetchRuns = async () => {
-      try {
-        // Fetch all runs across all environments
-        const response = await agentRunsApi.getAll();
-        setRuns(response.data.runs || []);
-      } catch (error) {
-        console.error('Failed to fetch runs:', error);
+  // Fetch runs with optional status filter
+  const fetchRuns = useCallback(async () => {
+    try {
+      const params: { status?: string; limit?: number } = { limit: 500 };
+      if (statusFilter) {
+        params.status = statusFilter;
       }
-    };
+      const response = await agentRunsApi.getAll(params);
+      setRuns(response.data.runs || []);
+      setTotalCount(response.data.total_count || response.data.runs?.length || 0);
+    } catch (error) {
+      console.error('Failed to fetch runs:', error);
+    }
+  }, [statusFilter]);
 
+  useEffect(() => {
     fetchRuns();
-  }, [refreshTrigger]);
+  }, [fetchRuns, refreshTrigger]);
+
+  // Clear selection when filter changes
+  useEffect(() => {
+    setSelectedRuns(new Set());
+    setCurrentPage(1);
+  }, [statusFilter]);
 
   // Pagination logic
   const totalPages = Math.ceil(runs.length / runsPerPage);
@@ -63,6 +81,62 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
     setCurrentPage(page);
   };
 
+  // Selection handlers
+  const toggleRunSelection = (runId: number) => {
+    setSelectedRuns(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(runId)) {
+        newSet.delete(runId);
+      } else {
+        newSet.add(runId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRuns.size === runs.length) {
+      setSelectedRuns(new Set());
+    } else {
+      setSelectedRuns(new Set(runs.map(r => r.id)));
+    }
+  };
+
+  const handleDeleteClick = (mode: 'selected' | 'filtered' | 'all') => {
+    setDeleteMode(mode);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      if (deleteMode === 'all') {
+        await agentRunsApi.deleteMany({ all: true });
+      } else if (deleteMode === 'filtered' && statusFilter) {
+        await agentRunsApi.deleteMany({ status: statusFilter });
+      } else if (deleteMode === 'selected' && selectedRuns.size > 0) {
+        await agentRunsApi.deleteMany({ ids: Array.from(selectedRuns) });
+      }
+      setSelectedRuns(new Set());
+      setIsDeleteModalOpen(false);
+      fetchRuns();
+    } catch (error) {
+      console.error('Failed to delete runs:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const getDeleteMessage = () => {
+    if (deleteMode === 'all') {
+      return `Are you sure you want to delete ALL ${totalCount} runs? This action cannot be undone.`;
+    } else if (deleteMode === 'filtered' && statusFilter) {
+      return `Are you sure you want to delete all ${runs.length} runs with status "${statusFilter}"? This action cannot be undone.`;
+    } else {
+      return `Are you sure you want to delete ${selectedRuns.size} selected run${selectedRuns.size > 1 ? 's' : ''}? This action cannot be undone.`;
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Content - Timeline has its own header with tabs */}
@@ -70,43 +144,104 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
         {activeTab === 'list' ? (
           <div className="h-full flex flex-col">
             {/* Header for List view */}
-            <div className="flex items-center gap-4 p-4 border-b border-gray-200 bg-white">
-              <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
-              
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setActiveTab('list')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    activeTab === 'list'
-                      ? 'bg-white text-primary shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <List className="h-4 w-4" />
-                  List
-                </button>
-                <button
-                  onClick={() => setActiveTab('timeline')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    activeTab === 'timeline'
-                      ? 'bg-white text-primary shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <GitBranch className="h-4 w-4" />
-                  Timeline
-                </button>
-                <button
-                  onClick={() => setActiveTab('stats')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    activeTab === 'stats'
-                      ? 'bg-white text-primary shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  Stats
-                </button>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+              <div className="flex items-center gap-4">
+                <h1 className="text-xl font-semibold text-gray-900">Agent Runs</h1>
+                
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setActiveTab('list')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      activeTab === 'list'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <List className="h-4 w-4" />
+                    List
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('timeline')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      activeTab === 'timeline'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <GitBranch className="h-4 w-4" />
+                    Timeline
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('stats')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      activeTab === 'stats'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    Stats
+                  </button>
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-gray-500" />
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                    className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="completed">Completed</option>
+                    <option value="running">Running</option>
+                    <option value="failed">Failed</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                  {statusFilter && (
+                    <button
+                      onClick={() => setStatusFilter('')}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <span className="text-sm text-gray-500">
+                  {runs.length} of {totalCount} runs
+                </span>
+              </div>
+
+              {/* Delete Actions */}
+              <div className="flex items-center gap-2">
+                {selectedRuns.size > 0 && (
+                  <button
+                    onClick={() => handleDeleteClick('selected')}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete Selected ({selectedRuns.size})
+                  </button>
+                )}
+                {statusFilter && runs.length > 0 && (
+                  <button
+                    onClick={() => handleDeleteClick('filtered')}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-md transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete All {statusFilter}
+                  </button>
+                )}
+                {totalCount > 0 && (
+                  <button
+                    onClick={() => handleDeleteClick('all')}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-md transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete All Runs
+                  </button>
+                )}
               </div>
             </div>
             {runs.length === 0 ? (
@@ -141,7 +276,14 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
               </div>
             ) : (
               <div className="flex-1 p-4 overflow-y-auto bg-white">
-                <RunsList runs={currentRuns} onRunClick={onRunClick} />
+                <RunsList 
+                  runs={currentRuns} 
+                  onRunClick={onRunClick}
+                  selectedRuns={selectedRuns}
+                  onToggleSelection={toggleRunSelection}
+                  onToggleSelectAll={toggleSelectAll}
+                  allSelected={selectedRuns.size === runs.length && runs.length > 0}
+                />
                 <Pagination
                   currentPage={currentPage}
                   totalPages={totalPages}
@@ -165,6 +307,51 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
           />
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-red-100 rounded-full">
+                  <AlertTriangle className="h-6 w-6 text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Confirm Delete</h3>
+              </div>
+              <p className="text-gray-600 mb-6">
+                {getDeleteMessage()}
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

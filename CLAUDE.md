@@ -516,6 +516,17 @@ stn agent create  # Create new agent
 stn status        # Check system status
 ```
 
+## Local Development
+
+```bash
+# Build and install Station binary with UI
+make local-install-ui
+
+# Start dev server (STN_DEV_MODE enables API server on :8585)
+export STN_DEV_MODE=true
+stn serve
+```
+
 ## Context for New Chats
 When starting a new conversation about Station:
 1. Reference this file for current state

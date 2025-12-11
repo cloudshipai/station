@@ -272,6 +272,85 @@ func convertAgentRunWithDetailsFromSQLc(row interface{}) *models.AgentRunWithDet
 			result.Error = &errorMsg
 		}
 
+	case queries.ListRecentAgentRunsByStatusRow:
+		result = &models.AgentRunWithDetails{
+			AgentRun: models.AgentRun{
+				ID:            r.ID,
+				AgentID:       r.AgentID,
+				UserID:        r.UserID,
+				Task:          r.Task,
+				FinalResponse: r.FinalResponse,
+				StepsTaken:    r.StepsTaken,
+				Status:        r.Status,
+			},
+			AgentName: r.AgentName,
+			Username:  r.Username,
+		}
+
+		if r.ToolCalls.Valid {
+			var toolCalls models.JSONArray
+			if err := (&toolCalls).Scan(r.ToolCalls.String); err == nil {
+				result.ToolCalls = &toolCalls
+			}
+		}
+
+		if r.ExecutionSteps.Valid {
+			var executionSteps models.JSONArray
+			if err := (&executionSteps).Scan(r.ExecutionSteps.String); err == nil {
+				result.ExecutionSteps = &executionSteps
+			}
+		}
+
+		if r.StartedAt.Valid {
+			result.StartedAt = r.StartedAt.Time
+		}
+
+		if r.CompletedAt.Valid {
+			result.CompletedAt = &r.CompletedAt.Time
+		}
+
+		if r.InputTokens.Valid {
+			inputTokens := r.InputTokens.Int64
+			result.InputTokens = &inputTokens
+		}
+
+		if r.OutputTokens.Valid {
+			outputTokens := r.OutputTokens.Int64
+			result.OutputTokens = &outputTokens
+		}
+
+		if r.TotalTokens.Valid {
+			totalTokens := r.TotalTokens.Int64
+			result.TotalTokens = &totalTokens
+		}
+
+		if r.DurationSeconds.Valid {
+			durationSeconds := r.DurationSeconds.Float64
+			result.DurationSeconds = &durationSeconds
+		}
+
+		if r.ModelName.Valid {
+			modelName := r.ModelName.String
+			result.ModelName = &modelName
+		}
+
+		if r.ToolsUsed.Valid {
+			toolsUsed := r.ToolsUsed.Int64
+			result.ToolsUsed = &toolsUsed
+		}
+
+		if r.DebugLogs.Valid {
+			var debugLogs models.JSONArray
+			if err := (&debugLogs).Scan(r.DebugLogs.String); err == nil {
+				result.DebugLogs = &debugLogs
+			}
+		}
+
+		if r.Error.Valid {
+			errorMsg := r.Error.String
+			result.Error = &errorMsg
+		}
+
 	case queries.GetAgentRunWithDetailsRow:
 		result = &models.AgentRunWithDetails{
 			AgentRun: models.AgentRun{
@@ -805,6 +884,160 @@ func (r *AgentRunRepo) ListByModel(ctx context.Context, modelName string, limit,
 		attribute.Int("runs.count", len(result)),
 	)
 	return result, nil
+}
+
+// ListRecentByStatus gets recent runs filtered by status with limit
+func (r *AgentRunRepo) ListRecentByStatus(ctx context.Context, status string, limit int64) ([]*models.AgentRunWithDetails, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.list_recent_by_status",
+		trace.WithAttributes(
+			attribute.String("status", status),
+			attribute.Int64("limit", limit),
+		),
+	)
+	defer span.End()
+
+	rows, err := r.queries.ListRecentAgentRunsByStatus(ctx, queries.ListRecentAgentRunsByStatusParams{
+		Status: status,
+		Limit:  limit,
+	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return nil, err
+	}
+
+	var result []*models.AgentRunWithDetails
+	for _, row := range rows {
+		result = append(result, convertAgentRunWithDetailsFromSQLc(row))
+	}
+
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int("runs.count", len(result)),
+	)
+	return result, nil
+}
+
+// Count returns the total count of agent runs
+func (r *AgentRunRepo) Count(ctx context.Context) (int64, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.count")
+	defer span.End()
+
+	count, err := r.queries.CountAgentRuns(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return 0, err
+	}
+
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int64("count", count),
+	)
+	return count, nil
+}
+
+// CountByStatus returns the count of agent runs filtered by status
+func (r *AgentRunRepo) CountByStatus(ctx context.Context, status string) (int64, error) {
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.count_by_status",
+		trace.WithAttributes(attribute.String("status", status)),
+	)
+	defer span.End()
+
+	count, err := r.queries.CountAgentRunsByStatus(ctx, status)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return 0, err
+	}
+
+	span.SetAttributes(
+		attribute.Bool("db.operation.success", true),
+		attribute.Int64("count", count),
+	)
+	return count, nil
+}
+
+// Delete deletes a single agent run by ID
+func (r *AgentRunRepo) Delete(ctx context.Context, id int64) error {
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
+
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.delete",
+		trace.WithAttributes(attribute.Int64("run.id", id)),
+	)
+	defer span.End()
+
+	err := r.queries.DeleteAgentRun(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return err
+	}
+
+	span.SetAttributes(attribute.Bool("db.operation.success", true))
+	return nil
+}
+
+// DeleteByIDs deletes multiple agent runs by their IDs
+func (r *AgentRunRepo) DeleteByIDs(ctx context.Context, ids []int64) error {
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
+
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.delete_by_ids",
+		trace.WithAttributes(attribute.Int("ids.count", len(ids))),
+	)
+	defer span.End()
+
+	err := r.queries.DeleteAgentRunsByIDs(ctx, ids)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return err
+	}
+
+	span.SetAttributes(attribute.Bool("db.operation.success", true))
+	return nil
+}
+
+// DeleteAll deletes all agent runs
+func (r *AgentRunRepo) DeleteAll(ctx context.Context) error {
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
+
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.delete_all")
+	defer span.End()
+
+	err := r.queries.DeleteAllAgentRuns(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return err
+	}
+
+	span.SetAttributes(attribute.Bool("db.operation.success", true))
+	return nil
+}
+
+// DeleteByStatus deletes all agent runs matching a status
+func (r *AgentRunRepo) DeleteByStatus(ctx context.Context, status string) error {
+	db.SQLiteWriteMutex.Lock()
+	defer db.SQLiteWriteMutex.Unlock()
+
+	ctx, span := r.tracer.Start(ctx, "db.agent_runs.delete_by_status",
+		trace.WithAttributes(attribute.String("status", status)),
+	)
+	defer span.End()
+
+	err := r.queries.DeleteAgentRunsByStatus(ctx, status)
+	if err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Bool("db.operation.success", false))
+		return err
+	}
+
+	span.SetAttributes(attribute.Bool("db.operation.success", true))
+	return nil
 }
 
 // ListDistinctModels returns all unique model names used in runs with their counts

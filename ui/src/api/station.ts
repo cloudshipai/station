@@ -73,19 +73,28 @@ export const usersApi = {
 
 // Agent Runs API  
 export const agentRunsApi = {
-  getAll: (params?: { environment_id?: number }) => {
+  getAll: (params?: { environment_id?: number; status?: string; limit?: number }) => {
     const queryParams = new URLSearchParams();
     if (params?.environment_id) {
       queryParams.append('environment_id', params.environment_id.toString());
     }
+    if (params?.status) {
+      queryParams.append('status', params.status);
+    }
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
     const queryString = queryParams.toString();
-    return apiClient.get<{runs: AgentRunWithDetails[], count: number, limit: number}>(
+    return apiClient.get<{runs: AgentRunWithDetails[], count: number, total_count: number, limit: number, status?: string}>(
       `/runs${queryString ? `?${queryString}` : ''}`
     );
   },
   getById: (id: number) => apiClient.get<{run: AgentRunWithDetails}>(`/runs/${id}`),
   getByAgent: (agentId: number) => 
     apiClient.get<{runs: AgentRun[], count: number, agent_id: number}>(`/agents/${agentId}/runs`),
+  delete: (id: number) => apiClient.delete<{success: boolean, message: string, run_id: number}>(`/runs/${id}`),
+  deleteMany: (params: { ids?: number[]; status?: string; all?: boolean }) => 
+    apiClient.delete<{success: boolean, message: string, deleted_count: number}>('/runs', { data: params }),
 };
 
 // Benchmark API

@@ -8,7 +8,30 @@ package queries
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
+
+const countAgentRuns = `-- name: CountAgentRuns :one
+SELECT COUNT(*) as count FROM agent_runs
+`
+
+func (q *Queries) CountAgentRuns(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAgentRuns)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countAgentRunsByStatus = `-- name: CountAgentRunsByStatus :one
+SELECT COUNT(*) as count FROM agent_runs WHERE status = ?
+`
+
+func (q *Queries) CountAgentRunsByStatus(ctx context.Context, status string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAgentRunsByStatus, status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createAgentRun = `-- name: CreateAgentRun :one
 INSERT INTO agent_runs (agent_id, user_id, task, final_response, steps_taken, tool_calls, execution_steps, status, completed_at, input_tokens, output_tokens, total_tokens, duration_seconds, model_name, tools_used, debug_logs, error, parent_run_id)
@@ -140,6 +163,52 @@ func (q *Queries) CreateAgentRunBasic(ctx context.Context, arg CreateAgentRunBas
 		&i.ParentRunID,
 	)
 	return i, err
+}
+
+const deleteAgentRun = `-- name: DeleteAgentRun :exec
+DELETE FROM agent_runs WHERE id = ?
+`
+
+func (q *Queries) DeleteAgentRun(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteAgentRun, id)
+	return err
+}
+
+const deleteAgentRunsByIDs = `-- name: DeleteAgentRunsByIDs :exec
+DELETE FROM agent_runs WHERE id IN (/*SLICE:ids*/?)
+`
+
+func (q *Queries) DeleteAgentRunsByIDs(ctx context.Context, ids []int64) error {
+	query := deleteAgentRunsByIDs
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	_, err := q.db.ExecContext(ctx, query, queryParams...)
+	return err
+}
+
+const deleteAgentRunsByStatus = `-- name: DeleteAgentRunsByStatus :exec
+DELETE FROM agent_runs WHERE status = ?
+`
+
+func (q *Queries) DeleteAgentRunsByStatus(ctx context.Context, status string) error {
+	_, err := q.db.ExecContext(ctx, deleteAgentRunsByStatus, status)
+	return err
+}
+
+const deleteAllAgentRuns = `-- name: DeleteAllAgentRuns :exec
+DELETE FROM agent_runs
+`
+
+func (q *Queries) DeleteAllAgentRuns(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllAgentRuns)
+	return err
 }
 
 const getAgentRun = `-- name: GetAgentRun :one
@@ -532,6 +601,92 @@ func (q *Queries) ListRecentAgentRuns(ctx context.Context, limit int64) ([]ListR
 	var items []ListRecentAgentRunsRow
 	for rows.Next() {
 		var i ListRecentAgentRunsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.UserID,
+			&i.Task,
+			&i.FinalResponse,
+			&i.StepsTaken,
+			&i.ToolCalls,
+			&i.ExecutionSteps,
+			&i.Status,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.TotalTokens,
+			&i.DurationSeconds,
+			&i.ModelName,
+			&i.ToolsUsed,
+			&i.DebugLogs,
+			&i.Error,
+			&i.ParentRunID,
+			&i.AgentName,
+			&i.Username,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentAgentRunsByStatus = `-- name: ListRecentAgentRunsByStatus :many
+SELECT ar.id, ar.agent_id, ar.user_id, ar.task, ar.final_response, ar.steps_taken, ar.tool_calls, ar.execution_steps, ar.status, ar.started_at, ar.completed_at, ar.input_tokens, ar.output_tokens, ar.total_tokens, ar.duration_seconds, ar.model_name, ar.tools_used, ar.debug_logs, ar.error, ar.parent_run_id, a.name as agent_name, u.username
+FROM agent_runs ar
+JOIN agents a ON ar.agent_id = a.id
+JOIN users u ON ar.user_id = u.id
+WHERE ar.status = ?
+ORDER BY ar.started_at DESC
+LIMIT ?
+`
+
+type ListRecentAgentRunsByStatusParams struct {
+	Status string `json:"status"`
+	Limit  int64  `json:"limit"`
+}
+
+type ListRecentAgentRunsByStatusRow struct {
+	ID              int64           `json:"id"`
+	AgentID         int64           `json:"agent_id"`
+	UserID          int64           `json:"user_id"`
+	Task            string          `json:"task"`
+	FinalResponse   string          `json:"final_response"`
+	StepsTaken      int64           `json:"steps_taken"`
+	ToolCalls       sql.NullString  `json:"tool_calls"`
+	ExecutionSteps  sql.NullString  `json:"execution_steps"`
+	Status          string          `json:"status"`
+	StartedAt       sql.NullTime    `json:"started_at"`
+	CompletedAt     sql.NullTime    `json:"completed_at"`
+	InputTokens     sql.NullInt64   `json:"input_tokens"`
+	OutputTokens    sql.NullInt64   `json:"output_tokens"`
+	TotalTokens     sql.NullInt64   `json:"total_tokens"`
+	DurationSeconds sql.NullFloat64 `json:"duration_seconds"`
+	ModelName       sql.NullString  `json:"model_name"`
+	ToolsUsed       sql.NullInt64   `json:"tools_used"`
+	DebugLogs       sql.NullString  `json:"debug_logs"`
+	Error           sql.NullString  `json:"error"`
+	ParentRunID     sql.NullInt64   `json:"parent_run_id"`
+	AgentName       string          `json:"agent_name"`
+	Username        string          `json:"username"`
+}
+
+func (q *Queries) ListRecentAgentRunsByStatus(ctx context.Context, arg ListRecentAgentRunsByStatusParams) ([]ListRecentAgentRunsByStatusRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentAgentRunsByStatus, arg.Status, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentAgentRunsByStatusRow
+	for rows.Next() {
+		var i ListRecentAgentRunsByStatusRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AgentID,

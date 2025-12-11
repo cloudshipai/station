@@ -63,3 +63,30 @@ UPDATE agent_runs SET status = ? WHERE id = ?;
 
 -- name: UpdateAgentRunDebugLogs :exec
 UPDATE agent_runs SET debug_logs = ? WHERE id = ?;
+
+-- name: ListRecentAgentRunsByStatus :many
+SELECT ar.*, a.name as agent_name, u.username
+FROM agent_runs ar
+JOIN agents a ON ar.agent_id = a.id
+JOIN users u ON ar.user_id = u.id
+WHERE ar.status = ?
+ORDER BY ar.started_at DESC
+LIMIT ?;
+
+-- name: CountAgentRuns :one
+SELECT COUNT(*) as count FROM agent_runs;
+
+-- name: CountAgentRunsByStatus :one
+SELECT COUNT(*) as count FROM agent_runs WHERE status = ?;
+
+-- name: DeleteAgentRun :exec
+DELETE FROM agent_runs WHERE id = ?;
+
+-- name: DeleteAgentRunsByIDs :exec
+DELETE FROM agent_runs WHERE id IN (sqlc.slice('ids'));
+
+-- name: DeleteAllAgentRuns :exec
+DELETE FROM agent_runs;
+
+-- name: DeleteAgentRunsByStatus :exec
+DELETE FROM agent_runs WHERE status = ?;
