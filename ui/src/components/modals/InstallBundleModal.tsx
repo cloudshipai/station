@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Package, Download, Copy, AlertCircle, Cloud, Star, Building2, User, Search, CheckCircle, Globe } from 'lucide-react';
+import { X, Package, Download, Copy, AlertCircle, Cloud, Star, Building2, Search, CheckCircle, Globe, HelpCircle, FolderOpen } from 'lucide-react';
 import { apiClient } from '../../api/client';
 
 interface Bundle {
@@ -25,14 +25,16 @@ interface InstallBundleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (environmentName: string) => void;
+  cloudShipConnected?: boolean;
 }
 
 export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  cloudShipConnected = false
 }) => {
-  const [bundleSource, setBundleSource] = useState<'url' | 'file' | 'cloudship'>('cloudship');
+  const [bundleSource, setBundleSource] = useState<'url' | 'file' | 'cloudship'>('file');
   const [bundleLocation, setBundleLocation] = useState('');
   const [environmentName, setEnvironmentName] = useState('');
   const [installing, setInstalling] = useState(false);
@@ -45,12 +47,22 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'official' | 'organization' | 'all'>('official');
 
+  // Set default source based on CloudShip connection
+  useEffect(() => {
+    if (isOpen) {
+      setBundleSource(cloudShipConnected ? 'cloudship' : 'file');
+      setError(null);
+      setInstallSuccess(false);
+      setInstallDetails(null);
+    }
+  }, [isOpen, cloudShipConnected]);
+
   // Load CloudShip bundles when modal opens and CloudShip source is selected
   useEffect(() => {
-    if (isOpen && bundleSource === 'cloudship') {
+    if (isOpen && bundleSource === 'cloudship' && cloudShipConnected) {
       loadCloudShipBundles();
     }
-  }, [isOpen, bundleSource]);
+  }, [isOpen, bundleSource, cloudShipConnected]);
 
   // Auto-fill environment name when bundle is selected
   useEffect(() => {
@@ -264,17 +276,28 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                 Bundle Source
               </label>
               <div className="flex space-x-4">
-                <label className="flex items-center space-x-2 cursor-pointer">
+                {/* CloudShip Option */}
+                <label className={`flex items-center space-x-2 ${!cloudShipConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                   <input
                     type="radio"
                     value="cloudship"
                     checked={bundleSource === 'cloudship'}
-                    onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
-                    className="text-blue-600 focus:ring-blue-600"
+                    onChange={(e) => cloudShipConnected && setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
+                    disabled={!cloudShipConnected}
+                    className="text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed"
                   />
-                  <span className="text-sm text-gray-900 flex items-center gap-1">
+                  <span className={`text-sm flex items-center gap-1 ${!cloudShipConnected ? 'text-gray-400' : 'text-gray-900'}`}>
                     <Cloud className="h-3 w-3" />
                     CloudShip
+                    {!cloudShipConnected && (
+                      <div className="relative group/help">
+                        <HelpCircle className="h-3.5 w-3.5 text-gray-400" />
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/help:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-50">
+                          CloudShip API key required. Set it in Settings → CloudShip Integration.
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                      </div>
+                    )}
                   </span>
                 </label>
                 <label className="flex items-center space-x-2 cursor-pointer">
@@ -295,12 +318,15 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                     onChange={(e) => setBundleSource(e.target.value as 'url' | 'file' | 'cloudship')}
                     className="text-blue-600 focus:ring-blue-600"
                   />
-                  <span className="text-sm text-gray-900">File Path</span>
+                  <span className="text-sm text-gray-900 flex items-center gap-1">
+                    <FolderOpen className="h-3 w-3" />
+                    File Path
+                  </span>
                 </label>
               </div>
             </div>
 
-            {bundleSource === 'cloudship' ? (
+            {bundleSource === 'cloudship' && cloudShipConnected ? (
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 {/* Tabs */}
                 <div className="flex border-b border-gray-200 mb-3">
@@ -440,10 +466,15 @@ export const InstallBundleModal: React.FC<InstallBundleModalProps> = ({
                   type="text"
                   value={bundleLocation}
                   onChange={(e) => setBundleLocation(e.target.value)}
-                  placeholder={bundleSource === 'url' ? 'https://example.com/bundle.tar.gz' : '/path/to/bundle.tar.gz'}
-                  className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 placeholder:text-gray-400 transition-colors"
+                  placeholder={bundleSource === 'url' ? 'https://example.com/bundle.tar.gz' : '/home/user/.config/station/bundles/my-bundle.tar.gz'}
+                  className="w-full bg-white border border-gray-300 text-gray-900 px-3 py-2 rounded focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 placeholder:text-gray-400 transition-colors font-mono text-sm"
                   disabled={installing}
                 />
+                {bundleSource === 'file' && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the full path to a local .tar.gz bundle file
+                  </p>
+                )}
               </div>
             )}
 

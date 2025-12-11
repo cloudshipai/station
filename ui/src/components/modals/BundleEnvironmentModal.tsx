@@ -1,22 +1,39 @@
-import React, { useState } from 'react';
-import { X, Package, Copy } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Package, Copy, Cloud, HelpCircle, Upload } from 'lucide-react';
 import { bundlesApi } from '../../api/station';
 
 interface BundleEnvironmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   environmentName: string;
+  cloudShipConnected?: boolean;
 }
 
 export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
   isOpen,
   onClose,
-  environmentName
+  environmentName,
+  cloudShipConnected = false
 }) => {
-  const [bundleType, setBundleType] = useState<'cloudship' | 'local' | 'public'>('cloudship');
+  const [bundleType, setBundleType] = useState<'cloudship' | 'local' | 'public'>('local');
   const [publicEndpoint, setPublicEndpoint] = useState('https://share.cloudshipai.com/upload');
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<any>(null);
+
+  // Auto-select local if CloudShip not connected
+  useEffect(() => {
+    if (!cloudShipConnected && bundleType === 'cloudship') {
+      setBundleType('local');
+    }
+  }, [cloudShipConnected, bundleType]);
+
+  // Set default based on connection status when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setBundleType(cloudShipConnected ? 'cloudship' : 'local');
+      setResponse(null);
+    }
+  }, [isOpen, cloudShipConnected]);
 
   const handleBundle = async () => {
     setIsLoading(true);
@@ -52,7 +69,7 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white rounded-t-lg">
           <h2 className="text-lg font-semibold text-gray-900 z-10 relative">
-            Bundle Environment: {environmentName}
+            Publish Bundle: {environmentName}
           </h2>
           <button onClick={onClose} className="text-gray-600 hover:text-gray-900 transition-colors z-10 relative">
             <X className="h-5 w-5" />
@@ -72,18 +89,35 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
           <div className="space-y-3">
             <label className="text-sm font-medium text-gray-900">Bundle Destination:</label>
             <div className="space-y-2">
-              <div className="flex items-center gap-3">
+              {/* CloudShip Option */}
+              <div className={`flex items-center gap-3 ${!cloudShipConnected ? 'opacity-50' : ''}`}>
                 <input
                   type="radio"
                   id="cloudship-bundle"
                   checked={bundleType === 'cloudship'}
                   onChange={() => setBundleType('cloudship')}
-                  className="w-4 h-4 text-station-blue focus:ring-station-blue focus:ring-2"
+                  disabled={!cloudShipConnected}
+                  className="w-4 h-4 text-station-blue focus:ring-station-blue focus:ring-2 disabled:cursor-not-allowed"
                 />
-                <label htmlFor="cloudship-bundle" className="text-sm text-gray-900">
+                <label 
+                  htmlFor="cloudship-bundle" 
+                  className={`text-sm flex items-center gap-2 ${!cloudShipConnected ? 'text-gray-400 cursor-not-allowed' : 'text-gray-900 cursor-pointer'}`}
+                >
+                  <Cloud className="h-4 w-4" />
                   Upload to CloudShip (Organization Bundle)
+                  {!cloudShipConnected && (
+                    <div className="relative group">
+                      <HelpCircle className="h-4 w-4 text-gray-400" />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-50">
+                        CloudShip API key required. Set it in Settings → CloudShip Integration.
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                      </div>
+                    </div>
+                  )}
                 </label>
               </div>
+              
+              {/* Public Share Option */}
               <div className="flex items-center gap-3">
                 <input
                   type="radio"
@@ -92,10 +126,12 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
                   onChange={() => setBundleType('public')}
                   className="w-4 h-4 text-station-blue focus:ring-station-blue focus:ring-2"
                 />
-                <label htmlFor="public-bundle" className="text-sm text-gray-900">
+                <label htmlFor="public-bundle" className="text-sm text-gray-900 cursor-pointer">
                   Upload to Public Share
                 </label>
               </div>
+              
+              {/* Local Option */}
               <div className="flex items-center gap-3">
                 <input
                   type="radio"
@@ -104,7 +140,7 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
                   onChange={() => setBundleType('local')}
                   className="w-4 h-4 text-station-blue focus:ring-station-blue focus:ring-2"
                 />
-                <label htmlFor="local-bundle" className="text-sm text-gray-900">
+                <label htmlFor="local-bundle" className="text-sm text-gray-900 cursor-pointer">
                   Save Locally
                 </label>
               </div>
@@ -256,12 +292,12 @@ export const BundleEnvironmentModal: React.FC<BundleEnvironmentModalProps> = ({
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  Creating Bundle...
+                  Publishing Bundle...
                 </>
               ) : (
                 <>
-                  <Package className="h-4 w-4" />
-                  Bundle
+                  <Upload className="h-4 w-4" />
+                  Publish Bundle
                 </>
               )}
             </button>

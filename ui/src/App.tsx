@@ -1676,6 +1676,26 @@ const EnvironmentsPage = () => {
   const [copySourceEnvId, setCopySourceEnvId] = useState<number | null>(null);
   const [copySourceEnvName, setCopySourceEnvName] = useState<string>('');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [cloudShipConnected, setCloudShipConnected] = useState(false);
+
+  // Check CloudShip connection status
+  useEffect(() => {
+    const checkCloudShipStatus = async () => {
+      try {
+        const response = await fetch('/api/v1/cloudship/status');
+        if (response.ok) {
+          const data = await response.json();
+          setCloudShipConnected(data.authenticated === true);
+        }
+      } catch (error) {
+        setCloudShipConnected(false);
+      }
+    };
+    checkCloudShipStatus();
+    // Poll every 30 seconds
+    const interval = setInterval(checkCloudShipStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Define TOC items for help modal
   const envHelpTocItems: TocItem[] = [
@@ -2039,7 +2059,7 @@ const EnvironmentsPage = () => {
                 className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
               >
                 <Archive className="h-4 w-4" />
-                <span>Create Bundle</span>
+                <span>Publish Bundle</span>
               </button>
             </div>
           </div>
@@ -2080,6 +2100,7 @@ const EnvironmentsPage = () => {
         isOpen={isBundleModalOpen}
         onClose={() => setIsBundleModalOpen(false)}
         environmentName={selectedEnvironment ? environments.find(env => env.id === selectedEnvironment)?.name || 'default' : 'default'}
+        cloudShipConnected={cloudShipConnected}
       />
 
       {/* Build Image Modal */}
@@ -2104,6 +2125,7 @@ const EnvironmentsPage = () => {
           setSyncEnvironmentName(environmentName);
           setIsSyncModalOpen(true);
         }}
+        cloudShipConnected={cloudShipConnected}
       />
 
       {/* Variables Editor Modal */}

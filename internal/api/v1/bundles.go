@@ -82,7 +82,7 @@ func (h *APIHandlers) createBundle(c *gin.Context) {
 
 	// Use BundleService for proper bundle creation with manifest, reports, and datasets
 	bundleService := services.NewBundleServiceWithRepos(h.repos)
-	
+
 	// Try to get environment ID for report export
 	var tarData []byte
 	var bundleErr error
@@ -500,18 +500,35 @@ func (h *APIHandlers) installBundle(c *gin.Context) {
 		}
 		log.Printf("[BundleInstall] Bundle downloaded to: %s", bundlePath)
 	} else {
-		log.Printf("[BundleInstall] Copying bundle from file path: %s", req.BundleLocation)
-		// Copy from file path
-		bundlePath, err = copyBundle(req.BundleLocation, bundlesDir)
-		if err != nil {
-			log.Printf("[BundleInstall] ERROR: Failed to copy bundle: %v", err)
-			c.JSON(http.StatusBadRequest, BundleInstallResponse{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to copy bundle: %v", err),
-			})
-			return
+		log.Printf("[BundleInstall] Processing bundle from file path: %s", req.BundleLocation)
+		// Check if the file is already in the bundles directory - if so, use it directly
+		absSource, _ := filepath.Abs(req.BundleLocation)
+		absBundlesDir, _ := filepath.Abs(bundlesDir)
+		if strings.HasPrefix(absSource, absBundlesDir) {
+			log.Printf("[BundleInstall] Bundle is already in bundles directory, using directly")
+			bundlePath = req.BundleLocation
+			// Verify file exists
+			if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
+				log.Printf("[BundleInstall] ERROR: Bundle file does not exist: %s", bundlePath)
+				c.JSON(http.StatusBadRequest, BundleInstallResponse{
+					Success: false,
+					Error:   fmt.Sprintf("Bundle file does not exist: %s", bundlePath),
+				})
+				return
+			}
+		} else {
+			// Copy from file path
+			bundlePath, err = copyBundle(req.BundleLocation, bundlesDir)
+			if err != nil {
+				log.Printf("[BundleInstall] ERROR: Failed to copy bundle: %v", err)
+				c.JSON(http.StatusBadRequest, BundleInstallResponse{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to copy bundle: %v", err),
+				})
+				return
+			}
+			log.Printf("[BundleInstall] Bundle copied to: %s", bundlePath)
 		}
-		log.Printf("[BundleInstall] Bundle copied to: %s", bundlePath)
 	}
 
 	// Create new environment
@@ -574,7 +591,7 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 
 	// Check if this is a CloudShip URL and add authentication if needed
 	cfg, err := config.Load()
-	log.Printf("[DownloadBundle] Config loaded - CloudShip enabled: %v, APIURL: %s, RegistrationKey len: %d", 
+	log.Printf("[DownloadBundle] Config loaded - CloudShip enabled: %v, APIURL: %s, RegistrationKey len: %d",
 		cfg.CloudShip.Enabled, cfg.CloudShip.APIURL, len(cfg.CloudShip.RegistrationKey))
 	if err == nil && cfg.CloudShip.Enabled && cfg.CloudShip.RegistrationKey != "" {
 		// Check if URL matches CloudShip API URL or bundle registry
@@ -590,12 +607,12 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 		}
 		if isCloudShipURL {
 			log.Printf("[DownloadBundle] Detected CloudShip URL, adding authentication header")
-	// Set auth header - prefer API key (Bearer), fall back to Registration Key
-	if cfg.CloudShip.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
-	} else {
-		req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
-	}
+			// Set auth header - prefer API key (Bearer), fall back to Registration Key
+			if cfg.CloudShip.APIKey != "" {
+				req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
+			} else {
+				req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+			}
 		} else {
 			log.Printf("[DownloadBundle] URL did not match CloudShip patterns")
 		}
