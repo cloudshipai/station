@@ -214,6 +214,9 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// CloudShip lighthouse status
 	router.GET("/lighthouse/status", h.LighthouseStatusHandler)
 
+	// CloudShip API status (checks API key authentication for bundles)
+	router.GET("/cloudship/status", h.CloudShipStatusHandler)
+
 	// Version routes (public - no auth required for checking updates)
 	versionGroup := router.Group("/version")
 	h.registerVersionRoutes(versionGroup)

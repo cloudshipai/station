@@ -1,228 +1,255 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Cloud, CheckCircle, XCircle, AlertCircle, Key, X, ExternalLink, RefreshCw } from 'lucide-react';
 
-interface LighthouseStatus {
-  connected: boolean;
-  registered: boolean;
-  last_error: string;
-  last_error_time: string;
-  last_success: string;
-  registration_key: string;
-  telemetry_sent: number;
-  telemetry_failed: number;
-  server_url: string;
-}
-
-interface LighthouseResponse {
-  status: LighthouseStatus;
-  is_healthy: boolean;
-  has_error: boolean;
-  summary_message: string;
-}
-
-interface BundleAuthStatus {
+interface CloudShipAPIStatus {
   authenticated: boolean;
-  bundleCount: number;
+  has_api_key: boolean;
+  api_key_masked?: string;
+  api_url: string;
+  bundle_count: number;
   organization?: string;
+  error?: string;
 }
 
 const CloudShipStatus: React.FC = () => {
-  const [status, setStatus] = useState<LighthouseResponse | null>(null);
-  const [bundleAuth, setBundleAuth] = useState<BundleAuthStatus | null>(null);
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [apiStatus, setApiStatus] = useState<CloudShipAPIStatus | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchStatus = async () => {
+    try {
+      setIsRefreshing(true);
+      const response = await fetch('/api/v1/cloudship/status');
+      if (response.ok) {
+        const data = await response.json();
+        setApiStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch CloudShip status:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const response = await fetch('/api/v1/lighthouse/status');
-        if (response.ok) {
-          const data = await response.json();
-          setStatus(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch lighthouse status:', error);
-      }
-    };
-
-    const fetchBundleAuth = async () => {
-      try {
-        const response = await fetch('/api/v1/cloudship/bundles');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.bundles) {
-            setBundleAuth({
-              authenticated: true,
-              bundleCount: data.bundles.length,
-              organization: data.bundles[0]?.organization
-            });
-          } else {
-            setBundleAuth({ authenticated: false, bundleCount: 0 });
-          }
-        } else {
-          setBundleAuth({ authenticated: false, bundleCount: 0 });
-        }
-      } catch (error) {
-        console.error('Failed to fetch bundle auth status:', error);
-        setBundleAuth({ authenticated: false, bundleCount: 0 });
-      }
-    };
-
     // Initial fetch
     fetchStatus();
-    fetchBundleAuth();
 
-    // Poll every 5 seconds for lighthouse, 30 seconds for bundles
-    const lighthouseInterval = setInterval(fetchStatus, 5000);
-    const bundleInterval = setInterval(fetchBundleAuth, 30000);
+    // Poll every 30 seconds
+    const interval = setInterval(fetchStatus, 30000);
 
     return () => {
-      clearInterval(lighthouseInterval);
-      clearInterval(bundleInterval);
+      clearInterval(interval);
     };
   }, []);
 
-  const isAuthenticated = bundleAuth?.authenticated || status?.is_healthy;
-  
-  const getStatusColor = () => {
-    if (isAuthenticated) return 'bg-tokyo-green';
-    if (status?.has_error) return 'bg-tokyo-red';
-    if (status?.status.connected) return 'bg-tokyo-yellow';
-    return 'bg-tokyo-dark5';
-  };
+  const isAuthenticated = apiStatus?.authenticated || false;
+  const hasAPIKey = apiStatus?.has_api_key || false;
 
   const getStatusText = () => {
-    if (bundleAuth?.authenticated) return 'Logged In';
-    if (status?.is_healthy) return 'Connected';
-    if (status?.has_error) return 'Error';
-    if (status?.status.connected) return 'Auth Issue';
+    if (isAuthenticated) return 'Connected';
+    if (hasAPIKey && apiStatus?.error) return 'Auth Error';
+    if (hasAPIKey) return 'Validating...';
     return 'Not Connected';
   };
 
   const StatusIcon = isAuthenticated ? CheckCircle : 
-                     status?.has_error ? XCircle : 
-                     status?.status.connected ? AlertCircle : Cloud;
+                     (hasAPIKey && apiStatus?.error) ? XCircle : 
+                     hasAPIKey ? AlertCircle : Cloud;
 
   return (
-    <div
-      className="relative cursor-pointer"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-    >
-      {/* CloudShip Badge */}
-      <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-        isAuthenticated 
-          ? 'bg-tokyo-green/10 border border-tokyo-green/30' 
-          : 'bg-tokyo-dark3 border border-tokyo-dark4'
-      }`}>
-        <StatusIcon 
-          size={16} 
-          className={isAuthenticated ? 'text-tokyo-green' : 'text-tokyo-dark5'} 
-        />
-        <div className="flex flex-col">
-          <span className="text-xs font-semibold text-tokyo-fg">CloudShip</span>
-          <span className={`text-[10px] ${isAuthenticated ? 'text-tokyo-green' : 'text-tokyo-comment'}`}>
-            {getStatusText()}
-          </span>
+    <>
+      {/* CloudShip Badge - Click to open modal */}
+      <div
+        className="relative cursor-pointer"
+        onClick={() => setShowModal(true)}
+      >
+        <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors hover:opacity-80 ${
+          isAuthenticated 
+            ? 'bg-tokyo-green/10 border border-tokyo-green/30' 
+            : 'bg-tokyo-dark3 border border-tokyo-dark4'
+        }`}>
+          <StatusIcon 
+            size={16} 
+            className={isAuthenticated ? 'text-tokyo-green' : 'text-tokyo-dark5'} 
+          />
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-tokyo-fg">CloudShip</span>
+            <span className={`text-[10px] ${isAuthenticated ? 'text-tokyo-green' : 'text-tokyo-comment'}`}>
+              {getStatusText()}
+            </span>
+          </div>
+          {isAuthenticated && (
+            <div className="w-2 h-2 rounded-full bg-tokyo-green animate-pulse ml-auto"></div>
+          )}
         </div>
-        {isAuthenticated && (
-          <div className="w-2 h-2 rounded-full bg-tokyo-green animate-pulse ml-auto"></div>
-        )}
       </div>
 
-      {/* Tooltip */}
-      {showTooltip && (
-        <div className="absolute bottom-full left-0 mb-2 p-3 bg-tokyo-dark2 border border-tokyo-dark4 rounded-lg shadow-lg z-50 min-w-72">
-          <div className="text-xs text-tokyo-fg space-y-2">
+      {/* Modal */}
+      {showModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowModal(false)}
+        >
+          <div 
+            className="bg-tokyo-dark2 border border-tokyo-dark4 rounded-xl shadow-2xl w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
-            <div className="flex items-center space-x-2 pb-2 border-b border-tokyo-dark4">
-              <Cloud size={16} className="text-tokyo-blue" />
-              <span className="font-semibold text-tokyo-blue">CloudShip Status</span>
+            <div className="flex items-center justify-between p-4 border-b border-tokyo-dark4">
+              <div className="flex items-center space-x-3">
+                <Cloud size={24} className="text-tokyo-blue" />
+                <div>
+                  <h2 className="text-lg font-semibold text-tokyo-fg">CloudShip Status</h2>
+                  <p className="text-xs text-tokyo-comment">Bundle registry connection</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-2 hover:bg-tokyo-dark3 rounded-lg transition-colors"
+              >
+                <X size={20} className="text-tokyo-comment" />
+              </button>
             </div>
 
-            {/* Bundle Access */}
-            {bundleAuth && (
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <span className="text-tokyo-comment">Bundle Access:</span>
-                  <span className={bundleAuth.authenticated ? 'text-tokyo-green flex items-center space-x-1' : 'text-tokyo-red'}>
-                    {bundleAuth.authenticated ? (
-                      <>
-                        <CheckCircle size={12} />
-                        <span>Authenticated</span>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle size={12} />
-                        <span>Not Authenticated</span>
-                      </>
-                    )}
-                  </span>
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              {/* Connection Status */}
+              <div className={`p-4 rounded-lg ${
+                isAuthenticated 
+                  ? 'bg-tokyo-green/10 border border-tokyo-green/30' 
+                  : hasAPIKey && apiStatus?.error 
+                    ? 'bg-tokyo-red/10 border border-tokyo-red/30'
+                    : 'bg-tokyo-dark3 border border-tokyo-dark4'
+              }`}>
+                <div className="flex items-center space-x-3">
+                  <StatusIcon 
+                    size={32} 
+                    className={
+                      isAuthenticated ? 'text-tokyo-green' : 
+                      hasAPIKey && apiStatus?.error ? 'text-tokyo-red' : 
+                      'text-tokyo-comment'
+                    } 
+                  />
+                  <div>
+                    <p className={`font-semibold ${
+                      isAuthenticated ? 'text-tokyo-green' : 
+                      hasAPIKey && apiStatus?.error ? 'text-tokyo-red' : 
+                      'text-tokyo-comment'
+                    }`}>
+                      {getStatusText()}
+                    </p>
+                    <p className="text-xs text-tokyo-comment">
+                      {isAuthenticated 
+                        ? 'Your Station is connected to CloudShip' 
+                        : hasAPIKey 
+                          ? 'API key configured but not authenticated'
+                          : 'No API key configured'}
+                    </p>
+                  </div>
                 </div>
-                {bundleAuth.authenticated && bundleAuth.bundleCount > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-tokyo-comment">Available Bundles:</span>
-                    <span className="text-tokyo-purple">{bundleAuth.bundleCount}</span>
-                  </div>
-                )}
-                {bundleAuth.organization && (
-                  <div className="flex justify-between">
-                    <span className="text-tokyo-comment">Organization:</span>
-                    <span className="text-tokyo-cyan">{bundleAuth.organization}</span>
-                  </div>
-                )}
               </div>
-            )}
 
-            {/* Lighthouse Status */}
-            {status && (
-              <div className="border-t border-tokyo-dark4 pt-2 space-y-1">
-                <div className="text-tokyo-comment text-[10px] uppercase tracking-wide mb-1">Lighthouse</div>
-                <div className="flex justify-between">
-                  <span className="text-tokyo-comment">Status:</span>
-                  <span className={status.is_healthy ? 'text-tokyo-green' : 'text-tokyo-red'}>
-                    {status.is_healthy ? 'Healthy' : 'Disconnected'}
-                  </span>
-                </div>
-
-                {status.status.connected && (
-                  <div className="flex justify-between">
-                    <span className="text-tokyo-comment">Registered:</span>
-                    <span className={status.status.registered ? 'text-tokyo-green' : 'text-tokyo-yellow'}>
-                      {status.status.registered ? 'Yes' : 'No'}
+              {/* Details */}
+              {apiStatus && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
+                    <span className="text-sm text-tokyo-comment flex items-center space-x-2">
+                      <Key size={16} />
+                      <span>API Key</span>
+                    </span>
+                    <span className={`text-sm font-mono ${apiStatus.has_api_key ? 'text-tokyo-fg' : 'text-tokyo-comment'}`}>
+                      {apiStatus.has_api_key ? apiStatus.api_key_masked : 'Not configured'}
                     </span>
                   </div>
-                )}
 
-                {status.status.telemetry_sent > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-tokyo-comment">Telemetry:</span>
-                    <span className="text-tokyo-green">{status.status.telemetry_sent} sent</span>
+                  <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
+                    <span className="text-sm text-tokyo-comment">Authentication</span>
+                    <span className={`text-sm flex items-center space-x-1 ${
+                      apiStatus.authenticated ? 'text-tokyo-green' : 'text-tokyo-red'
+                    }`}>
+                      {apiStatus.authenticated ? (
+                        <>
+                          <CheckCircle size={14} />
+                          <span>Valid</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle size={14} />
+                          <span>{apiStatus.has_api_key ? 'Invalid' : 'None'}</span>
+                        </>
+                      )}
+                    </span>
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* Error Display */}
-            {status?.has_error && status.status.last_error && (
-              <div className="border-t border-tokyo-dark4 pt-2">
-                <div className="text-tokyo-red text-xs bg-tokyo-dark1 p-2 rounded border-l-2 border-tokyo-red">
-                  {status.status.last_error}
-                </div>
-              </div>
-            )}
+                  {apiStatus.authenticated && apiStatus.bundle_count > 0 && (
+                    <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
+                      <span className="text-sm text-tokyo-comment">Available Bundles</span>
+                      <span className="text-sm text-tokyo-purple font-semibold">{apiStatus.bundle_count}</span>
+                    </div>
+                  )}
 
-            {/* Help text when not authenticated */}
-            {!isAuthenticated && (
-              <div className="border-t border-tokyo-dark4 pt-2">
-                <div className="text-tokyo-comment text-[10px]">
-                  Run <code className="bg-tokyo-dark3 px-1 rounded">stn auth login</code> to authenticate
+                  {apiStatus.organization && (
+                    <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
+                      <span className="text-sm text-tokyo-comment">Organization</span>
+                      <span className="text-sm text-tokyo-cyan">{apiStatus.organization}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-sm text-tokyo-comment">API URL</span>
+                    <span className="text-sm text-tokyo-comment font-mono text-xs">{apiStatus.api_url}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Error Display */}
+              {apiStatus?.error && (
+                <div className="p-3 bg-tokyo-red/10 border border-tokyo-red/30 rounded-lg">
+                  <p className="text-sm text-tokyo-red">{apiStatus.error}</p>
+                </div>
+              )}
+
+              {/* Help text when not authenticated */}
+              {!isAuthenticated && (
+                <div className="p-3 bg-tokyo-dark3 rounded-lg">
+                  <p className="text-sm text-tokyo-comment">
+                    To connect to CloudShip, run:
+                  </p>
+                  <code className="block mt-2 p-2 bg-tokyo-dark1 rounded text-sm text-tokyo-cyan font-mono">
+                    stn auth login
+                  </code>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-4 border-t border-tokyo-dark4">
+              <button
+                onClick={fetchStatus}
+                disabled={isRefreshing}
+                className="flex items-center space-x-2 px-3 py-2 text-sm text-tokyo-comment hover:text-tokyo-fg hover:bg-tokyo-dark3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                <span>Refresh</span>
+              </button>
+              
+              {isAuthenticated && (
+                <a
+                  href={apiStatus?.api_url || 'https://app.cloudshipai.com'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-blue text-white text-sm font-medium rounded-lg hover:bg-tokyo-blue/80 transition-colors"
+                >
+                  <span>Open CloudShip</span>
+                  <ExternalLink size={14} />
+                </a>
+              )}
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

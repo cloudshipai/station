@@ -3460,44 +3460,129 @@ const SettingsPage = () => {
                         className="bg-white border border-gray-300"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Registration Key</label>
-                      <input
-                        type="password"
-                        value={configObj.cloudship?.registration_key || ''}
-                        onChange={(e) => updateCloudShipConfig({ registration_key: e.target.value })}
-                        placeholder="Enter CloudShip key"
-                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
-                      />
+                    
+                    {/* Station Identity */}
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-500 mb-2">Station Identity</div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Station Name</label>
+                          <input
+                            type="text"
+                            value={configObj.cloudship?.name || ''}
+                            onChange={(e) => updateCloudShipConfig({ name: e.target.value })}
+                            placeholder="my-station"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Endpoint</label>
-                      <input
-                        type="text"
-                        value={configObj.cloudship?.endpoint || ''}
-                        onChange={(e) => updateCloudShipConfig({ endpoint: e.target.value })}
-                        placeholder="lighthouse.cloudshipai.com:50051"
-                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
-                      />
+
+                    {/* Bundle Access (API Key) */}
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-500 mb-2">Bundle Access</div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">API Key (Personal Access Token)</label>
+                          <input
+                            type="password"
+                            value={configObj.cloudship?.api_key || ''}
+                            onChange={(e) => updateCloudShipConfig({ api_key: e.target.value })}
+                            placeholder="cst_..."
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">Run `stn auth login` to get an API key</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">API URL</label>
+                          <input
+                            type="text"
+                            value={configObj.cloudship?.api_url || 'https://app.cloudshipai.com'}
+                            onChange={(e) => updateCloudShipConfig({ api_url: e.target.value })}
+                            placeholder="https://app.cloudshipai.com"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Bundle Registry URL</label>
-                      <input
-                        type="text"
-                        value={configObj.cloudship?.bundle_registry_url || ''}
-                        onChange={(e) => updateCloudShipConfig({ bundle_registry_url: e.target.value })}
-                        placeholder="https://api.cloudshipai.com"
-                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
-                      />
+
+                    {/* Lighthouse Connection (for deployed stations) */}
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-500 mb-2">Lighthouse Connection</div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Registration Key</label>
+                          <input
+                            type="password"
+                            value={configObj.cloudship?.registration_key || ''}
+                            onChange={(e) => updateCloudShipConfig({ registration_key: e.target.value })}
+                            placeholder="Enter registration key"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">Used for remote station management</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Endpoint</label>
+                          <input
+                            type="text"
+                            value={configObj.cloudship?.endpoint || 'lighthouse.cloudshipai.com:443'}
+                            onChange={(e) => updateCloudShipConfig({ endpoint: e.target.value })}
+                            placeholder="lighthouse.cloudshipai.com:443"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-gray-600">Use TLS</label>
+                          <input
+                            type="checkbox"
+                            checked={configObj.cloudship?.use_tls !== false}
+                            onChange={(e) => updateCloudShipConfig({ use_tls: e.target.checked })}
+                            className="bg-white border border-gray-300"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Station ID (auto-generated)</label>
-                      <input
-                        type="text"
-                        value={configObj.cloudship?.station_id || ''}
-                        disabled
-                        className="w-full bg-gray-100 border border-gray-300 text-gray-500 font-mono text-sm p-2 rounded"
-                      />
+
+                    {/* OAuth Settings */}
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-500 mb-2">OAuth Settings</div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-gray-600">OAuth Enabled</label>
+                          <input
+                            type="checkbox"
+                            checked={configObj.cloudship?.oauth?.enabled || false}
+                            onChange={(e) => updateCloudShipConfig({ 
+                              oauth: { ...configObj.cloudship?.oauth, enabled: e.target.checked }
+                            })}
+                            className="bg-white border border-gray-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Client ID</label>
+                          <input
+                            type="text"
+                            value={configObj.cloudship?.oauth?.client_id || ''}
+                            onChange={(e) => updateCloudShipConfig({ 
+                              oauth: { ...configObj.cloudship?.oauth, client_id: e.target.value }
+                            })}
+                            placeholder="OAuth client ID"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Introspect URL</label>
+                          <input
+                            type="text"
+                            value={configObj.cloudship?.oauth?.introspect_url || 'https://app.cloudshipai.com/oauth/introspect/'}
+                            onChange={(e) => updateCloudShipConfig({ 
+                              oauth: { ...configObj.cloudship?.oauth, introspect_url: e.target.value }
+                            })}
+                            placeholder="https://app.cloudshipai.com/oauth/introspect/"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3515,31 +3600,34 @@ const SettingsPage = () => {
                 {expandedSections.ports && (
                   <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">API Port</label>
+                      <label className="block text-xs text-gray-600 mb-1">API Port (Dev Mode Only)</label>
                       <input
                         type="number"
                         value={configObj.api_port || 8585}
                         onChange={(e) => updateConfig({ api_port: parseInt(e.target.value) })}
                         className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
+                      <p className="text-[10px] text-gray-400 mt-1">Management UI and REST API</p>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">MCP Port</label>
+                      <label className="block text-xs text-gray-600 mb-1">Management MCP Port</label>
                       <input
                         type="number"
-                        value={configObj.mcp_port || 3000}
+                        value={configObj.mcp_port || 8586}
                         onChange={(e) => updateConfig({ mcp_port: parseInt(e.target.value) })}
                         className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
                       />
+                      <p className="text-[10px] text-gray-400 mt-1">MCP server for local tools</p>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">SSH Port</label>
+                      <label className="block text-xs text-gray-600 mb-1">Dynamic Agent MCP Port</label>
                       <input
                         type="number"
-                        value={configObj.ssh_port || 2222}
-                        onChange={(e) => updateConfig({ ssh_port: parseInt(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                        value={(configObj.mcp_port || 8586) + 1}
+                        disabled
+                        className="w-full bg-gray-100 border border-gray-300 text-gray-500 font-mono text-sm p-2 rounded"
                       />
+                      <p className="text-[10px] text-gray-400 mt-1">Auto-calculated as MCP Port + 1 (for CloudShip agent access)</p>
                     </div>
                   </div>
                 )}

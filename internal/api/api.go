@@ -240,6 +240,44 @@ func (s *Server) setupUIRoutes(router *gin.Engine) {
 		c.Data(http.StatusOK, "image/svg+xml", content)
 	})
 
+	// Handle favicon.svg
+	router.GET("/favicon.svg", func(c *gin.Context) {
+		file, err := uiFS.Open("favicon.svg")
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "favicon.svg not found"})
+			return
+		}
+		defer func() { _ = file.Close() }()
+
+		content, err := io.ReadAll(file)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read favicon.svg"})
+			return
+		}
+
+		c.Header("Content-Type", "image/svg+xml")
+		c.Data(http.StatusOK, "image/svg+xml", content)
+	})
+
+	// Handle favicon.ico
+	router.GET("/favicon.ico", func(c *gin.Context) {
+		file, err := uiFS.Open("favicon.ico")
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "favicon.ico not found"})
+			return
+		}
+		defer func() { _ = file.Close() }()
+
+		content, err := io.ReadAll(file)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read favicon.ico"})
+			return
+		}
+
+		c.Header("Content-Type", "image/x-icon")
+		c.Data(http.StatusOK, "image/x-icon", content)
+	})
+
 	// Handle logos directory
 	router.GET("/logos/*filepath", func(c *gin.Context) {
 		filepath := c.Param("filepath")
