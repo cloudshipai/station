@@ -114,6 +114,14 @@ func runMainServer() error {
 	// Create repositories and services
 	repos := repositories.New(database)
 
+	// Bundle bootstrap: If STN_BUNDLE_ID is set, download and install from CloudShip
+	// This runs BEFORE DeclarativeSync so the bundle files are in place for sync
+	if bundleBootstrapped, err := services.CheckAndBootstrap(ctx, cfg, repos); err != nil {
+		return fmt.Errorf("bundle bootstrap failed: %w", err)
+	} else if bundleBootstrapped {
+		log.Printf("🎯 Bundle bootstrap completed, continuing with server startup")
+	}
+
 	// Get environment name from viper config (defaults to "default")
 	environmentName := viper.GetString("serve_environment")
 	if environmentName == "" {

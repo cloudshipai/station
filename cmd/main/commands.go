@@ -324,7 +324,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	configFile := filepath.Join(configDir, "config.yaml")
 
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		// Auto-initialize if we detect API keys (Docker/container deployments)
+		// Auto-initialize if we detect API keys or bundle ID (Docker/container deployments)
 		hasAPIKey := os.Getenv("OPENAI_API_KEY") != "" ||
 			os.Getenv("ANTHROPIC_API_KEY") != "" ||
 			os.Getenv("GEMINI_API_KEY") != "" ||
@@ -332,6 +332,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 			os.Getenv("AI_API_KEY") != "" ||
 			os.Getenv("STN_API_KEY") != "" ||
 			os.Getenv("STATION_AI_API_KEY") != ""
+
+		hasBundleID := os.Getenv("STN_BUNDLE_ID") != ""
 
 		if hasAPIKey {
 			logging.Info("🔧 Auto-initializing Station from environment variables...")
@@ -342,6 +344,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 			}
 
 			logging.Info("✅ Configuration auto-initialized successfully")
+		} else if hasBundleID {
+			// Bundle ID is set but no API key - provide helpful error
+			fmt.Printf("Error: STN_BUNDLE_ID is set but no AI provider API key found.\n")
+			fmt.Printf("Please provide an API key for the AI provider your bundle uses:\n")
+			fmt.Printf("  docker run -e STN_BUNDLE_ID=... -e OPENAI_API_KEY=sk-... station:latest\n")
+			fmt.Printf("  docker run -e STN_BUNDLE_ID=... -e ANTHROPIC_API_KEY=... station:latest\n")
+			return fmt.Errorf("STN_BUNDLE_ID requires an AI provider API key")
 		} else {
 			fmt.Printf("Configuration not found. Please run 'station init' first.\n")
 			fmt.Printf("Expected config file: %s\n", configFile)
