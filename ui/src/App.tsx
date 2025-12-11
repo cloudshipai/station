@@ -3239,6 +3239,7 @@ const SettingsPage = () => {
   const [expandedSections, setExpandedSections] = useState({
     ai: true,
     cloudship: false,
+    telemetry: false,
     ports: false,
     other: false,
   });
@@ -3282,6 +3283,11 @@ const SettingsPage = () => {
   const updateCloudShipConfig = (updates: any) => {
     const newCloudShip = { ...configObj.cloudship, ...updates };
     updateConfig({ cloudship: newCloudShip });
+  };
+
+  const updateTelemetryConfig = (updates: any) => {
+    const newTelemetry = { ...configObj.telemetry, ...updates };
+    updateConfig({ telemetry: newTelemetry });
   };
 
   const handleYamlChange = (value: string | undefined) => {
@@ -3610,6 +3616,64 @@ const SettingsPage = () => {
                 )}
               </div>
 
+              {/* Telemetry Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('telemetry')}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  <span>Telemetry (OTEL)</span>
+                  {expandedSections.telemetry ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.telemetry && (
+                  <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-600">Enabled</label>
+                      <input
+                        type="checkbox"
+                        checked={configObj.telemetry?.enabled !== false}
+                        onChange={(e) => updateTelemetryConfig({ enabled: e.target.checked })}
+                        className="bg-white border border-gray-300"
+                      />
+                    </div>
+
+                    {/* Endpoint - always show when enabled */}
+                    {configObj.telemetry?.enabled !== false && (
+                      <>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Endpoint</label>
+                          <input
+                            type="text"
+                            value={configObj.telemetry?.endpoint || 'http://localhost:4318'}
+                            onChange={(e) => updateTelemetryConfig({ endpoint: e.target.value })}
+                            placeholder="http://localhost:4318"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">OTLP HTTP endpoint (Jaeger, Grafana Cloud, Datadog, etc.)</p>
+                        </div>
+
+                        {/* Auth Header - show if endpoint is not localhost */}
+                        {configObj.telemetry?.endpoint && !configObj.telemetry?.endpoint.includes('localhost') && (
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Authorization Header</label>
+                            <input
+                              type="password"
+                              value={configObj.telemetry?.headers?.Authorization || ''}
+                              onChange={(e) => updateTelemetryConfig({ 
+                                headers: { ...configObj.telemetry?.headers, Authorization: e.target.value }
+                              })}
+                              placeholder="Basic <base64> or Bearer <token>"
+                              className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">For Grafana Cloud: Basic base64(instanceId:token)</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Server Ports Section */}
               <div className="mb-4">
                 <button
@@ -3681,15 +3745,6 @@ const SettingsPage = () => {
                         type="checkbox"
                         checked={configObj.debug || false}
                         onChange={(e) => updateConfig({ debug: e.target.checked })}
-                        className="bg-white border border-gray-300"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs text-gray-600">Telemetry</label>
-                      <input
-                        type="checkbox"
-                        checked={configObj.telemetry_enabled !== false}
-                        onChange={(e) => updateConfig({ telemetry_enabled: e.target.checked })}
                         className="bg-white border border-gray-300"
                       />
                     </div>

@@ -38,37 +38,63 @@ open http://localhost:16686
 
 ### Configuration Options
 
-Station supports multiple ways to configure OTEL:
+Station supports multiple telemetry providers via the `telemetry:` config section:
 
-**1. Environment Variable (Recommended)**
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-# Or for gRPC:
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-```
-
-**2. Config File**
+**Config File (Recommended)**
 ```yaml
 # ~/.config/station/config.yaml
-otel_endpoint: "http://localhost:4318"
+
+telemetry:
+  enabled: true
+  provider: jaeger       # Options: none, jaeger, otlp, cloudship
+  endpoint: "http://localhost:4318"
+  service_name: station
+  environment: development
+  sample_rate: 1.0       # 1.0 = sample all, 0.1 = sample 10%
 ```
 
-**3. CLI Flag (init command)**
-```bash
-stn init --otel-endpoint http://localhost:4318
+**Provider Options:**
+- `none` - Disable telemetry export
+- `jaeger` - Local Jaeger at http://localhost:4318 (default)
+- `otlp` - Custom OTLP endpoint with optional authentication
+- `cloudship` - CloudShip managed telemetry (uses registration key)
+
+**Bring Your Own OTLP Backend (Grafana Cloud, Datadog, etc.)**
+```yaml
+telemetry:
+  enabled: true
+  provider: otlp
+  endpoint: "https://otlp-gateway-prod-us-central-0.grafana.net/otlp"
+  headers:
+    Authorization: "Basic <base64(user:token)>"
+  service_name: station
+  environment: production
+  sample_rate: 0.1       # Sample 10% in production
 ```
 
-**Optional Configuration:**
+**Environment Variables (Override config file)**
 ```bash
-# Service name (defaults to "station")
-export OTEL_SERVICE_NAME=station-prod
+# Enable/disable telemetry
+export STN_TELEMETRY_ENABLED=true
 
-# Service version (auto-detected from binary)
-export OTEL_SERVICE_VERSION=v0.2.7
+# Set provider
+export STN_TELEMETRY_PROVIDER=otlp
 
-# Environment tag
-# Auto-detected: "production" if CloudShip key set, else "development"
+# Set endpoint
+export STN_TELEMETRY_ENDPOINT=http://localhost:4318
+
+# Optional overrides
+export STN_TELEMETRY_SERVICE_NAME=station-prod
+export STN_TELEMETRY_ENVIRONMENT=production
+export STN_TELEMETRY_SAMPLE_RATE=0.1
+export STN_TELEMETRY_JAEGER_QUERY_URL=http://localhost:16686
+```
+
+**Legacy Configuration (still supported)**
+```bash
+# These still work for backward compatibility
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_SERVICE_NAME=station
 ```
 
 ## Team Integration Examples
@@ -527,11 +553,12 @@ stn serve
 
 **Verify configuration:**
 ```bash
-# Check if endpoint is set
-echo $OTEL_EXPORTER_OTLP_ENDPOINT
+# Check environment variables
+echo $STN_TELEMETRY_PROVIDER
+echo $STN_TELEMETRY_ENDPOINT
 
 # Or check config file
-cat ~/.config/station/config.yaml | grep otel
+cat ~/.config/station/config.yaml | grep -A5 telemetry
 ```
 
 ### Partial Traces
@@ -565,8 +592,21 @@ Station automatically adds these attributes to spans:
 - `agent.name` - Agent name
 - `agent.id` - Agent database ID
 - `run.id` - Execution run ID
-- `environment.id` - Environment ID
+- `agent.environment` - Environment ID
+- `execution.model` - AI model used (e.g., openai/gpt-4o-mini)
+- `execution.duration_seconds` - Total execution time
+- `execution.success` - Whether execution succeeded
+- `execution.steps_taken` - Number of agent steps
+- `execution.tools_used` - Number of tool calls
+- `task.preview` - First 100 chars of the task
 - `genkit.*` - GenKit native attributes
+
+**CloudShip Attributes (when connected):**
+- `cloudship.org_id` - Organization ID for multi-tenant filtering
+- `cloudship.station_id` - Station UUID
+- `cloudship.station_name` - Human-readable station name
+
+These CloudShip attributes are automatically injected when Station authenticates with Lighthouse, enabling you to filter traces by organization in Grafana Cloud or other backends.
 
 ### Sampling Strategies
 
