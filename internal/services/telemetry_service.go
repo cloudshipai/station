@@ -42,6 +42,9 @@ type TelemetryService struct {
 	tokenUsageCounter      metric.Int64Counter
 	toolCallCounter        metric.Int64Counter
 	errorCounter           metric.Int64Counter
+
+	// CloudShip attribute processor - adds org_id/station_name to ALL spans
+	cloudShipProcessor *cloudShipAttributeProcessor
 }
 
 // TelemetryConfig holds configuration for telemetry services
@@ -342,6 +345,10 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 		}
 	}
 
+	// Create CloudShip attribute processor to add org_id/station_name to ALL spans
+	// This is necessary because resources are immutable but CloudShip auth happens after init
+	ts.cloudShipProcessor = newCloudShipAttributeProcessor(ts.config)
+
 	// Create trace provider with resource and exporter - optimized for immediate export
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
@@ -351,6 +358,8 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 			sdktrace.WithExportTimeout(time.Second*10),
 		),
 		sdktrace.WithSampler(ts.getSampler()),
+		// Add CloudShip processor to inject org_id/station_name into ALL spans
+		sdktrace.WithSpanProcessor(ts.cloudShipProcessor),
 	)
 
 	// Store shutdown function
@@ -588,5 +597,60 @@ func (e *noOpExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnl
 }
 
 func (e *noOpExporter) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+// cloudShipAttributeProcessor is a SpanProcessor that adds CloudShip attributes
+// (org_id, station_id, station_name) to ALL spans, including those created by
+// external libraries like Genkit that don't use TelemetryService.StartSpan().
+//
+// This solves the problem that OTEL resources are immutable and set at init time,
+// but CloudShip auth happens later. By using a SpanProcessor, we can add attributes
+// to spans at the time they are started, when we have the auth info available.
+type cloudShipAttributeProcessor struct {
+	config *TelemetryConfig
+}
+
+// newCloudShipAttributeProcessor creates a new CloudShip attribute processor
+func newCloudShipAttributeProcessor(config *TelemetryConfig) *cloudShipAttributeProcessor {
+	return &cloudShipAttributeProcessor{config: config}
+}
+
+// OnStart is called when a span is started. We add CloudShip attributes here.
+func (p *cloudShipAttributeProcessor) OnStart(parent context.Context, s sdktrace.ReadWriteSpan) {
+	if p.config == nil {
+		logging.Info("SpanProcessor OnStart: config is nil!")
+		return
+	}
+
+	// Debug: Always log first few spans to verify processor is being called
+	logging.Info("SpanProcessor OnStart: span=%s org_id='%s' station_name='%s' station_id='%s'",
+		s.Name(), p.config.OrgID, p.config.StationName, p.config.StationID)
+
+	// Add CloudShip attributes to the span for multi-tenant filtering
+	// These attributes are crucial for the CloudShip platform to filter traces by org
+	if p.config.StationID != "" {
+		s.SetAttributes(attribute.String("cloudship.station_id", p.config.StationID))
+	}
+	if p.config.StationName != "" {
+		s.SetAttributes(attribute.String("cloudship.station_name", p.config.StationName))
+	}
+	if p.config.OrgID != "" {
+		s.SetAttributes(attribute.String("cloudship.org_id", p.config.OrgID))
+	}
+}
+
+// OnEnd is called when a span ends. No action needed.
+func (p *cloudShipAttributeProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
+	// No action needed on span end
+}
+
+// Shutdown shuts down the processor.
+func (p *cloudShipAttributeProcessor) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+// ForceFlush forces a flush of any pending spans.
+func (p *cloudShipAttributeProcessor) ForceFlush(ctx context.Context) error {
 	return nil
 }

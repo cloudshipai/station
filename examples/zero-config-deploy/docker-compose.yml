@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   station:
-    image: ghcr.io/cloudshipai/station:latest
+    image: station:local
     container_name: station-zero-config
     ports:
       - "8585:8585"  # API/UI port
@@ -10,57 +8,35 @@ services:
     environment:
       # AI Provider Configuration (required)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      # or use other providers:
-      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      # - GOOGLE_API_KEY=${GOOGLE_API_KEY}
 
-      # AWS Configuration (if using AWS MCP servers)
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-
-      # E2B Configuration (if using E2B for code execution)
-      - E2B_API_KEY=${E2B_API_KEY}
-
-      # CloudShip Configuration (optional)
-      - STN_CLOUDSHIP_ENABLED=${STN_CLOUDSHIP_ENABLED:-false}
-      - STN_CLOUDSHIP_ENDPOINT=${STN_CLOUDSHIP_ENDPOINT:-lighthouse.cloudshipai.com:50051}
+      # CloudShip Configuration (v2 auth flow)
+      - STN_CLOUDSHIP_ENABLED=${STN_CLOUDSHIP_ENABLED:-true}
+      - STN_CLOUDSHIP_ENDPOINT=${STN_CLOUDSHIP_ENDPOINT:-lighthouse.cloudshipai.com:443}
       - STN_CLOUDSHIP_KEY=${STN_CLOUDSHIP_KEY}
-      - STN_CLOUDSHIP_STATION_ID=${STN_CLOUDSHIP_STATION_ID}
+      - STN_CLOUDSHIP_USE_TLS=${STN_CLOUDSHIP_USE_TLS:-true}
+      - STN_CLOUDSHIP_NAME=${STN_CLOUDSHIP_NAME:-docker-station}
+      - STN_CLOUDSHIP_API_URL=${STN_CLOUDSHIP_API_URL:-https://app.cloudshipai.com}
 
-      # Station Configuration
-      - STATION_ENCRYPTION_KEY=${STATION_ENCRYPTION_KEY:-auto-generated-on-init}
+      # Bundle auto-download (set STN_BUNDLE_ID to a bundle UUID to auto-install)
+      - STN_BUNDLE_ID=${STN_BUNDLE_ID:-}
+
+      # Telemetry Configuration (traces to CloudShip)
+      - STN_TELEMETRY_ENABLED=${STN_TELEMETRY_ENABLED:-true}
     volumes:
-      # Mount bundles directory for zero-config deployment
-      - ./bundles:/bundles:ro
       # Persist Station data
       - station-data:/root/.config/station
-    command: >
-      sh -c "
-        echo '🚀 Station Zero-Config Deployment Starting...' &&
-
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo '🚀 Station Zero-Config Deployment Starting...'
+        
         if [ ! -f /root/.config/station/config.yaml ]; then
-          echo '📦 Initializing Station...' &&
+          echo '📦 Initializing Station...'
           stn init --provider openai --model gpt-4o-mini --yes
-        fi &&
-
-        if [ -d /bundles ] && [ \"\$(ls -A /bundles/*.tar.gz 2>/dev/null)\" ]; then
-          echo '📦 Installing bundles from /bundles directory...' &&
-          for bundle in /bundles/*.tar.gz; do
-            bundle_name=\$(basename \"\$bundle\" .tar.gz) &&
-            echo \"  Installing: \$bundle_name\" &&
-            stn bundle install \"\$bundle\" \"\$bundle_name\" &&
-            echo \"  Syncing: \$bundle_name\" &&
-            stn sync \"\$bundle_name\" -i=false || echo \"  ⚠️  Sync had validation errors (non-blocking)\"
-          done &&
-          echo '✅ All bundles installed and synced!'
-        else
-          echo '⚠️  No bundles found in /bundles directory'
-        fi &&
-
-        echo '🌐 Starting Station server...' &&
-        stn serve
-      "
+        fi
+        
+        echo '🌐 Starting Station server...'
+        exec stn serve
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8585/health"]

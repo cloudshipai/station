@@ -110,52 +110,60 @@ func (s *AgentService) SetMemoryAPIClient(apiClient *lighthouse.MemoryAPIClient)
 }
 
 // NewAgentServiceWithLighthouse creates a new agent service with Lighthouse integration
-func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseClient *lighthouse.LighthouseClient) *AgentService {
+// If telemetryService is provided, it will be used instead of creating a new one.
+// This prevents multiple TracerProvider registrations which can cause org_id to be missing from spans.
+func NewAgentServiceWithLighthouse(repos *repositories.Repositories, lighthouseClient *lighthouse.LighthouseClient, telemetryService ...*TelemetryService) *AgentService {
 	service := &AgentService{
 		repos:         repos,
 		exportService: NewAgentExportService(repos),
 	}
 
-	// Initialize telemetry service with config
-	cfg, err := config.Load()
-	if err != nil {
-		log.Printf("Warning: Failed to load config for telemetry: %v", err)
-		// Use default config
-		cfg = &config.Config{
-			Telemetry: config.TelemetryConfig{
-				Enabled:  true,
-				Provider: config.TelemetryProviderJaeger,
-			},
-			Environment: "development",
-		}
-	}
-
-	// Build CloudShip info for telemetry
-	var cloudShipInfoForLH *CloudShipInfo
-	if cfg.CloudShip.RegistrationKey != "" || cfg.CloudShip.Name != "" {
-		cloudShipInfoForLH = &CloudShipInfo{
-			RegistrationKey: cfg.CloudShip.RegistrationKey,
-			StationName:     cfg.CloudShip.Name, // Use configured station name
-			// StationID, OrgID populated later when connected to CloudShip via callback
-		}
-	}
-
-	// Build telemetry config from the new struct
-	telemetryConfig := NewTelemetryConfigFromConfig(&cfg.Telemetry, cloudShipInfoForLH)
-
-	// Allow runtime OTEL endpoint override (for backward compatibility)
-	if runtimeEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); runtimeEndpoint != "" {
-		telemetryConfig.Endpoint = runtimeEndpoint
-		telemetryConfig.Provider = config.TelemetryProviderOTLP // Use generic OTLP for runtime override
-		log.Printf("🔍 Using runtime OTEL endpoint: %s", runtimeEndpoint)
-	}
-
-	service.telemetry = NewTelemetryService(telemetryConfig)
-	if err := service.telemetry.Initialize(context.Background()); err != nil {
-		log.Printf("⚠️  Warning: Failed to initialize telemetry: %v", err)
-		// Continue without telemetry rather than failing
+	// Use provided telemetry service if available, otherwise create a new one
+	if len(telemetryService) > 0 && telemetryService[0] != nil {
+		service.telemetry = telemetryService[0]
+		log.Printf("✅ Using shared telemetry service (avoiding duplicate TracerProvider)")
 	} else {
-		log.Printf("✅ Telemetry service initialized (provider=%s, endpoint=%s)", telemetryConfig.Provider, telemetryConfig.Endpoint)
+		// Initialize telemetry service with config (fallback for backward compatibility)
+		cfg, err := config.Load()
+		if err != nil {
+			log.Printf("Warning: Failed to load config for telemetry: %v", err)
+			// Use default config
+			cfg = &config.Config{
+				Telemetry: config.TelemetryConfig{
+					Enabled:  true,
+					Provider: config.TelemetryProviderJaeger,
+				},
+				Environment: "development",
+			}
+		}
+
+		// Build CloudShip info for telemetry
+		var cloudShipInfoForLH *CloudShipInfo
+		if cfg.CloudShip.RegistrationKey != "" || cfg.CloudShip.Name != "" {
+			cloudShipInfoForLH = &CloudShipInfo{
+				RegistrationKey: cfg.CloudShip.RegistrationKey,
+				StationName:     cfg.CloudShip.Name, // Use configured station name
+				// StationID, OrgID populated later when connected to CloudShip via callback
+			}
+		}
+
+		// Build telemetry config from the new struct
+		telemetryConfig := NewTelemetryConfigFromConfig(&cfg.Telemetry, cloudShipInfoForLH)
+
+		// Allow runtime OTEL endpoint override (for backward compatibility)
+		if runtimeEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); runtimeEndpoint != "" {
+			telemetryConfig.Endpoint = runtimeEndpoint
+			telemetryConfig.Provider = config.TelemetryProviderOTLP // Use generic OTLP for runtime override
+			log.Printf("🔍 Using runtime OTEL endpoint: %s", runtimeEndpoint)
+		}
+
+		service.telemetry = NewTelemetryService(telemetryConfig)
+		if err := service.telemetry.Initialize(context.Background()); err != nil {
+			log.Printf("⚠️  Warning: Failed to initialize telemetry: %v", err)
+			// Continue without telemetry rather than failing
+		} else {
+			log.Printf("✅ Telemetry service initialized (provider=%s, endpoint=%s)", telemetryConfig.Provider, telemetryConfig.Endpoint)
+		}
 	}
 
 	// Create execution engine with Lighthouse client integration

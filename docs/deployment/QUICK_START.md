@@ -85,9 +85,73 @@ stn down
 
 ---
 
-### Option 2: Docker Compose (Recommended)
+### Option 2: CloudShip-Managed Deployment (Recommended)
 
-**Perfect for:** Production deployment, persistent agents, team environments
+**Perfect for:** Production deployment with remote management, monitoring, and tracing
+
+**Step 1: Get CloudShip credentials**
+1. Sign up at https://app.cloudshipai.com
+2. Create a Registration Key in Settings > Stations
+3. Create or select a Bundle from the Bundles page
+
+**Step 2: Create `docker-compose.yml`:**
+```yaml
+services:
+  station:
+    image: station-server:latest
+    ports:
+      - "8585:8585"
+      - "8586:8586"
+      - "8587:8587"
+    environment:
+      # CloudShip Integration
+      - STN_CLOUDSHIP_ENABLED=true
+      - STN_CLOUDSHIP_KEY=${STN_CLOUDSHIP_KEY}
+      - STN_CLOUDSHIP_NAME=${STN_CLOUDSHIP_NAME:-my-station}
+      
+      # Auto-download bundle from CloudShip
+      - STN_BUNDLE_ID=${STN_BUNDLE_ID}
+      
+      # AI Provider
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Telemetry (traces to Grafana Tempo)
+      - STN_TELEMETRY_ENABLED=true
+      - STN_TELEMETRY_PROVIDER=cloudship
+      
+      - STN_DEV_MODE=true
+    volumes:
+      - station-data:/home/station/.config/station
+    restart: unless-stopped
+
+volumes:
+  station-data:
+```
+
+**Step 3: Create `.env`:**
+```bash
+STN_CLOUDSHIP_KEY=your-registration-key
+STN_CLOUDSHIP_NAME=my-production-station
+STN_BUNDLE_ID=your-bundle-uuid
+OPENAI_API_KEY=sk-your-key
+```
+
+**Step 4: Deploy:**
+```bash
+docker compose up -d
+```
+
+**What you get:**
+- Station appears in CloudShip UI at https://app.cloudshipai.com/webapp/stations/
+- Remote agent execution from CloudShip dashboard
+- Distributed tracing to Grafana Tempo
+- Bundle auto-download on startup
+
+---
+
+### Option 3: Docker Compose (Script-based)
+
+**Perfect for:** Quick setup with automatic bundle installation
 
 **Step 1: Create project directory**
 ```bash
@@ -135,7 +199,7 @@ docker-compose exec station sh
 
 ---
 
-### Option 3: Docker Compose from Scratch
+### Option 4: Docker Compose from Scratch
 
 **Perfect for:** Full control, custom configurations
 
@@ -176,7 +240,7 @@ docker-compose up -d
 
 ---
 
-### Option 4: Kubernetes
+### Option 5: Kubernetes
 
 **Perfect for:** Cloud deployments, high availability, auto-scaling
 

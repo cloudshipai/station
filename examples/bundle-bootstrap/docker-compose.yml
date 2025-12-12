@@ -1,0 +1,59 @@
+# Bundle Bootstrap Example
+# Demonstrates automatic bundle installation from CloudShip on container startup
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in your values
+#   2. docker-compose up -d
+#
+# The container will:
+#   1. Auto-initialize config from environment variables
+#   2. Download and install the bundle from CloudShip
+#   3. Run DeclarativeSync to register agents/MCP servers
+#   4. Start the Station server
+
+services:
+  station:
+    image: station-server:latest
+    container_name: station-bundle-test
+    ports:
+      - "8585:8585"  # API/UI port
+      - "8586:8586"  # MCP port
+      - "8587:8587"  # Dynamic Agent MCP port
+    environment:
+      # Bundle to install from CloudShip
+      - STN_BUNDLE_ID=${STN_BUNDLE_ID}
+      
+      # CloudShip authentication (Registration Key)
+      - STN_CLOUDSHIP_KEY=${STN_CLOUDSHIP_KEY}
+      - STN_CLOUDSHIP_NAME=${STN_CLOUDSHIP_NAME:-bootstrap}
+      - STN_CLOUDSHIP_ENABLED=true
+      - STN_CLOUDSHIP_ENDPOINT=${STN_CLOUDSHIP_ENDPOINT:-lighthouse.cloudshipai.com:443}
+      
+      # AI Provider (required for bundle agents)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Optional: Override AI provider/model
+      # - STN_AI_PROVIDER=openai
+      # - STN_AI_MODEL=gpt-4o-mini
+      
+      # Enable dev mode for API access
+      - STN_DEV_MODE=true
+      
+      # Telemetry - send traces to CloudShip (which forwards to Grafana Tempo)
+      - STN_TELEMETRY_ENABLED=true
+      - STN_TELEMETRY_PROVIDER=cloudship
+      - STN_DEBUG_TELEMETRY=true
+    volumes:
+      # Persist Station data across restarts
+      - station-data:/home/station/.config/station
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8585/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  station-data:
+    driver: local

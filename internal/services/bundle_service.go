@@ -98,22 +98,22 @@ func (s *BundleService) exportReportsToFiles(environmentPath string, environment
 
 		// Build export structure
 		exportData := map[string]interface{}{
-			"id":                     fullReport.ID,
-			"name":                   fullReport.Name,
-			"description":            nullStringValue(fullReport.Description),
-			"environment_id":         fullReport.EnvironmentID,
-			"status":                 fullReport.Status,
-			"team_criteria":          fullReport.TeamCriteria,
-			"agent_criteria":         nullStringValue(fullReport.AgentCriteria),
-			"executive_summary":      nullStringValue(fullReport.ExecutiveSummary),
-			"team_score":             nullFloat64Value(fullReport.TeamScore),
-			"team_reasoning":         nullStringValue(fullReport.TeamReasoning),
-			"team_criteria_scores":   nullStringValue(fullReport.TeamCriteriaScores),
-			"total_runs_analyzed":    nullInt64Value(fullReport.TotalRunsAnalyzed),
-			"total_agents_analyzed":  nullInt64Value(fullReport.TotalAgentsAnalyzed),
+			"id":                      fullReport.ID,
+			"name":                    fullReport.Name,
+			"description":             nullStringValue(fullReport.Description),
+			"environment_id":          fullReport.EnvironmentID,
+			"status":                  fullReport.Status,
+			"team_criteria":           fullReport.TeamCriteria,
+			"agent_criteria":          nullStringValue(fullReport.AgentCriteria),
+			"executive_summary":       nullStringValue(fullReport.ExecutiveSummary),
+			"team_score":              nullFloat64Value(fullReport.TeamScore),
+			"team_reasoning":          nullStringValue(fullReport.TeamReasoning),
+			"team_criteria_scores":    nullStringValue(fullReport.TeamCriteriaScores),
+			"total_runs_analyzed":     nullInt64Value(fullReport.TotalRunsAnalyzed),
+			"total_agents_analyzed":   nullInt64Value(fullReport.TotalAgentsAnalyzed),
 			"generation_completed_at": nullTimeValue(fullReport.GenerationCompletedAt),
-			"judge_model":            nullStringValue(fullReport.JudgeModel),
-			"created_at":             fullReport.CreatedAt,
+			"judge_model":             nullStringValue(fullReport.JudgeModel),
+			"created_at":              fullReport.CreatedAt,
 		}
 
 		if agentDetails != nil {
@@ -920,15 +920,15 @@ type ReportManifestInfo struct {
 
 // DatasetManifestInfo contains dataset metadata for the manifest
 type DatasetManifestInfo struct {
-	Path           string `json:"path"`
-	AgentID        int64  `json:"agent_id"`
-	AgentName      string `json:"agent_name"`
-	RunCount       int    `json:"run_count"`
-	ScenarioCount  int    `json:"scenario_count,omitempty"`
-	CreatedAt      string `json:"created_at"`
-	HasAnalysis    bool   `json:"has_analysis"`
-	HasLLMEval     bool   `json:"has_llm_evaluation"`
-	QualityScore   *float64 `json:"quality_score,omitempty"`
+	Path          string   `json:"path"`
+	AgentID       int64    `json:"agent_id"`
+	AgentName     string   `json:"agent_name"`
+	RunCount      int      `json:"run_count"`
+	ScenarioCount int      `json:"scenario_count,omitempty"`
+	CreatedAt     string   `json:"created_at"`
+	HasAnalysis   bool     `json:"has_analysis"`
+	HasLLMEval    bool     `json:"has_llm_evaluation"`
+	QualityScore  *float64 `json:"quality_score,omitempty"`
 }
 
 // BundleMetadata contains high-level bundle information
@@ -1054,7 +1054,7 @@ func (s *BundleService) InstallBundleWithOptions(bundleLocation, environmentName
 		}
 		envExists = true
 		log.Printf("Environment '%s' exists, replacing with bundle contents (force=true)", environmentName)
-		
+
 		// Clear existing environment contents (agents/, mcp-configs/, etc.)
 		// Keep the directory itself but remove contents
 		entries, err := os.ReadDir(envDir)
@@ -1072,9 +1072,16 @@ func (s *BundleService) InstallBundleWithOptions(bundleLocation, environmentName
 	// Create environment using proper service layer if repos are available (skip if env exists)
 	if s.repos != nil {
 		envService := NewEnvironmentManagementService(s.repos)
-		
-		// Only create environment record if it doesn't exist
-		if !envExists {
+
+		// Check if environment exists in database (not just filesystem)
+		dbEnvExists := false
+		if existingEnv, err := s.repos.Environments.GetByName(environmentName); err == nil && existingEnv != nil {
+			dbEnvExists = true
+			log.Printf("Environment '%s' already exists in database (ID: %d)", environmentName, existingEnv.ID)
+		}
+
+		// Only create environment record if it doesn't exist in database
+		if !envExists && !dbEnvExists {
 			description := fmt.Sprintf("Environment created from bundle installation")
 			_, result, err := envService.CreateEnvironment(environmentName, &description, 1)
 			if err != nil || !result.Success {

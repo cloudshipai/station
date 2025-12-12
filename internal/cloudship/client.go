@@ -97,7 +97,8 @@ func (c *Client) DownloadBundle(bundleID string) (string, error) {
 	}
 
 	if resp.StatusCode == 404 {
-		return "", fmt.Errorf("bundle not found: %s", bundleID)
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("bundle not found or no downloadable version: %s (API response: %s)", bundleID, string(body))
 	}
 
 	if resp.StatusCode != 200 {

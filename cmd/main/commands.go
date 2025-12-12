@@ -460,41 +460,17 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 // autoInitializeConfig creates a minimal Station config from environment variables
 // This allows Docker containers to start without pre-baked config.yaml files
+//
+// IMPORTANT: This only writes the MINIMAL required config (encryption_key, database_url).
+// All other settings are read directly from environment variables at runtime via config.Load().
+// This means ANY env var supported by config.Load() will work without changes here.
 func autoInitializeConfig(configFile, configDir string) error {
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Determine AI provider from env vars (fallback to openai)
-	provider := os.Getenv("STATION_AI_PROVIDER")
-	if provider == "" {
-		provider = os.Getenv("STN_AI_PROVIDER")
-	}
-	if provider == "" {
-		provider = "openai" // Default
-	}
-
-	// Determine AI model from env vars or use provider-specific defaults
-	model := os.Getenv("STATION_AI_MODEL")
-	if model == "" {
-		model = os.Getenv("STN_AI_MODEL")
-	}
-	if model == "" {
-		// Provider-specific defaults
-		switch provider {
-		case "openai":
-			model = "gpt-4o-mini"
-		case "anthropic":
-			model = "claude-3-5-sonnet-20241022"
-		case "google", "gemini":
-			model = "gemini-1.5-flash"
-		default:
-			model = "gpt-4o-mini"
-		}
-	}
-
-	// Generate encryption key
+	// Generate encryption key - this MUST be persisted to disk
 	encryptionKey, err := auth.GenerateAPIKey()
 	if err != nil {
 		return fmt.Errorf("failed to generate encryption key: %w", err)
@@ -502,26 +478,18 @@ func autoInitializeConfig(configFile, configDir string) error {
 	// Remove the "sk-" prefix as this is an encryption key, not an API key
 	encryptionKey = encryptionKey[3:]
 
-	// Get database path (defaults handled by config.Load())
+	// Get database path
 	databasePath := os.Getenv("DATABASE_URL")
 	if databasePath == "" {
 		databasePath = filepath.Join(configDir, "station.db")
 	}
 
-	// Set viper values for config creation
-	viper.Set("ai_provider", provider)
-	viper.Set("ai_model", model)
+	// Only set the minimal required values that MUST be persisted
+	// Everything else comes from env vars via config.Load()
 	viper.Set("encryption_key", encryptionKey)
 	viper.Set("database_url", databasePath)
-	viper.Set("mcp_port", getEnvIntOrDefault("STATION_MCP_PORT", 8586))
-	viper.Set("api_port", getEnvIntOrDefault("STATION_API_PORT", 8585))
-	viper.Set("ssh_port", getEnvIntOrDefault("STATION_SSH_PORT", 2222))
-	viper.Set("telemetry_enabled", getEnvBoolOrDefault("STATION_TELEMETRY_ENABLED", false))
-	viper.Set("debug", getEnvBoolOrDefault("STATION_DEBUG", false))
-	// Local mode can be disabled via STATION_LOCAL_MODE=false to enable OAuth authentication
-	viper.Set("local_mode", getEnvBoolOrDefault("STATION_LOCAL_MODE", true))
 
-	// Write config file
+	// Write minimal config file
 	viper.SetConfigFile(configFile)
 	viper.SetConfigType("yaml")
 	if err := viper.WriteConfig(); err != nil {
@@ -529,9 +497,8 @@ func autoInitializeConfig(configFile, configDir string) error {
 	}
 
 	logging.Info("📝 Created config file: %s", configFile)
-	logging.Info("🤖 AI Provider: %s", provider)
-	logging.Info("🧠 AI Model: %s", model)
 	logging.Info("🗄️  Database: %s", databasePath)
+	logging.Info("📋 All other settings will be read from environment variables")
 
 	return nil
 }

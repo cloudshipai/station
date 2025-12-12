@@ -43,6 +43,15 @@ type AgentExecutionResult struct {
 	AppType string `json:"app_type,omitempty"` // CloudShip data ingestion app_type classification
 }
 
+// ExecutionOptions contains optional parameters for agent execution
+type ExecutionOptions struct {
+	// SkipLighthouse if true, skips sending to Lighthouse (used by management channel which handles its own SendRun)
+	SkipLighthouse bool
+	// CloudShipRunID is the run ID provided by CloudShip for management channel executions
+	// This is used for telemetry correlation - when set, spans will include cloudship.run_id attribute
+	CloudShipRunID string
+}
+
 // AgentExecutionEngine handles the execution of agents using GenKit and MCP
 type AgentExecutionEngine struct {
 	repos                    *repositories.Repositories
@@ -118,11 +127,11 @@ func (aee *AgentExecutionEngine) ExecuteAgent(ctx context.Context, agent *models
 // Execute executes an agent with optional user variables for dotprompt rendering
 // skipLighthouse: if true, skips sending to Lighthouse (used by management channel which handles its own SendRun)
 func (aee *AgentExecutionEngine) Execute(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}) (*AgentExecutionResult, error) {
-	return aee.ExecuteWithOptions(ctx, agent, task, runID, userVariables, false)
+	return aee.ExecuteWithOptions(ctx, agent, task, runID, userVariables, ExecutionOptions{SkipLighthouse: false})
 }
 
 // ExecuteWithOptions executes an agent with options to control Lighthouse integration
-func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}, skipLighthouse bool) (*AgentExecutionResult, error) {
+func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *models.Agent, task string, runID int64, userVariables map[string]interface{}, opts ExecutionOptions) (*AgentExecutionResult, error) {
 	// Nil check to prevent panic
 	if agent == nil {
 		return nil, fmt.Errorf("agent cannot be nil")
@@ -145,8 +154,19 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	defer cancel()
 
 	startTime := time.Now()
-	logging.Info("🎬 [EXECUTION TRACKER] ExecuteWithOptions STARTED - agent_id=%d agent_name='%s' station_run_id=%d skipLighthouse=%v timeout=%v", agent.ID, agent.Name, runID, skipLighthouse, timeout)
-	logging.Debug("Execute called for agent %s (ID: %d), skipLighthouse=%v, timeout=%v", agent.Name, agent.ID, skipLighthouse, timeout)
+
+	// Generate run UUID early so it can be used for both telemetry spans and SendRun
+	// For management channel executions: use CloudShip's run ID (opts.CloudShipRunID)
+	// For local executions: generate a new UUID
+	var runUUID string
+	if opts.CloudShipRunID != "" {
+		runUUID = opts.CloudShipRunID
+	} else {
+		runUUID = uuid.New().String()
+	}
+
+	logging.Info("🎬 [EXECUTION TRACKER] ExecuteWithOptions STARTED - agent_id=%d agent_name='%s' station_run_id=%d run_uuid=%s skipLighthouse=%v timeout=%v", agent.ID, agent.Name, runID, runUUID, opts.SkipLighthouse, timeout)
+	logging.Debug("Execute called for agent %s (ID: %d), skipLighthouse=%v, timeout=%v", agent.Name, agent.ID, opts.SkipLighthouse, timeout)
 	logging.Info("Starting unified dotprompt execution for agent '%s'", agent.Name)
 
 	// Use execCtx instead of ctx for all subsequent operations
@@ -161,6 +181,7 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 			attribute.String("agent.name", agent.Name),
 			attribute.Int64("agent.id", agent.ID),
 			attribute.Int64("run.id", runID),
+			attribute.String("run.uuid", runUUID), // UUID that will be sent to CloudShip
 			attribute.Int("user_variables.count", len(userVariables)),
 		}
 
@@ -435,7 +456,7 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 				userVariables = make(map[string]interface{})
 			}
 			userVariables["cloudship_memory"] = memoryCtx.Content
-			logging.Info("Injected memory context for topic '%s' (%d tokens, source: %s)", 
+			logging.Info("Injected memory context for topic '%s' (%d tokens, source: %s)",
 				memoryCtx.TopicKey, memoryCtx.TokenCount, memoryCtx.Source)
 		} else {
 			// Memory topic exists but no content yet - inject empty string
@@ -564,9 +585,9 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	// 🚀 Lighthouse Integration: Send run data to CloudShip (async, non-blocking)
 	// Send to CloudShip Lighthouse (dual flow: SendRun always + IngestData conditionally)
 	// Skip if management channel is handling the SendRun (they use their own run_id)
-	if !skipLighthouse {
-		logging.Debug("🔍 DEBUG: About to call sendToLighthouse for agent %d, run %d", agent.ID, runID)
-		aee.sendToLighthouse(agent, task, runID, startTime, result)
+	if !opts.SkipLighthouse {
+		logging.Debug("🔍 DEBUG: About to call sendToLighthouse for agent %d, run %d, runUUID %s", agent.ID, runID, runUUID)
+		aee.sendToLighthouse(agent, task, runID, runUUID, startTime, result)
 		logging.Debug("🔍 DEBUG: Returned from sendToLighthouse for agent %d, run %d", agent.ID, runID)
 	} else {
 		logging.Debug("🔍 DEBUG: Skipping sendToLighthouse for agent %d, run %d (management channel will handle SendRun)", agent.ID, runID)
@@ -581,8 +602,9 @@ func (aee *AgentExecutionEngine) GetGenkitProvider() *GenKitProvider {
 }
 
 // sendToLighthouse sends agent run data to CloudShip Lighthouse (async, non-blocking)
-func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult) {
-	logging.Info("🚀 [SENDRUN TRACKER] sendToLighthouse CALLED - agent_id=%d agent_name='%s' station_run_id=%d", agent.ID, agent.Name, runID)
+// runUUID is the UUID that will be used as the run ID in CloudShip (matches span.run.uuid attribute)
+func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task string, runID int64, runUUID string, startTime time.Time, result *AgentExecutionResult) {
+	logging.Info("🚀 [SENDRUN TRACKER] sendToLighthouse CALLED - agent_id=%d agent_name='%s' station_run_id=%d run_uuid=%s", agent.ID, agent.Name, runID, runUUID)
 	logging.Debug("🔍 DEBUG: sendToLighthouse called for agent %d, run %d", agent.ID, runID)
 	logging.Debug("🔍 DEBUG: lighthouseClient nil? %v", aee.lighthouseClient == nil)
 	if aee.lighthouseClient != nil {
@@ -598,8 +620,8 @@ func (aee *AgentExecutionEngine) sendToLighthouse(agent *models.Agent, task stri
 	logging.Debug("🔍 DEBUG: Proceeding with Lighthouse integration")
 
 	// Convert AgentExecutionResult to types.AgentRun for Lighthouse
-	agentRun := aee.convertToAgentRun(agent, task, runID, startTime, result)
-	logging.Info("🆔 [SENDRUN TRACKER] Generated run_uuid=%s for station_run_id=%d agent='%s' memory_topic_key='%s'", agentRun.ID, runID, agent.Name, agentRun.MemoryTopicKey)
+	agentRun := aee.convertToAgentRun(agent, task, runID, runUUID, startTime, result)
+	logging.Info("🆔 [SENDRUN TRACKER] Using run_uuid=%s for station_run_id=%d agent='%s' memory_topic_key='%s'", agentRun.ID, runID, agent.Name, agentRun.MemoryTopicKey)
 
 	// Determine deployment mode and send appropriate data
 	mode := aee.lighthouseClient.GetMode()
@@ -762,15 +784,14 @@ func (aee *AgentExecutionEngine) sendStructuredDataIfEligible(agent *models.Agen
 }
 
 // convertToAgentRun converts Station models to Lighthouse types
-func (aee *AgentExecutionEngine) convertToAgentRun(agent *models.Agent, task string, runID int64, startTime time.Time, result *AgentExecutionResult) *types.AgentRun {
+// runUUID is the pre-generated UUID that matches the span.run.uuid telemetry attribute
+func (aee *AgentExecutionEngine) convertToAgentRun(agent *models.Agent, task string, runID int64, runUUID string, startTime time.Time, result *AgentExecutionResult) *types.AgentRun {
 	status := "completed"
 	if !result.Success {
 		status = "failed"
 	}
 
-	// Generate UUID for run ID to prevent collisions across multiple stations
-	runUUID := uuid.New().String()
-
+	// Use the provided runUUID (generated early in ExecuteWithOptions for telemetry correlation)
 	return &types.AgentRun{
 		ID:             runUUID,
 		AgentID:        fmt.Sprintf("agent_%d", agent.ID),

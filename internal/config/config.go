@@ -165,17 +165,71 @@ func InitViper(cfgFile string) error {
 		viper.SetConfigName("config")
 	}
 
-	// Read environment variables
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("STATION")
-	viper.BindEnv("encryption_key", "STATION_ENCRYPTION_KEY")
-
-	// Read config file if it exists
+	// Read config file FIRST (lowest priority)
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintf(os.Stderr, "[CONFIG] Using config file: %s\n", viper.ConfigFileUsed())
 	}
 
+	// Environment variables take HIGHEST priority - they override config file values
+	// We support multiple prefixes: STN_, STATION_, and unprefixed for common vars
+	viper.AutomaticEnv()
+
+	// Bind all STN_* and STATION_* environment variables to their config keys
+	// This ensures env vars ALWAYS override config file values
+	bindEnvVars()
+
 	return nil
+}
+
+// bindEnvVars explicitly binds environment variables to viper config keys
+// This ensures environment variables take precedence over config file values
+func bindEnvVars() {
+	// Core config
+	viper.BindEnv("encryption_key", "STATION_ENCRYPTION_KEY", "STN_ENCRYPTION_KEY")
+	viper.BindEnv("database_url", "DATABASE_URL", "STATION_DATABASE", "STN_DATABASE_URL")
+	viper.BindEnv("mcp_port", "STATION_MCP_PORT", "STN_MCP_PORT", "MCP_PORT")
+	viper.BindEnv("api_port", "STATION_API_PORT", "STN_API_PORT", "API_PORT")
+	viper.BindEnv("ssh_port", "STATION_SSH_PORT", "STN_SSH_PORT", "SSH_PORT")
+	viper.BindEnv("admin_username", "STATION_ADMIN_USERNAME", "STN_ADMIN_USERNAME")
+	viper.BindEnv("debug", "STATION_DEBUG", "STN_DEBUG")
+	viper.BindEnv("local_mode", "STATION_LOCAL_MODE", "STN_LOCAL_MODE")
+	viper.BindEnv("dev_mode", "STN_DEV_MODE", "STATION_DEV_MODE")
+
+	// AI Provider config
+	viper.BindEnv("ai_provider", "STN_AI_PROVIDER", "STATION_AI_PROVIDER")
+	viper.BindEnv("ai_model", "STN_AI_MODEL", "STATION_AI_MODEL")
+	viper.BindEnv("ai_base_url", "STN_AI_BASE_URL", "STATION_AI_BASE_URL")
+
+	// CloudShip config - these are critical for container deployments
+	viper.BindEnv("cloudship.enabled", "STN_CLOUDSHIP_ENABLED")
+	viper.BindEnv("cloudship.registration_key", "STN_CLOUDSHIP_KEY")
+	viper.BindEnv("cloudship.endpoint", "STN_CLOUDSHIP_ENDPOINT")
+	viper.BindEnv("cloudship.name", "STN_CLOUDSHIP_NAME")
+	viper.BindEnv("cloudship.station_id", "STN_CLOUDSHIP_STATION_ID")
+	viper.BindEnv("cloudship.base_url", "STN_CLOUDSHIP_BASE_URL")
+	viper.BindEnv("cloudship.api_url", "STN_CLOUDSHIP_API_URL")
+	viper.BindEnv("cloudship.bundle_registry_url", "STN_CLOUDSHIP_BUNDLE_REGISTRY_URL")
+	viper.BindEnv("cloudship.use_tls", "STN_CLOUDSHIP_USE_TLS")
+
+	// CloudShip OAuth config
+	viper.BindEnv("cloudship.oauth.enabled", "STN_CLOUDSHIP_OAUTH_ENABLED")
+	viper.BindEnv("cloudship.oauth.client_id", "STN_CLOUDSHIP_OAUTH_CLIENT_ID")
+	viper.BindEnv("cloudship.oauth.auth_url", "STN_CLOUDSHIP_OAUTH_AUTH_URL")
+	viper.BindEnv("cloudship.oauth.token_url", "STN_CLOUDSHIP_OAUTH_TOKEN_URL")
+	viper.BindEnv("cloudship.oauth.introspect_url", "STN_CLOUDSHIP_OAUTH_INTROSPECT_URL")
+	viper.BindEnv("cloudship.oauth.redirect_uri", "STN_CLOUDSHIP_OAUTH_REDIRECT_URI")
+	viper.BindEnv("cloudship.oauth.scopes", "STN_CLOUDSHIP_OAUTH_SCOPES")
+
+	// Telemetry config
+	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
+	viper.BindEnv("telemetry.enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
+	viper.BindEnv("telemetry.provider", "STN_TELEMETRY_PROVIDER")
+	viper.BindEnv("telemetry.endpoint", "STN_TELEMETRY_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+	viper.BindEnv("telemetry.service_name", "STN_TELEMETRY_SERVICE_NAME", "OTEL_SERVICE_NAME")
+	viper.BindEnv("telemetry.environment", "STN_TELEMETRY_ENVIRONMENT")
+	viper.BindEnv("telemetry.sample_rate", "STN_TELEMETRY_SAMPLE_RATE")
+	viper.BindEnv("otel_endpoint", "OTEL_EXPORTER_OTLP_ENDPOINT", "STN_OTEL_ENDPOINT")
+	viper.BindEnv("jaeger_query_url", "STN_JAEGER_QUERY_URL", "JAEGER_QUERY_URL")
 }
 
 func Load() (*Config, error) {
@@ -458,23 +512,21 @@ func Load() (*Config, error) {
 //
 // Logic:
 //   - stdio mode: Default to local Jaeger (localhost:4318) for development
-//   - serve mode with CloudShip registration key + telemetry enabled + no custom endpoint:
-//     Default to CloudShip managed telemetry (telemetry.cloudshipai.com)
-//   - serve mode without CloudShip: Default to local Jaeger
+//   - serve mode with CloudShip registration key: AUTO-ENABLE telemetry and use CloudShip endpoint
+//   - serve mode without CloudShip: Default to local Jaeger (if telemetry enabled)
 //
 // This should be called after Load() in the command handlers.
 func (cfg *Config) ApplyTelemetryDefaults(isStdioMode bool) {
-	// Skip if telemetry is disabled
-	if !cfg.Telemetry.Enabled {
-		return
-	}
-
 	// Check if user has explicitly set an endpoint (via config file or env var)
 	userSetEndpoint := viper.IsSet("telemetry.endpoint") || os.Getenv("STN_TELEMETRY_ENDPOINT") != ""
+	userSetEnabled := os.Getenv("STN_TELEMETRY_ENABLED") != ""
+
+	// Check for CloudShip integration
+	hasCloudShipKey := cfg.CloudShip.Enabled && cfg.CloudShip.RegistrationKey != ""
 
 	if isStdioMode {
-		// stdio mode: always use local Jaeger for development
-		if !userSetEndpoint {
+		// stdio mode: use local Jaeger for development (if telemetry enabled)
+		if cfg.Telemetry.Enabled && !userSetEndpoint {
 			cfg.Telemetry.Provider = TelemetryProviderJaeger
 			cfg.Telemetry.Endpoint = LocalJaegerEndpoint
 			cfg.Telemetry.JaegerQueryURL = LocalJaegerQueryURL
@@ -482,16 +534,22 @@ func (cfg *Config) ApplyTelemetryDefaults(isStdioMode bool) {
 			cfg.Telemetry.SampleRate = 1.0 // Sample everything in dev
 		}
 	} else {
-		// serve mode: check for CloudShip integration
-		hasCloudShipKey := cfg.CloudShip.Enabled && cfg.CloudShip.RegistrationKey != ""
+		// serve mode
+		if hasCloudShipKey {
+			// CloudShip connected = AUTO-ENABLE telemetry unless user explicitly disabled it
+			if !userSetEnabled {
+				cfg.Telemetry.Enabled = true
+				cfg.TelemetryEnabled = true
+			}
 
-		if hasCloudShipKey && !userSetEndpoint {
-			// CloudShip connected + no custom endpoint = use CloudShip telemetry
-			cfg.Telemetry.Provider = TelemetryProviderCloudShip
-			cfg.Telemetry.Endpoint = CloudShipTelemetryEndpoint
-			cfg.Telemetry.Environment = "production"
-			cfg.Telemetry.SampleRate = 1.0 // Sample everything, CloudShip handles storage
-		} else if !userSetEndpoint {
+			// Use CloudShip telemetry endpoint unless user specified a custom one
+			if cfg.Telemetry.Enabled && !userSetEndpoint {
+				cfg.Telemetry.Provider = TelemetryProviderCloudShip
+				cfg.Telemetry.Endpoint = CloudShipTelemetryEndpoint
+				cfg.Telemetry.Environment = "production"
+				cfg.Telemetry.SampleRate = 1.0 // Sample everything, CloudShip handles storage
+			}
+		} else if cfg.Telemetry.Enabled && !userSetEndpoint {
 			// No CloudShip, no custom endpoint = default to local Jaeger
 			cfg.Telemetry.Provider = TelemetryProviderJaeger
 			cfg.Telemetry.Endpoint = LocalJaegerEndpoint

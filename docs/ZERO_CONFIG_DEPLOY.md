@@ -13,7 +13,124 @@ All configuration can be injected at runtime via environment variables, enabling
 
 ## Quick Start
 
-### Docker Compose Example
+### CloudShip-Managed Deployment (Recommended)
+
+The simplest way to deploy Station is with CloudShip integration. This provides:
+- **Automatic bundle download** from CloudShip registry
+- **Remote management** via CloudShip UI
+- **Distributed tracing** to Grafana Tempo
+- **Station health monitoring**
+
+```yaml
+# docker-compose.yml
+services:
+  station:
+    image: station-server:latest
+    container_name: station-production
+    ports:
+      - "8585:8585"  # API/UI port
+      - "8586:8586"  # MCP port
+      - "8587:8587"  # Dynamic Agent MCP port
+    environment:
+      # CloudShip Integration (required)
+      - STN_CLOUDSHIP_ENABLED=true
+      - STN_CLOUDSHIP_KEY=${STN_CLOUDSHIP_KEY}
+      - STN_CLOUDSHIP_NAME=${STN_CLOUDSHIP_NAME:-my-station}
+      - STN_CLOUDSHIP_ENDPOINT=${STN_CLOUDSHIP_ENDPOINT:-lighthouse.cloudshipai.com:443}
+      
+      # Bundle auto-download (optional - downloads bundle on startup)
+      - STN_BUNDLE_ID=${STN_BUNDLE_ID}
+      
+      # AI Provider (required for agent execution)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Telemetry - send traces to CloudShip → Grafana Tempo
+      - STN_TELEMETRY_ENABLED=true
+      - STN_TELEMETRY_PROVIDER=cloudship
+      
+      # Enable dev mode for local API access (optional)
+      - STN_DEV_MODE=true
+    volumes:
+      - station-data:/home/station/.config/station
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8585/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  station-data:
+    driver: local
+```
+
+**.env file:**
+```bash
+# CloudShip Integration
+STN_CLOUDSHIP_KEY=your-registration-key-from-cloudship
+STN_CLOUDSHIP_NAME=my-production-station
+
+# Bundle to install (get UUID from CloudShip Bundles page)
+STN_BUNDLE_ID=8adac89b-be10-43f4-ba6b-615f014156bc
+
+# AI Provider
+OPENAI_API_KEY=sk-your-openai-key
+```
+
+**Deploy:**
+```bash
+docker compose up -d
+docker compose logs -f
+```
+
+Your station will:
+1. Connect to CloudShip via the registration key
+2. Download and install the specified bundle
+3. Register agents as MCP tools
+4. Send execution traces to Grafana Tempo
+5. Appear in CloudShip UI at https://app.cloudshipai.com/webapp/stations/
+
+### CloudShip Environment Variables Reference
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `STN_CLOUDSHIP_ENABLED` | Yes | `false` | Enable CloudShip integration |
+| `STN_CLOUDSHIP_KEY` | Yes | - | Registration key from CloudShip |
+| `STN_CLOUDSHIP_NAME` | No | hostname | Station name shown in CloudShip UI |
+| `STN_CLOUDSHIP_ENDPOINT` | No | `lighthouse.cloudshipai.com:443` | CloudShip Lighthouse endpoint |
+| `STN_BUNDLE_ID` | No | - | Bundle UUID for auto-download on startup |
+| `STN_TELEMETRY_ENABLED` | No | `true` | Enable OpenTelemetry tracing |
+| `STN_TELEMETRY_PROVIDER` | No | `jaeger` | Telemetry backend: `cloudship`, `jaeger`, or `otlp` |
+
+### Telemetry Providers
+
+**CloudShip (Recommended for production):**
+```bash
+STN_TELEMETRY_ENABLED=true
+STN_TELEMETRY_PROVIDER=cloudship
+```
+Traces are sent to `telemetry.cloudshipai.com` and forwarded to Grafana Tempo. View traces in Grafana Cloud with your org's credentials.
+
+**Local Jaeger (Development):**
+```bash
+STN_TELEMETRY_ENABLED=true
+STN_TELEMETRY_PROVIDER=jaeger
+STN_TELEMETRY_ENDPOINT=http://localhost:4318
+```
+
+**Custom OTLP Endpoint:**
+```bash
+STN_TELEMETRY_ENABLED=true
+STN_TELEMETRY_PROVIDER=otlp
+STN_TELEMETRY_ENDPOINT=https://your-otlp-collector:4318
+```
+
+---
+
+### Docker Compose Example (Manual Bundle Install)
+
+For deployments without CloudShip, you can manually install bundles:
 
 ```yaml
 version: '3.8'

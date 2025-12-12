@@ -222,16 +222,16 @@ func TestConvertExecutionSteps(t *testing.T) {
 			name: "Valid steps with all fields",
 			steps: &models.JSONArray{
 				map[string]interface{}{
-					"step_number":  float64(1),
-					"description":  "First step",
-					"type":         "tool_call",
-					"duration_ms":  float64(150),
+					"step_number": float64(1),
+					"description": "First step",
+					"type":        "tool_call",
+					"duration_ms": float64(150),
 				},
 				map[string]interface{}{
-					"step_number":  float64(2),
-					"description":  "Second step",
-					"type":         "response",
-					"duration_ms":  float64(200),
+					"step_number": float64(2),
+					"description": "Second step",
+					"type":        "response",
+					"duration_ms": float64(200),
 				},
 			},
 			wantCount: 2,
@@ -306,13 +306,13 @@ func TestConvertTokenUsage(t *testing.T) {
 	engine := NewAgentExecutionEngine(repos, agentService)
 
 	tests := []struct {
-		name  string
-		usage map[string]interface{}
-		isNil bool
-		wantPromptTokens int
+		name                 string
+		usage                map[string]interface{}
+		isNil                bool
+		wantPromptTokens     int
 		wantCompletionTokens int
-		wantTotalTokens int
-		wantCostUSD float64
+		wantTotalTokens      int
+		wantCostUSD          float64
 	}{
 		{
 			name:  "Nil usage",
@@ -332,11 +332,11 @@ func TestConvertTokenUsage(t *testing.T) {
 				"total_tokens":      150,
 				"cost_usd":          0.0025,
 			},
-			isNil: false,
-			wantPromptTokens: 100,
+			isNil:                false,
+			wantPromptTokens:     100,
 			wantCompletionTokens: 50,
-			wantTotalTokens: 150,
-			wantCostUSD: 0.0025,
+			wantTotalTokens:      150,
+			wantCostUSD:          0.0025,
 		},
 		{
 			name: "Partial usage data",
@@ -344,9 +344,9 @@ func TestConvertTokenUsage(t *testing.T) {
 				"prompt_tokens": 200,
 				"total_tokens":  250,
 			},
-			isNil: false,
+			isNil:            false,
 			wantPromptTokens: 200,
-			wantTotalTokens: 250,
+			wantTotalTokens:  250,
 		},
 		{
 			name: "Usage with invalid types",
@@ -494,15 +494,24 @@ func TestExecuteWithOptions(t *testing.T) {
 	userVars := map[string]interface{}{"key": "value"}
 
 	t.Run("Execute with skipLighthouse=true", func(t *testing.T) {
-		_, err := engine.ExecuteWithOptions(ctx, agent, "test", 1, userVars, true)
+		_, err := engine.ExecuteWithOptions(ctx, agent, "test", 1, userVars, ExecutionOptions{SkipLighthouse: true})
 		// Will likely fail without API key setup
 		t.Logf("ExecuteWithOptions error: %v", err)
 	})
 
 	t.Run("Execute with skipLighthouse=false", func(t *testing.T) {
-		_, err := engine.ExecuteWithOptions(ctx, agent, "test", 1, userVars, false)
+		_, err := engine.ExecuteWithOptions(ctx, agent, "test", 1, userVars, ExecutionOptions{SkipLighthouse: false})
 		// Will likely fail without API key setup
 		t.Logf("ExecuteWithOptions error: %v", err)
+	})
+
+	t.Run("Execute with CloudShipRunID", func(t *testing.T) {
+		_, err := engine.ExecuteWithOptions(ctx, agent, "test", 1, userVars, ExecutionOptions{
+			SkipLighthouse: true,
+			CloudShipRunID: "abc123def456",
+		})
+		// Will likely fail without API key setup
+		t.Logf("ExecuteWithOptions with CloudShipRunID error: %v", err)
 	})
 }
 

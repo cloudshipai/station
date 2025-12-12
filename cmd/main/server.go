@@ -172,7 +172,9 @@ func runMainServer() error {
 	}
 
 	// Initialize agent service with AgentExecutionEngine and Lighthouse integration
-	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient)
+	// Pass the global otelTelemetryService to avoid creating a duplicate TracerProvider
+	// This ensures org_id from CloudShip auth is properly added to all spans
+	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient, otelTelemetryService)
 
 	// Initialize MCP for the agent service
 	if err := agentSvc.InitializeMCP(ctx); err != nil {

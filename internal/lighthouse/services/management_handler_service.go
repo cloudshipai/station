@@ -498,8 +498,11 @@ func (mhs *ManagementHandlerService) handleExecuteAgent(ctx context.Context, ori
 	// Use the same unified execution flow as MCP and CLI with empty variables
 	// IMPORTANT: Skip Lighthouse SendRun in execution engine - management channel handles its own SendRun with CloudShip's run_id
 	userVariables := make(map[string]interface{})
-	logging.Debug("🔍 MGMT: About to call agentService.GetExecutionEngine().ExecuteWithOptions() for agent %d, run %d (skipLighthouse=true)", agent.ID, runID)
-	result, execErr := agentService.GetExecutionEngine().ExecuteWithOptions(ctx, agent, req.Task, runID, userVariables, true)
+	logging.Debug("🔍 MGMT: About to call agentService.GetExecutionEngine().ExecuteWithOptions() for agent %d, run %d (skipLighthouse=true, cloudShipRunID=%s)", agent.ID, runID, cloudShipRunID)
+	result, execErr := agentService.GetExecutionEngine().ExecuteWithOptions(ctx, agent, req.Task, runID, userVariables, services.ExecutionOptions{
+		SkipLighthouse: true,
+		CloudShipRunID: cloudShipRunID,
+	})
 	logging.Debug("🔍 MGMT: Returned from ExecuteWithOptions() - execErr=%v, result.Success=%v", execErr, result != nil && result.Success)
 
 	if execErr != nil {
