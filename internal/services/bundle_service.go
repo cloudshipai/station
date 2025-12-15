@@ -553,8 +553,9 @@ func (s *BundleService) parseAgentFile(filePath string) (*AgentManifestInfo, err
 		return nil, fmt.Errorf("invalid agent file format")
 	}
 
-	// Parse YAML frontmatter
+	// Parse YAML frontmatter - support both nested metadata and root-level fields
 	var frontmatter struct {
+		// Nested metadata format (preferred)
 		Metadata struct {
 			Name        string   `yaml:"name"`
 			Description string   `yaml:"description"`
@@ -562,13 +563,33 @@ func (s *BundleService) parseAgentFile(filePath string) (*AgentManifestInfo, err
 			App         string   `yaml:"app"`
 			AppType     string   `yaml:"app_type"`
 		} `yaml:"metadata"`
-		Model    string   `yaml:"model"`
-		MaxSteps int      `yaml:"max_steps"`
-		Tools    []string `yaml:"tools"`
+		// Root-level fields (legacy/alternative format)
+		Name        string   `yaml:"name"`
+		Description string   `yaml:"description"`
+		Tags        []string `yaml:"tags"`
+		Model       string   `yaml:"model"`
+		MaxSteps    int      `yaml:"max_steps"`
+		Tools       []string `yaml:"tools"`
 	}
 
 	if err := yaml.Unmarshal([]byte(parts[1]), &frontmatter); err != nil {
 		return nil, err
+	}
+
+	// Prefer metadata.name over root-level name, but fall back to root-level if metadata is empty
+	name := frontmatter.Metadata.Name
+	if name == "" {
+		name = frontmatter.Name
+	}
+
+	description := frontmatter.Metadata.Description
+	if description == "" {
+		description = frontmatter.Description
+	}
+
+	tags := frontmatter.Metadata.Tags
+	if len(tags) == 0 {
+		tags = frontmatter.Tags
 	}
 
 	// Infer MCP servers from tool names
@@ -582,11 +603,11 @@ func (s *BundleService) parseAgentFile(filePath string) (*AgentManifestInfo, err
 	}
 
 	return &AgentManifestInfo{
-		Name:        frontmatter.Metadata.Name,
-		Description: frontmatter.Metadata.Description,
+		Name:        name,
+		Description: description,
 		Model:       frontmatter.Model,
 		MaxSteps:    frontmatter.MaxSteps,
-		Tags:        frontmatter.Metadata.Tags,
+		Tags:        tags,
 		Tools:       frontmatter.Tools,
 		MCPServers:  mcpServers, // Will be populated when matching tools to servers
 		App:         frontmatter.Metadata.App,
@@ -739,6 +760,11 @@ func (s *BundleService) createTarGz(sourceDir string) ([]byte, error) {
 
 		// Skip the source directory itself
 		if file == sourceDir {
+			return nil
+		}
+
+		// Skip existing manifest.json - we generate a fresh one
+		if filepath.Base(file) == "manifest.json" {
 			return nil
 		}
 
