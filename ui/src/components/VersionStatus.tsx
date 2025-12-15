@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Download, CheckCircle, RefreshCw, ExternalLink, AlertCircle, X, Rocket } from 'lucide-react';
-import { versionApi, type VersionInfo, type UpdateResult } from '../api/station';
+import { Download, CheckCircle, RefreshCw, ExternalLink, AlertCircle, X, Rocket, Copy, Check, AlertTriangle } from 'lucide-react';
+import { versionApi, type VersionInfo } from '../api/station';
 
 const VersionStatus: React.FC = () => {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [updateResult, setUpdateResult] = useState<UpdateResult | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const checkForUpdates = async () => {
     setIsChecking(true);
@@ -33,31 +32,14 @@ const VersionStatus: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleUpdate = async () => {
-    if (isUpdating) return;
-    
-    setIsUpdating(true);
-    setUpdateResult(null);
-    
+  const copyUpgradeCommand = async () => {
+    const command = 'stn upgrade';
     try {
-      const response = await versionApi.performUpdate();
-      setUpdateResult(response.data);
-      
-      if (response.data.success) {
-        // Refresh version info after successful update
-        setTimeout(() => {
-          checkForUpdates();
-        }, 2000);
-      }
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to perform update:', err);
-      setUpdateResult({
-        success: false,
-        message: 'Update failed',
-        error: 'Network error or server unavailable'
-      });
-    } finally {
-      setIsUpdating(false);
+      console.error('Failed to copy command:', err);
     }
   };
 
@@ -207,26 +189,39 @@ const VersionStatus: React.FC = () => {
                 </div>
               )}
 
-              {/* Update Result */}
-              {updateResult && (
-                <div className={`p-3 rounded-lg ${
-                  updateResult.success 
-                    ? 'bg-emerald-50 border border-emerald-200' 
-                    : 'bg-red-50 border border-red-200'
-                }`}>
-                  <div className="flex items-start gap-2">
-                    {updateResult.success ? (
-                      <CheckCircle className="h-5 w-5 text-emerald-600 mt-0.5 flex-shrink-0" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                    )}
-                    <div>
-                      <p className={`font-medium text-sm ${updateResult.success ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {updateResult.message}
-                      </p>
-                      {updateResult.error && (
-                        <p className="text-xs text-red-600 mt-1">{updateResult.error}</p>
-                      )}
+              {/* Upgrade Command Section */}
+              {versionInfo?.update_available && (
+                <div className="space-y-3">
+                  {/* Warning */}
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-700">
+                      <span className="font-medium">Important:</span> Disconnect Station from all MCP clients (Claude Desktop, Cursor, etc.) before upgrading.
+                    </p>
+                  </div>
+
+                  {/* Copy Command */}
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-500">Run this command in your terminal:</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 px-3 py-2 bg-gray-900 text-gray-100 text-sm font-mono rounded-lg">
+                        stn upgrade
+                      </code>
+                      <button
+                        onClick={copyUpgradeCommand}
+                        className={`flex items-center justify-center p-2 rounded-lg transition-colors ${
+                          copied 
+                            ? 'bg-emerald-100 text-emerald-600' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                        title="Copy command"
+                      >
+                        {copied ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -244,43 +239,17 @@ const VersionStatus: React.FC = () => {
                 <span>Check Now</span>
               </button>
               
-              <div className="flex items-center gap-2">
-                {versionInfo?.release_url && (
-                  <a
-                    href={versionInfo.release_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                  >
-                    <ExternalLink size={14} />
-                    <span>View release notes</span>
-                  </a>
-                )}
-                
-                {versionInfo?.update_available && (
-                  <button
-                    onClick={handleUpdate}
-                    disabled={isUpdating}
-                    className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      isUpdating
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'bg-amber-500 text-white hover:bg-amber-600'
-                    }`}
-                  >
-                    {isUpdating ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>Updating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4" />
-                        <span>Update to {versionInfo.latest_version}</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
+              {versionInfo?.release_url && (
+                <a
+                  href={versionInfo.release_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  <ExternalLink size={14} />
+                  <span>View release notes</span>
+                </a>
+              )}
             </div>
           </div>
         </div>
