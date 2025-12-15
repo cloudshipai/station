@@ -35,6 +35,8 @@ type Config struct {
 	CloudShip CloudShipConfig
 	// Telemetry Configuration (distributed tracing)
 	Telemetry TelemetryConfig
+	// Webhook Configuration
+	Webhook WebhookConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
@@ -80,6 +82,12 @@ type OAuthConfig struct {
 	IntrospectURL string `yaml:"introspect_url"` // CloudShip OAuth introspect URL
 	RedirectURI   string `yaml:"redirect_uri"`   // OAuth redirect URI (for auth code flow)
 	Scopes        string `yaml:"scopes"`         // OAuth scopes (space-separated)
+}
+
+// WebhookConfig holds settings for the webhook execute endpoint
+type WebhookConfig struct {
+	Enabled bool   `yaml:"enabled"` // Enable the /execute webhook endpoint (default: true)
+	APIKey  string `yaml:"api_key"` // Static API key for webhook auth (optional, overrides user API keys)
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -220,6 +228,10 @@ func bindEnvVars() {
 	viper.BindEnv("cloudship.oauth.redirect_uri", "STN_CLOUDSHIP_OAUTH_REDIRECT_URI")
 	viper.BindEnv("cloudship.oauth.scopes", "STN_CLOUDSHIP_OAUTH_SCOPES")
 
+	// Webhook config
+	viper.BindEnv("webhook.enabled", "STN_WEBHOOK_ENABLED")
+	viper.BindEnv("webhook.api_key", "STN_WEBHOOK_API_KEY")
+
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
 	viper.BindEnv("telemetry.enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -282,6 +294,11 @@ func Load() (*Config, error) {
 			Environment:    "development",           // Default environment
 			SampleRate:     1.0,                     // Sample everything in dev
 			Headers:        make(map[string]string),
+		},
+		// Webhook Configuration - enabled by default
+		Webhook: WebhookConfig{
+			Enabled: getEnvBoolOrDefault("STN_WEBHOOK_ENABLED", true), // Default enabled
+			APIKey:  getEnvOrDefault("STN_WEBHOOK_API_KEY", ""),       // Optional static API key
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,

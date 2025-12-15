@@ -687,6 +687,79 @@ Station uses cron expressions with second precision:
 
 Scheduled agents run automatically and store results in the runs history.
 
+### Event-Triggered Execution (Webhooks)
+
+Trigger agent execution from external systems via HTTP webhook. Perfect for integrating with CI/CD pipelines, alerting systems, or any automation that can make HTTP requests.
+
+**Endpoint:** `POST http://localhost:8587/execute`
+
+```bash
+# Trigger by agent name
+curl -X POST http://localhost:8587/execute \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "incident_coordinator", "task": "Investigate the API timeout alert"}'
+
+# Trigger by agent ID
+curl -X POST http://localhost:8587/execute \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": 21, "task": "Check system health"}'
+
+# With variables for template rendering
+curl -X POST http://localhost:8587/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_name": "cost_analyzer",
+    "task": "Analyze costs for project",
+    "variables": {"project_id": "prod-123", "region": "us-east-1"}
+  }'
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "run_id": 120,
+  "agent_id": 21,
+  "agent_name": "incident_coordinator",
+  "status": "running",
+  "message": "Agent execution started"
+}
+```
+
+**Integration Examples:**
+
+*PagerDuty Webhook:*
+```bash
+# Auto-investigate when PagerDuty alert fires
+curl -X POST https://your-station:8587/execute \
+  -H "Authorization: Bearer $STN_WEBHOOK_API_KEY" \
+  -d '{"agent_name": "incident_coordinator", "task": "PagerDuty alert: {{alert.title}}"}'
+```
+
+*GitHub Actions:*
+```yaml
+- name: Run deployment analyzer
+  run: |
+    curl -X POST ${{ secrets.STATION_URL }}/execute \
+      -H "Authorization: Bearer ${{ secrets.STATION_API_KEY }}" \
+      -d '{"agent_name": "deployment_analyzer", "task": "Analyze deployment ${{ github.sha }}"}'
+```
+
+**Authentication:**
+- **Local mode:** No authentication required
+- **Production:** Set `STN_WEBHOOK_API_KEY` environment variable for static API key auth
+- **OAuth:** Uses CloudShip OAuth when enabled
+
+**Configuration:**
+```bash
+# Enable/disable webhook (default: enabled)
+export STN_WEBHOOK_ENABLED=true
+
+# Set static API key for authentication
+export STN_WEBHOOK_API_KEY="your-secret-key"
+```
+
+[Webhook API Reference →](./docs/station/webhook-execute.md)
+
 ---
 
 ## What Makes Station Special

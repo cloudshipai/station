@@ -2,6 +2,7 @@ package mcp_agents
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,6 +22,29 @@ import (
 // authRequiredKey is a context key to signal that auth is required but not provided
 type authRequiredKey struct{}
 
+// ExecuteWebhookRequest represents the webhook payload for executing an agent
+type ExecuteWebhookRequest struct {
+	AgentName string                 `json:"agent_name,omitempty"`
+	AgentID   int64                  `json:"agent_id,omitempty"`
+	Task      string                 `json:"task"`
+	Variables map[string]interface{} `json:"variables,omitempty"`
+}
+
+// ExecuteWebhookResponse represents the webhook response
+type ExecuteWebhookResponse struct {
+	RunID     int64  `json:"run_id"`
+	AgentID   int64  `json:"agent_id"`
+	AgentName string `json:"agent_name"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+}
+
+// ErrorResponse represents an error response
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Message string `json:"message,omitempty"`
+}
+
 // DynamicAgentServer manages a dynamic MCP server that serves database agents as individual tools
 type DynamicAgentServer struct {
 	repos           *repositories.Repositories
@@ -30,6 +54,7 @@ type DynamicAgentServer struct {
 	localMode       bool
 	environmentName string
 	config          *config.Config
+	oauthHandler    *oauth.CloudShipOAuth
 }
 
 // NewDynamicAgentServer creates a new dynamic agent MCP server with environment filtering
@@ -69,14 +94,13 @@ func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 	}
 
 	// Create OAuth handler if enabled
-	var oauthHandler *oauth.CloudShipOAuth
 	if das.config != nil && das.config.CloudShip.OAuth.Enabled {
-		oauthHandler = oauth.NewCloudShipOAuth(&das.config.CloudShip.OAuth)
+		das.oauthHandler = oauth.NewCloudShipOAuth(&das.config.CloudShip.OAuth)
 		log.Printf("Dynamic Agent MCP OAuth authentication enabled")
 	}
 
 	// Create HTTP context function for authentication
-	httpContextFunc := createDynamicAgentAuthContextFunc(das.repos, oauthHandler, das.localMode)
+	httpContextFunc := createDynamicAgentAuthContextFunc(das.repos, das.oauthHandler, das.localMode)
 
 	// Start the HTTP server with auth context
 	das.httpServer = server.NewStreamableHTTPServer(das.mcpServer,
@@ -91,30 +115,303 @@ func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 
+	// Create HTTP mux for multiple routes
+	mux := http.NewServeMux()
+
+	// MCP endpoint (default routes)
+	mux.Handle("/", das.httpServer)
+	mux.Handle("/mcp", das.httpServer)
+	mux.Handle("/mcp/", das.httpServer)
+
+	// Webhook execute endpoint
+	mux.HandleFunc("/execute", das.handleExecuteWebhook)
+
+	// Health check endpoint
+	mux.HandleFunc("/health", das.handleHealth)
+
+	// Determine the final handler based on auth configuration
+	var handler http.Handler = mux
+
 	// If OAuth is enabled and we're not in local mode, wrap with OAuth discovery middleware
 	if !das.localMode && das.config != nil && das.config.CloudShip.OAuth.Enabled {
-		// Wrap the MCP handler with OAuth discovery
-		// StreamableHTTPServer implements http.Handler via ServeHTTP
-		wrappedHandler := wrapWithOAuthDiscovery(das.httpServer, cloudshipBaseURL, das.repos, oauthHandler)
-
+		handler = wrapWithOAuthDiscovery(mux, cloudshipBaseURL, das.repos, das.oauthHandler)
 		log.Printf("Starting Dynamic Agent MCP server with OAuth discovery on %s", addr)
 		log.Printf("  OAuth discovery URL: %s/.well-known/oauth-protected-resource", cloudshipBaseURL)
-
-		httpServer := &http.Server{
-			Addr:    addr,
-			Handler: wrappedHandler,
-		}
-		return httpServer.ListenAndServe()
+	} else {
+		log.Printf("Starting Dynamic Agent MCP server on %s", addr)
 	}
 
-	// Standard startup without OAuth middleware
-	return das.httpServer.Start(addr)
+	// Log webhook status
+	webhookEnabled := das.config == nil || das.config.Webhook.Enabled
+	if webhookEnabled {
+		log.Printf("  Webhook endpoint: http://%s/execute", addr)
+		if das.config != nil && das.config.Webhook.APIKey != "" {
+			log.Printf("  Webhook auth: Static API key (STN_WEBHOOK_API_KEY)")
+		} else if das.localMode {
+			log.Printf("  Webhook auth: Local mode (no auth required)")
+		} else {
+			log.Printf("  Webhook auth: Bearer token (user API key or OAuth)")
+		}
+	} else {
+		log.Printf("  Webhook endpoint: Disabled (STN_WEBHOOK_ENABLED=false)")
+	}
+
+	httpServer := &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
+	return httpServer.ListenAndServe()
+}
+
+// handleExecuteWebhook handles the /execute webhook endpoint
+func (das *DynamicAgentServer) handleExecuteWebhook(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Check if webhook is enabled
+	if das.config != nil && !das.config.Webhook.Enabled {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "service_unavailable",
+			Message: "Webhook endpoint is disabled",
+		})
+		return
+	}
+
+	// Only POST allowed
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "method_not_allowed"})
+		return
+	}
+
+	// Authenticate request
+	user, err := das.authenticateWebhookRequest(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "unauthorized",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// Parse request body
+	var req ExecuteWebhookRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "Invalid JSON: " + err.Error(),
+		})
+		return
+	}
+
+	// Validate required fields
+	if req.AgentName == "" && req.AgentID == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "Either agent_name or agent_id is required",
+		})
+		return
+	}
+
+	if req.Task == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "task is required",
+		})
+		return
+	}
+
+	// Resolve agent
+	agent, err := das.resolveAgent(req.AgentName, req.AgentID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "not_found",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// Create agent run record
+	userID := user.ID
+	if userID == 0 {
+		userID = 1 // Default to console user for OAuth users
+	}
+
+	agentRun, err := das.repos.AgentRuns.Create(
+		r.Context(),
+		agent.ID,
+		userID,
+		req.Task,
+		"",        // final_response (will be updated)
+		0,         // steps_taken
+		nil,       // tool_calls
+		nil,       // execution_steps
+		"running", // status
+		nil,       // completed_at
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to create agent run: " + err.Error(),
+		})
+		return
+	}
+
+	// Execute agent asynchronously
+	go func() {
+		ctx := context.Background()
+		metadata := map[string]interface{}{
+			"source":       "webhook",
+			"triggered_by": "webhook",
+			"user_id":      userID,
+		}
+
+		// Merge variables into metadata
+		if req.Variables != nil {
+			for k, v := range req.Variables {
+				metadata[k] = v
+			}
+		}
+
+		_, err := das.agentService.ExecuteAgentWithRunID(ctx, agent.ID, req.Task, agentRun.ID, metadata)
+		if err != nil {
+			log.Printf("Webhook agent execution failed (Run ID: %d, Agent: %s): %v", agentRun.ID, agent.Name, err)
+		} else {
+			log.Printf("Webhook agent execution completed (Run ID: %d, Agent: %s)", agentRun.ID, agent.Name)
+		}
+	}()
+
+	// Return success response
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(ExecuteWebhookResponse{
+		RunID:     agentRun.ID,
+		AgentID:   agent.ID,
+		AgentName: agent.Name,
+		Status:    "running",
+		Message:   "Agent execution started",
+	})
+
+	log.Printf("Webhook: Started agent execution (Run ID: %d, Agent: %s, Task: %s)", agentRun.ID, agent.Name, truncateString(req.Task, 50))
+}
+
+// handleHealth handles the /health endpoint
+func (das *DynamicAgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":      "ok",
+		"environment": das.environmentName,
+	})
+}
+
+// authenticateWebhookRequest authenticates a webhook request
+func (das *DynamicAgentServer) authenticateWebhookRequest(r *http.Request) (*models.User, error) {
+	// Local mode: default admin user (no auth required)
+	if das.localMode {
+		return &models.User{ID: 1, Username: "local", IsAdmin: true}, nil
+	}
+
+	// Extract bearer token
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		return nil, fmt.Errorf("bearer token required")
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	if token == "" {
+		return nil, fmt.Errorf("bearer token required")
+	}
+
+	// Check static webhook API key first (highest priority)
+	if das.config != nil && das.config.Webhook.APIKey != "" {
+		if token == das.config.Webhook.APIKey {
+			log.Printf("Webhook auth: authenticated via static API key")
+			return &models.User{ID: 1, Username: "webhook", IsAdmin: true}, nil
+		}
+		// If static key is configured, only that key is valid
+		return nil, fmt.Errorf("invalid API key")
+	}
+
+	// Try local API key (sk-* prefix)
+	if strings.HasPrefix(token, "sk-") {
+		user, err := das.repos.Users.GetByAPIKey(token)
+		if err == nil {
+			log.Printf("Webhook auth: authenticated via user API key (user: %s)", user.Username)
+			return user, nil
+		}
+	}
+
+	// Try OAuth if enabled
+	if das.oauthHandler != nil && das.oauthHandler.IsEnabled() {
+		tokenInfo, err := das.oauthHandler.ValidateToken(token)
+		if err == nil && tokenInfo.Active {
+			log.Printf("Webhook auth: authenticated via OAuth (user: %s, org: %s)", tokenInfo.Email, tokenInfo.OrgID)
+			return &models.User{
+				ID:       0,
+				Username: tokenInfo.Email,
+				IsAdmin:  false,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("invalid token")
+}
+
+// resolveAgent resolves an agent by name or ID
+func (das *DynamicAgentServer) resolveAgent(name string, id int64) (*models.Agent, error) {
+	// Prefer ID if provided
+	if id > 0 {
+		agent, err := das.repos.Agents.GetByID(id)
+		if err != nil {
+			return nil, fmt.Errorf("agent with ID %d not found", id)
+		}
+		return agent, nil
+	}
+
+	// Lookup by name within the environment
+	env, err := das.repos.Environments.GetByName(das.environmentName)
+	if err != nil {
+		return nil, fmt.Errorf("environment '%s' not found", das.environmentName)
+	}
+
+	agents, err := das.repos.Agents.ListByEnvironment(env.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list agents: %v", err)
+	}
+
+	for _, agent := range agents {
+		if agent.Name == name {
+			return agent, nil
+		}
+	}
+
+	return nil, fmt.Errorf("agent '%s' not found in environment '%s'", name, das.environmentName)
+}
+
+// truncateString truncates a string to the specified length
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // wrapWithOAuthDiscovery wraps an HTTP handler with MCP OAuth discovery support
 // Returns 401 with WWW-Authenticate header when authentication is required but not provided
 func wrapWithOAuthDiscovery(next http.Handler, cloudshipBaseURL string, repos *repositories.Repositories, oauthHandler *oauth.CloudShipOAuth) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip auth check for health endpoint
+		if r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Check if request has valid authentication
 		authHeader := r.Header.Get("Authorization")
 
@@ -161,7 +458,7 @@ func wrapWithOAuthDiscovery(next http.Handler, cloudshipBaseURL string, repos *r
 			return
 		}
 
-		// Authenticated - pass to MCP handler
+		// Authenticated - pass to next handler
 		next.ServeHTTP(w, r)
 	})
 }
