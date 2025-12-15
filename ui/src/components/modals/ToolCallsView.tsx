@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Wrench, ChevronDown, ChevronUp, Copy, CheckCircle, Clock, Zap, Database, DollarSign, Rocket, AlertTriangle, Bot, BarChart2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Wrench, ChevronDown, ChevronUp, Copy, CheckCircle, Clock, Zap, Database, DollarSign, Rocket, AlertTriangle, Bot, BarChart2, Check } from 'lucide-react';
 import { tracesApi } from '../../api/station';
 import type { JaegerSpan, JaegerTag } from '../../types/station';
+
+const JAEGER_DOCKER_COMMAND = `docker run -d --name jaeger -e COLLECTOR_OTLP_ENABLED=true -e SPAN_STORAGE_TYPE=badger -e BADGER_EPHEMERAL=false -e BADGER_DIRECTORY_VALUE=/badger/data -e BADGER_DIRECTORY_KEY=/badger/key -v jaeger_data:/badger -p 16686:16686 -p 4317:4317 -p 4318:4318 jaegertracing/all-in-one:latest`;
 
 interface ToolCallsViewProps {
   runId: number;
@@ -25,6 +27,17 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
   const [error, setError] = useState<string | null>(null);
   const [expandedCalls, setExpandedCalls] = useState<Set<string>>(new Set());
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
+  const [copiedCommand, setCopiedCommand] = useState(false);
+
+  const copyDockerCommand = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(JAEGER_DOCKER_COMMAND);
+      setCopiedCommand(true);
+      setTimeout(() => setCopiedCommand(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchToolCalls = async () => {
@@ -240,71 +253,52 @@ export const ToolCallsView: React.FC<ToolCallsViewProps> = ({ runId }) => {
 
           {/* Installation Section */}
           <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Installation</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Setup</h3>
             <div className="space-y-4">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Step 1: Setup volume</span>
-                  <span className="text-xs text-gray-500">~10 sec</span>
-                </div>
-                <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
-                  <code className="text-xs text-green-400 font-mono block">
-                    docker volume create jaeger-badger-data
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block mt-1">
-                    docker run --rm -v jaeger-badger-data:/badger busybox chown -R 10001:10001 /badger
-                  </code>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Step 2: Start Jaeger</span>
-                  <span className="text-xs text-gray-500">~30 sec</span>
-                </div>
-                <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
-                  <code className="text-xs text-green-400 font-mono block">
-                    docker run -d --name jaeger \
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block">
-                    {'  '}-e SPAN_STORAGE_TYPE=badger \
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block">
-                    {'  '}-e BADGER_EPHEMERAL=false \
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block">
-                    {'  '}-e BADGER_DIRECTORY_VALUE=/badger/data \
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block">
-                    {'  '}-e BADGER_DIRECTORY_KEY=/badger/key \
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block">
-                    {'  '}-v jaeger-badger-data:/badger \
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block">
-                    {'  '}-p 16686:16686 -p 4317:4317 -p 4318:4318 \
-                  </code>
-                  <code className="text-xs text-green-400 font-mono block">
-                    {'  '}jaegertracing/all-in-one:latest
-                  </code>
+                <p className="text-sm text-gray-600 mb-3">
+                  Run this command to start Jaeger with persistent storage:
+                </p>
+                <div className="relative">
+                  <div className="bg-gray-900 rounded-lg p-3 pr-12 overflow-x-auto">
+                    <code className="text-xs text-green-400 font-mono whitespace-pre-wrap break-all">
+                      {JAEGER_DOCKER_COMMAND}
+                    </code>
+                  </div>
+                  <button
+                    onClick={copyDockerCommand}
+                    className={`absolute top-2 right-2 p-2 rounded-md transition-colors ${
+                      copiedCommand 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                    title="Copy command"
+                  >
+                    {copiedCommand ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Step 3: Refresh page</span>
-                  <span className="text-xs text-gray-500">instant</span>
-                </div>
+              <div className="flex items-center gap-3">
+                <a
+                  href="http://localhost:16686"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Open Jaeger UI
+                </a>
                 <button
                   onClick={() => window.location.reload()}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh to Load Tool Calls
+                  Refresh Page
                 </button>
               </div>
+
+              <p className="text-xs text-gray-500">
+                Data persists in the <code className="bg-gray-100 px-1 rounded">jaeger_data</code> Docker volume across restarts.
+              </p>
             </div>
           </div>
         </div>
