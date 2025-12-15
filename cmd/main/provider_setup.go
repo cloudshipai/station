@@ -22,7 +22,7 @@ type ProviderConfig struct {
 	BaseURL  string
 }
 
-// getProviderModels returns available models for each provider
+// getProviderModels returns example models for each provider (any model string is accepted)
 func getProviderModels() map[string][]string {
 	return map[string][]string{
 		"openai": config.GetSupportedOpenAIModels(),
@@ -35,13 +35,12 @@ func getProviderModels() map[string][]string {
 
 // getDefaultProvider returns the default provider and model
 func getDefaultProvider() (string, string) {
-	recommended := config.GetRecommendedOpenAIModels()
-	return "openai", recommended["cost_effective"] // Use cost-effective default
+	return "openai", "gpt-5-mini"
 }
 
 // Provider descriptions for better UX
 var providerDescriptions = map[string]string{
-	"openai": "OpenAI models - GPT-4o, o1, reasoning models (13 supported models)",
+	"openai": "OpenAI models - GPT-5, GPT-4o, and more (any model accepted)",
 	"gemini": "Google's Gemini models - Fast, capable, and cost-effective",
 	"custom": "Configure a custom provider (any OpenAI-compatible endpoint)",
 }

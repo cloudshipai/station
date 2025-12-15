@@ -393,7 +393,7 @@ func (a *Analyzer) storeMetrics(ctx context.Context, runID int64, metrics map[st
 			metric.Reason,
 			string(verdictsJSON),
 			string(evidenceJSON),
-			"gpt-4o-mini", // Default judge model
+			"gpt-5-mini", // Default judge model
 			metric.JudgeTokens,
 			metric.JudgeCost,
 			metric.EvaluationDurationMS,

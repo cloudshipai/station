@@ -332,7 +332,7 @@ func (chs *CommandHandlerService) handleListAgentsCommand(ctx context.Context, c
 		}
 
 		// Model name - using default since models.Agent doesn't expose ModelID
-		modelName := "gpt-4o-mini" // Default model
+		modelName := "gpt-5-mini" // Default model
 
 		protoAgent := &proto.AgentConfig{
 			Id:             fmt.Sprintf("%d", agent.ID),
@@ -455,7 +455,7 @@ func (chs *CommandHandlerService) gatherEnvironmentInformation(ctx context.Conte
 				ID:          fmt.Sprintf("%d", agent.ID),
 				Name:        agent.Name,
 				Description: agent.Description,
-				Model:       "gpt-4o-mini", // TODO: Get actual model from agent config
+				Model:       "gpt-5-mini", // TODO: Get actual model from agent config
 				MaxSteps:    int(agent.MaxSteps),
 				Tools:       []string{}, // TODO: Get actual assigned tools
 			}

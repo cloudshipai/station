@@ -327,12 +327,12 @@ func (e *GenKitExecutor) getAgentPromptPath(agent models.Agent, environmentName 
 func (e *GenKitExecutor) getModelName() string {
 	cfg, err := config.Load()
 	if err != nil {
-		return "openai/gpt-4o-mini" // fallback
+		return "openai/gpt-5-mini" // fallback
 	}
 
 	baseModel := cfg.AIModel
 	if baseModel == "" {
-		baseModel = "gpt-4o-mini"
+		baseModel = "gpt-5-mini"
 	}
 
 	switch cfg.AIProvider {

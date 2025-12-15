@@ -177,7 +177,7 @@ func (h *APIHandlers) buildEnvironmentImage(c *gin.Context) {
 			req.Provider = "openai"
 		}
 		if req.Model == "" {
-			req.Model = "gpt-4o-mini"
+			req.Model = "gpt-5-mini"
 		}
 	}
 

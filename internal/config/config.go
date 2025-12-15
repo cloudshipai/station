@@ -583,31 +583,31 @@ func getBuiltInFakerTemplates() map[string]FakerTemplate {
 			Name:        "AWS FinOps",
 			Description: "Complete AWS cost management and optimization tools",
 			Instruction: "Generate comprehensive AWS Cost Explorer and Billing API tools for FinOps investigations. Include tools for: 1) Cost queries (get_cost_and_usage, get_cost_forecast, get_cost_categories, get_dimension_values), 2) Cost anomaly detection (get_anomalies, get_anomaly_monitors, get_anomaly_subscriptions, detect_cost_spikes), 3) Service-level cost analysis (get_ec2_costs, get_rds_costs, get_s3_costs, get_lambda_costs, get_cloudfront_costs, get_data_transfer_costs), 4) Reserved Instances and Savings Plans (get_ri_utilization, get_ri_coverage, get_savings_plans_utilization, get_ri_recommendations, get_savings_plans_purchase_recommendation), 5) Cost allocation and tagging (get_cost_by_tag, get_cost_by_account, get_cost_by_region, get_untagged_resources, validate_cost_allocation_tags), 6) Budget management (list_budgets, get_budget_performance, get_budget_forecast, analyze_budget_variance, get_budget_alerts). Tools should accept parameters like time_period (start/end dates), granularity (daily/monthly), filters (service, region, tag, account), group_by dimensions, and return realistic AWS Cost Explorer JSON responses with detailed cost breakdowns, usage quantities, and trending data.",
-			Model:       "gpt-4o-mini",
+			Model:       "gpt-5-mini",
 		},
 		"gcp-finops": {
 			Name:        "GCP FinOps",
 			Description: "GCP cloud billing and cost optimization tools",
 			Instruction: "Generate comprehensive GCP Cloud Billing and Cost Management API tools for FinOps investigations. Include tools for: 1) Querying billing data and export tables (query_billing_export, get_billing_account, list_projects_billing), 2) Analyzing cost trends and anomalies (analyze_cost_spike, get_cost_forecast, compare_period_costs, detect_cost_anomalies), 3) Resource cost attribution (get_service_costs, get_project_costs, get_sku_costs, get_label_costs), 4) Budget and alert management (list_budgets, get_budget_status, get_budget_alerts, analyze_budget_variance), 5) Recommendations and optimization (get_cost_recommendations, list_idle_resources, get_commitment_analysis, analyze_sustained_use_discount), 6) Cost allocation and reporting (get_cost_breakdown_by_service, get_cost_by_region, get_cost_by_label, generate_cost_report). Each tool should accept parameters like project_id, billing_account_id, time_range (start_date, end_date), granularity (daily, weekly, monthly), filters (service, sku, region, labels), and aggregation options.",
-			Model:       "gpt-4o-mini",
+			Model:       "gpt-5-mini",
 		},
 		"azure-finops": {
 			Name:        "Azure FinOps",
 			Description: "Azure cost management and optimization tools",
 			Instruction: "Generate comprehensive Azure Cost Management API tools for FinOps investigations. Include tools for: 1) Cost queries (get_cost_and_usage, get_cost_forecast, query_cost_management), 2) Cost anomaly detection (detect_cost_anomalies, get_anomaly_alerts), 3) Resource-level analysis (get_resource_costs, get_subscription_costs, get_resource_group_costs), 4) Budget management (list_budgets, get_budget_alerts, analyze_budget_variance), 5) Recommendations (get_advisor_recommendations, get_rightsizing_recommendations, get_reserved_instance_recommendations), 6) Cost allocation (get_cost_by_tag, get_cost_by_department, get_cost_by_service). Tools should work with Azure Cost Management REST API patterns and return realistic Azure billing data.",
-			Model:       "gpt-4o-mini",
+			Model:       "gpt-5-mini",
 		},
 		"datadog-monitoring": {
 			Name:        "Datadog Monitoring",
 			Description: "Datadog metrics, logs, and monitoring tools",
 			Instruction: "Generate Datadog monitoring API tools for DevOps and observability. Include tools for: 1) Metrics queries (query_metrics, get_metric_metadata, list_active_metrics), 2) Log analysis (search_logs, get_log_aggregates, analyze_log_patterns), 3) APM traces (search_traces, get_service_performance, analyze_trace_latency), 4) Monitors and alerts (list_monitors, get_monitor_status, get_alert_history), 5) Dashboards (get_dashboard_data, query_dashboard_widgets), 6) Infrastructure monitoring (get_host_metrics, get_container_metrics, get_process_metrics). Tools should return realistic Datadog API responses with time-series data, log entries, and monitoring insights.",
-			Model:       "gpt-4o-mini",
+			Model:       "gpt-5-mini",
 		},
 		"stripe-payments": {
 			Name:        "Stripe Payments",
 			Description: "Stripe payment and subscription API tools",
 			Instruction: "Generate Stripe payment API tools for payment processing and subscription management. Include tools for: 1) Payment operations (create_payment_intent, capture_payment, refund_payment, list_payments), 2) Customer management (create_customer, update_customer, list_customers, get_customer_payment_methods), 3) Subscription handling (create_subscription, update_subscription, cancel_subscription, list_subscriptions), 4) Invoice operations (create_invoice, finalize_invoice, list_invoices, get_invoice_status), 5) Product and pricing (list_products, get_product_details, list_prices, create_price), 6) Payment analytics (get_payment_analytics, get_mrr_metrics, get_churn_analysis). Tools should return realistic Stripe API response formats with proper object structures.",
-			Model:       "gpt-4o-mini",
+			Model:       "gpt-5-mini",
 		},
 	}
 }
@@ -735,50 +735,36 @@ func getAIModelDefault() string {
 	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
 	switch provider {
 	case "openai":
-		// Official GenKit v1.0.1 OpenAI plugin supported models:
-		// Latest: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4.5-preview
-		// Production: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo
-		// Reasoning: o3-mini, o1, o1-preview, o1-mini
-		return "gpt-4o-mini" // Fast and cost-effective default
+		// Any model string is passed through to OpenAI API via GenKit
+		// GPT-5 family: gpt-5.2, gpt-5.1, gpt-5, gpt-5-mini, gpt-5-nano
+		// GPT-4 family: gpt-4.1, gpt-4o, gpt-4o-mini, gpt-4-turbo
+		// Reasoning: o4-mini, o3, o3-mini
+		return "gpt-5-mini" // Fast and cost-effective default
 	case "gemini":
-		return "gemini-pro" // Google's main model
+		return "gemini-2.5-flash" // Google's latest fast model
 	case "cloudflare":
 		return "@cf/openai/gpt-oss-120b" // Cloudflare Workers AI GPT-OSS model
 	case "ollama":
 		return "llama3" // Popular local model
 	default:
-		return "gpt-4o-mini" // Safe, cost-effective fallback
+		return "gpt-5-mini" // Safe, cost-effective fallback
 	}
 }
 
-// GetSupportedOpenAIModels returns the list of models supported by the official GenKit v1.0.1 OpenAI plugin
+// GetSupportedOpenAIModels returns example OpenAI models for UI suggestions
+// Note: Any model string is accepted - these are just common examples
 func GetSupportedOpenAIModels() []string {
 	return []string{
-		// Latest Models
-		"gpt-4.1",
-		"gpt-4.1-mini",
-		"gpt-4.1-nano",
-		"gpt-4.5-preview",
-		// Production Models
-		"gpt-4o",
-		"gpt-4o-mini",
-		"gpt-4-turbo",
-		"gpt-4",
-		"gpt-3.5-turbo",
-		// Reasoning Models
-		"o3-mini",
-		"o1",
-		"o1-preview",
-		"o1-mini",
+		"gpt-5-mini",  // Default - fast and cost-effective
+		"gpt-5.2",     // Latest flagship
+		"gpt-4o-mini", // Previous generation
 	}
 }
 
-// GetRecommendedOpenAIModels returns recommended models for different use cases
+// GetRecommendedOpenAIModels returns the default model for OpenAI
+// Note: Any model string is accepted - this is just the default suggestion
 func GetRecommendedOpenAIModels() map[string]string {
 	return map[string]string{
-		"cost_effective": "gpt-4o-mini",
-		"balanced":       "gpt-4o",
-		"latest":         "gpt-4.1",
-		"reasoning":      "o1-mini",
+		"cost_effective": "gpt-5-mini",
 	}
 }

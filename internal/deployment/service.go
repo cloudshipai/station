@@ -104,7 +104,7 @@ func LoadConfigFromYAML(configContent string, envVarsContent string, environment
 		MCPPort:              fmt.Sprintf("%v", getConfigValue(config, "mcp_port", 3000)),
 		SSHPort:              fmt.Sprintf("%v", getConfigValue(config, "ssh_port", 2222)),
 		AIProvider:           fmt.Sprintf("%v", getConfigValue(config, "ai_provider", "openai")),
-		AIModel:              fmt.Sprintf("%v", getConfigValue(config, "ai_model", "gpt-4o-mini")),
+		AIModel:              fmt.Sprintf("%v", getConfigValue(config, "ai_model", "gpt-5-mini")),
 		Debug:                fmt.Sprintf("%v", getConfigValue(config, "debug", false)),
 		TelemetryEnabled:     fmt.Sprintf("%v", getConfigValue(config, "telemetry_enabled", true)),
 		OpenAIAPIKey:         "<your-openai-api-key>", // Placeholder - user must replace

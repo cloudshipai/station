@@ -124,7 +124,7 @@ metadata:
 		}
 	}
 
-	content += fmt.Sprintf("\nmodel: gpt-4o-mini\nmax_steps: %d", agent.MaxSteps)
+	content += fmt.Sprintf("\nmodel: gpt-5-mini\nmax_steps: %d", agent.MaxSteps)
 
 	// Add CloudShip memory integration if configured
 	if agent.MemoryTopicKey != nil && *agent.MemoryTopicKey != "" {

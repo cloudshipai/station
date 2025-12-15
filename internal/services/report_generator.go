@@ -31,7 +31,7 @@ type ReportGenerator struct {
 
 // ReportGeneratorConfig configures the report generator
 type ReportGeneratorConfig struct {
-	JudgeModel         string // Default: "gpt-4o-mini"
+	JudgeModel         string // Default: "gpt-5-mini"
 	MaxConcurrentEvals int    // Default: 10
 }
 
@@ -52,8 +52,8 @@ func NewReportGenerator(repos *repositories.Repositories, db *sql.DB, cfg *Repor
 			logging.Info("Using Station AI model for LLM judge: %s", cfg.JudgeModel)
 		} else {
 			// Fallback only if config loading fails
-			cfg.JudgeModel = "gpt-4o-mini"
-			logging.Info("Failed to load Station config for LLM judge, using fallback: gpt-4o-mini")
+			cfg.JudgeModel = "gpt-5-mini"
+			logging.Info("Failed to load Station config for LLM judge, using fallback: gpt-5-mini")
 		}
 	}
 
@@ -829,7 +829,7 @@ func (rg *ReportGenerator) calculateAgentMetrics(runs []queries.AgentRun) AgentM
 	}
 
 	count := float64(len(runs))
-	// Estimate cost: ~$0.002 per 1000 tokens for gpt-4o-mini
+	// Estimate cost: ~$0.002 per 1000 tokens for gpt-5-mini
 	avgCost := (float64(totalTokens) / 1000.0) * 0.002 / count
 
 	metrics := AgentMetrics{
@@ -938,7 +938,7 @@ func (rg *ReportGenerator) callLLMJudge(ctx context.Context, prompt string) (str
 		return "", fmt.Errorf("failed to load Station config: %w", err)
 	}
 
-	// Format model name with provider prefix (e.g., "googleai/gemini-2.5-pro", "openai/gpt-4o-mini")
+	// Format model name with provider prefix (e.g., "googleai/gemini-2.5-pro", "openai/gpt-5-mini")
 	modelName := rg.judgeModel
 	if !strings.Contains(modelName, "/") {
 		// Use Station's configured provider

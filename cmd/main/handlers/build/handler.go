@@ -82,7 +82,7 @@ func (h *BuildHandler) RunBuildEnvironment(cmd *cobra.Command, args []string) er
 			return fmt.Errorf("--provider flag is required for full builds (openai, gemini, anthropic)")
 		}
 		if model == "" {
-			return fmt.Errorf("--model flag is required for full builds (e.g., gpt-4o-mini, gemini-2.5-flash)")
+			return fmt.Errorf("--model flag is required for full builds (e.g., gpt-5-mini, gemini-2.5-flash)")
 		}
 
 		log.Printf("Building full containerized environment: %s", environmentName)

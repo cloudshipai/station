@@ -1396,7 +1396,7 @@ func (f *MCPFaker) enrichToolResult(ctx context.Context, toolName string, args m
 func (f *MCPFaker) getModelName() string {
 	baseModel := f.stationConfig.AIModel
 	if baseModel == "" {
-		baseModel = "gpt-4o-mini"
+		baseModel = "gpt-5-mini"
 	}
 
 	switch strings.ToLower(f.stationConfig.AIProvider) {

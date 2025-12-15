@@ -124,7 +124,7 @@ func (f *MCPFaker) generateToolsWithAI(ctx context.Context) ([]mcp.Tool, error) 
 // Uses the same logic as pkg/faker/ai package
 func getModelName(cfg *config.Config) string {
 	if cfg == nil {
-		return "openai/gpt-4o-mini"
+		return "openai/gpt-5-mini"
 	}
 
 	baseModel := cfg.AIModel

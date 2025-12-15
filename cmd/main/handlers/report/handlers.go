@@ -185,7 +185,7 @@ func (h *ReportHandler) createReport(envName, reportName, description string) er
 		EnvironmentID: env.ID,
 		TeamCriteria:  string(teamCriteriaJSON),
 		AgentCriteria: sql.NullString{Valid: false},
-		JudgeModel:    sql.NullString{String: "gpt-4o-mini", Valid: true},
+		JudgeModel:    sql.NullString{String: "gpt-5-mini", Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create report: %v", err)

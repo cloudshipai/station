@@ -273,7 +273,7 @@ func (s *EnvironmentCopyService) buildPromptFileContent(agent *models.Agent, too
 	}
 
 	// Add model
-	sb.WriteString("model: gpt-4o-mini\n")
+	sb.WriteString("model: gpt-5-mini\n")
 
 	sb.WriteString(fmt.Sprintf("max_steps: %d\n", agent.MaxSteps))
 

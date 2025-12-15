@@ -87,7 +87,7 @@ func init() {
 
 	// Init flags for first-time setup
 	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, anthropic, custom). Defaults to openai")
-	upCmd.Flags().String("model", "", "AI model to use (e.g., gpt-4o-mini, gemini-2.0-flash-exp). Defaults based on provider")
+	upCmd.Flags().String("model", "", "AI model to use (e.g., gpt-5-mini, gemini-2.0-flash-exp). Defaults based on provider")
 	upCmd.Flags().String("api-key", "", "API key for AI provider (alternative to environment variables)")
 	upCmd.Flags().String("base-url", "", "Custom base URL for OpenAI-compatible endpoints")
 	upCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")

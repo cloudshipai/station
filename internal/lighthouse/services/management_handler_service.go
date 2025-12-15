@@ -320,7 +320,7 @@ func (mhs *ManagementHandlerService) handleListAgents(ctx context.Context, req *
 			Name:            agent.Name,
 			Description:     agent.Description,
 			Prompt:          agent.Prompt,
-			ModelName:       "gpt-4o-mini", // Default model - could be enhanced with dotprompt model info
+			ModelName:       "gpt-5-mini", // Default model - could be enhanced with dotprompt model info
 			MaxSteps:        int32(agent.MaxSteps),
 			AssignedTools:   toolNames,
 			EnvironmentName: environmentName,

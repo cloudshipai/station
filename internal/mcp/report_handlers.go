@@ -71,8 +71,8 @@ func (s *Server) handleCreateReport(ctx context.Context, request mcp.CallToolReq
 	}
 	judgeModel := cfg.AIModel
 	if judgeModel == "" {
-		judgeModel = "gpt-4o-mini" // Fallback only if config has no model
-		logging.Info("No AI model in config, using fallback for LLM judge: gpt-4o-mini")
+		judgeModel = "gpt-5-mini" // Fallback only if config has no model
+		logging.Info("No AI model in config, using fallback for LLM judge: gpt-5-mini")
 	} else {
 		logging.Info("Using Station AI model for LLM judge: %s", judgeModel)
 	}

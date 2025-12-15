@@ -289,7 +289,7 @@ func (h *APIHandlers) createReport(c *gin.Context) {
 			judgeModel = sql.NullString{String: cfg.AIModel, Valid: true}
 		} else {
 			// Fallback only if config loading fails
-			judgeModel = sql.NullString{String: "gpt-4o-mini", Valid: true}
+			judgeModel = sql.NullString{String: "gpt-5-mini", Valid: true}
 		}
 	}
 

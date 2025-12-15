@@ -86,7 +86,7 @@ func (h *APIHandlers) createFaker(c *gin.Context) {
 	}
 
 	if aiModel == "" {
-		aiModel = "gpt-4o-mini" // Final fallback
+		aiModel = "gpt-5-mini" // Final fallback
 	}
 
 	// Build MCP server config (proper format with args array)

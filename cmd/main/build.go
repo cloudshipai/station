@@ -45,7 +45,7 @@ Examples:
   stn build env default --skip-sync
 
   # Full build with sync during build
-  stn build env default --provider openai --model gpt-4o-mini
+  stn build env default --provider openai --model gpt-5-mini
 
   # Custom image name for registry
   stn build env myenv --skip-sync --image myorg/station-myenv --tag v1.0.0
