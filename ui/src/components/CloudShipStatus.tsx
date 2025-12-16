@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, CheckCircle, XCircle, AlertCircle, Key, X, ExternalLink, RefreshCw } from 'lucide-react';
+import { Cloud, CheckCircle, XCircle, AlertCircle, Key, X, ExternalLink, RefreshCw, Link } from 'lucide-react';
 
 interface CloudShipAPIStatus {
   authenticated: boolean;
@@ -66,21 +66,21 @@ const CloudShipStatus: React.FC = () => {
       >
         <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors hover:opacity-80 ${
           isAuthenticated 
-            ? 'bg-tokyo-green/10 border border-tokyo-green/30' 
-            : 'bg-tokyo-dark3 border border-tokyo-dark4'
+            ? 'bg-emerald-50 border border-emerald-200' 
+            : 'bg-gray-100 border border-gray-300'
         }`}>
           <StatusIcon 
             size={16} 
-            className={isAuthenticated ? 'text-tokyo-green' : 'text-tokyo-dark5'} 
+            className={isAuthenticated ? 'text-emerald-600' : 'text-gray-400'} 
           />
           <div className="flex flex-col">
-            <span className="text-xs font-semibold text-tokyo-fg">CloudShip</span>
-            <span className={`text-[10px] ${isAuthenticated ? 'text-tokyo-green' : 'text-tokyo-comment'}`}>
+            <span className="text-xs font-semibold text-gray-700">CloudShip</span>
+            <span className={`text-[10px] ${isAuthenticated ? 'text-emerald-600' : 'text-gray-500'}`}>
               {getStatusText()}
             </span>
           </div>
           {isAuthenticated && (
-            <div className="w-2 h-2 rounded-full bg-tokyo-green animate-pulse ml-auto"></div>
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-auto"></div>
           )}
         </div>
       </div>
@@ -92,23 +92,23 @@ const CloudShipStatus: React.FC = () => {
           onClick={() => setShowModal(false)}
         >
           <div 
-            className="bg-tokyo-dark2 border border-tokyo-dark4 rounded-xl shadow-2xl w-full max-w-md mx-4"
+            className="bg-white border border-gray-200 rounded-xl shadow-2xl w-full max-w-md mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-tokyo-dark4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center space-x-3">
-                <Cloud size={24} className="text-tokyo-blue" />
+                <Cloud size={24} className="text-blue-600" />
                 <div>
-                  <h2 className="text-lg font-semibold text-tokyo-fg">CloudShip Status</h2>
-                  <p className="text-xs text-tokyo-comment">Bundle registry connection</p>
+                  <h2 className="text-lg font-semibold text-gray-900">CloudShip Status</h2>
+                  <p className="text-xs text-gray-500">Bundle registry connection</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-tokyo-dark3 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X size={20} className="text-tokyo-comment" />
+                <X size={20} className="text-gray-500" />
               </button>
             </div>
 
@@ -117,29 +117,29 @@ const CloudShipStatus: React.FC = () => {
               {/* Connection Status */}
               <div className={`p-4 rounded-lg ${
                 isAuthenticated 
-                  ? 'bg-tokyo-green/10 border border-tokyo-green/30' 
+                  ? 'bg-emerald-50 border border-emerald-200' 
                   : hasAPIKey && apiStatus?.error 
-                    ? 'bg-tokyo-red/10 border border-tokyo-red/30'
-                    : 'bg-tokyo-dark3 border border-tokyo-dark4'
+                    ? 'bg-red-50 border border-red-200'
+                    : 'bg-gray-50 border border-gray-200'
               }`}>
                 <div className="flex items-center space-x-3">
                   <StatusIcon 
                     size={32} 
                     className={
-                      isAuthenticated ? 'text-tokyo-green' : 
-                      hasAPIKey && apiStatus?.error ? 'text-tokyo-red' : 
-                      'text-tokyo-comment'
+                      isAuthenticated ? 'text-emerald-600' : 
+                      hasAPIKey && apiStatus?.error ? 'text-red-600' : 
+                      'text-gray-400'
                     } 
                   />
                   <div>
                     <p className={`font-semibold ${
-                      isAuthenticated ? 'text-tokyo-green' : 
-                      hasAPIKey && apiStatus?.error ? 'text-tokyo-red' : 
-                      'text-tokyo-comment'
+                      isAuthenticated ? 'text-emerald-700' : 
+                      hasAPIKey && apiStatus?.error ? 'text-red-700' : 
+                      'text-gray-600'
                     }`}>
                       {getStatusText()}
                     </p>
-                    <p className="text-xs text-tokyo-comment">
+                    <p className="text-xs text-gray-600">
                       {isAuthenticated 
                         ? 'Your Station is connected to CloudShip' 
                         : hasAPIKey 
@@ -153,20 +153,20 @@ const CloudShipStatus: React.FC = () => {
               {/* Details */}
               {apiStatus && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
-                    <span className="text-sm text-tokyo-comment flex items-center space-x-2">
+                  <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                    <span className="text-sm text-gray-500 flex items-center gap-2">
                       <Key size={16} />
                       <span>API Key</span>
                     </span>
-                    <span className={`text-sm font-mono ${apiStatus.has_api_key ? 'text-tokyo-fg' : 'text-tokyo-comment'}`}>
+                    <span className={`text-sm font-mono ${apiStatus.has_api_key ? 'text-gray-900' : 'text-gray-400'}`}>
                       {apiStatus.has_api_key ? apiStatus.api_key_masked : 'Not configured'}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
-                    <span className="text-sm text-tokyo-comment">Authentication</span>
-                    <span className={`text-sm flex items-center space-x-1 ${
-                      apiStatus.authenticated ? 'text-tokyo-green' : 'text-tokyo-red'
+                  <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                    <span className="text-sm text-gray-500">Authentication</span>
+                    <span className={`text-sm flex items-center gap-1 ${
+                      apiStatus.authenticated ? 'text-emerald-600' : 'text-red-600'
                     }`}>
                       {apiStatus.authenticated ? (
                         <>
@@ -183,40 +183,43 @@ const CloudShipStatus: React.FC = () => {
                   </div>
 
                   {apiStatus.authenticated && apiStatus.bundle_count > 0 && (
-                    <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
-                      <span className="text-sm text-tokyo-comment">Available Bundles</span>
-                      <span className="text-sm text-tokyo-purple font-semibold">{apiStatus.bundle_count}</span>
+                    <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                      <span className="text-sm text-gray-500">Available Bundles</span>
+                      <span className="text-sm text-purple-600 font-semibold">{apiStatus.bundle_count}</span>
                     </div>
                   )}
 
                   {apiStatus.organization && (
-                    <div className="flex items-center justify-between py-2 border-b border-tokyo-dark4">
-                      <span className="text-sm text-tokyo-comment">Organization</span>
-                      <span className="text-sm text-tokyo-cyan">{apiStatus.organization}</span>
+                    <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                      <span className="text-sm text-gray-500">Organization</span>
+                      <span className="text-sm text-blue-600 font-medium">{apiStatus.organization}</span>
                     </div>
                   )}
 
                   <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-tokyo-comment">API URL</span>
-                    <span className="text-sm text-tokyo-comment font-mono text-xs">{apiStatus.api_url}</span>
+                    <span className="text-sm text-gray-500 flex items-center gap-2">
+                      <Link size={16} />
+                      <span>API URL</span>
+                    </span>
+                    <span className="text-sm text-gray-600 font-mono text-xs">{apiStatus.api_url}</span>
                   </div>
                 </div>
               )}
 
               {/* Error Display */}
               {apiStatus?.error && (
-                <div className="p-3 bg-tokyo-red/10 border border-tokyo-red/30 rounded-lg">
-                  <p className="text-sm text-tokyo-red">{apiStatus.error}</p>
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700">{apiStatus.error}</p>
                 </div>
               )}
 
               {/* Help text when not authenticated */}
               {!isAuthenticated && (
-                <div className="p-3 bg-tokyo-dark3 rounded-lg">
-                  <p className="text-sm text-tokyo-comment">
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-2">
                     To connect to CloudShip, run:
                   </p>
-                  <code className="block mt-2 p-2 bg-tokyo-dark1 rounded text-sm text-tokyo-cyan font-mono">
+                  <code className="block p-2 bg-gray-900 rounded text-sm text-green-400 font-mono">
                     stn auth login
                   </code>
                 </div>
@@ -224,11 +227,11 @@ const CloudShipStatus: React.FC = () => {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between p-4 border-t border-tokyo-dark4">
+            <div className="flex items-center justify-between p-4 border-t border-gray-200">
               <button
                 onClick={fetchStatus}
                 disabled={isRefreshing}
-                className="flex items-center space-x-2 px-3 py-2 text-sm text-tokyo-comment hover:text-tokyo-fg hover:bg-tokyo-dark3 rounded-lg transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
               >
                 <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
                 <span>Refresh</span>
@@ -239,7 +242,7 @@ const CloudShipStatus: React.FC = () => {
                   href={apiStatus?.api_url || 'https://app.cloudshipai.com'}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center space-x-2 px-4 py-2 bg-tokyo-blue text-white text-sm font-medium rounded-lg hover:bg-tokyo-blue/80 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <span>Open CloudShip</span>
                   <ExternalLink size={14} />
