@@ -1648,14 +1648,16 @@ const EnvironmentMCPNode = ({ data }: NodeProps) => {
   );
 };
 
-// Environments Page with ReactFlow Node Graph
+// Environments Page with Two-Column Layout (Agents | MCP Servers)
 const EnvironmentsPage = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
+  const navigate = useNavigate();
   const [environments, setEnvironments] = useState<any[]>([]);
   const [selectedEnvironment, setSelectedEnvironment] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [rebuildingGraph, setRebuildingGraph] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [mcpServers, setMcpServers] = useState<any[]>([]);
+  const [expandedAgents, setExpandedAgents] = useState<Set<number>>(new Set());
+  const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set());
   const { toast, showToast, hideToast } = useToast();
   const [confirmDeleteEnv, setConfirmDeleteEnv] = useState<{
     isOpen: boolean;
@@ -1692,20 +1694,9 @@ const EnvironmentsPage = () => {
       }
     };
     checkCloudShipStatus();
-    // Poll every 30 seconds
     const interval = setInterval(checkCloudShipStatus, 30000);
     return () => clearInterval(interval);
   }, []);
-
-  // Define TOC items for help modal
-  const envHelpTocItems: TocItem[] = [
-    { id: 'multi-env-isolation', label: 'Multi-Environment' },
-    { id: 'template-variables', label: 'Template Variables' },
-    { id: 'environment-graph', label: 'Environment Graph' },
-    { id: 'key-actions', label: 'Key Actions' },
-    { id: 'use-cases', label: 'Use Cases' },
-    { id: 'best-practices-env', label: 'Best Practices' }
-  ];
 
   // Button handlers
   const handleSyncEnvironment = () => {
@@ -1720,10 +1711,6 @@ const EnvironmentsPage = () => {
     setIsBundleModalOpen(true);
   };
 
-  const handleBuildImage = () => {
-    setIsBuildImageModalOpen(true);
-  };
-
   const handleInstallBundle = () => {
     setIsInstallBundleModalOpen(true);
   };
@@ -1732,51 +1719,40 @@ const EnvironmentsPage = () => {
     setIsVariablesModalOpen(true);
   };
 
-  const handleDeploy = () => {
-    setIsDeployModalOpen(true);
-  };
-
-  const handleCopyEnvironment = (environmentId: number, environmentName: string) => {
-    setCopySourceEnvId(environmentId);
-    setCopySourceEnvName(environmentName);
-    setIsCopyModalOpen(true);
-  };
-
-  const handleCopyComplete = () => {
-    // Simply close the modal - user will manually refresh or navigate
-    // to see the copied environment
-    setIsCopyModalOpen(false);
-  };
-
-  const handleRefreshGraph = () => {
+  const handleCopyEnvironment = () => {
     if (selectedEnvironment) {
-      setRebuildingGraph(true);
-      // This will trigger the useEffect that rebuilds the graph
+      const env = environments.find(e => e.id === selectedEnvironment);
+      setCopySourceEnvId(selectedEnvironment);
+      setCopySourceEnvName(env?.name || '');
+      setIsCopyModalOpen(true);
     }
   };
 
+  const handleCopyComplete = () => {
+    setIsCopyModalOpen(false);
+  };
+
   // Function to delete environment
-  const handleDeleteEnvironment = (environmentId: number, environmentName: string) => {
-    setConfirmDeleteEnv({
-      isOpen: true,
-      environmentName,
-      environmentId
-    });
+  const handleDeleteEnvironment = () => {
+    if (selectedEnvironment) {
+      const env = environments.find(e => e.id === selectedEnvironment);
+      setConfirmDeleteEnv({
+        isOpen: true,
+        environmentName: env?.name || '',
+        environmentId: selectedEnvironment
+      });
+    }
   };
 
   const confirmDeleteEnvironment = async () => {
     const { environmentId, environmentName } = confirmDeleteEnv;
 
     try {
-      // Call the new unified API endpoint
       await apiClient.delete(`/environments/${environmentId}`);
-
-      // Refresh environments list
       const response = await environmentsApi.getAll();
       const envs = response.data.environments || [];
       setEnvironments(envs);
 
-      // Select the first available environment or clear selection
       if (envs.length > 0) {
         setSelectedEnvironment(envs[0].id);
       } else {
@@ -1790,12 +1766,30 @@ const EnvironmentsPage = () => {
     }
   };
 
-  // Environment-specific node types
-  const environmentPageNodeTypes: NodeTypes = {
-    agent: EnvironmentAgentNode,
-    mcp: EnvironmentMCPNode,
-    tool: ToolNode,
-    environment: EnvironmentNode,
+  // Toggle agent expansion
+  const toggleAgentExpansion = (agentId: number) => {
+    setExpandedAgents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(agentId)) {
+        newSet.delete(agentId);
+      } else {
+        newSet.add(agentId);
+      }
+      return newSet;
+    });
+  };
+
+  // Toggle server expansion
+  const toggleServerExpansion = (serverId: number) => {
+    setExpandedServers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(serverId)) {
+        newSet.delete(serverId);
+      } else {
+        newSet.add(serverId);
+      }
+      return newSet;
+    });
   };
 
   // Fetch environments
@@ -1818,264 +1812,327 @@ const EnvironmentsPage = () => {
     fetchEnvironments();
   }, []);
 
-  // Build environment graph when environment changes
+  // Fetch agents and MCP servers when environment changes
   useEffect(() => {
     if (!selectedEnvironment || loading) return;
 
-    const buildEnvironmentGraph = async () => {
-      setRebuildingGraph(true);
+    const fetchData = async () => {
       try {
-        const selectedEnv = environments.find(env => env.id === selectedEnvironment);
-
-        // Fetch agents and MCP servers for selected environment
         const [agentsRes, mcpRes] = await Promise.all([
           agentsApi.getAll(),
           mcpServersApi.getAll()
         ]);
 
-        const agents = (agentsRes.data.agents || []).filter((agent: any) =>
+        const filteredAgents = (agentsRes.data.agents || []).filter((agent: any) =>
           agent.environment_id === selectedEnvironment
         );
-        // Debug logging
-        console.log('MCP API Response:', mcpRes.data);
-        console.log('Raw MCP data:', mcpRes.data.servers || mcpRes.data || []);
-        console.log('Selected environment:', selectedEnvironment);
-
-        const mcpServers = (mcpRes.data.servers || mcpRes.data || []).filter((server: any) =>
+        const filteredServers = (mcpRes.data.servers || mcpRes.data || []).filter((server: any) =>
           server.environment_id === selectedEnvironment
         );
-        console.log('Filtered MCP servers:', mcpServers);
 
-        const newNodes: any[] = [];
-        const newEdges: any[] = [];
-
-        // Environment node (center hub)
-        newNodes.push({
-          id: `env-${selectedEnvironment}`,
-          type: 'environment',
-          position: { x: 0, y: 0 },
-          data: {
-            label: selectedEnv?.name || 'Environment',
-            description: selectedEnv?.description || 'Environment Hub',
-            agentCount: agents.length,
-            serverCount: mcpServers.length,
-            environmentId: selectedEnvironment,
-            onDeleteEnvironment: handleDeleteEnvironment,
-            onCopyEnvironment: handleCopyEnvironment,
-          },
-        });
-
-        // Agent nodes - better spacing
-        agents.forEach((agent: any, index: number) => {
-          newNodes.push({
-            id: `agent-${agent.id}`,
-            type: 'agent',
-            position: { x: 500, y: index * 180 },
-            data: {
-              label: agent.name,
-              description: agent.description || 'No description',
-              status: agent.schedule ? 'Scheduled' : 'Manual',
-              agentId: agent.id,
-            },
-          });
-
-          // Agent edge to environment
-          newEdges.push({
-            id: `edge-env-${selectedEnvironment}-to-agent-${agent.id}`,
-            source: `env-${selectedEnvironment}`,
-            target: `agent-${agent.id}`,
-            animated: true,
-            style: {
-              stroke: '#7aa2f7',
-              strokeWidth: 2,
-              filter: 'drop-shadow(0 0 6px rgba(122, 162, 247, 0.4))'
-            },
-          });
-        });
-
-        // MCP server nodes - better spacing and positioning
-        mcpServers.forEach((server: any, index: number) => {
-          newNodes.push({
-            id: `mcp-${server.id}`,
-            type: 'mcp',
-            position: { x: 500, y: (agents.length * 180) + (index * 180) + 100 },
-            data: {
-              label: server.name,
-              description: 'MCP Server',
-              serverId: server.id,
-            },
-          });
-
-          // MCP server edge to environment
-          newEdges.push({
-            id: `edge-env-${selectedEnvironment}-to-mcp-${server.id}`,
-            source: `env-${selectedEnvironment}`,
-            target: `mcp-${server.id}`,
-            animated: true,
-            style: {
-              stroke: '#0db9d7',
-              strokeWidth: 2,
-              filter: 'drop-shadow(0 0 6px rgba(13, 185, 215, 0.4))'
-            },
-          });
-        });
-
-        // Apply ELK layout
-        const layoutedElements = await layoutElements(newNodes, newEdges, 'RIGHT');
-        setNodes(layoutedElements.nodes);
-        setEdges(layoutedElements.edges);
-
+        setAgents(filteredAgents);
+        setMcpServers(filteredServers);
       } catch (error) {
-        console.error('Failed to build environment graph:', error);
-      } finally {
-        setRebuildingGraph(false);
+        console.error('Failed to fetch data:', error);
+        setAgents([]);
+        setMcpServers([]);
       }
     };
 
-    buildEnvironmentGraph();
-  }, [selectedEnvironment, environments, loading]);
+    fetchData();
+  }, [selectedEnvironment, loading]);
+
+  const selectedEnv = environments.find(env => env.id === selectedEnvironment);
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-tokyo-bg">
-        <div className="text-tokyo-fg font-mono">Loading environments...</div>
+      <div className="h-full flex items-center justify-center bg-gray-50">
+        <div className="text-gray-600">Loading environments...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex bg-tokyo-bg">
-      {/* Left Column - Canvas */}
-      <div className="flex-1 flex flex-col border-r border-tokyo-dark4">
-        {/* Canvas Header */}
-        <div className="px-6 py-4 border-b border-tokyo-dark4">
-          <h2 className="text-lg font-mono font-semibold text-tokyo-fg">Environment Graph</h2>
-          <p className="text-sm text-tokyo-comment mt-1">Visual representation of agents, MCP servers, and tools</p>
-        </div>
-
-        {/* Canvas Content */}
-        {environments.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Globe className="h-16 w-16 text-tokyo-comment mx-auto mb-4" />
-              <div className="text-tokyo-fg font-mono text-lg mb-2">No environments found</div>
-              <div className="text-tokyo-comment font-mono text-sm">Create your first environment to get started</div>
-            </div>
-          </div>
-      ) : rebuildingGraph ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-tokyo-fg font-mono">Rebuilding environment graph...</div>
-        </div>
-      ) : (
-        <div className="flex-1 h-full">
-          <ReactFlowProvider>
-            <ReactFlow
-              key={`environment-${selectedEnvironment}`}
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              nodeTypes={environmentPageNodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.1, duration: 500 }}
-              className="bg-tokyo-bg w-full h-full"
-              defaultEdgeOptions={{
-                animated: true,
-                style: {
-                  stroke: '#ff00ff',
-                  strokeWidth: 3,
-                  filter: 'drop-shadow(0 0 6px rgba(255, 0, 255, 0.4))'
-                }
-              }}
-            />
-          </ReactFlowProvider>
-        </div>
-      )}
-      </div>
-
-      {/* Right Column - Controls */}
-      <div className="w-96 flex flex-col bg-white border-l border-gray-200 overflow-y-auto">
-        {/* Environment Selector */}
-        <div className="p-6 border-b border-gray-200">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Environment</label>
-          {environments.length > 0 && (
-            <select
-              value={selectedEnvironment || ''}
-              onChange={(e) => setSelectedEnvironment(Number(e.target.value))}
-              className="w-full bg-white border-2 border-gray-300 text-gray-900 font-semibold px-4 py-3 rounded-lg focus:outline-none focus:border-station-blue focus:ring-1 focus:ring-station-blue text-lg shadow-sm"
-            >
-              {environments.map((env) => (
-                <option key={env.id} value={env.id}>
-                  {env.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* Action Buttons */}
-        {selectedEnvironment && (
-          <div className="p-6 space-y-3">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Actions</h3>
-              <button
-                onClick={() => setIsHelpModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all shadow-sm"
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-semibold text-gray-900">Environments</h1>
+            {environments.length > 0 && (
+              <select
+                value={selectedEnvironment || ''}
+                onChange={(e) => setSelectedEnvironment(Number(e.target.value))}
+                className="bg-white border border-gray-300 text-gray-900 font-medium px-3 py-1.5 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               >
-                <HelpCircle className="h-3.5 w-3.5" />
-                Help
-              </button>
-            </div>
-
+                {environments.map((env) => (
+                  <option key={env.id} value={env.id}>
+                    {env.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedEnv && (
+              <span className="text-sm text-gray-500">
+                {agents.length} agents, {mcpServers.length} servers
+              </span>
+            )}
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
             <button
               onClick={handleSyncEnvironment}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all"
             >
               <Play className="h-4 w-4" />
-              <span>Sync Environment</span>
+              Sync
             </button>
-
             <button
               onClick={handleVariables}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all"
             >
               <FileText className="h-4 w-4" />
-              <span>Edit Variables</span>
+              Variables
             </button>
-
             <button
               onClick={handleAddServer}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all"
             >
               <Plus className="h-4 w-4" />
-              <span>Add MCP Server</span>
+              Add Server
             </button>
-
-            <div className="border-t border-gray-200 pt-3 mt-3">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Bundle</h3>
-
+            <div className="w-px h-6 bg-gray-300 mx-1" />
+            <button
+              onClick={handleBundleEnvironment}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md transition-all"
+            >
+              <Archive className="h-4 w-4" />
+              Publish
+            </button>
+            <button
+              onClick={handleInstallBundle}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 rounded-md transition-all"
+            >
+              <Download className="h-4 w-4" />
+              Install Bundle
+            </button>
+            <div className="w-px h-6 bg-gray-300 mx-1" />
+            <button
+              onClick={handleCopyEnvironment}
+              className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all"
+              title="Copy Environment"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+            {selectedEnv?.name !== 'default' && (
               <button
-                onClick={handleBundleEnvironment}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm"
+                onClick={handleDeleteEnvironment}
+                className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-all"
+                title="Delete Environment"
               >
-                <Archive className="h-4 w-4" />
-                <span>Publish Bundle</span>
+                <Trash2 className="h-4 w-4" />
               </button>
-            </div>
+            )}
+            <button
+              onClick={() => setIsHelpModalOpen(true)}
+              className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all"
+              title="Help"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
           </div>
-        )}
-
-        {/* Install Bundle (always visible) */}
-        <div className="p-6 border-t border-gray-200 mt-auto">
-          <button
-            onClick={handleInstallBundle}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-pink-600 text-white hover:bg-pink-700 rounded text-sm font-medium transition-colors shadow-sm"
-          >
-            <Download className="h-4 w-4" />
-            <span>Install Bundle</span>
-          </button>
         </div>
       </div>
+
+      {/* Content - Two Column Layout */}
+      {environments.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Globe className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <div className="text-gray-900 text-lg font-medium mb-2">No environments found</div>
+            <div className="text-gray-500 text-sm">Install a bundle to create your first environment</div>
+            <button
+              onClick={handleInstallBundle}
+              className="mt-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 rounded-md transition-all mx-auto"
+            >
+              <Download className="h-4 w-4" />
+              Install Bundle
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 grid grid-cols-2 gap-6 p-6 overflow-hidden">
+          {/* Agents Column */}
+          <div className="flex flex-col bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-blue-600" />
+                <h2 className="font-semibold text-gray-900">Agents</h2>
+                <span className="text-sm text-gray-500">({agents.length})</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {agents.length === 0 ? (
+                <div className="text-center py-8">
+                  <Bot className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-500 text-sm">No agents in this environment</p>
+                </div>
+              ) : (
+                agents.map((agent) => (
+                  <div
+                    key={agent.id}
+                    className="border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition-colors"
+                  >
+                    <div
+                      onClick={() => toggleAgentExpansion(agent.id)}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Bot className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                        <div className="text-left">
+                          <div className="font-medium text-gray-900">{agent.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {agent.schedule ? 'Scheduled' : 'Manual'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const envName = selectedEnv?.name?.toLowerCase() || 'default';
+                            navigate(`/agents/${envName}/${agent.id}`);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="View Agent"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/agent-editor/${agent.id}`);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                          title="Edit Agent"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        {expandedAgents.has(agent.id) ? (
+                          <ChevronDown className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        )}
+                      </div>
+                    </div>
+                    {expandedAgents.has(agent.id) && (
+                      <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 space-y-2">
+                        <div>
+                          <div className="text-xs font-medium text-gray-500 mb-1">Description</div>
+                          <div className="text-sm text-gray-700">{agent.description || 'No description'}</div>
+                        </div>
+                        {agent.model && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-1">Model</div>
+                            <div className="text-sm text-gray-700 font-mono">{agent.model}</div>
+                          </div>
+                        )}
+                        {agent.prompt_file && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-1">Prompt File</div>
+                            <div className="text-sm text-gray-700 font-mono truncate">{agent.prompt_file}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* MCP Servers Column */}
+          <div className="flex flex-col bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-purple-600" />
+                <h2 className="font-semibold text-gray-900">MCP Servers</h2>
+                <span className="text-sm text-gray-500">({mcpServers.length})</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {mcpServers.length === 0 ? (
+                <div className="text-center py-8">
+                  <Server className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-500 text-sm">No MCP servers in this environment</p>
+                  <button
+                    onClick={handleAddServer}
+                    className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    + Add Server
+                  </button>
+                </div>
+              ) : (
+                mcpServers.map((server) => (
+                  <div
+                    key={server.id}
+                    className="border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition-colors"
+                  >
+                    <div
+                      onClick={() => toggleServerExpansion(server.id)}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Server className="h-5 w-5 text-purple-600 flex-shrink-0" />
+                        <div className="text-left">
+                          <div className="font-medium text-gray-900">{server.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {server.status === 'error' ? (
+                              <span className="text-red-600">Error</span>
+                            ) : (
+                              <span className="text-green-600">Active</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {expandedServers.has(server.id) ? (
+                          <ChevronDown className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        )}
+                      </div>
+                    </div>
+                    {expandedServers.has(server.id) && (
+                      <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 space-y-2">
+                        {server.command && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-1">Command</div>
+                            <div className="text-sm text-gray-700 font-mono truncate">{server.command}</div>
+                          </div>
+                        )}
+                        {server.args && server.args.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-1">Arguments</div>
+                            <div className="text-sm text-gray-700 font-mono truncate">{server.args.join(' ')}</div>
+                          </div>
+                        )}
+                        {server.error && (
+                          <div>
+                            <div className="text-xs font-medium text-red-600 mb-1">Error</div>
+                            <div className="text-sm text-red-700">{server.error}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <SyncModal
@@ -2178,7 +2235,6 @@ const EnvironmentsPage = () => {
         onClose={() => setIsHelpModalOpen(false)}
         title="Environments"
         pageDescription="Isolate agents, MCP servers, and tools across deployment contexts (dev, staging, prod) with environment-specific configurations, template variables, and separate execution spaces."
-        tocItems={envHelpTocItems}
       >
         <div className="space-y-6">
           {/* What are Environments */}
