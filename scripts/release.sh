@@ -275,7 +275,7 @@ $(echo -e "$changelog_entry")"
     echo "Next steps:"
     echo "  1. Watch GitHub Actions: gh run watch"
     echo "  2. Verify release: gh release view v$new_version"
-    echo "  3. Test installation: curl -sSL https://getstation.cloudshipai.com | bash"
+    echo "  3. Test installation: curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash"
     echo "  4. Update project board and close milestone"
 }
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Station Installation Script
-# Usage: curl -sSL https://getstation.cloudshipai.com | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 
 set -e
 
@@ -319,14 +319,23 @@ print_next_steps() {
     echo "1. Set your AI provider API key:"
     echo -e "   ${YELLOW}export OPENAI_API_KEY=\"sk-...\"${NC}"
     echo ""
-    echo "2. Initialize Station with your provider:"
+    echo "2. Start Jaeger for tracing (optional but recommended):"
+    echo -e "   ${YELLOW}docker run -d --name jaeger \\
+     -e COLLECTOR_OTLP_ENABLED=true \\
+     -e SPAN_STORAGE_TYPE=badger -e BADGER_EPHEMERAL=false \\
+     -e BADGER_DIRECTORY_VALUE=/badger/data -e BADGER_DIRECTORY_KEY=/badger/key \\
+     -v jaeger_data:/badger \\
+     -p 16686:16686 -p 4317:4317 -p 4318:4318 \\
+     jaegertracing/all-in-one:latest${NC}"
+    echo ""
+    echo "3. Initialize Station with your provider:"
     echo -e "   ${YELLOW}${BINARY_NAME} init --provider openai --ship${NC}"
     echo ""
     echo "   Other providers:"
     echo -e "   ${YELLOW}${BINARY_NAME} init --provider gemini --ship${NC}  (requires GEMINI_API_KEY)"
     echo -e "   ${YELLOW}${BINARY_NAME} init --provider custom --api-key \"key\" --base-url https://api.anthropic.com/v1 --model claude-3-sonnet --ship${NC}"
     echo ""
-    echo "3. Add Station to your MCP client:"
+    echo "4. Add Station to your MCP client:"
     echo ""
     echo -e "   ${CYAN}Claude Code:${NC}"
     echo -e "   ${YELLOW}claude mcp add --transport stdio station -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 -- ${BINARY_NAME} stdio${NC}"
@@ -345,7 +354,7 @@ print_next_steps() {
     echo "     }"
     echo -e "   }${NC}"
     echo ""
-    echo "4. Restart your editor - Station starts automatically!"
+    echo "5. Restart your editor - Station starts automatically!"
     echo "   - Web UI: http://localhost:8585"
     echo "   - Jaeger Traces: http://localhost:16686"
     echo ""

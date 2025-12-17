@@ -303,7 +303,7 @@ git log $(git describe --tags --abbrev=0)..HEAD --oneline
 gh run list --workflow=release.yml --limit 1
 
 # 6. Test installation
-curl -sSL https://getstation.cloudshipai.com | bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 
 # 7. Update project board and close milestone
 gh issue list --milestone v0.17.0

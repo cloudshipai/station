@@ -836,7 +836,7 @@ stn team test security-pipeline --scenario full-scan
 
 **Step 1: Installation (2 minutes)**
 ```bash
-curl -sSL https://getstation.cloudshipai.com | bash
+curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 stn --version
 ```
 
