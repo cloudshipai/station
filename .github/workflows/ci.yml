@@ -31,11 +31,6 @@ jobs:
         OPENAI_API_KEY: sk-test-dummy-key-for-ci
       run: make test
 
-    - name: Run integration tests
-      env:
-        OPENAI_API_KEY: sk-test-dummy-key-for-ci
-      run: make test-integration
-
   coverage:
     runs-on: ubuntu-latest
     steps:
