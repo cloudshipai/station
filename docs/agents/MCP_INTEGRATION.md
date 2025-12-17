@@ -26,17 +26,49 @@ Station implements both MCP client and server capabilities:
 
 Station itself provides MCP tools via stdio interface:
 
+#### Claude Code
+
 ```bash
-# Connect Claude Code to Station
-echo '{
+claude mcp add --transport stdio -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 station -- stn stdio
+```
+
+#### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
   "mcpServers": {
     "station": {
       "command": "stn",
-      "args": ["stdio"]
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
     }
   }
-}' > ~/.claude_desktop_config.json
+}
 ```
+
+#### Cursor / Other MCP Clients
+
+Add to `.mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
+```
+
+> **Note**: The `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable enables OpenTelemetry tracing. Station ships with Jaeger for trace visualization at `http://localhost:16686`.
 
 **Available Station Tools**:
 - `call_agent` - Execute agents with custom parameters

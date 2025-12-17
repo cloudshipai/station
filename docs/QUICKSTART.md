@@ -25,7 +25,35 @@ This command automatically sets up:
 - **Example agents** ready to use
 - **Web automation** tools via Playwright
 
-## 3. Verify Installation
+## 3. Configure in Your AI Editor
+
+Add Station to your MCP settings. Choose your editor:
+
+**Claude Code:**
+```bash
+claude mcp add --transport stdio -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 station -- stn stdio
+```
+
+**Claude Desktop / Cursor:**
+
+Add to your MCP config file:
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
+```
+
+See [MCP Integration Guide](./agents/MCP_INTEGRATION.md) for config file locations.
+
+## 4. Verify Installation
 
 ```bash
 # Check Station status
@@ -38,14 +66,14 @@ stn agent list
 stn env list
 ```
 
-## 4. Run Your First Agent
+## 5. Run Your First Agent
 
 ```bash
 # Test the Hello World agent
 stn agent run "Hello World Agent" "Introduce yourself and tell me what you can do"
 ```
 
-## 5. Create Your First Custom Agent
+## 6. Create Your First Custom Agent
 
 ```bash
 # Create a new agent interactively
@@ -54,7 +82,7 @@ stn agent create
 
 Follow the prompts to create a file analysis agent with filesystem tools.
 
-## 6. Monitor Execution
+## 7. Monitor Execution
 
 ```bash
 # List recent runs
