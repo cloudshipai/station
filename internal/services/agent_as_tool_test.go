@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/firebase/genkit/go/ai"
@@ -77,7 +78,7 @@ func TestAgentAsTool(t *testing.T) {
 		}
 	})
 
-	t.Run("RunRaw with valid input", func(t *testing.T) {
+	t.Run("RunRaw with valid input but no agent service", func(t *testing.T) {
 		tool := &AgentAsTool{
 			agentID:     1,
 			agentName:   "Test Agent",
@@ -89,23 +90,13 @@ func TestAgentAsTool(t *testing.T) {
 			"task": "test task",
 		}
 
-		result, err := tool.RunRaw(ctx, input)
-		if err != nil {
-			t.Fatalf("RunRaw failed: %v", err)
+		// Without agentService set, RunRaw should return an error
+		_, err := tool.RunRaw(ctx, input)
+		if err == nil {
+			t.Fatal("RunRaw should fail when agentService is nil")
 		}
-
-		if result == nil {
-			t.Fatal("Result should not be nil")
-		}
-
-		resultStr, ok := result.(string)
-		if !ok {
-			t.Fatal("Result should be a string")
-		}
-
-		expected := "Agent Test Agent would execute task: test task"
-		if resultStr != expected {
-			t.Errorf("Expected result '%s', got '%s'", expected, resultStr)
+		if !strings.Contains(err.Error(), "agent service not available") {
+			t.Errorf("Expected 'agent service not available' error, got: %v", err)
 		}
 	})
 
@@ -215,8 +206,8 @@ func TestAgentAsTool(t *testing.T) {
 		}{
 			{"Simple Agent", "__agent_simple_agent"},
 			{"Agent With Spaces", "__agent_agent_with_spaces"},
-			{"Agent-With-Dashes", "__agent_agent-with-dashes"},
-			{"Agent.With.Dots", "__agent_agent.with.dots"},
+			{"Agent-With-Dashes", "__agent_agent_with_dashes"},
+			{"Agent.With.Dots", "__agent_agent_with_dots"},
 			{"UPPERCASE AGENT", "__agent_uppercase_agent"},
 		}
 

@@ -74,7 +74,7 @@ func TestGetModelName_DefaultModel(t *testing.T) {
 	require.NoError(t, err)
 
 	modelName := client.GetModelName()
-	assert.Equal(t, "openai/gpt-4o-mini", modelName)
+	assert.Equal(t, "openai/gpt-5-mini", modelName)
 }
 
 func TestGetDefaultModel(t *testing.T) {
@@ -82,10 +82,10 @@ func TestGetDefaultModel(t *testing.T) {
 		provider string
 		expected string
 	}{
-		{"openai", "gpt-4o-mini"},
+		{"openai", "gpt-5-mini"},
 		{"gemini", "gemini-1.5-flash"},
 		{"googlegenai", "gemini-1.5-flash"},
-		{"unknown", "gpt-4o-mini"}, // Fallback
+		{"unknown", "gpt-5-mini"}, // Fallback
 	}
 
 	for _, tt := range tests {
