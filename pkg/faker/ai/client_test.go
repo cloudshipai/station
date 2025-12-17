@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"os"
 	"testing"
 
 	"station/internal/config"
@@ -41,10 +42,18 @@ func TestGetModelName_OpenAI(t *testing.T) {
 }
 
 func TestGetModelName_Gemini(t *testing.T) {
+	// Skip if no real Gemini API key is set - the genkit library panics without it
+	if os.Getenv("GEMINI_API_KEY") == "" && os.Getenv("GOOGLE_API_KEY") == "" {
+		t.Skip("Skipping Gemini test: GEMINI_API_KEY or GOOGLE_API_KEY not set")
+	}
+
 	cfg := &config.Config{
 		AIProvider: "gemini",
 		AIModel:    "gemini-pro",
-		AIAPIKey:   "test-key",
+		AIAPIKey:   os.Getenv("GEMINI_API_KEY"),
+	}
+	if cfg.AIAPIKey == "" {
+		cfg.AIAPIKey = os.Getenv("GOOGLE_API_KEY")
 	}
 
 	client, err := NewClient(cfg, false)
