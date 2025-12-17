@@ -320,7 +320,7 @@ func TestGenerateDotpromptContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			content := service.generateDotpromptContent(agent, tools, env.Name, tt.app, tt.appType)
+			content := service.generateDotpromptContent(agent, tools, nil, env.Name, tt.app, tt.appType)
 
 			// Verify frontmatter
 			if tt.expectFrontmatter && !strings.HasPrefix(content, "---") {

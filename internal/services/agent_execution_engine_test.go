@@ -614,6 +614,7 @@ func TestConvertToAgentRun(t *testing.T) {
 		agent           *models.Agent
 		task            string
 		runID           int64
+		runUUID         string
 		result          *AgentExecutionResult
 		expectStatus    string
 		expectToolCalls bool
@@ -628,8 +629,9 @@ func TestConvertToAgentRun(t *testing.T) {
 				OutputSchema:       &outputSchema,
 				OutputSchemaPreset: &outputPreset,
 			},
-			task:  "Complete a test task",
-			runID: 100,
+			task:    "Complete a test task",
+			runID:   100,
+			runUUID: "test-uuid-100",
 			result: &AgentExecutionResult{
 				Success:   true,
 				Response:  "Task completed successfully",
@@ -665,8 +667,9 @@ func TestConvertToAgentRun(t *testing.T) {
 				ID:   2,
 				Name: "failing-agent",
 			},
-			task:  "Task that failed",
-			runID: 101,
+			task:    "Task that failed",
+			runID:   101,
+			runUUID: "test-uuid-101",
 			result: &AgentExecutionResult{
 				Success:   false,
 				Response:  "Task failed due to error",
@@ -686,8 +689,9 @@ func TestConvertToAgentRun(t *testing.T) {
 				ID:   3,
 				Name: "minimal-agent",
 			},
-			task:  "Minimal task",
-			runID: 102,
+			task:    "Minimal task",
+			runID:   102,
+			runUUID: "test-uuid-102",
 			result: &AgentExecutionResult{
 				Success:   true,
 				Response:  "Basic response",
@@ -709,8 +713,9 @@ func TestConvertToAgentRun(t *testing.T) {
 				OutputSchema:       &outputSchema,
 				OutputSchemaPreset: &outputPreset,
 			},
-			task:  "Structured output task",
-			runID: 103,
+			task:    "Structured output task",
+			runID:   103,
+			runUUID: "test-uuid-103",
 			result: &AgentExecutionResult{
 				Success:   true,
 				Response:  `{"result": "structured data"}`,
@@ -729,7 +734,7 @@ func TestConvertToAgentRun(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			startTime := time.Now()
-			agentRun := engine.convertToAgentRun(tt.agent, tt.task, tt.runID, startTime, tt.result)
+			agentRun := engine.convertToAgentRun(tt.agent, tt.task, tt.runID, tt.runUUID, startTime, tt.result)
 
 			// Verify basic fields
 			require.NotNil(t, agentRun)

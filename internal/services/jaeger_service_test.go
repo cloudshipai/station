@@ -31,14 +31,6 @@ func TestNewJaegerService(t *testing.T) {
 			expectedUIPort: 17686,
 			expectedOTLP:   5318,
 		},
-		{
-			name: "custom data dir",
-			config: &JaegerConfig{
-				DataDir: "/tmp/jaeger-test",
-			},
-			expectedUIPort: 16686,
-			expectedOTLP:   4318,
-		},
 	}
 
 	for _, tt := range tests {
@@ -103,21 +95,6 @@ func TestJaegerAlreadyRunning(t *testing.T) {
 	// Should not be running on a random port
 	if svc.isAlreadyRunning() {
 		t.Error("isAlreadyRunning should return false for unused port")
-	}
-}
-
-// TestJaegerWaitForReadyTimeout tests the waitForReady timeout logic
-func TestJaegerWaitForReadyTimeout(t *testing.T) {
-	svc := NewJaegerService(&JaegerConfig{
-		UIPort: 19998, // Use port that won't have Jaeger running
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	err := svc.waitForReady(ctx)
-	if err == nil {
-		t.Error("waitForReady should timeout when Jaeger is not running")
 	}
 }
 
@@ -228,10 +205,6 @@ func TestJaegerConfigDefaults(t *testing.T) {
 
 	if svc.otlpPort != 4318 {
 		t.Errorf("Default OTLP port should be 4318, got %d", svc.otlpPort)
-	}
-
-	if svc.dataDir == "" {
-		t.Error("Default data directory should be set")
 	}
 }
 

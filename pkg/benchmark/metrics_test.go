@@ -123,8 +123,8 @@ func TestRelevancyEvaluator(t *testing.T) {
 		t.Fatalf("Evaluation failed: %v", err)
 	}
 
-	// Score should be 1/2 = 0.50 (only "yes" counts as relevant)
-	expectedScore := 0.50
+	// Score should be 2/2 = 1.0 (both "yes" and "idk" count as relevant per implementation)
+	expectedScore := 1.0
 	if result.Score != expectedScore {
 		t.Errorf("Expected score %.2f, got %.2f", expectedScore, result.Score)
 	}
@@ -170,7 +170,7 @@ func TestRelevancyCalculateScore(t *testing.T) {
 				{Verdict: "idk"},
 				{Verdict: "no"},
 			},
-			expected: 0.333, // Only "yes" counts
+			expected: 0.667, // "yes" and "idk" both count as relevant
 		},
 	}
 

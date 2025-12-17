@@ -277,7 +277,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 	schema := `
 	CREATE TABLE agents (
 		id INTEGER PRIMARY KEY,
-		name TEXT NOT NULL
+		name TEXT NOT NULL,
+		description TEXT
 	);
 
 	CREATE TABLE agent_runs (
@@ -288,7 +289,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		tool_calls TEXT,
 		execution_steps TEXT,
 		trace_id TEXT,
-		duration REAL,
+		duration_seconds REAL,
 		total_tokens INTEGER,
 		total_cost REAL,
 		status TEXT,
@@ -336,7 +337,7 @@ func insertTestRun(t *testing.T, db *sql.DB, data *testRunData) int64 {
 	query := `
 		INSERT INTO agent_runs (
 			agent_id, task, final_response, tool_calls, status,
-			duration, total_tokens, total_cost
+			duration_seconds, total_tokens, total_cost
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
