@@ -33,7 +33,7 @@ const VersionStatus: React.FC = () => {
   }, []);
 
   const copyUpgradeCommand = async () => {
-    const command = 'stn upgrade';
+    const command = 'curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash';
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
@@ -204,8 +204,8 @@ const VersionStatus: React.FC = () => {
                   <div className="space-y-2">
                     <p className="text-xs text-gray-500">Run this command in your terminal:</p>
                     <div className="flex items-center gap-2">
-                      <code className="flex-1 px-3 py-2 bg-gray-900 text-gray-100 text-sm font-mono rounded-lg">
-                        stn upgrade
+                      <code className="flex-1 px-3 py-2 bg-gray-900 text-gray-100 text-xs font-mono rounded-lg overflow-x-auto">
+                        curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
                       </code>
                       <button
                         onClick={copyUpgradeCommand}
