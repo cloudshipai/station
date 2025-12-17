@@ -15,6 +15,12 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("Failed to open test database: %v", err)
 	}
 
+	// Enable foreign key constraints (required for CASCADE DELETE to work)
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	if err != nil {
+		t.Fatalf("Failed to enable foreign keys: %v", err)
+	}
+
 	// Create tables
 	schema := `
 	CREATE TABLE faker_sessions (

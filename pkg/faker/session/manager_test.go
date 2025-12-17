@@ -15,6 +15,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
+	// Enable foreign key constraints (required for CASCADE DELETE to work)
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
 	// Create tables
 	_, err = db.Exec(`
 		CREATE TABLE faker_sessions (

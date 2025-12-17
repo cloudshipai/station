@@ -497,26 +497,19 @@ func TestResponseShapePreservation(t *testing.T) {
 		t.Fatalf("Expected 1 event, got %d", len(allEvents))
 	}
 
-	// Response should be stored as structured data
-	responseData, ok := allEvents[0].Response.([]interface{})
+	// Response is stored as a string (text content joined together)
+	responseStr, ok := allEvents[0].Response.(string)
 	if !ok {
-		t.Fatal("Response should be stored as array")
+		t.Fatalf("Response should be stored as string, got %T", allEvents[0].Response)
 	}
 
-	if len(responseData) == 0 {
-		t.Fatal("Response array should not be empty")
+	if responseStr == "" {
+		t.Fatal("Response string should not be empty")
 	}
 
-	// Verify content can be unmarshaled
-	firstContent := responseData[0].(map[string]interface{})
-	text, ok := firstContent["text"].(string)
-	if !ok {
-		t.Fatal("Content should have text field")
-	}
-
-	// Verify JSON structure
+	// Verify JSON structure is preserved in the string
 	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+	if err := json.Unmarshal([]byte(responseStr), &parsed); err != nil {
 		t.Fatalf("Response text should be valid JSON: %v", err)
 	}
 
