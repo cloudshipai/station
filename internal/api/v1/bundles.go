@@ -612,7 +612,12 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 				req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
 			} else {
 				if cfg.CloudShip.RegistrationKey != "" {
-					req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+					// Set auth header - prefer API key (Bearer), fall back to Registration Key
+					if cfg.CloudShip.APIKey != "" {
+						req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
+					} else {
+						req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+					}
 				} else {
 					req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
 				}
