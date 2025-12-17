@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -161,7 +162,7 @@ func TestMessageJSONSerialization(t *testing.T) {
 			}
 
 			jsonStr := string(jsonData)
-			if !stringContains(jsonStr, tt.wantContain) {
+			if !strings.Contains(jsonStr, tt.wantContain) {
 				t.Errorf("JSON should contain %q, got: %s", tt.wantContain, jsonStr)
 			}
 
@@ -243,7 +244,7 @@ func TestMessageOmitEmptyExtra(t *testing.T) {
 	}
 
 	jsonStr := string(jsonData)
-	if stringContains(jsonStr, "extra") {
+	if strings.Contains(jsonStr, "extra") {
 		t.Errorf("JSON should omit empty extra field, got: %s", jsonStr)
 	}
 }

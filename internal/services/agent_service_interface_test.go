@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -112,11 +113,11 @@ func TestAgentConfigJSONSerialization(t *testing.T) {
 	t.Logf("Serialized JSON: %s", jsonStr)
 
 	// Verify key fields are present
-	if !stringContains(jsonStr, "test-agent") {
+	if !strings.Contains(jsonStr, "test-agent") {
 		t.Error("JSON should contain agent name")
 	}
 
-	if !stringContains(jsonStr, "assigned_tools") {
+	if !strings.Contains(jsonStr, "assigned_tools") {
 		t.Error("JSON should contain assigned_tools field")
 	}
 }

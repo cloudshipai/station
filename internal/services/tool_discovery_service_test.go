@@ -1,6 +1,7 @@
 package services
 
 import (
+	"strings"
 	"testing"
 
 	"station/internal/db"
@@ -293,11 +294,11 @@ func TestDeprecatedDiscoverToolsFromFileConfig(t *testing.T) {
 	}
 
 	errMsg := err.Error()
-	if !stringContains(errMsg, "deprecated") {
+	if !strings.Contains(errMsg, "deprecated") {
 		t.Errorf("Error should mention 'deprecated', got: %s", errMsg)
 	}
 
-	if !stringContains(errMsg, "DeclarativeSync") {
+	if !strings.Contains(errMsg, "DeclarativeSync") {
 		t.Errorf("Error should mention 'DeclarativeSync', got: %s", errMsg)
 	}
 }
@@ -320,7 +321,7 @@ func TestDeprecatedDiscoverToolsFromFileConfigNew(t *testing.T) {
 	}
 
 	errMsg := err.Error()
-	if !stringContains(errMsg, "deprecated") {
+	if !strings.Contains(errMsg, "deprecated") {
 		t.Errorf("Error should mention 'deprecated', got: %s", errMsg)
 	}
 }
@@ -347,7 +348,7 @@ func TestDeprecatedGetToolsByFileConfig(t *testing.T) {
 	}
 
 	errMsg := err.Error()
-	if !stringContains(errMsg, "deprecated") {
+	if !strings.Contains(errMsg, "deprecated") {
 		t.Errorf("Error should mention 'deprecated', got: %s", errMsg)
 	}
 }
