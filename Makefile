@@ -21,12 +21,10 @@ build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME)"
 
-# Build with UI embedded
+# Build with UI embedded (vite outputs directly to internal/ui/static)
 build-with-ui: build-ui
 	@echo "🔨 Building Station $(VERSION) with embedded UI..."
 	@mkdir -p $(BUILD_DIR)
-	@mkdir -p internal/ui/static
-	@cp -r ui/dist/* internal/ui/static/ 2>/dev/null || true
 	go build $(LDFLAGS) -tags ui -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME) with embedded UI"
 

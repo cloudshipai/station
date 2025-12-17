@@ -7,6 +7,8 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   build: {
+    outDir: '../internal/ui/static',
+    emptyDir: false,  // Don't delete logos, favicons, images
     rollupOptions: {
       output: {
         entryFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
