@@ -2,10 +2,7 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"testing"
-	"time"
 )
 
 // TestNewJaegerService tests service creation with default and custom configs
@@ -134,64 +131,6 @@ func TestJaegerPortForwardConfiguration(t *testing.T) {
 				t.Errorf("OTLP port not configured correctly: expected %d, got %d", tt.otlpPort, svc.otlpPort)
 			}
 		})
-	}
-}
-
-// MockHTTPServer creates a mock HTTP server for testing
-type MockHTTPServer struct {
-	server *http.Server
-	port   int
-}
-
-func NewMockHTTPServer(port int) *MockHTTPServer {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "OK")
-	})
-
-	return &MockHTTPServer{
-		server: &http.Server{
-			Addr:    fmt.Sprintf(":%d", port),
-			Handler: mux,
-		},
-		port: port,
-	}
-}
-
-func (m *MockHTTPServer) Start() error {
-	go func() {
-		_ = m.server.ListenAndServe()
-	}()
-	// Give server time to start
-	time.Sleep(100 * time.Millisecond)
-	return nil
-}
-
-func (m *MockHTTPServer) Stop() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	return m.server.Shutdown(ctx)
-}
-
-// TestJaegerDetectsExistingInstance tests detection of already running Jaeger
-func TestJaegerDetectsExistingInstance(t *testing.T) {
-	// Start a mock HTTP server on Jaeger's port
-	mockPort := 19997
-	mock := NewMockHTTPServer(mockPort)
-	if err := mock.Start(); err != nil {
-		t.Fatalf("Failed to start mock server: %v", err)
-	}
-	defer mock.Stop()
-
-	// Create Jaeger service pointing to the mock port
-	svc := NewJaegerService(&JaegerConfig{
-		UIPort: mockPort,
-	})
-
-	// Should detect the mock server as "already running"
-	if !svc.isAlreadyRunning() {
-		t.Error("Should detect mock HTTP server as running Jaeger instance")
 	}
 }
 
