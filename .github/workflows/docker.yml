@@ -37,15 +37,10 @@ jobs:
         cd ui
         npm install
 
-    - name: Build UI
+    - name: Build UI (outputs directly to internal/ui/static)
       run: |
         cd ui
         npm run build
-
-    - name: Prepare UI assets for embedding
-      run: |
-        mkdir -p internal/ui/static
-        cp -r ui/dist/* internal/ui/static/
 
     - name: Build Station binary with embedded UI
       run: |
