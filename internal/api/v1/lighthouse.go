@@ -71,8 +71,12 @@ func (h *APIHandlers) CloudShipStatusHandler(c *gin.Context) {
 		return
 	}
 
+	// Check if we have any auth method configured
+	hasRegistrationKey := cfg.CloudShip.RegistrationKey != ""
+	hasAPIKey := cfg.CloudShip.APIKey != ""
+
 	response := CloudShipStatusResponse{
-		HasAPIKey: cfg.CloudShip.APIKey != "",
+		HasAPIKey: hasRegistrationKey || hasAPIKey,
 		APIURL:    cfg.CloudShip.APIURL,
 	}
 
@@ -80,8 +84,15 @@ func (h *APIHandlers) CloudShipStatusHandler(c *gin.Context) {
 		response.APIURL = "https://api.cloudshipai.com"
 	}
 
-	// Mask the API key for display
-	if cfg.CloudShip.APIKey != "" {
+	// Mask the key for display (prefer registration key, fall back to API key)
+	if hasRegistrationKey {
+		key := cfg.CloudShip.RegistrationKey
+		if len(key) > 8 {
+			response.APIKeyMasked = key[:4] + "..." + key[len(key)-4:]
+		} else {
+			response.APIKeyMasked = "****"
+		}
+	} else if hasAPIKey {
 		key := cfg.CloudShip.APIKey
 		if len(key) > 8 {
 			response.APIKeyMasked = key[:4] + "..." + key[len(key)-4:]
@@ -90,8 +101,8 @@ func (h *APIHandlers) CloudShipStatusHandler(c *gin.Context) {
 		}
 	}
 
-	// If we have an API key, try to validate it by fetching bundles
-	if cfg.CloudShip.APIKey != "" {
+	// If we have credentials, try to validate by fetching bundles
+	if hasRegistrationKey || hasAPIKey {
 		apiURL := response.APIURL
 		listURL := fmt.Sprintf("%s/api/public/bundles/", strings.TrimSuffix(apiURL, "/"))
 
@@ -102,8 +113,12 @@ func (h *APIHandlers) CloudShipStatusHandler(c *gin.Context) {
 			return
 		}
 
-		// Use API key for authentication
-		req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
+		// Use registration key if available (preferred), otherwise use API key
+		if hasRegistrationKey {
+			req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+		} else {
+			req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
+		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -119,19 +134,23 @@ func (h *APIHandlers) CloudShipStatusHandler(c *gin.Context) {
 
 			// Try to parse bundle count and organization
 			var bundleResp struct {
-				Bundles []struct {
+				Organization string `json:"organization"`
+				Bundles      []struct {
 					Organization string `json:"organization"`
 				} `json:"bundles"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&bundleResp); err == nil {
 				response.BundleCount = len(bundleResp.Bundles)
-				if len(bundleResp.Bundles) > 0 {
+				// Organization is at top level in the response
+				if bundleResp.Organization != "" {
+					response.Organization = bundleResp.Organization
+				} else if len(bundleResp.Bundles) > 0 {
 					response.Organization = bundleResp.Bundles[0].Organization
 				}
 			}
 		} else if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			response.Authenticated = false
-			response.Error = "API key is invalid or expired"
+			response.Error = "Registration key or API key is invalid"
 		} else {
 			response.Error = fmt.Sprintf("CloudShip returned HTTP %d", resp.StatusCode)
 		}
