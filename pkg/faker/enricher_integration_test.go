@@ -14,6 +14,9 @@ import (
 
 // TestFakerPassthrough tests that faker correctly proxies without AI enrichment
 func TestFakerPassthrough(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 	// Create MCP client to the faker server
 	fakerClient, err := client.NewStdioMCPClient("go", nil,
 		"run", "../../cmd/main",
@@ -88,6 +91,9 @@ func TestFakerPassthrough(t *testing.T) {
 
 // TestFakerWithAIEnrichment tests that faker enriches responses with AI
 func TestFakerWithAIEnrichment(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		t.Skip("Skipping: OPENAI_API_KEY not set")
 	}

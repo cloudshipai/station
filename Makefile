@@ -86,10 +86,10 @@ clean:
 	rm -f $(BINARY_NAME)
 	@echo "✅ Clean complete"
 
-# Run tests
+# Run tests (use -short to skip slow tests like TestFakerPassthrough)
 test:
 	@echo "🧪 Running tests..."
-	go test -v -coverprofile=coverage.out ./...
+	go test -v -short -coverprofile=coverage.out ./...
 	@echo "✅ Tests completed"
 
 # Lighthouse-specific test targets
