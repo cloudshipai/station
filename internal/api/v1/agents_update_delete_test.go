@@ -59,7 +59,7 @@ func TestAPIHandlers_UpdateAgent(t *testing.T) {
 			name:           "non-existent agent",
 			agentID:        "999",
 			requestBody:    map[string]interface{}{"name": "Updated Name"},
-			expectedStatus: http.StatusInternalServerError, // MockAgentService returns error for non-existent
+			expectedStatus: http.StatusNotFound, // Agent doesn't exist
 		},
 		{
 			name:           "invalid agent ID",

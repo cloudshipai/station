@@ -39,7 +39,7 @@ func runFakerTemplates(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Println("Available Faker Templates:\n")
+	fmt.Println("Available Faker Templates:")
 
 	// Sort template keys for consistent output
 	var keys []string
