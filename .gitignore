@@ -32,6 +32,7 @@ stn-ui
 stn-*
 station-*
 !docs/station/
+!**/station-logo.png
 prds/
 # All binaries and archives
 *.tar.gz
