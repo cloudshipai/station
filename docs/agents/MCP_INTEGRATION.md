@@ -29,7 +29,7 @@ Station itself provides MCP tools via stdio interface:
 #### Claude Code
 
 ```bash
-claude mcp add --transport stdio -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 station -- stn stdio
+claude mcp add --transport stdio station -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 -- stn stdio
 ```
 
 #### Claude Desktop

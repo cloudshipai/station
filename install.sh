@@ -325,7 +325,7 @@ print_next_steps() {
     echo "3. Add Station to your MCP client:"
     echo ""
     echo -e "   ${CYAN}Claude Code:${NC}"
-    echo -e "   ${YELLOW}claude mcp add --transport stdio -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 station -- ${BINARY_NAME} stdio${NC}"
+    echo -e "   ${YELLOW}claude mcp add --transport stdio station -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 -- ${BINARY_NAME} stdio${NC}"
     echo ""
     echo -e "   ${CYAN}Claude Desktop / Cursor / Other MCP Clients:${NC}"
     echo "   Add to your config file:"
