@@ -611,7 +611,11 @@ func downloadBundle(url, bundlesDir string) (string, error) {
 			if cfg.CloudShip.APIKey != "" {
 				req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
 			} else {
-				req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+				if cfg.CloudShip.RegistrationKey != "" {
+					req.Header.Set("X-Registration-Key", cfg.CloudShip.RegistrationKey)
+				} else {
+					req.Header.Set("Authorization", "Bearer "+cfg.CloudShip.APIKey)
+				}
 			}
 		} else {
 			log.Printf("[DownloadBundle] URL did not match CloudShip patterns")
