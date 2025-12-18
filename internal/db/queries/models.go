@@ -294,3 +294,49 @@ type WebhookDelivery struct {
 	DeliveredAt     sql.NullTime   `json:"delivered_at"`
 	CreatedAt       sql.NullTime   `json:"created_at"`
 }
+
+type Workflow struct {
+	ID          int64          `json:"id"`
+	WorkflowID  string         `json:"workflow_id"`
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	Version     int64          `json:"version"`
+	Definition  string         `json:"definition"`
+	Status      string         `json:"status"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+type WorkflowRun struct {
+	ID              int64          `json:"id"`
+	RunID           string         `json:"run_id"`
+	WorkflowID      string         `json:"workflow_id"`
+	WorkflowVersion int64          `json:"workflow_version"`
+	Status          string         `json:"status"`
+	CurrentStep     sql.NullString `json:"current_step"`
+	Input           sql.NullString `json:"input"`
+	Context         sql.NullString `json:"context"`
+	Result          sql.NullString `json:"result"`
+	Error           sql.NullString `json:"error"`
+	Summary         sql.NullString `json:"summary"`
+	Options         sql.NullString `json:"options"`
+	LastSignal      sql.NullString `json:"last_signal"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
+	UpdatedAt       sql.NullTime   `json:"updated_at"`
+	StartedAt       sql.NullTime   `json:"started_at"`
+	CompletedAt     sql.NullTime   `json:"completed_at"`
+}
+
+type WorkflowRunStep struct {
+	ID          int64          `json:"id"`
+	RunID       string         `json:"run_id"`
+	StepID      string         `json:"step_id"`
+	Attempt     int64          `json:"attempt"`
+	Status      string         `json:"status"`
+	Input       sql.NullString `json:"input"`
+	Output      sql.NullString `json:"output"`
+	Error       sql.NullString `json:"error"`
+	Metadata    sql.NullString `json:"metadata"`
+	StartedAt   sql.NullTime   `json:"started_at"`
+	CompletedAt sql.NullTime   `json:"completed_at"`
+}
