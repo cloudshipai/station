@@ -10,6 +10,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/internal/telemetry"
+	"station/internal/workflows/runtime"
 )
 
 // APIHandlers contains all the API handlers and their dependencies
@@ -23,6 +24,7 @@ type APIHandlers struct {
 	// executionQueueSvc removed - using direct execution instead
 	agentExportService *services.AgentExportService
 	telemetryService   *telemetry.TelemetryService
+	workflowService    *services.WorkflowService
 	localMode          bool
 	cfg                *config.Config // Config for OAuth settings
 }
@@ -35,12 +37,14 @@ func NewAPIHandlers(
 	telemetryService *telemetry.TelemetryService,
 	localMode bool,
 ) *APIHandlers {
+	workflowService := services.NewWorkflowServiceWithEngine(repos, mustInitWorkflowEngine())
 	return &APIHandlers{
 		repos:                repos,
 		db:                   db,
 		agentService:         services.NewAgentService(repos),
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
+		workflowService:      workflowService,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 	}
@@ -55,12 +59,14 @@ func NewAPIHandlersWithConfig(
 	localMode bool,
 	cfg *config.Config,
 ) *APIHandlers {
+	workflowService := services.NewWorkflowServiceWithEngine(repos, mustInitWorkflowEngine())
 	return &APIHandlers{
 		repos:                repos,
 		db:                   db,
 		agentService:         services.NewAgentService(repos),
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
+		workflowService:      workflowService,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 		cfg:                  cfg,
@@ -78,16 +84,27 @@ func NewAPIHandlersWithAgentService(
 	cfg *config.Config,
 	agentService *services.AgentService,
 ) *APIHandlers {
+	workflowService := services.NewWorkflowServiceWithEngine(repos, mustInitWorkflowEngine())
 	return &APIHandlers{
 		repos:                repos,
 		db:                   db,
 		agentService:         agentService, // Use provided agent service with CloudShip telemetry
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
+		workflowService:      workflowService,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 		cfg:                  cfg,
 	}
+}
+
+func mustInitWorkflowEngine() runtime.Engine {
+	opts := runtime.EnvOptions()
+	engine, err := runtime.NewEngine(opts)
+	if err != nil {
+		return nil
+	}
+	return engine
 }
 
 // telemetryMiddleware tracks API requests
@@ -183,6 +200,17 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Report routes - accessible to regular users in server mode
 	reportsGroup := router.Group("/reports")
 	h.registerReportRoutes(reportsGroup)
+
+	// Workflow definition routes - admin only in server mode
+	workflowGroup := router.Group("/workflows")
+	if !h.localMode {
+		workflowGroup.Use(h.requireAdminInServerMode())
+	}
+	h.registerWorkflowRoutes(workflowGroup)
+
+	// Workflow run routes - accessible to regular users
+	workflowRunsGroup := router.Group("/workflow-runs")
+	h.registerWorkflowRunRoutes(workflowRunsGroup)
 
 	// Settings routes - admin only
 	settingsGroup := router.Group("/settings")
