@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "mysql": {
+      "description": "Connect to MySQL databases for direct data access, queries, and database management within Claude Code workflows. Note: If connecting to localhost MySQL from Station container, use host.docker.internal instead of localhost in connection string.",
+      "command": "uvx",
+      "args": [
+        "mcp-server-mysql"
+      ],
+      "env": {
+        "MYSQL_CONNECTION_STRING": "{{ .MYSQL_CONNECTION_STRING }}"
+      },
+      "metadata": {
+        "category": "Database",
+        "notes": "For local MySQL databases, use host.docker.internal:3306 instead of localhost:3306 when running Station in Docker",
+        "logoUrl": "/logos/mysql.svg",
+        "githubUrl": "https://github.com/benborla/mcp-server-mysql",
+        "toolSourceUrl": "https://www.mysql.com/",
+        "docsUrl": "https://dev.mysql.com/doc/",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

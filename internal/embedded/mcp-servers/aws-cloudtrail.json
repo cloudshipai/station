@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "aws-cloudtrail": {
+      "description": "This AWS Labs Model Context Protocol (MCP) server for CloudTrail enables your AI agents to query AWS account activity for security investigations, compliance auditing, and operational troubleshooting. It provides comprehensive access to CloudTrail events and CloudTrail Lake analytics, allowing agents to track API calls, analyze user activity, and perform advanced security analysis.",
+      "command": "uvx",
+      "args": [
+        "awslabs.cloudtrail-mcp-server@latest"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "metadata": {
+        "category": "Cloud & Infrastructure",
+        "logoUrl": "/logos/aws.png",
+        "githubUrl": "https://github.com/awslabs/mcp/tree/main/src/cloudtrail-mcp-server",
+        "toolSourceUrl": "https://aws.amazon.com",
+        "docsUrl": "https://docs.aws.amazon.com/cloudtrail",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

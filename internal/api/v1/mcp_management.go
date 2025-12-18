@@ -102,11 +102,22 @@ func (h *APIHandlers) addMCPServerToEnvironment(c *gin.Context) {
 		Env:         make(map[string]string),
 	}
 
-	// Extract command
-	if cmd, ok := req.Config["command"].(string); ok {
+	// Extract command OR url (one is required)
+	hasCommand := false
+	hasURL := false
+
+	if cmd, ok := req.Config["command"].(string); ok && cmd != "" {
 		serverConfig.Command = cmd
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Config must contain 'command' field"})
+		hasCommand = true
+	}
+
+	if urlVal, ok := req.Config["url"].(string); ok && urlVal != "" {
+		serverConfig.URL = urlVal
+		hasURL = true
+	}
+
+	if !hasCommand && !hasURL {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Config must contain 'command' or 'url' field"})
 		return
 	}
 

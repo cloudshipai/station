@@ -43,6 +43,7 @@ type MCPServer struct {
 	Command        string            `json:"command" db:"command"`
 	Args           []string          `json:"args" db:"args"`
 	Env            map[string]string `json:"env" db:"env"`
+	URL            string            `json:"url,omitempty" db:"url"`
 	WorkingDir     *string           `json:"working_dir" db:"working_dir"`
 	TimeoutSeconds *int64            `json:"timeout_seconds" db:"timeout_seconds"`
 	AutoRestart    *bool             `json:"auto_restart" db:"auto_restart"`
@@ -80,8 +81,8 @@ type Agent struct {
 	ScheduleEnabled    bool       `json:"schedule_enabled" db:"schedule_enabled"`
 	ScheduleVariables  *string    `json:"schedule_variables,omitempty" db:"schedule_variables"`
 	// CloudShip Memory Integration
-	MemoryTopicKey  *string `json:"memory_topic_key,omitempty" db:"memory_topic_key"`   // Memory topic key for context injection
-	MemoryMaxTokens *int    `json:"memory_max_tokens,omitempty" db:"memory_max_tokens"` // Max tokens for memory context (default: 2000)
+	MemoryTopicKey  *string   `json:"memory_topic_key,omitempty" db:"memory_topic_key"`   // Memory topic key for context injection
+	MemoryMaxTokens *int      `json:"memory_max_tokens,omitempty" db:"memory_max_tokens"` // Max tokens for memory context (default: 2000)
 	CreatedAt       time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 }

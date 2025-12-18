@@ -912,6 +912,7 @@ const MCPServersPage = () => {
     serverId: number;
   }>({ isOpen: false, serverName: '', serverId: 0 });
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
 
   // Function to open MCP server details modal
   const openMCPServerModal = (serverId: number) => {
@@ -1192,14 +1193,26 @@ const MCPServersPage = () => {
             </select>
           )}
         </div>
-        <button
-          onClick={() => setIsHelpModalOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-tokyo-cyan bg-tokyo-bg hover:bg-tokyo-dark2 border border-tokyo-blue7 rounded-md transition-all"
-          title="Learn about MCP servers"
-        >
-          <HelpCircle className="h-4 w-4" />
-          <span className="hidden sm:inline">Help</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {currentEnvironment && (
+            <button
+              onClick={() => setIsAddServerModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-md transition-all"
+              title="Add MCP Server"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add Server</span>
+            </button>
+          )}
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-tokyo-cyan bg-tokyo-bg hover:bg-tokyo-dark2 border border-tokyo-blue7 rounded-md transition-all"
+            title="Learn about MCP servers"
+          >
+            <HelpCircle className="h-4 w-4" />
+            <span className="hidden sm:inline">Help</span>
+          </button>
+        </div>
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
         {filteredServers.length === 0 ? (
@@ -1510,6 +1523,19 @@ const MCPServersPage = () => {
           </div>
         </div>
       </HelpModal>
+
+      {/* Add Server Modal */}
+      {currentEnvironment && (
+        <AddServerModal
+          isOpen={isAddServerModalOpen}
+          onClose={() => setIsAddServerModalOpen(false)}
+          environmentName={currentEnvironment.name}
+          onSuccess={() => {
+            setIsAddServerModalOpen(false);
+            fetchMCPServers();
+          }}
+        />
+      )}
     </div>
   );
 };

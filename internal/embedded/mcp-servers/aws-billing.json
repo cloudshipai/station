@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "aws-billing": {
+      "description": "MCP server for accessing AWS Billing and Cost Management capabilities. This server accesses cost and usage data from AWS Billing and Cost Management APIs. All API calls are performed using the caller's AWS credentials and follow AWS service limits and quotas.",
+      "command": "uvx",
+      "args": [
+        "awslabs.billing-cost-management-mcp-server@latest"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}"
+      },
+      "metadata": {
+        "category": "Cloud & Infrastructure",
+        "logoUrl": "/logos/aws.png",
+        "githubUrl": "https://github.com/awslabs/mcp/tree/main/src/billing-cost-management-mcp-server",
+        "toolSourceUrl": "https://aws.amazon.com",
+        "docsUrl": "https://docs.aws.amazon.com/cost-management",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

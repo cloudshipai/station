@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "aws-cloudwatch": {
+      "description": "This AWS Labs Model Context Protocol (MCP) server for CloudWatch enables your troubleshooting agents to use CloudWatch data to do AI-powered root cause analysis and provide recommendations. It offers comprehensive observability tools that simplify monitoring, reduce context switching, and help teams quickly diagnose and resolve service issues. Provides seamless access to CloudWatch telemetry data through standardized MCP interfaces.",
+      "command": "uvx",
+      "args": [
+        "awslabs.cloudwatch-mcp-server@latest"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "metadata": {
+        "category": "Cloud & Infrastructure",
+        "logoUrl": "/logos/aws.png",
+        "githubUrl": "https://github.com/awslabs/mcp/tree/main/src/cloudwatch-mcp-server",
+        "toolSourceUrl": "https://aws.amazon.com",
+        "docsUrl": "https://docs.aws.amazon.com/cloudwatch",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

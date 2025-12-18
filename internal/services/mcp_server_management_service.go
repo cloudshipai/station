@@ -9,6 +9,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/embedded"
 )
 
 // MCPServerManagementService provides unified MCP server operations
@@ -336,31 +337,28 @@ func (s *MCPServerManagementService) UpdateRawMCPConfig(environmentName, content
 	return os.WriteFile(templatePath, []byte(content), 0644)
 }
 
-// MCPDirectoryTemplate represents a template from the mcp-servers/ directory
 type MCPDirectoryTemplate struct {
 	ID                  string            `json:"id"`
 	Name                string            `json:"name"`
 	Description         string            `json:"description"`
 	Category            string            `json:"category"`
-	Command             string            `json:"command"`
-	Args                []string          `json:"args"`
+	Command             string            `json:"command,omitempty"`
+	Args                []string          `json:"args,omitempty"`
 	Env                 map[string]string `json:"env,omitempty"`
-	OpenAPISpec         string            `json:"openapiSpec,omitempty"`         // Name of the OpenAPI spec file
-	RequiresOpenAPISpec bool              `json:"requiresOpenAPISpec,omitempty"` // Whether this template requires an OpenAPI spec
-	LogoURL             string            `json:"logoUrl,omitempty"`             // Logo image URL
-	GithubURL           string            `json:"githubUrl,omitempty"`           // GitHub implementation URL
-	ToolSourceURL       string            `json:"toolSourceUrl,omitempty"`       // Original tool source URL
-	DocsURL             string            `json:"docsUrl,omitempty"`             // Documentation URL
-	RequiresAPIKey      bool              `json:"requiresApiKey,omitempty"`      // Whether API key is required
+	URL                 string            `json:"url,omitempty"`
+	OpenAPISpec         string            `json:"openapiSpec,omitempty"`
+	RequiresOpenAPISpec bool              `json:"requiresOpenAPISpec,omitempty"`
+	LogoURL             string            `json:"logoUrl,omitempty"`
+	GithubURL           string            `json:"githubUrl,omitempty"`
+	ToolSourceURL       string            `json:"toolSourceUrl,omitempty"`
+	DocsURL             string            `json:"docsUrl,omitempty"`
+	RequiresAPIKey      bool              `json:"requiresApiKey,omitempty"`
 }
 
-// GetMCPDirectoryTemplates reads all MCP server templates from the mcp-servers/ directory
 func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryTemplate, error) {
-	// Get the mcp-servers directory path
-	// Check multiple locations: embedded in binary location, system-wide, local dev
 	mcpServersDirs := []string{
-		"/usr/share/station/mcp-servers", // Docker/system installation
-		"mcp-servers",                    // Local development
+		"/usr/share/station/mcp-servers",
+		"mcp-servers",
 	}
 
 	var mcpServersDir string
@@ -371,94 +369,119 @@ func (s *MCPServerManagementService) GetMCPDirectoryTemplates() ([]MCPDirectoryT
 		}
 	}
 
-	// If no directory found, return empty array
-	if mcpServersDir == "" {
-		return []MCPDirectoryTemplate{}, nil
+	if mcpServersDir != "" {
+		return s.loadTemplatesFromFilesystem(mcpServersDir)
 	}
 
-	// Read all JSON files in the mcp-servers directory
+	return s.loadTemplatesFromEmbedded()
+}
+
+func (s *MCPServerManagementService) loadTemplatesFromEmbedded() ([]MCPDirectoryTemplate, error) {
+	files, err := embedded.GetMCPTemplateFiles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded mcp templates: %v", err)
+	}
+
+	var templates []MCPDirectoryTemplate
+	for _, filename := range files {
+		fileData, err := embedded.ReadMCPTemplate(filename)
+		if err != nil {
+			continue
+		}
+
+		parsed := s.parseTemplateFile(fileData)
+		templates = append(templates, parsed...)
+	}
+
+	return templates, nil
+}
+
+func (s *MCPServerManagementService) loadTemplatesFromFilesystem(mcpServersDir string) ([]MCPDirectoryTemplate, error) {
 	files, err := filepath.Glob(filepath.Join(mcpServersDir, "*.json"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read mcp-servers directory: %v", err)
 	}
 
 	var templates []MCPDirectoryTemplate
-
 	for _, filePath := range files {
-		// Read the template file
 		fileData, err := os.ReadFile(filePath)
 		if err != nil {
-			continue // Skip files that can't be read
+			continue
 		}
-
-		var singleServerTemplate SingleServerTemplate
-		if err := json.Unmarshal(fileData, &singleServerTemplate); err != nil {
-			continue // Skip files that can't be parsed
-		}
-
-		// Extract templates from this file
-		for serverName, serverConfig := range singleServerTemplate.MCPServers {
-			// Try to infer category from tags or default to "Community"
-			category := "Community"
-			if categoryVal, ok := serverConfig.Metadata["category"].(string); ok {
-				category = categoryVal
-			}
-
-			// Check for OpenAPI spec metadata
-			var openapiSpec string
-			var requiresOpenAPISpec bool
-			if singleServerTemplate.Metadata != nil {
-				if specVal, ok := singleServerTemplate.Metadata["openapiSpec"].(string); ok {
-					openapiSpec = specVal
-				}
-				if requiresVal, ok := singleServerTemplate.Metadata["requiresOpenAPISpec"].(bool); ok {
-					requiresOpenAPISpec = requiresVal
-				}
-			}
-
-			// Extract metadata fields from serverConfig.Metadata
-			var logoURL, githubURL, toolSourceURL, docsURL string
-			var requiresAPIKey bool
-			if serverConfig.Metadata != nil {
-				if val, ok := serverConfig.Metadata["logoUrl"].(string); ok {
-					logoURL = val
-				}
-				if val, ok := serverConfig.Metadata["githubUrl"].(string); ok {
-					githubURL = val
-				}
-				if val, ok := serverConfig.Metadata["toolSourceUrl"].(string); ok {
-					toolSourceURL = val
-				}
-				if val, ok := serverConfig.Metadata["docsUrl"].(string); ok {
-					docsURL = val
-				}
-				if val, ok := serverConfig.Metadata["requiresApiKey"].(bool); ok {
-					requiresAPIKey = val
-				}
-			}
-
-			template := MCPDirectoryTemplate{
-				ID:                  serverName,
-				Name:                serverName,
-				Description:         serverConfig.Description,
-				Category:            category,
-				Command:             serverConfig.Command,
-				Args:                serverConfig.Args,
-				Env:                 serverConfig.Env,
-				OpenAPISpec:         openapiSpec,
-				RequiresOpenAPISpec: requiresOpenAPISpec,
-				LogoURL:             logoURL,
-				GithubURL:           githubURL,
-				ToolSourceURL:       toolSourceURL,
-				DocsURL:             docsURL,
-				RequiresAPIKey:      requiresAPIKey,
-			}
-
-			templates = append(templates, template)
-		}
+		parsed := s.parseTemplateFile(fileData)
+		templates = append(templates, parsed...)
 	}
 
 	return templates, nil
+}
+
+func (s *MCPServerManagementService) parseTemplateFile(fileData []byte) []MCPDirectoryTemplate {
+	var templates []MCPDirectoryTemplate
+
+	var singleServerTemplate SingleServerTemplate
+	if err := json.Unmarshal(fileData, &singleServerTemplate); err != nil {
+		return templates
+	}
+
+	for serverName, serverConfig := range singleServerTemplate.MCPServers {
+		category := "Community"
+		if categoryVal, ok := serverConfig.Metadata["category"].(string); ok {
+			category = categoryVal
+		}
+
+		var openapiSpec string
+		var requiresOpenAPISpec bool
+		if singleServerTemplate.Metadata != nil {
+			if specVal, ok := singleServerTemplate.Metadata["openapiSpec"].(string); ok {
+				openapiSpec = specVal
+			}
+			if requiresVal, ok := singleServerTemplate.Metadata["requiresOpenAPISpec"].(bool); ok {
+				requiresOpenAPISpec = requiresVal
+			}
+		}
+
+		var logoURL, githubURL, toolSourceURL, docsURL string
+		var requiresAPIKey bool
+		if serverConfig.Metadata != nil {
+			if val, ok := serverConfig.Metadata["logoUrl"].(string); ok {
+				logoURL = val
+			}
+			if val, ok := serverConfig.Metadata["githubUrl"].(string); ok {
+				githubURL = val
+			}
+			if val, ok := serverConfig.Metadata["toolSourceUrl"].(string); ok {
+				toolSourceURL = val
+			}
+			if val, ok := serverConfig.Metadata["docsUrl"].(string); ok {
+				docsURL = val
+			}
+			if val, ok := serverConfig.Metadata["requiresApiKey"].(bool); ok {
+				requiresAPIKey = val
+			}
+		}
+
+		template := MCPDirectoryTemplate{
+			ID:                  serverName,
+			Name:                serverName,
+			Description:         serverConfig.Description,
+			Category:            category,
+			Command:             serverConfig.Command,
+			Args:                serverConfig.Args,
+			Env:                 serverConfig.Env,
+			URL:                 serverConfig.URL,
+			OpenAPISpec:         openapiSpec,
+			RequiresOpenAPISpec: requiresOpenAPISpec,
+			LogoURL:             logoURL,
+			GithubURL:           githubURL,
+			ToolSourceURL:       toolSourceURL,
+			DocsURL:             docsURL,
+			RequiresAPIKey:      requiresAPIKey,
+		}
+
+		templates = append(templates, template)
+	}
+
+	return templates
 }
 
 // InstallOpenAPITemplate installs an OpenAPI-based MCP template

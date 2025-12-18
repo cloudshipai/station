@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "description": "Secure filesystem access for Claude Code with configurable directory permissions and file operations.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/workspace"
+      ],
+      "metadata": {
+        "category": "Development",
+        "logoUrl": "",
+        "githubUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+        "toolSourceUrl": "https://github.com/modelcontextprotocol/servers",
+        "docsUrl": "https://modelcontextprotocol.io/docs/tools/filesystem"
+      }
+    }
+  }
+}

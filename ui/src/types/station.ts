@@ -31,7 +31,8 @@ export interface MCPServer {
   id: number;
   name: string;
   description?: string;
-  command: string;
+  command?: string;
+  url?: string;
   args?: string[];
   environment_id: number;
   status: 'active' | 'inactive' | 'error';

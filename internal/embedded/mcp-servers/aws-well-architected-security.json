@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "aws-well-architected-security": {
+      "description": "A Model Context Protocol (MCP) server that provides operational tools for monitoring and assessing AWS environments against the AWS Well-Architected Framework Security Pillar. This server enables AI assistants to help operations teams evaluate security posture, monitor compliance status, and optimize security costs while maintaining operational excellence according to the Well-Architected Framework.",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "awslabs.well-architected-security-mcp-server",
+        "well-architected-security-mcp-server"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "metadata": {
+        "category": "Cloud & Infrastructure",
+        "logoUrl": "/logos/aws.png",
+        "githubUrl": "https://github.com/awslabs/mcp/tree/main/src/well-architected-security-mcp-server",
+        "toolSourceUrl": "https://aws.amazon.com",
+        "docsUrl": "https://docs.aws.amazon.com/wellarchitected",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

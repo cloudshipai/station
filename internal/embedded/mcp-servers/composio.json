@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "composio": {
+      "description": "Composio MCP server providing 250+ tool integrations including Gmail, Slack, GitHub, Linear, and more via a unified API.",
+      "url": "{{ .COMPOSIO_MCP_URL }}",
+      "metadata": {
+        "category": "Integrations",
+        "logoUrl": "https://composio.dev/logo.png",
+        "githubUrl": "https://github.com/ComposioHQ/composio",
+        "toolSourceUrl": "https://composio.dev",
+        "docsUrl": "https://docs.composio.dev",
+        "requiresApiKey": true,
+        "notes": "Get your MCP URL from https://mcp.composio.dev after connecting your integrations"
+      }
+    }
+  }
+}

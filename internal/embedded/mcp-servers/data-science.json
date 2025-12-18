@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "data-science": {
+      "description": "MCP Server for Data Exploration - Your personal Data Scientist assistant, turning complex datasets into clear, actionable insights.",
+      "command": "uvx",
+      "args": [
+        "mcp-server-ds"
+      ],
+      "metadata": {
+        "category": "Data & Analytics"
+      }
+    }
+  }
+}

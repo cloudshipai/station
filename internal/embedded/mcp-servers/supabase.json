@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "description": "Connect your Claude Code to Supabase using MCP. Provides database access, storage, and auth management capabilities.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--read-only",
+        "--project-ref={{ .SUPABASE_PROJECT_REF }}"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "{{ .SUPABASE_ACCESS_TOKEN }}"
+      },
+      "metadata": {
+        "category": "Database",
+        "logoUrl": "/logos/supabase.svg",
+        "githubUrl": "https://github.com/supabase-community/supabase-mcp",
+        "toolSourceUrl": "https://supabase.com",
+        "docsUrl": "https://supabase.com/docs/guides/getting-started/mcp",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

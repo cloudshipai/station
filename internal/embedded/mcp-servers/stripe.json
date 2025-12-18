@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "stripe": {
+      "description": "Let your AI agents interact with the Stripe API by using our MCP server.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@stripe/mcp",
+        "--tools=all"
+      ],
+      "env": {
+        "STRIPE_SECRET_KEY": "{{ .STRIPE_SECRET_KEY }}"
+      },
+      "metadata": {
+        "category": "Financial",
+        "logoUrl": "/logos/stripe.svg",
+        "githubUrl": "https://github.com/stripe/agent-toolkit",
+        "toolSourceUrl": "https://stripe.com",
+        "docsUrl": "https://docs.stripe.com/mcp",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

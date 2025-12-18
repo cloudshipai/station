@@ -297,13 +297,24 @@ func (h *APIHandlers) createMCPServer(c *gin.Context) {
 		serverConfig.Description = desc
 	}
 
-	// Extract command
-	if cmd, ok := serverConfigMap["command"].(string); ok {
+	// Extract command OR url (one is required)
+	hasCommand := false
+	hasURL := false
+
+	if cmd, ok := serverConfigMap["command"].(string); ok && cmd != "" {
 		serverConfig.Command = cmd
-	} else {
+		hasCommand = true
+	}
+
+	if urlVal, ok := serverConfigMap["url"].(string); ok && urlVal != "" {
+		serverConfig.URL = urlVal
+		hasURL = true
+	}
+
+	if !hasCommand && !hasURL {
 		c.JSON(http.StatusBadRequest, MCPServerResponse{
 			Success: false,
-			Error:   "Server configuration must contain 'command' field",
+			Error:   "Server configuration must contain either 'command' or 'url' field",
 		})
 		return
 	}

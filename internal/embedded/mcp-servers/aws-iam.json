@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "aws-iam": {
+      "description": "A Model Context Protocol (MCP) server for comprehensive AWS Identity and Access Management (IAM) operations. This server provides AI assistants with the ability to manage IAM users, roles, policies, and permissions while following security best practices.",
+      "command": "uvx",
+      "args": [
+        "awslabs.iam-mcp-server@latest"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "{{ .AWS_ACCESS_KEY_ID }}",
+        "AWS_SECRET_ACCESS_KEY": "{{ .AWS_SECRET_ACCESS_KEY }}",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "metadata": {
+        "category": "Cloud & Infrastructure",
+        "logoUrl": "/logos/aws.png",
+        "githubUrl": "https://github.com/awslabs/mcp/tree/main/src/iam-mcp-server",
+        "toolSourceUrl": "https://aws.amazon.com",
+        "docsUrl": "https://docs.aws.amazon.com/iam",
+        "requiresApiKey": true
+      }
+    }
+  }
+}

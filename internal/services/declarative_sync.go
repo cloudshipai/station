@@ -485,6 +485,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 
 		// Extract server properties
 		command, _ := serverConfig["command"].(string)
+		url, _ := serverConfig["url"].(string)
 		args := []string{}
 		if argsRaw, ok := serverConfig["args"].([]interface{}); ok {
 			for _, arg := range argsRaw {
@@ -503,14 +504,17 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			}
 		}
 
-		// Validate required server config
-		if command == "" {
-			fmt.Printf("     ❌ Server %s missing required 'command' field\n", serverName)
+		if command == "" && url == "" {
+			fmt.Printf("     ❌ Server %s missing required 'command' or 'url' field\n", serverName)
 			fmt.Printf("        Config: %+v\n", serverConfig)
-			return successCount, fmt.Errorf("server %s missing required 'command' field", serverName)
+			return successCount, fmt.Errorf("server %s missing required 'command' or 'url' field", serverName)
 		}
 
-		fmt.Printf("        Command: %s %v\n", command, args)
+		if url != "" {
+			fmt.Printf("        URL: %s\n", url)
+		} else {
+			fmt.Printf("        Command: %s %v\n", command, args)
+		}
 		if len(env) > 0 {
 			fmt.Printf("        Environment: %+v\n", env)
 		}
@@ -531,6 +535,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 				Command:       command,
 				Args:          args,
 				Env:           env,
+				URL:           url,
 				EnvironmentID: envID,
 				FileConfigID:  &fileConfig.ID,
 			}
@@ -547,6 +552,7 @@ func (s *DeclarativeSync) syncMCPServersFromTemplate(ctx context.Context, mcpCon
 			existingServer.Command = command
 			existingServer.Args = args
 			existingServer.Env = env
+			existingServer.URL = url
 			existingServer.FileConfigID = &fileConfig.ID
 
 			err = s.repos.MCPServers.Update(existingServer)
