@@ -259,7 +259,7 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-4xl w-full mx-4 z-[10000] relative max-h-[90vh] overflow-hidden"
+        className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-4xl w-full mx-4 z-[10000] relative max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -297,7 +297,7 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
           {!showSuccess ? (
             <>
               <div className="space-y-2">
