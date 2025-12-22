@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/firebase/genkit/go/genkit"
@@ -50,10 +51,20 @@ func SetupOpenTelemetryWithGenkit(ctx context.Context, g *genkit.Genkit, cfg OTe
 	}
 
 	// Create OTLP HTTP trace exporter
-	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint(endpoint),
-		otlptracehttp.WithInsecure(),
-	)
+	// Check if endpoint uses HTTPS - if so, use TLS (don't add WithInsecure)
+	useHTTPS := strings.HasPrefix(endpoint, "https://")
+	// Strip protocol prefix - WithEndpoint expects just host:port
+	cleanEndpoint := strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+
+	opts := []otlptracehttp.Option{
+		otlptracehttp.WithEndpoint(cleanEndpoint),
+	}
+	// Only use insecure (HTTP) if endpoint is not HTTPS
+	if !useHTTPS {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+
+	exporter, err := otlptracehttp.New(ctx, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create OTLP trace exporter: %w", err)
 	}

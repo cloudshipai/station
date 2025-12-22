@@ -1623,19 +1623,26 @@ var globalTracerProvider *sdktrace.TracerProvider
 
 // initializeFakerOTEL sets up OpenTelemetry for faker span export
 func initializeFakerOTEL(ctx context.Context, endpoint string, debug bool) error {
+	// Check if endpoint uses HTTPS before stripping protocol
+	useHTTPS := strings.HasPrefix(endpoint, "https://")
 	// Parse endpoint to remove protocol - OTLP HTTP exporter expects host:port format
 	endpoint = strings.TrimPrefix(endpoint, "http://")
 	endpoint = strings.TrimPrefix(endpoint, "https://")
 
 	if debug {
-		fmt.Fprintf(os.Stderr, "[FAKER OTEL] Initializing with endpoint: %s\n", endpoint)
+		fmt.Fprintf(os.Stderr, "[FAKER OTEL] Initializing with endpoint: %s (https=%v)\n", endpoint, useHTTPS)
 	}
 
 	// Create OTLP HTTP trace exporter
-	exporter, err := otlptracehttp.New(ctx,
+	opts := []otlptracehttp.Option{
 		otlptracehttp.WithEndpoint(endpoint),
-		otlptracehttp.WithInsecure(),
-	)
+	}
+	// Only use insecure (HTTP) if endpoint is not HTTPS
+	if !useHTTPS {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+
+	exporter, err := otlptracehttp.New(ctx, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
