@@ -349,18 +349,49 @@ func (ts *TelemetryService) initTraceProvider(ctx context.Context, res *resource
 	// This is necessary because resources are immutable but CloudShip auth happens after init
 	ts.cloudShipProcessor = newCloudShipAttributeProcessor(ts.config)
 
-	// Create trace provider with resource and exporter - optimized for immediate export
-	tp := sdktrace.NewTracerProvider(
+	// Build list of span processors
+	var spanProcessors []sdktrace.TracerProviderOption
+
+	// Add primary exporter
+	spanProcessors = append(spanProcessors, sdktrace.WithBatcher(exporter,
+		sdktrace.WithBatchTimeout(time.Second*1), // Reduced timeout for faster export
+		sdktrace.WithMaxExportBatchSize(1),       // Export immediately
+		sdktrace.WithExportTimeout(time.Second*10),
+	))
+
+	// Check for dual export to local Jaeger (useful for debugging)
+	// Set OTEL_EXPORTER_JAEGER_ENDPOINT=localhost:4318 to enable
+	jaegerEndpoint := os.Getenv("OTEL_EXPORTER_JAEGER_ENDPOINT")
+	if jaegerEndpoint != "" && ts.config.Provider == config.TelemetryProviderCloudShip {
+		// Create additional Jaeger exporter for local debugging
+		jaegerOpts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpoint(jaegerEndpoint),
+			otlptracehttp.WithInsecure(), // Local Jaeger is always insecure
+		}
+		jaegerExporter, jaegerErr := otlptracehttp.New(ctx, jaegerOpts...)
+		if jaegerErr != nil {
+			logging.Info("Warning: Failed to create Jaeger exporter for dual export: %v", jaegerErr)
+		} else {
+			spanProcessors = append(spanProcessors, sdktrace.WithBatcher(jaegerExporter,
+				sdktrace.WithBatchTimeout(time.Second*1),
+				sdktrace.WithMaxExportBatchSize(1),
+				sdktrace.WithExportTimeout(time.Second*5),
+			))
+			logging.Info("📊 Dual export enabled: CloudShip + Jaeger (%s)", jaegerEndpoint)
+		}
+	}
+
+	// Add CloudShip attribute processor
+	spanProcessors = append(spanProcessors, sdktrace.WithSpanProcessor(ts.cloudShipProcessor))
+
+	// Create trace provider with resource and all processors
+	providerOpts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(res),
-		sdktrace.WithBatcher(exporter,
-			sdktrace.WithBatchTimeout(time.Second*1), // Reduced timeout for faster export
-			sdktrace.WithMaxExportBatchSize(1),       // Export immediately
-			sdktrace.WithExportTimeout(time.Second*10),
-		),
 		sdktrace.WithSampler(ts.getSampler()),
-		// Add CloudShip processor to inject org_id/station_name into ALL spans
-		sdktrace.WithSpanProcessor(ts.cloudShipProcessor),
-	)
+	}
+	providerOpts = append(providerOpts, spanProcessors...)
+
+	tp := sdktrace.NewTracerProvider(providerOpts...)
 
 	// Store shutdown function
 	ts.shutdownFunc = tp.Shutdown
