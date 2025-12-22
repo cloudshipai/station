@@ -444,7 +444,8 @@ func (ts *TelemetryService) getSampler() sdktrace.Sampler {
 
 // SetCloudShipInfo updates the CloudShip info after authentication
 // This is called when ManagementChannel receives AuthResult from CloudShip
-// Since OTEL resources are immutable, we store this and add to each span
+// Since OTEL resources are immutable, we need to re-initialize the tracer provider
+// with the correct resource attributes for CloudShip platform filtering
 func (ts *TelemetryService) SetCloudShipInfo(stationID, stationName, orgID string) {
 	if ts.config == nil {
 		return
@@ -453,6 +454,32 @@ func (ts *TelemetryService) SetCloudShipInfo(stationID, stationName, orgID strin
 	ts.config.StationName = stationName
 	ts.config.OrgID = orgID
 	logging.Info("Telemetry CloudShip info updated: station_id=%s station_name=%s org_id=%s", stationID, stationName, orgID)
+
+	// Re-initialize the tracer provider with correct resource attributes
+	// This is necessary because OTEL resources are immutable and CloudShip auth
+	// happens AFTER initial telemetry setup. CloudShip's Tempo queries filter by
+	// resource attributes (resource.cloudship.station_id), not span attributes.
+	if err := ts.reinitializeWithCloudShipResources(); err != nil {
+		logging.Info("Warning: Failed to reinitialize telemetry with CloudShip resources: %v", err)
+	}
+}
+
+// reinitializeWithCloudShipResources shuts down the current tracer provider and
+// creates a new one with CloudShip attributes as resource attributes
+func (ts *TelemetryService) reinitializeWithCloudShipResources() error {
+	ctx := context.Background()
+
+	// Shutdown existing provider to flush pending spans
+	if ts.shutdownFunc != nil {
+		shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := ts.shutdownFunc(shutdownCtx); err != nil {
+			logging.Info("Warning: Error shutting down previous tracer provider: %v", err)
+		}
+	}
+
+	// Re-initialize with updated resource attributes
+	return ts.Initialize(ctx)
 }
 
 // StartSpan creates a new span with common attributes
