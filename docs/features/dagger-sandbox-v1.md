@@ -462,20 +462,34 @@ sandbox:
 
 ## 8) Implementation Plan
 
-### Phase 0 - Design + Scaffolding (1-4h)
+### Phase 0 - Design + Scaffolding (1-4h) ✅ COMPLETE
 
-- [ ] Add `SandboxService` skeleton with config parsing
-- [ ] Add tool factory skeleton returning GenKit tool
-- [ ] Add frontmatter parsing (`sandbox: string|object`)
+- [x] Add `SandboxService` skeleton with config parsing
+- [x] Add tool factory skeleton returning GenKit tool
+- [x] Add frontmatter parsing (`sandbox: string|object`)
 
-### Phase 1 - Python MVP (1-2d)
+**Deliverables**:
+- `internal/services/sandbox_service.go` - SandboxService with config, Run(), MergeDefaults()
+- `internal/services/sandbox_tool.go` - SandboxToolFactory with GenKit tool creation
+- `pkg/dotprompt/types.go` - SandboxConfig struct with custom UnmarshalYAML
+- `pkg/dotprompt/types_test.go` - Tests for frontmatter parsing (string and object forms)
 
-- [ ] Implement `sandbox_run` for Python runtime
-- [ ] Inject code and files
-- [ ] Execute and capture stdout/stderr
-- [ ] Enforce timeout and output caps
-- [ ] Integrate into `GenKitExecutor.ExecuteAgent` flow
+### Phase 1 - Python MVP (1-2d) 🔄 IN PROGRESS
+
+- [x] Implement `sandbox_run` for Python runtime (`executeInDagger()` with full Dagger SDK)
+- [x] Inject code and files (via `WithNewFile`)
+- [x] Execute and capture stdout/stderr
+- [x] Enforce timeout and output caps (truncation helper)
+- [x] Integrate into `GenKitExecutor.ExecuteAgent` flow
+  - [x] Add `sandboxService` and `sandboxToolFactory` to `AgentExecutionEngine`
+  - [x] Add `parseSandboxConfigFromAgent()` to parse dotprompt frontmatter
+  - [x] Conditionally inject `sandbox_run` tool when frontmatter has `sandbox:` config
 - [ ] Add tests (unit + integration)
+
+**Files implemented**:
+- `internal/services/sandbox_service.go` - Full `executeInDagger()` with Dagger Go SDK
+- `internal/services/sandbox_tool.go` - GenKit tool factory with schema
+- `internal/services/agent_execution_engine.go` - Integration with frontmatter parsing
 
 ### Phase 2 - Node + Bash (1-2d)
 

@@ -516,22 +516,51 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 
 ## 7) Implementation Plan
 
-### Phase 0 - Align & Harden PR #83 Foundations (1-4h)
+### Phase 0 - Align & Harden PR #83 Foundations (1-4h) ✅ COMPLETE
 
-- [ ] Confirm schema migration stability (`040_add_workflow_engine.sql`)
-- [ ] Add `workflow_run_events` table for audit trail
-- [ ] Add `workflow_approvals` table
-- [ ] Confirm NATS engine uses explicit acks, durable consumers
-- [ ] Map PR #83 gaps to this PRD
+- [x] Confirm schema migration stability (`040_add_workflow_engine.sql`)
+- [x] Add `workflow_run_events` table for audit trail
+- [x] Add `workflow_approvals` table
+- [x] Confirm NATS engine uses explicit acks, durable consumers
+  - **Gap identified**: Current engine uses `conn.Subscribe()` (basic NATS), not JetStream durable consumer
+  - **Fix planned for Phase 1**: Convert to `js.Subscribe()` with `Durable`, `AckExplicit`, `DeliverAll`
+- [x] Map PR #83 gaps to this PRD
 
-**Deliverables**: Updated migration, "known gaps" checklist
+**Deliverables**: 
+- Updated migration `040_add_workflow_engine.sql` with `workflow_run_events` and `workflow_approvals` tables
+- SQLC queries: `workflow_run_events.sql`, `workflow_approvals.sql`
+- Schema updated in `internal/db/schema.sql`
 
-### Phase 1 - Core Runtime: State Machine + Persistence (1-2d)
+**Files changed**:
+- `internal/db/migrations/040_add_workflow_engine.sql`
+- `internal/db/schema.sql`
+- `internal/db/queries/workflow_run_events.sql` (new)
+- `internal/db/queries/workflow_approvals.sql` (new)
 
-- [ ] Implement deterministic `step_id` generation
+### Phase 1 - Core Runtime: State Machine + Persistence (1-2d) 🔄 IN PROGRESS
+
+- [x] Implement deterministic `step_id` generation
+  - Created `internal/workflows/stepid.go` with hash-based step ID
+  - `GenerateStepID(runID, stateName, branchPath, foreachIndex)` 
+  - `StepContext` builder with fluent API
+  - `IdempotencyKey()` for deduplication
+- [x] JetStream durable consumer with explicit acks
+  - Updated `internal/workflows/runtime/nats_engine.go`
+  - Uses `js.Subscribe()` with `Durable`, `AckExplicit`, `ManualAck`
+  - Added `ConsumerName` to options
+- [x] Implement idempotent step execution guard
+  - Added `GetWorkflowRunStep` and `IsStepCompleted` SQLC queries
+  - Added `Get()` and `IsCompleted()` repository methods
 - [ ] Ensure all transitions persist before enqueueing next task
-- [ ] Implement idempotent step execution guard
-- [ ] Add event table writes for audit trail
+- [ ] Add event table writes for audit trail (`InsertWorkflowRunEvent`)
+
+**Files implemented**:
+- `internal/workflows/stepid.go` - Deterministic step ID generation
+- `internal/workflows/stepid_test.go` - Tests (all passing)
+- `internal/workflows/runtime/nats_engine.go` - JetStream durable consumer
+- `internal/workflows/runtime/options.go` - Added `ConsumerName` field
+- `internal/db/queries/workflow_run_steps.sql` - Idempotency queries
+- `internal/db/repositories/workflows.go` - Repository methods
 
 **Deliverables**: Crash-recovery integration tests
 

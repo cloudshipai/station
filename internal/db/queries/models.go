@@ -307,6 +307,23 @@ type Workflow struct {
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
+type WorkflowApproval struct {
+	ID             int64          `json:"id"`
+	ApprovalID     string         `json:"approval_id"`
+	RunID          string         `json:"run_id"`
+	StepID         string         `json:"step_id"`
+	Message        string         `json:"message"`
+	SummaryPath    sql.NullString `json:"summary_path"`
+	Approvers      sql.NullString `json:"approvers"`
+	Status         string         `json:"status"`
+	DecidedBy      sql.NullString `json:"decided_by"`
+	DecidedAt      sql.NullTime   `json:"decided_at"`
+	DecisionReason sql.NullString `json:"decision_reason"`
+	TimeoutAt      sql.NullTime   `json:"timeout_at"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+	UpdatedAt      sql.NullTime   `json:"updated_at"`
+}
+
 type WorkflowRun struct {
 	ID              int64          `json:"id"`
 	RunID           string         `json:"run_id"`
@@ -325,6 +342,17 @@ type WorkflowRun struct {
 	UpdatedAt       sql.NullTime   `json:"updated_at"`
 	StartedAt       sql.NullTime   `json:"started_at"`
 	CompletedAt     sql.NullTime   `json:"completed_at"`
+}
+
+type WorkflowRunEvent struct {
+	ID        int64          `json:"id"`
+	RunID     string         `json:"run_id"`
+	Seq       int64          `json:"seq"`
+	EventType string         `json:"event_type"`
+	StepID    sql.NullString `json:"step_id"`
+	Payload   sql.NullString `json:"payload"`
+	Actor     sql.NullString `json:"actor"`
+	CreatedAt sql.NullTime   `json:"created_at"`
 }
 
 type WorkflowRunStep struct {

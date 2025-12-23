@@ -38,3 +38,17 @@ SELECT id, run_id, step_id, attempt, status, input, output, error, metadata, sta
 FROM workflow_run_steps
 WHERE run_id = sqlc.arg(run_id)
 ORDER BY started_at ASC, attempt ASC;
+
+-- name: GetWorkflowRunStep :one
+SELECT id, run_id, step_id, attempt, status, input, output, error, metadata, started_at, completed_at
+FROM workflow_run_steps
+WHERE run_id = sqlc.arg(run_id) AND step_id = sqlc.arg(step_id) AND attempt = sqlc.arg(attempt);
+
+-- name: IsStepCompleted :one
+SELECT EXISTS (
+    SELECT 1 FROM workflow_run_steps
+    WHERE run_id = sqlc.arg(run_id)
+      AND step_id = sqlc.arg(step_id)
+      AND attempt = sqlc.arg(attempt)
+      AND status IN ('succeeded', 'failed', 'canceled', 'timed_out')
+) AS completed;

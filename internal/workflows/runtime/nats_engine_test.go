@@ -20,9 +20,10 @@ func TestEmbeddedEnginePublishesAndConsumes(t *testing.T) {
 	var mu sync.Mutex
 	var received []string
 
-	sub, err := engine.Subscribe("workflow.run.demo.step.*.schedule", func(msg *nats.Msg) {
+	sub, err := engine.SubscribeDurable("workflow.run.demo.step.*.schedule", "test-consumer", func(msg *nats.Msg) {
 		mu.Lock()
 		received = append(received, string(msg.Data))
+		msg.Ack()
 		mu.Unlock()
 	})
 	if err != nil {

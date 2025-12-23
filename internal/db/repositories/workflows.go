@@ -352,6 +352,30 @@ func (r *WorkflowRunStepRepo) ListByRun(ctx context.Context, runID string) ([]*m
 	return result, nil
 }
 
+func (r *WorkflowRunStepRepo) Get(ctx context.Context, runID, stepID string, attempt int64) (*models.WorkflowRunStep, error) {
+	row, err := r.queries.GetWorkflowRunStep(ctx, queries.GetWorkflowRunStepParams{
+		RunID:   runID,
+		StepID:  stepID,
+		Attempt: attempt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertWorkflowRunStep(row), nil
+}
+
+func (r *WorkflowRunStepRepo) IsCompleted(ctx context.Context, runID, stepID string, attempt int64) (bool, error) {
+	completed, err := r.queries.IsStepCompleted(ctx, queries.IsStepCompletedParams{
+		RunID:   runID,
+		StepID:  stepID,
+		Attempt: attempt,
+	})
+	if err != nil {
+		return false, err
+	}
+	return completed != 0, nil
+}
+
 func convertWorkflowRunStep(row queries.WorkflowRunStep) *models.WorkflowRunStep {
 	var errMsg *string
 	if row.Error.Valid {
