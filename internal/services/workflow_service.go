@@ -56,6 +56,20 @@ type StepUpdate struct {
 	CompletedAt *time.Time
 }
 
+// ApproveWorkflowStepRequest defines parameters for approving a workflow step.
+type ApproveWorkflowStepRequest struct {
+	ApprovalID string
+	ApproverID string
+	Comment    string
+}
+
+// RejectWorkflowStepRequest defines parameters for rejecting a workflow step.
+type RejectWorkflowStepRequest struct {
+	ApprovalID string
+	RejecterID string
+	Reason     string
+}
+
 func NewWorkflowService(repos *repositories.Repositories) *WorkflowService {
 	return &WorkflowService{repos: repos}
 }
@@ -366,6 +380,132 @@ func (s *WorkflowService) RecordStepUpdate(ctx context.Context, update StepUpdat
 
 func (s *WorkflowService) ListSteps(ctx context.Context, runID string) ([]*models.WorkflowRunStep, error) {
 	return s.repos.WorkflowRunSteps.ListByRun(ctx, runID)
+}
+
+func (s *WorkflowService) GetApproval(ctx context.Context, approvalID string) (*models.WorkflowApproval, error) {
+	if s.repos.WorkflowApprovals == nil {
+		return nil, errors.New("approval repository not initialized")
+	}
+	return s.repos.WorkflowApprovals.Get(ctx, approvalID)
+}
+
+func (s *WorkflowService) ListPendingApprovals(ctx context.Context, runID string, limit int64) ([]*models.WorkflowApproval, error) {
+	if s.repos.WorkflowApprovals == nil {
+		return nil, errors.New("approval repository not initialized")
+	}
+	if limit == 0 {
+		limit = 50
+	}
+
+	if runID != "" {
+		approvals, err := s.repos.WorkflowApprovals.ListByRun(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		pending := make([]*models.WorkflowApproval, 0)
+		for _, a := range approvals {
+			if a.Status == models.ApprovalStatusPending {
+				pending = append(pending, a)
+			}
+		}
+		return pending, nil
+	}
+
+	return s.repos.WorkflowApprovals.ListPending(ctx, limit)
+}
+
+func (s *WorkflowService) ApproveWorkflowStep(ctx context.Context, req ApproveWorkflowStepRequest) (*models.WorkflowApproval, error) {
+	if s.repos.WorkflowApprovals == nil {
+		return nil, errors.New("approval repository not initialized")
+	}
+
+	approval, err := s.repos.WorkflowApprovals.Get(ctx, req.ApprovalID)
+	if err != nil {
+		return nil, fmt.Errorf("approval not found: %w", err)
+	}
+
+	if approval.Status != models.ApprovalStatusPending {
+		return nil, fmt.Errorf("approval is not pending, current status: %s", approval.Status)
+	}
+
+	var approverID *string
+	if req.ApproverID != "" {
+		approverID = &req.ApproverID
+	}
+	var comment *string
+	if req.Comment != "" {
+		comment = &req.Comment
+	}
+
+	if err := s.repos.WorkflowApprovals.Approve(ctx, req.ApprovalID, approverID, comment); err != nil {
+		return nil, fmt.Errorf("failed to approve: %w", err)
+	}
+
+	_ = s.emitRunEvent(ctx, approval.RunID, map[string]interface{}{
+		"type":        models.EventTypeApprovalDecided,
+		"approval_id": req.ApprovalID,
+		"step_id":     approval.StepID,
+		"decision":    models.ApprovalStatusApproved,
+		"actor":       req.ApproverID,
+		"comment":     req.Comment,
+		"time":        time.Now().UTC().Format(time.RFC3339),
+	})
+
+	return s.repos.WorkflowApprovals.Get(ctx, req.ApprovalID)
+}
+
+func (s *WorkflowService) RejectWorkflowStep(ctx context.Context, req RejectWorkflowStepRequest) (*models.WorkflowApproval, error) {
+	if s.repos.WorkflowApprovals == nil {
+		return nil, errors.New("approval repository not initialized")
+	}
+
+	approval, err := s.repos.WorkflowApprovals.Get(ctx, req.ApprovalID)
+	if err != nil {
+		return nil, fmt.Errorf("approval not found: %w", err)
+	}
+
+	if approval.Status != models.ApprovalStatusPending {
+		return nil, fmt.Errorf("approval is not pending, current status: %s", approval.Status)
+	}
+
+	var rejecterID *string
+	if req.RejecterID != "" {
+		rejecterID = &req.RejecterID
+	}
+	var reason *string
+	if req.Reason != "" {
+		reason = &req.Reason
+	}
+
+	if err := s.repos.WorkflowApprovals.Reject(ctx, req.ApprovalID, rejecterID, reason); err != nil {
+		return nil, fmt.Errorf("failed to reject: %w", err)
+	}
+
+	_ = s.emitRunEvent(ctx, approval.RunID, map[string]interface{}{
+		"type":        models.EventTypeApprovalDecided,
+		"approval_id": req.ApprovalID,
+		"step_id":     approval.StepID,
+		"decision":    models.ApprovalStatusRejected,
+		"actor":       req.RejecterID,
+		"reason":      req.Reason,
+		"time":        time.Now().UTC().Format(time.RFC3339),
+	})
+
+	return s.repos.WorkflowApprovals.Get(ctx, req.ApprovalID)
+}
+
+func (s *WorkflowService) ListApprovalsByRun(ctx context.Context, runID string) ([]*models.WorkflowApproval, error) {
+	if s.repos.WorkflowApprovals == nil {
+		return nil, errors.New("approval repository not initialized")
+	}
+	return s.repos.WorkflowApprovals.ListByRun(ctx, runID)
+}
+
+func (s *WorkflowService) TimeoutExpiredApprovals(ctx context.Context) error {
+	if s.repos.WorkflowApprovals == nil {
+		return errors.New("approval repository not initialized")
+	}
+	return s.repos.WorkflowApprovals.TimeoutExpired(ctx)
 }
 
 func (s *WorkflowService) emitRunEvent(ctx context.Context, runID string, event map[string]interface{}) error {

@@ -37,17 +37,32 @@ type completeWorkflowRunRequest struct {
 	Summary string          `json:"summary"`
 }
 
-// registerWorkflowRunRoutes wires workflow run operations.
+type approveWorkflowStepRequest struct {
+	Comment string `json:"comment"`
+}
+
+type rejectWorkflowStepRequest struct {
+	Reason string `json:"reason"`
+}
+
 func (h *APIHandlers) registerWorkflowRunRoutes(group *gin.RouterGroup) {
 	group.POST("", h.startWorkflowRun)
 	group.GET("", h.listWorkflowRuns)
 	group.GET("/:runId", h.getWorkflowRun)
 	group.GET("/:runId/steps", h.listWorkflowRunSteps)
+	group.GET("/:runId/approvals", h.listWorkflowRunApprovals)
 	group.POST("/:runId/cancel", h.cancelWorkflowRun)
 	group.POST("/:runId/signal", h.signalWorkflowRun)
 	group.POST("/:runId/pause", h.pauseWorkflowRun)
 	group.POST("/:runId/resume", h.resumeWorkflowRun)
 	group.POST("/:runId/complete", h.completeWorkflowRun)
+}
+
+func (h *APIHandlers) registerWorkflowApprovalRoutes(group *gin.RouterGroup) {
+	group.GET("", h.listPendingApprovals)
+	group.GET("/:approvalId", h.getApproval)
+	group.POST("/:approvalId/approve", h.approveWorkflowStep)
+	group.POST("/:approvalId/reject", h.rejectWorkflowStep)
 }
 
 func (h *APIHandlers) startWorkflowRun(c *gin.Context) {
@@ -219,5 +234,104 @@ func (h *APIHandlers) listWorkflowRunSteps(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"steps": steps,
 		"count": len(steps),
+	})
+}
+
+func (h *APIHandlers) listWorkflowRunApprovals(c *gin.Context) {
+	runID := c.Param("runId")
+	approvals, err := h.workflowService.ListApprovalsByRun(c.Request.Context(), runID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list approvals"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"approvals": approvals,
+		"count":     len(approvals),
+	})
+}
+
+func (h *APIHandlers) listPendingApprovals(c *gin.Context) {
+	runID := c.Query("runId")
+	limit := int64(50)
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	approvals, err := h.workflowService.ListPendingApprovals(c.Request.Context(), runID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list pending approvals"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"approvals": approvals,
+		"count":     len(approvals),
+		"limit":     limit,
+	})
+}
+
+func (h *APIHandlers) getApproval(c *gin.Context) {
+	approvalID := c.Param("approvalId")
+	approval, err := h.workflowService.GetApproval(c.Request.Context(), approvalID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Approval not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"approval": approval})
+}
+
+func (h *APIHandlers) approveWorkflowStep(c *gin.Context) {
+	approvalID := c.Param("approvalId")
+	approverID := c.GetHeader("X-Approver-ID")
+	if approverID == "" {
+		approverID = "api-user"
+	}
+
+	var req approveWorkflowStepRequest
+	_ = c.ShouldBindJSON(&req)
+
+	approval, err := h.workflowService.ApproveWorkflowStep(c.Request.Context(), services.ApproveWorkflowStepRequest{
+		ApprovalID: approvalID,
+		ApproverID: approverID,
+		Comment:    req.Comment,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"approval": approval,
+		"message":  "Workflow step approved",
+	})
+}
+
+func (h *APIHandlers) rejectWorkflowStep(c *gin.Context) {
+	approvalID := c.Param("approvalId")
+	rejecterID := c.GetHeader("X-Approver-ID")
+	if rejecterID == "" {
+		rejecterID = "api-user"
+	}
+
+	var req rejectWorkflowStepRequest
+	_ = c.ShouldBindJSON(&req)
+
+	approval, err := h.workflowService.RejectWorkflowStep(c.Request.Context(), services.RejectWorkflowStepRequest{
+		ApprovalID: approvalID,
+		RejecterID: rejecterID,
+		Reason:     req.Reason,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"approval": approval,
+		"message":  "Workflow step rejected",
 	})
 }
