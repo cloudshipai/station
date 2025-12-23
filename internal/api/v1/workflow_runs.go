@@ -28,6 +28,15 @@ type signalWorkflowRunRequest struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+type pauseWorkflowRunRequest struct {
+	Reason string `json:"reason"`
+}
+
+type completeWorkflowRunRequest struct {
+	Result  json.RawMessage `json:"result"`
+	Summary string          `json:"summary"`
+}
+
 // registerWorkflowRunRoutes wires workflow run operations.
 func (h *APIHandlers) registerWorkflowRunRoutes(group *gin.RouterGroup) {
 	group.POST("", h.startWorkflowRun)
@@ -36,6 +45,9 @@ func (h *APIHandlers) registerWorkflowRunRoutes(group *gin.RouterGroup) {
 	group.GET("/:runId/steps", h.listWorkflowRunSteps)
 	group.POST("/:runId/cancel", h.cancelWorkflowRun)
 	group.POST("/:runId/signal", h.signalWorkflowRun)
+	group.POST("/:runId/pause", h.pauseWorkflowRun)
+	group.POST("/:runId/resume", h.resumeWorkflowRun)
+	group.POST("/:runId/complete", h.completeWorkflowRun)
 }
 
 func (h *APIHandlers) startWorkflowRun(c *gin.Context) {
@@ -152,6 +164,48 @@ func (h *APIHandlers) signalWorkflowRun(c *gin.Context) {
 		"run":     run,
 		"message": "Signal recorded",
 	})
+}
+
+func (h *APIHandlers) pauseWorkflowRun(c *gin.Context) {
+	runID := c.Param("runId")
+	var req pauseWorkflowRunRequest
+	_ = c.ShouldBindJSON(&req)
+
+	run, err := h.workflowService.PauseRun(c.Request.Context(), runID, req.Reason)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to pause workflow run"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"run": run, "message": "Workflow run paused"})
+}
+
+func (h *APIHandlers) resumeWorkflowRun(c *gin.Context) {
+	runID := c.Param("runId")
+	var req signalWorkflowRunRequest
+	_ = c.ShouldBindJSON(&req)
+
+	run, err := h.workflowService.ResumeRun(c.Request.Context(), runID, req.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resume workflow run"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"run": run, "message": "Workflow run resumed"})
+}
+
+func (h *APIHandlers) completeWorkflowRun(c *gin.Context) {
+	runID := c.Param("runId")
+	var req completeWorkflowRunRequest
+	_ = c.ShouldBindJSON(&req)
+
+	run, err := h.workflowService.CompleteRun(c.Request.Context(), runID, req.Result, req.Summary)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to complete workflow run"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"run": run, "message": "Workflow run completed"})
 }
 
 func (h *APIHandlers) listWorkflowRunSteps(c *gin.Context) {
