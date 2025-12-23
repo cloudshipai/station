@@ -137,6 +137,37 @@ Supported models:
 - `gpt-4o-mini` - Fast and efficient (recommended)
 - `gpt-4-turbo` - Good balance of capability and speed
 
+### Sandbox Configuration (Isolated Code Execution)
+
+Enable agents to execute code in isolated Dagger containers:
+
+```yaml
+# Simple form - just specify runtime
+sandbox: python
+
+# Structured form - full configuration
+sandbox:
+  runtime: python              # python, node, or bash
+  image: "python:3.11-slim"    # Custom container image
+  timeout_seconds: 300         # Execution timeout
+  allow_network: false         # Network access (default: disabled)
+  pip_packages:                # Python packages to install
+    - pandas
+    - pyyaml
+```
+
+When sandbox is enabled, the agent receives a `sandbox_run` tool that can execute code safely:
+
+```python
+# Agent can use sandbox_run to process data
+import json
+data = json.loads(input_data)
+result = sorted(data, key=lambda x: x['value'], reverse=True)[:10]
+print(json.dumps(result))
+```
+
+See **[Sandbox Documentation](../station/sandbox.md)** for complete configuration options and examples.
+
 ### Tool Configuration
 
 ```yaml
@@ -396,6 +427,82 @@ Prioritize findings by severity and provide actionable remediation guidance.
 
 **Scan Target:** {{scan_path}}
 **Minimum Severity:** {{severity_level}}
+```
+
+### 4. Data Processor with Sandbox
+
+```yaml
+---
+metadata:
+  name: "Data Processor"
+  description: "Processes and transforms data using Python sandbox"
+  tags: ["data", "python", "sandbox"]
+model: gpt-4o-mini
+max_steps: 10
+sandbox:
+  runtime: python
+  pip_packages:
+    - pandas
+    - pyyaml
+  timeout_seconds: 300
+input:
+  schema:
+    type: object
+    properties:
+      userInput:
+        type: string
+        description: User input for the agent
+      data:
+        type: string
+        description: JSON or CSV data to process
+    required:
+      - userInput
+---
+
+{{role "system"}}
+You are a data processing expert. When given data, use the sandbox_run tool
+to execute Python code for accurate transformations and analysis.
+
+Guidelines:
+1. Always use the sandbox for calculations - never compute in your response
+2. Parse JSON/CSV data properly using Python libraries
+3. Return results as structured JSON when possible
+4. Handle errors gracefully and report clear messages
+
+Example sandbox usage:
+```python
+import json
+data = json.loads('''{"items": [1, 2, 3]}''')
+result = {"sum": sum(data["items"]), "count": len(data["items"])}
+print(json.dumps(result))
+```
+
+{{role "user"}}
+{{userInput}}
+
+Data to process:
+```
+{{data}}
+```
+```
+
+**Example execution**:
+```bash
+stn agent run "Data Processor" "Find the average price" \
+  --data '[{"name": "A", "price": 10}, {"name": "B", "price": 20}]'
+```
+
+The agent will execute Python code in an isolated container:
+```python
+import json
+data = json.loads('[{"name": "A", "price": 10}, {"name": "B", "price": 20}]')
+avg = sum(item["price"] for item in data) / len(data)
+print(json.dumps({"average_price": avg}))
+```
+
+Output:
+```json
+{"average_price": 15.0}
 ```
 
 ## Deployment and Distribution

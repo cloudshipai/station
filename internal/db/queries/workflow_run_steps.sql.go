@@ -10,6 +10,37 @@ import (
 	"database/sql"
 )
 
+const getWorkflowRunStep = `-- name: GetWorkflowRunStep :one
+SELECT id, run_id, step_id, attempt, status, input, output, error, metadata, started_at, completed_at
+FROM workflow_run_steps
+WHERE run_id = ?1 AND step_id = ?2 AND attempt = ?3
+`
+
+type GetWorkflowRunStepParams struct {
+	RunID   string `json:"run_id"`
+	StepID  string `json:"step_id"`
+	Attempt int64  `json:"attempt"`
+}
+
+func (q *Queries) GetWorkflowRunStep(ctx context.Context, arg GetWorkflowRunStepParams) (WorkflowRunStep, error) {
+	row := q.db.QueryRowContext(ctx, getWorkflowRunStep, arg.RunID, arg.StepID, arg.Attempt)
+	var i WorkflowRunStep
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.StepID,
+		&i.Attempt,
+		&i.Status,
+		&i.Input,
+		&i.Output,
+		&i.Error,
+		&i.Metadata,
+		&i.StartedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const insertWorkflowRunStep = `-- name: InsertWorkflowRunStep :one
 INSERT INTO workflow_run_steps (
     run_id,
@@ -78,6 +109,29 @@ func (q *Queries) InsertWorkflowRunStep(ctx context.Context, arg InsertWorkflowR
 		&i.CompletedAt,
 	)
 	return i, err
+}
+
+const isStepCompleted = `-- name: IsStepCompleted :one
+SELECT EXISTS (
+    SELECT 1 FROM workflow_run_steps
+    WHERE run_id = ?1
+      AND step_id = ?2
+      AND attempt = ?3
+      AND status IN ('succeeded', 'failed', 'canceled', 'timed_out')
+) AS completed
+`
+
+type IsStepCompletedParams struct {
+	RunID   string `json:"run_id"`
+	StepID  string `json:"step_id"`
+	Attempt int64  `json:"attempt"`
+}
+
+func (q *Queries) IsStepCompleted(ctx context.Context, arg IsStepCompletedParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, isStepCompleted, arg.RunID, arg.StepID, arg.Attempt)
+	var completed int64
+	err := row.Scan(&completed)
+	return completed, err
 }
 
 const listWorkflowRunSteps = `-- name: ListWorkflowRunSteps :many

@@ -11,15 +11,13 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// Engine defines the minimal runtime interface used by the workflow service.
 type Engine interface {
-	PublishRunEvent(ctx context.Context, runID string, event interface{}) error
-	PublishStepSchedule(ctx context.Context, runID, stepID string, payload interface{}) error
-	Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error)
+	PublishRunEvent(ctx context.Context, runID string, event any) error
+	PublishStepSchedule(ctx context.Context, runID, stepID string, payload any) error
+	SubscribeDurable(subject, consumer string, handler func(msg *nats.Msg)) (*nats.Subscription, error)
 	Close()
 }
 
-// NATSEngine implements Engine using NATS and JetStream.
 type NATSEngine struct {
 	opts   Options
 	server *natsserver.Server
@@ -27,7 +25,6 @@ type NATSEngine struct {
 	js     nats.JetStreamContext
 }
 
-// NewEngine initializes an engine using the provided options.
 func NewEngine(opts Options) (*NATSEngine, error) {
 	if !opts.Enabled {
 		return nil, nil
@@ -74,39 +71,54 @@ func NewEngine(opts Options) (*NATSEngine, error) {
 	return engine, nil
 }
 
-func (e *NATSEngine) PublishRunEvent(ctx context.Context, runID string, event interface{}) error {
-	if e == nil || e.conn == nil {
+func (e *NATSEngine) PublishRunEvent(ctx context.Context, runID string, event any) error {
+	if e == nil || e.js == nil {
 		return nil
 	}
 	subject := fmt.Sprintf("%s.events.%s", e.opts.SubjectPrefix, runID)
-	return e.publishJSON(ctx, subject, event)
+	return e.publishJSON(subject, event)
 }
 
-func (e *NATSEngine) PublishStepSchedule(ctx context.Context, runID, stepID string, payload interface{}) error {
-	if e == nil || e.conn == nil {
+func (e *NATSEngine) PublishStepSchedule(ctx context.Context, runID, stepID string, payload any) error {
+	if e == nil || e.js == nil {
 		return nil
 	}
 	subject := fmt.Sprintf("%s.run.%s.step.%s.schedule", e.opts.SubjectPrefix, runID, stepID)
-	return e.publishJSON(ctx, subject, payload)
+	return e.publishJSON(subject, payload)
 }
 
-func (e *NATSEngine) Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error) {
-	if e == nil || e.conn == nil {
+func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg *nats.Msg)) (*nats.Subscription, error) {
+	if e == nil || e.js == nil {
 		return nil, fmt.Errorf("engine not initialized")
 	}
-	return e.conn.Subscribe(subject, handler)
+
+	if consumer == "" {
+		consumer = e.opts.ConsumerName
+	}
+
+	sub, err := e.js.Subscribe(
+		subject,
+		handler,
+		nats.Durable(consumer),
+		nats.AckExplicit(),
+		nats.DeliverAll(),
+		nats.ManualAck(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("jetstream subscribe failed: %w", err)
+	}
+	return sub, nil
 }
 
-func (e *NATSEngine) publishJSON(ctx context.Context, subject string, value interface{}) error {
+func (e *NATSEngine) publishJSON(subject string, value any) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	msg := &nats.Msg{Subject: subject, Data: data}
-	return e.conn.PublishMsg(msg)
+	_, err = e.js.Publish(subject, data)
+	return err
 }
 
-// Close tears down resources.
 func (e *NATSEngine) Close() {
 	if e == nil {
 		return
@@ -120,7 +132,6 @@ func (e *NATSEngine) Close() {
 	}
 }
 
-// NewEmbeddedEngineForTests starts an embedded server with JetStream for test use.
 func NewEmbeddedEngineForTests() (*NATSEngine, error) {
 	serverOpts := natsserver_test.DefaultTestOptions
 	serverOpts.Port = -1
@@ -131,6 +142,7 @@ func NewEmbeddedEngineForTests() (*NATSEngine, error) {
 		URL:           srv.ClientURL(),
 		Stream:        "WORKFLOW_EVENTS",
 		SubjectPrefix: "workflow",
+		ConsumerName:  "test-consumer",
 		Embedded:      false,
 	}
 	engine, err := NewEngine(opts)

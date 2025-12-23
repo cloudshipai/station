@@ -11,6 +11,7 @@ type Options struct {
 	URL           string
 	Stream        string
 	SubjectPrefix string
+	ConsumerName  string
 	Embedded      bool
 }
 
@@ -26,6 +27,7 @@ func EnvOptions() Options {
 		URL:           getenvDefault("WORKFLOW_NATS_URL", "nats://127.0.0.1:4222"),
 		Stream:        getenvDefault("WORKFLOW_NATS_STREAM", "WORKFLOW_EVENTS"),
 		SubjectPrefix: getenvDefault("WORKFLOW_NATS_SUBJECT_PREFIX", "workflow"),
+		ConsumerName:  getenvDefault("WORKFLOW_NATS_CONSUMER", "station-workflow"),
 		Embedded:      getenvBool("WORKFLOW_NATS_EMBEDDED", false),
 	}
 	return opts

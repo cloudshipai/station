@@ -454,3 +454,40 @@ CREATE TABLE workflow_run_steps (
 );
 
 CREATE INDEX idx_workflow_run_steps_run ON workflow_run_steps(run_id);
+
+CREATE TABLE workflow_run_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    step_id TEXT,
+    payload TEXT,
+    actor TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(run_id, seq),
+    FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_workflow_run_events_run ON workflow_run_events(run_id);
+CREATE INDEX idx_workflow_run_events_type ON workflow_run_events(event_type);
+
+CREATE TABLE workflow_approvals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    approval_id TEXT NOT NULL UNIQUE,
+    run_id TEXT NOT NULL,
+    step_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    summary_path TEXT,
+    approvers TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    decided_by TEXT,
+    decided_at DATETIME,
+    decision_reason TEXT,
+    timeout_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_workflow_approvals_run ON workflow_approvals(run_id);
+CREATE INDEX idx_workflow_approvals_status ON workflow_approvals(status);

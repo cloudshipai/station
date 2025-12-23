@@ -16,7 +16,29 @@ type DotpromptConfig struct {
 	Tools        []string               `yaml:"tools,omitempty"`
 	Metadata     AgentMetadata          `yaml:"metadata"`
 	Station      ExecutionMetadata      `yaml:"station,omitempty"`
+	Sandbox      *SandboxConfig         `yaml:"sandbox,omitempty"`
 	CustomFields map[string]interface{} `yaml:",inline"`
+}
+
+type SandboxConfig struct {
+	Runtime        string   `yaml:"runtime,omitempty"`
+	Image          string   `yaml:"image,omitempty"`
+	TimeoutSeconds int      `yaml:"timeout_seconds,omitempty"`
+	MaxStdoutBytes int      `yaml:"max_stdout_bytes,omitempty"`
+	AllowNetwork   bool     `yaml:"allow_network,omitempty"`
+	PipPackages    []string `yaml:"pip_packages,omitempty"`
+	NpmPackages    []string `yaml:"npm_packages,omitempty"`
+}
+
+func (s *SandboxConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var str string
+	if err := unmarshal(&str); err == nil {
+		s.Runtime = str
+		return nil
+	}
+
+	type plain SandboxConfig
+	return unmarshal((*plain)(s))
 }
 
 // GenerationConfig contains model generation parameters
