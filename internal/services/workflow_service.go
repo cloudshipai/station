@@ -558,3 +558,111 @@ func optionalString(value string) *string {
 func timePointer(t time.Time) *time.Time {
 	return &t
 }
+
+type WorkflowSyncResult struct {
+	WorkflowsProcessed int
+	WorkflowsSynced    int
+	WorkflowsSkipped   int
+	WorkflowsDisabled  int
+	Errors             []WorkflowSyncError
+}
+
+type WorkflowSyncError struct {
+	WorkflowID string
+	FilePath   string
+	Error      string
+}
+
+func (s *WorkflowService) SyncWorkflowFiles(ctx context.Context, workflowsDir string) (*WorkflowSyncResult, error) {
+	result := &WorkflowSyncResult{
+		Errors: []WorkflowSyncError{},
+	}
+
+	loader := workflows.NewLoader(workflowsDir)
+	loadResult, err := loader.LoadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load workflow files: %w", err)
+	}
+
+	result.WorkflowsProcessed = loadResult.TotalFiles
+
+	for _, loadErr := range loadResult.Errors {
+		result.Errors = append(result.Errors, WorkflowSyncError{
+			FilePath: loadErr.FilePath,
+			Error:    loadErr.Error.Error(),
+		})
+	}
+
+	existingWorkflows, err := s.repos.Workflows.ListLatest(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list existing workflows: %w", err)
+	}
+
+	existingMap := make(map[string]*models.WorkflowDefinition)
+	for _, wf := range existingWorkflows {
+		existingMap[wf.WorkflowID] = wf
+	}
+
+	fileWorkflowIDs := make(map[string]bool)
+
+	for _, wf := range loadResult.Workflows {
+		fileWorkflowIDs[wf.WorkflowID] = true
+
+		existing, exists := existingMap[wf.WorkflowID]
+		if exists && existing.Status == "active" {
+			var existingDef workflows.Definition
+			if err := json.Unmarshal(existing.Definition, &existingDef); err == nil {
+				if existingDef.Version == wf.Definition.Version {
+					result.WorkflowsSkipped++
+					continue
+				}
+			}
+		}
+
+		name := wf.Definition.Name
+		if name == "" {
+			name = wf.WorkflowID
+		}
+		description := wf.Definition.Description
+
+		input := WorkflowDefinitionInput{
+			WorkflowID:  wf.WorkflowID,
+			Name:        name,
+			Description: description,
+			Definition:  wf.RawContent,
+		}
+
+		var createErr error
+		if exists {
+			_, _, createErr = s.UpdateWorkflow(ctx, input)
+		} else {
+			_, _, createErr = s.CreateWorkflow(ctx, input)
+		}
+
+		if createErr != nil {
+			result.Errors = append(result.Errors, WorkflowSyncError{
+				WorkflowID: wf.WorkflowID,
+				FilePath:   wf.FilePath,
+				Error:      createErr.Error(),
+			})
+			continue
+		}
+
+		result.WorkflowsSynced++
+	}
+
+	for workflowID, existing := range existingMap {
+		if !fileWorkflowIDs[workflowID] && existing.Status == "active" {
+			if err := s.repos.Workflows.Disable(ctx, workflowID); err != nil {
+				result.Errors = append(result.Errors, WorkflowSyncError{
+					WorkflowID: workflowID,
+					Error:      fmt.Sprintf("failed to disable orphaned workflow: %v", err),
+				})
+				continue
+			}
+			result.WorkflowsDisabled++
+		}
+	}
+
+	return result, nil
+}

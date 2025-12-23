@@ -39,6 +39,16 @@ func GetAgentPromptPath(environmentName, agentName string) string {
 	return filepath.Join(GetAgentsDir(environmentName), agentName+".prompt")
 }
 
+// GetWorkflowsDir returns the workflows directory for a specific environment
+func GetWorkflowsDir(environmentName string) string {
+	return filepath.Join(GetEnvironmentDir(environmentName), "workflows")
+}
+
+// GetWorkflowFilePath returns the path to a workflow definition file
+func GetWorkflowFilePath(environmentName, workflowID string) string {
+	return filepath.Join(GetWorkflowsDir(environmentName), workflowID+".workflow.yaml")
+}
+
 // GetVariablesPath returns the path to the variables.yml file for an environment
 func GetVariablesPath(environmentName string) string {
 	return filepath.Join(GetEnvironmentDir(environmentName), "variables.yml")
