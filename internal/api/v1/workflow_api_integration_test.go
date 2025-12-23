@@ -63,7 +63,7 @@ func TestWorkflowAPIEndToEnd(t *testing.T) {
 
 	// Subscribe to schedule messages before starting the run
 	scheduleCh := make(chan string, 1)
-	sub, err := engine.Subscribe("workflow.run.*.step.*.schedule", func(msg *nats.Msg) {
+	sub, err := engine.SubscribeDurable("workflow.run.*.step.*.schedule", "test-api-consumer", func(msg *nats.Msg) {
 		scheduleCh <- string(msg.Data)
 	})
 	if err != nil {

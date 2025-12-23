@@ -52,14 +52,24 @@ func (a *WorkflowServiceAdapter) GetRunContext(ctx context.Context, runID string
 		return nil, err
 	}
 
+	var result map[string]interface{}
 	if run.Context == nil || len(run.Context) == 0 {
-		return make(map[string]interface{}), nil
+		result = make(map[string]interface{})
+	} else {
+		if err := json.Unmarshal(run.Context, &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal run context: %w", err)
+		}
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(run.Context, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal run context: %w", err)
+	// Add default environment ID if not already set
+	// This is needed for agent name resolution in workflow steps
+	if _, ok := result["_environmentID"]; !ok {
+		env, err := a.repos.Environments.GetByName("default")
+		if err == nil && env != nil {
+			result["_environmentID"] = env.ID
+		}
 	}
+
 	return result, nil
 }
 

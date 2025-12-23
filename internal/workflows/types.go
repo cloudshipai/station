@@ -27,6 +27,15 @@ type StateSpec struct {
 	Retry      *RetryPolicy           `json:"retry,omitempty" yaml:"retry,omitempty"`
 	Timeout    string                 `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 
+	// Agent step fields (convenience - can also be specified via Input)
+	Agent string `json:"agent,omitempty" yaml:"agent,omitempty"`
+	Task  string `json:"task,omitempty" yaml:"task,omitempty"`
+
+	// Human approval fields
+	Message       string   `json:"message,omitempty" yaml:"message,omitempty"`
+	ApprovalTitle string   `json:"approval_title,omitempty" yaml:"approval_title,omitempty"`
+	Approvers     []string `json:"approvers,omitempty" yaml:"approvers,omitempty"`
+
 	DataPath    string            `json:"dataPath,omitempty" yaml:"dataPath,omitempty"`
 	Conditions  []SwitchCondition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 	DefaultNext string            `json:"defaultNext,omitempty" yaml:"defaultNext,omitempty"`

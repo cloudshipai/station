@@ -3,7 +3,7 @@ import { ReactFlow, ReactFlowProvider, Background, Controls, useNodesState, useE
 import type { Node, Edge, NodeTypes } from '@xyflow/react';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { Play, CheckCircle, GitBranch, ArrowRight, Layout, AlertOctagon, MoreHorizontal } from 'lucide-react';
-import { WorkflowDefinition } from '../../api/station';
+import type { WorkflowDefinition } from '../../types/station';
 
 const elk = new ELK();
 

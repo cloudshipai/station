@@ -9,15 +9,28 @@ import (
 )
 
 type mockAgentDeps struct {
-	agents  map[int64]AgentInfo
-	results map[int64]AgentExecutionResult
-	execErr error
+	agents       map[int64]AgentInfo
+	agentsByName map[string]AgentInfo
+	results      map[int64]AgentExecutionResult
+	execErr      error
 }
 
 func (m *mockAgentDeps) GetAgentByID(id int64) (AgentInfo, error) {
 	agent, ok := m.agents[id]
 	if !ok {
 		return AgentInfo{}, errors.New("agent not found")
+	}
+	return agent, nil
+}
+
+func (m *mockAgentDeps) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (AgentInfo, error) {
+	if m.agentsByName == nil {
+		return AgentInfo{}, errors.New("agent not found")
+	}
+	key := name
+	agent, ok := m.agentsByName[key]
+	if !ok {
+		return AgentInfo{}, errors.New("agent not found in environment")
 	}
 	return agent, nil
 }
@@ -34,14 +47,24 @@ func (m *mockAgentDeps) ExecuteAgent(ctx context.Context, agentID int64, task st
 }
 
 func TestAgentRunExecutor_Execute(t *testing.T) {
+	schemaRequiringNamespace := `{"type":"object","properties":{"namespace":{"type":"string"},"limit":{"type":"number"}},"required":["namespace"]}`
+
 	deps := &mockAgentDeps{
 		agents: map[int64]AgentInfo{
-			1: {ID: 1, Name: "test-agent"},
-			2: {ID: 2, Name: "analyzer"},
+			1:  {ID: 1, Name: "test-agent"},
+			2:  {ID: 2, Name: "analyzer"},
+			10: {ID: 10, Name: "kubernetes-triage"},
+			20: {ID: 20, Name: "schema-agent", InputSchema: &schemaRequiringNamespace},
+		},
+		agentsByName: map[string]AgentInfo{
+			"kubernetes-triage": {ID: 10, Name: "kubernetes-triage"},
+			"schema-agent":      {ID: 20, Name: "schema-agent", InputSchema: &schemaRequiringNamespace},
 		},
 		results: map[int64]AgentExecutionResult{
-			1: {Response: "Task completed successfully", StepCount: 3, ToolsUsed: 2},
-			2: {Response: "Analysis complete", StepCount: 5, ToolsUsed: 4},
+			1:  {Response: "Task completed successfully", StepCount: 3, ToolsUsed: 2},
+			2:  {Response: "Analysis complete", StepCount: 5, ToolsUsed: 4},
+			10: {Response: "Pods are healthy", StepCount: 2, ToolsUsed: 1},
+			20: {Response: "Data processed", StepCount: 1, ToolsUsed: 0},
 		},
 	}
 
@@ -107,7 +130,7 @@ func TestAgentRunExecutor_Execute(t *testing.T) {
 			},
 		},
 		{
-			name: "missing agent_id",
+			name: "missing agent identifier",
 			step: workflows.ExecutionStep{
 				ID:   "no-agent",
 				Type: workflows.StepTypeAgent,
@@ -118,7 +141,7 @@ func TestAgentRunExecutor_Execute(t *testing.T) {
 				},
 			},
 			wantErr:     true,
-			errContains: "agent_id is required",
+			errContains: "agent name is required",
 		},
 		{
 			name: "invalid agent_id type",
@@ -164,6 +187,113 @@ func TestAgentRunExecutor_Execute(t *testing.T) {
 					t.Errorf("expected no error, got %s", *result.Error)
 				}
 			},
+		},
+		{
+			name: "successful execution with agent name",
+			step: workflows.ExecutionStep{
+				ID:   "run-by-name",
+				Type: workflows.StepTypeAgent,
+				Next: "next-step",
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"agent": "kubernetes-triage",
+						"task":  "check pod health",
+					},
+				},
+			},
+			runContext: map[string]interface{}{"_environmentID": int64(1)},
+			checkOutput: func(t *testing.T, result StepResult) {
+				if result.Error != nil {
+					t.Errorf("expected no error, got %s", *result.Error)
+				}
+				if result.NextStep != "next-step" {
+					t.Errorf("expected next_step=next-step, got %s", result.NextStep)
+				}
+				if result.Output["agent_name"] != "kubernetes-triage" {
+					t.Errorf("expected agent_name=kubernetes-triage, got %v", result.Output["agent_name"])
+				}
+				if result.Output["agent_id"] != int64(10) {
+					t.Errorf("expected agent_id=10, got %v", result.Output["agent_id"])
+				}
+			},
+		},
+		{
+			name: "agent name resolution requires environment ID",
+			step: workflows.ExecutionStep{
+				ID:   "no-env",
+				Type: workflows.StepTypeAgent,
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"agent": "kubernetes-triage",
+						"task":  "check pods",
+					},
+				},
+			},
+			runContext:  map[string]interface{}{},
+			wantErr:     true,
+			errContains: "_environmentID is required",
+		},
+		{
+			name: "agent not found by name",
+			step: workflows.ExecutionStep{
+				ID:   "missing-by-name",
+				Type: workflows.StepTypeAgent,
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"agent": "nonexistent-agent",
+						"task":  "do something",
+					},
+				},
+			},
+			runContext:  map[string]interface{}{"_environmentID": int64(1)},
+			wantErr:     true,
+			errContains: "agent not found",
+		},
+		{
+			name: "agent with input schema - valid input",
+			step: workflows.ExecutionStep{
+				ID:   "schema-valid",
+				Type: workflows.StepTypeAgent,
+				Next: "done",
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"agent": "schema-agent",
+						"task":  "process data",
+						"variables": map[string]interface{}{
+							"namespace": "production",
+							"limit":     float64(10),
+						},
+					},
+				},
+			},
+			runContext: map[string]interface{}{"_environmentID": int64(1)},
+			checkOutput: func(t *testing.T, result StepResult) {
+				if result.Error != nil {
+					t.Errorf("expected no error, got %s", *result.Error)
+				}
+				if result.Output["agent_name"] != "schema-agent" {
+					t.Errorf("expected agent_name=schema-agent, got %v", result.Output["agent_name"])
+				}
+			},
+		},
+		{
+			name: "agent with input schema - missing required field",
+			step: workflows.ExecutionStep{
+				ID:   "schema-invalid",
+				Type: workflows.StepTypeAgent,
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"agent": "schema-agent",
+						"task":  "process data",
+						"variables": map[string]interface{}{
+							"limit": float64(10),
+						},
+					},
+				},
+			},
+			runContext:  map[string]interface{}{"_environmentID": int64(1)},
+			wantErr:     true,
+			errContains: "missing required field: namespace",
 		},
 	}
 

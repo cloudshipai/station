@@ -10,16 +10,19 @@ import (
 )
 
 var (
-	ErrAgentNotFound      = errors.New("agent not found")
-	ErrAgentIDRequired    = errors.New("agent_id is required")
-	ErrInvalidAgentID     = errors.New("invalid agent_id type")
-	ErrExecutorNotFound   = errors.New("executor not found for step type")
-	ErrExecutionFailed    = errors.New("step execution failed")
-	ErrApprovalRejected   = errors.New("approval was rejected")
-	ErrApprovalTimedOut   = errors.New("approval timed out")
-	ErrMessageRequired    = errors.New("message is required for approval")
-	ErrApprovalCreateFail = errors.New("failed to create approval request")
-	ErrRunIDRequired      = errors.New("_runID is required in runContext")
+	ErrAgentNotFound        = errors.New("agent not found")
+	ErrAgentIDRequired      = errors.New("agent_id is required")
+	ErrAgentNameRequired    = errors.New("agent name is required")
+	ErrInvalidAgentID       = errors.New("invalid agent_id type")
+	ErrExecutorNotFound     = errors.New("executor not found for step type")
+	ErrExecutionFailed      = errors.New("step execution failed")
+	ErrApprovalRejected     = errors.New("approval was rejected")
+	ErrApprovalTimedOut     = errors.New("approval timed out")
+	ErrMessageRequired      = errors.New("message is required for approval")
+	ErrApprovalCreateFail   = errors.New("failed to create approval request")
+	ErrRunIDRequired        = errors.New("_runID is required in runContext")
+	ErrEnvironmentRequired  = errors.New("_environmentID is required in runContext for agent name resolution")
+	ErrInputSchemaViolation = errors.New("input does not match agent's input schema")
 )
 
 type StepStatus string
@@ -49,12 +52,15 @@ type StepResult struct {
 
 type AgentExecutorDeps interface {
 	GetAgentByID(id int64) (AgentInfo, error)
+	GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (AgentInfo, error)
 	ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (AgentExecutionResult, error)
 }
 
 type AgentInfo struct {
-	ID   int64
-	Name string
+	ID           int64
+	Name         string
+	InputSchema  *string
+	OutputSchema *string
 }
 
 type AgentExecutionResult struct {
@@ -81,9 +87,110 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 		input = make(map[string]interface{})
 	}
 
+	if step.Raw.Agent != "" {
+		if _, exists := input["agent"]; !exists {
+			input["agent"] = step.Raw.Agent
+		}
+	}
+	if step.Raw.Task != "" {
+		if _, exists := input["task"]; !exists {
+			input["task"] = step.Raw.Task
+		}
+	}
+
+	agent, err := e.resolveAgent(ctx, input, runContext)
+	if err != nil {
+		errStr := err.Error()
+		return StepResult{
+			Status: StepStatusFailed,
+			Error:  &errStr,
+		}, err
+	}
+
+	if agent.InputSchema != nil && *agent.InputSchema != "" {
+		if err := e.validateInput(input, runContext, *agent.InputSchema); err != nil {
+			errStr := fmt.Sprintf("input schema validation failed: %v", err)
+			return StepResult{
+				Status:   StepStatusFailed,
+				Error:    &errStr,
+				NextStep: step.Next,
+				End:      step.End,
+			}, fmt.Errorf("%w: %v", ErrInputSchemaViolation, err)
+		}
+	}
+
+	task := e.extractTask(input, step.ID)
+
+	variables := make(map[string]interface{})
+	if varsRaw, ok := input["variables"].(map[string]interface{}); ok {
+		variables = varsRaw
+	}
+
+	for k, v := range runContext {
+		if k == "_runID" || k == "_environmentID" {
+			continue
+		}
+		if _, exists := variables[k]; !exists {
+			variables[k] = v
+		}
+	}
+
+	result, err := e.deps.ExecuteAgent(ctx, agent.ID, task, variables)
+	if err != nil {
+		errStr := err.Error()
+		return StepResult{
+			Status:   StepStatusFailed,
+			Error:    &errStr,
+			NextStep: step.Next,
+			End:      step.End,
+		}, fmt.Errorf("%w: %v", ErrExecutionFailed, err)
+	}
+
+	output := map[string]interface{}{
+		"response":   result.Response,
+		"agent_id":   agent.ID,
+		"agent_name": agent.Name,
+		"step_count": result.StepCount,
+		"tools_used": result.ToolsUsed,
+	}
+
+	return StepResult{
+		Status:   StepStatusCompleted,
+		Output:   output,
+		NextStep: step.Next,
+		End:      step.End,
+	}, nil
+}
+
+func (e *AgentRunExecutor) resolveAgent(ctx context.Context, input map[string]interface{}, runContext map[string]interface{}) (AgentInfo, error) {
+	if agentName, ok := input["agent"].(string); ok && agentName != "" {
+		envID, ok := runContext["_environmentID"]
+		if !ok {
+			return AgentInfo{}, ErrEnvironmentRequired
+		}
+
+		var environmentID int64
+		switch v := envID.(type) {
+		case float64:
+			environmentID = int64(v)
+		case int64:
+			environmentID = v
+		case int:
+			environmentID = int64(v)
+		default:
+			return AgentInfo{}, fmt.Errorf("invalid _environmentID type: %T", envID)
+		}
+
+		agent, err := e.deps.GetAgentByNameAndEnvironment(ctx, agentName, environmentID)
+		if err != nil {
+			return AgentInfo{}, fmt.Errorf("%w: agent '%s' not found in environment %d", ErrAgentNotFound, agentName, environmentID)
+		}
+		return agent, nil
+	}
+
 	agentIDRaw, ok := input["agent_id"]
 	if !ok {
-		return StepResult{}, ErrAgentIDRequired
+		return AgentInfo{}, ErrAgentNameRequired
 	}
 
 	var agentID int64
@@ -97,57 +204,51 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 	case json.Number:
 		id, err := v.Int64()
 		if err != nil {
-			return StepResult{}, fmt.Errorf("%w: %v", ErrInvalidAgentID, err)
+			return AgentInfo{}, fmt.Errorf("%w: %v", ErrInvalidAgentID, err)
 		}
 		agentID = id
 	default:
-		return StepResult{}, fmt.Errorf("%w: got %T", ErrInvalidAgentID, agentIDRaw)
+		return AgentInfo{}, fmt.Errorf("%w: got %T", ErrInvalidAgentID, agentIDRaw)
 	}
 
 	agent, err := e.deps.GetAgentByID(agentID)
 	if err != nil {
-		return StepResult{}, fmt.Errorf("%w: %v", ErrAgentNotFound, err)
+		return AgentInfo{}, fmt.Errorf("%w: %v", ErrAgentNotFound, err)
 	}
+	return agent, nil
+}
 
-	task, _ := input["task"].(string)
-	if task == "" {
-		task = fmt.Sprintf("Execute workflow step: %s", step.ID)
-	}
-
-	variables := make(map[string]interface{})
-	if varsRaw, ok := input["variables"].(map[string]interface{}); ok {
-		variables = varsRaw
-	}
-
-	for k, v := range runContext {
-		if _, exists := variables[k]; !exists {
-			variables[k] = v
+func (e *AgentRunExecutor) extractTask(input map[string]interface{}, stepID string) string {
+	if taskField, ok := input["task"].(string); ok && taskField != "" {
+		if taskField != "agent.run" && taskField != "agent.hierarchy.run" {
+			return taskField
 		}
 	}
 
-	result, err := e.deps.ExecuteAgent(ctx, agentID, task, variables)
-	if err != nil {
-		errStr := err.Error()
-		return StepResult{
-			Status:   StepStatusFailed,
-			Error:    &errStr,
-			NextStep: step.Next,
-			End:      step.End,
-		}, fmt.Errorf("%w: %v", ErrExecutionFailed, err)
+	if agentTask, ok := input["agent_task"].(string); ok && agentTask != "" {
+		return agentTask
 	}
 
-	return StepResult{
-		Status: StepStatusCompleted,
-		Output: map[string]interface{}{
-			"response":   result.Response,
-			"agent_id":   agentID,
-			"agent_name": agent.Name,
-			"step_count": result.StepCount,
-			"tools_used": result.ToolsUsed,
-		},
-		NextStep: step.Next,
-		End:      step.End,
-	}, nil
+	return fmt.Sprintf("Execute workflow step: %s", stepID)
+}
+
+func (e *AgentRunExecutor) validateInput(input map[string]interface{}, runContext map[string]interface{}, schemaJSON string) error {
+	combined := make(map[string]interface{})
+
+	for k, v := range runContext {
+		if k == "_runID" || k == "_environmentID" {
+			continue
+		}
+		combined[k] = v
+	}
+
+	if varsRaw, ok := input["variables"].(map[string]interface{}); ok {
+		for k, v := range varsRaw {
+			combined[k] = v
+		}
+	}
+
+	return workflows.ValidateInputAgainstSchema(combined, schemaJSON)
 }
 
 type ApprovalExecutorDeps interface {

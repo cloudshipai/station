@@ -134,8 +134,9 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 	registry := runtime.NewExecutorRegistry()
 	registry.Register(runtime.NewInjectExecutor())
 	registry.Register(runtime.NewSwitchExecutor())
-	registry.Register(runtime.NewAgentRunExecutor(&agentExecutorAdapter{agentService: agentService}))
+	registry.Register(runtime.NewAgentRunExecutor(&agentExecutorAdapter{agentService: agentService, repos: repos}))
 	registry.Register(runtime.NewHumanApprovalExecutor(&approvalExecutorAdapter{repos: repos}))
+	registry.Register(runtime.NewCustomExecutor(nil))
 
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
 
@@ -155,6 +156,7 @@ func (h *APIHandlers) StopWorkflowConsumer() {
 
 type agentExecutorAdapter struct {
 	agentService services.AgentServiceInterface
+	repos        *repositories.Repositories
 }
 
 func (a *agentExecutorAdapter) GetAgentByID(id int64) (runtime.AgentInfo, error) {
@@ -162,7 +164,25 @@ func (a *agentExecutorAdapter) GetAgentByID(id int64) (runtime.AgentInfo, error)
 	if err != nil {
 		return runtime.AgentInfo{}, err
 	}
-	return runtime.AgentInfo{ID: agent.ID, Name: agent.Name}, nil
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *agentExecutorAdapter) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameAndEnvironment(name, environmentID)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
 }
 
 func (a *agentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {

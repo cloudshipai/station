@@ -317,7 +317,36 @@ input:
 - On reject: run transitions to `CANCELLED` or `FAILED`
 - On timeout: step transitions to `TIMED_OUT`
 
-### 3.4 Schema Validation for Data Flow
+### 3.4 Agent Resolution by Name
+
+Agents in workflows are referenced **by name**, not by ID. Agent names are unique within an environment.
+
+**Why name-based resolution**:
+- Names are human-readable and portable across environments
+- IDs are auto-generated and environment-specific
+- Enables GitOps workflows where definitions reference stable names
+
+**Workflow definition syntax**:
+```yaml
+- name: check_pods
+  type: operation
+  input:
+    task: "agent.run"
+    agent: "kubernetes-triage"    # Agent name, NOT ID
+    task: "Check pods in {{ ctx.namespace }}"
+```
+
+**Resolution rules**:
+1. Workflow definitions include `environment_id` (set at creation or execution time)
+2. Agent lookup: `GetAgentByNameAndEnvironment(name, environmentID)`
+3. If agent not found: validation error at definition time, graceful failure at runtime
+
+**Environment scoping**:
+- Workflows are scoped to an environment (like agents and MCP servers)
+- Agent references are resolved within the same environment
+- Cross-environment agent calls are not supported in V1
+
+### 3.5 Schema Validation for Data Flow
 
 Agents can define input and output schemas in their dotprompt frontmatter:
 
@@ -352,14 +381,81 @@ output:
 ---
 ```
 
-**Workflow engine validates**:
-1. **Pre-execution**: Input data matches agent's input schema
-2. **Post-execution**: Output data matches agent's output schema
-3. **Flow validation**: At workflow load time, warn if agent A's output schema is incompatible with agent B's input schema
+**Workflow engine validates at three levels**:
 
-This enables **type-safe workflows** where data flows correctly between steps.
+#### Level 1: Static Validation (at workflow create/update)
 
-### 3.5 NATS JetStream Integration
+When a workflow is created or updated, the validator checks:
+
+1. **Agent existence**: All referenced agents exist in the environment
+2. **Schema compatibility**: For sequential steps A → B where both are `agent.run`:
+   - If A has `output_schema` and B has `input_schema`, validate compatibility
+   - Compatibility rule: A's output must satisfy B's input requirements (superset OK)
+   - Missing schemas are allowed (no validation performed)
+
+```
+Step A (agent: "pod-checker")     Step B (agent: "log-analyzer")
+output_schema: {                  input_schema: {
+  pods: [{name, status}],           pods: [{name}],     ← OK: A provides more
+  timestamp: string                 filters: [string]   ← WARNING: B expects field A doesn't provide
+}                                 }
+```
+
+**Validation result**:
+- `errors`: Block workflow creation (agent not found, critical schema mismatch)
+- `warnings`: Allow creation but surface issues (optional field missing, type coercion needed)
+
+#### Level 2: Pre-execution Validation (at step start)
+
+Before executing an agent step:
+1. Extract input data from workflow context (via `resultPath` of previous step)
+2. Validate against agent's `input_schema` if defined
+3. On validation failure: fail step with clear error, do NOT execute agent
+
+#### Level 3: Post-execution Validation (at step completion)
+
+After agent execution:
+1. Validate output against agent's `output_schema` if defined
+2. On validation failure: log warning but proceed (don't fail the workflow)
+3. Store validation result in step record for debugging
+
+#### Graceful NATS Error Handling
+
+Schema mismatches at runtime are handled gracefully through the NATS message flow:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  NATS Step Execution Flow with Schema Validation                │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Consumer receives step task                                  │
+│  2. Load step definition + agent metadata                        │
+│  3. Extract input from workflow context                          │
+│  4. IF agent.input_schema exists:                                │
+│     ├─ Validate input against schema                             │
+│     ├─ ON FAILURE: Record step as FAILED with validation error   │
+│     │              Ack message (don't retry)                     │
+│     │              Emit error event to WORKFLOW_EVENTS           │
+│     │              Continue to next step if error handling set   │
+│     └─ ON SUCCESS: Proceed to execution                          │
+│  5. Execute agent                                                │
+│  6. IF agent.output_schema exists:                               │
+│     ├─ Validate output against schema                            │
+│     ├─ ON FAILURE: Log warning, store validation result          │
+│     │              Proceed anyway (output may still be useful)   │
+│     └─ ON SUCCESS: Store validated output                        │
+│  7. Write output to workflow context at resultPath               │
+│  8. Schedule next step                                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Error categories**:
+- `SCHEMA_VALIDATION_INPUT`: Input doesn't match agent's input_schema
+- `SCHEMA_VALIDATION_OUTPUT`: Output doesn't match agent's output_schema (warning only)
+- `SCHEMA_COMPATIBILITY`: Static validation found incompatible schemas between steps
+
+This enables **type-safe workflows** where data flows correctly between steps, while gracefully handling edge cases without crashing the entire workflow.
+
+### 3.6 NATS JetStream Integration
 
 **SQLite is the source of truth** for workflow state; JetStream is the **durable queue/event bus** for:
 - Scheduling step execution
@@ -383,7 +479,7 @@ This enables **type-safe workflows** where data flows correctly between steps.
 2. Executor checks SQLite: "is this step already completed?"
 3. If yes, ack and skip; if no, execute
 
-### 3.6 State Machine
+### 3.7 State Machine
 
 **Run lifecycle statuses (V1)**:
 - `PENDING` → created, not yet started
@@ -864,7 +960,264 @@ environments/
 
 **Deliverables**: Full workflows UI parity with Agents page
 
-### Phase 8 - Observability + Docs (1-2d)
+### Phase 8 - Agent Name Resolution + Schema Validation (2-3d)
+
+Implement type-safe workflows with agent name resolution and schema validation.
+
+#### 8.1 Agent Name Resolution
+
+- [ ] Update `AgentRunExecutor` to resolve agents by name instead of ID
+- [ ] Add `environment_id` to workflow execution context
+- [ ] Create `AgentResolver` interface for testability
+- [ ] Update workflow definition schema to use `agent: "name"` syntax
+
+**Files to modify/create**:
+- `internal/workflows/runtime/executor.go` - Update AgentRunExecutor
+- `internal/workflows/runtime/agent_resolver.go` - New: AgentResolver interface
+- `internal/workflows/types.go` - Add environment_id to execution context
+
+#### 8.2 Workflow Validator
+
+- [ ] Create `WorkflowValidator` for static validation at create/update time
+- [ ] Validate all referenced agents exist in environment
+- [ ] Build step transition graph for schema validation
+- [ ] Return structured `ValidationResult` with errors and warnings
+
+**Files to create**:
+- `internal/workflows/validator.go` - WorkflowValidator implementation
+- `internal/workflows/validator_test.go` - Comprehensive tests
+
+#### 8.3 Schema Compatibility Checker
+
+- [ ] Create `SchemaChecker` for JSON Schema compatibility validation
+- [ ] Implement superset validation (output satisfies input requirements)
+- [ ] Handle optional vs required fields
+- [ ] Generate human-readable compatibility reports
+
+**Files to create**:
+- `internal/workflows/schema_checker.go` - SchemaChecker implementation
+- `internal/workflows/schema_checker_test.go` - Tests
+
+#### 8.4 Runtime Schema Validation
+
+- [ ] Add pre-execution input validation in step consumer
+- [ ] Add post-execution output validation (warning only)
+- [ ] Emit schema validation events to WORKFLOW_EVENTS
+- [ ] Graceful error handling without crashing workflow
+
+**Files to modify**:
+- `internal/workflows/runtime/consumer.go` - Add validation hooks
+- `internal/workflows/runtime/executor.go` - Add validation to AgentRunExecutor
+
+#### 8.5 API Integration
+
+- [ ] Add validation endpoint: `POST /api/v1/workflows/validate`
+- [ ] Return validation results on workflow create/update
+- [ ] Surface validation warnings in UI
+
+**Deliverables**: Type-safe workflows with clear validation errors
+
+---
+
+## 9) Test Plan: Agent Name Resolution + Schema Validation
+
+### 9.1 Unit Tests
+
+#### Agent Resolution Tests (`internal/workflows/runtime/executor_test.go`)
+
+| Test Case | Input | Expected |
+|-----------|-------|----------|
+| `TestAgentRunExecutor_ResolveByName_Success` | `agent: "kubernetes-triage"`, env has agent | Agent resolved, execution proceeds |
+| `TestAgentRunExecutor_ResolveByName_NotFound` | `agent: "nonexistent"` | Error: `agent not found in environment` |
+| `TestAgentRunExecutor_ResolveByName_WrongEnvironment` | Agent exists in different env | Error: `agent not found in environment` |
+| `TestAgentRunExecutor_ResolveByName_EmptyName` | `agent: ""` | Error: `agent name is required` |
+| `TestAgentRunExecutor_BackwardsCompatibility` | `agent_id: 123` (legacy) | Works with deprecation warning |
+
+#### Workflow Validator Tests (`internal/workflows/validator_test.go`)
+
+| Test Case | Input | Expected |
+|-----------|-------|----------|
+| `TestValidator_AllAgentsExist` | Workflow with 3 valid agents | No errors |
+| `TestValidator_AgentNotFound` | Workflow references missing agent | Error with agent name and step |
+| `TestValidator_MultipleAgentsNotFound` | 2 missing agents | 2 errors, one per agent |
+| `TestValidator_EmptyWorkflow` | No states | Error: `workflow has no states` |
+| `TestValidator_InvalidStartState` | `start` references nonexistent state | Error: `start state not found` |
+| `TestValidator_CircularTransition` | A → B → A | Warning: `circular transition detected` |
+| `TestValidator_UnreachableState` | State with no incoming transition | Warning: `unreachable state` |
+
+#### Schema Compatibility Tests (`internal/workflows/schema_checker_test.go`)
+
+| Test Case | Output Schema | Input Schema | Expected |
+|-----------|--------------|--------------|----------|
+| `TestSchema_ExactMatch` | `{pods: []}` | `{pods: []}` | Compatible |
+| `TestSchema_OutputSuperset` | `{pods: [], timestamp: ""}` | `{pods: []}` | Compatible |
+| `TestSchema_MissingRequiredField` | `{pods: []}` | `{pods: [], filters: []}` (required) | Incompatible |
+| `TestSchema_MissingOptionalField` | `{pods: []}` | `{pods: [], filters?: []}` | Compatible with warning |
+| `TestSchema_TypeMismatch` | `{count: "10"}` | `{count: integer}` | Incompatible |
+| `TestSchema_NestedObjectMatch` | `{result: {status: ""}}` | `{result: {status: ""}}` | Compatible |
+| `TestSchema_ArrayItemMatch` | `{pods: [{name: ""}]}` | `{pods: [{name: ""}]}` | Compatible |
+| `TestSchema_NoSchemas` | None | None | Compatible (no validation) |
+| `TestSchema_OnlyOutputSchema` | `{pods: []}` | None | Compatible (no validation) |
+| `TestSchema_OnlyInputSchema` | None | `{pods: []}` | Warning: cannot validate |
+
+#### Runtime Validation Tests (`internal/workflows/runtime/consumer_test.go`)
+
+| Test Case | Scenario | Expected |
+|-----------|----------|----------|
+| `TestRuntime_InputValidation_Pass` | Input matches schema | Step executes |
+| `TestRuntime_InputValidation_Fail` | Input missing required field | Step FAILED, clear error message |
+| `TestRuntime_InputValidation_NoSchema` | Agent has no input_schema | Step executes (no validation) |
+| `TestRuntime_OutputValidation_Pass` | Output matches schema | Step completes normally |
+| `TestRuntime_OutputValidation_Fail` | Output missing field | Warning logged, step still completes |
+| `TestRuntime_OutputValidation_NoSchema` | Agent has no output_schema | Step completes (no validation) |
+
+### 9.2 Integration Tests
+
+#### End-to-End Workflow Tests (`internal/workflows/runtime/e2e_test.go`)
+
+| Test Case | Scenario | Expected |
+|-----------|----------|----------|
+| `TestE2E_ThreeAgentPipeline_SchemaValid` | A → B → C, all schemas compatible | Workflow completes successfully |
+| `TestE2E_ThreeAgentPipeline_SchemaMismatch` | A outputs X, B expects Y | Static validation error at creation |
+| `TestE2E_RuntimeSchemaMismatch` | Agent returns unexpected output | Warning logged, workflow continues |
+| `TestE2E_AgentNotFoundAtRuntime` | Agent deleted after workflow created | Step fails with clear error |
+| `TestE2E_ParallelBranches_SchemaValidation` | Parallel branches with different schemas | Each branch validated independently |
+| `TestE2E_ForeachIteration_SchemaValidation` | Foreach with schema-validated agent | Each iteration validated |
+
+#### API Tests (`internal/api/v1/workflows_test.go`)
+
+| Test Case | Endpoint | Expected |
+|-----------|----------|----------|
+| `TestAPI_CreateWorkflow_Valid` | `POST /workflows` with valid def | 201, workflow created |
+| `TestAPI_CreateWorkflow_AgentNotFound` | `POST /workflows` with bad agent | 400, validation errors returned |
+| `TestAPI_CreateWorkflow_SchemaIncompatible` | `POST /workflows` with mismatched schemas | 400 or 201 with warnings |
+| `TestAPI_ValidateWorkflow` | `POST /workflows/validate` | 200, validation result |
+| `TestAPI_UpdateWorkflow_BreaksSchema` | `PUT /workflows/{id}` | Validation errors if incompatible |
+
+### 9.3 Test Fixtures
+
+#### Sample Agents (for tests)
+
+```yaml
+# Agent: pod-checker (has output_schema)
+name: pod-checker
+input_schema:
+  type: object
+  properties:
+    namespace: { type: string }
+  required: [namespace]
+output_schema:
+  type: object
+  properties:
+    pods:
+      type: array
+      items:
+        type: object
+        properties:
+          name: { type: string }
+          status: { type: string }
+    timestamp: { type: string }
+  required: [pods]
+
+# Agent: log-analyzer (has input_schema matching pod-checker output)
+name: log-analyzer
+input_schema:
+  type: object
+  properties:
+    pods:
+      type: array
+      items:
+        type: object
+        properties:
+          name: { type: string }
+  required: [pods]
+output_schema:
+  type: object
+  properties:
+    analysis: { type: string }
+    severity: { type: string, enum: [low, medium, high, critical] }
+
+# Agent: notifier (no schemas - accepts anything)
+name: notifier
+# No input_schema or output_schema defined
+```
+
+#### Sample Workflows (for tests)
+
+```yaml
+# Valid workflow - schemas compatible
+id: valid-pipeline
+states:
+  - id: check
+    type: operation
+    input:
+      task: agent.run
+      agent: pod-checker
+    resultPath: steps.check
+    transition: analyze
+  - id: analyze
+    type: operation
+    input:
+      task: agent.run
+      agent: log-analyzer
+      # Input comes from steps.check.pods - matches input_schema
+    transition: notify
+  - id: notify
+    type: operation
+    input:
+      task: agent.run
+      agent: notifier
+    end: true
+
+# Invalid workflow - agent not found
+id: invalid-agent
+states:
+  - id: check
+    type: operation
+    input:
+      task: agent.run
+      agent: nonexistent-agent  # Does not exist
+    end: true
+
+# Warning workflow - schema mismatch (optional field missing)
+id: warning-pipeline
+states:
+  - id: step1
+    type: operation
+    input:
+      task: agent.run
+      agent: minimal-output-agent  # outputs: {result: ""}
+    transition: step2
+  - id: step2
+    type: operation
+    input:
+      task: agent.run
+      agent: expects-more-agent   # expects: {result: "", metadata?: {}}
+    end: true
+```
+
+### 9.4 Test Execution Commands
+
+```bash
+# Run all workflow tests
+go test ./internal/workflows/... -v
+
+# Run specific test suites
+go test ./internal/workflows/runtime/... -v -run TestAgentRunExecutor
+go test ./internal/workflows/... -v -run TestValidator
+go test ./internal/workflows/... -v -run TestSchema
+
+# Run integration tests
+go test ./internal/workflows/runtime/... -v -run TestE2E
+
+# Run with coverage
+go test ./internal/workflows/... -coverprofile=coverage.out
+go tool cover -html=coverage.out
+```
+
+---
+
+### Phase 9 - Observability + Docs (1-2d)
 
 - [ ] OpenTelemetry spans + NATS trace propagation
 - [ ] Add run/step metrics
@@ -873,7 +1226,7 @@ environments/
 
 ---
 
-## 10) Success Metrics
+## 10) Success Metrics (updated)
 
 ### Reliability
 
@@ -884,7 +1237,12 @@ environments/
 
 - All V1 state types working: operation, switch, parallel, inject, foreach
 - Both executors working: agent.run, human.approval
-- Schema validation catching mismatched agent inputs/outputs
+- **Agent name resolution**: Agents referenced by name (unique per environment), not ID
+- **Schema validation**: 
+  - Static validation at workflow create/update time
+  - Runtime input validation before agent execution
+  - Runtime output validation after agent execution (warning only)
+  - Clear error messages for schema mismatches
 - File-based workflow definitions loadable via `stn sync`
 - Workflows includable in bundles
 - Full web UI for workflow management (list, detail, runs, approvals)

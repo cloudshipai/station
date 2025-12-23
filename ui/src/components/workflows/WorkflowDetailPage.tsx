@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   X
 } from 'lucide-react';
-import { workflowsApi, type WorkflowDefinition, type WorkflowRun, type WorkflowStep, type WorkflowApproval } from '../../api/station';
+import { workflowsApi } from '../../api/station';
+import type { WorkflowDefinition, WorkflowRun, WorkflowStep, WorkflowApproval } from '../../types/station';
 
 type TabType = 'overview' | 'runs' | 'definition' | 'versions';
 

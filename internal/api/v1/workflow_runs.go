@@ -14,10 +14,11 @@ import (
 )
 
 type startWorkflowRunRequest struct {
-	WorkflowID string          `json:"workflowId" binding:"required"`
-	Version    *int64          `json:"version,omitempty"`
-	Input      json.RawMessage `json:"input"`
-	Options    json.RawMessage `json:"options"`
+	WorkflowID    string          `json:"workflowId" binding:"required"`
+	Version       *int64          `json:"version,omitempty"`
+	EnvironmentID *int64          `json:"environmentId,omitempty"`
+	Input         json.RawMessage `json:"input"`
+	Options       json.RawMessage `json:"options"`
 }
 
 type cancelWorkflowRunRequest struct {
@@ -79,11 +80,17 @@ func (h *APIHandlers) startWorkflowRun(c *gin.Context) {
 		version = *req.Version
 	}
 
+	environmentID := int64(0)
+	if req.EnvironmentID != nil {
+		environmentID = *req.EnvironmentID
+	}
+
 	run, validation, err := h.workflowService.StartRun(c.Request.Context(), services.StartWorkflowRunRequest{
-		WorkflowID: req.WorkflowID,
-		Version:    version,
-		Input:      req.Input,
-		Options:    req.Options,
+		WorkflowID:    req.WorkflowID,
+		Version:       version,
+		EnvironmentID: environmentID,
+		Input:         req.Input,
+		Options:       req.Options,
 	})
 	if errors.Is(err, workflows.ErrValidation) {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -107,9 +114,10 @@ func (h *APIHandlers) startWorkflowRunNested(c *gin.Context) {
 	workflowID := c.Param("workflowId")
 
 	var req struct {
-		Version *int64          `json:"version,omitempty"`
-		Input   json.RawMessage `json:"input"`
-		Options json.RawMessage `json:"options"`
+		Version       *int64          `json:"version,omitempty"`
+		EnvironmentID *int64          `json:"environmentId,omitempty"`
+		Input         json.RawMessage `json:"input"`
+		Options       json.RawMessage `json:"options"`
 	}
 	_ = c.ShouldBindJSON(&req)
 
@@ -118,11 +126,17 @@ func (h *APIHandlers) startWorkflowRunNested(c *gin.Context) {
 		version = *req.Version
 	}
 
+	environmentID := int64(0)
+	if req.EnvironmentID != nil {
+		environmentID = *req.EnvironmentID
+	}
+
 	run, validation, err := h.workflowService.StartRun(c.Request.Context(), services.StartWorkflowRunRequest{
-		WorkflowID: workflowID,
-		Version:    version,
-		Input:      req.Input,
-		Options:    req.Options,
+		WorkflowID:    workflowID,
+		Version:       version,
+		EnvironmentID: environmentID,
+		Input:         req.Input,
+		Options:       req.Options,
 	})
 	if errors.Is(err, workflows.ErrValidation) {
 		c.JSON(http.StatusBadRequest, gin.H{
