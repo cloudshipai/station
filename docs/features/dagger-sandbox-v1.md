@@ -474,7 +474,7 @@ sandbox:
 - `pkg/dotprompt/types.go` - SandboxConfig struct with custom UnmarshalYAML
 - `pkg/dotprompt/types_test.go` - Tests for frontmatter parsing (string and object forms)
 
-### Phase 1 - Python MVP (1-2d) 🔄 IN PROGRESS
+### Phase 1 - Python MVP (1-2d) ✅ COMPLETE
 
 - [x] Implement `sandbox_run` for Python runtime (`executeInDagger()` with full Dagger SDK)
 - [x] Inject code and files (via `WithNewFile`)
@@ -484,16 +484,24 @@ sandbox:
   - [x] Add `sandboxService` and `sandboxToolFactory` to `AgentExecutionEngine`
   - [x] Add `parseSandboxConfigFromAgent()` to parse dotprompt frontmatter
   - [x] Conditionally inject `sandbox_run` tool when frontmatter has `sandbox:` config
-- [ ] Add tests (unit + integration)
+- [x] Add tests (unit + integration)
+  - [x] Unit tests: 14 tests for config, validation, parsing, truncation
+  - [x] Integration tests: Python, Node, Bash execution with Docker/Dagger
+  - [x] E2E test: Full agent flow with LLM calling sandbox_run tool
 
 **Files implemented**:
 - `internal/services/sandbox_service.go` - Full `executeInDagger()` with Dagger Go SDK
 - `internal/services/sandbox_tool.go` - GenKit tool factory with schema
 - `internal/services/agent_execution_engine.go` - Integration with frontmatter parsing
+- `internal/services/sandbox_service_test.go` - Unit and integration tests
+- `internal/services/sandbox_e2e_test.go` - E2E tests with LLM + Docker
 
-### Phase 2 - Node + Bash (1-2d)
+### Phase 2 - Node + Bash (1-2d) ✅ COMPLETE
 
-- [ ] Add runtime mapping for Node and Bash
+- [x] Add runtime mapping for Node and Bash
+  - Node: `node:20-slim` image, executes `node /work/main.js`
+  - Bash: `ubuntu:22.04` image, executes `bash /work/main.sh`
+- [x] Integration tests verify Node and Bash execution
 - [ ] Add examples in prompt templates
 - [ ] Documentation
 

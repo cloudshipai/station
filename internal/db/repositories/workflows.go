@@ -446,3 +446,242 @@ func nullOrDefault(value *time.Time) interface{} {
 	}
 	return *value
 }
+
+// WorkflowRunEventRepo manages workflow run event persistence for audit trails.
+type WorkflowRunEventRepo struct {
+	db      *sql.DB
+	queries *queries.Queries
+}
+
+func NewWorkflowRunEventRepo(db *sql.DB) *WorkflowRunEventRepo {
+	return &WorkflowRunEventRepo{
+		db:      db,
+		queries: queries.New(db),
+	}
+}
+
+type CreateWorkflowRunEventParams struct {
+	RunID     string
+	EventType string
+	StepID    *string
+	Payload   *string
+	Actor     *string
+}
+
+func (r *WorkflowRunEventRepo) Insert(ctx context.Context, params CreateWorkflowRunEventParams) (*models.WorkflowRunEvent, error) {
+	seq, err := r.queries.GetNextEventSeq(ctx, params.RunID)
+	if err != nil {
+		return nil, err
+	}
+
+	row, err := r.queries.InsertWorkflowRunEvent(ctx, queries.InsertWorkflowRunEventParams{
+		RunID:     params.RunID,
+		Seq:       seq,
+		EventType: params.EventType,
+		StepID:    toNullString(params.StepID),
+		Payload:   toNullString(params.Payload),
+		Actor:     toNullString(params.Actor),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return convertWorkflowRunEvent(row), nil
+}
+
+func (r *WorkflowRunEventRepo) GetNextSeq(ctx context.Context, runID string) (int64, error) {
+	return r.queries.GetNextEventSeq(ctx, runID)
+}
+
+func (r *WorkflowRunEventRepo) ListByRun(ctx context.Context, runID string) ([]*models.WorkflowRunEvent, error) {
+	rows, err := r.queries.ListWorkflowRunEvents(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.WorkflowRunEvent, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, convertWorkflowRunEvent(row))
+	}
+	return result, nil
+}
+
+func (r *WorkflowRunEventRepo) ListByType(ctx context.Context, runID, eventType string) ([]*models.WorkflowRunEvent, error) {
+	rows, err := r.queries.ListWorkflowRunEventsByType(ctx, queries.ListWorkflowRunEventsByTypeParams{
+		RunID:     runID,
+		EventType: eventType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.WorkflowRunEvent, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, convertWorkflowRunEvent(row))
+	}
+	return result, nil
+}
+
+func convertWorkflowRunEvent(row queries.WorkflowRunEvent) *models.WorkflowRunEvent {
+	var stepID *string
+	if row.StepID.Valid {
+		value := row.StepID.String
+		stepID = &value
+	}
+	var payload *string
+	if row.Payload.Valid {
+		value := row.Payload.String
+		payload = &value
+	}
+	var actor *string
+	if row.Actor.Valid {
+		value := row.Actor.String
+		actor = &value
+	}
+
+	return &models.WorkflowRunEvent{
+		ID:        row.ID,
+		RunID:     row.RunID,
+		Seq:       row.Seq,
+		EventType: row.EventType,
+		StepID:    stepID,
+		Payload:   payload,
+		Actor:     actor,
+		CreatedAt: nullTimeOrZero(row.CreatedAt),
+	}
+}
+
+// WorkflowApprovalRepo manages workflow approval persistence.
+type WorkflowApprovalRepo struct {
+	db      *sql.DB
+	queries *queries.Queries
+}
+
+func NewWorkflowApprovalRepo(db *sql.DB) *WorkflowApprovalRepo {
+	return &WorkflowApprovalRepo{
+		db:      db,
+		queries: queries.New(db),
+	}
+}
+
+type CreateWorkflowApprovalParams struct {
+	ApprovalID  string
+	RunID       string
+	StepID      string
+	Message     string
+	SummaryPath *string
+	Approvers   *string
+	TimeoutAt   *time.Time
+}
+
+func (r *WorkflowApprovalRepo) Create(ctx context.Context, params CreateWorkflowApprovalParams) (*models.WorkflowApproval, error) {
+	row, err := r.queries.InsertWorkflowApproval(ctx, queries.InsertWorkflowApprovalParams{
+		ApprovalID:  params.ApprovalID,
+		RunID:       params.RunID,
+		StepID:      params.StepID,
+		Message:     params.Message,
+		SummaryPath: toNullString(params.SummaryPath),
+		Approvers:   toNullString(params.Approvers),
+		Status:      models.ApprovalStatusPending,
+		TimeoutAt:   toNullTime(params.TimeoutAt),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return convertWorkflowApproval(row), nil
+}
+
+func (r *WorkflowApprovalRepo) Get(ctx context.Context, approvalID string) (*models.WorkflowApproval, error) {
+	row, err := r.queries.GetWorkflowApproval(ctx, approvalID)
+	if err != nil {
+		return nil, err
+	}
+	return convertWorkflowApproval(row), nil
+}
+
+func (r *WorkflowApprovalRepo) ListByRun(ctx context.Context, runID string) ([]*models.WorkflowApproval, error) {
+	rows, err := r.queries.ListWorkflowApprovals(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.WorkflowApproval, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, convertWorkflowApproval(row))
+	}
+	return result, nil
+}
+
+func (r *WorkflowApprovalRepo) ListPending(ctx context.Context, limit int64) ([]*models.WorkflowApproval, error) {
+	rows, err := r.queries.ListPendingApprovals(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.WorkflowApproval, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, convertWorkflowApproval(row))
+	}
+	return result, nil
+}
+
+func (r *WorkflowApprovalRepo) Approve(ctx context.Context, approvalID string, decidedBy *string, reason *string) error {
+	return r.queries.ApproveWorkflowApproval(ctx, queries.ApproveWorkflowApprovalParams{
+		ApprovalID:     approvalID,
+		DecidedBy:      toNullString(decidedBy),
+		DecisionReason: toNullString(reason),
+	})
+}
+
+func (r *WorkflowApprovalRepo) Reject(ctx context.Context, approvalID string, decidedBy *string, reason *string) error {
+	return r.queries.RejectWorkflowApproval(ctx, queries.RejectWorkflowApprovalParams{
+		ApprovalID:     approvalID,
+		DecidedBy:      toNullString(decidedBy),
+		DecisionReason: toNullString(reason),
+	})
+}
+
+func (r *WorkflowApprovalRepo) TimeoutExpired(ctx context.Context) error {
+	return r.queries.TimeoutExpiredApprovals(ctx)
+}
+
+func convertWorkflowApproval(row queries.WorkflowApproval) *models.WorkflowApproval {
+	var summaryPath *string
+	if row.SummaryPath.Valid {
+		value := row.SummaryPath.String
+		summaryPath = &value
+	}
+	var approvers *string
+	if row.Approvers.Valid {
+		value := row.Approvers.String
+		approvers = &value
+	}
+	var decidedBy *string
+	if row.DecidedBy.Valid {
+		value := row.DecidedBy.String
+		decidedBy = &value
+	}
+	var decisionReason *string
+	if row.DecisionReason.Valid {
+		value := row.DecisionReason.String
+		decisionReason = &value
+	}
+
+	return &models.WorkflowApproval{
+		ID:             row.ID,
+		ApprovalID:     row.ApprovalID,
+		RunID:          row.RunID,
+		StepID:         row.StepID,
+		Message:        row.Message,
+		SummaryPath:    summaryPath,
+		Approvers:      approvers,
+		Status:         row.Status,
+		DecidedBy:      decidedBy,
+		DecidedAt:      nullTimePtr(row.DecidedAt),
+		DecisionReason: decisionReason,
+		TimeoutAt:      nullTimePtr(row.TimeoutAt),
+		CreatedAt:      nullTimeOrZero(row.CreatedAt),
+		UpdatedAt:      nullTimeOrZero(row.UpdatedAt),
+	}
+}

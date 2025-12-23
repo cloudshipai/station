@@ -21,6 +21,7 @@ type ExecutionStep struct {
 	ID   string            `json:"id"`
 	Type ExecutionStepType `json:"type"`
 	Next string            `json:"next,omitempty"`
+	End  bool              `json:"end,omitempty"`
 	Raw  StateSpec         `json:"raw"`
 }
 
@@ -48,6 +49,7 @@ func CompileExecutionPlan(def *Definition) ExecutionPlan {
 			ID:   state.StableID(),
 			Type: stepType,
 			Next: next,
+			End:  state.End || next == "",
 			Raw:  state,
 		}
 	}

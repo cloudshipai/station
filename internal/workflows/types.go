@@ -24,6 +24,7 @@ type StateSpec struct {
 	Output     map[string]interface{} `json:"output,omitempty" yaml:"output,omitempty"`
 	Transition string                 `json:"transition,omitempty" yaml:"transition,omitempty"`
 	Next       string                 `json:"next,omitempty" yaml:"next,omitempty"`
+	End        bool                   `json:"end,omitempty" yaml:"end,omitempty"`
 	Retry      *RetryPolicy           `json:"retry,omitempty" yaml:"retry,omitempty"`
 	Timeout    string                 `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
