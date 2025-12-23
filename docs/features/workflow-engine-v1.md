@@ -512,9 +512,197 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 - Idempotent execution
 - SQLite as source of truth
 
+### 6.4 File-Based Workflow Definitions
+
+Workflow definitions follow the same file-based configuration pattern as agents (`.prompt` files) and MCP servers. This enables:
+- Version control for workflow definitions
+- Bundle packaging and distribution
+- GitOps workflows for workflow management
+
+**Directory Structure**:
+```
+environments/
+└── default/
+    ├── agents/
+    │   └── *.prompt
+    ├── mcp-servers/
+    │   └── *.json
+    └── workflows/           # NEW: Workflow definitions
+        ├── incident-triage.workflow.yaml
+        ├── deploy-pipeline.workflow.yaml
+        └── security-scan.workflow.yaml
+```
+
+**File Format**: `.workflow.yaml` or `.workflow.json`
+
+```yaml
+# incident-triage.workflow.yaml
+id: incident-triage
+version: "1.0"
+name: "Incident Triage Workflow"
+description: "Automated incident diagnosis with approval gate"
+inputSchema:
+  type: object
+  properties:
+    namespace: { type: string }
+    service: { type: string }
+  required: [namespace, service]
+start: diagnostics
+states:
+  - name: diagnostics
+    type: operation
+    action: agent.run
+    input:
+      agent: "kubernetes-triage"
+      task: "Check pods in {{ ctx.namespace }}"
+    next: analyze
+  # ... more states
+```
+
+**Sync Behavior**:
+- `stn sync` discovers `.workflow.yaml` / `.workflow.json` files in `workflows/` directory
+- Files are validated against Open Serverless Workflow schema (Station profile)
+- Valid workflows are registered in SQLite with version tracking
+- Deleted files are marked as `disabled` (not hard deleted, preserving run history)
+
+**Bundle Integration**:
+```
+bundles/
+└── sre-playbooks/
+    ├── template.json
+    ├── agents/
+    │   └── kubernetes-triage.prompt
+    ├── mcp-servers/
+    │   └── kubectl.json
+    └── workflows/              # Workflows included in bundle
+        ├── incident-triage.workflow.yaml
+        └── capacity-planning.workflow.yaml
+```
+
 ---
 
-## 7) Implementation Plan
+## 7) Web UI
+
+### 7.1 Workflows Page
+
+A dedicated Workflows page in the Station web UI, similar to the existing Agents page.
+
+**Navigation**: Add "Workflows" entry to sidenav under the existing sections.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Station                                                         │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Dashboard                                                    │
+│  🤖 Agents                                                       │
+│  🔧 Tools                                                        │
+│  📋 Workflows  ← NEW                                             │
+│  ⚙️  Settings                                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Workflows List Page** (`/workflows`):
+
+| Column | Description |
+|--------|-------------|
+| Name | Workflow name with link to detail |
+| Version | Current active version |
+| Status | `active` / `disabled` |
+| Last Run | Timestamp of most recent run |
+| Success Rate | % of successful runs (last 30 days) |
+| Actions | Run, Edit, Disable |
+
+**Features**:
+- Filter by status, search by name
+- Quick "Run" button to start a new run with input modal
+- Sync status indicator (file vs DB state)
+
+### 7.2 Workflow Detail Page
+
+**Tabs**:
+
+1. **Overview Tab**
+   - Workflow metadata (name, description, version)
+   - Visual state diagram (mermaid or custom SVG)
+   - Input schema documentation
+   - Quick stats (total runs, success rate, avg duration)
+
+2. **Runs Tab**
+   - Paginated list of workflow runs
+   - Filter by status (running, completed, failed, cancelled)
+   - Click to open run detail drawer/page
+   - Real-time status updates via SSE
+
+3. **Definition Tab**
+   - YAML/JSON viewer with syntax highlighting
+   - Read-only in V1 (edits via file system)
+   - Validation status indicator
+
+4. **Versions Tab**
+   - Version history with timestamps
+   - Diff viewer between versions
+   - Rollback action (creates new version from old)
+
+### 7.3 Run Detail Page/Drawer
+
+**Sections**:
+
+1. **Header**
+   - Run ID, status badge, duration
+   - Action buttons: Pause, Resume, Cancel
+   - Approval actions (if waiting)
+
+2. **Timeline View**
+   - Vertical timeline of steps executed
+   - Each step shows: name, status, duration, input/output toggle
+   - Expandable step details with full payload
+   - Approval steps show approver, decision, timestamp
+
+3. **Context Inspector**
+   - Current workflow context (JSON tree view)
+   - Shows data flow between steps
+   - Highlight changes per step
+
+4. **Events Log**
+   - Chronological event stream
+   - Filter by event type
+   - Export to JSON
+
+### 7.4 React Components
+
+```
+static_src/js/Pages/Workflows/
+├── Index.tsx              # Workflow list page
+├── Detail.tsx             # Workflow detail with tabs
+├── RunDetail.tsx          # Run detail page/drawer
+└── components/
+    ├── WorkflowCard.tsx           # List item card
+    ├── WorkflowDiagram.tsx        # Visual state diagram
+    ├── RunTimeline.tsx            # Step execution timeline
+    ├── StepDetail.tsx             # Expandable step view
+    ├── ContextInspector.tsx       # JSON context viewer
+    ├── ApprovalCard.tsx           # Pending approval UI
+    ├── RunInputModal.tsx          # Start run with input
+    └── WorkflowStatusBadge.tsx    # Status indicator
+```
+
+### 7.5 API Integration
+
+The UI consumes existing workflow APIs:
+
+| Page | API Endpoints |
+|------|---------------|
+| List | `GET /api/v1/workflows` |
+| Detail | `GET /api/v1/workflows/{id}` |
+| Runs | `GET /api/v1/workflow-runs?workflowId={id}` |
+| Run Detail | `GET /api/v1/workflow-runs/{runId}` |
+| Start Run | `POST /api/v1/workflow-runs` |
+| Approvals | `GET /api/v1/workflow-approvals` |
+| Real-time | `GET /api/v1/workflow-runs/{runId}/stream` (SSE) |
+
+---
+
+## 8) Implementation Plan
 
 ### Phase 0 - Align & Harden PR #83 Foundations (1-4h) ✅ COMPLETE
 
@@ -616,7 +804,28 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 
 **Deliverables**: Parallel diagnostics workflow
 
-### Phase 6 - Observability + Docs (1-2d)
+### Phase 6 - File-Based Workflow Definitions (1-2d)
+
+- [ ] Add `workflows/` directory support in environment structure
+- [ ] Implement workflow file discovery (`.workflow.yaml`, `.workflow.json`)
+- [ ] Add workflow sync logic to `stn sync` command
+- [ ] Integrate workflows into bundle packaging
+- [ ] Add file-based workflow validation on sync
+
+**Deliverables**: Workflows loadable from files, included in bundles
+
+### Phase 7 - Web UI: Workflows Page (2-3d)
+
+- [ ] Add "Workflows" to sidenav navigation
+- [ ] Implement Workflows list page (`/workflows`)
+- [ ] Implement Workflow detail page with tabs (Overview, Runs, Definition, Versions)
+- [ ] Add Run detail drawer/page with timeline view
+- [ ] Implement "Start Run" modal with input form
+- [ ] Add real-time run updates via SSE
+
+**Deliverables**: Full workflows UI parity with Agents page
+
+### Phase 8 - Observability + Docs (1-2d)
 
 - [ ] OpenTelemetry spans + NATS trace propagation
 - [ ] Add run/step metrics
@@ -625,7 +834,7 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 
 ---
 
-## 8) Success Metrics
+## 10) Success Metrics
 
 ### Reliability
 
@@ -637,6 +846,9 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 - All V1 state types working: operation, switch, parallel, inject, foreach
 - Both executors working: agent.run, human.approval
 - Schema validation catching mismatched agent inputs/outputs
+- File-based workflow definitions loadable via `stn sync`
+- Workflows includable in bundles
+- Full web UI for workflow management (list, detail, runs, approvals)
 
 ### Performance (V1 targets)
 
@@ -650,7 +862,7 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 
 ---
 
-## 9) Open Questions
+## 11) Open Questions
 
 1. **Starlark sandbox limits**: What CPU/memory limits for expression evaluation?
 2. **Approval identity**: What auth system is authoritative (local users, CloudShip identity, OIDC)?
