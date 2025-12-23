@@ -33,6 +33,33 @@ type StateSpec struct {
 
 	Data       map[string]interface{} `json:"data,omitempty" yaml:"data,omitempty"`
 	ResultPath string                 `json:"resultPath,omitempty" yaml:"resultPath,omitempty"`
+
+	// Parallel state fields
+	Branches []BranchSpec `json:"branches,omitempty" yaml:"branches,omitempty"`
+	Join     *JoinSpec    `json:"join,omitempty" yaml:"join,omitempty"`
+
+	// Foreach state fields
+	ItemsPath      string        `json:"itemsPath,omitempty" yaml:"itemsPath,omitempty"`
+	ItemName       string        `json:"itemName,omitempty" yaml:"itemName,omitempty"`
+	MaxConcurrency int           `json:"maxConcurrency,omitempty" yaml:"maxConcurrency,omitempty"`
+	Iterator       *IteratorSpec `json:"iterator,omitempty" yaml:"iterator,omitempty"`
+}
+
+// BranchSpec defines a parallel branch with its own mini-workflow.
+type BranchSpec struct {
+	Name   string      `json:"name" yaml:"name"`
+	States []StateSpec `json:"states" yaml:"states"`
+}
+
+// JoinSpec defines how parallel branches are joined.
+type JoinSpec struct {
+	Mode string `json:"mode,omitempty" yaml:"mode,omitempty"` // "all" (default), "any" (future)
+}
+
+// IteratorSpec defines the inline workflow for foreach iteration.
+type IteratorSpec struct {
+	Start  string      `json:"start,omitempty" yaml:"start,omitempty"`
+	States []StateSpec `json:"states" yaml:"states"`
 }
 
 type SwitchCondition struct {
