@@ -255,6 +255,58 @@ func (s *WorkflowService) SignalRun(ctx context.Context, req SignalWorkflowRunRe
 	return s.repos.WorkflowRuns.Get(ctx, req.RunID)
 }
 
+// PauseRun marks a workflow run as blocked (pause).
+func (s *WorkflowService) PauseRun(ctx context.Context, runID, reason string) (*models.WorkflowRun, error) {
+	if reason == "" {
+		reason = "Run paused"
+	}
+	now := time.Now()
+	if err := s.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
+		RunID:       runID,
+		Status:      "blocked",
+		Error:       &reason,
+		CompletedAt: nil,
+	}); err != nil {
+		return nil, err
+	}
+	_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
+		"type":   "run_paused",
+		"reason": reason,
+		"paused": true,
+		"time":   now.UTC().Format(time.RFC3339),
+	})
+	return s.repos.WorkflowRuns.Get(ctx, runID)
+}
+
+// ResumeRun is a convenience wrapper around SignalRun that unblocks a paused run.
+func (s *WorkflowService) ResumeRun(ctx context.Context, runID, note string) (*models.WorkflowRun, error) {
+	return s.SignalRun(ctx, SignalWorkflowRunRequest{
+		RunID:   runID,
+		Name:    "resume",
+		Payload: json.RawMessage([]byte(fmt.Sprintf(`{"note":"%s"}`, note))),
+	})
+}
+
+// CompleteRun marks a workflow run as completed.
+func (s *WorkflowService) CompleteRun(ctx context.Context, runID string, result json.RawMessage, summary string) (*models.WorkflowRun, error) {
+	now := time.Now()
+	if err := s.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
+		RunID:       runID,
+		Status:      "completed",
+		Result:      result,
+		Summary:     optionalString(summary),
+		CompletedAt: &now,
+	}); err != nil {
+		return nil, err
+	}
+	_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
+		"type":   "run_completed",
+		"result": string(result),
+		"time":   now.UTC().Format(time.RFC3339),
+	})
+	return s.repos.WorkflowRuns.Get(ctx, runID)
+}
+
 func (s *WorkflowService) RecordStepStart(ctx context.Context, runID, stepID string, attempt int64, input json.RawMessage, metadata json.RawMessage) (*models.WorkflowRunStep, error) {
 	return s.repos.WorkflowRunSteps.Create(ctx, repositories.CreateWorkflowRunStepParams{
 		RunID:     runID,
@@ -282,6 +334,13 @@ func (s *WorkflowService) RecordStepUpdate(ctx context.Context, update StepUpdat
 
 func (s *WorkflowService) ListSteps(ctx context.Context, runID string) ([]*models.WorkflowRunStep, error) {
 	return s.repos.WorkflowRunSteps.ListByRun(ctx, runID)
+}
+
+func (s *WorkflowService) emitRunEvent(ctx context.Context, runID string, event map[string]interface{}) error {
+	if s.engine == nil {
+		return nil
+	}
+	return s.engine.PublishRunEvent(ctx, runID, event)
 }
 
 func optionalString(value string) *string {
