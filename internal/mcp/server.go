@@ -31,10 +31,11 @@ type Server struct {
 	agentExportService *services.AgentExportService
 	bundleHandler      *UnifiedBundleHandler
 	telemetryService   *telemetry.TelemetryService
-	lighthouseClient   *lighthouse.LighthouseClient // For surgical telemetry integration
+	lighthouseClient   *lighthouse.LighthouseClient
 	schemaRegistry     *schemas.SchemaRegistry
-	schedulerService   *services.SchedulerService // Cron-based agent scheduler
-	benchmarkService   *services.BenchmarkService // Async benchmark evaluation
+	schedulerService   *services.SchedulerService
+	benchmarkService   *services.BenchmarkService
+	workflowService    *services.WorkflowService
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -80,6 +81,7 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 		schemaRegistry:     schemas.NewSchemaRegistry(),
 		schedulerService:   schedulerService,
 		benchmarkService:   benchmarkService,
+		workflowService:    services.NewWorkflowService(repos),
 	}
 
 	// Setup the server capabilities

@@ -23,12 +23,12 @@ type Options struct {
 // WORKFLOW_NATS_EMBEDDED=true starts an embedded NATS server for local development.
 func EnvOptions() Options {
 	opts := Options{
-		Enabled:       getenvBool("WORKFLOW_NATS_ENABLED", false),
+		Enabled:       getenvBool("WORKFLOW_NATS_ENABLED", true),
 		URL:           getenvDefault("WORKFLOW_NATS_URL", "nats://127.0.0.1:4222"),
 		Stream:        getenvDefault("WORKFLOW_NATS_STREAM", "WORKFLOW_EVENTS"),
 		SubjectPrefix: getenvDefault("WORKFLOW_NATS_SUBJECT_PREFIX", "workflow"),
 		ConsumerName:  getenvDefault("WORKFLOW_NATS_CONSUMER", "station-workflow"),
-		Embedded:      getenvBool("WORKFLOW_NATS_EMBEDDED", false),
+		Embedded:      getenvBool("WORKFLOW_NATS_EMBEDDED", true),
 	}
 	return opts
 }

@@ -19,7 +19,6 @@ type workflowDefinitionRequest struct {
 	Definition  json.RawMessage `json:"definition" binding:"required"`
 }
 
-// registerWorkflowRoutes wires workflow definition CRUD endpoints.
 func (h *APIHandlers) registerWorkflowRoutes(group *gin.RouterGroup) {
 	group.POST("", h.createWorkflow)
 	group.POST("/validate", h.validateWorkflow)
@@ -29,6 +28,7 @@ func (h *APIHandlers) registerWorkflowRoutes(group *gin.RouterGroup) {
 	group.GET("/:workflowId/versions/:version", h.getWorkflowVersion)
 	group.PUT("/:workflowId", h.updateWorkflow)
 	group.DELETE("/:workflowId", h.disableWorkflow)
+	group.POST("/:workflowId/runs", h.startWorkflowRunNested)
 }
 
 func (h *APIHandlers) createWorkflow(c *gin.Context) {

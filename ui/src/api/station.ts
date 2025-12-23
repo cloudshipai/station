@@ -225,6 +225,140 @@ export const versionApi = {
   performUpdate: () => apiClient.post<UpdateResult>('/version/update'),
 };
 
+// Workflow types
+export interface WorkflowDefinition {
+  id: number;
+  workflow_id: string;
+  name: string;
+  description: string;
+  version: number;
+  definition: any;
+  status: 'active' | 'disabled';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowRun {
+  id: number;
+  run_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'waiting_approval';
+  started_at: string;
+  completed_at?: string;
+  input?: any;
+  output?: any;
+  error?: string;
+  current_state?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowStep {
+  id: number;
+  run_id: string;
+  state_name: string;
+  step_type: string;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+  input?: any;
+  output?: any;
+  error?: string;
+  agent_run_id?: number;
+  approval_id?: string;
+  branch_index?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowApproval {
+  id: number;
+  approval_id: string;
+  run_id: string;
+  step_id: number;
+  state_name: string;
+  status: 'pending' | 'approved' | 'rejected';
+  required_approvers?: string[];
+  approved_by?: string;
+  rejected_by?: string;
+  comment?: string;
+  reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Workflows API
+export const workflowsApi = {
+  // Workflow Definitions
+  getAll: () => 
+    apiClient.get<{ workflows: WorkflowDefinition[], count: number }>('/workflows'),
+  
+  getById: (id: string, version?: number) => {
+    const params = version ? `?version=${version}` : '';
+    return apiClient.get<{ workflow: WorkflowDefinition }>(`/workflows/${id}${params}`);
+  },
+  
+  create: (data: { workflowId: string; name: string; description?: string; definition: any }) =>
+    apiClient.post<{ workflow: WorkflowDefinition; message: string }>('/workflows', data),
+  
+  update: (id: string, data: { name?: string; description?: string; definition: any }) =>
+    apiClient.put<{ workflow: WorkflowDefinition; message: string }>(`/workflows/${id}`, data),
+  
+  delete: (id: string) =>
+    apiClient.delete<{ message: string }>(`/workflows/${id}`),
+  
+  validate: (definition: any) =>
+    apiClient.post<{ valid: boolean; errors?: string[] }>('/workflows/validate', { definition }),
+
+  // Workflow Runs
+  startRun: (workflowId: string, input?: any, version?: number) =>
+    apiClient.post<{ run: WorkflowRun; message: string }>(`/workflows/${workflowId}/runs`, { input, version }),
+  
+  listRuns: (params?: { workflow_id?: string; status?: string; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.workflow_id) queryParams.append('workflow_id', params.workflow_id);
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const queryString = queryParams.toString();
+    return apiClient.get<{ runs: WorkflowRun[], count: number }>(
+      `/workflow-runs${queryString ? `?${queryString}` : ''}`
+    );
+  },
+  
+  getRun: (runId: string) =>
+    apiClient.get<{ run: WorkflowRun }>(`/workflow-runs/${runId}`),
+  
+  cancelRun: (runId: string, reason?: string) =>
+    apiClient.post<{ run: WorkflowRun; message: string }>(`/workflow-runs/${runId}/cancel`, { reason }),
+  
+  pauseRun: (runId: string, reason?: string) =>
+    apiClient.post<{ run: WorkflowRun; message: string }>(`/workflow-runs/${runId}/pause`, { reason }),
+  
+  resumeRun: (runId: string) =>
+    apiClient.post<{ run: WorkflowRun; message: string }>(`/workflow-runs/${runId}/resume`),
+  
+  getSteps: (runId: string) =>
+    apiClient.get<{ steps: WorkflowStep[], count: number }>(`/workflow-runs/${runId}/steps`),
+
+  // Workflow Approvals
+  listApprovals: (params?: { run_id?: string; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.run_id) queryParams.append('run_id', params.run_id);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const queryString = queryParams.toString();
+    return apiClient.get<{ approvals: WorkflowApproval[], count: number }>(
+      `/workflow-approvals${queryString ? `?${queryString}` : ''}`
+    );
+  },
+  
+  approve: (approvalId: string, comment?: string) =>
+    apiClient.post<{ approval: WorkflowApproval; message: string }>(`/workflow-approvals/${approvalId}/approve`, { comment }),
+  
+  reject: (approvalId: string, reason?: string) =>
+    apiClient.post<{ approval: WorkflowApproval; message: string }>(`/workflow-approvals/${approvalId}/reject`, { reason }),
+};
+
 // Reports API
 export const reportsApi = {
   getAll: (params?: { environment_id?: number; limit?: number; offset?: number }) => {

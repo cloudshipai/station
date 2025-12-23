@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -49,6 +50,7 @@ func (h *APIHandlers) registerWorkflowRunRoutes(group *gin.RouterGroup) {
 	group.POST("", h.startWorkflowRun)
 	group.GET("", h.listWorkflowRuns)
 	group.GET("/:runId", h.getWorkflowRun)
+	group.GET("/:runId/stream", h.streamWorkflowRun)
 	group.GET("/:runId/steps", h.listWorkflowRunSteps)
 	group.GET("/:runId/approvals", h.listWorkflowRunApprovals)
 	group.POST("/:runId/cancel", h.cancelWorkflowRun)
@@ -101,6 +103,45 @@ func (h *APIHandlers) startWorkflowRun(c *gin.Context) {
 	})
 }
 
+func (h *APIHandlers) startWorkflowRunNested(c *gin.Context) {
+	workflowID := c.Param("workflowId")
+
+	var req struct {
+		Version *int64          `json:"version,omitempty"`
+		Input   json.RawMessage `json:"input"`
+		Options json.RawMessage `json:"options"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	version := int64(0)
+	if req.Version != nil {
+		version = *req.Version
+	}
+
+	run, validation, err := h.workflowService.StartRun(c.Request.Context(), services.StartWorkflowRunRequest{
+		WorkflowID: workflowID,
+		Version:    version,
+		Input:      req.Input,
+		Options:    req.Options,
+	})
+	if errors.Is(err, workflows.ErrValidation) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"validation": validation,
+			"message":    "Workflow definition failed validation for execution",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start workflow run"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"run":     run,
+		"message": "Workflow run started",
+	})
+}
+
 func (h *APIHandlers) getWorkflowRun(c *gin.Context) {
 	runID := c.Param("runId")
 	run, err := h.workflowService.GetRun(c.Request.Context(), runID)
@@ -113,7 +154,10 @@ func (h *APIHandlers) getWorkflowRun(c *gin.Context) {
 }
 
 func (h *APIHandlers) listWorkflowRuns(c *gin.Context) {
-	workflowID := c.Query("workflowId")
+	workflowID := c.Query("workflow_id")
+	if workflowID == "" {
+		workflowID = c.Query("workflowId")
+	}
 	status := c.Query("status")
 
 	limit := int64(50)
@@ -252,7 +296,10 @@ func (h *APIHandlers) listWorkflowRunApprovals(c *gin.Context) {
 }
 
 func (h *APIHandlers) listPendingApprovals(c *gin.Context) {
-	runID := c.Query("runId")
+	runID := c.Query("run_id")
+	if runID == "" {
+		runID = c.Query("runId")
+	}
 	limit := int64(50)
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
@@ -334,4 +381,75 @@ func (h *APIHandlers) rejectWorkflowStep(c *gin.Context) {
 		"approval": approval,
 		"message":  "Workflow step rejected",
 	})
+}
+
+func (h *APIHandlers) streamWorkflowRun(c *gin.Context) {
+	runID := c.Param("runId")
+
+	run, err := h.workflowService.GetRun(c.Request.Context(), runID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Workflow run not found"})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Access-Control-Allow-Origin", "*")
+
+	clientGone := c.Request.Context().Done()
+
+	runData, _ := json.Marshal(gin.H{"type": "run_update", "run": run})
+	c.SSEvent("message", string(runData))
+	c.Writer.Flush()
+
+	steps, _ := h.workflowService.ListSteps(c.Request.Context(), runID)
+	for _, step := range steps {
+		stepData, _ := json.Marshal(gin.H{"type": "step_update", "step": step})
+		c.SSEvent("message", string(stepData))
+	}
+	c.Writer.Flush()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	lastRunStatus := run.Status
+	lastStepCount := len(steps)
+
+	for {
+		select {
+		case <-clientGone:
+			return
+		case <-ticker.C:
+			currentRun, err := h.workflowService.GetRun(c.Request.Context(), runID)
+			if err != nil {
+				continue
+			}
+
+			stepChanged := (currentRun.CurrentStep == nil) != (run.CurrentStep == nil) ||
+				(currentRun.CurrentStep != nil && run.CurrentStep != nil && *currentRun.CurrentStep != *run.CurrentStep)
+
+			if currentRun.Status != lastRunStatus || stepChanged {
+				runData, _ := json.Marshal(gin.H{"type": "run_update", "run": currentRun})
+				c.SSEvent("message", string(runData))
+				c.Writer.Flush()
+				lastRunStatus = currentRun.Status
+				run = currentRun
+			}
+
+			currentSteps, _ := h.workflowService.ListSteps(c.Request.Context(), runID)
+			if len(currentSteps) != lastStepCount {
+				for _, step := range currentSteps[lastStepCount:] {
+					stepData, _ := json.Marshal(gin.H{"type": "step_update", "step": step})
+					c.SSEvent("message", string(stepData))
+				}
+				c.Writer.Flush()
+				lastStepCount = len(currentSteps)
+			}
+
+			if currentRun.Status == "completed" || currentRun.Status == "failed" || currentRun.Status == "cancelled" {
+				return
+			}
+		}
+	}
 }

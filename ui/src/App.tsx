@@ -25,6 +25,8 @@ import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
 import { ReportsPage } from './components/pages/ReportsPage';
 import { ReportDetailPage } from './components/pages/ReportDetailPage';
+import { WorkflowsPage } from './components/workflows/WorkflowsPage';
+import { WorkflowDetailPage } from './components/workflows/WorkflowDetailPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -243,6 +245,7 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/mcps')) return 'mcps';
     if (path.startsWith('/mcp-directory')) return 'mcp-directory';
     if (path.startsWith('/runs')) return 'runs';
+    if (path.startsWith('/workflows')) return 'workflows';
     if (path.startsWith('/reports')) return 'reports';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
@@ -296,6 +299,7 @@ const Layout = ({ children }: any) => {
   const sidebarItems = [
     { id: 'agents', label: 'Agents', icon: Bot, path: currentEnvironmentName ? `/agents/${currentEnvironmentName}` : '/agents' },
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
+    { id: 'workflows', label: 'Workflows', icon: GitBranch, path: '/workflows' },
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
     { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
     { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
@@ -4104,6 +4108,8 @@ function App() {
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
                   <Route path="/runs" element={<RunsPage />} />
+                  <Route path="/workflows" element={<WorkflowsPage />} />
+                  <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
                   <Route path="/reports" element={<ReportsPageWrapper />} />
                   <Route path="/reports/:reportId" element={<ReportDetailPageWrapper />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />

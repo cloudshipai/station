@@ -352,11 +352,13 @@ func (m *mockApprovalDeps) GetApproval(ctx context.Context, approvalID string) (
 
 func TestHumanApprovalExecutor_Execute(t *testing.T) {
 	deps := &mockApprovalDeps{}
-	executor := NewHumanApprovalExecutor(deps, "run-123")
+	executor := NewHumanApprovalExecutor(deps)
+	runContext := map[string]interface{}{"_runID": "run-123"}
 
 	tests := []struct {
 		name       string
 		step       workflows.ExecutionStep
+		runCtx     map[string]interface{}
 		wantStatus StepStatus
 		wantErr    bool
 	}{
@@ -374,6 +376,7 @@ func TestHumanApprovalExecutor_Execute(t *testing.T) {
 					},
 				},
 			},
+			runCtx:     runContext,
 			wantStatus: StepStatusWaitingApproval,
 			wantErr:    false,
 		},
@@ -388,6 +391,7 @@ func TestHumanApprovalExecutor_Execute(t *testing.T) {
 					},
 				},
 			},
+			runCtx:     runContext,
 			wantStatus: StepStatusCompleted,
 			wantErr:    false,
 		},
@@ -402,6 +406,23 @@ func TestHumanApprovalExecutor_Execute(t *testing.T) {
 					},
 				},
 			},
+			runCtx:     runContext,
+			wantStatus: StepStatusFailed,
+			wantErr:    true,
+		},
+		{
+			name: "requires runID in context",
+			step: workflows.ExecutionStep{
+				ID:   "approval-step",
+				Type: workflows.StepTypeAwait,
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"task":    "human.approval",
+						"message": "Approve?",
+					},
+				},
+			},
+			runCtx:     nil,
 			wantStatus: StepStatusFailed,
 			wantErr:    true,
 		},
@@ -409,7 +430,7 @@ func TestHumanApprovalExecutor_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := executor.Execute(context.Background(), tt.step, nil)
+			result, err := executor.Execute(context.Background(), tt.step, tt.runCtx)
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error, got nil")
@@ -486,7 +507,7 @@ func TestHumanApprovalExecutor_HandleDecision(t *testing.T) {
 					tt.approval.ID: tt.approval,
 				},
 			}
-			executor := NewHumanApprovalExecutor(deps, "run-123")
+			executor := NewHumanApprovalExecutor(deps)
 
 			result, err := executor.HandleApprovalDecision(context.Background(), tt.approval.ID, step)
 
@@ -506,7 +527,7 @@ func TestHumanApprovalExecutor_HandleDecision(t *testing.T) {
 }
 
 func TestHumanApprovalExecutor_SupportedTypes(t *testing.T) {
-	executor := NewHumanApprovalExecutor(nil, "run-123")
+	executor := NewHumanApprovalExecutor(nil)
 	types := executor.SupportedTypes()
 
 	if len(types) != 1 {
