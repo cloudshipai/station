@@ -779,40 +779,57 @@ The UI consumes existing workflow APIs:
 
 **Deliverables**: E2E test: workflow calls agent, stores result
 
-### Phase 3 - Executor: human.approval + Signals (1-2d)
+### Phase 3 - Executor: human.approval + Signals (1-2d) ✅ COMPLETE
 
-- [ ] Implement `human.approval` executor
-- [ ] Add approval records + APIs
-- [ ] Implement `WAITING_SIGNAL` semantics
-- [ ] Implement timeouts for approvals/signals
+- [x] Implement `human.approval` executor
+- [x] Add approval records + APIs
+- [x] Implement `WAITING_SIGNAL` semantics
+- [x] Implement timeouts for approvals/signals
 
 **Deliverables**: Workflow example: plan → approval → execute
 
-### Phase 4 - Starlark Switch + Inject (1d)
+### Phase 4 - Starlark Switch + Inject (1d) ✅ COMPLETE
 
-- [ ] Integrate Starlark for `switch` conditions
-- [ ] Implement `inject` state type
-- [ ] Expand validator for V1 constraints
+- [x] Integrate Starlark for `switch` conditions
+- [x] Implement `inject` state type
+- [x] Add GetNestedValue/SetNestedValue for context access
+- [x] Add comprehensive tests
 
 **Deliverables**: Workflow with conditional branching
 
-### Phase 5 - Parallel + Foreach (2-3d)
+### Phase 5 - Parallel + Foreach (2-3d) ✅ COMPLETE
 
-- [ ] Implement parallel branch execution and join
-- [ ] Implement foreach (sequential, maxConcurrency=1)
-- [ ] Branch context isolation and merge
+- [x] Implement parallel branch execution and join
+- [x] Implement foreach (sequential and concurrent with maxConcurrency)
+- [x] Branch context isolation and merge
+- [x] Add comprehensive tests
 
 **Deliverables**: Parallel diagnostics workflow
 
-### Phase 6 - File-Based Workflow Definitions (1-2d)
+### Phase 6 - File-Based Workflow Definitions (1-2d) ✅ COMPLETE
 
-- [ ] Add `workflows/` directory support in environment structure
-- [ ] Implement workflow file discovery (`.workflow.yaml`, `.workflow.json`)
-- [ ] Add workflow sync logic to `stn sync` command
-- [ ] Integrate workflows into bundle packaging
-- [ ] Add file-based workflow validation on sync
+- [x] Add `workflows/` directory support in environment structure (`config/paths.go`)
+- [x] Implement workflow file discovery (`.workflow.yaml`, `.workflow.yml`, `.workflow.json`)
+- [x] Create workflow loader (`internal/workflows/loader.go`)
+- [x] Add `SyncWorkflowFiles` to workflow service
+- [x] Integrate workflow sync into declarative sync (`stn sync`)
+- [x] Add file-based workflow validation on sync
+- [ ] Integrate workflows into bundle packaging (deferred to Phase 6.5)
 
-**Deliverables**: Workflows loadable from files, included in bundles
+**Deliverables**: Workflows loadable from files via `stn sync`
+
+**Directory Structure**:
+```
+environments/
+└── default/
+    ├── agents/
+    │   └── *.prompt
+    ├── mcp-servers/
+    │   └── *.json
+    └── workflows/
+        ├── incident-triage.workflow.yaml
+        └── deploy-pipeline.workflow.json
+```
 
 ### Phase 7 - Web UI: Workflows Page (2-3d)
 
