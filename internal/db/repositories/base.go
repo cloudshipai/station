@@ -21,6 +21,9 @@ type Repositories struct {
 	Reports          *ReportRepo
 	BenchmarkMetrics *BenchmarkMetricsRepo
 	BenchmarkTasks   *BenchmarkTasksRepo
+	Workflows        *WorkflowRepo
+	WorkflowRuns     *WorkflowRunRepo
+	WorkflowRunSteps *WorkflowRunStepRepo
 	db               db.Database // Store reference to database for transactions
 }
 
@@ -43,6 +46,9 @@ func New(database db.Database) *Repositories {
 		Reports:          NewReportRepo(conn),
 		BenchmarkMetrics: NewBenchmarkMetricsRepo(conn),
 		BenchmarkTasks:   NewBenchmarkTasksRepo(conn),
+		Workflows:        NewWorkflowRepo(conn),
+		WorkflowRuns:     NewWorkflowRunRepo(conn),
+		WorkflowRunSteps: NewWorkflowRunStepRepo(conn),
 		db:               database,
 	}
 }
