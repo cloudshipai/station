@@ -84,18 +84,18 @@ type WorkflowApproval struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
-// Workflow event type constants.
 const (
-	EventTypeRunStarted     = "run_started"
-	EventTypeRunCompleted   = "run_completed"
-	EventTypeRunFailed      = "run_failed"
-	EventTypeRunCanceled    = "run_canceled"
-	EventTypeRunPaused      = "run_paused"
-	EventTypeRunResumed     = "run_resumed"
-	EventTypeStepStarted    = "step_started"
-	EventTypeStepCompleted  = "step_completed"
-	EventTypeStepFailed     = "step_failed"
-	EventTypeSignalReceived = "signal_received"
+	EventTypeRunStarted      = "run_started"
+	EventTypeRunCompleted    = "run_completed"
+	EventTypeRunFailed       = "run_failed"
+	EventTypeRunCanceled     = "run_canceled"
+	EventTypeRunPaused       = "run_paused"
+	EventTypeRunResumed      = "run_resumed"
+	EventTypeStepStarted     = "step_started"
+	EventTypeStepCompleted   = "step_completed"
+	EventTypeStepFailed      = "step_failed"
+	EventTypeSignalReceived  = "signal_received"
+	EventTypeApprovalDecided = "approval_decided"
 )
 
 // Approval status constants.

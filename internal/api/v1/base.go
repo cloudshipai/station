@@ -212,6 +212,10 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	workflowRunsGroup := router.Group("/workflow-runs")
 	h.registerWorkflowRunRoutes(workflowRunsGroup)
 
+	// Workflow approval routes - accessible to regular users
+	workflowApprovalsGroup := router.Group("/workflow-approvals")
+	h.registerWorkflowApprovalRoutes(workflowApprovalsGroup)
+
 	// Settings routes - admin only
 	settingsGroup := router.Group("/settings")
 	if !h.localMode {
