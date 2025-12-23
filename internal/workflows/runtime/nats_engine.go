@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -81,10 +82,18 @@ func (e *NATSEngine) PublishRunEvent(ctx context.Context, runID string, event an
 
 func (e *NATSEngine) PublishStepSchedule(ctx context.Context, runID, stepID string, payload any) error {
 	if e == nil || e.js == nil {
+		log.Printf("NATS Engine: PublishStepSchedule called but engine is nil (runID=%s, stepID=%s)", runID, stepID)
 		return nil
 	}
 	subject := fmt.Sprintf("%s.run.%s.step.%s.schedule", e.opts.SubjectPrefix, runID, stepID)
-	return e.publishJSON(subject, payload)
+	log.Printf("NATS Engine: Publishing step schedule to subject=%s (runID=%s, stepID=%s)", subject, runID, stepID)
+	err := e.publishJSON(subject, payload)
+	if err != nil {
+		log.Printf("NATS Engine: Failed to publish step schedule: %v", err)
+	} else {
+		log.Printf("NATS Engine: Successfully published step schedule for run=%s step=%s", runID, stepID)
+	}
+	return err
 }
 
 func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg *nats.Msg)) (*nats.Subscription, error) {
@@ -96,6 +105,8 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 		consumer = e.opts.ConsumerName
 	}
 
+	log.Printf("NATS Engine: Subscribing to subject=%s with consumer=%s", subject, consumer)
+
 	sub, err := e.js.Subscribe(
 		subject,
 		handler,
@@ -105,8 +116,16 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 		nats.ManualAck(),
 	)
 	if err != nil {
+		log.Printf("NATS Engine: Subscribe failed: %v", err)
 		return nil, fmt.Errorf("jetstream subscribe failed: %w", err)
 	}
+
+	info, infoErr := sub.ConsumerInfo()
+	if infoErr == nil {
+		log.Printf("NATS Engine: Consumer info - NumPending=%d, NumAckPending=%d, NumRedelivered=%d, Delivered.Stream=%d",
+			info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Stream)
+	}
+
 	return sub, nil
 }
 

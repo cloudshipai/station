@@ -17,7 +17,8 @@ import {
   Trash2,
   Settings
 } from 'lucide-react';
-import { workflowsApi, type WorkflowDefinition, type WorkflowRun } from '../../api/station';
+import { workflowsApi } from '../../api/station';
+import type { WorkflowDefinition, WorkflowRun } from '../../types/station';
 
 type TabType = 'definitions' | 'runs';
 type StatusFilter = '' | 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'waiting_approval';

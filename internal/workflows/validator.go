@@ -1,10 +1,12 @@
 package workflows
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
 	"gopkg.in/yaml.v3"
+	"station/pkg/models"
 )
 
 // ValidateDefinition parses and validates a workflow definition, returning both errors and warnings.
@@ -187,4 +189,272 @@ func ValidateDefinition(raw json.RawMessage) (*Definition, ValidationResult, err
 	}
 
 	return &def, result, nil
+}
+
+type AgentLookup interface {
+	GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (*models.Agent, error)
+}
+
+type AgentValidator struct {
+	agentLookup AgentLookup
+}
+
+func NewAgentValidator(agentLookup AgentLookup) *AgentValidator {
+	return &AgentValidator{agentLookup: agentLookup}
+}
+
+func (v *AgentValidator) ValidateAgents(ctx context.Context, def *Definition, environmentID int64) *ValidationResult {
+	result := &ValidationResult{
+		Errors:   []ValidationIssue{},
+		Warnings: []ValidationIssue{},
+	}
+
+	if def == nil || len(def.States) == 0 {
+		return result
+	}
+
+	agentCache := make(map[string]*models.Agent)
+	agentSteps := []agentStepInfo{}
+
+	for i, state := range def.States {
+		path := fmt.Sprintf("/states/%d", i)
+		v.collectAgentSteps(ctx, &state, path, environmentID, agentCache, &agentSteps, result)
+	}
+
+	v.validateSchemaCompatibility(agentSteps, def, result)
+
+	return result
+}
+
+type agentStepInfo struct {
+	stateID    string
+	statePath  string
+	agent      *models.Agent
+	transition string
+}
+
+func (v *AgentValidator) collectAgentSteps(ctx context.Context, state *StateSpec, path string, envID int64, cache map[string]*models.Agent, steps *[]agentStepInfo, result *ValidationResult) {
+	if isAgentRunStep(state) {
+		agentName := extractAgentName(state)
+		if agentName == "" {
+			result.Errors = append(result.Errors, ValidationIssue{
+				Code:    "AGENT_NAME_REQUIRED",
+				Path:    path + "/input/agent",
+				Message: "agent name is required for agent.run steps",
+				Hint:    "Add 'agent: \"your-agent-name\"' to the step input",
+			})
+			return
+		}
+
+		agent, err := v.lookupAgent(ctx, agentName, envID, cache)
+		if err != nil {
+			result.Errors = append(result.Errors, ValidationIssue{
+				Code:    "AGENT_NOT_FOUND",
+				Path:    path + "/input/agent",
+				Message: fmt.Sprintf("agent '%s' not found in environment %d", agentName, envID),
+				Actual:  agentName,
+				Hint:    "Ensure the agent exists in the same environment as the workflow",
+			})
+			return
+		}
+
+		*steps = append(*steps, agentStepInfo{
+			stateID:    state.StableID(),
+			statePath:  path,
+			agent:      agent,
+			transition: getStateTransition(state),
+		})
+	}
+
+	for i, branch := range state.Branches {
+		branchPath := fmt.Sprintf("%s/branches/%d", path, i)
+		for j := range branch.States {
+			v.collectAgentSteps(ctx, &branch.States[j], fmt.Sprintf("%s/states/%d", branchPath, j), envID, cache, steps, result)
+		}
+	}
+
+	if state.Iterator != nil {
+		for j := range state.Iterator.States {
+			v.collectAgentSteps(ctx, &state.Iterator.States[j], fmt.Sprintf("%s/iterator/states/%d", path, j), envID, cache, steps, result)
+		}
+	}
+}
+
+func (v *AgentValidator) lookupAgent(ctx context.Context, name string, envID int64, cache map[string]*models.Agent) (*models.Agent, error) {
+	cacheKey := fmt.Sprintf("%s:%d", name, envID)
+	if agent, exists := cache[cacheKey]; exists {
+		return agent, nil
+	}
+
+	agent, err := v.agentLookup.GetAgentByNameAndEnvironment(ctx, name, envID)
+	if err != nil {
+		return nil, err
+	}
+
+	cache[cacheKey] = agent
+	return agent, nil
+}
+
+func (v *AgentValidator) validateSchemaCompatibility(steps []agentStepInfo, def *Definition, result *ValidationResult) {
+	stepByID := make(map[string]*agentStepInfo)
+	for i := range steps {
+		stepByID[steps[i].stateID] = &steps[i]
+	}
+
+	checker := NewSchemaChecker()
+
+	for _, step := range steps {
+		if step.transition == "" {
+			continue
+		}
+
+		nextStep, exists := stepByID[step.transition]
+		if !exists {
+			continue
+		}
+
+		if step.agent.OutputSchema == nil || *step.agent.OutputSchema == "" {
+			continue
+		}
+
+		if nextStep.agent.InputSchema == nil || *nextStep.agent.InputSchema == "" {
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Code:    "SCHEMA_NO_INPUT",
+				Path:    fmt.Sprintf("%s -> %s", step.statePath, nextStep.statePath),
+				Message: fmt.Sprintf("agent '%s' has output_schema but next agent '%s' has no input_schema - cannot validate compatibility", step.agent.Name, nextStep.agent.Name),
+			})
+			continue
+		}
+
+		compat := checker.CheckCompatibility(*step.agent.OutputSchema, *nextStep.agent.InputSchema)
+
+		if !compat.Compatible {
+			for _, issue := range compat.Issues {
+				result.Errors = append(result.Errors, ValidationIssue{
+					Code:    "SCHEMA_INCOMPATIBLE",
+					Path:    fmt.Sprintf("%s -> %s", step.statePath, nextStep.statePath),
+					Message: issue,
+					Hint:    fmt.Sprintf("Agent '%s' output schema is incompatible with agent '%s' input schema", step.agent.Name, nextStep.agent.Name),
+				})
+			}
+		}
+
+		for _, warning := range compat.Warnings {
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Code:    "SCHEMA_WARNING",
+				Path:    fmt.Sprintf("%s -> %s", step.statePath, nextStep.statePath),
+				Message: warning,
+			})
+		}
+	}
+}
+
+func isAgentRunStep(state *StateSpec) bool {
+	if state.Type != "operation" && state.Type != "action" && state.Type != "function" {
+		return false
+	}
+
+	if state.Input == nil {
+		return false
+	}
+
+	task, ok := state.Input["task"].(string)
+	if !ok {
+		return false
+	}
+
+	return task == "agent.run" || task == "agent.hierarchy.run"
+}
+
+func extractAgentName(state *StateSpec) string {
+	if state.Input == nil {
+		return ""
+	}
+
+	if name, ok := state.Input["agent"].(string); ok {
+		return name
+	}
+
+	return ""
+}
+
+func getStateTransition(state *StateSpec) string {
+	if state.Transition != "" {
+		return state.Transition
+	}
+	return state.Next
+}
+
+func ValidateInputAgainstSchema(input map[string]interface{}, schemaJSON string) error {
+	if schemaJSON == "" {
+		return nil
+	}
+
+	var schema map[string]interface{}
+	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
+		return fmt.Errorf("invalid schema JSON: %w", err)
+	}
+
+	required, _ := schema["required"].([]interface{})
+	properties, _ := schema["properties"].(map[string]interface{})
+
+	for _, req := range required {
+		reqStr, ok := req.(string)
+		if !ok {
+			continue
+		}
+
+		if _, exists := input[reqStr]; !exists {
+			return fmt.Errorf("missing required field: %s", reqStr)
+		}
+	}
+
+	for key, value := range input {
+		propDef, exists := properties[key]
+		if !exists {
+			continue
+		}
+
+		propMap, ok := propDef.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		expectedType, _ := propMap["type"].(string)
+		if expectedType != "" {
+			if err := validateType(value, expectedType); err != nil {
+				return fmt.Errorf("field '%s': %w", key, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func validateType(value interface{}, expectedType string) error {
+	switch expectedType {
+	case "string":
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("expected string, got %T", value)
+		}
+	case "number", "integer":
+		switch value.(type) {
+		case float64, int, int64, float32:
+		default:
+			return fmt.Errorf("expected %s, got %T", expectedType, value)
+		}
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("expected boolean, got %T", value)
+		}
+	case "array":
+		if _, ok := value.([]interface{}); !ok {
+			return fmt.Errorf("expected array, got %T", value)
+		}
+	case "object":
+		if _, ok := value.(map[string]interface{}); !ok {
+			return fmt.Errorf("expected object, got %T", value)
+		}
+	}
+	return nil
 }

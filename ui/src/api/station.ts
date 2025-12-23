@@ -11,8 +11,14 @@ import type {
   JaegerTrace,
   Report,
   ReportWithDetails,
-  CreateReportRequest
+  CreateReportRequest,
+  WorkflowDefinition,
+  WorkflowRun,
+  WorkflowStep,
+  WorkflowApproval
 } from '../types/station';
+
+
 
 // Environment API
 export const environmentsApi = {
@@ -224,69 +230,6 @@ export const versionApi = {
   checkForUpdates: () => apiClient.get<VersionInfo>('/version/check'),
   performUpdate: () => apiClient.post<UpdateResult>('/version/update'),
 };
-
-// Workflow types
-export interface WorkflowDefinition {
-  id: number;
-  workflow_id: string;
-  name: string;
-  description: string;
-  version: number;
-  definition: any;
-  status: 'active' | 'disabled';
-  created_at: string;
-  updated_at: string;
-}
-
-export interface WorkflowRun {
-  id: number;
-  run_id: string;
-  workflow_id: string;
-  workflow_version: number;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'waiting_approval';
-  started_at: string;
-  completed_at?: string;
-  input?: any;
-  output?: any;
-  error?: string;
-  current_state?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface WorkflowStep {
-  id: number;
-  run_id: string;
-  state_name: string;
-  step_type: string;
-  status: string;
-  started_at?: string;
-  completed_at?: string;
-  input?: any;
-  output?: any;
-  error?: string;
-  agent_run_id?: number;
-  approval_id?: string;
-  branch_index?: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface WorkflowApproval {
-  id: number;
-  approval_id: string;
-  run_id: string;
-  step_id: number;
-  state_name: string;
-  status: 'pending' | 'approved' | 'rejected';
-  required_approvers?: string[];
-  approved_by?: string;
-  rejected_by?: string;
-  comment?: string;
-  reason?: string;
-  created_at: string;
-  updated_at: string;
-}
 
 // Workflows API
 export const workflowsApi = {

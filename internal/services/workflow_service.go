@@ -31,10 +31,11 @@ type WorkflowDefinitionInput struct {
 
 // StartWorkflowRunRequest defines parameters for starting a workflow run.
 type StartWorkflowRunRequest struct {
-	WorkflowID string
-	Version    int64
-	Input      json.RawMessage
-	Options    json.RawMessage
+	WorkflowID    string
+	Version       int64
+	EnvironmentID int64
+	Input         json.RawMessage
+	Options       json.RawMessage
 }
 
 // SignalWorkflowRunRequest represents a signal payload delivered to a run.
@@ -182,6 +183,8 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 	runID := uuid.NewString()
 	now := time.Now()
 
+	initialContext := s.buildInitialContext(req.Input, req.EnvironmentID)
+
 	run, err := s.repos.WorkflowRuns.Create(ctx, repositories.CreateWorkflowRunParams{
 		RunID:           runID,
 		WorkflowID:      req.WorkflowID,
@@ -189,7 +192,7 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 		Status:          "pending",
 		CurrentStep:     optionalString(startStep),
 		Input:           req.Input,
-		Context:         req.Input,
+		Context:         initialContext,
 		Options:         req.Options,
 		StartedAt:       now,
 	})
@@ -550,6 +553,24 @@ func (s *WorkflowService) emitRunEvent(ctx context.Context, runID string, event 
 		return s.engine.PublishRunEvent(ctx, runID, event)
 	}
 	return nil
+}
+
+func (s *WorkflowService) buildInitialContext(input json.RawMessage, environmentID int64) json.RawMessage {
+	ctx := make(map[string]interface{})
+
+	if len(input) > 0 {
+		_ = json.Unmarshal(input, &ctx)
+	}
+
+	if environmentID > 0 {
+		ctx["_environmentID"] = environmentID
+	}
+
+	result, err := json.Marshal(ctx)
+	if err != nil {
+		return input
+	}
+	return result
 }
 
 func optionalString(value string) *string {

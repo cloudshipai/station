@@ -59,6 +59,12 @@ func CompileExecutionPlan(def *Definition) ExecutionPlan {
 
 func classifyStep(state StateSpec) ExecutionStepType {
 	switch state.Type {
+	case "agent":
+		return StepTypeAgent
+	case "tool":
+		return StepTypeTool
+	case "human_approval":
+		return StepTypeAwait
 	case "operation", "action", "function":
 		// Map operation/action to agent/tool/custom based on task hints
 		if task, ok := state.Input["task"]; ok {
