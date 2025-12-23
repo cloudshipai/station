@@ -364,5 +364,122 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(generateAndTestAgentTool, s.handleGenerateAndTestAgent)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 38)
+	// Workflow Management Tools
+	listWorkflowsTool := mcp.NewTool("list_workflows",
+		mcp.WithDescription("List all workflow definitions"),
+		mcp.WithString("status", mcp.Description("Filter by status (active, disabled)")),
+	)
+	s.mcpServer.AddTool(listWorkflowsTool, s.handleListWorkflows)
+
+	getWorkflowTool := mcp.NewTool("get_workflow",
+		mcp.WithDescription("Get a workflow definition by ID"),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to retrieve")),
+		mcp.WithNumber("version", mcp.Description("Specific version to retrieve (default: latest)")),
+	)
+	s.mcpServer.AddTool(getWorkflowTool, s.handleGetWorkflow)
+
+	createWorkflowTool := mcp.NewTool("create_workflow",
+		mcp.WithDescription("Create a new workflow definition. For DSL syntax and state types (operation, switch, parallel, foreach, inject), read the 'station://docs/workflow-dsl' resource first."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Unique workflow identifier")),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable workflow name")),
+		mcp.WithString("description", mcp.Description("Workflow description")),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string. See 'station://docs/workflow-dsl' resource for full DSL reference including state types, transitions, expressions, and examples.")),
+	)
+	s.mcpServer.AddTool(createWorkflowTool, s.handleCreateWorkflow)
+
+	updateWorkflowTool := mcp.NewTool("update_workflow",
+		mcp.WithDescription("Update an existing workflow definition (creates new version). For DSL syntax, read 'station://docs/workflow-dsl' resource."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to update")),
+		mcp.WithString("name", mcp.Description("New workflow name")),
+		mcp.WithString("description", mcp.Description("New workflow description")),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Updated workflow definition as JSON string. See 'station://docs/workflow-dsl' resource for DSL reference.")),
+	)
+	s.mcpServer.AddTool(updateWorkflowTool, s.handleUpdateWorkflow)
+
+	deleteWorkflowTool := mcp.NewTool("delete_workflow",
+		mcp.WithDescription("Disable a workflow definition (soft delete)"),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to disable")),
+	)
+	s.mcpServer.AddTool(deleteWorkflowTool, s.handleDeleteWorkflow)
+
+	validateWorkflowTool := mcp.NewTool("validate_workflow",
+		mcp.WithDescription("Validate a workflow definition without saving. Checks DSL syntax, state references, and expression validity. Read 'station://docs/workflow-dsl' resource for DSL specification."),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string to validate against the DSL schema.")),
+	)
+	s.mcpServer.AddTool(validateWorkflowTool, s.handleValidateWorkflow)
+
+	// Workflow Run Management Tools
+	startWorkflowRunTool := mcp.NewTool("start_workflow_run",
+		mcp.WithDescription("Start a new workflow run (async). Returns run ID immediately."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to run")),
+		mcp.WithNumber("version", mcp.Description("Workflow version to run (default: latest)")),
+		mcp.WithString("input", mcp.Description("Input data as JSON string")),
+	)
+	s.mcpServer.AddTool(startWorkflowRunTool, s.handleStartWorkflowRun)
+
+	getWorkflowRunTool := mcp.NewTool("get_workflow_run",
+		mcp.WithDescription("Get status and details of a workflow run"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to retrieve")),
+	)
+	s.mcpServer.AddTool(getWorkflowRunTool, s.handleGetWorkflowRun)
+
+	listWorkflowRunsTool := mcp.NewTool("list_workflow_runs",
+		mcp.WithDescription("List workflow runs with filtering"),
+		mcp.WithString("workflow_id", mcp.Description("Filter by workflow ID")),
+		mcp.WithString("status", mcp.Description("Filter by status (running, completed, failed, cancelled, paused)")),
+		mcp.WithNumber("limit", mcp.Description("Maximum runs to return (default: 50)")),
+	)
+	s.mcpServer.AddTool(listWorkflowRunsTool, s.handleListWorkflowRuns)
+
+	cancelWorkflowRunTool := mcp.NewTool("cancel_workflow_run",
+		mcp.WithDescription("Cancel a running workflow"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to cancel")),
+		mcp.WithString("reason", mcp.Description("Cancellation reason")),
+	)
+	s.mcpServer.AddTool(cancelWorkflowRunTool, s.handleCancelWorkflowRun)
+
+	pauseWorkflowRunTool := mcp.NewTool("pause_workflow_run",
+		mcp.WithDescription("Pause a running workflow"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to pause")),
+		mcp.WithString("reason", mcp.Description("Pause reason")),
+	)
+	s.mcpServer.AddTool(pauseWorkflowRunTool, s.handlePauseWorkflowRun)
+
+	resumeWorkflowRunTool := mcp.NewTool("resume_workflow_run",
+		mcp.WithDescription("Resume a paused workflow"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to resume")),
+	)
+	s.mcpServer.AddTool(resumeWorkflowRunTool, s.handleResumeWorkflowRun)
+
+	getWorkflowRunStepsTool := mcp.NewTool("get_workflow_run_steps",
+		mcp.WithDescription("Get execution steps for a workflow run"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to get steps for")),
+	)
+	s.mcpServer.AddTool(getWorkflowRunStepsTool, s.handleGetWorkflowRunSteps)
+
+	// Workflow Approval Tools
+	listPendingApprovalsTool := mcp.NewTool("list_workflow_approvals",
+		mcp.WithDescription("List pending workflow approvals"),
+		mcp.WithString("run_id", mcp.Description("Filter by run ID")),
+		mcp.WithNumber("limit", mcp.Description("Maximum approvals to return (default: 50)")),
+	)
+	s.mcpServer.AddTool(listPendingApprovalsTool, s.handleListWorkflowApprovals)
+
+	approveWorkflowStepTool := mcp.NewTool("approve_workflow_step",
+		mcp.WithDescription("Approve a pending workflow step"),
+		mcp.WithString("approval_id", mcp.Required(), mcp.Description("Approval ID to approve")),
+		mcp.WithString("comment", mcp.Description("Approval comment")),
+		mcp.WithString("approver_id", mcp.Description("Approver identifier (default: mcp-user)")),
+	)
+	s.mcpServer.AddTool(approveWorkflowStepTool, s.handleApproveWorkflowStep)
+
+	rejectWorkflowStepTool := mcp.NewTool("reject_workflow_step",
+		mcp.WithDescription("Reject a pending workflow step"),
+		mcp.WithString("approval_id", mcp.Required(), mcp.Description("Approval ID to reject")),
+		mcp.WithString("reason", mcp.Description("Rejection reason")),
+		mcp.WithString("rejecter_id", mcp.Description("Rejecter identifier (default: mcp-user)")),
+	)
+	s.mcpServer.AddTool(rejectWorkflowStepTool, s.handleRejectWorkflowStep)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 53)
 }

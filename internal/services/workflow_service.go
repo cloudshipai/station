@@ -451,6 +451,8 @@ func (s *WorkflowService) ApproveWorkflowStep(ctx context.Context, req ApproveWo
 		"time":        time.Now().UTC().Format(time.RFC3339),
 	})
 
+	s.resumeAfterApproval(ctx, approval.RunID, approval.StepID)
+
 	return s.repos.WorkflowApprovals.Get(ctx, req.ApprovalID)
 }
 
@@ -490,6 +492,8 @@ func (s *WorkflowService) RejectWorkflowStep(ctx context.Context, req RejectWork
 		"reason":      req.Reason,
 		"time":        time.Now().UTC().Format(time.RFC3339),
 	})
+
+	s.failAfterRejection(ctx, approval.RunID, req.Reason)
 
 	return s.repos.WorkflowApprovals.Get(ctx, req.ApprovalID)
 }
@@ -557,6 +561,63 @@ func optionalString(value string) *string {
 
 func timePointer(t time.Time) *time.Time {
 	return &t
+}
+
+func (s *WorkflowService) failAfterRejection(ctx context.Context, runID, reason string) {
+	if reason == "" {
+		reason = "approval rejected"
+	}
+	now := time.Now()
+	_ = s.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
+		RunID:       runID,
+		Status:      "failed",
+		Error:       &reason,
+		CompletedAt: &now,
+	})
+}
+
+func (s *WorkflowService) resumeAfterApproval(ctx context.Context, runID, stepID string) {
+	if s.engine == nil {
+		return
+	}
+
+	run, err := s.repos.WorkflowRuns.Get(ctx, runID)
+	if err != nil {
+		return
+	}
+
+	definition, err := s.repos.Workflows.Get(ctx, run.WorkflowID, run.WorkflowVersion)
+	if err != nil {
+		return
+	}
+
+	parsed, _, err := workflows.ValidateDefinition(definition.Definition)
+	if err != nil || parsed == nil {
+		return
+	}
+
+	plan := workflows.CompileExecutionPlan(parsed)
+	step, exists := plan.Steps[stepID]
+	if !exists {
+		return
+	}
+
+	if step.End || step.Next == "" {
+		now := time.Now()
+		_ = s.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
+			RunID:       runID,
+			Status:      "completed",
+			CompletedAt: &now,
+		})
+		return
+	}
+
+	nextStep, exists := plan.Steps[step.Next]
+	if !exists {
+		return
+	}
+
+	_ = s.engine.PublishStepSchedule(ctx, runID, step.Next, nextStep)
 }
 
 type WorkflowSyncResult struct {

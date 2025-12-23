@@ -1254,7 +1254,7 @@ Content`)
 			bundlePath := tt.createBundle(tmpDir)
 			envDir := filepath.Join(tmpDir, "test-env")
 
-			agentCount, mcpCount, err := service.extractBundle(bundlePath, envDir)
+			agentCount, mcpCount, _, err := service.extractBundle(bundlePath, envDir)
 
 			if (err != nil) != tt.expectError {
 				t.Errorf("extractBundle() error = %v, expectError %v", err, tt.expectError)

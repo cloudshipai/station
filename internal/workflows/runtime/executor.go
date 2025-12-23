@@ -19,6 +19,7 @@ var (
 	ErrApprovalTimedOut   = errors.New("approval timed out")
 	ErrMessageRequired    = errors.New("message is required for approval")
 	ErrApprovalCreateFail = errors.New("failed to create approval request")
+	ErrRunIDRequired      = errors.New("_runID is required in runContext")
 )
 
 type StepStatus string
@@ -172,12 +173,11 @@ type ApprovalInfo struct {
 }
 
 type HumanApprovalExecutor struct {
-	deps  ApprovalExecutorDeps
-	runID string
+	deps ApprovalExecutorDeps
 }
 
-func NewHumanApprovalExecutor(deps ApprovalExecutorDeps, runID string) *HumanApprovalExecutor {
-	return &HumanApprovalExecutor{deps: deps, runID: runID}
+func NewHumanApprovalExecutor(deps ApprovalExecutorDeps) *HumanApprovalExecutor {
+	return &HumanApprovalExecutor{deps: deps}
 }
 
 func (e *HumanApprovalExecutor) SupportedTypes() []workflows.ExecutionStepType {
@@ -185,6 +185,11 @@ func (e *HumanApprovalExecutor) SupportedTypes() []workflows.ExecutionStepType {
 }
 
 func (e *HumanApprovalExecutor) Execute(ctx context.Context, step workflows.ExecutionStep, runContext map[string]interface{}) (StepResult, error) {
+	runID, _ := runContext["_runID"].(string)
+	if runID == "" {
+		return StepResult{Status: StepStatusFailed}, ErrRunIDRequired
+	}
+
 	input := step.Raw.Input
 	if input == nil {
 		input = make(map[string]interface{})
@@ -223,11 +228,11 @@ func (e *HumanApprovalExecutor) Execute(ctx context.Context, step workflows.Exec
 		timeoutSecs = ts
 	}
 
-	approvalID := fmt.Sprintf("appr-%s-%s", e.runID, step.ID)
+	approvalID := fmt.Sprintf("appr-%s-%s", runID, step.ID)
 
 	params := CreateApprovalParams{
 		ApprovalID:  approvalID,
-		RunID:       e.runID,
+		RunID:       runID,
 		StepID:      step.ID,
 		Message:     message,
 		SummaryPath: summaryPath,

@@ -831,14 +831,36 @@ environments/
         └── deploy-pipeline.workflow.json
 ```
 
-### Phase 7 - Web UI: Workflows Page (2-3d)
+### Phase 6.5 - Workflow Consumer & Execution Wiring (1d) ✅ COMPLETE
 
-- [ ] Add "Workflows" to sidenav navigation
-- [ ] Implement Workflows list page (`/workflows`)
-- [ ] Implement Workflow detail page with tabs (Overview, Runs, Definition, Versions)
-- [ ] Add Run detail drawer/page with timeline view
-- [ ] Implement "Start Run" modal with input form
-- [ ] Add real-time run updates via SSE
+- [x] Create WorkflowServiceAdapter implementing WorkflowRunUpdater, StepRecorder, StepProvider
+- [x] Wire WorkflowConsumer startup in API handlers when NATS engine enabled
+- [x] Update scheduleNextStep to fetch full step definition from execution plan
+- [x] Enable NATS and embedded NATS by default (no env vars needed)
+- [x] Register inject, switch, agent, and human approval executors in consumer startup
+- [x] Create approvalExecutorAdapter bridging ApprovalExecutorDeps interface to repositories
+- [x] Implement approval resume mechanism (schedule next step after approval granted)
+- [x] Implement approval rejection mechanism (fail run when rejected)
+- [x] Modify HumanApprovalExecutor to get runID from runContext (single executor instance)
+
+**Files implemented**:
+- `internal/workflows/runtime/adapter.go` - WorkflowServiceAdapter
+- `internal/workflows/runtime/consumer.go` - WorkflowConsumer with StepProvider interface, adds `_runID` to runContext
+- `internal/workflows/runtime/executor.go` - HumanApprovalExecutor reads runID from `runContext["_runID"]`
+- `internal/api/v1/base.go` - Consumer startup wiring with approvalExecutorAdapter
+- `internal/services/workflow_service.go` - resumeAfterApproval() and failAfterRejection() methods
+
+**Deliverables**: Workflows execute automatically when runs are started, including human approval steps
+
+### Phase 7 - Web UI: Workflows Page (2-3d) ✅ COMPLETE
+
+- [x] Add "Workflows" to sidenav navigation
+- [x] Implement Workflows list page (`/workflows`)
+- [x] Implement Workflow detail page with tabs (Overview, Runs, Definition, Versions)
+- [x] Add Run detail drawer/page with timeline view
+- [x] Implement "Start Run" modal with Monaco JSON editor
+- [x] Add real-time run updates via SSE
+- [x] Add React Flow visualization with ELK layout
 
 **Deliverables**: Full workflows UI parity with Agents page
 

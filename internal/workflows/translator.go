@@ -72,6 +72,9 @@ func classifyStep(state StateSpec) ExecutionStepType {
 				if taskStr == "custom.run" {
 					return StepTypeCustom
 				}
+				if taskStr == "human.approval" {
+					return StepTypeAwait
+				}
 			}
 		}
 		return StepTypeCustom
@@ -87,7 +90,7 @@ func classifyStep(state StateSpec) ExecutionStepType {
 		return StepTypeAwait
 	case "try":
 		return StepTypeTryCatch
-	case "set", "transform", "context":
+	case "inject", "set", "transform", "context":
 		return StepTypeContextOp
 	default:
 		return StepTypeCustom
