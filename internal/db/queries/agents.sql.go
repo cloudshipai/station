@@ -204,6 +204,48 @@ func (q *Queries) GetAgentByNameAndEnvironment(ctx context.Context, arg GetAgent
 	return i, err
 }
 
+const getAgentByNameGlobal = `-- name: GetAgentByNameGlobal :one
+SELECT a.id, a.name, a.description, a.prompt, a.max_steps, a.environment_id, a.created_by, a.model_id, a.input_schema, a.output_schema, a.output_schema_preset, a.app, a.app_subtype, a.cron_schedule, a.is_scheduled, a.last_scheduled_run, a.next_scheduled_run, a.schedule_enabled, a.schedule_variables, a.memory_topic_key, a.memory_max_tokens, a.created_at, a.updated_at FROM agents a
+LEFT JOIN environments e ON a.environment_id = e.id
+WHERE a.name = ?
+ORDER BY 
+    CASE WHEN e.name = 'default' THEN 0 ELSE 1 END,
+    e.name
+LIMIT 1
+`
+
+// Global agent lookup: prioritizes "default" environment, falls back to any environment
+func (q *Queries) GetAgentByNameGlobal(ctx context.Context, name string) (Agent, error) {
+	row := q.db.QueryRowContext(ctx, getAgentByNameGlobal, name)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Prompt,
+		&i.MaxSteps,
+		&i.EnvironmentID,
+		&i.CreatedBy,
+		&i.ModelID,
+		&i.InputSchema,
+		&i.OutputSchema,
+		&i.OutputSchemaPreset,
+		&i.App,
+		&i.AppSubtype,
+		&i.CronSchedule,
+		&i.IsScheduled,
+		&i.LastScheduledRun,
+		&i.NextScheduledRun,
+		&i.ScheduleEnabled,
+		&i.ScheduleVariables,
+		&i.MemoryTopicKey,
+		&i.MemoryMaxTokens,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentBySchedule = `-- name: GetAgentBySchedule :one
 SELECT id, name, description, prompt, max_steps, environment_id, created_by, model_id, input_schema, output_schema, output_schema_preset, app, app_subtype, cron_schedule, is_scheduled, last_scheduled_run, next_scheduled_run, schedule_enabled, schedule_variables, memory_topic_key, memory_max_tokens, created_at, updated_at FROM agents WHERE id = ? AND is_scheduled = TRUE AND schedule_enabled = TRUE
 `

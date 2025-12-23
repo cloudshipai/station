@@ -35,6 +35,17 @@ func (m *mockAgentDeps) GetAgentByNameAndEnvironment(ctx context.Context, name s
 	return agent, nil
 }
 
+func (m *mockAgentDeps) GetAgentByNameGlobal(ctx context.Context, name string) (AgentInfo, error) {
+	if m.agentsByName == nil {
+		return AgentInfo{}, errors.New("agent not found")
+	}
+	agent, ok := m.agentsByName[name]
+	if !ok {
+		return AgentInfo{}, errors.New("agent not found globally")
+	}
+	return agent, nil
+}
+
 func (m *mockAgentDeps) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (AgentExecutionResult, error) {
 	if m.execErr != nil {
 		return AgentExecutionResult{}, m.execErr
@@ -218,10 +229,11 @@ func TestAgentRunExecutor_Execute(t *testing.T) {
 			},
 		},
 		{
-			name: "agent name resolution requires environment ID",
+			name: "global agent resolution without environment ID",
 			step: workflows.ExecutionStep{
-				ID:   "no-env",
+				ID:   "global-lookup",
 				Type: workflows.StepTypeAgent,
+				Next: "next-step",
 				Raw: workflows.StateSpec{
 					Input: map[string]interface{}{
 						"agent": "kubernetes-triage",
@@ -229,9 +241,15 @@ func TestAgentRunExecutor_Execute(t *testing.T) {
 					},
 				},
 			},
-			runContext:  map[string]interface{}{},
-			wantErr:     true,
-			errContains: "_environmentID is required",
+			runContext: map[string]interface{}{},
+			checkOutput: func(t *testing.T, result StepResult) {
+				if result.Error != nil {
+					t.Errorf("expected no error, got %s", *result.Error)
+				}
+				if result.Output["agent_name"] != "kubernetes-triage" {
+					t.Errorf("expected agent_name=kubernetes-triage, got %v", result.Output["agent_name"])
+				}
+			},
 		},
 		{
 			name: "agent not found by name",

@@ -185,6 +185,19 @@ func (a *agentExecutorAdapter) GetAgentByNameAndEnvironment(ctx context.Context,
 	}, nil
 }
 
+func (a *agentExecutorAdapter) GetAgentByNameGlobal(ctx context.Context, name string) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameGlobal(name)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
 func (a *agentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {
 	result, err := a.agentService.ExecuteAgent(ctx, agentID, task, variables)
 	if err != nil {

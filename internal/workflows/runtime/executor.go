@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"station/internal/workflows"
 )
@@ -53,6 +54,7 @@ type StepResult struct {
 type AgentExecutorDeps interface {
 	GetAgentByID(id int64) (AgentInfo, error)
 	GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (AgentInfo, error)
+	GetAgentByNameGlobal(ctx context.Context, name string) (AgentInfo, error)
 	ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (AgentExecutionResult, error)
 }
 
@@ -164,26 +166,37 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 
 func (e *AgentRunExecutor) resolveAgent(ctx context.Context, input map[string]interface{}, runContext map[string]interface{}) (AgentInfo, error) {
 	if agentName, ok := input["agent"].(string); ok && agentName != "" {
-		envID, ok := runContext["_environmentID"]
-		if !ok {
-			return AgentInfo{}, ErrEnvironmentRequired
+		if strings.Contains(agentName, "@") {
+			parts := strings.SplitN(agentName, "@", 2)
+			name, envName := parts[0], parts[1]
+
+			envID, ok := runContext["_environmentID"]
+			if !ok {
+				return AgentInfo{}, fmt.Errorf("explicit environment '%s' specified but _environmentID not in context", envName)
+			}
+
+			var environmentID int64
+			switch v := envID.(type) {
+			case float64:
+				environmentID = int64(v)
+			case int64:
+				environmentID = v
+			case int:
+				environmentID = int64(v)
+			default:
+				return AgentInfo{}, fmt.Errorf("invalid _environmentID type: %T", envID)
+			}
+
+			agent, err := e.deps.GetAgentByNameAndEnvironment(ctx, name, environmentID)
+			if err != nil {
+				return AgentInfo{}, fmt.Errorf("%w: agent '%s' not found in environment '%s' (id=%d)", ErrAgentNotFound, name, envName, environmentID)
+			}
+			return agent, nil
 		}
 
-		var environmentID int64
-		switch v := envID.(type) {
-		case float64:
-			environmentID = int64(v)
-		case int64:
-			environmentID = v
-		case int:
-			environmentID = int64(v)
-		default:
-			return AgentInfo{}, fmt.Errorf("invalid _environmentID type: %T", envID)
-		}
-
-		agent, err := e.deps.GetAgentByNameAndEnvironment(ctx, agentName, environmentID)
+		agent, err := e.deps.GetAgentByNameGlobal(ctx, agentName)
 		if err != nil {
-			return AgentInfo{}, fmt.Errorf("%w: agent '%s' not found in environment %d", ErrAgentNotFound, agentName, environmentID)
+			return AgentInfo{}, fmt.Errorf("%w: agent '%s' not found globally", ErrAgentNotFound, agentName)
 		}
 		return agent, nil
 	}
