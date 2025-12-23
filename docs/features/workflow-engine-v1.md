@@ -537,7 +537,7 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 - `internal/db/queries/workflow_run_events.sql` (new)
 - `internal/db/queries/workflow_approvals.sql` (new)
 
-### Phase 1 - Core Runtime: State Machine + Persistence (1-2d) 🔄 IN PROGRESS
+### Phase 1 - Core Runtime: State Machine + Persistence (1-2d) ✅ COMPLETE
 
 - [x] Implement deterministic `step_id` generation
   - Created `internal/workflows/stepid.go` with hash-based step ID
@@ -551,8 +551,12 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 - [x] Implement idempotent step execution guard
   - Added `GetWorkflowRunStep` and `IsStepCompleted` SQLC queries
   - Added `Get()` and `IsCompleted()` repository methods
-- [ ] Ensure all transitions persist before enqueueing next task
-- [ ] Add event table writes for audit trail (`InsertWorkflowRunEvent`)
+- [x] Ensure all transitions persist before enqueueing next task
+- [x] Add event table writes for audit trail (`InsertWorkflowRunEvent`)
+  - Created `WorkflowRunEventRepo` with Insert, GetNextSeq, ListByRun, ListByType
+  - Created `WorkflowApprovalRepo` with Create, Get, ListByRun, ListPending, Approve, Reject, TimeoutExpired
+  - Updated `WorkflowService.emitRunEvent()` to write to DB before NATS publish
+  - Added event emission at all lifecycle points (StartRun, CancelRun, SignalRun, PauseRun, CompleteRun, RecordStepStart, RecordStepUpdate)
 
 **Files implemented**:
 - `internal/workflows/stepid.go` - Deterministic step ID generation
@@ -560,16 +564,30 @@ V1 targets single-replica deployment. Multiple replicas can process tasks via Je
 - `internal/workflows/runtime/nats_engine.go` - JetStream durable consumer
 - `internal/workflows/runtime/options.go` - Added `ConsumerName` field
 - `internal/db/queries/workflow_run_steps.sql` - Idempotency queries
-- `internal/db/repositories/workflows.go` - Repository methods
+- `internal/db/queries/workflow_run_events.sql` - Event audit trail queries
+- `internal/db/queries/workflow_approvals.sql` - Approval queries
+- `internal/db/repositories/workflows.go` - Repository methods (WorkflowRunEventRepo, WorkflowApprovalRepo)
+- `internal/db/repositories/base.go` - Added new repos to Repositories struct
+- `internal/services/workflow_service.go` - Updated emitRunEvent for DB persistence
+- `pkg/models/workflow.go` - Added WorkflowRunEvent, WorkflowApproval models and constants
 
 **Deliverables**: Crash-recovery integration tests
 
-### Phase 2 - Executor: agent.run (1-2d)
+### Phase 2 - Executor: agent.run (1-2d) ✅ COMPLETE
 
-- [ ] Build executor registry + interfaces
-- [ ] Implement `agent.run` calling AgentExecutionEngine
-- [ ] Add schema validation (input/output)
-- [ ] Store agent_run_id for idempotency
+- [x] Build executor registry + interfaces
+  - Created `StepExecutor` interface with `Execute()` and `SupportedTypes()` methods
+  - Created `ExecutorRegistry` with `Register()`, `GetExecutor()`, and `Execute()` methods
+- [x] Implement `agent.run` calling AgentExecutionEngine
+  - Created `AgentRunExecutor` with dependency injection interface
+  - Handles agent_id parsing (float64, int64, int, json.Number)
+  - Merges workflow context variables with step input variables
+- [ ] Add schema validation (input/output) - deferred to Phase 3
+- [x] Store agent_run_id for idempotency (via step record)
+
+**Files implemented**:
+- `internal/workflows/runtime/executor.go` - StepExecutor interface, ExecutorRegistry, AgentRunExecutor
+- `internal/workflows/runtime/executor_test.go` - Comprehensive tests (all passing)
 
 **Deliverables**: E2E test: workflow calls agent, stores result
 

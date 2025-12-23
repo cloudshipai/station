@@ -175,18 +175,18 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 		Status:          "pending",
 		CurrentStep:     optionalString(startStep),
 		Input:           req.Input,
-		Context:         req.Input, // bootstrap context with provided inputs
+		Context:         req.Input,
 		Options:         req.Options,
 		StartedAt:       now,
 	})
-	if err == nil && s.engine != nil {
-		_ = s.engine.PublishRunEvent(ctx, runID, map[string]interface{}{
-			"type":     "run_started",
+	if err == nil {
+		_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
+			"type":     models.EventTypeRunStarted,
 			"workflow": req.WorkflowID,
 			"version":  definition.Version,
 			"step":     startStep,
 		})
-		if startStep != "" {
+		if startStep != "" && s.engine != nil {
 			plan := workflows.CompileExecutionPlan(parsed)
 			step := plan.Steps[startStep]
 			_ = s.engine.PublishStepSchedule(ctx, runID, startStep, step)
@@ -223,6 +223,11 @@ func (s *WorkflowService) CancelRun(ctx context.Context, runID, reason string) (
 	}); err != nil {
 		return nil, err
 	}
+	_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
+		"type":   models.EventTypeRunCanceled,
+		"reason": reason,
+		"time":   now.UTC().Format(time.RFC3339),
+	})
 	return s.repos.WorkflowRuns.Get(ctx, runID)
 }
 
@@ -252,10 +257,16 @@ func (s *WorkflowService) SignalRun(ctx context.Context, req SignalWorkflowRunRe
 		return nil, err
 	}
 
+	_ = s.emitRunEvent(ctx, req.RunID, map[string]interface{}{
+		"type":    models.EventTypeSignalReceived,
+		"signal":  req.Name,
+		"payload": string(req.Payload),
+		"time":    time.Now().UTC().Format(time.RFC3339),
+	})
+
 	return s.repos.WorkflowRuns.Get(ctx, req.RunID)
 }
 
-// PauseRun marks a workflow run as blocked (pause).
 func (s *WorkflowService) PauseRun(ctx context.Context, runID, reason string) (*models.WorkflowRun, error) {
 	if reason == "" {
 		reason = "Run paused"
@@ -270,9 +281,8 @@ func (s *WorkflowService) PauseRun(ctx context.Context, runID, reason string) (*
 		return nil, err
 	}
 	_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
-		"type":   "run_paused",
+		"type":   models.EventTypeRunPaused,
 		"reason": reason,
-		"paused": true,
 		"time":   now.UTC().Format(time.RFC3339),
 	})
 	return s.repos.WorkflowRuns.Get(ctx, runID)
@@ -287,7 +297,6 @@ func (s *WorkflowService) ResumeRun(ctx context.Context, runID, note string) (*m
 	})
 }
 
-// CompleteRun marks a workflow run as completed.
 func (s *WorkflowService) CompleteRun(ctx context.Context, runID string, result json.RawMessage, summary string) (*models.WorkflowRun, error) {
 	now := time.Now()
 	if err := s.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
@@ -300,7 +309,7 @@ func (s *WorkflowService) CompleteRun(ctx context.Context, runID string, result 
 		return nil, err
 	}
 	_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
-		"type":   "run_completed",
+		"type":   models.EventTypeRunCompleted,
 		"result": string(result),
 		"time":   now.UTC().Format(time.RFC3339),
 	})
@@ -308,7 +317,7 @@ func (s *WorkflowService) CompleteRun(ctx context.Context, runID string, result 
 }
 
 func (s *WorkflowService) RecordStepStart(ctx context.Context, runID, stepID string, attempt int64, input json.RawMessage, metadata json.RawMessage) (*models.WorkflowRunStep, error) {
-	return s.repos.WorkflowRunSteps.Create(ctx, repositories.CreateWorkflowRunStepParams{
+	step, err := s.repos.WorkflowRunSteps.Create(ctx, repositories.CreateWorkflowRunStepParams{
 		RunID:     runID,
 		StepID:    stepID,
 		Attempt:   attempt,
@@ -317,10 +326,19 @@ func (s *WorkflowService) RecordStepStart(ctx context.Context, runID, stepID str
 		Metadata:  metadata,
 		StartedAt: timePointer(time.Now()),
 	})
+	if err == nil {
+		_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
+			"type":    models.EventTypeStepStarted,
+			"step_id": stepID,
+			"attempt": attempt,
+			"time":    time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+	return step, err
 }
 
 func (s *WorkflowService) RecordStepUpdate(ctx context.Context, update StepUpdate) error {
-	return s.repos.WorkflowRunSteps.Update(ctx, repositories.UpdateWorkflowRunStepParams{
+	err := s.repos.WorkflowRunSteps.Update(ctx, repositories.UpdateWorkflowRunStepParams{
 		RunID:       update.RunID,
 		StepID:      update.StepID,
 		Attempt:     update.Attempt,
@@ -330,6 +348,20 @@ func (s *WorkflowService) RecordStepUpdate(ctx context.Context, update StepUpdat
 		Metadata:    update.Metadata,
 		CompletedAt: update.CompletedAt,
 	})
+	if err == nil {
+		eventType := models.EventTypeStepCompleted
+		if update.Status == "failed" {
+			eventType = models.EventTypeStepFailed
+		}
+		_ = s.emitRunEvent(ctx, update.RunID, map[string]interface{}{
+			"type":    eventType,
+			"step_id": update.StepID,
+			"attempt": update.Attempt,
+			"status":  update.Status,
+			"time":    time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+	return err
 }
 
 func (s *WorkflowService) ListSteps(ctx context.Context, runID string) ([]*models.WorkflowRunStep, error) {
@@ -337,10 +369,43 @@ func (s *WorkflowService) ListSteps(ctx context.Context, runID string) ([]*model
 }
 
 func (s *WorkflowService) emitRunEvent(ctx context.Context, runID string, event map[string]interface{}) error {
-	if s.engine == nil {
-		return nil
+	eventType, _ := event["type"].(string)
+	if eventType == "" {
+		eventType = "unknown"
 	}
-	return s.engine.PublishRunEvent(ctx, runID, event)
+
+	var stepID *string
+	if sid, ok := event["step_id"].(string); ok && sid != "" {
+		stepID = &sid
+	} else if sid, ok := event["step"].(string); ok && sid != "" {
+		stepID = &sid
+	}
+
+	var payload *string
+	if payloadBytes, err := json.Marshal(event); err == nil {
+		payloadStr := string(payloadBytes)
+		payload = &payloadStr
+	}
+
+	var actor *string
+	if a, ok := event["actor"].(string); ok && a != "" {
+		actor = &a
+	}
+
+	if s.repos.WorkflowRunEvents != nil {
+		_, _ = s.repos.WorkflowRunEvents.Insert(ctx, repositories.CreateWorkflowRunEventParams{
+			RunID:     runID,
+			EventType: eventType,
+			StepID:    stepID,
+			Payload:   payload,
+			Actor:     actor,
+		})
+	}
+
+	if s.engine != nil {
+		return s.engine.PublishRunEvent(ctx, runID, event)
+	}
+	return nil
 }
 
 func optionalString(value string) *string {

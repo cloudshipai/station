@@ -53,3 +53,55 @@ type WorkflowRunStep struct {
 	StartedAt   time.Time       `json:"started_at"`
 	CompletedAt *time.Time      `json:"completed_at,omitempty"`
 }
+
+// WorkflowRunEvent records audit trail events for workflow runs.
+type WorkflowRunEvent struct {
+	ID        int64     `json:"id"`
+	RunID     string    `json:"run_id"`
+	Seq       int64     `json:"seq"`
+	EventType string    `json:"event_type"`
+	StepID    *string   `json:"step_id,omitempty"`
+	Payload   *string   `json:"payload,omitempty"`
+	Actor     *string   `json:"actor,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// WorkflowApproval tracks human approval requests for workflow steps.
+type WorkflowApproval struct {
+	ID             int64      `json:"id"`
+	ApprovalID     string     `json:"approval_id"`
+	RunID          string     `json:"run_id"`
+	StepID         string     `json:"step_id"`
+	Message        string     `json:"message"`
+	SummaryPath    *string    `json:"summary_path,omitempty"`
+	Approvers      *string    `json:"approvers,omitempty"`
+	Status         string     `json:"status"`
+	DecidedBy      *string    `json:"decided_by,omitempty"`
+	DecidedAt      *time.Time `json:"decided_at,omitempty"`
+	DecisionReason *string    `json:"decision_reason,omitempty"`
+	TimeoutAt      *time.Time `json:"timeout_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// Workflow event type constants.
+const (
+	EventTypeRunStarted     = "run_started"
+	EventTypeRunCompleted   = "run_completed"
+	EventTypeRunFailed      = "run_failed"
+	EventTypeRunCanceled    = "run_canceled"
+	EventTypeRunPaused      = "run_paused"
+	EventTypeRunResumed     = "run_resumed"
+	EventTypeStepStarted    = "step_started"
+	EventTypeStepCompleted  = "step_completed"
+	EventTypeStepFailed     = "step_failed"
+	EventTypeSignalReceived = "signal_received"
+)
+
+// Approval status constants.
+const (
+	ApprovalStatusPending  = "pending"
+	ApprovalStatusApproved = "approved"
+	ApprovalStatusRejected = "rejected"
+	ApprovalStatusTimedOut = "timed_out"
+)
