@@ -15,7 +15,6 @@ type Definition struct {
 	States      []StateSpec `json:"states" yaml:"states"`
 }
 
-// StateSpec captures the minimal fields required for Station workflow states.
 type StateSpec struct {
 	ID         string                 `json:"id,omitempty" yaml:"id,omitempty"`
 	Name       string                 `json:"name,omitempty" yaml:"name,omitempty"`
@@ -27,6 +26,18 @@ type StateSpec struct {
 	End        bool                   `json:"end,omitempty" yaml:"end,omitempty"`
 	Retry      *RetryPolicy           `json:"retry,omitempty" yaml:"retry,omitempty"`
 	Timeout    string                 `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+
+	DataPath    string            `json:"dataPath,omitempty" yaml:"dataPath,omitempty"`
+	Conditions  []SwitchCondition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+	DefaultNext string            `json:"defaultNext,omitempty" yaml:"defaultNext,omitempty"`
+
+	Data       map[string]interface{} `json:"data,omitempty" yaml:"data,omitempty"`
+	ResultPath string                 `json:"resultPath,omitempty" yaml:"resultPath,omitempty"`
+}
+
+type SwitchCondition struct {
+	If   string `json:"if" yaml:"if"`
+	Next string `json:"next" yaml:"next"`
 }
 
 // StableID returns the normalized identifier for a state.
