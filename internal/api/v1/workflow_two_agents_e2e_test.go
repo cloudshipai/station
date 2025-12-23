@@ -390,13 +390,27 @@ func (a *testAgentExecutorAdapter) GetAgentByID(id int64) (runtime.AgentInfo, er
 }
 
 func (a *testAgentExecutorAdapter) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (runtime.AgentInfo, error) {
-	// Use repository to resolve agent by name
 	agent, err := a.repos.Agents.GetByNameAndEnvironment(name, environmentID)
 	if err != nil {
 		return runtime.AgentInfo{}, err
 	}
 
-	// Also register with mock service so ExecuteAgent works
+	a.mockService.registerAgent(agent)
+
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *testAgentExecutorAdapter) GetAgentByNameGlobal(ctx context.Context, name string) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameGlobal(name)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+
 	a.mockService.registerAgent(agent)
 
 	return runtime.AgentInfo{

@@ -52,13 +52,18 @@ PR #83 introduces foundational workflow scaffolding (DSL translation, SQLite per
    - `parallel` (fan-out/fan-in)
    - `inject` (mutate context with provided data)
    - `foreach` (iterate over a list)
+   - `cron` (scheduled start state)
+   - `tool` (direct MCP tool invocation)
+   - `timer` (delayed execution)
+   - `try_catch` (error handling with fallback)
 3. **V1 Executors**:
    - `agent.run` → runs Station agent via AgentExecutionEngine
    - `human.approval` → approval gates with timeout
-4. **Schema validation**: Validate that agent output schemas match next agent's input schemas for type-safe data flow.
-5. **Human-in-loop controls**: Approval gates, pause/resume, signal delivery, and timeouts.
-6. **Observability**: End-to-end tracing for workflow runs and per-step spans; durable run history for audit and debugging.
-7. **Deployment compatibility**: Works in Docker Compose and common cloud platforms (ECS, GCP, Fly.io), with embedded or external NATS.
+4. **Global agent resolution**: Agents referenced by name (globally unique), enabling bundle portability without ID mapping.
+5. **Schema validation**: Validate that agent output schemas match next agent's input schemas for type-safe data flow.
+6. **Human-in-loop controls**: Approval gates, pause/resume, signal delivery, and timeouts.
+7. **Observability**: End-to-end tracing for workflow runs and per-step spans; durable run history for audit and debugging.
+8. **Deployment compatibility**: Works in Docker Compose and common cloud platforms (ECS, GCP, Fly.io), with embedded or external NATS.
 
 ### Non-goals (V1)
 
@@ -265,6 +270,176 @@ Iterate over a list in context.
   next: summarize
 ```
 
+#### F) `cron`
+
+Schedule-triggered start state. When used as the `start` state, the workflow runs automatically on schedule.
+
+```yaml
+id: daily-health-check
+name: "Daily Health Check"
+start: schedule                 # Start with cron state
+states:
+  - name: schedule
+    type: cron
+    cron: "0 9 * * *"           # Every day at 9 AM
+    timezone: "America/Chicago"  # Optional, defaults to UTC
+    enabled: true                # Can be disabled without removing
+    input:                       # Injected into context on each run
+      namespace: "production"
+      services: ["api", "web", "worker"]
+    next: check_services        # First "real" state after trigger
+    
+  - name: check_services
+    type: operation
+    action: agent.run
+    input:
+      agent: "health-checker"
+      task: "Check services: {{ ctx.services }}"
+    end: true
+```
+
+**Cron expression format** (standard 5-field):
+```
+┌───────────── minute (0 - 59)
+│ ┌───────────── hour (0 - 23)
+│ │ ┌───────────── day of month (1 - 31)
+│ │ │ ┌───────────── month (1 - 12)
+│ │ │ │ ┌───────────── day of week (0 - 6, Sun = 0)
+│ │ │ │ │
+* * * * *
+```
+
+**Common schedules**:
+```yaml
+cron: "*/15 * * * *"          # Every 15 minutes
+cron: "0 * * * *"             # Every hour
+cron: "0 9 * * *"             # Daily at 9 AM
+cron: "0 9 * * 1-5"           # Weekdays at 9 AM
+cron: "0 0 1 * *"             # Monthly on 1st at midnight
+```
+
+**Behavior**:
+- Workflow with `cron` start state is registered with scheduler on sync
+- Background scheduler checks every minute for due workflows
+- On trigger: creates run with `input` injected into context
+- Immediately transitions to `next` state
+- Manual runs still work: `POST /api/v1/workflow-runs` skips cron state
+
+**Management**:
+- `enabled: false` stops scheduled runs without deleting workflow
+- Deleting workflow removes from scheduler
+- `stn sync` updates schedule from file changes
+
+**Database**: Cron state metadata stored in `workflow_definitions.definition` JSON. 
+Scheduler tracks in `workflow_schedules` table:
+- `workflow_id`, `cron_expression`, `timezone`, `enabled`
+- `last_run_at`, `next_run_at`
+
+#### G) `tool`
+
+Directly invoke an MCP tool without agent orchestration. Useful for deterministic operations.
+
+```yaml
+- name: get_pods
+  type: tool
+  server: "kubectl"             # MCP server name
+  tool: "list_pods"             # Tool name
+  input:
+    namespace: "{{ ctx.namespace }}"
+    selector: "app={{ ctx.service }}"
+  timeoutSeconds: 60
+  resultPath: "steps.pods"
+  next: analyze_pods
+```
+
+**Use cases**:
+- Direct MCP tool invocation without LLM overhead
+- Deterministic data gathering (kubectl, database queries)
+- High-frequency operations where agent overhead is wasteful
+
+**Resolution**: Tool lookup via `GetMCPServerByName(server)` → `GetTool(tool)`
+
+#### G) `timer`
+
+Delay execution for a specified duration. Useful for rate limiting, cooldowns, or scheduled delays.
+
+```yaml
+- name: wait_for_cooldown
+  type: timer
+  duration: "5m"                # Duration: "30s", "5m", "1h", "24h"
+  next: retry_check
+```
+
+**Duration formats**:
+- Seconds: `"30s"`, `"120s"`
+- Minutes: `"5m"`, `"15m"`
+- Hours: `"1h"`, `"24h"`
+- Combined: `"1h30m"`, `"2h15m30s"`
+
+**Behavior**:
+- Step transitions to `WAITING_TIMER`
+- Timer is durable (survives Station restart via NATS delayed delivery)
+- On completion: engine enqueues next step
+
+#### H) `try_catch`
+
+Error handling with fallback states. Wraps states that may fail with recovery logic.
+
+```yaml
+- name: safe_deploy
+  type: try_catch
+  try:
+    start: deploy_service
+    states:
+      - name: deploy_service
+        type: operation
+        action: agent.run
+        input:
+          agent: "deployer"
+          task: "Deploy {{ ctx.service }} to production"
+        resultPath: "deploy_result"
+        end: true
+  catch:
+    start: rollback
+    states:
+      - name: rollback
+        type: operation
+        action: agent.run
+        input:
+          agent: "deployer"
+          task: "Rollback {{ ctx.service }} to previous version"
+        resultPath: "rollback_result"
+        end: true
+  finally:                      # Optional: always runs
+    start: notify
+    states:
+      - name: notify
+        type: operation
+        action: agent.run
+        input:
+          agent: "notifier"
+          task: "Send deployment status to Slack"
+        end: true
+  resultPath: "steps.deployment"
+  next: verify
+```
+
+**Behavior**:
+- Executes `try` states normally
+- On any error in `try`: captures error, executes `catch` states
+- `finally` always executes (success or failure)
+- Error details available in context: `ctx._error`, `ctx._errorStep`, `ctx._errorMessage`
+
+**Error context**:
+```json
+{
+  "_error": true,
+  "_errorStep": "deploy_service",
+  "_errorMessage": "Agent execution failed: timeout",
+  "_errorType": "TIMEOUT"
+}
+```
+
 ### 3.3 Step Executors (V1)
 
 #### `agent.run` → AgentExecutionEngine
@@ -317,34 +492,44 @@ input:
 - On reject: run transitions to `CANCELLED` or `FAILED`
 - On timeout: step transitions to `TIMED_OUT`
 
-### 3.4 Agent Resolution by Name
+### 3.4 Global Agent Resolution (Bundle-Portable)
 
-Agents in workflows are referenced **by name**, not by ID. Agent names are unique within an environment.
+Agents in workflows are referenced **by name globally**, enabling bundle portability across Station instances.
 
-**Why name-based resolution**:
-- Names are human-readable and portable across environments
-- IDs are auto-generated and environment-specific
-- Enables GitOps workflows where definitions reference stable names
+**Why global agent resolution**:
+- **Bundle portability**: Workflows shared via bundles should work on any Station without ID mapping
+- **Environment independence**: Agent IDs are auto-generated and differ between Station instances
+- **GitOps compatibility**: Workflow definitions reference stable names, not instance-specific IDs
+- **No ID mismatch**: When importing a bundle, environment IDs won't line up—global names always work
 
 **Workflow definition syntax**:
 ```yaml
 - name: check_pods
   type: operation
   input:
-    task: "agent.run"
-    agent: "kubernetes-triage"    # Agent name, NOT ID
+    task: agent.run
+    agent: "kubernetes-triage"    # Agent name (global lookup)
     task: "Check pods in {{ ctx.namespace }}"
 ```
 
 **Resolution rules**:
-1. Workflow definitions include `environment_id` (set at creation or execution time)
-2. Agent lookup: `GetAgentByNameAndEnvironment(name, environmentID)`
+1. Agent lookup: `GetAgentByName(name)` - searches across ALL environments
+2. If multiple agents with same name exist, use priority:
+   - a) Agent in "default" environment (most common case)
+   - b) First agent found (alphabetically by environment name)
+   - c) Explicit environment override in step: `agent: "kubernetes-triage@production"`
 3. If agent not found: validation error at definition time, graceful failure at runtime
 
-**Environment scoping**:
-- Workflows are scoped to an environment (like agents and MCP servers)
-- Agent references are resolved within the same environment
-- Cross-environment agent calls are not supported in V1
+**Environment override syntax** (optional):
+```yaml
+agent: "kubernetes-triage"              # Global lookup
+agent: "kubernetes-triage@production"   # Explicit environment
+```
+
+**Bundle portability guarantee**:
+- Workflows in bundles reference agents by name only
+- When bundle is installed, agent names are resolved at runtime
+- No environment ID mapping needed during bundle import/export
 
 ### 3.5 Schema Validation for Data Flow
 
@@ -1217,7 +1402,85 @@ go tool cover -html=coverage.out
 
 ---
 
-### Phase 9 - Observability + Docs (1-2d)
+### Phase 9 - Global Agent Resolution (1d)
+
+Implement bundle-portable agent resolution by name.
+
+- [ ] Update `AgentRunExecutor` to use global agent lookup
+- [ ] Implement `GetAgentByName(name)` repository method (searches all environments)
+- [ ] Add environment override syntax: `agent: "name@environment"`
+- [ ] Update workflow validator to use global lookup
+- [ ] Add tests for multi-environment agent resolution
+
+**Files to modify/create**:
+- `internal/db/repositories/agents.go` - Add `GetByName()` method
+- `internal/workflows/runtime/executor.go` - Update `resolveAgent()`
+- `internal/workflows/validator.go` - Update agent existence check
+
+### Phase 10 - Cron State Executor (1-2d)
+
+Implement `cron` state type for scheduled workflow execution.
+
+- [ ] Create `CronExecutor` implementing `StepExecutor` interface
+- [ ] Create `workflow_schedules` table (migration)
+- [ ] Implement schedule parsing with `robfig/cron/v3`
+- [ ] Create `SchedulerService` with background ticker (checks every minute)
+- [ ] Register cron states on workflow sync
+- [ ] On trigger: create run, inject cron state's `input` into context, transition to `next`
+- [ ] Add `enabled` toggle support
+- [ ] Add UI indicator for scheduled workflows
+- [ ] Add tests
+
+**Files to create**:
+- `internal/workflows/runtime/cron_executor.go` - Cron state executor
+- `internal/db/migrations/042_add_workflow_schedules.sql`
+- `internal/db/queries/workflow_schedules.sql`
+- `internal/services/scheduler_service.go` - Background scheduler
+- `internal/workflows/translator.go` - Add `StepTypeCron` classification
+
+### Phase 11 - Tool Step Executor (1d)
+
+Implement direct MCP tool invocation step type.
+
+- [ ] Create `ToolExecutor` implementing `StepExecutor` interface
+- [ ] Add MCP server/tool resolution logic
+- [ ] Wire tool executor to registry
+- [ ] Add step type classification for `"tool"` in translator
+- [ ] Add tests
+
+**Files to create/modify**:
+- `internal/workflows/runtime/tool_executor.go` - New executor
+- `internal/workflows/translator.go` - Add `StepTypeTool` classification
+
+### Phase 12 - Timer Step Executor (0.5d)
+
+Implement delayed execution step type.
+
+- [ ] Create `TimerExecutor` implementing `StepExecutor` interface
+- [ ] Parse duration strings ("5m", "1h30m")
+- [ ] Use NATS delayed delivery or background timer
+- [ ] Add `WAITING_TIMER` step status
+- [ ] Add tests
+
+**Files to create/modify**:
+- `internal/workflows/runtime/timer_executor.go` - New executor
+- `pkg/models/workflow.go` - Add `StepStatusWaitingTimer`
+
+### Phase 13 - TryCatch Step Executor (1d)
+
+Implement error handling with try/catch/finally semantics.
+
+- [ ] Create `TryCatchExecutor` implementing `StepExecutor` interface
+- [ ] Execute `try` states, capture errors
+- [ ] On error: set `_error` context, execute `catch` states
+- [ ] Always execute `finally` states
+- [ ] Add tests for error propagation
+
+**Files to create/modify**:
+- `internal/workflows/runtime/trycatch_executor.go` - New executor
+- `internal/workflows/types.go` - Add `TryBlock`, `CatchBlock`, `FinallyBlock` to StateSpec
+
+### Phase 14 - Observability + Docs (1-2d)
 
 - [ ] OpenTelemetry spans + NATS trace propagation
 - [ ] Add run/step metrics

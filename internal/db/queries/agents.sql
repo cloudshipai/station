@@ -12,6 +12,16 @@ SELECT * FROM agents WHERE name = ?;
 -- name: GetAgentByNameAndEnvironment :one
 SELECT * FROM agents WHERE name = ? AND environment_id = ?;
 
+-- name: GetAgentByNameGlobal :one
+-- Global agent lookup: prioritizes "default" environment, falls back to any environment
+SELECT a.* FROM agents a
+LEFT JOIN environments e ON a.environment_id = e.id
+WHERE a.name = ?
+ORDER BY 
+    CASE WHEN e.name = 'default' THEN 0 ELSE 1 END,
+    e.name
+LIMIT 1;
+
 -- name: ListAgents :many
 SELECT * FROM agents ORDER BY name;
 
