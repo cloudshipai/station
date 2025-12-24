@@ -104,7 +104,7 @@ curl -X POST http://localhost:8585/api/v1/workflow-approvals/{approvalId}/reject
 
 | Type | Description | Example Use Case |
 |------|-------------|------------------|
-| `operation` | Execute an agent or tool | Run analysis agent |
+| `operation` | Execute an agent | Run analysis agent |
 | `inject` / `set` | Inject data into context | Set status flags |
 | `switch` | Conditional branching | Route by severity |
 | `parallel` | Execute branches concurrently | Run checks in parallel |

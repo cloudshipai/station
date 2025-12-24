@@ -53,7 +53,6 @@ PR #83 introduces foundational workflow scaffolding (DSL translation, SQLite per
    - `inject` (mutate context with provided data)
    - `foreach` (iterate over a list)
    - `cron` (scheduled start state)
-   - `tool` (direct MCP tool invocation)
    - `timer` (delayed execution)
    - `try_catch` (error handling with fallback)
 3. **V1 Executors**:
@@ -334,30 +333,6 @@ cron: "0 0 1 * *"             # Monthly on 1st at midnight
 Scheduler tracks in `workflow_schedules` table:
 - `workflow_id`, `cron_expression`, `timezone`, `enabled`
 - `last_run_at`, `next_run_at`
-
-#### G) `tool`
-
-Directly invoke an MCP tool without agent orchestration. Useful for deterministic operations.
-
-```yaml
-- name: get_pods
-  type: tool
-  server: "kubectl"             # MCP server name
-  tool: "list_pods"             # Tool name
-  input:
-    namespace: "{{ ctx.namespace }}"
-    selector: "app={{ ctx.service }}"
-  timeoutSeconds: 60
-  resultPath: "steps.pods"
-  next: analyze_pods
-```
-
-**Use cases**:
-- Direct MCP tool invocation without LLM overhead
-- Deterministic data gathering (kubectl, database queries)
-- High-frequency operations where agent overhead is wasteful
-
-**Resolution**: Tool lookup via `GetMCPServerByName(server)` → `GetTool(tool)`
 
 #### G) `timer`
 
@@ -1438,19 +1413,11 @@ Implement `cron` state type for scheduled workflow execution.
 - `internal/services/scheduler_service.go` - Background scheduler
 - `internal/workflows/translator.go` - Add `StepTypeCron` classification
 
-### Phase 11 - Tool Step Executor (1d)
+### Phase 11 - Tool Step Executor ~~(1d)~~ REMOVED
 
-Implement direct MCP tool invocation step type.
+~~Implement direct MCP tool invocation step type.~~
 
-- [ ] Create `ToolExecutor` implementing `StepExecutor` interface
-- [ ] Add MCP server/tool resolution logic
-- [ ] Wire tool executor to registry
-- [ ] Add step type classification for `"tool"` in translator
-- [ ] Add tests
-
-**Files to create/modify**:
-- `internal/workflows/runtime/tool_executor.go` - New executor
-- `internal/workflows/translator.go` - Add `StepTypeTool` classification
+**Status**: REMOVED - Tool step type was removed because ensuring tool signature compatibility would be a maintenance burden. Agents can call any MCP tools they need internally, making direct tool steps redundant.
 
 ### Phase 12 - Timer Step Executor (0.5d)
 
