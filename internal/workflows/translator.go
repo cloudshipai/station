@@ -5,7 +5,6 @@ type ExecutionStepType string
 
 const (
 	StepTypeAgent     ExecutionStepType = "agent"
-	StepTypeTool      ExecutionStepType = "tool"
 	StepTypeCustom    ExecutionStepType = "custom"
 	StepTypeAwait     ExecutionStepType = "await"
 	StepTypeTimer     ExecutionStepType = "timer"
@@ -62,8 +61,6 @@ func classifyStep(state StateSpec) ExecutionStepType {
 	switch state.Type {
 	case "agent":
 		return StepTypeAgent
-	case "tool":
-		return StepTypeTool
 	case "human_approval":
 		return StepTypeAwait
 	case "operation", "action", "function":
@@ -72,9 +69,6 @@ func classifyStep(state StateSpec) ExecutionStepType {
 			if taskStr, ok := task.(string); ok {
 				if taskStr == "agent.run" || taskStr == "agent.hierarchy.run" {
 					return StepTypeAgent
-				}
-				if taskStr == "tool.call" {
-					return StepTypeTool
 				}
 				if taskStr == "custom.run" {
 					return StepTypeCustom

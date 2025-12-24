@@ -154,8 +154,6 @@ func classifyState(state workflows.StateSpec) workflows.ExecutionStepType {
 	switch state.Type {
 	case "agent":
 		return workflows.StepTypeAgent
-	case "tool":
-		return workflows.StepTypeTool
 	case "switch":
 		return workflows.StepTypeBranch
 	case "inject", "set", "transform", "context":

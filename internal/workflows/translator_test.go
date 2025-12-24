@@ -7,8 +7,8 @@ func TestCompileExecutionPlanMapsStepTypes(t *testing.T) {
 		ID:    "demo",
 		Start: "start",
 		States: []StateSpec{
-			{ID: "start", Type: "operation", Input: map[string]interface{}{"task": "agent.run"}, Transition: "tool"},
-			{ID: "tool", Type: "operation", Input: map[string]interface{}{"task": "tool.call"}, Transition: "wait"},
+			{ID: "start", Type: "operation", Input: map[string]interface{}{"task": "agent.run"}, Transition: "custom"},
+			{ID: "custom", Type: "operation", Input: map[string]interface{}{"task": "custom.run"}, Transition: "wait"},
 			{ID: "wait", Type: "await", Transition: "done"},
 			{ID: "done", Type: "operation", Input: map[string]interface{}{"task": "custom.run"}},
 		},
@@ -21,8 +21,8 @@ func TestCompileExecutionPlanMapsStepTypes(t *testing.T) {
 	if plan.Steps["start"].Type != StepTypeAgent {
 		t.Fatalf("expected start to map to agent, got %s", plan.Steps["start"].Type)
 	}
-	if plan.Steps["tool"].Type != StepTypeTool {
-		t.Fatalf("expected tool step type %s, got %s", StepTypeTool, plan.Steps["tool"].Type)
+	if plan.Steps["custom"].Type != StepTypeCustom {
+		t.Fatalf("expected custom step type %s, got %s", StepTypeCustom, plan.Steps["custom"].Type)
 	}
 	if plan.Steps["wait"].Type != StepTypeAwait {
 		t.Fatalf("expected await step, got %s", plan.Steps["wait"].Type)
