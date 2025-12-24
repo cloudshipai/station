@@ -491,3 +491,21 @@ CREATE TABLE workflow_approvals (
 
 CREATE INDEX idx_workflow_approvals_run ON workflow_approvals(run_id);
 CREATE INDEX idx_workflow_approvals_status ON workflow_approvals(status);
+
+CREATE TABLE workflow_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id TEXT NOT NULL,
+    workflow_version INTEGER NOT NULL,
+    cron_expression TEXT NOT NULL,
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    input TEXT,
+    last_run_at DATETIME,
+    next_run_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(workflow_id, workflow_version)
+);
+
+CREATE INDEX idx_workflow_schedules_enabled ON workflow_schedules(enabled);
+CREATE INDEX idx_workflow_schedules_next_run ON workflow_schedules(next_run_at);

@@ -26,6 +26,7 @@ type Repositories struct {
 	WorkflowRunSteps  *WorkflowRunStepRepo
 	WorkflowRunEvents *WorkflowRunEventRepo
 	WorkflowApprovals *WorkflowApprovalRepo
+	WorkflowSchedules *WorkflowScheduleRepo
 	db                db.Database
 }
 
@@ -53,6 +54,7 @@ func New(database db.Database) *Repositories {
 		WorkflowRunSteps:  NewWorkflowRunStepRepo(conn),
 		WorkflowRunEvents: NewWorkflowRunEventRepo(conn),
 		WorkflowApprovals: NewWorkflowApprovalRepo(conn),
+		WorkflowSchedules: NewWorkflowScheduleRepo(conn),
 		db:                database,
 	}
 }

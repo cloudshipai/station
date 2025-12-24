@@ -98,7 +98,20 @@ const (
 	EventTypeApprovalDecided = "approval_decided"
 )
 
-// Approval status constants.
+type WorkflowSchedule struct {
+	ID              int64           `json:"id"`
+	WorkflowID      string          `json:"workflow_id"`
+	WorkflowVersion int64           `json:"workflow_version"`
+	CronExpression  string          `json:"cron_expression"`
+	Timezone        string          `json:"timezone"`
+	Enabled         bool            `json:"enabled"`
+	Input           json.RawMessage `json:"input,omitempty"`
+	LastRunAt       *time.Time      `json:"last_run_at,omitempty"`
+	NextRunAt       *time.Time      `json:"next_run_at,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
 const (
 	ApprovalStatusPending  = "pending"
 	ApprovalStatusApproved = "approved"

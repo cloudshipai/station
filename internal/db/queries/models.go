@@ -368,3 +368,17 @@ type WorkflowRunStep struct {
 	StartedAt   sql.NullTime   `json:"started_at"`
 	CompletedAt sql.NullTime   `json:"completed_at"`
 }
+
+type WorkflowSchedule struct {
+	ID              int64          `json:"id"`
+	WorkflowID      string         `json:"workflow_id"`
+	WorkflowVersion int64          `json:"workflow_version"`
+	CronExpression  string         `json:"cron_expression"`
+	Timezone        string         `json:"timezone"`
+	Enabled         bool           `json:"enabled"`
+	Input           sql.NullString `json:"input"`
+	LastRunAt       sql.NullTime   `json:"last_run_at"`
+	NextRunAt       sql.NullTime   `json:"next_run_at"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
+	UpdatedAt       sql.NullTime   `json:"updated_at"`
+}

@@ -685,3 +685,127 @@ func convertWorkflowApproval(row queries.WorkflowApproval) *models.WorkflowAppro
 		UpdatedAt:      nullTimeOrZero(row.UpdatedAt),
 	}
 }
+
+type WorkflowScheduleRepo struct {
+	db      *sql.DB
+	queries *queries.Queries
+}
+
+func NewWorkflowScheduleRepo(db *sql.DB) *WorkflowScheduleRepo {
+	return &WorkflowScheduleRepo{
+		db:      db,
+		queries: queries.New(db),
+	}
+}
+
+type CreateWorkflowScheduleParams struct {
+	WorkflowID      string
+	WorkflowVersion int64
+	CronExpression  string
+	Timezone        string
+	Enabled         bool
+	Input           json.RawMessage
+	NextRunAt       *time.Time
+}
+
+func (r *WorkflowScheduleRepo) Create(ctx context.Context, params CreateWorkflowScheduleParams) (*models.WorkflowSchedule, error) {
+	row, err := r.queries.CreateWorkflowSchedule(ctx, queries.CreateWorkflowScheduleParams{
+		WorkflowID:      params.WorkflowID,
+		WorkflowVersion: params.WorkflowVersion,
+		CronExpression:  params.CronExpression,
+		Timezone:        params.Timezone,
+		Enabled:         params.Enabled,
+		Input:           toNullRaw(params.Input),
+		NextRunAt:       toNullTime(params.NextRunAt),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertWorkflowSchedule(row), nil
+}
+
+func (r *WorkflowScheduleRepo) Get(ctx context.Context, workflowID string, version int64) (*models.WorkflowSchedule, error) {
+	row, err := r.queries.GetWorkflowSchedule(ctx, queries.GetWorkflowScheduleParams{
+		WorkflowID:      workflowID,
+		WorkflowVersion: version,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertWorkflowSchedule(row), nil
+}
+
+func (r *WorkflowScheduleRepo) GetByID(ctx context.Context, id int64) (*models.WorkflowSchedule, error) {
+	row, err := r.queries.GetWorkflowScheduleByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return convertWorkflowSchedule(row), nil
+}
+
+func (r *WorkflowScheduleRepo) ListEnabled(ctx context.Context) ([]*models.WorkflowSchedule, error) {
+	rows, err := r.queries.ListEnabledSchedules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*models.WorkflowSchedule, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, convertWorkflowSchedule(row))
+	}
+	return result, nil
+}
+
+func (r *WorkflowScheduleRepo) ListDue(ctx context.Context, now time.Time) ([]*models.WorkflowSchedule, error) {
+	rows, err := r.queries.ListDueSchedules(ctx, toNullTime(&now))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*models.WorkflowSchedule, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, convertWorkflowSchedule(row))
+	}
+	return result, nil
+}
+
+func (r *WorkflowScheduleRepo) UpdateLastRun(ctx context.Context, id int64, lastRunAt, nextRunAt time.Time) error {
+	return r.queries.UpdateScheduleLastRun(ctx, queries.UpdateScheduleLastRunParams{
+		LastRunAt: toNullTime(&lastRunAt),
+		NextRunAt: toNullTime(&nextRunAt),
+		ID:        id,
+	})
+}
+
+func (r *WorkflowScheduleRepo) SetEnabled(ctx context.Context, workflowID string, version int64, enabled bool) error {
+	return r.queries.UpdateScheduleEnabled(ctx, queries.UpdateScheduleEnabledParams{
+		Enabled:         enabled,
+		WorkflowID:      workflowID,
+		WorkflowVersion: version,
+	})
+}
+
+func (r *WorkflowScheduleRepo) Delete(ctx context.Context, workflowID string, version int64) error {
+	return r.queries.DeleteWorkflowSchedule(ctx, queries.DeleteWorkflowScheduleParams{
+		WorkflowID:      workflowID,
+		WorkflowVersion: version,
+	})
+}
+
+func (r *WorkflowScheduleRepo) DeleteByWorkflowID(ctx context.Context, workflowID string) error {
+	return r.queries.DeleteWorkflowScheduleByWorkflowID(ctx, workflowID)
+}
+
+func convertWorkflowSchedule(row queries.WorkflowSchedule) *models.WorkflowSchedule {
+	return &models.WorkflowSchedule{
+		ID:              row.ID,
+		WorkflowID:      row.WorkflowID,
+		WorkflowVersion: row.WorkflowVersion,
+		CronExpression:  row.CronExpression,
+		Timezone:        row.Timezone,
+		Enabled:         row.Enabled,
+		Input:           rawOrNil(row.Input),
+		LastRunAt:       nullTimePtr(row.LastRunAt),
+		NextRunAt:       nullTimePtr(row.NextRunAt),
+		CreatedAt:       nullTimeOrZero(row.CreatedAt),
+		UpdatedAt:       nullTimeOrZero(row.UpdatedAt),
+	}
+}
