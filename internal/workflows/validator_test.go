@@ -67,8 +67,9 @@ func TestValidateDefinitionAllowsWarnings(t *testing.T) {
 }
 
 type mockAgentLookup struct {
-	agents map[string]*models.Agent
-	err    error
+	agents       map[string]*models.Agent
+	environments map[string]int64
+	err          error
 }
 
 func (m *mockAgentLookup) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (*models.Agent, error) {
@@ -79,6 +80,26 @@ func (m *mockAgentLookup) GetAgentByNameAndEnvironment(ctx context.Context, name
 		return agent, nil
 	}
 	return nil, errors.New("agent not found")
+}
+
+func (m *mockAgentLookup) GetAgentByNameGlobal(ctx context.Context, name string) (*models.Agent, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if agent, ok := m.agents[name]; ok {
+		return agent, nil
+	}
+	return nil, errors.New("agent not found globally")
+}
+
+func (m *mockAgentLookup) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	if m.environments == nil {
+		return 0, errors.New("environment not found")
+	}
+	if id, ok := m.environments[name]; ok {
+		return id, nil
+	}
+	return 0, errors.New("environment not found")
 }
 
 func TestAgentValidator_AllAgentsExist(t *testing.T) {
@@ -332,5 +353,40 @@ func TestAgentValidator_NestedBranchAgents(t *testing.T) {
 
 	if result.Errors[0].Code != "AGENT_NOT_FOUND" {
 		t.Errorf("expected AGENT_NOT_FOUND, got %s", result.Errors[0].Code)
+	}
+}
+
+func TestAgentValidator_ExplicitEnvironmentOverride(t *testing.T) {
+	lookup := &mockAgentLookup{
+		agents: map[string]*models.Agent{
+			"prod-agent": {ID: 1, Name: "prod-agent"},
+		},
+		environments: map[string]int64{
+			"production": 20,
+		},
+	}
+	validator := NewAgentValidator(lookup)
+
+	def := &Definition{
+		ID: "test-workflow",
+		States: []StateSpec{
+			{
+				ID:   "step1",
+				Type: "operation",
+				Input: map[string]interface{}{
+					"task":  "agent.run",
+					"agent": "prod-agent@production",
+				},
+			},
+		},
+	}
+
+	// Should pass if prod-agent is found in environment 20
+	// Note: mockAgentLookup.GetAgentByNameAndEnvironment simply checks map by name,
+	// effectively ignoring environmentID but confirming lookup was called.
+	result := validator.ValidateAgents(context.Background(), def, 1) // calling from env 1
+
+	if len(result.Errors) != 0 {
+		t.Errorf("expected no errors for valid override, got %d: %+v", len(result.Errors), result.Errors)
 	}
 }

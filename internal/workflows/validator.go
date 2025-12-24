@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 	"station/pkg/models"
@@ -193,6 +194,8 @@ func ValidateDefinition(raw json.RawMessage) (*Definition, ValidationResult, err
 
 type AgentLookup interface {
 	GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (*models.Agent, error)
+	GetAgentByNameGlobal(ctx context.Context, name string) (*models.Agent, error)
+	GetEnvironmentIDByName(ctx context.Context, name string) (int64, error)
 }
 
 type AgentValidator struct {
@@ -248,12 +251,15 @@ func (v *AgentValidator) collectAgentSteps(ctx context.Context, state *StateSpec
 
 		agent, err := v.lookupAgent(ctx, agentName, envID, cache)
 		if err != nil {
+			// If not found, check if it's an explicit environment override which we might not fully validate yet
+			// or simply report not found.
+			// Ideally we should parse "agent@env" here too if we supported it fully in lookup.
 			result.Errors = append(result.Errors, ValidationIssue{
 				Code:    "AGENT_NOT_FOUND",
 				Path:    path + "/input/agent",
-				Message: fmt.Sprintf("agent '%s' not found in environment %d", agentName, envID),
+				Message: fmt.Sprintf("agent '%s' not found (checked environment %d and global)", agentName, envID),
 				Actual:  agentName,
-				Hint:    "Ensure the agent exists in the same environment as the workflow",
+				Hint:    "Ensure the agent exists in the environment or is globally accessible",
 			})
 			return
 		}
@@ -286,13 +292,44 @@ func (v *AgentValidator) lookupAgent(ctx context.Context, name string, envID int
 		return agent, nil
 	}
 
-	agent, err := v.agentLookup.GetAgentByNameAndEnvironment(ctx, name, envID)
-	if err != nil {
+	// Handle explicit environment override (e.g., "agent@env")
+	if envOverride, agentName, hasOverride := parseAgentName(name); hasOverride {
+		resolvedEnvID, err := v.agentLookup.GetEnvironmentIDByName(ctx, envOverride)
+		if err != nil {
+			return nil, fmt.Errorf("environment '%s' not found", envOverride)
+		}
+
+		agent, err := v.agentLookup.GetAgentByNameAndEnvironment(ctx, agentName, resolvedEnvID)
+		if err == nil {
+			cache[cacheKey] = agent
+			return agent, nil
+		}
 		return nil, err
 	}
 
-	cache[cacheKey] = agent
-	return agent, nil
+	// 1. Try resolving by name in the current environment
+	agent, err := v.agentLookup.GetAgentByNameAndEnvironment(ctx, name, envID)
+	if err == nil {
+		cache[cacheKey] = agent
+		return agent, nil
+	}
+
+	// 2. Try global resolution (this matches runtime behavior)
+	agent, err = v.agentLookup.GetAgentByNameGlobal(ctx, name)
+	if err == nil {
+		cache[cacheKey] = agent
+		return agent, nil
+	}
+
+	return nil, err
+}
+
+func parseAgentName(input string) (string, string, bool) {
+	if strings.Contains(input, "@") {
+		parts := strings.SplitN(input, "@", 2)
+		return parts[1], parts[0], true
+	}
+	return "", "", false
 }
 
 func (v *AgentValidator) validateSchemaCompatibility(steps []agentStepInfo, def *Definition, result *ValidationResult) {

@@ -72,7 +72,7 @@ func (h *APIHandlers) validateWorkflow(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid workflow payload"})
 		return
 	}
-	_, validation, err := h.workflowService.ValidateDefinition(req.Definition)
+	_, validation, err := h.workflowService.ValidateDefinition(c.Request.Context(), req.Definition)
 	status := http.StatusOK
 	if errors.Is(err, workflows.ErrValidation) {
 		status = http.StatusBadRequest

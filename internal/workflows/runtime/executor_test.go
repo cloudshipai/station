@@ -11,11 +11,12 @@ import (
 type mockAgentDeps struct {
 	agents       map[int64]AgentInfo
 	agentsByName map[string]AgentInfo
+	environments map[string]int64
 	results      map[int64]AgentExecutionResult
 	execErr      error
 }
 
-func (m *mockAgentDeps) GetAgentByID(id int64) (AgentInfo, error) {
+func (m *mockAgentDeps) GetAgentByID(ctx context.Context, id int64) (AgentInfo, error) {
 	agent, ok := m.agents[id]
 	if !ok {
 		return AgentInfo{}, errors.New("agent not found")
@@ -27,6 +28,8 @@ func (m *mockAgentDeps) GetAgentByNameAndEnvironment(ctx context.Context, name s
 	if m.agentsByName == nil {
 		return AgentInfo{}, errors.New("agent not found")
 	}
+	// For mock, we'll assume name is unique or key is name
+	// In real test we might want environment awareness but this mock is simple
 	key := name
 	agent, ok := m.agentsByName[key]
 	if !ok {
@@ -44,6 +47,17 @@ func (m *mockAgentDeps) GetAgentByNameGlobal(ctx context.Context, name string) (
 		return AgentInfo{}, errors.New("agent not found globally")
 	}
 	return agent, nil
+}
+
+func (m *mockAgentDeps) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	if m.environments == nil {
+		return 0, errors.New("environment not found")
+	}
+	id, ok := m.environments[name]
+	if !ok {
+		return 0, errors.New("environment not found")
+	}
+	return id, nil
 }
 
 func (m *mockAgentDeps) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (AgentExecutionResult, error) {
@@ -313,6 +327,36 @@ func TestAgentRunExecutor_Execute(t *testing.T) {
 			wantErr:     true,
 			errContains: "missing required field: namespace",
 		},
+		{
+			name: "explicit environment override",
+			step: workflows.ExecutionStep{
+				ID:   "env-override",
+				Type: workflows.StepTypeAgent,
+				Next: "done",
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"agent": "schema-agent@production",
+						"task":  "process data",
+						"variables": map[string]interface{}{
+							"namespace": "prod-namespace",
+						},
+					},
+				},
+			},
+			runContext: map[string]interface{}{"_environmentID": int64(1)}, // default env
+			checkOutput: func(t *testing.T, result StepResult) {
+				if result.Error != nil {
+					t.Errorf("expected no error, got %s", *result.Error)
+				}
+				if result.Output["agent_name"] != "schema-agent" {
+					t.Errorf("expected agent_name=schema-agent, got %v", result.Output["agent_name"])
+				}
+			},
+		},
+	}
+
+	deps.environments = map[string]int64{
+		"production": 20,
 	}
 
 	for _, tt := range tests {

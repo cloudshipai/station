@@ -21,7 +21,8 @@ import (
 type DeclarativeSync struct {
 	repos                  *repositories.Repositories
 	config                 *config.Config
-	customVariableResolver VariableResolver // Custom resolver for UI integration
+	customVariableResolver VariableResolver
+	workflowScheduler      *WorkflowSchedulerService
 }
 
 // SyncOptions controls sync behavior
@@ -79,9 +80,24 @@ func NewDeclarativeSync(repos *repositories.Repositories, config *config.Config)
 	}
 }
 
-// SetVariableResolver sets a custom variable resolver for UI integration
 func (s *DeclarativeSync) SetVariableResolver(resolver VariableResolver) {
 	s.customVariableResolver = resolver
+}
+
+func (s *DeclarativeSync) SetWorkflowScheduler(scheduler *WorkflowSchedulerService) {
+	s.workflowScheduler = scheduler
+	s.registerExistingCronSchedules(scheduler)
+}
+
+func (s *DeclarativeSync) registerExistingCronSchedules(scheduler *WorkflowSchedulerService) {
+	if scheduler == nil {
+		return
+	}
+	ctx := context.Background()
+	workflowService := NewWorkflowService(s.repos)
+	if err := workflowService.RegisterCronSchedules(ctx, scheduler); err != nil {
+		fmt.Printf("Warning: Failed to register cron schedules on startup: %v\n", err)
+	}
 }
 
 // SyncEnvironment synchronizes a specific environment
@@ -182,7 +198,18 @@ func (s *DeclarativeSync) syncWorkflows(ctx context.Context, workflowsDir, envir
 	}
 
 	workflowService := NewWorkflowService(s.repos)
-	return workflowService.SyncWorkflowFiles(ctx, workflowsDir)
+	result, err := workflowService.SyncWorkflowFiles(ctx, workflowsDir)
+	if err != nil {
+		return result, err
+	}
+
+	if s.workflowScheduler != nil && result.WorkflowsSynced > 0 {
+		if err := workflowService.RegisterCronSchedules(ctx, s.workflowScheduler); err != nil {
+			fmt.Printf("Warning: Failed to register cron schedules: %v\n", err)
+		}
+	}
+
+	return result, nil
 }
 
 func (s *DeclarativeSync) validateMCPDependencies(environmentName string) error {

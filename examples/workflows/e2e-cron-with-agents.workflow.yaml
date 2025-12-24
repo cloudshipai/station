@@ -1,0 +1,59 @@
+# E2E Test: Cron Schedule with Real Agent Work
+# Tests cron scheduling that triggers actual agent tasks
+id: e2e-cron-with-agents
+version: "1.0"
+name: "E2E Cron with Agents"
+description: "Cron-scheduled workflow that runs real agent tasks for periodic health monitoring"
+start: schedule
+
+states:
+  - name: schedule
+    type: cron
+    cron: "*/3 * * * *"
+    timezone: "UTC"
+    enabled: true
+    input:
+      check_type: "periodic_health"
+      namespace: "production"
+      alert_threshold: 0.05
+    next: inject_config
+
+  - name: inject_config
+    type: inject
+    data:
+      services_to_check:
+        - "api-gateway"
+        - "auth-service"
+        - "worker"
+      metrics_to_collect:
+        - "error_rate"
+        - "latency_p99"
+        - "cpu_usage"
+    resultPath: config
+    next: gather_metrics
+
+  - name: gather_metrics
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "grafana-analyst"
+      agent_task: "Periodic health check triggered at {{ ctx._cronTriggeredAt }}. Query Grafana for {{ config.metrics_to_collect }} metrics across services {{ config.services_to_check }} in namespace {{ ctx.namespace }}."
+    resultPath: metrics_result
+    next: check_kubernetes
+
+  - name: check_kubernetes
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "k8s-investigator"
+      agent_task: "Periodic kubernetes health check for namespace {{ ctx.namespace }}. Check pod health, resource utilization, and any pending issues for services {{ config.services_to_check }}."
+    resultPath: k8s_result
+    next: analyze_health
+
+  - name: analyze_health
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "root-cause-analyzer"
+      agent_task: "Analyze periodic health check results from Grafana metrics and Kubernetes. Check type: {{ ctx.check_type }}. Alert threshold: {{ ctx.alert_threshold }}. Summarize overall system health and flag any concerns."
+    end: true

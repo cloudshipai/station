@@ -142,7 +142,7 @@ func (s *Server) handleValidateWorkflow(ctx context.Context, request mcp.CallToo
 		return mcp.NewToolResultError(fmt.Sprintf("Missing 'definition' parameter: %v", err)), nil
 	}
 
-	_, validation, parseErr := s.workflowService.ValidateDefinition(json.RawMessage(definition))
+	_, validation, parseErr := s.workflowService.ValidateDefinition(ctx, json.RawMessage(definition))
 
 	resultMap := map[string]interface{}{
 		"valid":      parseErr == nil,

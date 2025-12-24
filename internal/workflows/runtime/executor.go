@@ -52,9 +52,7 @@ type StepResult struct {
 }
 
 type AgentExecutorDeps interface {
-	GetAgentByID(id int64) (AgentInfo, error)
-	GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (AgentInfo, error)
-	GetAgentByNameGlobal(ctx context.Context, name string) (AgentInfo, error)
+	AgentResolver
 	ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (AgentExecutionResult, error)
 }
 
@@ -156,6 +154,33 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 		"tools_used": result.ToolsUsed,
 	}
 
+	// Post-execution output schema validation (warning only)
+	if agent.OutputSchema != nil && *agent.OutputSchema != "" {
+		// Parse response if it's JSON, otherwise wrap it
+		var responseData map[string]interface{}
+		if json.Valid([]byte(result.Response)) {
+			_ = json.Unmarshal([]byte(result.Response), &responseData)
+		} else {
+			// If not JSON, we can't validate against object schema unless schema allows string
+			// For now, simple check: if schema expects object and we got string, it's a mismatch
+			responseData = map[string]interface{}{"response": result.Response}
+		}
+
+		// We validate 'output' which contains the response.
+		// Usually agents return a specific structure.
+		// If the agent output schema describes the *whole* output, we validate `output`.
+		// But `output` above includes metadata.
+		// Station agents usually return a string `Response`.
+		// If the agent is "structured", the `Response` string IS the JSON payload.
+		// So we should validate `responseData` against the schema.
+
+		if err := workflows.ValidateInputAgainstSchema(responseData, *agent.OutputSchema); err != nil {
+			// Log warning or include in step output metadata
+			// We don't fail the step, but we flag it.
+			output["_schema_validation_warning"] = fmt.Sprintf("output validation failed: %v", err)
+		}
+	}
+
 	return StepResult{
 		Status:   StepStatusCompleted,
 		Output:   output,
@@ -170,21 +195,10 @@ func (e *AgentRunExecutor) resolveAgent(ctx context.Context, input map[string]in
 			parts := strings.SplitN(agentName, "@", 2)
 			name, envName := parts[0], parts[1]
 
-			envID, ok := runContext["_environmentID"]
-			if !ok {
-				return AgentInfo{}, fmt.Errorf("explicit environment '%s' specified but _environmentID not in context", envName)
-			}
-
-			var environmentID int64
-			switch v := envID.(type) {
-			case float64:
-				environmentID = int64(v)
-			case int64:
-				environmentID = v
-			case int:
-				environmentID = int64(v)
-			default:
-				return AgentInfo{}, fmt.Errorf("invalid _environmentID type: %T", envID)
+			// Resolve environment name to ID
+			environmentID, err := e.deps.GetEnvironmentIDByName(ctx, envName)
+			if err != nil {
+				return AgentInfo{}, fmt.Errorf("environment '%s' not found: %w", envName, err)
 			}
 
 			agent, err := e.deps.GetAgentByNameAndEnvironment(ctx, name, environmentID)
@@ -224,7 +238,7 @@ func (e *AgentRunExecutor) resolveAgent(ctx context.Context, input map[string]in
 		return AgentInfo{}, fmt.Errorf("%w: got %T", ErrInvalidAgentID, agentIDRaw)
 	}
 
-	agent, err := e.deps.GetAgentByID(agentID)
+	agent, err := e.deps.GetAgentByID(ctx, agentID)
 	if err != nil {
 		return AgentInfo{}, fmt.Errorf("%w: %v", ErrAgentNotFound, err)
 	}

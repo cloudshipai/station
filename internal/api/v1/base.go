@@ -162,13 +162,19 @@ func (h *APIHandlers) StopWorkflowConsumer() {
 	}
 }
 
+func (h *APIHandlers) SetWorkflowScheduler(scheduler *services.WorkflowSchedulerService) {
+	if h.workflowService != nil {
+		h.workflowService.SetScheduler(scheduler)
+	}
+}
+
 type agentExecutorAdapter struct {
 	agentService services.AgentServiceInterface
 	repos        *repositories.Repositories
 }
 
-func (a *agentExecutorAdapter) GetAgentByID(id int64) (runtime.AgentInfo, error) {
-	agent, err := a.agentService.GetAgent(context.Background(), id)
+func (a *agentExecutorAdapter) GetAgentByID(ctx context.Context, id int64) (runtime.AgentInfo, error) {
+	agent, err := a.agentService.GetAgent(ctx, id)
 	if err != nil {
 		return runtime.AgentInfo{}, err
 	}
@@ -204,6 +210,14 @@ func (a *agentExecutorAdapter) GetAgentByNameGlobal(ctx context.Context, name st
 		InputSchema:  agent.InputSchema,
 		OutputSchema: agent.OutputSchema,
 	}, nil
+}
+
+func (a *agentExecutorAdapter) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	env, err := a.repos.Environments.GetByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return env.ID, nil
 }
 
 func (a *agentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {

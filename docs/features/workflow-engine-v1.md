@@ -2,7 +2,9 @@
 
 > **Status**: Draft  
 > **Created**: 2025-12-23  
+> **Updated**: 2025-12-24  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
+> **Current Phase**: Phase 10 - Cron State Executor (In Progress)
 
 ## 1) Overview
 
@@ -1392,26 +1394,144 @@ Implement bundle-portable agent resolution by name.
 - `internal/workflows/runtime/executor.go` - Update `resolveAgent()`
 - `internal/workflows/validator.go` - Update agent existence check
 
-### Phase 10 - Cron State Executor (1-2d)
+### Phase 10 - Cron State Executor (1-2d) - IN PROGRESS
 
 Implement `cron` state type for scheduled workflow execution.
 
-- [ ] Create `CronExecutor` implementing `StepExecutor` interface
-- [ ] Create `workflow_schedules` table (migration)
-- [ ] Implement schedule parsing with `robfig/cron/v3`
-- [ ] Create `SchedulerService` with background ticker (checks every minute)
-- [ ] Register cron states on workflow sync
-- [ ] On trigger: create run, inject cron state's `input` into context, transition to `next`
-- [ ] Add `enabled` toggle support
+- [x] Create `workflow_schedules` table (migration `041_add_workflow_schedules.sql`)
+- [x] Create `WorkflowScheduleRepo` with CRUD operations
+- [x] Implement schedule parsing with `robfig/cron/v3`
+- [x] Create `WorkflowSchedulerService` with background ticker (checks every minute)
+- [x] Wire up scheduler in `server.go` (start/stop lifecycle)
+- [x] Inject scheduler into `DeclarativeSync` for registration on sync
+- [x] Add `RegisterCronSchedules` to `WorkflowService`
+- [x] Add `RegisterWorkflowSchedule` to scheduler (finds cron start state, registers)
+- [x] On trigger: create run via `WorkflowService.StartRun`, inject cron state's `input`
+- [x] Add `enabled` toggle support via `SetScheduleEnabled`
+- [x] Add cron state fields to `StateSpec` (Cron, Timezone, Enabled)
+- [ ] Create `CronExecutor` implementing `StepExecutor` interface (for runtime skipping)
 - [ ] Add UI indicator for scheduled workflows
 - [ ] Add tests
 
-**Files to create**:
-- `internal/workflows/runtime/cron_executor.go` - Cron state executor
-- `internal/db/migrations/042_add_workflow_schedules.sql`
-- `internal/db/queries/workflow_schedules.sql`
-- `internal/services/scheduler_service.go` - Background scheduler
-- `internal/workflows/translator.go` - Add `StepTypeCron` classification
+**Files created/modified**:
+- `internal/db/migrations/041_add_workflow_schedules.sql` - Migration for workflow_schedules table
+- `internal/db/queries/workflow_schedules.sql` - SQLC queries for schedules
+- `internal/db/repositories/workflows.go` - WorkflowScheduleRepo implementation
+- `internal/services/workflow_scheduler_service.go` - Background scheduler service
+- `internal/services/workflow_service.go` - Added RegisterCronSchedules method
+- `internal/services/declarative_sync.go` - Added SetWorkflowScheduler, updated syncWorkflows
+- `internal/workflows/types.go` - Added Cron, Timezone, Enabled fields to StateSpec
+- `cmd/main/server.go` - Wire up WorkflowSchedulerService lifecycle
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Station Startup                              │
+├─────────────────────────────────────────────────────────────────┤
+│  1. server.go creates WorkflowService                            │
+│  2. server.go creates WorkflowSchedulerService                   │
+│  3. server.go calls workflowSchedulerSvc.Start(ctx)              │
+│  4. DeclarativeSync.syncWorkflows() registers cron schedules     │
+│     └─ WorkflowService.RegisterCronSchedules(scheduler)          │
+│         └─ scheduler.RegisterWorkflowSchedule(def, version)      │
+│  5. Background ticker checks every minute for due schedules       │
+│     └─ scheduler.checkAndTrigger(ctx)                            │
+│         └─ WorkflowService.StartRun() for each due schedule      │
+│  6. On shutdown: workflowSchedulerSvc.Stop()                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Database Schema** (`workflow_schedules`):
+```sql
+CREATE TABLE workflow_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id TEXT NOT NULL,
+    workflow_version INTEGER NOT NULL,
+    cron_expression TEXT NOT NULL,
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    input TEXT,
+    last_run_at DATETIME,
+    next_run_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(workflow_id, workflow_version)
+);
+```
+
+**E2E Testing Method**:
+
+To verify cron workflow functionality end-to-end:
+
+```bash
+# 1. Build station with UI
+cd /path/to/station
+make local-install-ui
+
+# 2. Start station server in dev mode
+export STN_DEV_MODE=true
+stn serve
+
+# 3. In another terminal, start the UI dev server
+cd /path/to/station/ui
+npm run dev
+```
+
+**API Verification** (localhost:8585):
+
+```bash
+# Create a cron workflow via API
+curl -X POST http://localhost:8585/api/v1/workflows \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "cron-test",
+    "name": "Cron Test Workflow",
+    "definition": {
+      "id": "cron-test",
+      "version": "1.0",
+      "name": "Cron Test",
+      "start": "schedule",
+      "states": [
+        {
+          "name": "schedule",
+          "type": "cron",
+          "cron": "*/1 * * * *",
+          "timezone": "UTC",
+          "enabled": true,
+          "input": {"test": "value"},
+          "next": "do_work"
+        },
+        {
+          "name": "do_work",
+          "type": "inject",
+          "data": {"message": "Cron triggered"},
+          "end": true
+        }
+      ]
+    }
+  }'
+
+# Check workflow schedules table
+curl http://localhost:8585/api/v1/workflow-schedules
+
+# List workflow runs (check for cron-triggered runs)
+curl http://localhost:8585/api/v1/workflow-runs?workflow_id=cron-test
+```
+
+**Playwright Browser Verification**:
+
+1. Navigate to `http://localhost:5173/workflows` (UI dev server)
+2. Verify cron workflow appears in list with schedule indicator
+3. Check workflow detail page shows next scheduled run time
+4. Wait for cron trigger (1 minute) and verify new run appears
+5. Check run detail shows `_cronTriggeredAt` in context
+
+**Expected Behavior**:
+- Workflow with cron start state registers in `workflow_schedules` table on sync
+- Background scheduler checks every minute for due schedules
+- When `next_run_at <= now`, scheduler triggers `WorkflowService.StartRun()`
+- Run context contains `_cronTriggeredAt`, `_cronExpression`, `_cronTimezone`
+- `last_run_at` and `next_run_at` updated after each trigger
 
 ### Phase 11 - Tool Step Executor ~~(1d)~~ REMOVED
 

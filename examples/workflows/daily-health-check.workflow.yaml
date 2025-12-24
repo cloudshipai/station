@@ -1,0 +1,70 @@
+id: daily-health-check
+version: "1.0"
+name: "Daily Health Check"
+description: "Automated daily health check triggered by cron schedule"
+start: schedule
+
+states:
+  - name: schedule
+    type: cron
+    cron: "0 9 * * *"
+    timezone: "America/Chicago"
+    enabled: true
+    input:
+      namespace: "production"
+      services:
+        - api
+        - web
+        - worker
+    next: inject_config
+
+  - name: inject_config
+    type: inject
+    data:
+      thresholds:
+        errorRate: 0.05
+        latencyP99: 500
+    next: check_services
+
+  - name: check_services
+    type: operation
+    operation: agent.run
+    input:
+      agent: health-checker
+      task: "Check health of services: {{ ctx.services }}"
+    resultPath: steps.health
+    next: analyze_results
+
+  - name: analyze_results
+    type: switch
+    dataPath: steps.health.result
+    conditions:
+      - if: "error_rate > ctx.thresholds.errorRate"
+        next: alert_high_errors
+      - if: "status == 'degraded'"
+        next: alert_degraded
+    defaultNext: report_healthy
+
+  - name: alert_high_errors
+    type: operation
+    operation: agent.run
+    input:
+      agent: notifier
+      task: "Send critical alert: High error rate detected"
+    end: true
+
+  - name: alert_degraded
+    type: operation
+    operation: agent.run
+    input:
+      agent: notifier
+      task: "Send warning: Service degraded"
+    end: true
+
+  - name: report_healthy
+    type: operation
+    operation: agent.run
+    input:
+      agent: notifier
+      task: "Send all-clear: All services healthy"
+    end: true
