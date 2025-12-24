@@ -480,9 +480,9 @@ export const WorkflowDetailPage: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{step.state_name}</span>
+                          <span className="font-medium text-gray-900">{step.step_id}</span>
                           <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-100 rounded">
-                            {step.step_type}
+                            {step.metadata?.step_type || 'unknown'}
                           </span>
                         </div>
                         {step.started_at && (
@@ -495,6 +495,16 @@ export const WorkflowDetailPage: React.FC = () => {
                         )}
                         {step.error && (
                           <p className="text-sm text-red-600 mt-1">{step.error}</p>
+                        )}
+                        {step.output && (
+                          <details className="mt-2">
+                            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                              View output
+                            </summary>
+                            <pre className="mt-1 text-xs bg-gray-50 p-2 rounded overflow-x-auto max-h-32">
+                              {JSON.stringify(step.output, null, 2)}
+                            </pre>
+                          </details>
                         )}
                       </div>
                     </div>
