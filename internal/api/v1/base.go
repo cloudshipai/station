@@ -13,6 +13,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/services"
 	"station/internal/telemetry"
+	"station/internal/workflows"
 	"station/internal/workflows/runtime"
 )
 
@@ -140,6 +141,10 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 	registry.Register(runtime.NewCronExecutor())
 	registry.Register(runtime.NewTimerExecutor())
 	registry.Register(runtime.NewTryCatchExecutor(registry))
+
+	stepAdapter := &registryStepExecutorAdapter{registry: registry}
+	registry.Register(runtime.NewParallelExecutor(stepAdapter))
+	registry.Register(runtime.NewForeachExecutor(stepAdapter))
 
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
 
@@ -277,6 +282,27 @@ func (a *approvalExecutorAdapter) GetApproval(ctx context.Context, approvalID st
 		info.DecisionReason = *approval.DecisionReason
 	}
 	return info, nil
+}
+
+// registryStepExecutorAdapter implements BranchExecutorDeps and IteratorExecutorDeps
+// by delegating step execution to the executor registry.
+type registryStepExecutorAdapter struct {
+	registry *runtime.ExecutorRegistry
+}
+
+func (a *registryStepExecutorAdapter) ExecuteStep(ctx context.Context, step workflows.ExecutionStep, runContext map[string]interface{}) (runtime.StepResult, error) {
+	executor, err := a.registry.GetExecutor(step.Type)
+	if err != nil {
+		return runtime.StepResult{
+			Status: runtime.StepStatusFailed,
+			Error:  strPtr(err.Error()),
+		}, err
+	}
+	return executor.Execute(ctx, step, runContext)
+}
+
+func strPtr(s string) *string {
+	return &s
 }
 
 func (h *APIHandlers) telemetryMiddleware() gin.HandlerFunc {
