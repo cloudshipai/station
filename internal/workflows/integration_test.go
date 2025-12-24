@@ -403,7 +403,6 @@ func TestStepTypeClassification(t *testing.T) {
 	}{
 		{"operation", "agent.run", workflows.StepTypeAgent},
 		{"operation", "agent.hierarchy.run", workflows.StepTypeAgent},
-		{"operation", "tool.call", workflows.StepTypeTool},
 		{"operation", "custom.run", workflows.StepTypeCustom},
 		{"operation", "human.approval", workflows.StepTypeAwait},
 		{"operation", "", workflows.StepTypeCustom},

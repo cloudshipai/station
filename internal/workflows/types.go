@@ -61,10 +61,6 @@ type StateSpec struct {
 	// Timer state fields
 	Duration string `json:"duration,omitempty" yaml:"duration,omitempty"`
 
-	// Tool state fields
-	Server string `json:"server,omitempty" yaml:"server,omitempty"`
-	Tool   string `json:"tool,omitempty" yaml:"tool,omitempty"`
-
 	// TryCatch state fields
 	Try     *IteratorSpec `json:"try,omitempty" yaml:"try,omitempty"`
 	Catch   *IteratorSpec `json:"catch,omitempty" yaml:"catch,omitempty"`

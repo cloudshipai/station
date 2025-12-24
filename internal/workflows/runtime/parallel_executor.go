@@ -189,9 +189,6 @@ func classifyBranchState(state workflows.StateSpec) workflows.ExecutionStepType 
 				if taskStr == "agent.run" || taskStr == "agent.hierarchy.run" {
 					return workflows.StepTypeAgent
 				}
-				if taskStr == "tool.call" {
-					return workflows.StepTypeTool
-				}
 			}
 		}
 		return workflows.StepTypeCustom

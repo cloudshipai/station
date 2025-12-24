@@ -422,7 +422,7 @@ func TestExecutorRegistry(t *testing.T) {
 	})
 
 	t.Run("get unregistered executor", func(t *testing.T) {
-		_, err := registry.GetExecutor(workflows.StepTypeTool)
+		_, err := registry.GetExecutor(workflows.StepTypeParallel)
 		if err == nil {
 			t.Error("expected error for unregistered executor")
 		}
