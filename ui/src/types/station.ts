@@ -367,19 +367,18 @@ export interface WorkflowRun {
 export interface WorkflowStep {
   id: number;
   run_id: string;
-  state_name: string;
-  step_type: string;
+  step_id: string;
+  attempt: number;
   status: string;
   started_at?: string;
   completed_at?: string;
   input?: any;
   output?: any;
   error?: string;
-  agent_run_id?: number;
-  approval_id?: string;
-  branch_index?: number;
-  created_at: string;
-  updated_at: string;
+  metadata?: {
+    step_type?: string;
+    [key: string]: any;
+  };
 }
 
 export interface WorkflowApproval {
