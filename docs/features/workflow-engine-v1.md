@@ -1377,6 +1377,272 @@ go test ./internal/workflows/... -coverprofile=coverage.out
 go tool cover -html=coverage.out
 ```
 
+### 9.5 E2E Test Plan (Manual Verification)
+
+This section documents end-to-end testing using real workflows with actual agents. Test workflows are located in `examples/workflows/`.
+
+#### Prerequisites
+
+1. Station server running with agents registered
+2. At least these agents available: `k8s-investigator`, `aws-log-analyzer`, `grafana-analyst`, `root-cause-analyzer`, `k8s-deployment-checker`, `alert-investigator`
+3. NATS enabled (embedded or external)
+
+#### Test Matrix
+
+| # | Test | Workflow File | State Types | Expected Outcome |
+|---|------|---------------|-------------|------------------|
+| 1 | Basic Inject + Switch | `e2e-switch-routing.workflow.yaml` | inject, switch, operation | Injects alert data, routes to `high_severity_response` branch, runs 2 agents |
+| 2 | Parallel Branches | `e2e-parallel-diagnostics.workflow.yaml` | inject, parallel, operation | Runs 3 agents concurrently, merges results, runs analyzer |
+| 3 | Foreach Concurrent | `e2e-foreach-services.workflow.yaml` | inject, foreach, operation | Iterates 3 services with maxConcurrency=2, runs summarizer |
+| 4 | Cron Triggered | `e2e-cron-with-agents.workflow.yaml` | cron, inject, operation | Triggers every 3 minutes, runs 3 sequential agents |
+| 5 | Human Approval | (create ad-hoc) | operation, human.approval | Blocks on approval, resumes after approve/reject |
+| 6 | Complex Multi-Step | (combine above) | All state types | Full workflow with all features |
+
+#### Test 1: Inject + Switch Routing
+
+**Workflow**: `examples/workflows/e2e-switch-routing.workflow.yaml`
+
+**What it tests**:
+- `inject` state: Sets alert data with severity="high"
+- `switch` state: Routes based on `alert.severity` value
+- `operation` state: Runs `alert-investigator` and `root-cause-analyzer` agents
+
+**Steps**:
+```bash
+# 1. Sync workflow to Station
+stn sync
+
+# 2. Start workflow run via API or UI
+curl -X POST http://localhost:8585/api/v1/workflow-runs \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "e2e-switch-routing"}'
+
+# 3. Watch run progress
+curl http://localhost:8585/api/v1/workflow-runs/{runId}
+```
+
+**Expected outcome**:
+- Run starts in `inject_alert` state
+- Injects `{severity: "high", ...}` into context
+- Switch routes to `high_severity_response` (not critical, medium, or low)
+- Runs `alert-investigator` agent
+- Transitions to `analyze_high`
+- Runs `root-cause-analyzer` agent
+- Run completes with status `COMPLETED`
+
+**Verification**:
+```bash
+# Check run status
+curl http://localhost:8585/api/v1/workflow-runs/{runId} | jq '.status'
+# Expected: "COMPLETED"
+
+# Check steps executed
+curl http://localhost:8585/api/v1/workflow-runs/{runId}/steps | jq '.[].name'
+# Expected: ["inject_alert", "route_by_severity", "high_severity_response", "analyze_high"]
+```
+
+#### Test 2: Parallel Branches
+
+**Workflow**: `examples/workflows/e2e-parallel-diagnostics.workflow.yaml`
+
+**What it tests**:
+- `parallel` state: Runs 3 branches concurrently
+- Branch isolation: Each branch has independent context
+- Join: Waits for all branches before proceeding
+- Result merging: Combined results available in `steps.gather_diagnostics`
+
+**Steps**:
+```bash
+# Start run
+curl -X POST http://localhost:8585/api/v1/workflow-runs \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "e2e-parallel-diagnostics"}'
+```
+
+**Expected outcome**:
+- `init` injects context with namespace, service, time_range
+- `gather_diagnostics` starts 3 branches in parallel:
+  - Branch `kubernetes`: runs `k8s-investigator`
+  - Branch `aws_logs`: runs `aws-log-analyzer`
+  - Branch `grafana_metrics`: runs `grafana-analyst`
+- All 3 branches complete (order may vary)
+- Join waits for all branches
+- `analyze_results` runs `root-cause-analyzer` with combined data
+- Run completes
+
+**Verification**:
+- Check logs for concurrent agent execution (overlapping timestamps)
+- All 4 agents should have executed
+- Final context should contain results from all branches
+
+#### Test 3: Foreach Concurrent Execution
+
+**Workflow**: `examples/workflows/e2e-foreach-services.workflow.yaml`
+
+**What it tests**:
+- `foreach` state: Iterates over 3 services
+- `maxConcurrency: 2`: Runs 2 iterations in parallel at a time
+- Item variable: `{{ service.name }}`, `{{ service.namespace }}`
+- Thread-safe prompt loading: Validates our race condition fix
+
+**Steps**:
+```bash
+curl -X POST http://localhost:8585/api/v1/workflow-runs \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "e2e-foreach-services"}'
+```
+
+**Expected outcome**:
+- `init_services` injects 3 service objects
+- `check_each_service` iterates with `maxConcurrency: 2`:
+  - First 2 services run in parallel
+  - Third service runs after one completes
+- Each iteration runs `k8s-deployment-checker` agent
+- `summarize` runs `root-cause-analyzer` agent
+- **NO PANIC**: Concurrent prompt loading should work (validates our fix)
+
+**Verification**:
+```bash
+# Check for panic in logs (should be none)
+grep -i "panic" /tmp/station.log
+
+# Check for our fix working
+grep "Reusing already-registered prompt" /tmp/station.log
+# Should see entries for k8s-deployment-checker being reused
+```
+
+#### Test 4: Cron-Triggered Execution
+
+**Workflow**: `examples/workflows/e2e-cron-with-agents.workflow.yaml`
+
+**What it tests**:
+- `cron` state: Scheduled execution every 3 minutes
+- Cron context injection: `_cronTriggeredAt`, `_cronExpression`
+- Sequential agent execution after trigger
+
+**Steps**:
+```bash
+# 1. Sync workflow (registers cron schedule)
+stn sync
+
+# 2. Check schedule registered
+curl http://localhost:8585/api/v1/workflow-schedules | jq '.[] | select(.workflow_id == "e2e-cron-with-agents")'
+
+# 3. Wait for next trigger (up to 3 minutes) or check logs
+tail -f /tmp/station.log | grep "WorkflowScheduler"
+```
+
+**Expected outcome**:
+- Workflow registered in `workflow_schedules` table
+- Background scheduler triggers every 3 minutes
+- Each trigger creates a new run with:
+  - `_cronTriggeredAt` in context
+  - `_cronExpression` and `_cronTimezone` metadata
+- Run executes: `inject_config` → `gather_metrics` → `check_kubernetes` → `analyze_health`
+- Run completes automatically
+
+**Verification**:
+```bash
+# Check for triggered runs
+curl http://localhost:8585/api/v1/workflow-runs?workflow_id=e2e-cron-with-agents | jq '.[0]'
+
+# Check context has cron metadata
+curl http://localhost:8585/api/v1/workflow-runs/{runId} | jq '.context._cronTriggeredAt'
+```
+
+#### Test 5: Human Approval Gate
+
+**What it tests**:
+- `human.approval` action: Blocks workflow for approval
+- Timeout handling: Approval expires after timeout
+- Resume: Workflow continues after approval granted
+
+**Ad-hoc workflow** (create via API):
+```bash
+curl -X POST http://localhost:8585/api/v1/workflows \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "e2e-approval-test",
+    "name": "E2E Approval Test",
+    "definition": {
+      "id": "e2e-approval-test",
+      "version": "1.0",
+      "start": "prepare",
+      "states": [
+        {
+          "name": "prepare",
+          "type": "inject",
+          "data": {"action": "deploy", "env": "production"},
+          "next": "request_approval"
+        },
+        {
+          "name": "request_approval",
+          "type": "operation",
+          "action": "human.approval",
+          "input": {
+            "message": "Approve deployment to production?",
+            "timeoutSeconds": 300
+          },
+          "next": "execute"
+        },
+        {
+          "name": "execute",
+          "type": "inject",
+          "data": {"status": "deployed"},
+          "end": true
+        }
+      ]
+    }
+  }'
+```
+
+**Expected outcome**:
+1. Run starts, executes `prepare`
+2. `request_approval` creates approval record, run status → `WAITING_APPROVAL`
+3. On approve: run resumes, executes `execute`, completes
+4. On reject: run fails with `CANCELLED` or `FAILED`
+5. On timeout: run fails with `TIMED_OUT`
+
+#### Test 6: Load Test (10+ Concurrent Runs)
+
+**What it tests**:
+- Concurrent workflow execution
+- NATS consumer handling
+- SQLite contention
+- Memory/goroutine usage
+
+**Steps**:
+```bash
+# Start 15 concurrent runs
+for i in {1..15}; do
+  curl -X POST http://localhost:8585/api/v1/workflow-runs \
+    -H "Content-Type: application/json" \
+    -d '{"workflow_id": "e2e-parallel-diagnostics"}' &
+done
+wait
+
+# Monitor
+watch -n 1 'curl -s http://localhost:8585/api/v1/workflow-runs?status=RUNNING | jq length'
+```
+
+**Expected outcome**:
+- All 15 runs start without error
+- Runs execute concurrently
+- All runs complete eventually
+- No panics, no deadlocks
+- Memory usage stays bounded
+
+#### UI Verification (Playwright)
+
+| Test | Steps | Expected |
+|------|-------|----------|
+| Workflow List | Navigate to `/workflows` | See all synced workflows |
+| Workflow Detail | Click workflow | See tabs: Overview, Runs, Definition |
+| Start Run | Click "Run" button, enter input | Run created, redirected to run detail |
+| Run Timeline | View run detail | Steps displayed in order with status |
+| Real-time Updates | Start run, watch | Status updates via SSE without refresh |
+| Approval UI | View waiting run | Shows approval button, can approve/reject |
+
 ---
 
 ### Phase 9 - Global Agent Resolution (1d)
