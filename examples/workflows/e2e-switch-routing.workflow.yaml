@@ -22,11 +22,11 @@ states:
     type: switch
     dataPath: alert.severity
     conditions:
-      - if: "val == 'critical'"
+      - if: "_value == 'critical'"
         next: critical_response
-      - if: "val == 'high'"
+      - if: "_value == 'high'"
         next: high_severity_response
-      - if: "val == 'medium'"
+      - if: "_value == 'medium'"
         next: medium_severity_response
     defaultNext: low_severity_response
 

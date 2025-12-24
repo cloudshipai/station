@@ -1645,6 +1645,179 @@ watch -n 1 'curl -s http://localhost:8585/api/v1/workflow-runs?status=RUNNING | 
 
 ---
 
+### 9.6 E2E Test Results (2025-12-24)
+
+#### Test Execution Summary
+
+| Run ID | Workflow | Status | Duration | Notes |
+|--------|----------|--------|----------|-------|
+| 54 | e2e-foreach-services | ✅ COMPLETED | ~7m | Foreach with 3 concurrent agent calls, NO PANICS |
+| 53 | e2e-parallel-diagnostics | ✅ COMPLETED | ~6m | 3 parallel branches executed successfully |
+| 52 | e2e-switch-routing | ❌ FAILED | <1s | Syntax error: `val` should be `_value` |
+
+#### Key Fixes Verified
+
+1. **Race Condition Fix (CRITICAL)** - Concurrent prompt loading now thread-safe
+   - **Problem**: `panic: action "/executable-prompt/k8s-deployment-checker" is already registered`
+   - **Solution**: Added `sync.Map` with per-agent mutexes in `pkg/dotprompt/genkit_executor.go`
+   - **Result**: Foreach workflow ran `k8s-deployment-checker` 3 times concurrently WITHOUT panics
+
+2. **Parallel Execution** - Working correctly
+   - 3 agents ran simultaneously: `k8s-investigator`, `aws-log-analyzer`, `grafana-analyst`
+   - Join completed correctly, results merged
+
+3. **Switch Routing** - Fixed syntax error
+   - When `dataPath` points to a scalar value, use `_value` not `val`
+   - Fixed in `examples/workflows/e2e-switch-routing.workflow.yaml`
+
+#### Commits
+
+- `ba885189`: "feat(workflows): add cron scheduler and fix concurrent prompt loading" (25 files, 1299 insertions)
+- `eb639162`: "docs: add comprehensive E2E test plan to workflow PRD"
+
+---
+
+### 9.7 UI/UX Issues Identified (2025-12-24)
+
+Critical UI/UX issues found during E2E testing that need to be addressed:
+
+#### Issue 1: Execution Steps View - Poor Data Visibility
+
+**Current State**: The execution steps view shows step names and completion times, but:
+- ❌ Cannot see input/outputs between nodes clearly
+- ❌ Cannot tell which agents ran (only shows step types like "loop", "agent", "context")
+- ❌ No link to agent run details if you want to drill down
+- ❌ Foreach results show `"message": "custom step completed (no-op)"` - not useful
+
+**Desired State**:
+- Show agent name prominently on each agent step
+- Show abbreviated input → output data flow between steps
+- Link each agent step to its corresponding agent run page
+- Show actual agent response preview (truncated)
+
+#### Issue 2: Workflow Flow Diagram - Missing Agent Info
+
+**Current State**: The visual flow diagram shows:
+- Node types (INJECT, FOREACH, OPERATION, PARALLEL)
+- Node names (init_services, check_each_se..., summarize)
+
+**Problems**:
+- ❌ Cannot tell which agent each OPERATION node uses
+- ❌ Node names are truncated and unclear
+- ❌ No indication of data flow between nodes
+
+**Desired State**:
+- Show agent name inside or below OPERATION nodes
+- Show full node names (or tooltip on hover)
+- Visual indicators of data connections between nodes
+
+#### Issue 3: Definition View - Cannot Scroll
+
+**Current State**: The JSON definition view cuts off at the bottom of the viewport.
+- ❌ Cannot scroll down to see full definition
+- ❌ Large workflows are impossible to review
+
+**Fix Required**: Add `overflow-y: auto` or use proper scrollable container.
+
+#### Issue 4: Definition View - Agent Visibility
+
+**Current State**: Definition shown as raw JSON, agents buried in nested structure.
+- ❌ Hard to see at a glance which agents a workflow uses
+- ❌ No summary of agents involved
+
+**Desired State**:
+- Add "Agents Used" summary section at top of definition
+- Consider collapsible tree view instead of raw JSON
+- Highlight agent names in the JSON view
+
+---
+
+### 9.8 CRITICAL: Data Flow Design Requirement
+
+**Current Design Problem**: Each workflow step has a hardcoded `agent_task` string in the definition:
+
+```yaml
+states:
+  - id: check_pods
+    type: operation
+    input:
+      agent: "k8s-investigator"
+      agent_task: "Check pods in namespace {{ ctx.namespace }}"  # ← Hardcoded task
+```
+
+**Why This Is Wrong**:
+1. The task description is baked into the workflow definition
+2. Each agent receives an independent, static task string
+3. Agent outputs don't naturally flow as inputs to the next agent
+4. Workflow definitions become bloated with task descriptions
+
+**Desired Design**: Task at trigger, data flows between nodes
+
+```yaml
+# Workflow defines STRUCTURE and AGENTS, not tasks
+id: incident-diagnosis
+start: investigate
+input:
+  task: string  # Task provided at trigger time
+
+states:
+  - id: investigate
+    type: agent
+    agent: "k8s-investigator"
+    # Receives: workflow input (task + context)
+    # Outputs: investigation results
+    next: analyze
+
+  - id: analyze
+    type: agent
+    agent: "root-cause-analyzer"
+    # Receives: previous agent's output automatically
+    # No need to specify task - agent works on received data
+    next: report
+
+  - id: report
+    type: agent
+    agent: "report-generator"
+    # Receives: analyzer's output
+    end: true
+```
+
+**Trigger Example**:
+```bash
+curl -X POST /api/v1/workflow-runs \
+  -d '{
+    "workflow_id": "incident-diagnosis",
+    "input": {
+      "task": "CPU usage is at 95% on payment-service",
+      "namespace": "production"
+    }
+  }'
+```
+
+**Data Flow**:
+```
+[Trigger Input] → k8s-investigator → [Output A] → root-cause-analyzer → [Output B] → report-generator → [Final Output]
+```
+
+**Key Principles**:
+1. **Task at trigger**: The actual task/question comes from whoever starts the workflow
+2. **Data flows forward**: Each agent receives the previous agent's output
+3. **Agents are black boxes**: Workflow doesn't need to know what agents do internally
+4. **Context accumulates**: Each step's output is added to context for later steps
+5. **Schema validation**: Ensure output schema of step N matches input schema of step N+1
+
+**Implementation Requirements** (Phase 9+):
+- [ ] Add `inputFlowMode: "auto" | "explicit"` to workflow definition
+- [ ] When `auto`: automatically pass previous step output as input
+- [ ] When `explicit`: use current `input` specification (backwards compatible)
+- [ ] Update workflow validator to check schema compatibility in auto mode
+- [ ] Update UI to show data flow arrows between nodes
+- [ ] Add "Workflow Input Schema" and "Expected Output Schema" to definition
+
+**This is tracked for future implementation.**
+
+---
+
 ### Phase 9 - Global Agent Resolution (1d)
 
 Implement bundle-portable agent resolution by name.
