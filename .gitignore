@@ -129,6 +129,8 @@ ui/.env*
 ui/coverage/
 ui/.nyc_output/
 ui/build/
+ui/playwright-report/
+ui/test-results/
 
 # Documentation site
 docs/site/dist/
