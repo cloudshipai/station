@@ -15,10 +15,10 @@ import (
 	"station/pkg/models"
 )
 
-// WorkflowService manages workflow definitions, validation, and durable run metadata.
 type WorkflowService struct {
-	repos  *repositories.Repositories
-	engine runtime.Engine
+	repos     *repositories.Repositories
+	engine    runtime.Engine
+	scheduler *WorkflowSchedulerService
 }
 
 // WorkflowDefinitionInput captures required fields to create or update a workflow.
@@ -75,22 +75,78 @@ func NewWorkflowService(repos *repositories.Repositories) *WorkflowService {
 	return &WorkflowService{repos: repos}
 }
 
-// NewWorkflowServiceWithEngine allows injecting a runtime engine (e.g., NATS-backed) for scheduling.
 func NewWorkflowServiceWithEngine(repos *repositories.Repositories, engine runtime.Engine) *WorkflowService {
 	return &WorkflowService{repos: repos, engine: engine}
 }
 
-func (s *WorkflowService) ValidateDefinition(definition json.RawMessage) (*workflows.Definition, workflows.ValidationResult, error) {
-	return workflows.ValidateDefinition(definition)
+func (s *WorkflowService) SetScheduler(scheduler *WorkflowSchedulerService) {
+	s.scheduler = scheduler
+}
+
+func (s *WorkflowService) registerCronScheduleIfNeeded(ctx context.Context, def *workflows.Definition, version int64) {
+	if s.scheduler == nil || def == nil {
+		return
+	}
+	if err := s.scheduler.RegisterWorkflowSchedule(ctx, def, version); err != nil {
+		fmt.Printf("Warning: Failed to register cron schedule for %s: %v\n", def.ID, err)
+	}
+}
+
+// agentLookupAdapter adapts repositories to workflows.AgentLookup interface
+type agentLookupAdapter struct {
+	repos *repositories.Repositories
+}
+
+func (a *agentLookupAdapter) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (*models.Agent, error) {
+	return a.repos.Agents.GetByNameAndEnvironment(name, environmentID)
+}
+
+func (a *agentLookupAdapter) GetAgentByNameGlobal(ctx context.Context, name string) (*models.Agent, error) {
+	return a.repos.Agents.GetByNameGlobal(name)
+}
+
+func (a *agentLookupAdapter) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	env, err := a.repos.Environments.GetByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return env.ID, nil
+}
+
+func (s *WorkflowService) ValidateDefinition(ctx context.Context, definition json.RawMessage) (*workflows.Definition, workflows.ValidationResult, error) {
+	def, basicResult, err := workflows.ValidateDefinition(definition)
+	if err != nil {
+		return def, basicResult, err
+	}
+
+	// Perform deeper agent and schema validation
+	// Use default environment (id=1) as primary context if we can determine it, otherwise 0
+	// TODO: Get actual environment ID from context or request if possible
+	var envID int64 = 1
+	if env, err := s.repos.Environments.GetByName("default"); err == nil {
+		envID = env.ID
+	}
+
+	validator := workflows.NewAgentValidator(&agentLookupAdapter{repos: s.repos})
+	agentResult := validator.ValidateAgents(ctx, def, envID)
+
+	// Merge results
+	basicResult.Errors = append(basicResult.Errors, agentResult.Errors...)
+	basicResult.Warnings = append(basicResult.Warnings, agentResult.Warnings...)
+
+	if len(basicResult.Errors) > 0 {
+		return def, basicResult, workflows.ErrValidation
+	}
+
+	return def, basicResult, nil
 }
 
 func (s *WorkflowService) CreateWorkflow(ctx context.Context, input WorkflowDefinitionInput) (*models.WorkflowDefinition, workflows.ValidationResult, error) {
-	parsed, validation, err := workflows.ValidateDefinition(input.Definition)
+	parsed, validation, err := s.ValidateDefinition(ctx, input.Definition)
 	if err != nil && !errors.Is(err, workflows.ErrValidation) {
 		return nil, validation, err
 	}
 
-	// Surface mismatch between body workflow_id and definition id as a warning
 	if parsed != nil && parsed.ID != "" && parsed.ID != input.WorkflowID {
 		validation.Warnings = append(validation.Warnings, workflows.ValidationIssue{
 			Code:    "WORKFLOW_ID_MISMATCH",
@@ -110,11 +166,17 @@ func (s *WorkflowService) CreateWorkflow(ctx context.Context, input WorkflowDefi
 	}
 
 	record, err := s.repos.Workflows.Insert(ctx, input.WorkflowID, input.Name, input.Description, nextVersion, input.Definition, "active")
-	return record, validation, err
+	if err != nil {
+		return nil, validation, err
+	}
+
+	s.registerCronScheduleIfNeeded(ctx, parsed, nextVersion)
+
+	return record, validation, nil
 }
 
 func (s *WorkflowService) UpdateWorkflow(ctx context.Context, input WorkflowDefinitionInput) (*models.WorkflowDefinition, workflows.ValidationResult, error) {
-	parsed, validation, err := workflows.ValidateDefinition(input.Definition)
+	parsed, validation, err := s.ValidateDefinition(ctx, input.Definition)
 	if err != nil && !errors.Is(err, workflows.ErrValidation) {
 		return nil, validation, err
 	}
@@ -132,7 +194,6 @@ func (s *WorkflowService) UpdateWorkflow(ctx context.Context, input WorkflowDefi
 		return nil, validation, workflows.ErrValidation
 	}
 
-	// Ensure workflow exists before version bump
 	if _, err := s.repos.Workflows.GetLatest(ctx, input.WorkflowID); err != nil {
 		return nil, validation, err
 	}
@@ -143,7 +204,13 @@ func (s *WorkflowService) UpdateWorkflow(ctx context.Context, input WorkflowDefi
 	}
 
 	record, err := s.repos.Workflows.Insert(ctx, input.WorkflowID, input.Name, input.Description, nextVersion, input.Definition, "active")
-	return record, validation, err
+	if err != nil {
+		return nil, validation, err
+	}
+
+	s.registerCronScheduleIfNeeded(ctx, parsed, nextVersion)
+
+	return record, validation, nil
 }
 
 func (s *WorkflowService) GetWorkflow(ctx context.Context, workflowID string, version int64) (*models.WorkflowDefinition, error) {
@@ -747,4 +814,28 @@ func (s *WorkflowService) SyncWorkflowFiles(ctx context.Context, workflowsDir st
 	}
 
 	return result, nil
+}
+
+func (s *WorkflowService) RegisterCronSchedules(ctx context.Context, scheduler *WorkflowSchedulerService) error {
+	workflowList, err := s.repos.Workflows.ListLatest(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list workflows: %w", err)
+	}
+
+	for _, wf := range workflowList {
+		if wf.Status != "active" {
+			continue
+		}
+
+		def, _, err := workflows.ValidateDefinition(wf.Definition)
+		if err != nil || def == nil {
+			continue
+		}
+
+		if err := scheduler.RegisterWorkflowSchedule(ctx, def, wf.Version); err != nil {
+			return fmt.Errorf("failed to register schedule for %s: %w", wf.WorkflowID, err)
+		}
+	}
+
+	return nil
 }

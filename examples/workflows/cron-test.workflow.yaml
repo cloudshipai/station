@@ -1,0 +1,22 @@
+id: cron-test
+version: "1.0"
+name: "Cron Test Workflow"
+description: "Simple test workflow for cron scheduling"
+start: schedule
+
+states:
+  - name: schedule
+    type: cron
+    cron: "*/5 * * * *"
+    timezone: "UTC"
+    enabled: true
+    input:
+      test_value: "hello from cron"
+    next: do_work
+
+  - name: do_work
+    type: inject
+    data:
+      message: "Cron triggered successfully"
+      timestamp: "{{ ctx._cronTriggeredAt }}"
+    end: true

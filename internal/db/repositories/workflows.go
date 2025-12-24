@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"station/internal/db/queries"
@@ -419,6 +420,34 @@ func toNullTime(t *time.Time) sql.NullTime {
 	return sql.NullTime{Time: *t, Valid: true}
 }
 
+func parseTimeString(s sql.NullString) *time.Time {
+	if !s.Valid || s.String == "" {
+		return nil
+	}
+	t, err := parseTimeFormats(s.String)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func parseTimeFormats(s string) (time.Time, error) {
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05 +0000 UTC",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02 15:04:05",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, errors.New("unable to parse time")
+}
+
 func rawOrNil(value sql.NullString) json.RawMessage {
 	if !value.Valid || value.String == "" {
 		return nil
@@ -709,19 +738,41 @@ type CreateWorkflowScheduleParams struct {
 }
 
 func (r *WorkflowScheduleRepo) Create(ctx context.Context, params CreateWorkflowScheduleParams) (*models.WorkflowSchedule, error) {
-	row, err := r.queries.CreateWorkflowSchedule(ctx, queries.CreateWorkflowScheduleParams{
-		WorkflowID:      params.WorkflowID,
-		WorkflowVersion: params.WorkflowVersion,
-		CronExpression:  params.CronExpression,
-		Timezone:        params.Timezone,
-		Enabled:         params.Enabled,
-		Input:           toNullRaw(params.Input),
-		NextRunAt:       toNullTime(params.NextRunAt),
-	})
-	if err != nil {
+	query := `INSERT INTO workflow_schedules (workflow_id, workflow_version, cron_expression, timezone, enabled, input, next_run_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, workflow_id, workflow_version, cron_expression, timezone, enabled, input, last_run_at, next_run_at, created_at, updated_at`
+
+	var nextRunAtStr sql.NullString
+	if params.NextRunAt != nil {
+		nextRunAtStr = sql.NullString{String: params.NextRunAt.UTC().Format(time.RFC3339), Valid: true}
+	}
+
+	row := r.db.QueryRowContext(ctx, query,
+		params.WorkflowID, params.WorkflowVersion, params.CronExpression,
+		params.Timezone, params.Enabled, toNullRaw(params.Input), nextRunAtStr)
+
+	var s models.WorkflowSchedule
+	var input, lastRunAt, nextRunAt, createdAt, updatedAt sql.NullString
+	if err := row.Scan(&s.ID, &s.WorkflowID, &s.WorkflowVersion, &s.CronExpression, &s.Timezone, &s.Enabled, &input, &lastRunAt, &nextRunAt, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
-	return convertWorkflowSchedule(row), nil
+
+	if input.Valid {
+		s.Input = json.RawMessage(input.String)
+	}
+	s.LastRunAt = parseTimeString(lastRunAt)
+	s.NextRunAt = parseTimeString(nextRunAt)
+	if createdAt.Valid {
+		if t, err := parseTimeFormats(createdAt.String); err == nil {
+			s.CreatedAt = t
+		}
+	}
+	if updatedAt.Valid {
+		if t, err := parseTimeFormats(updatedAt.String); err == nil {
+			s.UpdatedAt = t
+		}
+	}
+	return &s, nil
 }
 
 func (r *WorkflowScheduleRepo) Get(ctx context.Context, workflowID string, version int64) (*models.WorkflowSchedule, error) {
@@ -756,23 +807,54 @@ func (r *WorkflowScheduleRepo) ListEnabled(ctx context.Context) ([]*models.Workf
 }
 
 func (r *WorkflowScheduleRepo) ListDue(ctx context.Context, now time.Time) ([]*models.WorkflowSchedule, error) {
-	rows, err := r.queries.ListDueSchedules(ctx, toNullTime(&now))
+	query := `SELECT id, workflow_id, workflow_version, cron_expression, timezone, enabled, input, last_run_at, next_run_at, created_at, updated_at 
+		FROM workflow_schedules 
+		WHERE enabled = 1 AND next_run_at <= ? 
+		ORDER BY next_run_at ASC`
+
+	nowStr := now.UTC().Format(time.RFC3339)
+	rows, err := r.db.QueryContext(ctx, query, nowStr)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*models.WorkflowSchedule, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, convertWorkflowSchedule(row))
+	defer rows.Close()
+
+	var result []*models.WorkflowSchedule
+	for rows.Next() {
+		var s models.WorkflowSchedule
+		var input, lastRunAt, nextRunAt, createdAt, updatedAt sql.NullString
+
+		if err := rows.Scan(&s.ID, &s.WorkflowID, &s.WorkflowVersion, &s.CronExpression, &s.Timezone, &s.Enabled, &input, &lastRunAt, &nextRunAt, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+
+		if input.Valid {
+			s.Input = json.RawMessage(input.String)
+		}
+		s.LastRunAt = parseTimeString(lastRunAt)
+		s.NextRunAt = parseTimeString(nextRunAt)
+		if createdAt.Valid {
+			if t, err := parseTimeFormats(createdAt.String); err == nil {
+				s.CreatedAt = t
+			}
+		}
+		if updatedAt.Valid {
+			if t, err := parseTimeFormats(updatedAt.String); err == nil {
+				s.UpdatedAt = t
+			}
+		}
+		result = append(result, &s)
 	}
-	return result, nil
+	return result, rows.Err()
 }
 
 func (r *WorkflowScheduleRepo) UpdateLastRun(ctx context.Context, id int64, lastRunAt, nextRunAt time.Time) error {
-	return r.queries.UpdateScheduleLastRun(ctx, queries.UpdateScheduleLastRunParams{
-		LastRunAt: toNullTime(&lastRunAt),
-		NextRunAt: toNullTime(&nextRunAt),
-		ID:        id,
-	})
+	query := `UPDATE workflow_schedules SET last_run_at = ?, next_run_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	_, err := r.db.ExecContext(ctx, query,
+		lastRunAt.UTC().Format(time.RFC3339),
+		nextRunAt.UTC().Format(time.RFC3339),
+		id)
+	return err
 }
 
 func (r *WorkflowScheduleRepo) SetEnabled(ctx context.Context, workflowID string, version int64, enabled bool) error {

@@ -181,14 +181,20 @@ func runMainServer() error {
 		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
 	}
 
-	// Initialize scheduler service for cron-based agent execution (using direct execution)
 	schedulerSvc := services.NewSchedulerService(database, repos, agentSvc)
-
-	// Start scheduler service
 	if err := schedulerSvc.Start(); err != nil {
 		return fmt.Errorf("failed to start scheduler service: %w", err)
 	}
 	defer schedulerSvc.Stop()
+
+	workflowService := services.NewWorkflowService(repos)
+	workflowSchedulerSvc := services.NewWorkflowSchedulerService(repos, workflowService)
+	if err := workflowSchedulerSvc.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start workflow scheduler service: %w", err)
+	}
+	defer workflowSchedulerSvc.Stop()
+
+	syncer.SetWorkflowScheduler(workflowSchedulerSvc)
 
 	// Initialize remote control service for server mode CloudShip integration
 	var remoteControlSvc *lighthouseServices.RemoteControlService
@@ -262,6 +268,9 @@ func runMainServer() error {
 	apiServer.SetServices(toolDiscoveryService)
 	// Share agent service with API server so CloudShip telemetry info propagates to traces
 	apiServer.SetAgentService(agentSvc)
+
+	apiServer.InitializeHandlers()
+	apiServer.SetWorkflowScheduler(workflowSchedulerSvc)
 
 	// Check if dev mode is enabled (default: false for production deployments)
 	devMode := os.Getenv("STN_DEV_MODE") == "true"

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"station/internal/config"
@@ -13,6 +14,13 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"gopkg.in/yaml.v2"
+)
+
+// promptLoadMutexes protects concurrent prompt loading per-agent
+// This prevents the panic "action is already registered" when multiple
+// goroutines (e.g., foreach iterations) try to load the same prompt
+var (
+	promptLoadMutexes sync.Map // map[string]*sync.Mutex
 )
 
 // ToolCallTracker monitors tool usage to prevent obsessive calling loops
@@ -54,6 +62,31 @@ type GenKitExecutor struct {
 // NewGenKitExecutor creates a new GenKit-based dotprompt executor
 func NewGenKitExecutor() *GenKitExecutor {
 	return &GenKitExecutor{}
+}
+
+func getPromptMutex(agentName string) *sync.Mutex {
+	actual, _ := promptLoadMutexes.LoadOrStore(agentName, &sync.Mutex{})
+	return actual.(*sync.Mutex)
+}
+
+func loadPromptSafe(genkitApp *genkit.Genkit, agentName, promptPath string) (ai.Prompt, error) {
+	mu := getPromptMutex(agentName)
+	mu.Lock()
+	defer mu.Unlock()
+
+	prompt := genkit.LookupPrompt(genkitApp, agentName)
+	if prompt != nil {
+		fmt.Printf("DEBUG: Reusing already-registered prompt for %s\n", agentName)
+		return prompt, nil
+	}
+
+	fmt.Printf("DEBUG: Loading prompt for %s (first execution)\n", agentName)
+	prompt = genkit.LoadPrompt(genkitApp, promptPath, "")
+	if prompt == nil {
+		return nil, fmt.Errorf("failed to load prompt from: %s", promptPath)
+	}
+
+	return prompt, nil
 }
 
 // extractDotPromptMetadata extracts app/app_type metadata from dotprompt file if it exists
@@ -168,28 +201,14 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 	}
 	fmt.Printf("DEBUG: Registered %d tools, skipped %d already-registered tools for agent %s\n", registeredCount, skippedCount, agent.Name)
 
-	// Load or lookup dotprompt file AFTER registering tools
-	// For child agent executions, the prompt is already registered by the parent
-	// Try to lookup first, then load if not found (avoids re-registration panic)
-	agentPrompt := genkit.LookupPrompt(genkitApp, agent.Name)
-
-	if agentPrompt == nil {
-		// Prompt not registered yet - load it (this is the first execution)
-		fmt.Printf("DEBUG: Loading prompt for %s (first execution)\n", agent.Name)
-		agentPrompt = genkit.LoadPrompt(genkitApp, promptPath, "")
-
-		if agentPrompt == nil {
-			promptLoadError := fmt.Errorf("failed to load prompt from: %s", promptPath)
-			return &ExecutionResponse{
-				Success:  false,
-				Response: "",
-				Duration: time.Since(startTime),
-				Error:    promptLoadError.Error(),
-			}, promptLoadError
-		}
-	} else {
-		// Prompt already registered - reuse it (child agent execution)
-		fmt.Printf("DEBUG: Reusing already-registered prompt for %s (child agent)\n", agent.Name)
+	agentPrompt, err := loadPromptSafe(genkitApp, agent.Name, promptPath)
+	if err != nil {
+		return &ExecutionResponse{
+			Success:  false,
+			Response: "",
+			Duration: time.Since(startTime),
+			Error:    err.Error(),
+		}, err
 	}
 
 	// Get model configuration

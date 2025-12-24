@@ -1,0 +1,49 @@
+# E2E Test: Foreach Loop Workflow
+# Tests iteration over a list of services with agent tasks
+id: e2e-foreach-services
+version: "1.0"
+name: "E2E Foreach Services"
+description: "Iterates over a list of services and runs health checks on each"
+start: init_services
+
+states:
+  - id: init_services
+    type: inject
+    data:
+      services:
+        - name: "api-gateway"
+          namespace: "production"
+          criticality: "high"
+        - name: "auth-service"
+          namespace: "production"
+          criticality: "critical"
+        - name: "payment-processor"
+          namespace: "production"
+          criticality: "critical"
+    resultPath: ctx
+    transition: check_each_service
+
+  - id: check_each_service
+    type: foreach
+    itemsPath: ctx.services
+    itemName: service
+    maxConcurrency: 2
+    iterator:
+      start: health_check
+      states:
+        - id: health_check
+          type: operation
+          input:
+            task: "agent.run"
+            agent: "k8s-deployment-checker"
+            agent_task: "Check deployment health for {{ service.name }} in namespace {{ service.namespace }}. This is a {{ service.criticality }} criticality service."
+          end: true
+    transition: summarize
+
+  - id: summarize
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "root-cause-analyzer"
+      agent_task: "Summarize the health check results for all services. Identify any common issues or patterns across the services checked."
+    end: true

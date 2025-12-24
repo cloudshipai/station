@@ -59,6 +59,7 @@ type Server struct {
 	toolDiscoveryService *services.ToolDiscoveryService // restored for lighthouse/API compatibility
 	telemetryService     *telemetry.TelemetryService
 	agentService         *services.AgentService // shared agent service for CloudShip telemetry
+	handlers             *v1.APIHandlers        // Initialized via InitializeHandlers
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
 	localMode bool
@@ -93,6 +94,43 @@ func (s *Server) SetServices(toolDiscoveryService *services.ToolDiscoveryService
 // SetAgentService sets a shared agent service (with CloudShip telemetry info)
 func (s *Server) SetAgentService(agentService *services.AgentService) {
 	s.agentService = agentService
+}
+
+func (s *Server) SetWorkflowScheduler(scheduler *services.WorkflowSchedulerService) {
+	if s.handlers != nil {
+		s.handlers.SetWorkflowScheduler(scheduler)
+	}
+}
+
+// InitializeHandlers initializes the API handlers and starts the workflow consumer.
+// This must be called after SetAgentService and before Start (or independently if API server is disabled).
+func (s *Server) InitializeHandlers() {
+	if s.handlers != nil {
+		return
+	}
+
+	if s.agentService != nil {
+		// Use shared agent service with CloudShip telemetry info (org_id, station_id)
+		s.handlers = v1.NewAPIHandlersWithAgentService(
+			s.repos,
+			s.db.Conn(),
+			s.toolDiscoveryService,
+			s.telemetryService,
+			s.localMode,
+			s.cfg,
+			s.agentService,
+		)
+	} else {
+		// Fall back to creating new agent service (without CloudShip telemetry)
+		s.handlers = v1.NewAPIHandlersWithConfig(
+			s.repos,
+			s.db.Conn(),
+			s.toolDiscoveryService,
+			s.telemetryService,
+			s.localMode,
+			s.cfg,
+		)
+	}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -133,32 +171,12 @@ func (s *Server) Start(ctx context.Context) error {
 		c.JSON(http.StatusOK, gin.H{"debug": "working"})
 	})
 
+	// Ensure handlers are initialized
+	s.InitializeHandlers()
+
 	// API v1 routes
 	v1Group := router.Group("/api/v1")
-	var apiHandlers *v1.APIHandlers
-	if s.agentService != nil {
-		// Use shared agent service with CloudShip telemetry info (org_id, station_id)
-		apiHandlers = v1.NewAPIHandlersWithAgentService(
-			s.repos,
-			s.db.Conn(),
-			s.toolDiscoveryService,
-			s.telemetryService,
-			s.localMode,
-			s.cfg,
-			s.agentService,
-		)
-	} else {
-		// Fall back to creating new agent service (without CloudShip telemetry)
-		apiHandlers = v1.NewAPIHandlersWithConfig(
-			s.repos,
-			s.db.Conn(),
-			s.toolDiscoveryService,
-			s.telemetryService,
-			s.localMode,
-			s.cfg,
-		)
-	}
-	apiHandlers.RegisterRoutes(v1Group)
+	s.handlers.RegisterRoutes(v1Group)
 
 	// UI routes - serve embedded UI files when available
 	s.setupUIRoutes(router)
