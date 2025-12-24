@@ -52,6 +52,23 @@ type StateSpec struct {
 	ItemName       string        `json:"itemName,omitempty" yaml:"itemName,omitempty"`
 	MaxConcurrency int           `json:"maxConcurrency,omitempty" yaml:"maxConcurrency,omitempty"`
 	Iterator       *IteratorSpec `json:"iterator,omitempty" yaml:"iterator,omitempty"`
+
+	// Cron state fields
+	Cron     string `json:"cron,omitempty" yaml:"cron,omitempty"`
+	Timezone string `json:"timezone,omitempty" yaml:"timezone,omitempty"`
+	Enabled  *bool  `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+
+	// Timer state fields
+	Duration string `json:"duration,omitempty" yaml:"duration,omitempty"`
+
+	// Tool state fields
+	Server string `json:"server,omitempty" yaml:"server,omitempty"`
+	Tool   string `json:"tool,omitempty" yaml:"tool,omitempty"`
+
+	// TryCatch state fields
+	Try     *IteratorSpec `json:"try,omitempty" yaml:"try,omitempty"`
+	Catch   *IteratorSpec `json:"catch,omitempty" yaml:"catch,omitempty"`
+	Finally *IteratorSpec `json:"finally,omitempty" yaml:"finally,omitempty"`
 }
 
 // BranchSpec defines a parallel branch with its own mini-workflow.

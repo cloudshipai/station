@@ -137,6 +137,10 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 	registry.Register(runtime.NewAgentRunExecutor(&agentExecutorAdapter{agentService: agentService, repos: repos}))
 	registry.Register(runtime.NewHumanApprovalExecutor(&approvalExecutorAdapter{repos: repos}))
 	registry.Register(runtime.NewCustomExecutor(nil))
+	registry.Register(runtime.NewCronExecutor())
+	registry.Register(runtime.NewTimerExecutor())
+	registry.Register(runtime.NewToolExecutor(&toolExecutorAdapter{repos: repos}))
+	registry.Register(runtime.NewTryCatchExecutor(registry))
 
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
 
@@ -276,7 +280,28 @@ func (a *approvalExecutorAdapter) GetApproval(ctx context.Context, approvalID st
 	return info, nil
 }
 
-// telemetryMiddleware tracks API requests
+type toolExecutorAdapter struct {
+	repos *repositories.Repositories
+}
+
+func (a *toolExecutorAdapter) GetMCPServerByName(ctx context.Context, name string, environmentID int64) (runtime.MCPServerInfo, error) {
+	server, err := a.repos.MCPServers.GetByNameAndEnvironment(name, environmentID)
+	if err != nil {
+		return runtime.MCPServerInfo{}, err
+	}
+	return runtime.MCPServerInfo{
+		ID:   server.ID,
+		Name: server.Name,
+	}, nil
+}
+
+func (a *toolExecutorAdapter) CallTool(ctx context.Context, serverID int64, toolName string, input map[string]interface{}) (runtime.ToolCallResult, error) {
+	return runtime.ToolCallResult{
+		Content: `{"error": "tool execution not yet implemented - requires MCP client integration"}`,
+		IsError: true,
+	}, nil
+}
+
 func (h *APIHandlers) telemetryMiddleware() gin.HandlerFunc {
 	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		// Track API request telemetry
