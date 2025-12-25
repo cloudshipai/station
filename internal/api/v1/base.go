@@ -150,6 +150,7 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
 
 	consumer := runtime.NewWorkflowConsumer(natsEngine, registry, adapter, adapter, adapter)
+	consumer.SetPendingRunProvider(adapter)
 	h.workflowConsumer = consumer
 
 	if err := consumer.Start(context.Background()); err != nil {

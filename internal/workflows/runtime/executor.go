@@ -393,6 +393,25 @@ func (e *HumanApprovalExecutor) Execute(ctx context.Context, step workflows.Exec
 
 	approval, err := e.deps.CreateApproval(ctx, params)
 	if err != nil {
+		// Idempotent recovery: if approval already exists (UNIQUE constraint), return waiting status
+		// This handles re-processing of pending runs that already created their approval
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			existingApproval, getErr := e.deps.GetApproval(ctx, approvalID)
+			if getErr == nil {
+				return StepResult{
+					Status:     StepStatusWaitingApproval,
+					ApprovalID: existingApproval.ID,
+					Output: map[string]interface{}{
+						"approval_id": existingApproval.ID,
+						"message":     message,
+						"status":      existingApproval.Status,
+						"recovered":   true,
+					},
+					NextStep: step.Next,
+					End:      step.End,
+				}, nil
+			}
+		}
 		errStr := err.Error()
 		return StepResult{
 			Status: StepStatusFailed,
