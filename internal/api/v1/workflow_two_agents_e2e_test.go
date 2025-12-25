@@ -17,6 +17,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
+	"station/internal/workflows"
 	"station/internal/workflows/runtime"
 	"station/pkg/models"
 )
@@ -357,6 +358,14 @@ func startTestWorkflowConsumer(t *testing.T, engine runtime.Engine, repos *repos
 	}))
 	registry.Register(runtime.NewHumanApprovalExecutor(&approvalExecutorAdapter{repos: repos}))
 	registry.Register(runtime.NewCustomExecutor(nil))
+	registry.Register(runtime.NewCronExecutor())
+	registry.Register(runtime.NewTimerExecutor())
+	registry.Register(runtime.NewTryCatchExecutor(registry))
+	registry.Register(runtime.NewTransformExecutor())
+
+	stepAdapter := &testRegistryStepExecutorAdapter{registry: registry}
+	registry.Register(runtime.NewParallelExecutor(stepAdapter))
+	registry.Register(runtime.NewForeachExecutor(stepAdapter))
 
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
 	consumer := runtime.NewWorkflowConsumer(natsEngine, registry, adapter, adapter, adapter)
@@ -370,14 +379,30 @@ func startTestWorkflowConsumer(t *testing.T, engine runtime.Engine, repos *repos
 	})
 }
 
+type testRegistryStepExecutorAdapter struct {
+	registry *runtime.ExecutorRegistry
+}
+
+func (a *testRegistryStepExecutorAdapter) ExecuteStep(ctx context.Context, step workflows.ExecutionStep, runContext map[string]interface{}) (runtime.StepResult, error) {
+	executor, err := a.registry.GetExecutor(step.Type)
+	if err != nil {
+		errStr := err.Error()
+		return runtime.StepResult{
+			Status: runtime.StepStatusFailed,
+			Error:  &errStr,
+		}, err
+	}
+	return executor.Execute(ctx, step, runContext)
+}
+
 // testAgentExecutorAdapter implements runtime.AgentExecutorDeps using mock service
 type testAgentExecutorAdapter struct {
 	mockService *mockAgentService
 	repos       *repositories.Repositories
 }
 
-func (a *testAgentExecutorAdapter) GetAgentByID(id int64) (runtime.AgentInfo, error) {
-	agent, err := a.mockService.GetAgent(context.Background(), id)
+func (a *testAgentExecutorAdapter) GetAgentByID(ctx context.Context, id int64) (runtime.AgentInfo, error) {
+	agent, err := a.mockService.GetAgent(ctx, id)
 	if err != nil {
 		return runtime.AgentInfo{}, err
 	}
@@ -419,6 +444,14 @@ func (a *testAgentExecutorAdapter) GetAgentByNameGlobal(ctx context.Context, nam
 		InputSchema:  agent.InputSchema,
 		OutputSchema: agent.OutputSchema,
 	}, nil
+}
+
+func (a *testAgentExecutorAdapter) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	env, err := a.repos.Environments.GetByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return env.ID, nil
 }
 
 func (a *testAgentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {
