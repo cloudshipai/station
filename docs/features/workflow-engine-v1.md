@@ -4,7 +4,7 @@
 > **Created**: 2025-12-23  
 > **Updated**: 2025-12-24  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
-> **Current Phase**: Phase 11 - Data Flow Engine (In Progress)
+> **Current Phase**: Phase 14 - Observability + Docs (Phase 11, 12, 13 Complete)
 
 ## 1) Overview
 
@@ -2451,21 +2451,21 @@ states:
 **Files Implemented**:
 - `internal/workflows/dataflow/resolver.go` - `AggregateForeachOutputs()`, `PrepareIterationInput()`
 
-##### Backend - Schema Validation (IN PROGRESS)
+##### Backend - Schema Validation (MOSTLY COMPLETE 2025-12-24)
 
-- [ ] Create `SchemaValidator` service
-- [ ] Validate workflow.input against workflow.inputSchema at trigger
-- [ ] Validate step output against agent outputSchema (warning only)
-- [x] Validate step input against agent inputSchema (fail step if mismatch) - basic implementation exists
+- [x] Validate workflow.input against workflow.inputSchema at trigger (`workflow_service.go:StartRun`)
+  - Returns `INPUT_SCHEMA_VIOLATION` error if input doesn't match schema
+- [x] Validate step input against agent inputSchema (fail step if mismatch)
+- [x] Validate step output against agent outputSchema (warning only - `_schema_validation_warning` in output)
+- [ ] Create dedicated `SchemaValidator` service (currently using `ValidateInputAgainstSchema` directly)
 - [ ] Validate transform output against next step expected schema
-- [ ] Add schema validation at workflow definition CREATE/UPDATE time
 
-##### API Updates
+##### API Updates (PARTIALLY COMPLETE 2025-12-24)
 
 - [ ] Add `input` to workflow run response (show trigger input)
 - [ ] Add `output` to step response (show step output)
-- [ ] Add `/api/v1/workflows/{id}/validate` endpoint for static validation
-- [ ] Return schema validation errors/warnings on workflow create
+- [x] Add `/api/v1/workflows/{id}/validate` endpoint for static validation (`workflows.go:validateWorkflowByID`)
+- [x] Return schema validation errors/warnings on workflow create (already exists)
 
 ##### Files to Create/Modify
 
@@ -2509,7 +2509,8 @@ Create test workflows in `examples/workflows/dataflow/`:
 - [x] Transform steps can reshape data between agents (Starlark executor implemented)
 - [x] Parallel branches aggregate outputs correctly
 - [x] Foreach iterations aggregate outputs correctly
-- [ ] Schema validation catches mismatches at creation time (IN PROGRESS)
+- [x] Schema validation catches mismatches at trigger time (INPUT_SCHEMA_VIOLATION error)
+- [x] Schema validation catches mismatches at creation time (exists in ValidateDefinition)
 - [ ] UI shows data flow between steps
 - [x] No `agent_task` required in workflow definitions (task from `_stepInput` or trigger)
 
@@ -2521,33 +2522,36 @@ Create test workflows in `examples/workflows/dataflow/`:
 
 **Status**: REMOVED - Tool step type was removed because ensuring tool signature compatibility would be a maintenance burden. Agents can call any MCP tools they need internally, making direct tool steps redundant.
 
-### Phase 12 - Timer Step Executor (0.5d)
+### Phase 12 - Timer Step Executor (0.5d) ✅ COMPLETE
 
 Implement delayed execution step type.
 
-- [ ] Create `TimerExecutor` implementing `StepExecutor` interface
-- [ ] Parse duration strings ("5m", "1h30m")
-- [ ] Use NATS delayed delivery or background timer
-- [ ] Add `WAITING_TIMER` step status
-- [ ] Add tests
+- [x] Create `TimerExecutor` implementing `StepExecutor` interface
+- [x] Parse duration strings ("5m", "1h30m") - uses Go's `time.ParseDuration`
+- [x] Add `WAITING_TIMER` step status (`StepStatusWaitingTimer`)
+- [x] Add `CheckTimerComplete` method for checking timer expiry
+- [x] Register in executor registry (`internal/api/v1/base.go`)
+- [x] Add tests (TestTimerExecutor_SupportedTypes, TestTimerExecutor_Execute, TestTimerExecutor_CheckTimerComplete)
 
-**Files to create/modify**:
-- `internal/workflows/runtime/timer_executor.go` - New executor
-- `pkg/models/workflow.go` - Add `StepStatusWaitingTimer`
+**Files created/modified**:
+- `internal/workflows/runtime/timer_executor.go` - TimerExecutor implementation
+- `internal/workflows/runtime/new_executors_test.go` - Timer executor tests
 
-### Phase 13 - TryCatch Step Executor (1d)
+### Phase 13 - TryCatch Step Executor (1d) ✅ COMPLETE
 
 Implement error handling with try/catch/finally semantics.
 
-- [ ] Create `TryCatchExecutor` implementing `StepExecutor` interface
-- [ ] Execute `try` states, capture errors
-- [ ] On error: set `_error` context, execute `catch` states
-- [ ] Always execute `finally` states
-- [ ] Add tests for error propagation
+- [x] Create `TryCatchExecutor` implementing `StepExecutor` interface
+- [x] Execute `try` states, capture errors
+- [x] On error: set `_error` context, execute `catch` states
+- [x] Always execute `finally` states (after try success or catch)
+- [x] Register in executor registry (`internal/api/v1/base.go`)
+- [x] Add tests for try success, empty try, finally execution
 
-**Files to create/modify**:
-- `internal/workflows/runtime/trycatch_executor.go` - New executor
-- `internal/workflows/types.go` - Add `TryBlock`, `CatchBlock`, `FinallyBlock` to StateSpec
+**Files created/modified**:
+- `internal/workflows/runtime/trycatch_executor.go` - TryCatchExecutor implementation
+- `internal/workflows/types.go` - Added `Try`, `Catch`, `Finally` IteratorSpec fields to StateSpec
+- `internal/workflows/runtime/new_executors_test.go` - TryCatch executor tests
 
 ### Phase 14 - Observability + Docs (1-2d)
 
