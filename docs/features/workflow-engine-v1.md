@@ -1122,62 +1122,68 @@ environments/
 
 **Deliverables**: Full workflows UI parity with Agents page
 
-### Phase 8 - Agent Name Resolution + Schema Validation (2-3d)
+### Phase 8 - Agent Name Resolution + Schema Validation (2-3d) ✅ COMPLETE
 
 Implement type-safe workflows with agent name resolution and schema validation.
 
 #### 8.1 Agent Name Resolution
 
-- [ ] Update `AgentRunExecutor` to resolve agents by name instead of ID
-- [ ] Add `environment_id` to workflow execution context
-- [ ] Create `AgentResolver` interface for testability
-- [ ] Update workflow definition schema to use `agent: "name"` syntax
+- [x] Update `AgentRunExecutor` to resolve agents by name instead of ID
+- [x] Add `environment_id` to workflow execution context
+- [x] Create `AgentResolver` interface for testability
+- [x] Update workflow definition schema to use `agent: "name"` syntax
+- [x] Implement `@environment` syntax parser for explicit environment override
 
-**Files to modify/create**:
-- `internal/workflows/runtime/executor.go` - Update AgentRunExecutor
-- `internal/workflows/runtime/agent_resolver.go` - New: AgentResolver interface
-- `internal/workflows/types.go` - Add environment_id to execution context
+**Files implemented**:
+- `internal/workflows/runtime/agent_resolver.go` - AgentResolver interface
+- `internal/workflows/runtime/executor.go` - Updated AgentRunExecutor with name resolution
+- `internal/workflows/types.go` - Environment context support
 
 #### 8.2 Workflow Validator
 
-- [ ] Create `WorkflowValidator` for static validation at create/update time
-- [ ] Validate all referenced agents exist in environment
-- [ ] Build step transition graph for schema validation
-- [ ] Return structured `ValidationResult` with errors and warnings
+- [x] Create `WorkflowValidator` for static validation at create/update time
+- [x] Validate all referenced agents exist in environment
+- [x] Build step transition graph for schema validation
+- [x] Return structured `ValidationResult` with errors and warnings
 
-**Files to create**:
-- `internal/workflows/validator.go` - WorkflowValidator implementation
+**Files implemented**:
+- `internal/workflows/validator.go` - WorkflowValidator implementation (lines 1-200)
 - `internal/workflows/validator_test.go` - Comprehensive tests
 
 #### 8.3 Schema Compatibility Checker
 
-- [ ] Create `SchemaChecker` for JSON Schema compatibility validation
-- [ ] Implement superset validation (output satisfies input requirements)
-- [ ] Handle optional vs required fields
-- [ ] Generate human-readable compatibility reports
+- [x] Create `SchemaChecker` for JSON Schema compatibility validation
+- [x] Implement superset validation (output satisfies input requirements)
+- [x] Handle optional vs required fields
+- [x] Generate human-readable compatibility reports
 
-**Files to create**:
+**Files implemented**:
 - `internal/workflows/schema_checker.go` - SchemaChecker implementation
 - `internal/workflows/schema_checker_test.go` - Tests
 
 #### 8.4 Runtime Schema Validation
 
-- [ ] Add pre-execution input validation in step consumer
-- [ ] Add post-execution output validation (warning only)
-- [ ] Emit schema validation events to WORKFLOW_EVENTS
-- [ ] Graceful error handling without crashing workflow
+- [x] Add pre-execution input validation in step consumer
+- [x] Add post-execution output validation (warning only)
+- [x] Emit schema validation events to WORKFLOW_EVENTS
+- [x] Graceful error handling without crashing workflow
 
-**Files to modify**:
-- `internal/workflows/runtime/consumer.go` - Add validation hooks
-- `internal/workflows/runtime/executor.go` - Add validation to AgentRunExecutor
+**Files implemented**:
+- `internal/workflows/runtime/consumer.go` - Validation hooks in step execution
+- `internal/workflows/runtime/executor.go` - AgentRunExecutor with input/output validation
+- `internal/services/workflow_service.go:266` - Runtime input validation call
 
 #### 8.5 API Integration
 
-- [ ] Add validation endpoint: `POST /api/v1/workflows/validate`
-- [ ] Return validation results on workflow create/update
-- [ ] Surface validation warnings in UI
+- [x] Add validation endpoint: `POST /api/v1/workflows/validate`
+- [x] Return validation results on workflow create/update
+- [x] Surface validation warnings in UI
 
-**Deliverables**: Type-safe workflows with clear validation errors
+**Files implemented**:
+- `internal/api/v1/workflows.go:24` - POST /validate endpoint
+- `internal/workflows/validator.go:201-387` - AgentValidator with environment + global lookup
+
+**Deliverables**: Type-safe workflows with clear validation errors ✅
 
 ---
 
@@ -1943,20 +1949,27 @@ curl -X POST /api/v1/workflow-runs \
 
 ---
 
-### Phase 9 - Global Agent Resolution (1d)
+### Phase 9 - Global Agent Resolution (1d) ✅ COMPLETE
 
 Implement bundle-portable agent resolution by name.
 
-- [ ] Update `AgentRunExecutor` to use global agent lookup
-- [ ] Implement `GetAgentByName(name)` repository method (searches all environments)
-- [ ] Add environment override syntax: `agent: "name@environment"`
-- [ ] Update workflow validator to use global lookup
-- [ ] Add tests for multi-environment agent resolution
+- [x] Update `AgentRunExecutor` to use global agent lookup
+- [x] Implement `GetAgentByNameGlobal(name)` repository method (searches all environments)
+- [x] Add environment override syntax: `agent: "name@environment"`
+- [x] Update workflow validator to use global lookup with fallback
+- [x] Add tests for multi-environment agent resolution
 
-**Files to modify/create**:
-- `internal/db/repositories/agents.go` - Add `GetByName()` method
-- `internal/workflows/runtime/executor.go` - Update `resolveAgent()`
-- `internal/workflows/validator.go` - Update agent existence check
+**Files implemented**:
+- `internal/db/queries/agents.sql:15` - `GetAgentByNameGlobal` SQL query
+- `internal/db/queries/agents.sql.go:207-218` - SQLC generated method
+- `internal/db/repositories/agents.go:167-168` - Repository method `GetByNameGlobal()`
+- `internal/workflows/validator.go:310-324` - Fallback logic (environment → global lookup)
+- `internal/workflows/validator.go:327-333` - `@environment` syntax parser
+
+**Resolution Priority**:
+1. Try `GetAgentByNameAndEnvironment(name, envID)` first
+2. If not found, try `GetAgentByNameGlobal(name)` (searches across all environments)
+3. Support explicit override: `agent@environment` syntax parses and uses specific environment
 
 ### Phase 10 - Cron State Executor (1-2d) - IN PROGRESS
 
