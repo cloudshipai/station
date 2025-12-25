@@ -242,3 +242,24 @@ func (a *WorkflowServiceAdapter) GetStep(ctx context.Context, runID, stepID stri
 
 	return step, nil
 }
+
+func (a *WorkflowServiceAdapter) ListPendingRuns(ctx context.Context, limit int64) ([]PendingRunInfo, error) {
+	runs, err := a.repos.WorkflowRuns.List(ctx, "", "pending", limit)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]PendingRunInfo, 0, len(runs))
+	for _, run := range runs {
+		currentStep := ""
+		if run.CurrentStep != nil {
+			currentStep = *run.CurrentStep
+		}
+		result = append(result, PendingRunInfo{
+			RunID:       run.RunID,
+			WorkflowID:  run.WorkflowID,
+			CurrentStep: currentStep,
+		})
+	}
+	return result, nil
+}

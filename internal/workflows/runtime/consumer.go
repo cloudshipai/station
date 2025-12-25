@@ -43,13 +43,26 @@ type StepProvider interface {
 	GetStep(ctx context.Context, runID, stepID string) (workflows.ExecutionStep, error)
 }
 
+// PendingRunInfo contains minimal info needed to recover a pending run
+type PendingRunInfo struct {
+	RunID       string
+	WorkflowID  string
+	CurrentStep string
+}
+
+// PendingRunProvider provides access to pending workflow runs for recovery
+type PendingRunProvider interface {
+	ListPendingRuns(ctx context.Context, limit int64) ([]PendingRunInfo, error)
+}
+
 type WorkflowConsumer struct {
-	engine       *NATSEngine
-	registry     *ExecutorRegistry
-	runUpdater   WorkflowRunUpdater
-	stepRecorder StepRecorder
-	stepProvider StepProvider
-	telemetry    *WorkflowTelemetry
+	engine             *NATSEngine
+	registry           *ExecutorRegistry
+	runUpdater         WorkflowRunUpdater
+	stepRecorder       StepRecorder
+	stepProvider       StepProvider
+	pendingRunProvider PendingRunProvider
+	telemetry          *WorkflowTelemetry
 
 	mu           sync.Mutex
 	subscription *nats.Subscription
@@ -72,6 +85,10 @@ func NewWorkflowConsumer(
 		stepProvider: stepProvider,
 		stopCh:       make(chan struct{}),
 	}
+}
+
+func (c *WorkflowConsumer) SetPendingRunProvider(provider PendingRunProvider) {
+	c.pendingRunProvider = provider
 }
 
 func (c *WorkflowConsumer) SetTelemetry(t *WorkflowTelemetry) {
@@ -103,7 +120,52 @@ func (c *WorkflowConsumer) Start(ctx context.Context) error {
 	c.running = true
 
 	log.Println("Workflow consumer: started successfully")
+
+	go c.recoverPendingRuns(ctx)
+
 	return nil
+}
+
+func (c *WorkflowConsumer) recoverPendingRuns(ctx context.Context) {
+	if c.pendingRunProvider == nil {
+		log.Println("Workflow consumer: no pending run provider configured, skipping recovery")
+		return
+	}
+
+	time.Sleep(2 * time.Second)
+
+	pendingRuns, err := c.pendingRunProvider.ListPendingRuns(ctx, 100)
+	if err != nil {
+		log.Printf("Workflow consumer: failed to list pending runs for recovery: %v", err)
+		return
+	}
+
+	if len(pendingRuns) == 0 {
+		log.Println("Workflow consumer: no pending runs to recover")
+		return
+	}
+
+	log.Printf("Workflow consumer: recovering %d pending runs", len(pendingRuns))
+
+	for _, run := range pendingRuns {
+		if run.CurrentStep == "" {
+			log.Printf("Workflow consumer: skipping run %s with empty current_step", run.RunID)
+			continue
+		}
+
+		step, err := c.stepProvider.GetStep(ctx, run.RunID, run.CurrentStep)
+		if err != nil {
+			log.Printf("Workflow consumer: failed to get step %s for run %s: %v", run.CurrentStep, run.RunID, err)
+			continue
+		}
+
+		log.Printf("Workflow consumer: re-publishing step %s for pending run %s", run.CurrentStep, run.RunID)
+		if err := c.engine.PublishStepWithTrace(ctx, run.RunID, run.CurrentStep, step); err != nil {
+			log.Printf("Workflow consumer: failed to re-publish step for run %s: %v", run.RunID, err)
+		}
+	}
+
+	log.Println("Workflow consumer: pending run recovery complete")
 }
 
 func (c *WorkflowConsumer) Stop() {
