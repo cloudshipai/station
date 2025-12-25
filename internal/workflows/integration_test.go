@@ -421,7 +421,7 @@ func TestStepTypeClassification(t *testing.T) {
 		{"try", "", workflows.StepTypeTryCatch},
 		{"inject", "", workflows.StepTypeContextOp},
 		{"set", "", workflows.StepTypeContextOp},
-		{"transform", "", workflows.StepTypeContextOp},
+		{"transform", "", workflows.StepTypeTransform},
 		{"context", "", workflows.StepTypeContextOp},
 		{"unknown", "", workflows.StepTypeCustom},
 	}

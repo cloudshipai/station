@@ -272,8 +272,7 @@ func runMainServer() error {
 	apiServer.InitializeHandlers()
 	apiServer.SetWorkflowScheduler(workflowSchedulerSvc)
 
-	// Check if dev mode is enabled (default: false for production deployments)
-	devMode := os.Getenv("STN_DEV_MODE") == "true"
+	devMode := viper.GetBool("dev_mode")
 
 	// Conditional goroutine count based on dev mode
 	if devMode {

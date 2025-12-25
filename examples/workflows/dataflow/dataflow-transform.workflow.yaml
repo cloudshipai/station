@@ -1,0 +1,88 @@
+# Data Flow with Transform Steps
+# Demonstrates: Using Starlark transforms to reshape data between agents
+#
+# Transform steps allow you to:
+# - Select subsets of data
+# - Reshape data structures
+# - Compute derived values
+# - Prepare data for the next agent's expected input schema
+
+id: dataflow-transform
+version: "1.0"
+name: "Data Flow with Transforms"
+description: "Demonstrates Starlark transform steps between agents"
+
+inputSchema:
+  type: object
+  properties:
+    task:
+      type: string
+    namespace:
+      type: string
+    services:
+      type: array
+      items:
+        type: string
+  required: [task, namespace]
+
+start: investigate
+
+states:
+  # Step 1: Investigate the cluster
+  - name: investigate
+    type: agent
+    agent: "k8s-investigator"
+    resultPath: "steps.investigate"
+    next: extract_critical
+
+  # Step 2: Transform - extract only critical info for analysis
+  # Input: Full k8s investigation output (pods, logs, metrics, etc.)
+  # Output: Summarized data matching analyzer's expected input
+  - name: extract_critical
+    type: transform
+    expression: |
+      {
+        "error_pods": [p for p in input.pods if p.get("status") == "Error"],
+        "error_count": len([p for p in input.pods if p.get("status") == "Error"]),
+        "recent_logs": input.logs[-50:] if input.get("logs") else [],
+        "namespace": ctx.workflow.input.namespace,
+        "original_task": ctx.workflow.input.task
+      }
+    resultPath: "steps.extract"
+    next: analyze
+
+  # Step 3: Analyze with focused data
+  - name: analyze
+    type: agent
+    agent: "root-cause-analyzer"
+    resultPath: "steps.analyze"
+    next: prepare_report
+
+  # Step 4: Transform - prepare data for report generator
+  - name: prepare_report
+    type: transform
+    expression: |
+      {
+        "title": "Incident Analysis Report",
+        "summary": input.cause if input.get("cause") else "Unknown",
+        "details": {
+          "root_cause": input.get("cause", "Unknown"),
+          "confidence": input.get("confidence", 0),
+          "evidence": input.get("evidence", []),
+          "affected_pods": ctx.steps.extract.output.error_count
+        },
+        "metadata": {
+          "namespace": ctx.workflow.input.namespace,
+          "task": ctx.workflow.input.task,
+          "analyzed_at": ctx._timestamp
+        }
+      }
+    resultPath: "steps.prepare"
+    next: generate_report
+
+  # Step 5: Generate final report
+  - name: generate_report
+    type: agent
+    agent: "deployment-analyst"
+    resultPath: "steps.report"
+    end: true

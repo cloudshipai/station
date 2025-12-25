@@ -87,6 +87,11 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 		input = make(map[string]interface{})
 	}
 
+	stepInput, _ := runContext["_stepInput"].(map[string]interface{})
+	if stepInput == nil {
+		stepInput = make(map[string]interface{})
+	}
+
 	if step.Raw.Agent != "" {
 		if _, exists := input["agent"]; !exists {
 			input["agent"] = step.Raw.Agent
@@ -119,15 +124,21 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 		}
 	}
 
-	task := e.extractTask(input, step.ID)
+	task := e.extractTaskFromDataFlow(stepInput, input, step.ID)
 
 	variables := make(map[string]interface{})
 	if varsRaw, ok := input["variables"].(map[string]interface{}); ok {
 		variables = varsRaw
 	}
 
+	for k, v := range stepInput {
+		if _, exists := variables[k]; !exists {
+			variables[k] = v
+		}
+	}
+
 	for k, v := range runContext {
-		if k == "_runID" || k == "_environmentID" {
+		if k == "_runID" || k == "_environmentID" || k == "_stepInput" {
 			continue
 		}
 		if _, exists := variables[k]; !exists {
@@ -257,6 +268,18 @@ func (e *AgentRunExecutor) extractTask(input map[string]interface{}, stepID stri
 	}
 
 	return fmt.Sprintf("Execute workflow step: %s", stepID)
+}
+
+func (e *AgentRunExecutor) extractTaskFromDataFlow(stepInput, staticInput map[string]interface{}, stepID string) string {
+	if task, ok := stepInput["task"].(string); ok && task != "" {
+		return task
+	}
+
+	if response, ok := stepInput["response"].(string); ok && response != "" {
+		return response
+	}
+
+	return e.extractTask(staticInput, stepID)
 }
 
 func (e *AgentRunExecutor) validateInput(input map[string]interface{}, runContext map[string]interface{}, schemaJSON string) error {

@@ -1,0 +1,132 @@
+# Foreach Data Flow with Aggregation
+# Demonstrates: Iterate over array, run agent for each item, aggregate outputs
+#
+# The foreach step iterates over an array in the input. Each iteration runs
+# the specified agent with the current item. Outputs are collected into an
+# array and passed to the next step.
+
+id: dataflow-foreach
+version: "1.0"
+name: "Foreach Data Flow with Aggregation"
+description: "Demonstrates foreach iteration with output aggregation"
+
+inputSchema:
+  type: object
+  properties:
+    task:
+      type: string
+    services:
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          namespace:
+            type: string
+        required: [name, namespace]
+  required: [task, services]
+
+start: check_services
+
+states:
+  # Step 1: Foreach - iterate over services array
+  # For each service, run the health checker agent
+  - name: check_services
+    type: foreach
+    itemsPath: "$.services"      # JSONPath to array in input
+    itemVariable: "service"       # Variable name for current item
+    agent: "k8s-deployment-checker"
+    
+    # Each iteration receives:
+    # {
+    #   ...workflow.input,        # Original input
+    #   _item: { name: "api", namespace: "prod" },  # Current item
+    #   _index: 0                  # Current index
+    # }
+    
+    maxConcurrency: 2             # Run up to 2 checks in parallel
+    
+    # Output aggregation collects all iteration outputs
+    # Result: [
+    #   { item: {name: "api", ...}, index: 0, output: {...} },
+    #   { item: {name: "web", ...}, index: 1, output: {...} },
+    #   { item: {name: "worker", ...}, index: 2, output: {...} }
+    # ]
+    outputAggregation: array
+    resultPath: "steps.health_checks"
+    next: aggregate_results
+
+  # Step 2: Transform - summarize health check results
+  - name: aggregate_results
+    type: transform
+    expression: |
+      {
+        "total_services": len(input),
+        "healthy": len([r for r in input if r.output.get("status") == "healthy"]),
+        "unhealthy": len([r for r in input if r.output.get("status") != "healthy"]),
+        "details": [
+          {
+            "service": r.item.name,
+            "namespace": r.item.namespace,
+            "status": r.output.get("status", "unknown"),
+            "issues": r.output.get("issues", [])
+          }
+          for r in input
+        ],
+        "unhealthy_services": [
+          r.item.name 
+          for r in input 
+          if r.output.get("status") != "healthy"
+        ]
+      }
+    resultPath: "steps.summary"
+    next: analyze
+
+  # Step 3: Analyze aggregated health data
+  - name: analyze
+    type: agent
+    agent: "root-cause-analyzer"
+    resultPath: "steps.analysis"
+    next: route_by_health
+
+  # Step 4: Switch based on health status
+  - name: route_by_health
+    type: switch
+    conditions:
+      - if: "ctx.steps.summary.output.unhealthy > 0"
+        next: generate_alert_report
+    defaultNext: generate_ok_report
+
+  # Step 5a: Generate alert report (if unhealthy services)
+  - name: generate_alert_report
+    type: agent
+    agent: "deployment-analyst"
+    # Receives: steps.analysis.output with context including unhealthy info
+    end: true
+
+  # Step 5b: Generate OK report (all healthy)
+  - name: generate_ok_report
+    type: transform
+    expression: |
+      {
+        "status": "all_healthy",
+        "message": "All " + str(ctx.steps.summary.output.total_services) + " services are healthy",
+        "checked_at": ctx._timestamp
+      }
+    end: true
+
+# Trigger example:
+# curl -X POST http://localhost:8585/api/v1/workflow-runs \
+#   -H "Content-Type: application/json" \
+#   -d '{
+#     "workflow_id": "dataflow-foreach",
+#     "input": {
+#       "task": "Check health of all services",
+#       "services": [
+#         {"name": "api-gateway", "namespace": "production"},
+#         {"name": "user-service", "namespace": "production"},
+#         {"name": "payment-service", "namespace": "production"}
+#       ]
+#     }
+#   }'

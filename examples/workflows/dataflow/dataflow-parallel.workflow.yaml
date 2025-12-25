@@ -1,0 +1,89 @@
+# Parallel Data Flow with Aggregation
+# Demonstrates: Fan-out to multiple agents, aggregate outputs, funnel to next step
+#
+# The input is broadcast to all parallel branches. Each branch runs independently.
+# Outputs are aggregated using the specified mode (merge/array) and passed to next step.
+
+id: dataflow-parallel
+version: "1.0"
+name: "Parallel Data Flow with Aggregation"
+description: "Demonstrates parallel execution with output aggregation"
+
+inputSchema:
+  type: object
+  properties:
+    task:
+      type: string
+    namespace:
+      type: string
+    time_range:
+      type: string
+      default: "1h"
+  required: [task, namespace]
+
+start: gather_diagnostics
+
+states:
+  # Step 1: Parallel - run 3 agents concurrently
+  # Each branch receives the workflow.input
+  # Outputs are aggregated into a single object for the next step
+  - name: gather_diagnostics
+    type: parallel
+    branches:
+      # Branch A: Kubernetes investigation
+      - name: kubernetes
+        agent: "k8s-investigator"
+        # Input: workflow.input
+        # Output: { pods: [...], deployments: [...], events: [...] }
+      
+      # Branch B: AWS logs analysis
+      - name: aws_logs
+        agent: "aws-log-analyzer"
+        # Input: workflow.input
+        # Output: { log_groups: [...], errors: [...], patterns: [...] }
+      
+      # Branch C: Grafana metrics
+      - name: grafana
+        agent: "grafana-analyst"
+        # Input: workflow.input
+        # Output: { dashboards: [...], alerts: [...], anomalies: [...] }
+    
+    join:
+      mode: all  # Wait for all branches to complete
+    
+    # Aggregation mode determines how outputs are combined
+    # "merge": { kubernetes: {...}, aws_logs: {...}, grafana: {...} }
+    # "array": [{...}, {...}, {...}]
+    outputAggregation: merge
+    resultPath: "steps.diagnostics"
+    next: correlate
+
+  # Step 2: Transform - prepare aggregated data for correlation
+  - name: correlate
+    type: transform
+    expression: |
+      {
+        "kubernetes_issues": input.kubernetes.get("pods", []),
+        "log_errors": input.aws_logs.get("errors", []),
+        "metric_anomalies": input.grafana.get("anomalies", []),
+        "correlation_context": {
+          "namespace": ctx.workflow.input.namespace,
+          "task": ctx.workflow.input.task
+        }
+      }
+    resultPath: "steps.correlate"
+    next: analyze
+
+  # Step 3: Root cause analysis with correlated data
+  - name: analyze
+    type: agent
+    agent: "root-cause-analyzer"
+    resultPath: "steps.analyze"
+    end: true
+
+# Output structure after parallel step:
+# {
+#   "kubernetes": { pods: [...], deployments: [...] },
+#   "aws_logs": { log_groups: [...], errors: [...] },
+#   "grafana": { dashboards: [...], alerts: [...] }
+# }
