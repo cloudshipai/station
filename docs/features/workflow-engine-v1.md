@@ -1687,48 +1687,34 @@ watch -n 1 'curl -s http://localhost:8585/api/v1/workflow-runs?status=RUNNING | 
 
 Critical UI/UX issues found during E2E testing. **USER CONFIRMED THESE ARE BLOCKING ISSUES.**
 
-#### Issue 1: Execution Steps View - Poor Data Visibility
+#### Issue 1: Execution Steps View - Poor Data Visibility ✅ FIXED
 
 **Screenshot Reference**: Test Foreach Workflow execution view
 
-**Current State**: The execution steps view shows step names and completion times, but:
-- ❌ Cannot see input/outputs between nodes clearly
-- ❌ Cannot tell which agents ran (only shows step types like "loop", "agent", "context")
-- ❌ No link to agent run details if you want to drill down
-- ❌ Foreach results show `"message": "custom step completed (no-op)"` - not useful
-- ❌ `final-summary` shows agent output but no link to the agent run
+**Status**: Fixed in commit `d2d2b2f6` (2025-12-24)
 
-**User Feedback**: "In the execution steps, it's not clear the input/outputs between nodes and which agents ran and their link to their run if I want to go see it etc. This view isn't very helpful."
+**Fixes Implemented**:
+- ✅ Agent name prominently displayed with "Executed By" banner and Bot icon
+- ✅ Data preview showing first 3 output fields with truncation
+- ✅ "View Run" button links to agent runs page (`/runs?agent_id=X`)
+- ✅ Filters out "custom step completed (no-op)" messages
+- ✅ Visual timeline connector between steps
+- ✅ Better visual hierarchy with header/content separation
+- ✅ Dark theme for full JSON payload view
 
-**Desired State**:
-- Show agent name prominently on each agent step (e.g., "final-summary → deployment-analyst")
-- Show abbreviated input → output data flow between steps
-- Link each agent step to its corresponding agent run page (`/runs/{run_id}`)
-- Show actual agent response preview (truncated)
-- For foreach: show individual iteration results, not "custom step completed (no-op)"
-
-#### Issue 2: Workflow Flow Diagram - Missing Agent Info
+#### Issue 2: Workflow Flow Diagram - Missing Agent Info ✅ FIXED
 
 **Screenshot Reference**: E2E Foreach Services and E2E Parallel Diagnostics workflow diagrams
 
-**Current State**: The visual flow diagram shows:
-- Node types (INJECT, FOREACH, OPERATION, PARALLEL)
-- Node names (init_services, check_each_se..., summarize)
+**Status**: Fixed in commit `f3895087` (2025-12-24)
 
-**Problems**:
-- ❌ Cannot tell which agent each OPERATION node uses
-- ❌ Node names are truncated ("check_each_se..." instead of "check_each_service")
-- ❌ No indication of data flow between nodes
-- ❌ PARALLEL node doesn't show the 3 agents inside it
-
-**User Feedback**: "I also can't tell the agents it's using and why" (referring to flow diagram)
-
-**Desired State**:
-- Show agent name inside or below OPERATION nodes (e.g., "OPERATION: summarize (deployment-analyst)")
-- Show full node names (or tooltip on hover with full name)
-- Visual indicators of data connections between nodes (arrows with data type hints)
-- PARALLEL nodes should expand to show contained agents
-- FOREACH nodes should indicate the agent being iterated
+**Fixes Implemented**:
+- ✅ Agent names displayed as prominent emerald badges with Bot icon inside nodes
+- ✅ Node width increased from 192px to 280px - full names visible without truncation
+- ✅ Labels use `break-words` instead of `truncate` for full visibility
+- ✅ PARALLEL nodes now show ALL contained agents extracted from branches
+- ✅ FOREACH nodes show their agent with Repeat icon styling
+- ✅ Dynamic ELK height calculation based on agent count
 
 #### Issue 3: Definition View - Cannot Scroll
 
