@@ -4,7 +4,7 @@
 > **Created**: 2025-12-23  
 > **Updated**: 2025-12-24  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
-> **Current Phase**: Phase 14 - Observability + Docs (Phase 11, 12, 13 Complete)
+> **Current Phase**: Phase 14 - Observability + Docs ✅ COMPLETE
 
 ## 1) Overview
 
@@ -2553,12 +2553,32 @@ Implement error handling with try/catch/finally semantics.
 - `internal/workflows/types.go` - Added `Try`, `Catch`, `Finally` IteratorSpec fields to StateSpec
 - `internal/workflows/runtime/new_executors_test.go` - TryCatch executor tests
 
-### Phase 14 - Observability + Docs (1-2d)
+### Phase 14 - Observability + Docs (1-2d) ✅ COMPLETE
 
-- [ ] OpenTelemetry spans + NATS trace propagation
-- [ ] Add run/step metrics
-- [ ] Deployment guides (Compose, ECS, GCP, Fly.io)
-- [ ] Embedded vs external NATS guidance
+- [x] OpenTelemetry spans + NATS trace propagation
+- [x] Add run/step metrics
+- [x] Deployment guides (Compose, ECS, GCP, Fly.io)
+- [x] Embedded vs external NATS guidance
+
+**Files created/modified**:
+- `internal/workflows/runtime/telemetry.go` - WorkflowTelemetry with OTel spans and metrics
+- `internal/workflows/runtime/consumer.go` - Telemetry integration in step execution
+- `internal/workflows/runtime/nats_engine.go` - PublishStepWithTrace for trace propagation
+- `docs/deployment/WORKFLOW_ENGINE_DEPLOYMENT.md` - Comprehensive deployment guide
+
+**Metrics exposed**:
+- `station_workflow_runs_total` - Total workflow runs started
+- `station_workflow_run_duration_seconds` - Duration of workflow runs
+- `station_workflow_steps_total` - Total steps executed
+- `station_workflow_step_duration_seconds` - Duration of step execution
+- `station_workflow_runs_active` - Currently active runs
+- `station_workflow_failures_total` - Total failures (runs + steps)
+
+**Trace propagation**:
+- W3C trace context headers embedded in NATS messages
+- `NATSTraceCarrier` implements `propagation.TextMapCarrier`
+- `MarshalStepWithTrace` / `UnmarshalStepWithTrace` for serialization
+- Spans created for workflow runs and individual steps
 
 ---
 
