@@ -272,6 +272,9 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 
 		if result.Output != nil {
 			updatedContext := c.storeStepOutput(runContext, step.ID, result.Output)
+			if step.Raw.ResultPath != "" {
+				SetNestedValue(updatedContext, step.Raw.ResultPath, result.Output)
+			}
 			_ = c.runUpdater.UpdateRunContext(ctx, runID, updatedContext)
 		}
 
