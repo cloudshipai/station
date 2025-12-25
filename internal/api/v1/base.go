@@ -141,6 +141,7 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 	registry.Register(runtime.NewCronExecutor())
 	registry.Register(runtime.NewTimerExecutor())
 	registry.Register(runtime.NewTryCatchExecutor(registry))
+	registry.Register(runtime.NewTransformExecutor())
 
 	stepAdapter := &registryStepExecutorAdapter{registry: registry}
 	registry.Register(runtime.NewParallelExecutor(stepAdapter))

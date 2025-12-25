@@ -1,0 +1,82 @@
+# Simple Data Flow Workflow
+# Demonstrates: Entry payload → Agent A → Agent B → Agent C
+#
+# The workflow is triggered with an input payload. That payload flows
+# through each agent, with each agent's output becoming the next agent's input.
+#
+# NO agent_task strings - agents receive structured data and process it.
+
+id: dataflow-simple
+version: "1.0"
+name: "Simple Data Flow Pipeline"
+description: "Demonstrates basic data flow: trigger input → agent → agent → agent"
+
+# Schema for workflow trigger input
+inputSchema:
+  type: object
+  properties:
+    task:
+      type: string
+      description: "The incident or question to investigate"
+    namespace:
+      type: string
+      description: "Kubernetes namespace to investigate"
+    severity:
+      type: string
+      enum: [low, medium, high, critical]
+  required: [task, namespace]
+
+# Schema for workflow final output
+outputSchema:
+  type: object
+  properties:
+    diagnosis:
+      type: string
+    recommendations:
+      type: array
+      items:
+        type: string
+    confidence:
+      type: number
+
+start: investigate
+
+states:
+  # Step 1: k8s-investigator receives workflow.input
+  # Input: { task: "...", namespace: "...", severity: "..." }
+  # Output: { pods: [...], logs: [...], metrics: {...} }
+  - name: investigate
+    type: agent
+    agent: "k8s-investigator"
+    resultPath: "steps.investigate"
+    next: analyze
+
+  # Step 2: root-cause-analyzer receives steps.investigate.output
+  # Input: { pods: [...], logs: [...], metrics: {...} }
+  # Output: { cause: "...", evidence: [...], confidence: 0.85 }
+  - name: analyze
+    type: agent
+    agent: "root-cause-analyzer"
+    resultPath: "steps.analyze"
+    next: report
+
+  # Step 3: deployment-analyst receives steps.analyze.output
+  # Input: { cause: "...", evidence: [...], confidence: 0.85 }
+  # Output: { diagnosis: "...", recommendations: [...], confidence: 0.9 }
+  - name: report
+    type: agent
+    agent: "deployment-analyst"
+    resultPath: "steps.report"
+    end: true
+
+# Trigger example:
+# curl -X POST http://localhost:8585/api/v1/workflow-runs \
+#   -H "Content-Type: application/json" \
+#   -d '{
+#     "workflow_id": "dataflow-simple",
+#     "input": {
+#       "task": "CPU usage is at 95% on payment-service",
+#       "namespace": "production",
+#       "severity": "high"
+#     }
+#   }'

@@ -151,6 +151,9 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 	}
 	runContext["_runID"] = runID
 
+	stepInput := c.resolveStepInput(step, runContext)
+	runContext["_stepInput"] = stepInput
+
 	result, execErr := c.registry.Execute(ctx, step, runContext)
 
 	if execErr != nil {
@@ -165,10 +168,8 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 		_ = c.stepRecorder.RecordStepComplete(ctx, runID, step.ID, result.Output)
 
 		if result.Output != nil {
-			mergedContext := mergeContexts(runContext, map[string]interface{}{
-				step.ID: result.Output,
-			})
-			_ = c.runUpdater.UpdateRunContext(ctx, runID, mergedContext)
+			updatedContext := c.storeStepOutput(runContext, step.ID, result.Output)
+			_ = c.runUpdater.UpdateRunContext(ctx, runID, updatedContext)
 		}
 
 		if result.End || result.NextStep == "" {
@@ -193,6 +194,57 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 	}
 
 	return nil
+}
+
+func (c *WorkflowConsumer) resolveStepInput(step workflows.ExecutionStep, runContext map[string]interface{}) map[string]interface{} {
+	if steps, ok := runContext["steps"].(map[string]interface{}); ok {
+		var lastStepOutput map[string]interface{}
+		for _, stepData := range steps {
+			if sd, ok := stepData.(map[string]interface{}); ok {
+				if output, ok := sd["output"].(map[string]interface{}); ok {
+					lastStepOutput = output
+				}
+			}
+		}
+		if lastStepOutput != nil {
+			return lastStepOutput
+		}
+	}
+
+	if workflow, ok := runContext["workflow"].(map[string]interface{}); ok {
+		if input, ok := workflow["input"].(map[string]interface{}); ok {
+			return input
+		}
+	}
+
+	result := make(map[string]interface{})
+	for k, v := range runContext {
+		if k != "_runID" && k != "_environmentID" && k != "_stepInput" && k != "steps" && k != "workflow" {
+			result[k] = v
+		}
+	}
+	return result
+}
+
+func (c *WorkflowConsumer) storeStepOutput(runContext map[string]interface{}, stepID string, output map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	for k, v := range runContext {
+		result[k] = v
+	}
+
+	steps, ok := result["steps"].(map[string]interface{})
+	if !ok {
+		steps = make(map[string]interface{})
+	}
+
+	steps[stepID] = map[string]interface{}{
+		"output": output,
+	}
+	result["steps"] = steps
+
+	result[stepID] = output
+
+	return result
 }
 
 func (c *WorkflowConsumer) scheduleNextStep(ctx context.Context, runID, nextStepID string) error {

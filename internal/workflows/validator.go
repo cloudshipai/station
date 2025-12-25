@@ -387,6 +387,14 @@ func (v *AgentValidator) validateSchemaCompatibility(steps []agentStepInfo, def 
 }
 
 func isAgentRunStep(state *StateSpec) bool {
+	if state.Type == "agent" {
+		return true
+	}
+
+	if state.Agent != "" {
+		return true
+	}
+
 	if state.Type != "operation" && state.Type != "action" && state.Type != "function" {
 		return false
 	}
@@ -404,6 +412,10 @@ func isAgentRunStep(state *StateSpec) bool {
 }
 
 func extractAgentName(state *StateSpec) string {
+	if state.Agent != "" {
+		return state.Agent
+	}
+
 	if state.Input == nil {
 		return ""
 	}

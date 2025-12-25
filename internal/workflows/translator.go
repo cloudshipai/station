@@ -14,6 +14,7 @@ const (
 	StepTypeTryCatch  ExecutionStepType = "trycatch"
 	StepTypeContextOp ExecutionStepType = "context"
 	StepTypeCron      ExecutionStepType = "cron"
+	StepTypeTransform ExecutionStepType = "transform"
 )
 
 // ExecutionStep captures the minimal execution metadata the runtime needs.
@@ -91,7 +92,9 @@ func classifyStep(state StateSpec) ExecutionStepType {
 		return StepTypeAwait
 	case "try":
 		return StepTypeTryCatch
-	case "inject", "set", "transform", "context":
+	case "transform":
+		return StepTypeTransform
+	case "inject", "set", "context":
 		return StepTypeContextOp
 	case "cron", "schedule":
 		return StepTypeCron

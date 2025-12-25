@@ -625,8 +625,21 @@ func (s *WorkflowService) emitRunEvent(ctx context.Context, runID string, event 
 func (s *WorkflowService) buildInitialContext(input json.RawMessage, environmentID int64) json.RawMessage {
 	ctx := make(map[string]interface{})
 
+	var inputData map[string]interface{}
 	if len(input) > 0 {
-		_ = json.Unmarshal(input, &ctx)
+		_ = json.Unmarshal(input, &inputData)
+	}
+	if inputData == nil {
+		inputData = make(map[string]interface{})
+	}
+
+	ctx["workflow"] = map[string]interface{}{
+		"input": inputData,
+	}
+	ctx["steps"] = make(map[string]interface{})
+
+	for k, v := range inputData {
+		ctx[k] = v
 	}
 
 	if environmentID > 0 {

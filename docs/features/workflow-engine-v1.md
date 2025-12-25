@@ -4,7 +4,7 @@
 > **Created**: 2025-12-23  
 > **Updated**: 2025-12-24  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
-> **Current Phase**: Phase 10 - Cron State Executor (In Progress)
+> **Current Phase**: Phase 11 - Data Flow Engine (In Progress)
 
 ## 1) Overview
 
@@ -1677,25 +1677,33 @@ watch -n 1 'curl -s http://localhost:8585/api/v1/workflow-runs?status=RUNNING | 
 
 ---
 
-### 9.7 UI/UX Issues Identified (2025-12-24)
+### 9.7 UI/UX Issues Identified (2025-12-24, Updated with User Feedback)
 
-Critical UI/UX issues found during E2E testing that need to be addressed:
+Critical UI/UX issues found during E2E testing. **USER CONFIRMED THESE ARE BLOCKING ISSUES.**
 
 #### Issue 1: Execution Steps View - Poor Data Visibility
+
+**Screenshot Reference**: Test Foreach Workflow execution view
 
 **Current State**: The execution steps view shows step names and completion times, but:
 - ❌ Cannot see input/outputs between nodes clearly
 - ❌ Cannot tell which agents ran (only shows step types like "loop", "agent", "context")
 - ❌ No link to agent run details if you want to drill down
 - ❌ Foreach results show `"message": "custom step completed (no-op)"` - not useful
+- ❌ `final-summary` shows agent output but no link to the agent run
+
+**User Feedback**: "In the execution steps, it's not clear the input/outputs between nodes and which agents ran and their link to their run if I want to go see it etc. This view isn't very helpful."
 
 **Desired State**:
-- Show agent name prominently on each agent step
+- Show agent name prominently on each agent step (e.g., "final-summary → deployment-analyst")
 - Show abbreviated input → output data flow between steps
-- Link each agent step to its corresponding agent run page
+- Link each agent step to its corresponding agent run page (`/runs/{run_id}`)
 - Show actual agent response preview (truncated)
+- For foreach: show individual iteration results, not "custom step completed (no-op)"
 
 #### Issue 2: Workflow Flow Diagram - Missing Agent Info
+
+**Screenshot Reference**: E2E Foreach Services and E2E Parallel Diagnostics workflow diagrams
 
 **Current State**: The visual flow diagram shows:
 - Node types (INJECT, FOREACH, OPERATION, PARALLEL)
@@ -1703,118 +1711,235 @@ Critical UI/UX issues found during E2E testing that need to be addressed:
 
 **Problems**:
 - ❌ Cannot tell which agent each OPERATION node uses
-- ❌ Node names are truncated and unclear
+- ❌ Node names are truncated ("check_each_se..." instead of "check_each_service")
 - ❌ No indication of data flow between nodes
+- ❌ PARALLEL node doesn't show the 3 agents inside it
+
+**User Feedback**: "I also can't tell the agents it's using and why" (referring to flow diagram)
 
 **Desired State**:
-- Show agent name inside or below OPERATION nodes
-- Show full node names (or tooltip on hover)
-- Visual indicators of data connections between nodes
+- Show agent name inside or below OPERATION nodes (e.g., "OPERATION: summarize (deployment-analyst)")
+- Show full node names (or tooltip on hover with full name)
+- Visual indicators of data connections between nodes (arrows with data type hints)
+- PARALLEL nodes should expand to show contained agents
+- FOREACH nodes should indicate the agent being iterated
 
 #### Issue 3: Definition View - Cannot Scroll
+
+**Screenshot Reference**: E2E Parallel Diagnostics Definition tab
 
 **Current State**: The JSON definition view cuts off at the bottom of the viewport.
 - ❌ Cannot scroll down to see full definition
 - ❌ Large workflows are impossible to review
+- ❌ Definition is cut off mid-content
 
-**Fix Required**: Add `overflow-y: auto` or use proper scrollable container.
+**User Feedback**: "I also can't scroll down in the definition"
+
+**Fix Required**: 
+- Add `overflow-y: auto` or use proper scrollable container
+- Set `max-height` on definition container
+- Consider virtualized rendering for very large definitions
 
 #### Issue 4: Definition View - Agent Visibility
 
 **Current State**: Definition shown as raw JSON, agents buried in nested structure.
 - ❌ Hard to see at a glance which agents a workflow uses
 - ❌ No summary of agents involved
+- ❌ Have to read through entire JSON to find agent names
+
+**User Feedback**: "I also can't tell the agents it's using"
 
 **Desired State**:
-- Add "Agents Used" summary section at top of definition
+- Add "Agents Used" summary section at top of definition tab:
+  ```
+  Agents Used (3):
+  • k8s-investigator
+  • aws-log-analyzer  
+  • deployment-analyst
+  ```
 - Consider collapsible tree view instead of raw JSON
-- Highlight agent names in the JSON view
+- Highlight/badge agent names in the JSON view
+- Link agent names to their agent detail pages
 
 ---
 
-### 9.8 CRITICAL: Data Flow Design Requirement
+### 9.8 CRITICAL: Data Flow Design Requirement (USER CONFIRMED 2025-12-24)
+
+> **USER FEEDBACK**: "I haven't seen any agent flow you've described that has an agent output and the input for the next agent and so on. Like we shouldn't have to define the task in the definition - that's nonsensical. The task should be at the trigger of the workflow AND THEN the data FLOWS between nodes."
+
+**THIS IS A FUNDAMENTAL ARCHITECTURAL REQUIREMENT - NOT OPTIONAL.**
+
+---
 
 **Current Design Problem**: Each workflow step has a hardcoded `agent_task` string in the definition:
 
 ```yaml
+# ❌ WRONG - Current implementation (DO NOT USE AS MODEL)
 states:
   - id: check_pods
     type: operation
     input:
       agent: "k8s-investigator"
-      agent_task: "Check pods in namespace {{ ctx.namespace }}"  # ← Hardcoded task
+      agent_task: "Check pods in namespace {{ ctx.namespace }}"  # ← WRONG: Hardcoded task
+  - id: analyze
+    type: operation
+    input:
+      agent: "root-cause-analyzer"
+      agent_task: "Analyze the following pod data..."  # ← WRONG: Another hardcoded task
 ```
 
-**Why This Is Wrong**:
-1. The task description is baked into the workflow definition
-2. Each agent receives an independent, static task string
-3. Agent outputs don't naturally flow as inputs to the next agent
-4. Workflow definitions become bloated with task descriptions
+**Why This Is Fundamentally Wrong**:
+1. **Task baked into definition**: The actual question/task is hardcoded, not dynamic
+2. **No data flow**: Each agent receives an independent, static task string
+3. **Agents isolated**: Agent A's output doesn't become Agent B's input
+4. **Bloated definitions**: Workflow files full of task descriptions instead of structure
+5. **Not reusable**: Can't use same workflow for different tasks
 
-**Desired Design**: Task at trigger, data flows between nodes
+---
+
+**REQUIRED Design: Task at Trigger, Data Flows Between Nodes**
 
 ```yaml
-# Workflow defines STRUCTURE and AGENTS, not tasks
+# ✅ CORRECT - Desired implementation
 id: incident-diagnosis
-start: investigate
-input:
-  task: string  # Task provided at trigger time
+version: "1.0"
+name: "Incident Diagnosis Pipeline"
 
+# Workflow input schema - what the TRIGGER provides
+inputSchema:
+  type: object
+  properties:
+    task: 
+      type: string
+      description: "The incident/question to investigate"
+    namespace:
+      type: string
+  required: [task]
+
+start: investigate
 states:
   - id: investigate
     type: agent
     agent: "k8s-investigator"
-    # Receives: workflow input (task + context)
-    # Outputs: investigation results
+    # INPUT: Receives workflow.input (task + context) automatically
+    # OUTPUT: Investigation findings (pods, logs, metrics)
     next: analyze
 
   - id: analyze
     type: agent
     agent: "root-cause-analyzer"
-    # Receives: previous agent's output automatically
-    # No need to specify task - agent works on received data
+    # INPUT: Receives k8s-investigator's OUTPUT automatically
+    # OUTPUT: Root cause analysis
     next: report
 
   - id: report
     type: agent
     agent: "report-generator"
-    # Receives: analyzer's output
+    # INPUT: Receives root-cause-analyzer's OUTPUT automatically
+    # OUTPUT: Final report
     end: true
 ```
 
-**Trigger Example**:
+**Trigger provides the TASK**:
 ```bash
 curl -X POST /api/v1/workflow-runs \
+  -H "Content-Type: application/json" \
   -d '{
     "workflow_id": "incident-diagnosis",
     "input": {
-      "task": "CPU usage is at 95% on payment-service",
+      "task": "CPU usage is at 95% on payment-service. Why?",
       "namespace": "production"
     }
   }'
 ```
 
-**Data Flow**:
+**Data Flow Visualization**:
 ```
-[Trigger Input] → k8s-investigator → [Output A] → root-cause-analyzer → [Output B] → report-generator → [Final Output]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           WORKFLOW EXECUTION                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  [TRIGGER INPUT]                                                              │
+│  {                                                                            │
+│    "task": "CPU at 95% on payment-service. Why?",                            │
+│    "namespace": "production"                                                  │
+│  }                                                                            │
+│         │                                                                     │
+│         ▼                                                                     │
+│  ┌─────────────────────┐                                                      │
+│  │  k8s-investigator   │  ← Receives trigger input                           │
+│  │  (Agent Step 1)     │                                                      │
+│  └─────────────────────┘                                                      │
+│         │                                                                     │
+│         │ OUTPUT: { pods: [...], logs: [...], metrics: {...} }               │
+│         ▼                                                                     │
+│  ┌─────────────────────┐                                                      │
+│  │ root-cause-analyzer │  ← Receives k8s-investigator OUTPUT                 │
+│  │  (Agent Step 2)     │                                                      │
+│  └─────────────────────┘                                                      │
+│         │                                                                     │
+│         │ OUTPUT: { cause: "memory leak", confidence: 0.85, ... }            │
+│         ▼                                                                     │
+│  ┌─────────────────────┐                                                      │
+│  │  report-generator   │  ← Receives root-cause-analyzer OUTPUT              │
+│  │  (Agent Step 3)     │                                                      │
+│  └─────────────────────┘                                                      │
+│         │                                                                     │
+│         │ OUTPUT: { report: "## Root Cause Analysis\n..." }                  │
+│         ▼                                                                     │
+│  [WORKFLOW OUTPUT]                                                            │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Principles**:
-1. **Task at trigger**: The actual task/question comes from whoever starts the workflow
-2. **Data flows forward**: Each agent receives the previous agent's output
-3. **Agents are black boxes**: Workflow doesn't need to know what agents do internally
-4. **Context accumulates**: Each step's output is added to context for later steps
-5. **Schema validation**: Ensure output schema of step N matches input schema of step N+1
+---
 
-**Implementation Requirements** (Phase 9+):
-- [ ] Add `inputFlowMode: "auto" | "explicit"` to workflow definition
-- [ ] When `auto`: automatically pass previous step output as input
-- [ ] When `explicit`: use current `input` specification (backwards compatible)
-- [ ] Update workflow validator to check schema compatibility in auto mode
-- [ ] Update UI to show data flow arrows between nodes
-- [ ] Add "Workflow Input Schema" and "Expected Output Schema" to definition
+**Key Design Principles (NON-NEGOTIABLE)**:
 
-**This is tracked for future implementation.**
+| # | Principle | Description |
+|---|-----------|-------------|
+| 1 | **Task at trigger** | The actual task/question comes from whoever STARTS the workflow, not baked into definition |
+| 2 | **Data flows forward** | Each agent automatically receives the previous agent's output as input |
+| 3 | **Agents are black boxes** | Workflow defines WHICH agents in WHAT ORDER, not what each agent should do |
+| 4 | **Context accumulates** | All step outputs are added to context, available to later steps |
+| 5 | **Schema validation** | Validate output schema of step N matches input schema of step N+1 |
+| 6 | **Workflow = Structure** | Workflow definition is about STRUCTURE (agents, order, branches), not content |
+
+---
+
+**Implementation Requirements (HIGH PRIORITY)**:
+
+#### Backend Changes:
+- [ ] Add `dataFlowMode: "auto" | "explicit"` to workflow definition (default: `auto`)
+- [ ] When `auto`: automatically pass previous step output as input to next step
+- [ ] When `explicit`: use current `input` specification (backwards compatible for migration)
+- [ ] First agent in sequence receives `workflow.input` (the trigger input)
+- [ ] Each subsequent agent receives previous agent's full output
+- [ ] Store each step's output in context at `steps.<stepName>.output`
+- [ ] Update `AgentRunExecutor` to assemble input from previous step output
+- [ ] Add workflow-level `inputSchema` for trigger validation
+- [ ] Add workflow-level `outputSchema` for final output validation
+
+#### Schema Validation:
+- [ ] At workflow create/update: validate agent output→input schema compatibility
+- [ ] At runtime: validate actual data matches schemas (warning, don't block)
+- [ ] Surface schema mismatches in UI and API responses
+
+#### UI Changes:
+- [ ] Show data flow arrows in workflow diagram
+- [ ] Show "Input Schema" and "Output Schema" on workflow detail
+- [ ] In execution view: show input received and output produced for each step
+- [ ] Add visual indicator showing data flowing between nodes
+
+---
+
+**Migration Path**:
+1. Add `dataFlowMode` field (default `explicit` for existing workflows)
+2. New workflows default to `auto`
+3. Deprecate `agent_task` field in favor of automatic flow
+4. Update all example workflows to use new pattern
+
+**This is tracked as a HIGH PRIORITY requirement for production readiness.**
 
 ---
 
@@ -1972,7 +2097,425 @@ curl http://localhost:8585/api/v1/workflow-runs?workflow_id=cron-test
 - Run context contains `_cronTriggeredAt`, `_cronExpression`, `_cronTimezone`
 - `last_run_at` and `next_run_at` updated after each trigger
 
-### Phase 11 - Tool Step Executor ~~(1d)~~ REMOVED
+### Phase 11 - Data Flow Engine (HIGH PRIORITY - 3-4d)
+
+Implement AWS Step Functions-style data flow where workflow input triggers agents and outputs automatically flow to subsequent steps.
+
+**Reference**: Open Serverless Workflow DSL, AWS Step Functions data flow model.
+
+#### 11.1 Core Data Flow Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DATA FLOW EXECUTION MODEL                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  WORKFLOW TRIGGER                                                             │
+│  POST /api/v1/workflow-runs                                                   │
+│  {                                                                            │
+│    "workflow_id": "incident-pipeline",                                       │
+│    "input": {                              ◄── ENTRY PAYLOAD                 │
+│      "task": "CPU at 95% on payment-svc",                                    │
+│      "namespace": "production",                                              │
+│      "severity": "high"                                                       │
+│    }                                                                          │
+│  }                                                                            │
+│         │                                                                     │
+│         │ workflow.input                                                      │
+│         ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐     │
+│  │  STEP 1: k8s-investigator                                            │     │
+│  │  ────────────────────────────────────────────────────────────────────│     │
+│  │  INPUT:  workflow.input (validated against agent inputSchema)        │     │
+│  │  OUTPUT: { pods: [...], logs: [...], metrics: {...} }                │     │
+│  └─────────────────────────────────────────────────────────────────────┘     │
+│         │                                                                     │
+│         │ steps.investigate.output                                           │
+│         ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐     │
+│  │  STEP 2: transform (Starlark)                                        │     │
+│  │  ────────────────────────────────────────────────────────────────────│     │
+│  │  INPUT:  steps.investigate.output                                    │     │
+│  │  EXPR:   { "summary": input.pods, "log_count": len(input.logs) }    │     │
+│  │  OUTPUT: { summary: [...], log_count: 42 }                           │     │
+│  └─────────────────────────────────────────────────────────────────────┘     │
+│         │                                                                     │
+│         │ steps.transform.output                                             │
+│         ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐     │
+│  │  STEP 3: root-cause-analyzer                                         │     │
+│  │  ────────────────────────────────────────────────────────────────────│     │
+│  │  INPUT:  steps.transform.output (validated against agent inputSchema)│     │
+│  │  OUTPUT: { cause: "memory leak", confidence: 0.92 }                  │     │
+│  └─────────────────────────────────────────────────────────────────────┘     │
+│         │                                                                     │
+│         │ steps.analyze.output                                               │
+│         ▼                                                                     │
+│  WORKFLOW OUTPUT: steps.analyze.output                                        │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 11.2 Parallel Data Flow (Fan-out/Fan-in)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PARALLEL DATA FLOW                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Previous Step Output                                                         │
+│  { task: "...", namespace: "prod" }                                          │
+│         │                                                                     │
+│         │ Broadcast to all branches                                          │
+│         ├──────────────────────┬──────────────────────┐                      │
+│         ▼                      ▼                      ▼                      │
+│  ┌────────────┐         ┌────────────┐         ┌────────────┐               │
+│  │ k8s-agent  │         │ aws-agent  │         │ graf-agent │               │
+│  │  (branch a)│         │  (branch b)│         │  (branch c)│               │
+│  └────────────┘         └────────────┘         └────────────┘               │
+│         │                      │                      │                      │
+│         │ output_a             │ output_b             │ output_c             │
+│         └──────────────────────┼──────────────────────┘                      │
+│                                │                                              │
+│                                ▼                                              │
+│                     ┌─────────────────────┐                                  │
+│                     │   AGGREGATION       │                                  │
+│                     │   ───────────────── │                                  │
+│                     │   mode: "merge"     │                                  │
+│                     │   {                 │                                  │
+│                     │     kubernetes: output_a,                              │
+│                     │     aws: output_b,                                     │
+│                     │     grafana: output_c                                  │
+│                     │   }                 │                                  │
+│                     │   ───────────────── │                                  │
+│                     │   mode: "array"     │                                  │
+│                     │   [output_a, output_b, output_c]                       │
+│                     └─────────────────────┘                                  │
+│                                │                                              │
+│                                ▼                                              │
+│                     Next Step receives aggregated output                      │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 11.3 Foreach Data Flow (Iteration with Aggregation)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          FOREACH DATA FLOW                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Input: { services: ["api", "web", "worker"] }                               │
+│         │                                                                     │
+│         │ itemsPath: "services"                                              │
+│         │ Each item passed to agent                                          │
+│         │                                                                     │
+│         ├─────────────────┬─────────────────┬─────────────────┐             │
+│         ▼                 ▼                 ▼                 │             │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐         │             │
+│  │ health-chk  │   │ health-chk  │   │ health-chk  │  (same  │             │
+│  │ item: "api" │   │ item: "web" │   │ item:"wrkr" │  agent) │             │
+│  └─────────────┘   └─────────────┘   └─────────────┘         │             │
+│         │                 │                 │                 │             │
+│         │ { status: "ok"} │ { status: "ok"} │ { status: "bad"}│             │
+│         │                 │                 │                 │             │
+│         └─────────────────┼─────────────────┘                 │             │
+│                           │                                   │             │
+│                           ▼                                   │             │
+│                ┌─────────────────────┐                        │             │
+│                │   AGGREGATION       │                        │             │
+│                │   ───────────────── │                        │             │
+│                │   [                 │                        │             │
+│                │     { item: "api", output: {status:"ok"} },  │             │
+│                │     { item: "web", output: {status:"ok"} },  │             │
+│                │     { item: "worker", output: {status:"bad"}}│             │
+│                │   ]                 │                        │             │
+│                └─────────────────────┘                        │             │
+│                           │                                                  │
+│                           ▼                                                  │
+│                Next Step receives array of results                           │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 11.4 Updated State Types
+
+##### A) `agent` State (NEW - replaces `operation` with `action: agent.run`)
+
+```yaml
+- name: investigate
+  type: agent
+  agent: "k8s-investigator"           # Agent name (global resolution)
+  # INPUT: Automatically receives previous step output (or workflow.input if first)
+  # No agent_task - agent receives structured data and works on it
+  inputPath: "$"                       # Optional: JSONPath to select input subset
+  outputPath: "$.result"               # Optional: JSONPath to select output subset
+  resultPath: "steps.investigate"      # Where to store in context
+  next: analyze
+```
+
+##### B) `transform` State (NEW - Starlark transformation)
+
+```yaml
+- name: prepare_analysis
+  type: transform
+  # INPUT: Previous step output
+  expression: |
+    {
+      "summary": input.pods[:5],           # First 5 pods
+      "error_count": len([p for p in input.pods if p.status == "Error"]),
+      "namespace": input.namespace,
+      "timestamp": input._metadata.timestamp
+    }
+  # Expression must return object matching next step's inputSchema
+  resultPath: "steps.prepare"
+  next: analyze
+```
+
+##### C) `parallel` State (UPDATED - with aggregation)
+
+```yaml
+- name: gather_diagnostics
+  type: parallel
+  # INPUT: Previous step output, broadcast to all branches
+  branches:
+    - name: kubernetes
+      agent: "k8s-investigator"
+    - name: aws
+      agent: "aws-log-analyzer"
+    - name: metrics
+      agent: "grafana-analyst"
+  join:
+    mode: all                           # Wait for all branches
+  outputAggregation: merge              # "merge" | "array" | "first"
+  # merge: { kubernetes: {...}, aws: {...}, metrics: {...} }
+  # array: [{...}, {...}, {...}]
+  # first: first completed branch output
+  resultPath: "steps.diagnostics"
+  next: analyze_results
+```
+
+##### D) `foreach` State (UPDATED - with aggregation)
+
+```yaml
+- name: check_services
+  type: foreach
+  itemsPath: "$.services"               # JSONPath to array in input
+  itemVariable: "service"               # Variable name for current item
+  agent: "service-health-checker"       # Agent to run for each item
+  # Each iteration receives: { ...previousOutput, _item: currentItem, _index: i }
+  maxConcurrency: 3                     # Run up to 3 in parallel
+  outputAggregation: array              # Collect all outputs into array
+  # Output: [{ item: "api", output: {...} }, { item: "web", output: {...} }, ...]
+  resultPath: "steps.health_results"
+  next: summarize
+```
+
+##### E) `switch` State (UPDATED - operates on input data)
+
+```yaml
+- name: route_by_severity
+  type: switch
+  # INPUT: Previous step output
+  conditions:
+    - if: "input.severity == 'critical'"
+      next: escalate
+    - if: "input.error_count > 10"
+      next: detailed_analysis
+  defaultNext: standard_flow
+```
+
+#### 11.5 Workflow Definition Schema (Updated)
+
+```yaml
+id: incident-diagnosis-pipeline
+version: "1.0"
+name: "Incident Diagnosis Pipeline"
+description: "Multi-agent incident analysis with data flow"
+
+# Schema for workflow trigger input
+inputSchema:
+  type: object
+  properties:
+    task:
+      type: string
+      description: "The incident or question to investigate"
+    namespace:
+      type: string
+    severity:
+      type: string
+      enum: [low, medium, high, critical]
+  required: [task]
+
+# Schema for workflow final output
+outputSchema:
+  type: object
+  properties:
+    diagnosis:
+      type: string
+    recommendations:
+      type: array
+    confidence:
+      type: number
+
+start: investigate
+states:
+  - name: investigate
+    type: agent
+    agent: "k8s-investigator"
+    next: transform_data
+    
+  - name: transform_data
+    type: transform
+    expression: |
+      {
+        "pod_summary": input.pods,
+        "log_summary": input.logs[:100],
+        "original_task": ctx.workflow.input.task
+      }
+    next: parallel_analysis
+    
+  - name: parallel_analysis
+    type: parallel
+    branches:
+      - name: root_cause
+        agent: "root-cause-analyzer"
+      - name: impact
+        agent: "impact-analyzer"
+    outputAggregation: merge
+    next: generate_report
+    
+  - name: generate_report
+    type: agent
+    agent: "report-generator"
+    end: true
+```
+
+#### 11.6 Implementation Tasks
+
+##### Backend - Data Flow Engine (COMPLETED 2025-12-24)
+
+- [x] Add `inputSchema` and `outputSchema` to workflow definition type (`types.go`)
+- [x] Create `DataFlowResolver` to determine input for each step (`dataflow/resolver.go`):
+  - First step: `workflow.input`
+  - Subsequent steps: `steps.<previousStep>.output`
+  - Support explicit `inputPath` JSONPath override
+- [x] Update `WorkflowConsumer` to pass resolved input to executors (`consumer.go`)
+- [x] Store step output at `steps.<stepName>.output` in context
+- [x] Add `outputPath` support for selecting subset of output
+
+**Files Implemented**:
+- `internal/workflows/dataflow/resolver.go` - DataFlowResolver with input resolution
+- `internal/workflows/runtime/consumer.go` - Updated with `resolveStepInput()` and `storeStepOutput()`
+- `internal/services/workflow_service.go` - Updated `buildInitialContext()` for proper input storage
+
+##### Backend - Agent Executor Updates (COMPLETED 2025-12-24)
+
+- [x] Modify `AgentRunExecutor` to receive structured input via `_stepInput` in runContext
+- [x] Agent receives input data directly from previous step output
+- [x] Backwards compat: `extractTaskFromDataFlow()` checks `_stepInput["task"]`, then `_stepInput["response"]`, then falls back to static config
+- [x] Inject `_stepInput` into variables so agents have full access to previous step data
+
+**Files Modified**:
+- `internal/workflows/runtime/executor.go` - Added `extractTaskFromDataFlow()`, updated `Execute()` to use `_stepInput`
+
+##### Backend - Transform Executor (COMPLETED 2025-12-24)
+
+- [x] Create `TransformExecutor` implementing `StepExecutor`
+- [x] Evaluate Starlark expression with `input` variable bound to previous output
+- [x] Register `TransformExecutor` in executor registry (`base.go`)
+- [ ] Validate transform output against next step's expected input schema
+
+**Files Implemented**:
+- `internal/workflows/runtime/transform_executor.go` - Starlark-based transform executor
+- `internal/api/v1/base.go` - Registered TransformExecutor
+
+##### Backend - Parallel Aggregation (COMPLETED PREVIOUSLY)
+
+- [x] Add `outputAggregation` field to parallel state spec
+- [x] Implement `merge` mode: `{ branchName: branchOutput, ... }`
+- [x] Implement `array` mode: `[output1, output2, ...]`
+- [x] Implement `first` mode: first completed branch output
+- [x] Broadcast input to all branches
+
+**Files Implemented**:
+- `internal/workflows/dataflow/resolver.go` - `AggregateParallelOutputs()` function
+
+##### Backend - Foreach Aggregation (COMPLETED PREVIOUSLY)
+
+- [x] Add `outputAggregation` field to foreach state spec
+- [x] Collect iteration outputs: `[{ item, index, output }, ...]`
+- [x] Pass `{ ...input, _item: item, _index: i }` to each iteration
+- [x] Support `itemVariable` for custom variable name
+
+**Files Implemented**:
+- `internal/workflows/dataflow/resolver.go` - `AggregateForeachOutputs()`, `PrepareIterationInput()`
+
+##### Backend - Schema Validation (IN PROGRESS)
+
+- [ ] Create `SchemaValidator` service
+- [ ] Validate workflow.input against workflow.inputSchema at trigger
+- [ ] Validate step output against agent outputSchema (warning only)
+- [x] Validate step input against agent inputSchema (fail step if mismatch) - basic implementation exists
+- [ ] Validate transform output against next step expected schema
+- [ ] Add schema validation at workflow definition CREATE/UPDATE time
+
+##### API Updates
+
+- [ ] Add `input` to workflow run response (show trigger input)
+- [ ] Add `output` to step response (show step output)
+- [ ] Add `/api/v1/workflows/{id}/validate` endpoint for static validation
+- [ ] Return schema validation errors/warnings on workflow create
+
+##### Files to Create/Modify
+
+```
+internal/workflows/
+├── dataflow/
+│   ├── resolver.go          # DataFlowResolver - determines step input
+│   ├── resolver_test.go
+│   ├── aggregator.go        # Output aggregation for parallel/foreach
+│   └── aggregator_test.go
+├── runtime/
+│   ├── transform_executor.go    # NEW: Starlark transform executor
+│   ├── transform_executor_test.go
+│   ├── agent_executor.go        # UPDATED: receives structured input
+│   ├── parallel_executor.go     # UPDATED: aggregation support
+│   ├── foreach_executor.go      # UPDATED: aggregation support
+│   └── consumer.go              # UPDATED: data flow resolution
+├── schema/
+│   ├── validator.go         # Schema validation service
+│   └── validator_test.go
+└── types.go                 # UPDATED: new fields
+```
+
+#### 11.7 Test Workflows
+
+Create test workflows in `examples/workflows/dataflow/`:
+
+| Workflow | Tests |
+|----------|-------|
+| `dataflow-simple.workflow.yaml` | Basic A → B → C data flow |
+| `dataflow-transform.workflow.yaml` | Transform step between agents |
+| `dataflow-parallel.workflow.yaml` | Parallel with merge aggregation |
+| `dataflow-foreach.workflow.yaml` | Foreach with array aggregation |
+| `dataflow-complex.workflow.yaml` | All patterns combined |
+
+#### 11.8 Success Criteria
+
+- [x] Workflow triggered with input payload
+- [x] First agent receives workflow.input
+- [x] Each subsequent agent receives previous agent's output
+- [x] Transform steps can reshape data between agents (Starlark executor implemented)
+- [x] Parallel branches aggregate outputs correctly
+- [x] Foreach iterations aggregate outputs correctly
+- [ ] Schema validation catches mismatches at creation time (IN PROGRESS)
+- [ ] UI shows data flow between steps
+- [x] No `agent_task` required in workflow definitions (task from `_stepInput` or trigger)
+
+---
+
+### Phase 11-REMOVED - Tool Step Executor ~~(1d)~~ REMOVED
 
 ~~Implement direct MCP tool invocation step type.~~
 

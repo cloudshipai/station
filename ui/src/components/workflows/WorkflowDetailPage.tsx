@@ -479,11 +479,25 @@ export const WorkflowDetailPage: React.FC = () => {
                         {stepStatusIcons[step.status] || stepStatusIcons.pending}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-gray-900">{step.step_id}</span>
                           <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-100 rounded">
                             {step.metadata?.step_type || 'unknown'}
                           </span>
+                          {step.output?.agent_name && (
+                            <span className="text-xs text-blue-600 px-2 py-0.5 bg-blue-50 rounded font-medium">
+                              {step.output.agent_name}
+                            </span>
+                          )}
+                          {step.output?.agent_id && (
+                            <a
+                              href={`/runs?agent_id=${step.output.agent_id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
+                            >
+                              View agent run →
+                            </a>
+                          )}
                         </div>
                         {step.started_at && (
                           <p className="text-sm text-gray-500 mt-1">
@@ -602,7 +616,7 @@ export const WorkflowDetailPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'runs' && renderRunsTab()}
         {activeTab === 'definition' && renderDefinitionTab()}

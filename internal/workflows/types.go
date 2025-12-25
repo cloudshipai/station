@@ -13,6 +13,9 @@ type Definition struct {
 	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
 	Start       string      `json:"start,omitempty" yaml:"start,omitempty"`
 	States      []StateSpec `json:"states" yaml:"states"`
+
+	InputSchema  map[string]any `json:"inputSchema,omitempty" yaml:"inputSchema,omitempty"`
+	OutputSchema map[string]any `json:"outputSchema,omitempty" yaml:"outputSchema,omitempty"`
 }
 
 type StateSpec struct {
@@ -65,12 +68,18 @@ type StateSpec struct {
 	Try     *IteratorSpec `json:"try,omitempty" yaml:"try,omitempty"`
 	Catch   *IteratorSpec `json:"catch,omitempty" yaml:"catch,omitempty"`
 	Finally *IteratorSpec `json:"finally,omitempty" yaml:"finally,omitempty"`
+
+	// Data Flow fields (Phase 11)
+	Expression        string `json:"expression,omitempty" yaml:"expression,omitempty"`
+	InputPath         string `json:"inputPath,omitempty" yaml:"inputPath,omitempty"`
+	OutputPath        string `json:"outputPath,omitempty" yaml:"outputPath,omitempty"`
+	OutputAggregation string `json:"outputAggregation,omitempty" yaml:"outputAggregation,omitempty"`
 }
 
-// BranchSpec defines a parallel branch with its own mini-workflow.
 type BranchSpec struct {
 	Name   string      `json:"name" yaml:"name"`
-	States []StateSpec `json:"states" yaml:"states"`
+	States []StateSpec `json:"states,omitempty" yaml:"states,omitempty"`
+	Agent  string      `json:"agent,omitempty" yaml:"agent,omitempty"`
 }
 
 // JoinSpec defines how parallel branches are joined.
