@@ -539,18 +539,66 @@ export const WorkflowDetailPage: React.FC = () => {
     </div>
   );
 
-  const renderDefinitionTab = () => (
-    <div className="p-6">
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
-          <h3 className="font-medium text-gray-900">Workflow Definition (v{workflow.version})</h3>
+  const extractAgentsFromWorkflow = (definition: any): string[] => {
+    const agents = new Set<string>();
+    
+    const extractFromState = (state: any) => {
+      if (state.type === 'agent' && state.agent) {
+        agents.add(state.agent);
+      }
+      if (state.type === 'operation' && state.input?.agent) {
+        agents.add(state.input.agent);
+      }
+      if (state.type === 'foreach' && state.agent) {
+        agents.add(state.agent);
+      }
+      if (state.type === 'parallel' && state.branches) {
+        state.branches.forEach((branch: any) => {
+          if (branch.agent) agents.add(branch.agent);
+          if (branch.states) branch.states.forEach(extractFromState);
+        });
+      }
+    };
+    
+    if (definition?.states) {
+      definition.states.forEach(extractFromState);
+    }
+    
+    return Array.from(agents).sort();
+  };
+
+  const renderDefinitionTab = () => {
+    const agents = extractAgentsFromWorkflow(workflow.definition);
+    
+    return (
+      <div className="p-6 space-y-4">
+        {agents.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <h3 className="font-medium text-gray-900 mb-3">Agents Used ({agents.length})</h3>
+            <div className="flex flex-wrap gap-2">
+              {agents.map((agent) => (
+                <span
+                  key={agent}
+                  className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                >
+                  {agent}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 bg-gray-50">
+            <h3 className="font-medium text-gray-900">Workflow Definition (v{workflow.version})</h3>
+          </div>
+          <pre className="p-4 bg-gray-900 text-gray-100 overflow-auto text-sm max-h-[600px]">
+            <code>{JSON.stringify(workflow.definition, null, 2)}</code>
+          </pre>
         </div>
-        <pre className="p-4 bg-gray-900 text-gray-100 overflow-x-auto text-sm">
-          <code>{JSON.stringify(workflow.definition, null, 2)}</code>
-        </pre>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
