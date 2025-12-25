@@ -301,7 +301,7 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 		if startStep != "" && s.engine != nil {
 			plan := workflows.CompileExecutionPlan(parsed)
 			step := plan.Steps[startStep]
-			_ = s.engine.PublishStepSchedule(ctx, runID, startStep, step)
+			_ = s.engine.PublishStepWithTrace(ctx, runID, startStep, step)
 		}
 	}
 	return run, validation, err
@@ -746,7 +746,7 @@ func (s *WorkflowService) resumeAfterApproval(ctx context.Context, runID, stepID
 		return
 	}
 
-	_ = s.engine.PublishStepSchedule(ctx, runID, step.Next, nextStep)
+	_ = s.engine.PublishStepWithTrace(ctx, runID, step.Next, nextStep)
 }
 
 type WorkflowSyncResult struct {

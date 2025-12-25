@@ -17,6 +17,7 @@ import (
 type Engine interface {
 	PublishRunEvent(ctx context.Context, runID string, event any) error
 	PublishStepSchedule(ctx context.Context, runID, stepID string, payload any) error
+	PublishStepWithTrace(ctx context.Context, runID, stepID string, step workflows.ExecutionStep) error
 	SubscribeDurable(subject, consumer string, handler func(msg *nats.Msg)) (*nats.Subscription, error)
 	Close()
 }
