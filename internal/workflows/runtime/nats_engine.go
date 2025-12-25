@@ -131,28 +131,65 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 		consumer = e.opts.ConsumerName
 	}
 
-	log.Printf("NATS Engine: Subscribing to subject=%s with consumer=%s", subject, consumer)
+	ephemeralConsumerName := fmt.Sprintf("%s-%d", consumer, time.Now().UnixNano())
 
-	sub, err := e.js.Subscribe(
+	log.Printf("NATS Engine: Creating ephemeral pull consumer=%s for subject=%s", ephemeralConsumerName, subject)
+
+	if err := e.js.DeleteConsumer(e.opts.Stream, consumer); err == nil {
+		log.Printf("NATS Engine: Deleted old consumer %s", consumer)
+	}
+
+	sub, err := e.js.PullSubscribe(
 		subject,
-		handler,
-		nats.Durable(consumer),
+		ephemeralConsumerName,
 		nats.AckExplicit(),
-		nats.DeliverAll(),
 		nats.ManualAck(),
+		nats.DeliverNew(),
 	)
 	if err != nil {
-		log.Printf("NATS Engine: Subscribe failed: %v", err)
-		return nil, fmt.Errorf("jetstream subscribe failed: %w", err)
+		log.Printf("NATS Engine: PullSubscribe failed: %v", err)
+		return nil, fmt.Errorf("jetstream pull subscribe failed: %w", err)
 	}
 
 	info, infoErr := sub.ConsumerInfo()
 	if infoErr == nil {
-		log.Printf("NATS Engine: Consumer info - NumPending=%d, NumAckPending=%d, NumRedelivered=%d, Delivered.Stream=%d",
-			info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Stream)
+		log.Printf("NATS Engine: Pull consumer info - Name=%s, NumPending=%d, NumAckPending=%d, NumRedelivered=%d, Delivered.Stream=%d",
+			info.Name, info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Stream)
 	}
 
+	go e.pullFetchLoop(sub, handler)
+
 	return sub, nil
+}
+
+func (e *NATSEngine) pullFetchLoop(sub *nats.Subscription, handler func(msg *nats.Msg)) {
+	log.Printf("NATS Engine: Starting pull fetch loop")
+
+	for {
+		if !sub.IsValid() {
+			log.Printf("NATS Engine: Subscription no longer valid, stopping fetch loop")
+			return
+		}
+
+		msgs, err := sub.Fetch(10, nats.MaxWait(5*time.Second))
+		if err != nil {
+			if err == nats.ErrTimeout {
+				continue
+			}
+			if err == nats.ErrConnectionClosed || err == nats.ErrConsumerDeleted {
+				log.Printf("NATS Engine: Connection or consumer closed, stopping fetch loop")
+				return
+			}
+			log.Printf("NATS Engine: Fetch error: %v", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		for _, msg := range msgs {
+			log.Printf("NATS Engine: [PULL] Fetched message on subject=%s", msg.Subject)
+			handler(msg)
+		}
+	}
 }
 
 func (e *NATSEngine) publishJSON(subject string, value any) error {
