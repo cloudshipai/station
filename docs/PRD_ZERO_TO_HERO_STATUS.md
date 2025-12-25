@@ -337,6 +337,46 @@ $ stn serve --jaeger
 
 ---
 
-**Last Updated**: 2025-01-11  
-**Next Review**: After Priority 1-3 completion  
-**Target Release**: v0.10.0 (observability) + v0.11.0 (multi-agent + Jaeger)
+## 🔧 Workflow Engine Status (2025-12-25)
+
+### Overview
+The Station Workflow Engine enables durable, multi-step DevOps workflows with branching, parallelism, and human approval gates.
+
+**PRD**: `docs/features/workflow-engine-v1.md`
+
+### Implementation Progress
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 0-10 | Core engine, state types, executors | ✅ Complete |
+| Phase 11 | Data flow engine | ✅ Complete |
+| Phase 12 | Timer executor | ✅ Complete |
+| Phase 13 | TryCatch executor | ✅ Complete |
+| Phase 14 | Observability + Docs | ✅ Complete |
+
+### Current Blocker: NATS Consumer Issue
+
+**Status**: 🔴 Root cause identified, fix pending
+
+**Problem**: NATS push consumer stops receiving new messages after startup. Workflow runs created after startup remain stuck in "pending" status.
+
+**Root Cause**: JetStream push consumer with `DeliverAll()` policy stops receiving after processing initial batch.
+
+**Proposed Fix**: Convert to pull-based consumer that continuously fetches messages.
+
+**Key Files**:
+- `internal/workflows/runtime/consumer.go` - WorkflowConsumer
+- `internal/workflows/runtime/nats_engine.go` - NATS engine subscription
+
+**Next Steps**:
+1. Implement pull-based consumer fix
+2. Rebuild and verify workflow runs complete
+3. Run incident-response-pipeline E2E test
+4. Continue DevOps workflow testing
+
+See `docs/features/workflow-engine-v1.md` Section 12 for full debug log.
+
+---
+
+**Last Updated**: 2025-12-25  
+**Next Review**: After NATS consumer fix  
+**Target Release**: v0.10.0 (observability) + v0.11.0 (multi-agent + Jaeger) + v0.12.0 (workflow engine)

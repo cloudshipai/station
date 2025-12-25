@@ -121,12 +121,45 @@ func TestStarlarkEvaluator_EvaluateCondition(t *testing.T) {
 			want:       true,
 		},
 
-		// Nested data access via dict
 		{
 			name:       "dict access",
 			expression: "result['status'] == 'ok'",
 			data: map[string]interface{}{
 				"result": map[string]interface{}{"status": "ok", "code": 200},
+			},
+			want: true,
+		},
+		{
+			name:       "dot notation access",
+			expression: "vuln.severity == 'critical'",
+			data: map[string]interface{}{
+				"vuln": map[string]interface{}{"severity": "critical", "exploitable": true},
+			},
+			want: true,
+		},
+		{
+			name:       "dot notation with boolean",
+			expression: "vuln.exploitable",
+			data: map[string]interface{}{
+				"vuln": map[string]interface{}{"severity": "critical", "exploitable": true},
+			},
+			want: true,
+		},
+		{
+			name:       "dot notation compound expression",
+			expression: "\"critical\" in str(vuln.severity).lower() and vuln.exploitable",
+			data: map[string]interface{}{
+				"vuln": map[string]interface{}{"severity": "critical", "exploitable": true},
+			},
+			want: true,
+		},
+		{
+			name:       "nested dot notation",
+			expression: "result.data.status == 'ok'",
+			data: map[string]interface{}{
+				"result": map[string]interface{}{
+					"data": map[string]interface{}{"status": "ok"},
+				},
 			},
 			want: true,
 		},
