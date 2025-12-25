@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -278,6 +279,19 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 	runID := uuid.NewString()
 	now := time.Now()
 
+	// Pre-compile execution plan to check step types
+	plan := workflows.CompileExecutionPlan(parsed)
+
+	// If start step is a cron trigger, skip to its next step (cron is just a trigger definition)
+	if step, ok := plan.Steps[startStep]; ok && step.Type == workflows.StepTypeCron {
+		if step.Next != "" {
+			log.Printf("[WorkflowService] Cron trigger step '%s' → skipping to executable step '%s'", startStep, step.Next)
+			startStep = step.Next
+		} else {
+			log.Printf("[WorkflowService] WARNING: Cron step '%s' has no next step defined", startStep)
+		}
+	}
+
 	initialContext := s.buildInitialContext(req.Input, req.EnvironmentID)
 
 	run, err := s.repos.WorkflowRuns.Create(ctx, repositories.CreateWorkflowRunParams{
@@ -299,9 +313,10 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 			"step":     startStep,
 		})
 		if startStep != "" && s.engine != nil {
-			plan := workflows.CompileExecutionPlan(parsed)
 			step := plan.Steps[startStep]
-			_ = s.engine.PublishStepWithTrace(ctx, runID, startStep, step)
+			if err := s.engine.PublishStepWithTrace(ctx, runID, startStep, step); err != nil {
+				log.Printf("[WorkflowService] ERROR: Failed to publish initial step '%s': %v", startStep, err)
+			}
 		}
 	}
 	return run, validation, err

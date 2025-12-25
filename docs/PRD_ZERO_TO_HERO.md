@@ -1,7 +1,7 @@
 # Station Zero-to-Hero Development PRD
 
-**Version**: 1.1
-**Last Updated**: 2025-01-06
+**Version**: 1.2
+**Last Updated**: 2025-12-25
 **Status**: In Progress
 
 ---
@@ -981,6 +981,59 @@ git push origin main
 - [x] Add OpenAI-compatible provider support (Llama, Ollama)
 - [x] Multi-model AI support documentation (340 lines)
 - [x] Tested with Llama-4-Maverick-17B-128E-Instruct-FP8
+
+### ✅ Workflow Engine V1 (COMPLETED - 2025-12-25)
+
+**Bug Fixes Committed:**
+- [x] Made `RecordStepStart()` idempotent to prevent duplicate step errors (commit `27c2e018`)
+- [x] Added graceful handling for stale NATS messages and missing runs
+- [x] Fixed `isUniqueConstraintError()` helper for SQLite constraint detection
+- [x] Fixed NATS JetStream consumer using ephemeral pull-based consumer (commit `d2194fea`)
+- [x] Fixed cron-triggered workflows skipping trigger step to start from executable step (2025-12-25)
+
+**Workflow Engine Testing Results:**
+
+| Step Type | Status | Notes |
+|-----------|--------|-------|
+| `inject` | ✅ Working | Data injection into context works correctly |
+| `parallel` | ✅ Working | 4 parallel branches executed successfully |
+| `operation` | ✅ Working | Agent execution via `agent.run` task type |
+| `switch` | ✅ Working | Conditional routing based on context data |
+| `try_catch` | ✅ Defined | Error handling structure validated |
+| `timer` | ✅ Defined | Delay/wait functionality available |
+| `foreach` | ✅ Defined | Iteration over collections supported |
+| `cron` | ✅ Working | Scheduled workflow execution (fixed: skip trigger step) |
+
+**DevOps Workflow Examples Created:**
+
+1. **`production-incident-response`** (11 states)
+   - Pattern: inject → parallel(4 agents) → operation → switch → try_catch → operation
+   - Tests: Parallel diagnostics, severity-based routing, human approval, error handling
+
+2. **`daily-health-check`** (9 states)
+   - Pattern: cron → foreach → parallel → switch → operation
+   - Tests: Scheduled execution, service iteration, conditional alerting
+
+3. **`deployment-validation`** (9 states)
+   - Pattern: inject → parallel → operation(approval) → try_catch(foreach) → parallel → operation
+   - Tests: Pre/post deployment checks, approval gates, rollback handling
+
+**API Validation:**
+```bash
+# Workflow creation
+POST /api/v1/workflows ✅ (with correct payload format)
+
+# Workflow execution
+POST /api/v1/workflows/:id/runs ✅
+
+# Run monitoring
+GET /api/v1/workflow-runs/:runId ✅
+GET /api/v1/workflow-runs/:runId/steps ✅
+```
+
+**Documentation Created:**
+- `docs/TESTING_PLAYBOOK.md` - Comprehensive testing guide
+- `docs/workflows/devops-examples/` - 3 production-ready workflow templates
 
 ---
 
