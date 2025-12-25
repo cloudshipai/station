@@ -14,18 +14,30 @@ interface WorkflowFlowPanelProps {
 
 interface WorkflowState {
   id: string;
-  type: 'operation' | 'switch' | 'inject' | 'parallel' | 'foreach';
+  type: 'operation' | 'switch' | 'inject' | 'parallel' | 'foreach' | 'agent' | 'transform' | 'cron';
   name?: string;
   transition?: string;
   next?: string;
   end?: boolean;
   conditions?: Array<{ if: string; next: string }>;
   defaultNext?: string;
-  branches?: Array<{ name: string; states: WorkflowState[] }>;
+  branches?: Array<{ name: string; states?: WorkflowState[]; agent?: string }>;
+  agent?: string;
+  input?: { agent?: string };
 }
 
+const getAgentName = (state: WorkflowState): string | null => {
+  if ((state.type === 'agent' || state.type === 'foreach') && state.agent) {
+    return state.agent;
+  }
+  if (state.type === 'operation' && state.input?.agent) {
+    return state.input.agent;
+  }
+  return null;
+};
+
 const WorkflowNode = memo(({ data }: { data: any }) => {
-  const { type, label, end } = data;
+  const { type, label, end, agentName } = data;
 
   const getStyles = () => {
     switch (type) {
@@ -105,6 +117,11 @@ const WorkflowNode = memo(({ data }: { data: any }) => {
           <div className="flex-1 min-w-0">
             <div className="font-bold text-xs uppercase tracking-wider opacity-75">{type}</div>
             <div className="font-medium text-sm truncate" title={label}>{label}</div>
+            {agentName && (
+              <div className="text-xs text-emerald-600 font-medium truncate" title={agentName}>
+                → {agentName}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -150,7 +167,8 @@ export const WorkflowFlowPanel = memo(({ workflow, isVisible }: WorkflowFlowPane
           data: { 
             type: state.type, 
             label: state.name || state.id,
-            end: state.end
+            end: state.end,
+            agentName: getAgentName(state)
           }
         });
       });
