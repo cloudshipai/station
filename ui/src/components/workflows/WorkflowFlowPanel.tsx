@@ -2,7 +2,7 @@ import React, { memo, useEffect, useState, useMemo, useCallback } from 'react';
 import { ReactFlow, ReactFlowProvider, Background, Controls, useNodesState, useEdgesState, MarkerType, Handle, Position } from '@xyflow/react';
 import type { Node, Edge, NodeTypes } from '@xyflow/react';
 import ELK from 'elkjs/lib/elk.bundled.js';
-import { Play, CheckCircle, GitBranch, ArrowRight, Layout, AlertOctagon, MoreHorizontal } from 'lucide-react';
+import { Play, CheckCircle, GitBranch, ArrowRight, Layout, AlertOctagon, MoreHorizontal, Bot, Repeat } from 'lucide-react';
 import type { WorkflowDefinition } from '../../types/station';
 
 const elk = new ELK();
@@ -36,8 +36,26 @@ const getAgentName = (state: WorkflowState): string | null => {
   return null;
 };
 
+const getParallelAgents = (state: WorkflowState): string[] => {
+  if (state.type !== 'parallel' || !state.branches) return [];
+  
+  const agents: string[] = [];
+  for (const branch of state.branches) {
+    if (branch.agent) {
+      agents.push(branch.agent);
+    }
+    if (branch.states) {
+      for (const branchState of branch.states) {
+        const agent = getAgentName(branchState as WorkflowState);
+        if (agent) agents.push(agent);
+      }
+    }
+  }
+  return agents;
+};
+
 const WorkflowNode = memo(({ data }: { data: any }) => {
-  const { type, label, end, agentName } = data;
+  const { type, label, end, agentName, parallelAgents } = data;
 
   const getStyles = () => {
     switch (type) {
@@ -56,7 +74,15 @@ const WorkflowNode = memo(({ data }: { data: any }) => {
           border: 'border-blue-400',
           text: 'text-blue-900',
           icon: <Layout className="h-4 w-4" />,
-          shape: 'rounded-md w-48 px-4 py-2'
+          shape: 'rounded-md min-w-[280px] max-w-[320px] px-4 py-3'
+        };
+      case 'foreach':
+        return {
+          bg: 'bg-indigo-50',
+          border: 'border-indigo-400',
+          text: 'text-indigo-900',
+          icon: <Repeat className="h-4 w-4" />,
+          shape: 'rounded-md min-w-[280px] max-w-[320px] px-4 py-3'
         };
       case 'switch':
         return {
@@ -64,8 +90,7 @@ const WorkflowNode = memo(({ data }: { data: any }) => {
           border: 'border-yellow-400',
           text: 'text-yellow-900',
           icon: <GitBranch className="h-4 w-4" />,
-          // Diamond shape is hard with content, using rect with icon
-          shape: 'rounded-md transform rotate-0 w-48 px-4 py-2' 
+          shape: 'rounded-md min-w-[280px] max-w-[320px] px-4 py-3' 
         };
       case 'parallel':
         return {
@@ -73,10 +98,9 @@ const WorkflowNode = memo(({ data }: { data: any }) => {
           border: 'border-purple-400',
           text: 'text-purple-900',
           icon: <MoreHorizontal className="h-4 w-4" />,
-          shape: 'rounded-md w-48 px-4 py-2'
+          shape: 'rounded-md min-w-[280px] max-w-[320px] px-4 py-3'
         };
       case 'end': 
-        // Explicit end node or end state
         return {
           bg: 'bg-red-50',
           border: 'border-red-500',
@@ -90,13 +114,23 @@ const WorkflowNode = memo(({ data }: { data: any }) => {
           border: 'border-gray-400',
           text: 'text-gray-900',
           icon: <ArrowRight className="h-4 w-4" />,
-          shape: 'rounded-md w-48 px-4 py-2'
+          shape: 'rounded-md min-w-[280px] max-w-[320px] px-4 py-3'
         };
     }
   };
 
   const style = getStyles();
   const isEnd = end || type === 'end';
+
+  const renderAgentBadge = (agent: string, key?: string) => (
+    <div 
+      key={key}
+      className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-100 text-emerald-800 rounded-md text-xs font-semibold"
+    >
+      <Bot className="h-3 w-3" />
+      <span>{agent}</span>
+    </div>
+  );
 
   return (
     <div className={`
@@ -110,23 +144,31 @@ const WorkflowNode = memo(({ data }: { data: any }) => {
           {label && <span className="text-xs font-bold mt-1">{label}</span>}
         </div>
       ) : (
-        <div className="flex items-center gap-3">
-          <div className={`p-1.5 rounded-full bg-white/50 border border-current`}>
-            {style.icon}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 rounded-full bg-white/50 border border-current flex-shrink-0">
+              {style.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-xs uppercase tracking-wider opacity-75">{type}</div>
+              <div className="font-semibold text-sm break-words">{label}</div>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-bold text-xs uppercase tracking-wider opacity-75">{type}</div>
-            <div className="font-medium text-sm truncate" title={label}>{label}</div>
-            {agentName && (
-              <div className="text-xs text-emerald-600 font-medium truncate" title={agentName}>
-                → {agentName}
-              </div>
-            )}
-          </div>
+          
+          {agentName && (
+            <div className="pl-9">
+              {renderAgentBadge(agentName)}
+            </div>
+          )}
+          
+          {parallelAgents && parallelAgents.length > 0 && (
+            <div className="pl-9 flex flex-wrap gap-1.5">
+              {parallelAgents.map((agent: string, idx: number) => renderAgentBadge(agent, `${agent}-${idx}`))}
+            </div>
+          )}
         </div>
       )}
       
-      {/* Handles are needed for React Flow connections, but we can hide them or make them transparent */}
       <Handle type="target" position={Position.Top} className="w-2 h-2 !bg-transparent !border-0" />
       <Handle type="source" position={Position.Bottom} className="w-2 h-2 !bg-transparent !border-0" />
     </div>
@@ -160,6 +202,7 @@ export const WorkflowFlowPanel = memo(({ workflow, isVisible }: WorkflowFlowPane
       const stateMap = new Map(states.map((s: WorkflowState) => [s.id, s]));
 
       states.forEach((state: WorkflowState) => {
+        const parallelAgents = state.type === 'parallel' ? getParallelAgents(state) : undefined;
         flowNodes.push({
           id: state.id,
           type: 'workflowNode',
@@ -168,7 +211,8 @@ export const WorkflowFlowPanel = memo(({ workflow, isVisible }: WorkflowFlowPane
             type: state.type, 
             label: state.name || state.id,
             end: state.end,
-            agentName: getAgentName(state)
+            agentName: getAgentName(state),
+            parallelAgents: parallelAgents && parallelAgents.length > 0 ? parallelAgents : undefined
           }
         });
       });
@@ -248,11 +292,16 @@ export const WorkflowFlowPanel = memo(({ workflow, isVisible }: WorkflowFlowPane
           'elk.layered.spacing.nodeNodeBetweenLayers': '80',
           'elk.padding': '[top=20,left=20,bottom=20,right=20]'
         },
-        children: flowNodes.map(node => ({
-          id: node.id,
-          width: node.data.type === 'start' || node.data.type === 'end' ? 64 : 192,
-          height: node.data.type === 'start' || node.data.type === 'end' ? 64 : 64
-        })),
+        children: flowNodes.map(node => {
+          const isCircular = node.data.type === 'start' || node.data.type === 'end';
+          const hasAgents = node.data.agentName || (node.data.parallelAgents && node.data.parallelAgents.length > 0);
+          const agentCount = node.data.parallelAgents?.length || (node.data.agentName ? 1 : 0);
+          return {
+            id: node.id,
+            width: isCircular ? 64 : 280,
+            height: isCircular ? 64 : (hasAgents ? 80 + Math.ceil(agentCount / 2) * 28 : 60)
+          };
+        }),
         edges: flowEdges.map(edge => ({
           id: edge.id,
           sources: [edge.source],
