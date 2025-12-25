@@ -9,9 +9,20 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"go.opentelemetry.io/otel/trace"
 
 	"station/internal/workflows"
 )
+
+func asTraceSpan(v interface{}) trace.Span {
+	if v == nil {
+		return nil
+	}
+	if span, ok := v.(trace.Span); ok {
+		return span
+	}
+	return nil
+}
 
 type WorkflowRunUpdater interface {
 	UpdateRunStatus(ctx context.Context, runID, status string, currentStep *string, err *string) error
@@ -38,6 +49,7 @@ type WorkflowConsumer struct {
 	runUpdater   WorkflowRunUpdater
 	stepRecorder StepRecorder
 	stepProvider StepProvider
+	telemetry    *WorkflowTelemetry
 
 	mu           sync.Mutex
 	subscription *nats.Subscription
@@ -60,6 +72,10 @@ func NewWorkflowConsumer(
 		stepProvider: stepProvider,
 		stopCh:       make(chan struct{}),
 	}
+}
+
+func (c *WorkflowConsumer) SetTelemetry(t *WorkflowTelemetry) {
+	c.telemetry = t
 }
 
 func (c *WorkflowConsumer) Start(ctx context.Context) error {
@@ -111,11 +127,15 @@ func (c *WorkflowConsumer) handleMessage(msg *nats.Msg) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	var step workflows.ExecutionStep
-	if err := json.Unmarshal(msg.Data, &step); err != nil {
-		log.Printf("Workflow consumer: failed to unmarshal step: %v", err)
-		_ = msg.Nak()
-		return
+	step, ctx, err := UnmarshalStepWithTrace(ctx, msg.Data)
+	if err != nil {
+		var plainStep workflows.ExecutionStep
+		if jsonErr := json.Unmarshal(msg.Data, &plainStep); jsonErr != nil {
+			log.Printf("Workflow consumer: failed to unmarshal step: %v", err)
+			_ = msg.Nak()
+			return
+		}
+		step = plainStep
 	}
 
 	runID := extractRunIDFromSubject(msg.Subject)
@@ -135,6 +155,15 @@ func (c *WorkflowConsumer) handleMessage(msg *nats.Msg) {
 }
 
 func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step workflows.ExecutionStep) error {
+	startTime := time.Now()
+	var stepSpan interface{}
+
+	if c.telemetry != nil {
+		var span interface{}
+		ctx, span = c.telemetry.StartStepSpan(ctx, runID, step.ID, step.Type)
+		stepSpan = span
+	}
+
 	currentStep := step.ID
 	if err := c.runUpdater.UpdateRunStatus(ctx, runID, "running", &currentStep, nil); err != nil {
 		log.Printf("Workflow consumer: failed to update run status to running: %v", err)
@@ -155,11 +184,15 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 	runContext["_stepInput"] = stepInput
 
 	result, execErr := c.registry.Execute(ctx, step, runContext)
+	duration := time.Since(startTime)
 
 	if execErr != nil {
 		errStr := execErr.Error()
 		_ = c.stepRecorder.RecordStepFailed(ctx, runID, step.ID, errStr)
 		_ = c.runUpdater.FailRun(ctx, runID, errStr)
+		if c.telemetry != nil {
+			c.telemetry.EndStepSpan(asTraceSpan(stepSpan), step.Type, StepStatusFailed, duration, execErr)
+		}
 		return execErr
 	}
 
@@ -191,6 +224,10 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 		}
 		_ = c.stepRecorder.RecordStepFailed(ctx, runID, step.ID, errMsg)
 		_ = c.runUpdater.FailRun(ctx, runID, errMsg)
+	}
+
+	if c.telemetry != nil {
+		c.telemetry.EndStepSpan(asTraceSpan(stepSpan), step.Type, result.Status, duration, nil)
 	}
 
 	return nil
@@ -254,7 +291,7 @@ func (c *WorkflowConsumer) scheduleNextStep(ctx context.Context, runID, nextStep
 	}
 
 	log.Printf("Workflow consumer: scheduling next step %s (type: %s) for run %s", nextStepID, nextStep.Type, runID)
-	return c.engine.PublishStepSchedule(ctx, runID, nextStepID, nextStep)
+	return c.engine.PublishStepWithTrace(ctx, runID, nextStepID, nextStep)
 }
 
 func extractRunIDFromSubject(subject string) string {

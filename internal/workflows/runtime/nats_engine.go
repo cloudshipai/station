@@ -10,6 +10,8 @@ import (
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	natsserver_test "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
+
+	"station/internal/workflows"
 )
 
 type Engine interface {
@@ -92,6 +94,29 @@ func (e *NATSEngine) PublishStepSchedule(ctx context.Context, runID, stepID stri
 		log.Printf("NATS Engine: Failed to publish step schedule: %v", err)
 	} else {
 		log.Printf("NATS Engine: Successfully published step schedule for run=%s step=%s", runID, stepID)
+	}
+	return err
+}
+
+func (e *NATSEngine) PublishStepWithTrace(ctx context.Context, runID, stepID string, step workflows.ExecutionStep) error {
+	if e == nil || e.js == nil {
+		log.Printf("NATS Engine: PublishStepWithTrace called but engine is nil (runID=%s, stepID=%s)", runID, stepID)
+		return nil
+	}
+	subject := fmt.Sprintf("%s.run.%s.step.%s.schedule", e.opts.SubjectPrefix, runID, stepID)
+	log.Printf("NATS Engine: Publishing step with trace to subject=%s (runID=%s, stepID=%s)", subject, runID, stepID)
+
+	data, err := MarshalStepWithTrace(ctx, step)
+	if err != nil {
+		log.Printf("NATS Engine: Failed to marshal step with trace: %v", err)
+		return err
+	}
+
+	_, err = e.js.Publish(subject, data)
+	if err != nil {
+		log.Printf("NATS Engine: Failed to publish step with trace: %v", err)
+	} else {
+		log.Printf("NATS Engine: Successfully published step with trace for run=%s step=%s", runID, stepID)
 	}
 	return err
 }
