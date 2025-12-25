@@ -4,7 +4,7 @@
 > **Created**: 2025-12-23  
 > **Updated**: 2025-12-24  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
-> **Current Phase**: Phase 14 - Observability + Docs ✅ COMPLETE
+> **Current Phase**: Core Engine Complete (Phases 0-14) - UI Polish Remaining
 
 ## 1) Overview
 
@@ -1971,7 +1971,7 @@ Implement bundle-portable agent resolution by name.
 2. If not found, try `GetAgentByNameGlobal(name)` (searches across all environments)
 3. Support explicit override: `agent@environment` syntax parses and uses specific environment
 
-### Phase 10 - Cron State Executor (1-2d) - IN PROGRESS
+### Phase 10 - Cron State Executor (1-2d) ✅ COMPLETE
 
 Implement `cron` state type for scheduled workflow execution.
 
@@ -1986,9 +1986,9 @@ Implement `cron` state type for scheduled workflow execution.
 - [x] On trigger: create run via `WorkflowService.StartRun`, inject cron state's `input`
 - [x] Add `enabled` toggle support via `SetScheduleEnabled`
 - [x] Add cron state fields to `StateSpec` (Cron, Timezone, Enabled)
-- [ ] Create `CronExecutor` implementing `StepExecutor` interface (for runtime skipping)
-- [ ] Add UI indicator for scheduled workflows
-- [ ] Add tests
+- [x] Create `CronExecutor` implementing `StepExecutor` interface
+- [ ] Add UI indicator for scheduled workflows (deferred to UI polish phase)
+- [x] Add tests (E2E tests cover cron functionality)
 
 **Files created/modified**:
 - `internal/db/migrations/041_add_workflow_schedules.sql` - Migration for workflow_schedules table
@@ -1998,6 +1998,8 @@ Implement `cron` state type for scheduled workflow execution.
 - `internal/services/workflow_service.go` - Added RegisterCronSchedules method
 - `internal/services/declarative_sync.go` - Added SetWorkflowScheduler, updated syncWorkflows
 - `internal/workflows/types.go` - Added Cron, Timezone, Enabled fields to StateSpec
+- `internal/workflows/runtime/cron_executor.go` - CronExecutor implementation
+- `internal/api/v1/base.go` - Registered CronExecutor in executor registry
 - `cmd/main/server.go` - Wire up WorkflowSchedulerService lifecycle
 
 **Architecture**:
@@ -2110,9 +2112,11 @@ curl http://localhost:8585/api/v1/workflow-runs?workflow_id=cron-test
 - Run context contains `_cronTriggeredAt`, `_cronExpression`, `_cronTimezone`
 - `last_run_at` and `next_run_at` updated after each trigger
 
-### Phase 11 - Data Flow Engine (HIGH PRIORITY - 3-4d)
+### Phase 11 - Data Flow Engine (HIGH PRIORITY - 3-4d) ✅ CORE COMPLETE
 
 Implement AWS Step Functions-style data flow where workflow input triggers agents and outputs automatically flow to subsequent steps.
+
+**Status**: Core backend implementation complete. Remaining items are UI polish and optional validation enhancements.
 
 **Reference**: Open Serverless Workflow DSL, AWS Step Functions data flow model.
 
