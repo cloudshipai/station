@@ -1,0 +1,127 @@
+id: deployment-validation
+version: "1.0"
+name: "Deployment Validation Pipeline"
+description: "Pre and post deployment validation with go/no-go decision based on health checks"
+start: init_deployment
+
+states:
+  - id: init_deployment
+    type: inject
+    data:
+      deployment:
+        service: "payment-service"
+        version: "v2.4.0"
+        namespace: "production"
+        previous_version: "v2.3.9"
+        deployer: "ci-pipeline"
+        timestamp: "2025-12-25T10:00:00Z"
+      validation_config:
+        pre_check_required: true
+        post_check_required: true
+        rollback_on_failure: true
+    resultPath: ctx
+    transition: pre_deployment_check
+
+  - id: pre_deployment_check
+    type: parallel
+    branches:
+      - name: k8s_readiness
+        states:
+          - id: check_k8s
+            type: agent
+            agent: "k8s-deployment-checker"
+            resultPath: steps.pre_k8s
+            end: true
+      - name: deployment_history
+        states:
+          - id: check_history
+            type: agent
+            agent: "deployment-analyst"
+            resultPath: steps.pre_history
+            end: true
+    join:
+      mode: "all"
+    resultPath: pre_checks
+    transition: evaluate_readiness
+
+  - id: evaluate_readiness
+    type: switch
+    dataPath: pre_checks
+    conditions:
+      - if: "true"
+        next: simulate_deploy
+    defaultNext: abort_deployment
+
+  - id: simulate_deploy
+    type: inject
+    data:
+      deploy_status: "completed"
+      pods_updated: 5
+      rollout_time_seconds: 45
+    resultPath: deploy_result
+    transition: post_deployment_validation
+
+  - id: post_deployment_validation
+    type: parallel
+    branches:
+      - name: pod_health
+        states:
+          - id: verify_pods
+            type: agent
+            agent: "k8s-investigator"
+            resultPath: steps.post_pods
+            end: true
+      - name: metrics_check
+        states:
+          - id: verify_metrics
+            type: agent
+            agent: "grafana-analyst"
+            resultPath: steps.post_metrics
+            end: true
+      - name: error_check
+        states:
+          - id: verify_logs
+            type: agent
+            agent: "aws-log-analyzer"
+            resultPath: steps.post_logs
+            end: true
+    join:
+      mode: "all"
+    resultPath: post_checks
+    transition: final_assessment
+
+  - id: final_assessment
+    type: agent
+    agent: "root-cause-analyzer"
+    resultPath: steps.assessment
+    transition: deployment_decision
+
+  - id: deployment_decision
+    type: switch
+    dataPath: steps.assessment
+    conditions:
+      - if: "true"
+        next: deployment_success
+    defaultNext: trigger_rollback
+
+  - id: deployment_success
+    type: inject
+    data:
+      status: "SUCCESS"
+      message: "Deployment validated successfully"
+    resultPath: final_status
+    end: true
+
+  - id: trigger_rollback
+    type: agent
+    agent: "k8s-deployment-checker"
+    resultPath: steps.rollback
+    end: true
+
+  - id: abort_deployment
+    type: inject
+    data:
+      status: "ABORTED"
+      message: "Pre-deployment checks failed"
+    resultPath: final_status
+    end: true

@@ -1,0 +1,95 @@
+id: daily-infrastructure-health
+version: "1.0"
+name: "Daily Infrastructure Health Check"
+description: "Scheduled daily health check across all services with multi-cloud parallel analysis"
+start: schedule
+
+states:
+  - id: schedule
+    type: cron
+    cron: "0 6 * * *"
+    timezone: "America/New_York"
+    enabled: true
+    input:
+      check_type: "daily_health"
+      environments: ["production", "staging"]
+    next: init_config
+
+  - id: init_config
+    type: inject
+    data:
+      services:
+        - name: "api-gateway"
+          namespace: "production"
+          tier: "tier-1"
+        - name: "auth-service"
+          namespace: "production"
+          tier: "tier-1"
+        - name: "payment-processor"
+          namespace: "production"
+          tier: "tier-1"
+        - name: "notification-service"
+          namespace: "production"
+          tier: "tier-2"
+        - name: "analytics-worker"
+          namespace: "production"
+          tier: "tier-2"
+      thresholds:
+        cpu_warning: 70
+        cpu_critical: 90
+        memory_warning: 80
+        memory_critical: 95
+        error_rate_warning: 0.01
+        error_rate_critical: 0.05
+    resultPath: config
+    transition: check_services
+
+  - id: check_services
+    type: foreach
+    itemsPath: config.services
+    itemName: svc
+    maxConcurrency: 3
+    iterator:
+      start: service_health
+      states:
+        - id: service_health
+          type: agent
+          agent: "k8s-deployment-checker"
+          end: true
+    resultPath: steps.service_checks
+    transition: cloud_analysis
+
+  - id: cloud_analysis
+    type: parallel
+    branches:
+      - name: kubernetes_overview
+        states:
+          - id: k8s_cluster
+            type: agent
+            agent: "k8s-investigator"
+            resultPath: steps.k8s_overview
+            end: true
+      - name: aws_health
+        states:
+          - id: aws_status
+            type: agent
+            agent: "aws-log-analyzer"
+            resultPath: steps.aws_health
+            end: true
+      - name: metrics_dashboard
+        states:
+          - id: grafana_overview
+            type: agent
+            agent: "grafana-analyst"
+            resultPath: steps.grafana_overview
+            end: true
+    join:
+      mode: "all"
+    resultPath: cloud_results
+    transition: generate_report
+
+  - id: generate_report
+    type: agent
+    agent: "root-cause-analyzer"
+    resultPath: steps.daily_report
+    end: true

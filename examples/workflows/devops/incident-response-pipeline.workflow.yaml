@@ -1,0 +1,90 @@
+# Incident Response Pipeline
+# Demonstrates: parallel investigation, switch routing by severity, data flow between agents
+id: incident-response-pipeline
+version: "1.0"
+name: "Incident Response Pipeline"
+description: "Comprehensive incident response: parallel investigation across K8s/AWS/Grafana, severity-based routing, and root cause analysis"
+start: init_incident
+
+states:
+  - id: init_incident
+    type: inject
+    data:
+      incident_id: "INC-2025-001"
+      service: "payment-service"
+      namespace: "production"
+      severity: "high"
+      reported_by: "prometheus-alertmanager"
+      reported_at: "2025-12-25T08:00:00Z"
+    resultPath: incident
+    transition: parallel_investigation
+
+  - id: parallel_investigation
+    type: parallel
+    branches:
+      - name: kubernetes_analysis
+        states:
+          - id: k8s_pods
+            type: agent
+            agent: "k8s-investigator"
+            resultPath: steps.k8s
+            end: true
+      - name: aws_analysis
+        states:
+          - id: aws_logs
+            type: agent
+            agent: "aws-log-analyzer"
+            resultPath: steps.aws
+            end: true
+      - name: grafana_analysis
+        states:
+          - id: grafana_metrics
+            type: agent
+            agent: "grafana-analyst"
+            resultPath: steps.grafana
+            end: true
+      - name: deployment_analysis
+        states:
+          - id: recent_deploys
+            type: agent
+            agent: "deployment-analyst"
+            resultPath: steps.deploys
+            end: true
+    join:
+      mode: "all"
+    resultPath: investigation
+    transition: root_cause_analysis
+
+  - id: root_cause_analysis
+    type: agent
+    agent: "root-cause-analyzer"
+    resultPath: steps.rca
+    transition: severity_routing
+
+  - id: severity_routing
+    type: switch
+    dataPath: incident
+    conditions:
+      - if: "severity == 'critical'"
+        next: critical_escalation
+      - if: "severity == 'high'"
+        next: high_priority_response
+    defaultNext: standard_response
+
+  - id: critical_escalation
+    type: agent
+    agent: "alert-investigator"
+    resultPath: steps.escalation
+    end: true
+
+  - id: high_priority_response
+    type: agent
+    agent: "k8s-deployment-checker"
+    resultPath: steps.high_response
+    end: true
+
+  - id: standard_response
+    type: agent
+    agent: "aws-context-agent"
+    resultPath: steps.standard_response
+    end: true
