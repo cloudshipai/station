@@ -145,6 +145,12 @@ func (c *WorkflowConsumer) handleMessage(msg *nats.Msg) {
 		return
 	}
 
+	if step.ID == "" || step.Type == "" {
+		log.Printf("Workflow consumer: skipping invalid step (empty ID or type) for run %s, acking stale message", runID)
+		_ = msg.Ack()
+		return
+	}
+
 	log.Printf("Workflow consumer: executing step %s for run %s (type: %s)", step.ID, runID, step.Type)
 
 	if err := c.executeStep(ctx, runID, step); err != nil {
@@ -155,6 +161,12 @@ func (c *WorkflowConsumer) handleMessage(msg *nats.Msg) {
 }
 
 func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step workflows.ExecutionStep) error {
+	runContext, err := c.runUpdater.GetRunContext(ctx, runID)
+	if err != nil {
+		log.Printf("Workflow consumer: skipping step %s - run %s not found: %v", step.ID, runID, err)
+		return nil
+	}
+
 	startTime := time.Now()
 	var stepSpan interface{}
 
@@ -173,11 +185,6 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 		log.Printf("Workflow consumer: failed to record step start: %v", err)
 	}
 
-	runContext, err := c.runUpdater.GetRunContext(ctx, runID)
-	if err != nil {
-		log.Printf("Workflow consumer: failed to get run context: %v", err)
-		runContext = make(map[string]interface{})
-	}
 	runContext["_runID"] = runID
 
 	stepInput := c.resolveStepInput(step, runContext)

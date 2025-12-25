@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"station/internal/db/repositories"
@@ -125,12 +126,17 @@ func (a *WorkflowServiceAdapter) FailRun(ctx context.Context, runID string, errM
 }
 
 func (a *WorkflowServiceAdapter) RecordStepStart(ctx context.Context, runID, stepID string, stepType string) error {
+	existing, err := a.repos.WorkflowRunSteps.Get(ctx, runID, stepID, 1)
+	if err == nil && existing != nil {
+		return nil
+	}
+
 	now := time.Now()
 	metadata, _ := json.Marshal(map[string]interface{}{
 		"step_type": stepType,
 	})
 
-	_, err := a.repos.WorkflowRunSteps.Create(ctx, repositories.CreateWorkflowRunStepParams{
+	_, err = a.repos.WorkflowRunSteps.Create(ctx, repositories.CreateWorkflowRunStepParams{
 		RunID:     runID,
 		StepID:    stepID,
 		Attempt:   1,
@@ -138,7 +144,17 @@ func (a *WorkflowServiceAdapter) RecordStepStart(ctx context.Context, runID, ste
 		Metadata:  metadata,
 		StartedAt: &now,
 	})
+	if err != nil && isUniqueConstraintError(err) {
+		return nil
+	}
 	return err
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func (a *WorkflowServiceAdapter) RecordStepComplete(ctx context.Context, runID, stepID string, output map[string]interface{}) error {
