@@ -18,7 +18,11 @@ import {
   Settings,
   ChevronRight,
   CheckCircle2,
-  X
+  X,
+  Bot,
+  ExternalLink,
+  Database,
+  ArrowRight
 } from 'lucide-react';
 import { workflowsApi } from '../../api/station';
 import type { WorkflowDefinition, WorkflowRun, WorkflowStep, WorkflowApproval } from '../../types/station';
@@ -465,64 +469,120 @@ export const WorkflowDetailPage: React.FC = () => {
             )}
 
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Execution Steps</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-6">Execution Steps</h3>
               {runSteps.length === 0 ? (
-                <p className="text-gray-500">No steps recorded yet</p>
+                <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                  <List className="h-8 w-8 mx-auto text-gray-300 mb-2" />
+                  <p className="text-gray-500">No steps recorded yet</p>
+                </div>
               ) : (
-                <div className="space-y-2">
-                  {runSteps.map((step, index) => (
-                    <div
-                      key={step.id}
-                      className={`flex items-start gap-3 p-3 rounded-lg border ${statusColors[step.status]?.border || 'border-gray-200'} bg-white`}
-                    >
-                      <div className="mt-0.5">
-                        {stepStatusIcons[step.status] || stepStatusIcons.pending}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-gray-900">{step.step_id}</span>
-                          <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-100 rounded">
-                            {step.metadata?.step_type || 'unknown'}
-                          </span>
-                          {step.output?.agent_name && (
-                            <span className="text-xs text-blue-600 px-2 py-0.5 bg-blue-50 rounded font-medium">
-                              {step.output.agent_name}
-                            </span>
-                          )}
-                          {step.output?.agent_id && (
-                            <a
-                              href={`/runs?agent_id=${step.output.agent_id}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
-                            >
-                              View agent run →
-                            </a>
-                          )}
+                <div className="pl-2">
+                  {runSteps.map((step, index) => {
+                    const isLast = index === runSteps.length - 1;
+                    const agentName = step.output?.agent_name || (step.metadata as any)?.agent_name;
+                    const agentId = step.output?.agent_id || step.output?.agent_run_id;
+                    
+                    const renderDataPreview = (data: any, label: string, icon: React.ReactNode) => {
+                      if (!data || Object.keys(data).length === 0) return null;
+                      const keys = Object.keys(data).filter(k => 
+                        k !== 'message' || data[k] !== 'custom step completed (no-op)'
+                      );
+                      if (keys.length === 0) return null;
+                      const displayKeys = keys.slice(0, 3);
+                      const hasMore = keys.length > 3;
+                      return (
+                        <div className="mt-2 text-xs">
+                          <div className="flex items-center gap-1.5 text-gray-500 mb-1 uppercase tracking-wider text-[10px] font-semibold">
+                            {icon}
+                            <span>{label}</span>
+                          </div>
+                          <div className="bg-gray-50 rounded border border-gray-200 p-2 font-mono text-gray-600">
+                            {displayKeys.map(key => {
+                              let val = data[key];
+                              if (typeof val === 'object') val = JSON.stringify(val);
+                              if (String(val).length > 50) val = String(val).slice(0, 50) + '...';
+                              return (
+                                <div key={key} className="flex gap-2 leading-relaxed">
+                                  <span className="text-blue-600 font-medium shrink-0">{key}:</span>
+                                  <span className="truncate text-gray-700">{String(val)}</span>
+                                </div>
+                              );
+                            })}
+                            {hasMore && <div className="text-gray-400 italic mt-1 text-[10px]">+{keys.length - 3} more...</div>}
+                          </div>
                         </div>
-                        {step.started_at && (
-                          <p className="text-sm text-gray-500 mt-1">
-                            {step.completed_at 
-                              ? `Completed in ${formatDuration(step.started_at, step.completed_at)}`
-                              : `Started ${formatDate(step.started_at)}`
-                            }
-                          </p>
+                      );
+                    };
+
+                    return (
+                      <div key={step.id} className="relative pl-8 pb-6 last:pb-0">
+                        {!isLast && (
+                          <div className="absolute left-[11px] top-6 bottom-0 w-0.5 bg-gray-200" />
                         )}
-                        {step.error && (
-                          <p className="text-sm text-red-600 mt-1">{step.error}</p>
-                        )}
-                        {step.output && (
-                          <details className="mt-2">
-                            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
-                              View output
-                            </summary>
-                            <pre className="mt-1 text-xs bg-gray-50 p-2 rounded overflow-x-auto max-h-32">
-                              {JSON.stringify(step.output, null, 2)}
-                            </pre>
-                          </details>
-                        )}
+                        <div className="absolute left-0 top-0 mt-0.5 bg-white rounded-full z-10 ring-4 ring-white">
+                          {stepStatusIcons[step.status] || stepStatusIcons.pending}
+                        </div>
+                        <div className={`rounded-lg border ${statusColors[step.status]?.border || 'border-gray-200'} bg-white overflow-hidden shadow-sm`}>
+                          <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-start bg-gray-50/50">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-gray-900">{step.step_id}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium uppercase">
+                                {step.metadata?.step_type || 'task'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-400 text-right">
+                              {step.started_at && <div>{formatDate(step.started_at)}</div>}
+                              {step.completed_at && (
+                                <div className="font-mono text-gray-500 mt-0.5">
+                                  {formatDuration(step.started_at!, step.completed_at)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            {agentName && (
+                              <div className="flex items-center justify-between bg-blue-50/50 border border-blue-100 rounded-lg p-3">
+                                <div className="flex items-center gap-2">
+                                  <Bot className="h-4 w-4 text-blue-600" />
+                                  <div>
+                                    <div className="text-[10px] text-blue-400 font-bold uppercase">Agent</div>
+                                    <div className="text-sm font-semibold text-gray-900">{agentName}</div>
+                                  </div>
+                                </div>
+                                {agentId && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/runs?agent_id=${agentId}`);
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors"
+                                  >
+                                    View Run <ExternalLink className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {step.error && (
+                              <div className="bg-red-50 border border-red-100 rounded-md p-3 text-sm text-red-600 flex items-start gap-2">
+                                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                                <div>{step.error}</div>
+                              </div>
+                            )}
+                            {step.output && renderDataPreview(step.output, "Output", <Database className="h-3.5 w-3.5" />)}
+                            <details className="pt-2 border-t border-gray-100">
+                              <summary className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 cursor-pointer">
+                                <ChevronRight className="h-3 w-3" />
+                                Show full payload
+                              </summary>
+                              <pre className="mt-2 text-xs bg-gray-900 text-gray-300 p-3 rounded-lg overflow-x-auto max-h-48 font-mono">
+                                {JSON.stringify(step.output, null, 2)}
+                              </pre>
+                            </details>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
