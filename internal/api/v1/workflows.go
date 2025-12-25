@@ -24,6 +24,7 @@ func (h *APIHandlers) registerWorkflowRoutes(group *gin.RouterGroup) {
 	group.POST("/validate", h.validateWorkflow)
 	group.GET("", h.listWorkflows)
 	group.GET("/:workflowId", h.getWorkflow)
+	group.GET("/:workflowId/validate", h.validateWorkflowByID)
 	group.GET("/:workflowId/versions", h.listWorkflowVersions)
 	group.GET("/:workflowId/versions/:version", h.getWorkflowVersion)
 	group.PUT("/:workflowId", h.updateWorkflow)
@@ -79,6 +80,28 @@ func (h *APIHandlers) validateWorkflow(c *gin.Context) {
 	}
 
 	c.JSON(status, gin.H{"validation": validation})
+}
+
+func (h *APIHandlers) validateWorkflowByID(c *gin.Context) {
+	workflowID := c.Param("workflowId")
+
+	workflow, err := h.workflowService.GetWorkflow(c.Request.Context(), workflowID, 0)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Workflow not found"})
+		return
+	}
+
+	_, validation, err := h.workflowService.ValidateDefinition(c.Request.Context(), workflow.Definition)
+	status := http.StatusOK
+	if errors.Is(err, workflows.ErrValidation) {
+		status = http.StatusBadRequest
+	}
+
+	c.JSON(status, gin.H{
+		"workflow_id": workflowID,
+		"version":     workflow.Version,
+		"validation":  validation,
+	})
 }
 
 func (h *APIHandlers) updateWorkflow(c *gin.Context) {

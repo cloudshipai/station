@@ -246,6 +246,34 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 		return nil, validation, workflows.ErrValidation
 	}
 
+	if parsed.InputSchema != nil && len(parsed.InputSchema) > 0 {
+		var inputData map[string]interface{}
+		if len(req.Input) > 0 {
+			if err := json.Unmarshal(req.Input, &inputData); err != nil {
+				validation.Errors = append(validation.Errors, workflows.ValidationIssue{
+					Code:    "INVALID_INPUT_JSON",
+					Path:    "/input",
+					Message: fmt.Sprintf("Failed to parse input JSON: %v", err),
+					Hint:    "Provide valid JSON for the workflow input",
+				})
+				return nil, validation, workflows.ErrValidation
+			}
+		} else {
+			inputData = make(map[string]interface{})
+		}
+
+		schemaJSON, _ := json.Marshal(parsed.InputSchema)
+		if err := workflows.ValidateInputAgainstSchema(inputData, string(schemaJSON)); err != nil {
+			validation.Errors = append(validation.Errors, workflows.ValidationIssue{
+				Code:    "INPUT_SCHEMA_VIOLATION",
+				Path:    "/input",
+				Message: err.Error(),
+				Hint:    "Ensure the workflow input matches the defined inputSchema",
+			})
+			return nil, validation, workflows.ErrValidation
+		}
+	}
+
 	startStep := parsed.Start
 	runID := uuid.NewString()
 	now := time.Now()
