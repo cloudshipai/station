@@ -1055,6 +1055,59 @@ The UI consumes existing workflow APIs:
 
 **Deliverables**: Workflow with conditional branching
 
+#### Phase 4 Enhancement: AttrDict for Dot Notation Support (2025-12-25) ✅ COMPLETE
+
+**Problem**: Switch conditions in `foreach` loops failed with `"dict has no .severity field or method"` when using natural dot notation like `vuln.severity`. Users had to use verbose bracket notation (`vuln["severity"]`) instead.
+
+**Solution**: Created `AttrDict` type that wraps Go maps and implements Starlark's `HasAttrs` interface, enabling Python-like attribute access on dictionary objects.
+
+**Files Modified**:
+- `internal/workflows/runtime/starlark_eval.go` - Added `AttrDict` type implementing `starlark.HasAttrs`
+- `internal/workflows/runtime/switch_inject_test.go` - Added 4 dot notation test cases
+
+**Implementation Details**:
+- `AttrDict` wraps `*starlark.Dict` and implements:
+  - `starlark.Value` - Basic value interface
+  - `starlark.Mapping` - Dictionary access via `Get(key)`
+  - `starlark.HasAttrs` - Attribute access via `Attr(name)` (enables dot notation)
+  - `starlark.Iterable` - Iteration support
+  - `starlark.Comparable` - Comparison support
+- `goToStarlark()` function now wraps `map[string]interface{}` with `AttrDict` instead of plain `*starlark.Dict`
+- Nested maps are recursively wrapped, enabling `item.nested.field` access
+
+**Test Cases Added**:
+| Test | Expression | Data | Expected |
+|------|------------|------|----------|
+| `dot_notation_access` | `vuln.severity == 'critical'` | `{vuln: {severity: "critical"}}` | `true` |
+| `dot_notation_with_boolean` | `vuln.exploitable` | `{vuln: {exploitable: true}}` | `true` |
+| `dot_notation_compound` | `vuln.severity == 'critical' and vuln.exploitable` | `{vuln: {severity: "critical", exploitable: true}}` | `true` |
+| `nested_dot_notation` | `result.analysis.severity == 'high'` | `{result: {analysis: {severity: "high"}}}` | `true` |
+
+**E2E Validation**:
+- Run `69313c7a` (security-remediation workflow) - STATUS: RUNNING - Successfully using `vuln.severity` expressions
+- Compared to old run `18fcae15` which FAILED with `"dict has no .severity field or method"`
+
+**Usage Example**:
+```yaml
+# In foreach with switch - NOW WORKS with dot notation
+- id: categorize_vulnerabilities
+  type: foreach
+  itemsPath: ctx.scan.vulnerabilities
+  itemName: vuln
+  iterator:
+    states:
+      - id: route_by_severity
+        type: switch
+        dataPath: vuln
+        conditions:
+          - if: "vuln.severity == 'critical'"   # ✅ Clean dot notation
+            next: critical_path
+          - if: "vuln.severity == 'high'"       # ✅ Works!
+            next: high_path
+```
+
+See `docs/developers/starlark-expressions.md` for detailed developer documentation.
+
 ### Phase 5 - Parallel + Foreach (2-3d) ✅ COMPLETE
 
 - [x] Implement parallel branch execution and join
@@ -2728,5 +2781,165 @@ states:
 
 ---
 
+## 12) Known Issues & Debug Log
+
+### Issue: NATS Push Consumer Stops Receiving New Messages (2025-12-25)
+
+**Status**: 🔴 IN PROGRESS - Root cause identified, fix pending
+
+**Symptoms**:
+- Workflow runs with `inject` steps are created but remain stuck at "pending" status
+- Steps published AFTER startup are never received by the consumer
+- Recovery at startup works correctly (pending runs from DB are processed)
+
+**Evidence from Logs**:
+
+At startup (14:31:54) - works correctly:
+```
+Workflow consumer: subscribing to workflow.run.*.step.*.schedule
+NATS Engine: Consumer info - NumPending=0, NumAckPending=0, NumRedelivered=0, Delivered.Stream=3254
+Workflow consumer: started successfully
+Workflow consumer: recovering 100 pending runs
+Workflow consumer: executing step step1 for run 2f6f675c (type: context)
+Workflow consumer: run 2f6f675c completed
+```
+
+New run created after startup (14:38:27) - FAILS:
+```
+NATS Engine: Publishing step with trace to subject=workflow.run.5f86dc2d...step.step1.schedule
+NATS Engine: Successfully published step with trace for run=5f86dc2d step=step1
+```
+❌ NO `handleMessage` invoked - message never received!
+
+**Root Cause Analysis**:
+
+The issue is in the NATS JetStream push consumer behavior:
+
+1. **Embedded NATS** (`Embedded: true` by default in `options.go`) starts an in-memory NATS server
+2. **Durable consumer** (`nats.Durable("workflow-step-consumer")`) maintains delivery state
+3. At startup, the consumer receives all pending messages from the stream (`DeliverAll()`)
+4. **After processing those messages, the consumer stops receiving new messages**
+
+This is likely caused by:
+- The consumer's `MaxAckPending` being exhausted
+- Subject filter mismatch with the durable consumer after initial subscription
+- Embedded NATS not properly pushing new messages after initial `DeliverAll()` batch
+
+**Key Files**:
+```
+internal/workflows/runtime/consumer.go        # WorkflowConsumer - handleMessage at line 188
+internal/workflows/runtime/nats_engine.go     # NATS engine - SubscribeDurable at line 125
+internal/workflows/runtime/options.go         # Options - Embedded: true default at line 31
+internal/services/workflow_service.go         # StartRun at line 235 - publishes first step
+internal/api/v1/base.go                       # startWorkflowConsumer at line 128
+```
+
+**Code Flow**:
+```
+API POST /workflow-runs
+    └── WorkflowService.StartRun()
+        ├── Creates run in DB (status="pending", current_step="step1")
+        └── engine.PublishStepWithTrace() ← WORKS ✓
+
+NATSEngine.PublishStepWithTrace()
+    └── js.Publish("workflow.run.{runID}.step.step1.schedule") ← WORKS ✓
+
+WorkflowConsumer (subscribed at startup)
+    └── handleMessage(msg) ← NOT CALLED for new messages after startup!
+        └── registry.Execute() → InjectExecutor → Complete run
+
+SUSPECTED ISSUE: Push consumer with DeliverAll() stops receiving after initial batch
+```
+
+**Debug Logging Added**:
+
+Added entry-point logging to `handleMessage` in `consumer.go`:
+```go
+func (c *WorkflowConsumer) handleMessage(msg *nats.Msg) {
+    log.Printf("Workflow consumer: [DEBUG] received message on subject=%s", msg.Subject)
+    // ... rest of handler
+}
+```
+
+**Proposed Fixes**:
+
+**Option A: Change DeliverAll to DeliverNew (quick fix)**
+```go
+// In internal/workflows/runtime/nats_engine.go, SubscribeDurable() around line 125
+// Change:
+nats.DeliverAll(),
+// To:
+nats.DeliverNew(),
+```
+⚠️ Caveat: This breaks recovery - we'd miss messages during restarts.
+
+**Option B: Use a pull-based consumer (recommended fix)**
+Replace the push subscription with a pull consumer that continuously fetches:
+```go
+func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler nats.MsgHandler) error {
+    sub, err := e.js.PullSubscribe(subject, consumer, nats.AckExplicit())
+    if err != nil {
+        return err
+    }
+    
+    // Start a goroutine to continuously fetch messages
+    go func() {
+        for {
+            msgs, err := sub.Fetch(10, nats.MaxWait(5*time.Second))
+            if err != nil {
+                if err == nats.ErrTimeout {
+                    continue // No messages, keep waiting
+                }
+                log.Printf("Error fetching messages: %v", err)
+                continue
+            }
+            for _, msg := range msgs {
+                handler(msg)
+            }
+        }
+    }()
+    
+    return nil
+}
+```
+
+**Option C: Delete and recreate consumer on startup**
+```go
+// Add to nats_engine.go before Subscribe
+e.js.DeleteConsumer("WORKFLOWS", consumer)
+```
+
+**Next Steps**:
+1. [ ] Verify debug logging shows messages not being received
+2. [ ] Implement fix (Option B recommended)
+3. [ ] Rebuild and test with `make build`
+4. [ ] Verify workflow runs complete successfully
+5. [ ] Run incident-response-pipeline E2E test
+
+**Test Commands**:
+```bash
+# Check server is running
+curl -s http://localhost:8585/api/v1/version | jq .version
+
+# Create test workflow run
+curl -X POST http://localhost:8585/api/v1/workflow-runs \
+  -H "Content-Type: application/json" \
+  -d '{"workflowId": "test-inject-simple"}'
+
+# Check run status (should show "completed", not "pending")
+curl -s "http://localhost:8585/api/v1/workflow-runs?limit=1" | jq '.runs[0] | {status, current_step}'
+
+# Check logs for debug messages
+grep "\[DEBUG\] received message" /tmp/station.log
+
+# Full rebuild cycle
+cd /home/epuerta/sandbox/cloudship-sandbox/station && make build && \
+  pkill -f "stn serve" && \
+  nohup ./bin/stn serve --config /home/epuerta/.config/station/config.yaml > /tmp/station.log 2>&1 &
+```
+
+---
+
 *Created: 2025-12-23*  
-*Based on: PR #83 workflow scaffolding*
+*Based on: PR #83 workflow scaffolding*  
+*Last Updated: 2025-12-25 (NATS consumer debugging)*

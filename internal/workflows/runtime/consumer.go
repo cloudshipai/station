@@ -186,6 +186,7 @@ func (c *WorkflowConsumer) Stop() {
 }
 
 func (c *WorkflowConsumer) handleMessage(msg *nats.Msg) {
+	log.Printf("Workflow consumer: [DEBUG] received message on subject=%s", msg.Subject)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 

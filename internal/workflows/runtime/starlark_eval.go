@@ -2,11 +2,85 @@ package runtime
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )
+
+type AttrDict struct {
+	dict      *starlark.Dict
+	evaluator *StarlarkEvaluator
+}
+
+var (
+	_ starlark.Value      = (*AttrDict)(nil)
+	_ starlark.Mapping    = (*AttrDict)(nil)
+	_ starlark.HasAttrs   = (*AttrDict)(nil)
+	_ starlark.Iterable   = (*AttrDict)(nil)
+	_ starlark.Comparable = (*AttrDict)(nil)
+)
+
+func NewAttrDict(evaluator *StarlarkEvaluator, data map[string]interface{}) *AttrDict {
+	dict := starlark.NewDict(len(data))
+	for k, v := range data {
+		_ = dict.SetKey(starlark.String(k), evaluator.goToStarlark(v))
+	}
+	return &AttrDict{dict: dict, evaluator: evaluator}
+}
+
+func (d *AttrDict) String() string        { return d.dict.String() }
+func (d *AttrDict) Type() string          { return "attrdict" }
+func (d *AttrDict) Freeze()               { d.dict.Freeze() }
+func (d *AttrDict) Truth() starlark.Bool  { return d.dict.Truth() }
+func (d *AttrDict) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: attrdict") }
+
+func (d *AttrDict) Get(key starlark.Value) (v starlark.Value, found bool, err error) {
+	return d.dict.Get(key)
+}
+
+func (d *AttrDict) Iterate() starlark.Iterator {
+	return d.dict.Iterate()
+}
+
+func (d *AttrDict) CompareSameType(op syntax.Token, y starlark.Value, depth int) (bool, error) {
+	other, ok := y.(*AttrDict)
+	if !ok {
+		return false, nil
+	}
+	return starlark.Compare(op, d.dict, other.dict)
+}
+
+func (d *AttrDict) Attr(name string) (starlark.Value, error) {
+	val, found, err := d.dict.Get(starlark.String(name))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, starlark.NoSuchAttrError(fmt.Sprintf("attrdict has no .%s field or method", name))
+	}
+	return val, nil
+}
+
+func (d *AttrDict) AttrNames() []string {
+	var names []string
+	for _, item := range d.dict.Items() {
+		if key, ok := item[0].(starlark.String); ok {
+			names = append(names, string(key))
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (d *AttrDict) Len() int {
+	return d.dict.Len()
+}
+
+func (d *AttrDict) Items() []starlark.Tuple {
+	return d.dict.Items()
+}
 
 type StarlarkEvaluator struct {
 	maxSteps uint64
@@ -100,11 +174,7 @@ func (e *StarlarkEvaluator) goToStarlark(v interface{}) starlark.Value {
 		}
 		return starlark.NewList(elems)
 	case map[string]interface{}:
-		dict := starlark.NewDict(len(val))
-		for k, v := range val {
-			_ = dict.SetKey(starlark.String(k), e.goToStarlark(v))
-		}
-		return dict
+		return NewAttrDict(e, val)
 	default:
 		return starlark.String(fmt.Sprintf("%v", val))
 	}
@@ -130,6 +200,15 @@ func (e *StarlarkEvaluator) convertFromStarlark(v starlark.Value) interface{} {
 		}
 		return result
 	case *starlark.Dict:
+		result := make(map[string]interface{})
+		for _, item := range val.Items() {
+			key := e.convertFromStarlark(item[0])
+			if keyStr, ok := key.(string); ok {
+				result[keyStr] = e.convertFromStarlark(item[1])
+			}
+		}
+		return result
+	case *AttrDict:
 		result := make(map[string]interface{})
 		for _, item := range val.Items() {
 			key := e.convertFromStarlark(item[0])
