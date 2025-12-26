@@ -62,7 +62,90 @@ var (
 		Args:  cobra.ExactArgs(1),
 		RunE:  runWorkflowInspect,
 	}
+
+	workflowDebugExpressionCmd = &cobra.Command{
+		Use:   "debug-expression <expression>",
+		Short: "Evaluate a Starlark expression",
+		Long:  "Evaluate a Starlark expression against an optional JSON context. Useful for testing switch conditions and transforms.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runWorkflowDebugExpression,
+	}
 )
+
+func runWorkflowDebugExpression(cmd *cobra.Command, args []string) error {
+	expression := args[0]
+	contextJSON, _ := cmd.Flags().GetString("context")
+	runID, _ := cmd.Flags().GetString("run-id")
+	dataPath, _ := cmd.Flags().GetString("data-path")
+
+	var data map[string]interface{}
+	if runID != "" {
+		// Load context from a specific run
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		database, err := db.New(cfg.DatabaseURL)
+		if err != nil {
+			return fmt.Errorf("failed to connect to database: %w", err)
+		}
+		defer func() { _ = database.Close() }()
+		repos := repositories.New(database)
+		run, err := repos.WorkflowRuns.Get(context.Background(), runID)
+		if err != nil {
+			return fmt.Errorf("run not found: %w", err)
+		}
+		if err := json.Unmarshal(run.Context, &data); err != nil {
+			return fmt.Errorf("failed to parse run context: %w", err)
+		}
+		fmt.Printf("Using context from run: %s\n", runID)
+	} else if contextJSON != "" {
+		if err := json.Unmarshal([]byte(contextJSON), &data); err != nil {
+			return fmt.Errorf("invalid context JSON: %w", err)
+		}
+	} else {
+		data = make(map[string]interface{})
+	}
+
+	// Apply dataPath if specified
+	evalData := data
+	if dataPath != "" && dataPath != "$" && dataPath != "$. " {
+		val, ok := runtime.GetNestedValue(data, dataPath)
+		if !ok {
+			return fmt.Errorf("data path not found: %s", dataPath)
+		}
+		if m, ok := val.(map[string]interface{}); ok {
+			evalData = m
+		} else {
+			// If it's not a map, we wrap it so hasattr works on the 'data' variable or similar
+			// But usually Switch/Transform expect a map-like context.
+			// For simplicity, we'll just use it as is if it's a map.
+			fmt.Printf("Warning: data path returned %T, expected map for full compatibility\n", val)
+			evalData = map[string]interface{}{"data": val}
+		}
+		fmt.Printf("Extracted data from path: %s\n", dataPath)
+	}
+
+	evaluator := runtime.NewStarlarkEvaluator()
+	result, err := evaluator.EvaluateExpression(expression, evalData)
+	if err != nil {
+		// Try evaluating as condition if expression fails (might be a boolean expression)
+		condResult, condErr := evaluator.EvaluateCondition(expression, evalData)
+		if condErr == nil {
+			fmt.Printf("Result (Condition): %v\n", condResult)
+			return nil
+		}
+		return fmt.Errorf("evaluation failed: %w", err)
+	}
+
+	fmt.Printf("Result: %v\n", result)
+	if resultDict, ok := result.(map[string]interface{}); ok {
+		pretty, _ := json.MarshalIndent(resultDict, "", "  ")
+		fmt.Printf("JSON: %s\n", string(pretty))
+	}
+
+	return nil
+}
 
 func runWorkflowList(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()

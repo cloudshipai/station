@@ -960,9 +960,158 @@ states:
     output:
       summary: "$.result"
     end: true
+
+### Example 3: Slack-Based Human Approval
+
+Analyzes a security threat and requires human confirmation before taking a blocking action.
+
+```yaml
+id: slack-approval-escalation
+name: "Security Alert: Blocking Action"
+version: "1.0.0"
+description: "IP analysis with human-in-the-loop blocking"
+
+start: analyze-ip
+
+states:
+  - id: analyze-ip
+    type: agent
+    agent: security-analyzer
+    input:
+      ip: "$.input.ip"
+    output:
+      analysis: "$.result"
+    transition: check-risk
+
+  - id: check-risk
+    type: switch
+    dataPath: "$.analysis"
+    conditions:
+      - if: "risk_score > 0.8"
+        next: request-approval
+    defaultNext: log-incident
+
+  - id: request-approval
+    type: human_approval
+    message: |
+      A high-risk IP ({{input.ip}}) was detected with risk score {{analysis.risk_score}}. 
+      Reason: {{analysis.reason}}
+      
+      Should we block this IP in the production firewall?
+    approvers:
+      - security-admin
+    output:
+      approval_decision: "$.result"
+    transition: handle-approval
+
+  - id: handle-approval
+    type: switch
+    dataPath: "$.approval_decision"
+    conditions:
+      - if: "approved == True"
+        next: block-ip
+    defaultNext: log-incident
+
+  - id: block-ip
+    type: agent
+    agent: firewall-admin
+    input:
+      ip: "$.input.ip"
+      action: "block"
+    output:
+      block_result: "$.result"
+    transition: notify-team
+
+  - id: log-incident
+    type: agent
+    agent: security-logger
+    input:
+      ip: "$.input.ip"
+      analysis: "$.analysis"
+      blocked: false
+    output:
+      log_result: "$.result"
+    end: true
+
+  - id: notify-team
+    type: agent
+    agent: notifier
+    input:
+      message: "IP {{input.ip}} has been blocked successfully."
+    end: true
+```
+
+### Example 4: CloudWatch to JIRA Escalation
+
+Ingests a CloudWatch alarm, gathers log context, and manages JIRA tickets.
+
+```yaml
+id: cloudwatch-jira-escalation
+name: "Infrastructure Alert: JIRA Escalation"
+version: "1.0.0"
+description: "CloudWatch alarm analysis and ticket deduplication"
+
+start: analyze-logs
+
+states:
+  - id: analyze-logs
+    type: agent
+    agent: aws-log-analyzer
+    input:
+      service_name: "$.input.metric_data.service"
+      region: "$.input.metric_data.region"
+      time_range: 15
+    output:
+      log_analysis: "$.result"
+    transition: check-duplicate
+
+  - id: check-duplicate
+    type: agent
+    agent: jira-analyst
+    input:
+      query: "service = {{input.metric_data.service}} AND status != Closed"
+    output:
+      duplicate_found: "$.result.has_duplicate"
+      existing_ticket_id: "$.result.ticket_id"
+    transition: decide-escalation
+
+  - id: decide-escalation
+    type: switch
+    dataPath: "$"
+    conditions:
+      - if: "duplicate_found == False"
+        next: create-ticket
+    defaultNext: comment-on-ticket
+
+  - id: create-ticket
+    type: agent
+    agent: jira-admin
+    input:
+      summary: "Alarm: {{input.alarm_name}}"
+      description: "{{input.alarm_description}}\n\nAnalysis: {{log_analysis.summary}}"
+    output:
+      ticket: "$.result"
+    transition: notify-team
+
+  - id: comment-on-ticket
+    type: agent
+    agent: jira-admin
+    input:
+      ticket_id: "$.existing_ticket_id"
+      comment: "Alarm triggered again. New analysis: {{log_analysis.summary}}"
+    transition: notify-team
+
+  - id: notify-team
+    type: agent
+    agent: notifier
+    input:
+      channel: "#alerts"
+      text: "Processed alarm {{input.alarm_name}}. Ticket: {{ticket.key if hasattr(state, 'ticket') else existing_ticket_id}}"
+    end: true
 ```
 
 ---
+
 
 ## Best Practices
 
