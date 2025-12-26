@@ -112,7 +112,7 @@ func (e *StarlarkEvaluator) EvaluateCondition(expression string, data map[string
 
 	result, err := starlark.EvalExprOptions(&fileOpts, thread, expr, globals)
 	if err != nil {
-		return false, fmt.Errorf("eval error: %w", err)
+		return false, e.enhanceStarlarkError(err, globals)
 	}
 
 	switch v := result.(type) {
@@ -144,7 +144,7 @@ func (e *StarlarkEvaluator) EvaluateExpression(expression string, data map[strin
 
 	result, err := starlark.EvalExprOptions(&fileOpts, thread, expr, globals)
 	if err != nil {
-		return nil, fmt.Errorf("eval error: %w", err)
+		return nil, e.enhanceStarlarkError(err, globals)
 	}
 
 	return e.convertFromStarlark(result), nil
@@ -356,4 +356,43 @@ func (e *StarlarkEvaluator) builtinGetattr(_ *starlark.Thread, _ *starlark.Built
 		}
 		return nil, fmt.Errorf("'%s' object has no attribute '%s'", args[0].Type(), name)
 	}
+}
+
+func (e *StarlarkEvaluator) enhanceStarlarkError(err error, globals starlark.StringDict) error {
+	errStr := err.Error()
+
+	if !strings.Contains(errStr, "undefined:") && !strings.Contains(errStr, "undefined ") {
+		return err
+	}
+
+	builtins := map[string]bool{
+		"hasattr": true, "getattr": true,
+	}
+
+	var userVars []string
+	for name := range globals {
+		if !builtins[name] {
+			userVars = append(userVars, name)
+		}
+	}
+	sort.Strings(userVars)
+
+	var sb strings.Builder
+	sb.WriteString(errStr)
+	sb.WriteString("\n\n")
+
+	if len(userVars) > 0 {
+		sb.WriteString("Available variables: ")
+		sb.WriteString(strings.Join(userVars, ", "))
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\nHints:\n")
+	sb.WriteString("  - Workflow inputs are flattened into context. Use 'ticket_id' not 'input.ticket_id'\n")
+	sb.WriteString("  - Step outputs are stored under the step ID (e.g., 'classify_ticket' not 'classification')\n")
+	sb.WriteString("  - Parallel branch results are stored under the parallel step ID as a list\n")
+	sb.WriteString("  - Use hasattr(obj, 'field') to safely check if a field exists before accessing\n")
+	sb.WriteString("  - Use getattr(obj, 'field', default) to get a field with a fallback value\n")
+
+	return fmt.Errorf("%s", sb.String())
 }
