@@ -92,21 +92,20 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 	}
 	sandboxService := NewSandboxService(sandboxCfg)
 
-	codeModeEnabled := os.Getenv("STATION_SANDBOX_CODE_MODE_ENABLED") == "true"
+	codeModeConfig := DefaultCodeModeConfig()
+	codeModeConfig.Enabled = os.Getenv("STATION_SANDBOX_CODE_MODE_ENABLED") == "true"
 	var sessionManager *SessionManager
-	var dockerBackend SandboxBackend
-	if codeModeEnabled {
-		var err error
-		dockerBackend, err = NewDockerBackend()
+	if codeModeConfig.Enabled {
+		dockerBackend, err := NewDockerBackend(codeModeConfig)
 		if err != nil {
 			logging.Info("Failed to initialize Docker backend for code mode sandbox: %v (code mode will be disabled)", err)
-			codeModeEnabled = false
+			codeModeConfig.Enabled = false
 		} else {
 			sessionManager = NewSessionManager(dockerBackend)
 			logging.Info("Sandbox code mode enabled with Docker backend")
 		}
 	}
-	unifiedSandboxFactory := NewUnifiedSandboxFactory(sandboxService, sessionManager, dockerBackend, codeModeEnabled)
+	unifiedSandboxFactory := NewUnifiedSandboxFactory(sandboxService, sessionManager, codeModeConfig)
 
 	return &AgentExecutionEngine{
 		repos:                    repos,
@@ -448,10 +447,9 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	sandboxConfig := aee.parseSandboxConfigFromAgent(agent, environment.Name)
 	if aee.unifiedSandboxFactory.ShouldAddTools(sandboxConfig) {
 		execCtx := ExecutionContext{
-			WorkflowRunID: "",
-			AgentRunID:    fmt.Sprintf("%d", runID),
-			AgentName:     agent.Name,
-			Environment:   environment.Name,
+			WorkflowRunID:      "",
+			AgentRunID:         fmt.Sprintf("%d", runID),
+			SandboxSessionName: "",
 		}
 		sandboxTools := aee.unifiedSandboxFactory.GetSandboxTools(sandboxConfig, execCtx)
 		for _, tool := range sandboxTools {
@@ -521,9 +519,11 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 
 	// Clean up sandbox sessions (for code mode) after execution
 	if aee.sessionManager != nil && aee.unifiedSandboxFactory.IsCodeMode(sandboxConfig) {
-		sessionKey := NewAgentSessionKey(fmt.Sprintf("%d", runID))
-		if err := aee.sessionManager.DestroySession(ctx, sessionKey); err != nil {
-			logging.Debug("Failed to cleanup sandbox session for agent %s: %v", agent.Name, err)
+		sessionKey := ResolveSessionKey("", fmt.Sprintf("%d", runID), "")
+		if session, getErr := aee.sessionManager.GetSession(ctx, sessionKey); getErr == nil {
+			if closeErr := aee.sessionManager.CloseSession(ctx, session.ID); closeErr != nil {
+				logging.Debug("Failed to cleanup sandbox session for agent %s: %v", agent.Name, closeErr)
+			}
 		}
 	}
 

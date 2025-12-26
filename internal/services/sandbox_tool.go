@@ -207,18 +207,17 @@ type UnifiedSandboxFactory struct {
 func NewUnifiedSandboxFactory(
 	computeSvc *SandboxService,
 	sessionMgr *SessionManager,
-	backend SandboxBackend,
-	codeModeEnabled bool,
+	codeModeConfig CodeModeConfig,
 ) *UnifiedSandboxFactory {
 	var codeFactory *CodeModeToolFactory
-	if codeModeEnabled && sessionMgr != nil && backend != nil {
-		codeFactory = NewCodeModeToolFactory(sessionMgr, backend)
+	if codeModeConfig.Enabled && sessionMgr != nil {
+		codeFactory = NewCodeModeToolFactory(sessionMgr, codeModeConfig)
 	}
 
 	return &UnifiedSandboxFactory{
 		computeFactory:  NewSandboxToolFactory(computeSvc),
 		codeFactory:     codeFactory,
-		codeModeEnabled: codeModeEnabled,
+		codeModeEnabled: codeModeConfig.Enabled,
 	}
 }
 
@@ -231,7 +230,7 @@ func (f *UnifiedSandboxFactory) GetSandboxTools(
 	}
 
 	if sandboxCfg.Mode == "code" && f.codeFactory != nil {
-		return f.codeFactory.CreateTools(execCtx, sandboxCfg)
+		return f.codeFactory.CreateAllTools(sandboxCfg, execCtx)
 	}
 
 	if f.computeFactory.ShouldAddTool(sandboxCfg) {
