@@ -3,6 +3,9 @@ package services
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
+	"time"
+	"unicode/utf8"
 
 	"station/pkg/dotprompt"
 
@@ -10,298 +13,439 @@ import (
 )
 
 type CodeModeToolFactory struct {
-	manager *SessionManager
-	backend SandboxBackend
+	sessionManager *SessionManager
+	config         CodeModeConfig
 }
 
-func NewCodeModeToolFactory(manager *SessionManager, backend SandboxBackend) *CodeModeToolFactory {
+func NewCodeModeToolFactory(sessionManager *SessionManager, config CodeModeConfig) *CodeModeToolFactory {
 	return &CodeModeToolFactory{
-		manager: manager,
-		backend: backend,
+		sessionManager: sessionManager,
+		config:         config,
 	}
 }
 
-func (f *CodeModeToolFactory) CreateTools(execCtx ExecutionContext, sandboxCfg *dotprompt.SandboxConfig) []ai.Tool {
-	scope := SessionScopeWorkflow
-	if sandboxCfg.Session == "agent" {
-		scope = SessionScopeAgent
-	}
-	sessionKey := execCtx.SessionKey(scope)
+func (f *CodeModeToolFactory) IsEnabled() bool {
+	return f.config.Enabled
+}
 
-	cfg := SessionConfig{
-		Runtime: sandboxCfg.Runtime,
-		Image:   sandboxCfg.Image,
+func (f *CodeModeToolFactory) ShouldAddTools(sandbox *dotprompt.SandboxConfig) bool {
+	if sandbox == nil {
+		return false
 	}
-	if cfg.Runtime == "" {
-		cfg.Runtime = "linux"
-	}
+	return sandbox.Mode == "code" && f.config.Enabled
+}
 
+type ExecutionContext struct {
+	WorkflowRunID      string
+	AgentRunID         string
+	SandboxSessionName string
+}
+
+func (f *CodeModeToolFactory) CreateAllTools(agentDefaults *dotprompt.SandboxConfig, execCtx ExecutionContext) []ai.Tool {
 	return []ai.Tool{
-		f.createOpenTool(sessionKey, cfg),
-		f.createExecTool(sessionKey, sandboxCfg),
-		f.createFsWriteTool(sessionKey),
-		f.createFsReadTool(sessionKey),
-		f.createFsListTool(sessionKey),
-		f.createFsDeleteTool(sessionKey),
-		f.createCloseTool(sessionKey),
+		f.CreateOpenTool(agentDefaults, execCtx),
+		f.CreateExecTool(agentDefaults),
+		f.CreateFsWriteTool(),
+		f.CreateFsReadTool(),
+		f.CreateFsListTool(),
+		f.CreateFsDeleteTool(),
+		f.CreateCloseTool(),
 	}
 }
 
-func (f *CodeModeToolFactory) createOpenTool(key SessionKey, cfg SessionConfig) ai.Tool {
+type SandboxOpenInput struct {
+	SessionKey string `json:"session_key,omitempty"`
+}
+
+type SandboxOpenOutput struct {
+	SandboxID string `json:"sandbox_id"`
+	Image     string `json:"image"`
+	Workdir   string `json:"workdir"`
+	Created   bool   `json:"created"`
+}
+
+func (f *CodeModeToolFactory) CreateOpenTool(agentDefaults *dotprompt.SandboxConfig, execCtx ExecutionContext) ai.Tool {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"image": map[string]any{
+			"session_key": map[string]any{
 				"type":        "string",
-				"description": "Docker image to use. Shortcuts: 'python' (python:3.11-slim), 'node' (node:20-slim), 'linux' (ubuntu:22.04). Or specify any Docker image directly (e.g., 'golang:1.22', 'rust:1.75'). Default: ubuntu:22.04",
+				"description": "Optional session key override. Usually auto-resolved from workflow/agent context.",
 			},
 		},
 	}
 
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, _ := input.(map[string]any)
+		sessionKeyOverride, _ := inputMap["session_key"].(string)
+
+		sessionName := execCtx.SandboxSessionName
+		if sessionKeyOverride != "" {
+			sessionName = sessionKeyOverride
+		}
+
+		key := ResolveSessionKey(execCtx.WorkflowRunID, execCtx.AgentRunID, sessionName)
+
+		opts := f.buildSessionOptions(agentDefaults)
+
+		session, created, err := f.sessionManager.GetOrCreateSession(toolCtx.Context, key, &opts)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_open: %w", err)
+		}
+
+		return SandboxOpenOutput{
+			SandboxID: session.ID,
+			Image:     session.Image,
+			Workdir:   session.Workdir,
+			Created:   created,
+		}, nil
+	}
+
 	return ai.NewToolWithInputSchema(
 		"sandbox_open",
-		"Get or create a persistent Linux sandbox session. This is a full Linux environment where you can run any commands, install packages with apt/pip/npm, compile code, run scripts, and more. Files persist across calls within the same workflow/agent run.",
+		"Open or resume a persistent sandbox session. Call this first to get a sandbox_id for other sandbox operations. Files persist across calls within the same workflow.",
 		schema,
-		func(toolCtx *ai.ToolContext, input any) (any, error) {
-			inputMap, _ := input.(map[string]any)
-
-			sessionCfg := cfg
-			if img, ok := inputMap["image"].(string); ok && img != "" {
-				sessionCfg.Runtime = img
-			}
-			if sessionCfg.Runtime == "" {
-				sessionCfg.Runtime = "linux"
-			}
-
-			session, err := f.manager.GetOrCreateSession(toolCtx.Context, key, sessionCfg)
-			if err != nil {
-				return nil, err
-			}
-
-			return map[string]any{
-				"session_id": session.ID,
-				"image":      session.Config.Image,
-				"workdir":    "/work",
-				"status":     string(session.Status),
-			}, nil
-		},
+		toolFunc,
 	)
 }
 
-func (f *CodeModeToolFactory) createExecTool(key SessionKey, sandboxCfg *dotprompt.SandboxConfig) ai.Tool {
-	defaultTimeout := 60
-	if sandboxCfg.TimeoutSeconds > 0 {
-		defaultTimeout = sandboxCfg.TimeoutSeconds
+type SandboxExecInput struct {
+	SandboxID      string            `json:"sandbox_id"`
+	Cmd            []string          `json:"cmd"`
+	Cwd            string            `json:"cwd,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	TimeoutSeconds int               `json:"timeout_seconds,omitempty"`
+}
+
+type SandboxExecOutput struct {
+	ExitCode  int    `json:"exit_code"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	Truncated bool   `json:"truncated,omitempty"`
+}
+
+func (f *CodeModeToolFactory) CreateExecTool(agentDefaults *dotprompt.SandboxConfig) ai.Tool {
+	defaultTimeout := int(f.config.DefaultTimeout.Seconds())
+	if agentDefaults != nil && agentDefaults.TimeoutSeconds > 0 {
+		defaultTimeout = agentDefaults.TimeoutSeconds
 	}
 
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"command": map[string]any{
+			"sandbox_id": map[string]any{
 				"type":        "string",
-				"description": "Shell command to execute (e.g., 'apt update && apt install -y curl', 'python main.py', 'gcc -o app main.c && ./app')",
+				"description": "Sandbox session ID from sandbox_open",
+			},
+			"cmd": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Command and arguments to execute, e.g. [\"python\", \"main.py\"]",
+			},
+			"cwd": map[string]any{
+				"type":        "string",
+				"description": "Working directory (default: /workspace)",
+			},
+			"env": map[string]any{
+				"type":                 "object",
+				"additionalProperties": map[string]any{"type": "string"},
+				"description":          "Additional environment variables",
 			},
 			"timeout_seconds": map[string]any{
 				"type":        "integer",
 				"minimum":     1,
 				"maximum":     3600,
-				"description": "Execution timeout in seconds",
 				"default":     defaultTimeout,
-			},
-			"workdir": map[string]any{
-				"type":        "string",
-				"description": "Working directory (default: /work)",
+				"description": "Execution timeout in seconds",
 			},
 		},
-		"required": []string{"command"},
+		"required": []string{"sandbox_id", "cmd"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_exec: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_exec: sandbox_id is required")
+		}
+
+		cmdRaw, ok := inputMap["cmd"].([]any)
+		if !ok || len(cmdRaw) == 0 {
+			return nil, fmt.Errorf("sandbox_exec: cmd is required and must be non-empty array")
+		}
+
+		cmd := make([]string, 0, len(cmdRaw))
+		for _, v := range cmdRaw {
+			if s, ok := v.(string); ok {
+				cmd = append(cmd, s)
+			}
+		}
+
+		cwd, _ := inputMap["cwd"].(string)
+		timeout := defaultTimeout
+		if v, ok := inputMap["timeout_seconds"].(float64); ok {
+			timeout = int(v)
+		}
+
+		env := make(map[string]string)
+		if envRaw, ok := inputMap["env"].(map[string]any); ok {
+			for k, v := range envRaw {
+				if s, ok := v.(string); ok {
+					env[k] = s
+				}
+			}
+		}
+
+		session, err := f.sessionManager.GetSessionByID(toolCtx.Context, sandboxID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_exec: %w", err)
+		}
+
+		result, err := f.sessionManager.backend.Exec(toolCtx.Context, session.ID, ExecRequest{
+			Cmd:            cmd,
+			Cwd:            cwd,
+			Env:            env,
+			TimeoutSeconds: timeout,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_exec: %w", err)
+		}
+
+		return SandboxExecOutput{
+			ExitCode:  result.ExitCode,
+			Stdout:    result.Stdout,
+			Stderr:    result.Stderr,
+			Truncated: result.Truncated,
+		}, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"sandbox_exec",
-		"Execute a shell command in the Linux sandbox. Full shell access - run any command: install packages (apt, pip, npm), compile code, run scripts, curl APIs, process data, etc. Commands run via 'sh -c'.",
+		"Execute a command in the sandbox. Returns exit code, stdout, and stderr.",
 		schema,
-		func(toolCtx *ai.ToolContext, input any) (any, error) {
-			inputMap, ok := input.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid input")
-			}
-
-			session, exists := f.manager.GetSession(key)
-			if !exists {
-				return nil, fmt.Errorf("no sandbox session open - call sandbox_open first")
-			}
-
-			command, _ := inputMap["command"].(string)
-			if command == "" {
-				return nil, fmt.Errorf("command is required")
-			}
-
-			timeout := defaultTimeout
-			if t, ok := inputMap["timeout_seconds"].(float64); ok {
-				timeout = int(t)
-			}
-
-			workdir := "/work"
-			if w, ok := inputMap["workdir"].(string); ok && w != "" {
-				workdir = w
-			}
-
-			result, err := f.backend.Exec(toolCtx.Context, session.ContainerID, ExecRequest{
-				Command:        command,
-				Workdir:        workdir,
-				TimeoutSeconds: timeout,
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			return map[string]any{
-				"exit_code":   result.ExitCode,
-				"stdout":      result.Stdout,
-				"stderr":      result.Stderr,
-				"duration_ms": result.DurationMs,
-				"timed_out":   result.TimedOut,
-			}, nil
-		},
+		toolFunc,
 	)
 }
 
-func (f *CodeModeToolFactory) createFsWriteTool(key SessionKey) ai.Tool {
+type SandboxFsWriteInput struct {
+	SandboxID   string `json:"sandbox_id"`
+	Path        string `json:"path"`
+	Contents    string `json:"contents,omitempty"`
+	ContentsB64 string `json:"contents_b64,omitempty"`
+	Mode        string `json:"mode,omitempty"`
+	Overwrite   bool   `json:"overwrite,omitempty"`
+}
+
+type SandboxFsWriteOutput struct {
+	OK   bool   `json:"ok"`
+	Path string `json:"path"`
+}
+
+func (f *CodeModeToolFactory) CreateFsWriteTool() ai.Tool {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"sandbox_id": map[string]any{
+				"type":        "string",
+				"description": "Sandbox session ID from sandbox_open",
+			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "File path relative to /work (e.g., 'main.py' or 'src/utils.py')",
+				"description": "File path relative to /workspace",
 			},
-			"content": map[string]any{
+			"contents": map[string]any{
 				"type":        "string",
-				"description": "File content (text or base64-encoded)",
+				"description": "File contents as plain text",
 			},
-			"encoding": map[string]any{
+			"contents_b64": map[string]any{
 				"type":        "string",
-				"enum":        []string{"text", "base64"},
-				"description": "Content encoding",
-				"default":     "text",
+				"description": "File contents as base64 (for binary files)",
+			},
+			"mode": map[string]any{
+				"type":        "string",
+				"description": "Unix permission mode (default: 0644)",
+				"default":     "0644",
+			},
+			"overwrite": map[string]any{
+				"type":        "boolean",
+				"description": "Whether to overwrite existing file",
+				"default":     true,
 			},
 		},
-		"required": []string{"path", "content"},
+		"required": []string{"sandbox_id", "path"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_fs_write: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		path, _ := inputMap["path"].(string)
+		contents, _ := inputMap["contents"].(string)
+		contentsB64, _ := inputMap["contents_b64"].(string)
+
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_fs_write: sandbox_id is required")
+		}
+		if path == "" {
+			return nil, fmt.Errorf("sandbox_fs_write: path is required")
+		}
+
+		var content []byte
+		if contentsB64 != "" {
+			decoded, err := base64.StdEncoding.DecodeString(contentsB64)
+			if err != nil {
+				return nil, fmt.Errorf("sandbox_fs_write: invalid base64: %w", err)
+			}
+			content = decoded
+		} else {
+			content = []byte(contents)
+		}
+
+		mode := os.FileMode(0644)
+		if modeStr, ok := inputMap["mode"].(string); ok && modeStr != "" {
+			var m uint32
+			if _, err := fmt.Sscanf(modeStr, "%o", &m); err == nil {
+				mode = os.FileMode(m)
+			}
+		}
+
+		session, err := f.sessionManager.GetSessionByID(toolCtx.Context, sandboxID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_fs_write: %w", err)
+		}
+
+		if err := f.sessionManager.backend.WriteFile(toolCtx.Context, session.ID, path, content, mode); err != nil {
+			return nil, fmt.Errorf("sandbox_fs_write: %w", err)
+		}
+
+		return SandboxFsWriteOutput{
+			OK:   true,
+			Path: path,
+		}, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"sandbox_fs_write",
-		"Write a file to the sandbox filesystem. Use this to create source code files, config files, or data files.",
+		"Write a file to the sandbox workspace. Use contents for text files, contents_b64 for binary.",
 		schema,
-		func(toolCtx *ai.ToolContext, input any) (any, error) {
-			inputMap, ok := input.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid input")
-			}
-
-			session, exists := f.manager.GetSession(key)
-			if !exists {
-				return nil, fmt.Errorf("no sandbox session open - call sandbox_open first")
-			}
-
-			path, _ := inputMap["path"].(string)
-			content, _ := inputMap["content"].(string)
-			encoding, _ := inputMap["encoding"].(string)
-
-			if path == "" || content == "" {
-				return nil, fmt.Errorf("path and content are required")
-			}
-
-			var data []byte
-			if encoding == "base64" {
-				var err error
-				data, err = base64.StdEncoding.DecodeString(content)
-				if err != nil {
-					return nil, fmt.Errorf("invalid base64: %w", err)
-				}
-			} else {
-				data = []byte(content)
-			}
-
-			if err := f.backend.WriteFile(toolCtx.Context, session.ContainerID, path, data); err != nil {
-				return nil, err
-			}
-
-			return map[string]any{
-				"path":       "/work/" + path,
-				"size_bytes": len(data),
-			}, nil
-		},
+		toolFunc,
 	)
 }
 
-func (f *CodeModeToolFactory) createFsReadTool(key SessionKey) ai.Tool {
+type SandboxFsReadInput struct {
+	SandboxID string `json:"sandbox_id"`
+	Path      string `json:"path"`
+	MaxBytes  int    `json:"max_bytes,omitempty"`
+}
+
+type SandboxFsReadOutput struct {
+	Contents    string `json:"contents,omitempty"`
+	ContentsB64 string `json:"contents_b64,omitempty"`
+	Truncated   bool   `json:"truncated"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
+func (f *CodeModeToolFactory) CreateFsReadTool() ai.Tool {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"sandbox_id": map[string]any{
+				"type":        "string",
+				"description": "Sandbox session ID from sandbox_open",
+			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "File path relative to /work",
+				"description": "File path relative to /workspace",
 			},
-			"encoding": map[string]any{
-				"type":        "string",
-				"enum":        []string{"text", "base64"},
-				"description": "Response encoding",
-				"default":     "text",
+			"max_bytes": map[string]any{
+				"type":        "integer",
+				"description": "Maximum bytes to read (default: 256KB)",
+				"default":     262144,
 			},
 		},
-		"required": []string{"path"},
+		"required": []string{"sandbox_id", "path"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_fs_read: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		path, _ := inputMap["path"].(string)
+		maxBytes := 262144
+		if v, ok := inputMap["max_bytes"].(float64); ok {
+			maxBytes = int(v)
+		}
+
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_fs_read: sandbox_id is required")
+		}
+		if path == "" {
+			return nil, fmt.Errorf("sandbox_fs_read: path is required")
+		}
+
+		session, err := f.sessionManager.GetSessionByID(toolCtx.Context, sandboxID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_fs_read: %w", err)
+		}
+
+		content, truncated, err := f.sessionManager.backend.ReadFile(toolCtx.Context, session.ID, path, maxBytes)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_fs_read: %w", err)
+		}
+
+		output := SandboxFsReadOutput{
+			Truncated: truncated,
+			SizeBytes: int64(len(content)),
+		}
+
+		if utf8.Valid(content) {
+			output.Contents = string(content)
+		} else {
+			output.ContentsB64 = base64.StdEncoding.EncodeToString(content)
+		}
+
+		return output, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"sandbox_fs_read",
-		"Read a file from the sandbox filesystem.",
+		"Read a file from the sandbox workspace. Returns contents as text or base64 for binary files.",
 		schema,
-		func(toolCtx *ai.ToolContext, input any) (any, error) {
-			inputMap, ok := input.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid input")
-			}
-
-			session, exists := f.manager.GetSession(key)
-			if !exists {
-				return nil, fmt.Errorf("no sandbox session open - call sandbox_open first")
-			}
-
-			path, _ := inputMap["path"].(string)
-			encoding, _ := inputMap["encoding"].(string)
-
-			if path == "" {
-				return nil, fmt.Errorf("path is required")
-			}
-
-			data, err := f.backend.ReadFile(toolCtx.Context, session.ContainerID, path)
-			if err != nil {
-				return nil, err
-			}
-
-			var content string
-			if encoding == "base64" {
-				content = base64.StdEncoding.EncodeToString(data)
-			} else {
-				content = string(data)
-			}
-
-			return map[string]any{
-				"path":       "/work/" + path,
-				"content":    content,
-				"size_bytes": len(data),
-			}, nil
-		},
+		toolFunc,
 	)
 }
 
-func (f *CodeModeToolFactory) createFsListTool(key SessionKey) ai.Tool {
+type SandboxFsListInput struct {
+	SandboxID string `json:"sandbox_id"`
+	Path      string `json:"path,omitempty"`
+	Recursive bool   `json:"recursive,omitempty"`
+}
+
+type SandboxFsListOutput struct {
+	Entries []FileEntry `json:"entries"`
+}
+
+func (f *CodeModeToolFactory) CreateFsListTool() ai.Tool {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"sandbox_id": map[string]any{
+				"type":        "string",
+				"description": "Sandbox session ID from sandbox_open",
+			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "Directory path relative to /work",
+				"description": "Directory path relative to /workspace (default: root)",
 				"default":     ".",
 			},
 			"recursive": map[string]any{
@@ -310,134 +454,223 @@ func (f *CodeModeToolFactory) createFsListTool(key SessionKey) ai.Tool {
 				"default":     false,
 			},
 		},
+		"required": []string{"sandbox_id"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_fs_list: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		path, _ := inputMap["path"].(string)
+		recursive, _ := inputMap["recursive"].(bool)
+
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_fs_list: sandbox_id is required")
+		}
+		if path == "" {
+			path = "."
+		}
+
+		session, err := f.sessionManager.GetSessionByID(toolCtx.Context, sandboxID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_fs_list: %w", err)
+		}
+
+		entries, err := f.sessionManager.backend.ListFiles(toolCtx.Context, session.ID, path, recursive)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_fs_list: %w", err)
+		}
+
+		return SandboxFsListOutput{Entries: entries}, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"sandbox_fs_list",
-		"List files and directories in the sandbox.",
+		"List files and directories in the sandbox workspace.",
 		schema,
-		func(toolCtx *ai.ToolContext, input any) (any, error) {
-			inputMap, _ := input.(map[string]any)
-
-			session, exists := f.manager.GetSession(key)
-			if !exists {
-				return nil, fmt.Errorf("no sandbox session open - call sandbox_open first")
-			}
-
-			path := "."
-			if p, ok := inputMap["path"].(string); ok && p != "" {
-				path = p
-			}
-
-			recursive := false
-			if r, ok := inputMap["recursive"].(bool); ok {
-				recursive = r
-			}
-
-			entries, err := f.backend.ListFiles(toolCtx.Context, session.ContainerID, path, recursive)
-			if err != nil {
-				return nil, err
-			}
-
-			result := make([]map[string]any, len(entries))
-			for i, e := range entries {
-				result[i] = map[string]any{
-					"name":       e.Name,
-					"type":       string(e.Type),
-					"size_bytes": e.SizeBytes,
-				}
-			}
-
-			return map[string]any{
-				"entries": result,
-			}, nil
-		},
+		toolFunc,
 	)
 }
 
-func (f *CodeModeToolFactory) createFsDeleteTool(key SessionKey) ai.Tool {
+type SandboxFsDeleteInput struct {
+	SandboxID string `json:"sandbox_id"`
+	Path      string `json:"path"`
+	Recursive bool   `json:"recursive,omitempty"`
+}
+
+type SandboxFsDeleteOutput struct {
+	OK      bool   `json:"ok"`
+	Deleted string `json:"deleted"`
+}
+
+func (f *CodeModeToolFactory) CreateFsDeleteTool() ai.Tool {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"sandbox_id": map[string]any{
+				"type":        "string",
+				"description": "Sandbox session ID from sandbox_open",
+			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "File or directory path relative to /work",
+				"description": "File or directory path relative to /workspace",
 			},
 			"recursive": map[string]any{
 				"type":        "boolean",
-				"description": "Delete recursively (required for directories)",
+				"description": "Delete directory recursively (required for directories)",
 				"default":     false,
 			},
 		},
-		"required": []string{"path"},
+		"required": []string{"sandbox_id", "path"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_fs_delete: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		path, _ := inputMap["path"].(string)
+		recursive, _ := inputMap["recursive"].(bool)
+
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_fs_delete: sandbox_id is required")
+		}
+		if path == "" {
+			return nil, fmt.Errorf("sandbox_fs_delete: path is required")
+		}
+
+		session, err := f.sessionManager.GetSessionByID(toolCtx.Context, sandboxID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_fs_delete: %w", err)
+		}
+
+		if err := f.sessionManager.backend.DeleteFile(toolCtx.Context, session.ID, path, recursive); err != nil {
+			return nil, fmt.Errorf("sandbox_fs_delete: %w", err)
+		}
+
+		return SandboxFsDeleteOutput{
+			OK:      true,
+			Deleted: path,
+		}, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"sandbox_fs_delete",
-		"Delete a file or directory from the sandbox.",
+		"Delete a file or directory from the sandbox workspace.",
 		schema,
-		func(toolCtx *ai.ToolContext, input any) (any, error) {
-			inputMap, ok := input.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid input")
-			}
-
-			session, exists := f.manager.GetSession(key)
-			if !exists {
-				return nil, fmt.Errorf("no sandbox session open - call sandbox_open first")
-			}
-
-			path, _ := inputMap["path"].(string)
-			if path == "" {
-				return nil, fmt.Errorf("path is required")
-			}
-
-			recursive := false
-			if r, ok := inputMap["recursive"].(bool); ok {
-				recursive = r
-			}
-
-			if err := f.backend.DeleteFile(toolCtx.Context, session.ContainerID, path, recursive); err != nil {
-				return nil, err
-			}
-
-			return map[string]any{
-				"deleted": true,
-				"path":    "/work/" + path,
-			}, nil
-		},
+		toolFunc,
 	)
 }
 
-func (f *CodeModeToolFactory) createCloseTool(key SessionKey) ai.Tool {
+type SandboxCloseInput struct {
+	SandboxID       string `json:"sandbox_id"`
+	DeleteWorkspace bool   `json:"delete_workspace,omitempty"`
+}
+
+type SandboxCloseOutput struct {
+	OK bool `json:"ok"`
+}
+
+func (f *CodeModeToolFactory) CreateCloseTool() ai.Tool {
 	schema := map[string]any{
-		"type":       "object",
-		"properties": map[string]any{},
+		"type": "object",
+		"properties": map[string]any{
+			"sandbox_id": map[string]any{
+				"type":        "string",
+				"description": "Sandbox session ID from sandbox_open",
+			},
+			"delete_workspace": map[string]any{
+				"type":        "boolean",
+				"description": "Whether to delete the workspace files (default: true)",
+				"default":     true,
+			},
+		},
+		"required": []string{"sandbox_id"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_close: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_close: sandbox_id is required")
+		}
+
+		if err := f.sessionManager.CloseSession(toolCtx.Context, sandboxID); err != nil {
+			return nil, fmt.Errorf("sandbox_close: %w", err)
+		}
+
+		return SandboxCloseOutput{OK: true}, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"sandbox_close",
-		"Explicitly close the sandbox session. Optional - sessions are automatically cleaned up when the workflow completes.",
+		"Close a sandbox session and clean up resources. Usually not needed as sessions auto-cleanup when workflow completes.",
 		schema,
-		func(toolCtx *ai.ToolContext, input any) (any, error) {
-			session, exists := f.manager.GetSession(key)
-			if !exists {
-				return map[string]any{
-					"closed":     false,
-					"session_id": "",
-					"message":    "no session was open",
-				}, nil
-			}
-
-			sessionID := session.ID
-			if err := f.manager.DestroySession(toolCtx.Context, key); err != nil {
-				return nil, err
-			}
-
-			return map[string]any{
-				"closed":     true,
-				"session_id": sessionID,
-			}, nil
-		},
+		toolFunc,
 	)
+}
+
+func (f *CodeModeToolFactory) buildSessionOptions(agentDefaults *dotprompt.SandboxConfig) SessionOptions {
+	opts := DefaultSessionOptions()
+
+	if agentDefaults == nil {
+		return opts
+	}
+
+	if agentDefaults.Image != "" {
+		opts.Image = agentDefaults.Image
+	} else if agentDefaults.Runtime != "" {
+		opts.Image = runtimeToDefaultImage(agentDefaults.Runtime)
+	}
+
+	opts.NetworkEnabled = agentDefaults.AllowNetwork
+
+	if agentDefaults.Limits != nil {
+		if agentDefaults.Limits.CPUMillicores > 0 {
+			opts.Limits.CPUMillicores = agentDefaults.Limits.CPUMillicores
+		}
+		if agentDefaults.Limits.MemoryMB > 0 {
+			opts.Limits.MemoryMB = agentDefaults.Limits.MemoryMB
+		}
+		if agentDefaults.Limits.TimeoutSeconds > 0 {
+			opts.Limits.TimeoutSeconds = agentDefaults.Limits.TimeoutSeconds
+		}
+		if agentDefaults.Limits.WorkspaceMB > 0 {
+			opts.Limits.WorkspaceMB = agentDefaults.Limits.WorkspaceMB
+		}
+	}
+
+	return opts
+}
+
+func runtimeToDefaultImage(runtime string) string {
+	switch runtime {
+	case "python":
+		return "python:3.11-slim"
+	case "node":
+		return "node:20-slim"
+	case "bash":
+		return "ubuntu:22.04"
+	default:
+		return "python:3.11-slim"
+	}
+}
+
+func (f *CodeModeToolFactory) StartCleanupRoutine(interval, idleTimeout time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			f.sessionManager.CleanupIdleSessions(nil, idleTimeout)
+		}
+	}()
 }
