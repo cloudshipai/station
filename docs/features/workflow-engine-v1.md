@@ -2,7 +2,7 @@
 
 > **Status**: Draft  
 > **Created**: 2025-12-23  
-> **Updated**: 2025-12-25  
+> **Updated**: 2025-12-26  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
 > **Current Phase**: Core Engine Complete (Phases 0-15) - UI Polish Remaining
 
@@ -2738,6 +2738,214 @@ Demonstrates:
   - Workflow runs management
   - Approvals API
   - SSE streaming for real-time updates
+
+### Phase 15.5 - Workflow Run Deletion (0.5d) ✅ COMPLETE
+
+Added bulk deletion capabilities for workflow runs via UI and API.
+
+#### 15.5.1 Features Implemented
+
+- [x] **Backend API**: `DELETE /api/v1/workflow-runs` endpoint
+- [x] **Repository Methods**: `DeleteByIDs()`, `DeleteByStatus()`, `DeleteByWorkflowID()`, `DeleteAll()`
+- [x] **Service Layer**: `WorkflowService.DeleteRuns()` with bulk operation support
+- [x] **Frontend API Client**: `workflowsApi.deleteRuns()` in `station.ts`
+- [x] **UI Components**: Multi-select checkboxes, delete buttons, confirmation modal
+
+#### 15.5.2 API Specification
+
+**Endpoint**: `DELETE /api/v1/workflow-runs`
+
+**Request Body** (JSON):
+```json
+{
+  "runIds": ["uuid1", "uuid2"],     // Delete specific runs by ID
+  "workflowId": "my-workflow",      // Delete all runs for a workflow
+  "status": "failed",               // Delete all runs with this status
+  "all": true                       // Delete ALL runs (use with caution)
+}
+```
+
+**Priority**: `all` > `status` > `workflowId` > `runIds`
+
+**Response**:
+```json
+{
+  "deleted": 68,
+  "message": "Workflow runs deleted"
+}
+```
+
+#### 15.5.3 UI Features
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-select** | Checkbox per row, select all toggle |
+| **Delete Selected** | Delete only selected runs |
+| **Delete Filtered** | Delete all runs matching current status/workflow filter |
+| **Delete All** | Delete all runs (requires confirmation) |
+| **Confirmation Modal** | Shows count and filter details before deletion |
+
+#### 15.5.4 Files Modified
+
+| File | Changes |
+|------|---------|
+| `internal/api/v1/workflow_runs.go` | Added `deleteWorkflowRuns` handler, `deleteWorkflowRunsRequest` struct |
+| `internal/services/workflow_service.go` | Added `DeleteRuns()` method with `DeleteRunsRequest` struct |
+| `internal/db/queries/workflow_runs.sql` | Added deletion queries by IDs, status, workflow_id, all |
+| `internal/db/repositories/workflows.go` | Added `DeleteByIDs()`, `DeleteByStatus()`, `DeleteByWorkflowID()`, `DeleteAll()` |
+| `ui/src/api/station.ts` | Added `workflowsApi.deleteRuns()` |
+| `ui/src/components/workflows/WorkflowsPage.tsx` | Added selection state, delete buttons, confirmation modal |
+
+---
+
+### Phase 16 - Approval Webhook Notifications (1d) 🚧 IN PROGRESS
+
+Enable external notification when workflow approval is required. Essential for headless/production deployments where users aren't watching the UI.
+
+#### 16.1 Problem Statement
+
+When a workflow reaches a `human_approval` step:
+- In **UI mode**: Users can see pending approvals in the Workflows page
+- In **headless mode**: No notification mechanism exists - users don't know approval is needed
+
+This blocks production adoption of approval-gated workflows.
+
+#### 16.2 Solution: Webhook Notifications
+
+Add a configurable webhook that fires when approvals are created. Users point it at their notification system (Slack, PagerDuty, Discord, custom endpoint).
+
+**Configuration** (`config.yaml`):
+```yaml
+notifications:
+  approval_webhook_url: "https://hooks.slack.com/services/xxx/yyy/zzz"
+  approval_webhook_timeout: 10  # seconds, default: 10
+```
+
+**Environment Variable**:
+```bash
+STN_APPROVAL_WEBHOOK_URL=https://hooks.slack.com/services/xxx
+```
+
+**Webhook Payload** (HTTP POST, JSON):
+```json
+{
+  "event": "approval.requested",
+  "approval_id": "appr-abc123-step1",
+  "workflow_id": "security-review",
+  "workflow_name": "Security Review Pipeline",
+  "run_id": "abc123",
+  "step_name": "request_approval",
+  "message": "Approve deployment to production?",
+  "approvers": ["team:platform", "user:alice@example.com"],
+  "timeout_seconds": 3600,
+  "created_at": "2025-12-26T12:00:00Z",
+  "approve_url": "http://localhost:8587/workflow-approvals/appr-abc123-step1/approve",
+  "reject_url": "http://localhost:8587/workflow-approvals/appr-abc123-step1/reject",
+  "view_url": "http://localhost:8585/workflows/security-review?run=abc123"
+}
+```
+
+> **Note**: Approve/reject URLs use port **8587** (Dynamic Agent MCP - public API), not 8585 (internal dev API).
+
+#### 16.3 Implementation Tasks
+
+**Config Layer**:
+- [ ] Add `NotificationsConfig` struct to `internal/config/config.go`
+- [ ] Add `Notifications` field to main `Config` struct
+- [ ] Bind env var `STN_APPROVAL_WEBHOOK_URL`
+- [ ] Add default timeout of 10 seconds
+
+**Notification Service**:
+- [ ] Create `internal/notifications/webhook.go`
+- [ ] Implement `WebhookNotifier` with HTTP POST logic
+- [ ] Add retry logic (3 attempts with exponential backoff)
+- [ ] Log webhook failures (don't block workflow execution)
+
+**Approval Executor Integration**:
+- [ ] Inject `WebhookNotifier` into `HumanApprovalExecutor`
+- [ ] Fire webhook after successful `CreateApproval` call
+- [ ] Construct payload with all required fields
+- [ ] Make async (don't block workflow execution on webhook)
+
+**Public API Exposure** (Port 8587 - Dynamic Agent MCP):
+- [ ] Add `SetWorkflowService()` to `DynamicAgentServer` struct
+- [ ] Add `POST /workflow-approvals/:id/approve` handler
+- [ ] Add `POST /workflow-approvals/:id/reject` handler  
+- [ ] Add `GET /workflow-approvals/:id` handler (get approval status)
+- [ ] Reuse existing auth (local mode, static API key, or OAuth)
+- [ ] Wire up in `cmd/main/server.go`
+- [ ] Document public endpoints in API reference
+
+**Audit Logging**:
+- [ ] Create `workflow_notification_logs` table in SQLite
+- [ ] Log every webhook send attempt (approval_id, url, status_code, response_time, error)
+- [ ] Log every approve/reject action via public API (approval_id, actor, source: webhook|cli|ui)
+- [ ] Add `GET /workflow-approvals/:id/audit` endpoint to retrieve audit trail
+- [ ] Expose audit log in Workflows UI (approval detail view)
+
+**CLI Commands**:
+- [ ] Add `stn workflow approvals list` - list pending approvals
+- [ ] Add `stn workflow approvals approve <id>` - approve via CLI
+- [ ] Add `stn workflow approvals reject <id> --reason "..."` - reject via CLI
+
+#### 16.4 Files to Create/Modify
+
+| File | Changes |
+|------|---------|
+| `internal/config/config.go` | Add `NotificationsConfig` struct |
+| `internal/notifications/webhook.go` | New file - webhook HTTP client with audit logging |
+| `internal/notifications/audit.go` | New file - audit log service |
+| `internal/workflows/runtime/executor.go` | Inject notifier, fire after CreateApproval |
+| `internal/mcp_agents/server.go` | Add approval endpoints on public API (8587) |
+| `internal/db/queries/notification_logs.sql` | New file - audit log table + queries |
+| `cmd/main/server.go` | Wire workflow service to DynamicAgentServer |
+| `cmd/main/workflow.go` | Add approvals subcommands |
+| `docs/station/workflows.md` | Document webhook configuration |
+
+#### 16.5 Audit Log Schema
+
+```sql
+CREATE TABLE workflow_notification_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    approval_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,  -- 'webhook_sent', 'webhook_failed', 'approved', 'rejected'
+    actor TEXT,                -- user/system that triggered the action
+    source TEXT,               -- 'webhook', 'cli', 'ui', 'api'
+    webhook_url TEXT,          -- for webhook events
+    status_code INTEGER,       -- HTTP status code for webhook
+    response_time_ms INTEGER,  -- webhook response time
+    error TEXT,                -- error message if failed
+    metadata TEXT,             -- JSON blob for additional context
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_notification_logs_approval ON workflow_notification_logs(approval_id);
+CREATE INDEX idx_notification_logs_event ON workflow_notification_logs(event_type);
+```
+
+#### 16.6 Integration with CloudShip (Future)
+
+CloudShip integration will provide:
+- Native in-app notifications (Inertia toast/modal)
+- Slack bot integration via CloudShip
+- Email notifications via CloudShip
+- Mobile push notifications
+
+For now, webhook provides open-source flexibility.
+
+#### 16.7 Test Plan
+
+| Test | Description |
+|------|-------------|
+| `TestWebhook_SuccessfulDelivery` | Webhook fires, receives 200, logs success |
+| `TestWebhook_RetryOnFailure` | Webhook returns 500, retries 3 times |
+| `TestWebhook_Timeout` | Webhook hangs, times out after 10s |
+| `TestWebhook_Disabled` | No URL configured, no webhook fired |
+| `TestWebhook_PayloadFormat` | Verify JSON payload matches spec |
+| `TestCLI_ApprovalsListEmpty` | No pending approvals, clean output |
+| `TestCLI_ApprovalsListPending` | Shows pending approvals with details |
+| `TestCLI_ApprovalApprove` | Successfully approves, workflow resumes |
+| `TestCLI_ApprovalReject` | Successfully rejects, workflow fails |
 
 ---
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
+import yaml from 'js-yaml';
 import { WorkflowFlowPanel } from './WorkflowFlowPanel';
 import { 
   GitBranch, 
@@ -549,11 +550,16 @@ export const WorkflowDetailPage: React.FC = () => {
                                     <div className="text-sm font-semibold text-gray-900">{agentName}</div>
                                   </div>
                                 </div>
-                                {agentId && (
+                                {(step.output?.agent_run_id || agentId) && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      navigate(`/runs?agent_id=${agentId}`);
+                                      const runId = step.output?.agent_run_id;
+                                      if (runId) {
+                                        navigate(`/runs?run_id=${runId}`);
+                                      } else {
+                                        navigate(`/runs?agent_id=${agentId}`);
+                                      }
                                     }}
                                     className="flex items-center gap-1 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors"
                                   >
@@ -652,9 +658,21 @@ export const WorkflowDetailPage: React.FC = () => {
           <div className="p-4 border-b border-gray-200 bg-gray-50">
             <h3 className="font-medium text-gray-900">Workflow Definition (v{workflow.version})</h3>
           </div>
-          <pre className="p-4 bg-gray-900 text-gray-100 overflow-auto text-sm max-h-[600px]">
-            <code>{JSON.stringify(workflow.definition, null, 2)}</code>
-          </pre>
+          <div className="h-[600px]">
+            <Editor
+              height="100%"
+              defaultLanguage="yaml"
+              value={yaml.dump(workflow.definition, { indent: 2, lineWidth: -1, noRefs: true })}
+              options={{
+                readOnly: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                fontSize: 13,
+                lineNumbers: 'on',
+                theme: 'vs-dark',
+              }}
+            />
+          </div>
         </div>
       </div>
     );

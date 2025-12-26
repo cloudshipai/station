@@ -231,6 +231,33 @@ func (r *WorkflowRunRepo) List(ctx context.Context, workflowID, status string, l
 	return result, nil
 }
 
+func (r *WorkflowRunRepo) Count(ctx context.Context) (int64, error) {
+	return r.queries.CountWorkflowRuns(ctx)
+}
+
+func (r *WorkflowRunRepo) Delete(ctx context.Context, runID string) error {
+	return r.queries.DeleteWorkflowRun(ctx, runID)
+}
+
+func (r *WorkflowRunRepo) DeleteByIDs(ctx context.Context, runIDs []string) error {
+	if len(runIDs) == 0 {
+		return nil
+	}
+	return r.queries.DeleteWorkflowRunsByIDs(ctx, runIDs)
+}
+
+func (r *WorkflowRunRepo) DeleteByStatus(ctx context.Context, status string) error {
+	return r.queries.DeleteWorkflowRunsByStatus(ctx, status)
+}
+
+func (r *WorkflowRunRepo) DeleteByWorkflowID(ctx context.Context, workflowID string) error {
+	return r.queries.DeleteWorkflowRunsByWorkflowID(ctx, workflowID)
+}
+
+func (r *WorkflowRunRepo) DeleteAll(ctx context.Context) error {
+	return r.queries.DeleteAllWorkflowRuns(ctx)
+}
+
 func convertWorkflowRun(row queries.WorkflowRun) *models.WorkflowRun {
 	var currentStep *string
 	if row.CurrentStep.Valid {

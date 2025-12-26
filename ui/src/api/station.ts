@@ -300,6 +300,10 @@ export const workflowsApi = {
   
   reject: (approvalId: string, reason?: string) =>
     apiClient.post<{ approval: WorkflowApproval; message: string }>(`/workflow-approvals/${approvalId}/reject`, { reason }),
+
+  // Workflow Run Deletion
+  deleteRuns: (params: { runIds?: string[]; status?: string; workflowId?: string; all?: boolean }) =>
+    apiClient.delete<{ deleted: number; message: string }>('/workflow-runs', { data: params }),
 };
 
 // Reports API

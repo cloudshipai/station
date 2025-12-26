@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"station/internal/notifications"
 	"station/internal/workflows"
 )
 
@@ -328,11 +330,16 @@ type ApprovalInfo struct {
 }
 
 type HumanApprovalExecutor struct {
-	deps ApprovalExecutorDeps
+	deps     ApprovalExecutorDeps
+	notifier *notifications.WebhookNotifier
 }
 
 func NewHumanApprovalExecutor(deps ApprovalExecutorDeps) *HumanApprovalExecutor {
 	return &HumanApprovalExecutor{deps: deps}
+}
+
+func (e *HumanApprovalExecutor) SetNotifier(n *notifications.WebhookNotifier) {
+	e.notifier = n
 }
 
 func (e *HumanApprovalExecutor) SupportedTypes() []workflows.ExecutionStepType {
@@ -397,8 +404,6 @@ func (e *HumanApprovalExecutor) Execute(ctx context.Context, step workflows.Exec
 
 	approval, err := e.deps.CreateApproval(ctx, params)
 	if err != nil {
-		// Idempotent recovery: if approval already exists (UNIQUE constraint), return waiting status
-		// This handles re-processing of pending runs that already created their approval
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			existingApproval, getErr := e.deps.GetApproval(ctx, approvalID)
 			if getErr == nil {
@@ -421,6 +426,35 @@ func (e *HumanApprovalExecutor) Execute(ctx context.Context, step workflows.Exec
 			Status: StepStatusFailed,
 			Error:  &errStr,
 		}, fmt.Errorf("%w: %v", ErrApprovalCreateFail, err)
+	}
+
+	if e.notifier != nil && e.notifier.IsEnabled() {
+		workflowID, _ := runContext["_workflowID"].(string)
+		workflowName, _ := runContext["_workflowName"].(string)
+		if workflowName == "" {
+			workflowName = workflowID
+		}
+
+		go func() {
+			webhookCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			payload := notifications.ApprovalWebhookPayload{
+				ApprovalID:     approval.ID,
+				WorkflowID:     workflowID,
+				WorkflowName:   workflowName,
+				RunID:          runID,
+				StepName:       step.ID,
+				Message:        message,
+				Approvers:      approvers,
+				TimeoutSeconds: int(timeoutSecs),
+				CreatedAt:      time.Now().UTC().Format(time.RFC3339),
+			}
+
+			if err := e.notifier.NotifyApprovalRequired(webhookCtx, payload); err != nil {
+				fmt.Printf("[HumanApprovalExecutor] Webhook notification failed: %v\n", err)
+			}
+		}()
 	}
 
 	return StepResult{

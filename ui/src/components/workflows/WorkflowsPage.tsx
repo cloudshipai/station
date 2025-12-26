@@ -15,13 +15,17 @@ import {
   MoreVertical,
   Eye,
   Trash2,
-  Settings
+  Settings,
+  Square,
+  CheckSquare,
+  X
 } from 'lucide-react';
 import { workflowsApi } from '../../api/station';
 import type { WorkflowDefinition, WorkflowRun } from '../../types/station';
 
 type TabType = 'definitions' | 'runs';
 type StatusFilter = '' | 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'waiting_approval';
+type DeleteMode = 'selected' | 'filtered' | 'all' | null;
 
 const statusColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
   pending: { bg: 'bg-gray-100', text: 'text-gray-700', icon: <Clock className="h-3 w-3" /> },
@@ -41,6 +45,9 @@ export const WorkflowsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [selectedWorkflowFilter, setSelectedWorkflowFilter] = useState<string>('');
+  const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
+  const [deleteMode, setDeleteMode] = useState<DeleteMode>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchWorkflows = useCallback(async () => {
     try {
@@ -94,6 +101,73 @@ export const WorkflowsPage: React.FC = () => {
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
     return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  };
+
+  const toggleRunSelection = (runId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedRunIds(prev => {
+      const next = new Set(prev);
+      if (next.has(runId)) {
+        next.delete(runId);
+      } else {
+        next.add(runId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRunIds.size === runs.length) {
+      setSelectedRunIds(new Set());
+    } else {
+      setSelectedRunIds(new Set(runs.map(r => r.run_id)));
+    }
+  };
+
+  const handleDeleteRuns = async () => {
+    if (!deleteMode) return;
+    
+    setDeleting(true);
+    try {
+      let params: { runIds?: string[]; status?: string; workflowId?: string; all?: boolean } = {};
+      
+      if (deleteMode === 'selected') {
+        params.runIds = Array.from(selectedRunIds);
+      } else if (deleteMode === 'filtered') {
+        if (statusFilter) params.status = statusFilter;
+        if (selectedWorkflowFilter) params.workflowId = selectedWorkflowFilter;
+        if (!statusFilter && !selectedWorkflowFilter) params.all = true;
+      } else if (deleteMode === 'all') {
+        params.all = true;
+      }
+      
+      const response = await workflowsApi.deleteRuns(params);
+      console.log(`Deleted ${response.data.deleted} runs`);
+      
+      setSelectedRunIds(new Set());
+      setDeleteMode(null);
+      await fetchRuns();
+    } catch (error) {
+      console.error('Failed to delete runs:', error);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const getDeleteConfirmMessage = (): string => {
+    if (deleteMode === 'selected') {
+      return `Delete ${selectedRunIds.size} selected run${selectedRunIds.size !== 1 ? 's' : ''}?`;
+    } else if (deleteMode === 'filtered') {
+      const filters: string[] = [];
+      if (statusFilter) filters.push(`status: ${statusFilter}`);
+      if (selectedWorkflowFilter) filters.push(`workflow: ${selectedWorkflowFilter}`);
+      return filters.length > 0
+        ? `Delete all ${runs.length} runs matching ${filters.join(', ')}?`
+        : `Delete all ${runs.length} runs?`;
+    } else if (deleteMode === 'all') {
+      return `Delete ALL workflow runs? This cannot be undone.`;
+    }
+    return '';
   };
 
   const renderDefinitionsTab = () => (
@@ -167,35 +241,64 @@ export const WorkflowsPage: React.FC = () => {
 
   const renderRunsTab = () => (
     <div className="p-4">
-      <div className="flex items-center gap-4 mb-4">
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-gray-500" />
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-500" />
+            <select
+              value={selectedWorkflowFilter}
+              onChange={(e) => setSelectedWorkflowFilter(e.target.value)}
+              className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Workflows</option>
+              {workflows.map((w) => (
+                <option key={w.workflow_id} value={w.workflow_id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
           <select
-            value={selectedWorkflowFilter}
-            onChange={(e) => setSelectedWorkflowFilter(e.target.value)}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Workflows</option>
-            {workflows.map((w) => (
-              <option key={w.workflow_id} value={w.workflow_id}>{w.name}</option>
-            ))}
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="running">Running</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="paused">Paused</option>
+            <option value="waiting_approval">Waiting Approval</option>
           </select>
+          <span className="text-sm text-gray-500">{runs.length} runs</span>
+          {selectedRunIds.size > 0 && (
+            <span className="text-sm text-blue-600 font-medium">
+              {selectedRunIds.size} selected
+            </span>
+          )}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="running">Running</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-          <option value="cancelled">Cancelled</option>
-          <option value="paused">Paused</option>
-          <option value="waiting_approval">Waiting Approval</option>
-        </select>
-        <span className="text-sm text-gray-500">{runs.length} runs</span>
+
+        {runs.length > 0 && (
+          <div className="flex items-center gap-2">
+            {selectedRunIds.size > 0 && (
+              <button
+                onClick={() => setDeleteMode('selected')}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete Selected
+              </button>
+            )}
+            <button
+              onClick={() => setDeleteMode('filtered')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+              title={statusFilter || selectedWorkflowFilter ? 'Delete runs matching current filters' : 'Delete all runs'}
+            >
+              <Trash2 className="h-4 w-4" />
+              {statusFilter || selectedWorkflowFilter ? 'Delete Filtered' : 'Delete All'}
+            </button>
+          </div>
+        )}
       </div>
 
       {runs.length === 0 ? (
@@ -208,18 +311,49 @@ export const WorkflowsPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <button
+              onClick={toggleSelectAll}
+              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              title={selectedRunIds.size === runs.length ? 'Deselect all' : 'Select all'}
+            >
+              {selectedRunIds.size === runs.length ? (
+                <CheckSquare className="h-5 w-5 text-blue-600" />
+              ) : selectedRunIds.size > 0 ? (
+                <CheckSquare className="h-5 w-5 text-blue-400" />
+              ) : (
+                <Square className="h-5 w-5" />
+              )}
+            </button>
+            <span className="text-xs text-gray-500">
+              {selectedRunIds.size === runs.length ? 'Deselect all' : 'Select all'}
+            </span>
+          </div>
           {runs.map((run) => {
             const status = statusColors[run.status] || statusColors.pending;
             const workflow = workflows.find(w => w.workflow_id === run.workflow_id);
+            const isSelected = selectedRunIds.has(run.run_id);
             
             return (
               <div
                 key={run.run_id}
                 onClick={() => navigate(`/workflows/${run.workflow_id}?run=${run.run_id}`)}
-                className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
+                className={`bg-white border rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer ${
+                  isSelected ? 'border-blue-400 bg-blue-50/30' : 'border-gray-200'
+                }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
+                    <button
+                      onClick={(e) => toggleRunSelection(run.run_id, e)}
+                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="h-5 w-5 text-blue-600" />
+                      ) : (
+                        <Square className="h-5 w-5" />
+                      )}
+                    </button>
                     <div className={`p-2 rounded-lg ${status.bg}`}>
                       {status.icon}
                     </div>
@@ -250,12 +384,12 @@ export const WorkflowsPage: React.FC = () => {
                   </div>
                 </div>
                 {run.current_state && (
-                  <div className="mt-2 text-sm text-gray-500">
+                  <div className="mt-2 text-sm text-gray-500 ml-12">
                     Current state: <span className="font-mono text-gray-700">{run.current_state}</span>
                   </div>
                 )}
                 {run.error && (
-                  <div className="mt-2 text-sm text-red-600 bg-red-50 rounded p-2">
+                  <div className="mt-2 text-sm text-red-600 bg-red-50 rounded p-2 ml-12">
                     {run.error}
                   </div>
                 )}
@@ -323,6 +457,61 @@ export const WorkflowsPage: React.FC = () => {
           activeTab === 'definitions' ? renderDefinitionsTab() : renderRunsTab()
         )}
       </div>
+
+      {deleteMode && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Confirm Delete</h3>
+              <button
+                onClick={() => setDeleteMode(null)}
+                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 py-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-red-100 rounded-full">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-gray-900 font-medium">{getDeleteConfirmMessage()}</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    This action cannot be undone. All associated step data will also be deleted.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50">
+              <button
+                onClick={() => setDeleteMode(null)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteRuns}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -59,3 +59,21 @@ SET
     updated_at = CURRENT_TIMESTAMP,
     completed_at = COALESCE(sqlc.narg(completed_at), completed_at)
 WHERE run_id = sqlc.arg(run_id);
+
+-- name: DeleteWorkflowRun :exec
+DELETE FROM workflow_runs WHERE run_id = sqlc.arg(run_id);
+
+-- name: DeleteWorkflowRunsByIDs :exec
+DELETE FROM workflow_runs WHERE run_id IN (sqlc.slice(run_ids));
+
+-- name: DeleteWorkflowRunsByStatus :exec
+DELETE FROM workflow_runs WHERE status = sqlc.arg(status);
+
+-- name: DeleteWorkflowRunsByWorkflowID :exec
+DELETE FROM workflow_runs WHERE workflow_id = sqlc.arg(workflow_id);
+
+-- name: DeleteAllWorkflowRuns :exec
+DELETE FROM workflow_runs;
+
+-- name: CountWorkflowRuns :one
+SELECT COUNT(*) FROM workflow_runs;

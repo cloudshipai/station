@@ -47,9 +47,17 @@ type rejectWorkflowStepRequest struct {
 	Reason string `json:"reason"`
 }
 
+type deleteWorkflowRunsRequest struct {
+	RunIDs     []string `json:"runIds"`
+	WorkflowID string   `json:"workflowId"`
+	Status     string   `json:"status"`
+	All        bool     `json:"all"`
+}
+
 func (h *APIHandlers) registerWorkflowRunRoutes(group *gin.RouterGroup) {
 	group.POST("", h.startWorkflowRun)
 	group.GET("", h.listWorkflowRuns)
+	group.DELETE("", h.deleteWorkflowRuns)
 	group.GET("/:runId", h.getWorkflowRun)
 	group.GET("/:runId/stream", h.streamWorkflowRun)
 	group.GET("/:runId/steps", h.listWorkflowRunSteps)
@@ -192,6 +200,35 @@ func (h *APIHandlers) listWorkflowRuns(c *gin.Context) {
 		"count":   len(runs),
 		"limit":   limit,
 		"filters": gin.H{"workflowId": workflowID, "status": status},
+	})
+}
+
+func (h *APIHandlers) deleteWorkflowRuns(c *gin.Context) {
+	var req deleteWorkflowRunsRequest
+	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid delete payload"})
+		return
+	}
+
+	if !req.All && len(req.RunIDs) == 0 && req.WorkflowID == "" && req.Status == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Must specify runIds, workflowId, status, or all=true"})
+		return
+	}
+
+	deleted, err := h.workflowService.DeleteRuns(c.Request.Context(), services.DeleteRunsRequest{
+		RunIDs:     req.RunIDs,
+		WorkflowID: req.WorkflowID,
+		Status:     req.Status,
+		All:        req.All,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete workflow runs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deleted": deleted,
+		"message": "Workflow runs deleted",
 	})
 }
 
