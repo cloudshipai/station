@@ -663,13 +663,70 @@ func (a *cliAgentExecutorAdapter) GetEnvironmentIDByName(ctx context.Context, na
 }
 
 func (a *cliAgentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {
-	result, err := a.agentService.ExecuteAgent(ctx, agentID, task, variables)
+	userID := int64(1)
+
+	agentRun, err := a.repos.AgentRuns.Create(ctx, agentID, userID, task, "", 0, nil, nil, "running", nil)
 	if err != nil {
+		log.Printf("❌ Workflow agent step: Failed to create agent run: %v", err)
 		return runtime.AgentExecutionResult{}, err
 	}
+
+	result, err := a.agentService.ExecuteAgentWithRunID(ctx, agentID, task, agentRun.ID, variables)
+	if err != nil {
+		log.Printf("❌ Workflow agent step: Execution failed for run %d: %v", agentRun.ID, err)
+		completedAt := time.Now()
+		errorMsg := err.Error()
+		a.repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx, agentRun.ID, errorMsg, 0, nil, nil, "failed", &completedAt,
+			nil, nil, nil, nil, nil, nil, &errorMsg,
+		)
+		return runtime.AgentExecutionResult{}, err
+	}
+
+	log.Printf("✅ Workflow agent step: Completed run %d for agent %d", agentRun.ID, agentID)
+
+	completedAt := time.Now()
+	var inputTokens, outputTokens, totalTokens *int64
+	var durationSeconds *float64
+	var modelName *string
+	var stepsTaken int64
+
+	if result.Extra != nil {
+		if tokenUsage, ok := result.Extra["token_usage"].(map[string]interface{}); ok {
+			if val, ok := tokenUsage["input_tokens"].(float64); ok {
+				v := int64(val)
+				inputTokens = &v
+			}
+			if val, ok := tokenUsage["output_tokens"].(float64); ok {
+				v := int64(val)
+				outputTokens = &v
+			}
+			if val, ok := tokenUsage["total_tokens"].(float64); ok {
+				v := int64(val)
+				totalTokens = &v
+			}
+		}
+		if dur, ok := result.Extra["duration_seconds"].(float64); ok {
+			durationSeconds = &dur
+		}
+		if model, ok := result.Extra["model_name"].(string); ok {
+			modelName = &model
+		}
+		if steps, ok := result.Extra["steps_taken"].(int64); ok {
+			stepsTaken = steps
+		} else if steps, ok := result.Extra["steps_taken"].(float64); ok {
+			stepsTaken = int64(steps)
+		}
+	}
+
+	a.repos.AgentRuns.UpdateCompletionWithMetadata(
+		ctx, agentRun.ID, result.Content, stepsTaken, nil, nil, "completed", &completedAt,
+		inputTokens, outputTokens, totalTokens, durationSeconds, modelName, nil, nil,
+	)
+
 	return runtime.AgentExecutionResult{
 		Response:  result.Content,
-		StepCount: 0,
+		StepCount: stepsTaken,
 		ToolsUsed: 0,
 	}, nil
 }

@@ -185,6 +185,10 @@ func ValidateDefinition(raw json.RawMessage) (*Definition, ValidationResult, err
 	}
 	def.Start = startID
 
+	starlarkValidator := NewStarlarkValidator()
+	starlarkIssues := starlarkValidator.ValidateWorkflowExpressions(&def)
+	result.Errors = append(result.Errors, starlarkIssues...)
+
 	if len(result.Errors) > 0 {
 		return &def, result, ErrValidation
 	}
