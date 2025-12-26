@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"station/internal/config"
 	"station/internal/db"
@@ -69,6 +72,14 @@ var (
 		Long:  "Evaluate a Starlark expression against an optional JSON context. Useful for testing switch conditions and transforms.",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runWorkflowDebugExpression,
+	}
+
+	workflowExportCmd = &cobra.Command{
+		Use:   "export <workflow-id>",
+		Short: "Export workflow to YAML file",
+		Long:  "Export a workflow from the database to a YAML file in the environment's workflows directory. This enables the workflow to be included in bundles.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runWorkflowExport,
 	}
 )
 
@@ -578,6 +589,66 @@ func getStatusIcon(status string) string {
 	default:
 		return "❓"
 	}
+}
+
+func runWorkflowExport(cmd *cobra.Command, args []string) error {
+	workflowID := args[0]
+	version, _ := cmd.Flags().GetInt64("version")
+	envName, _ := cmd.Flags().GetString("environment")
+	outputPath, _ := cmd.Flags().GetString("output")
+
+	if envName == "" {
+		envName = "default"
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	repos := repositories.New(database)
+	workflowService := services.NewWorkflowService(repos)
+
+	ctx := context.Background()
+	wf, err := workflowService.GetWorkflow(ctx, workflowID, version)
+	if err != nil {
+		return fmt.Errorf("workflow not found: %w", err)
+	}
+
+	var defMap map[string]interface{}
+	if err := json.Unmarshal(wf.Definition, &defMap); err != nil {
+		return fmt.Errorf("failed to parse workflow definition: %w", err)
+	}
+
+	yamlBytes, err := yaml.Marshal(defMap)
+	if err != nil {
+		return fmt.Errorf("failed to convert to YAML: %w", err)
+	}
+
+	if outputPath == "" {
+		outputPath = config.GetWorkflowFilePath(envName, workflowID)
+	}
+
+	workflowsDir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create workflows directory: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, yamlBytes, 0644); err != nil {
+		return fmt.Errorf("failed to write workflow file: %w", err)
+	}
+
+	fmt.Printf("✅ Exported workflow '%s' (v%d) to:\n", wf.WorkflowID, wf.Version)
+	fmt.Printf("   %s\n", outputPath)
+	fmt.Printf("\n💡 This workflow will now be included in 'stn bundle' for environment '%s'\n", envName)
+
+	return nil
 }
 
 func startCLIWorkflowConsumer(ctx context.Context, repos *repositories.Repositories, engine *runtime.NATSEngine, agentService services.AgentServiceInterface) *runtime.WorkflowConsumer {
