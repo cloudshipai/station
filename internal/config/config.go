@@ -37,6 +37,8 @@ type Config struct {
 	Telemetry TelemetryConfig
 	// Webhook Configuration
 	Webhook WebhookConfig
+	// Notifications Configuration (outbound webhooks for approvals, etc.)
+	Notifications NotificationsConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
@@ -88,6 +90,12 @@ type OAuthConfig struct {
 type WebhookConfig struct {
 	Enabled bool   `yaml:"enabled"` // Enable the /execute webhook endpoint (default: true)
 	APIKey  string `yaml:"api_key"` // Static API key for webhook auth (optional, overrides user API keys)
+}
+
+// NotificationsConfig holds settings for outbound notifications (webhooks for approvals, etc.)
+type NotificationsConfig struct {
+	ApprovalWebhookURL     string `yaml:"approval_webhook_url"`     // URL to POST when approval is needed
+	ApprovalWebhookTimeout int    `yaml:"approval_webhook_timeout"` // Timeout in seconds (default: 10)
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -232,6 +240,10 @@ func bindEnvVars() {
 	viper.BindEnv("webhook.enabled", "STN_WEBHOOK_ENABLED")
 	viper.BindEnv("webhook.api_key", "STN_WEBHOOK_API_KEY")
 
+	// Notifications config (outbound webhooks for approvals)
+	viper.BindEnv("notifications.approval_webhook_url", "STN_APPROVAL_WEBHOOK_URL")
+	viper.BindEnv("notifications.approval_webhook_timeout", "STN_APPROVAL_WEBHOOK_TIMEOUT")
+
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
 	viper.BindEnv("telemetry.enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -299,6 +311,11 @@ func Load() (*Config, error) {
 		Webhook: WebhookConfig{
 			Enabled: getEnvBoolOrDefault("STN_WEBHOOK_ENABLED", true), // Default enabled
 			APIKey:  getEnvOrDefault("STN_WEBHOOK_API_KEY", ""),       // Optional static API key
+		},
+		// Notifications Configuration - outbound webhooks for approvals
+		Notifications: NotificationsConfig{
+			ApprovalWebhookURL:     getEnvOrDefault("STN_APPROVAL_WEBHOOK_URL", ""),
+			ApprovalWebhookTimeout: getEnvIntOrDefault("STN_APPROVAL_WEBHOOK_TIMEOUT", 10),
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,

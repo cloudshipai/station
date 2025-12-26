@@ -11,6 +11,7 @@ import (
 	"station/internal/auth"
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/notifications"
 	"station/internal/services"
 	"station/internal/telemetry"
 	"station/internal/workflows"
@@ -136,7 +137,13 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 	registry.Register(runtime.NewInjectExecutor())
 	registry.Register(runtime.NewSwitchExecutor())
 	registry.Register(runtime.NewAgentRunExecutor(&agentExecutorAdapter{agentService: agentService, repos: repos}))
-	registry.Register(runtime.NewHumanApprovalExecutor(&approvalExecutorAdapter{repos: repos}))
+
+	approvalExecutor := runtime.NewHumanApprovalExecutor(&approvalExecutorAdapter{repos: repos})
+	if h.cfg != nil {
+		notifier := notifications.NewWebhookNotifier(h.cfg)
+		approvalExecutor.SetNotifier(notifier)
+	}
+	registry.Register(approvalExecutor)
 	registry.Register(runtime.NewCustomExecutor(nil))
 	registry.Register(runtime.NewCronExecutor())
 	registry.Register(runtime.NewTimerExecutor())

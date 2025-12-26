@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Play, BarChart3, List, GitBranch, HelpCircle, Clock, Zap, DollarSign, Activity, Filter, Trash2, X, AlertTriangle } from 'lucide-react';
 import { RunsList } from './RunsList';
 import { Pagination } from './Pagination';
@@ -34,11 +35,13 @@ interface RunsPageProps {
 }
 
 export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [runs, setRuns] = useState<Run[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'timeline' | 'stats'>('timeline');
   const [currentPage, setCurrentPage] = useState(1);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
+  const [agentIdFilter, setAgentIdFilter] = useState<number | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [selectedRuns, setSelectedRuns] = useState<Set<number>>(new Set());
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -46,12 +49,36 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
   const [isDeleting, setIsDeleting] = useState(false);
   const runsPerPage = 20;
 
-  // Fetch runs with optional status filter
+  useEffect(() => {
+    const runIdParam = searchParams.get('run_id');
+    const agentIdParam = searchParams.get('agent_id');
+    
+    if (runIdParam || agentIdParam) {
+      setActiveTab('list');
+    }
+    
+    if (agentIdParam) {
+      setAgentIdFilter(parseInt(agentIdParam, 10));
+    }
+    
+    if (runIdParam) {
+      const runId = parseInt(runIdParam, 10);
+      if (!isNaN(runId)) {
+        onRunClick(runId);
+        searchParams.delete('run_id');
+        setSearchParams(searchParams, { replace: true });
+      }
+    }
+  }, [searchParams, setSearchParams, onRunClick]);
+
   const fetchRuns = useCallback(async () => {
     try {
-      const params: { status?: string; limit?: number } = { limit: 500 };
+      const params: { status?: string; limit?: number; agent_id?: number } = { limit: 500 };
       if (statusFilter) {
         params.status = statusFilter;
+      }
+      if (agentIdFilter) {
+        params.agent_id = agentIdFilter;
       }
       const response = await agentRunsApi.getAll(params);
       setRuns(response.data.runs || []);
@@ -59,7 +86,7 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
     } catch (error) {
       console.error('Failed to fetch runs:', error);
     }
-  }, [statusFilter]);
+  }, [statusFilter, agentIdFilter]);
 
   useEffect(() => {
     fetchRuns();
@@ -207,6 +234,23 @@ export const RunsPage: React.FC<RunsPageProps> = ({ onRunClick, refreshTrigger }
                     </button>
                   )}
                 </div>
+
+                {/* Agent Filter Badge */}
+                {agentIdFilter && (
+                  <div className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md text-sm border border-blue-200">
+                    <span>Agent ID: {agentIdFilter}</span>
+                    <button
+                      onClick={() => {
+                        setAgentIdFilter(null);
+                        searchParams.delete('agent_id');
+                        setSearchParams(searchParams, { replace: true });
+                      }}
+                      className="ml-1 text-blue-500 hover:text-blue-700"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
 
                 <span className="text-sm text-gray-500">
                   {runs.length} of {totalCount} runs

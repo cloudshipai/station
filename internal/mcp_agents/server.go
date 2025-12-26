@@ -49,6 +49,7 @@ type ErrorResponse struct {
 type DynamicAgentServer struct {
 	repos           *repositories.Repositories
 	agentService    services.AgentServiceInterface
+	workflowService *services.WorkflowService
 	mcpServer       *server.MCPServer
 	httpServer      *server.StreamableHTTPServer
 	localMode       bool
@@ -76,6 +77,11 @@ func NewDynamicAgentServerWithConfig(repos *repositories.Repositories, agentServ
 		environmentName: environmentName,
 		config:          cfg,
 	}
+}
+
+// SetWorkflowService sets the workflow service for approval endpoints
+func (das *DynamicAgentServer) SetWorkflowService(svc *services.WorkflowService) {
+	das.workflowService = svc
 }
 
 // Start starts the dynamic MCP server on the specified port
@@ -128,6 +134,9 @@ func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 
 	// Health check endpoint
 	mux.HandleFunc("/health", das.handleHealth)
+
+	// Workflow approval endpoints (public API for external approve/reject)
+	mux.HandleFunc("/workflow-approvals/", das.handleWorkflowApprovals)
 
 	// Determine the final handler based on auth configuration
 	var handler http.Handler = mux
@@ -300,7 +309,6 @@ func (das *DynamicAgentServer) handleExecuteWebhook(w http.ResponseWriter, r *ht
 	log.Printf("Webhook: Started agent execution (Run ID: %d, Agent: %s, Task: %s)", agentRun.ID, agent.Name, truncateString(req.Task, 50))
 }
 
-// handleHealth handles the /health endpoint
 func (das *DynamicAgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -310,7 +318,136 @@ func (das *DynamicAgentServer) handleHealth(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// authenticateWebhookRequest authenticates a webhook request
+func (das *DynamicAgentServer) handleWorkflowApprovals(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if das.workflowService == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "service_unavailable",
+			Message: "Workflow service not configured",
+		})
+		return
+	}
+
+	user, err := das.authenticateWebhookRequest(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "unauthorized",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/workflow-approvals/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 1 || parts[0] == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "Approval ID required in path: /workflow-approvals/{id}/approve or /workflow-approvals/{id}/reject",
+		})
+		return
+	}
+
+	approvalID := parts[0]
+	action := ""
+	if len(parts) >= 2 {
+		action = parts[1]
+	}
+
+	switch {
+	case r.Method == http.MethodGet && action == "":
+		das.handleGetApproval(w, r, approvalID)
+	case r.Method == http.MethodPost && action == "approve":
+		das.handleApproveAction(w, r, approvalID, user.Username)
+	case r.Method == http.MethodPost && action == "reject":
+		das.handleRejectAction(w, r, approvalID, user.Username)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "method_not_allowed",
+			Message: "Use GET /workflow-approvals/{id}, POST /workflow-approvals/{id}/approve, or POST /workflow-approvals/{id}/reject",
+		})
+	}
+}
+
+func (das *DynamicAgentServer) handleGetApproval(w http.ResponseWriter, r *http.Request, approvalID string) {
+	approval, err := das.workflowService.GetApproval(r.Context(), approvalID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "not_found",
+			Message: "Approval not found: " + approvalID,
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"approval": approval,
+	})
+}
+
+func (das *DynamicAgentServer) handleApproveAction(w http.ResponseWriter, r *http.Request, approvalID, actorID string) {
+	var req struct {
+		Comment string `json:"comment"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	approval, err := das.workflowService.ApproveWorkflowStep(r.Context(), services.ApproveWorkflowStepRequest{
+		ApprovalID: approvalID,
+		ApproverID: actorID,
+		Comment:    req.Comment,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "approval_failed",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	log.Printf("Workflow approval approved via public API (ID: %s, Actor: %s)", approvalID, actorID)
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"approval": approval,
+		"message":  "Workflow step approved",
+	})
+}
+
+func (das *DynamicAgentServer) handleRejectAction(w http.ResponseWriter, r *http.Request, approvalID, actorID string) {
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	approval, err := das.workflowService.RejectWorkflowStep(r.Context(), services.RejectWorkflowStepRequest{
+		ApprovalID: approvalID,
+		RejecterID: actorID,
+		Reason:     req.Reason,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "rejection_failed",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	log.Printf("Workflow approval rejected via public API (ID: %s, Actor: %s, Reason: %s)", approvalID, actorID, req.Reason)
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"approval": approval,
+		"message":  "Workflow step rejected",
+	})
+}
+
 func (das *DynamicAgentServer) authenticateWebhookRequest(r *http.Request) (*models.User, error) {
 	// Local mode: default admin user (no auth required)
 	if das.localMode {

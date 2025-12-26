@@ -8,7 +8,74 @@ package queries
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
+
+const countWorkflowRuns = `-- name: CountWorkflowRuns :one
+SELECT COUNT(*) FROM workflow_runs
+`
+
+func (q *Queries) CountWorkflowRuns(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkflowRuns)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteAllWorkflowRuns = `-- name: DeleteAllWorkflowRuns :exec
+DELETE FROM workflow_runs
+`
+
+func (q *Queries) DeleteAllWorkflowRuns(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllWorkflowRuns)
+	return err
+}
+
+const deleteWorkflowRun = `-- name: DeleteWorkflowRun :exec
+DELETE FROM workflow_runs WHERE run_id = ?1
+`
+
+func (q *Queries) DeleteWorkflowRun(ctx context.Context, runID string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkflowRun, runID)
+	return err
+}
+
+const deleteWorkflowRunsByIDs = `-- name: DeleteWorkflowRunsByIDs :exec
+DELETE FROM workflow_runs WHERE run_id IN (/*SLICE:run_ids*/?)
+`
+
+func (q *Queries) DeleteWorkflowRunsByIDs(ctx context.Context, runIds []string) error {
+	query := deleteWorkflowRunsByIDs
+	var queryParams []interface{}
+	if len(runIds) > 0 {
+		for _, v := range runIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:run_ids*/?", strings.Repeat(",?", len(runIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:run_ids*/?", "NULL", 1)
+	}
+	_, err := q.db.ExecContext(ctx, query, queryParams...)
+	return err
+}
+
+const deleteWorkflowRunsByStatus = `-- name: DeleteWorkflowRunsByStatus :exec
+DELETE FROM workflow_runs WHERE status = ?1
+`
+
+func (q *Queries) DeleteWorkflowRunsByStatus(ctx context.Context, status string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkflowRunsByStatus, status)
+	return err
+}
+
+const deleteWorkflowRunsByWorkflowID = `-- name: DeleteWorkflowRunsByWorkflowID :exec
+DELETE FROM workflow_runs WHERE workflow_id = ?1
+`
+
+func (q *Queries) DeleteWorkflowRunsByWorkflowID(ctx context.Context, workflowID string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkflowRunsByWorkflowID, workflowID)
+	return err
+}
 
 const getWorkflowRun = `-- name: GetWorkflowRun :one
 SELECT id, run_id, workflow_id, workflow_version, status, current_step, input, context, result, error, summary, options, last_signal, created_at, updated_at, started_at, completed_at

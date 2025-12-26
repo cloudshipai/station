@@ -259,6 +259,7 @@ func runMainServer() error {
 		log.Printf("✅ Lighthouse client configured for MCP server IngestData dual flow")
 	}
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServerWithConfig(repos, agentSvc, localMode, environmentName, cfg)
+	dynamicAgentServer.SetWorkflowService(workflowService)
 	apiServer := api.New(cfg, database, localMode, nil)
 
 	// Initialize ToolDiscoveryService for lighthouse and API compatibility

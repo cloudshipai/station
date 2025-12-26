@@ -333,6 +333,57 @@ func (s *WorkflowService) ListRuns(ctx context.Context, workflowID, status strin
 	return s.repos.WorkflowRuns.List(ctx, workflowID, status, limit)
 }
 
+type DeleteRunsRequest struct {
+	RunIDs     []string
+	WorkflowID string
+	Status     string
+	All        bool
+}
+
+func (s *WorkflowService) DeleteRuns(ctx context.Context, req DeleteRunsRequest) (int64, error) {
+	if req.All {
+		count, err := s.repos.WorkflowRuns.Count(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.repos.WorkflowRuns.DeleteAll(ctx); err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
+
+	if len(req.RunIDs) > 0 {
+		if err := s.repos.WorkflowRuns.DeleteByIDs(ctx, req.RunIDs); err != nil {
+			return 0, err
+		}
+		return int64(len(req.RunIDs)), nil
+	}
+
+	if req.Status != "" {
+		runs, err := s.repos.WorkflowRuns.List(ctx, "", req.Status, 10000)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.repos.WorkflowRuns.DeleteByStatus(ctx, req.Status); err != nil {
+			return 0, err
+		}
+		return int64(len(runs)), nil
+	}
+
+	if req.WorkflowID != "" {
+		runs, err := s.repos.WorkflowRuns.List(ctx, req.WorkflowID, "", 10000)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.repos.WorkflowRuns.DeleteByWorkflowID(ctx, req.WorkflowID); err != nil {
+			return 0, err
+		}
+		return int64(len(runs)), nil
+	}
+
+	return 0, nil
+}
+
 func (s *WorkflowService) CancelRun(ctx context.Context, runID, reason string) (*models.WorkflowRun, error) {
 	if _, err := s.repos.WorkflowRuns.Get(ctx, runID); err != nil {
 		return nil, err
