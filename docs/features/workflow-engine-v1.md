@@ -2884,9 +2884,9 @@ STN_APPROVAL_WEBHOOK_URL=https://hooks.slack.com/services/xxx
 - [ ] Expose audit log in Workflows UI (approval detail view)
 
 **CLI Commands**:
-- [ ] Add `stn workflow approvals list` - list pending approvals
-- [ ] Add `stn workflow approvals approve <id>` - approve via CLI
-- [ ] Add `stn workflow approvals reject <id> --reason "..."` - reject via CLI
+- [x] Add `stn workflow approvals list` - list pending approvals
+- [x] Add `stn workflow approvals approve <id>` - approve via CLI
+- [x] Add `stn workflow approvals reject <id> --reason "..."` - reject via CLI
 
 #### 16.4 Files to Create/Modify
 
@@ -3096,158 +3096,62 @@ states:
 
 ### Issue: NATS Push Consumer Stops Receiving New Messages (2025-12-25)
 
-**Status**: 🔴 IN PROGRESS - Root cause identified, fix pending
+**Status**: ✅ RESOLVED (2025-12-26)
 
-**Symptoms**:
-- Workflow runs with `inject` steps are created but remain stuck at "pending" status
-- Steps published AFTER startup are never received by the consumer
-- Recovery at startup works correctly (pending runs from DB are processed)
+**Original Problem**:
+- Workflow runs with `inject` steps were created but remained stuck at "pending" status
+- Steps published AFTER startup were never received by the consumer
+- Recovery at startup worked correctly (pending runs from DB were processed)
 
-**Evidence from Logs**:
+**Root Cause**:
+The NATS JetStream push consumer with `DeliverAll()` stopped receiving new messages after processing the initial batch at startup. This was caused by the push-based subscription model not properly handling new messages published after the initial delivery.
 
-At startup (14:31:54) - works correctly:
-```
-Workflow consumer: subscribing to workflow.run.*.step.*.schedule
-NATS Engine: Consumer info - NumPending=0, NumAckPending=0, NumRedelivered=0, Delivered.Stream=3254
-Workflow consumer: started successfully
-Workflow consumer: recovering 100 pending runs
-Workflow consumer: executing step step1 for run 2f6f675c (type: context)
-Workflow consumer: run 2f6f675c completed
-```
+**Solution Implemented** (Option B from original analysis):
+Replaced the push subscription with a **pull-based consumer** that continuously fetches messages.
 
-New run created after startup (14:38:27) - FAILS:
-```
-NATS Engine: Publishing step with trace to subject=workflow.run.5f86dc2d...step.step1.schedule
-NATS Engine: Successfully published step with trace for run=5f86dc2d step=step1
-```
-❌ NO `handleMessage` invoked - message never received!
-
-**Root Cause Analysis**:
-
-The issue is in the NATS JetStream push consumer behavior:
-
-1. **Embedded NATS** (`Embedded: true` by default in `options.go`) starts an in-memory NATS server
-2. **Durable consumer** (`nats.Durable("workflow-step-consumer")`) maintains delivery state
-3. At startup, the consumer receives all pending messages from the stream (`DeliverAll()`)
-4. **After processing those messages, the consumer stops receiving new messages**
-
-This is likely caused by:
-- The consumer's `MaxAckPending` being exhausted
-- Subject filter mismatch with the durable consumer after initial subscription
-- Embedded NATS not properly pushing new messages after initial `DeliverAll()` batch
-
-**Key Files**:
-```
-internal/workflows/runtime/consumer.go        # WorkflowConsumer - handleMessage at line 188
-internal/workflows/runtime/nats_engine.go     # NATS engine - SubscribeDurable at line 125
-internal/workflows/runtime/options.go         # Options - Embedded: true default at line 31
-internal/services/workflow_service.go         # StartRun at line 235 - publishes first step
-internal/api/v1/base.go                       # startWorkflowConsumer at line 128
-```
-
-**Code Flow**:
-```
-API POST /workflow-runs
-    └── WorkflowService.StartRun()
-        ├── Creates run in DB (status="pending", current_step="step1")
-        └── engine.PublishStepWithTrace() ← WORKS ✓
-
-NATSEngine.PublishStepWithTrace()
-    └── js.Publish("workflow.run.{runID}.step.step1.schedule") ← WORKS ✓
-
-WorkflowConsumer (subscribed at startup)
-    └── handleMessage(msg) ← NOT CALLED for new messages after startup!
-        └── registry.Execute() → InjectExecutor → Complete run
-
-SUSPECTED ISSUE: Push consumer with DeliverAll() stops receiving after initial batch
-```
-
-**Debug Logging Added**:
-
-Added entry-point logging to `handleMessage` in `consumer.go`:
+**Key Changes** (`internal/workflows/runtime/nats_engine.go`):
 ```go
-func (c *WorkflowConsumer) handleMessage(msg *nats.Msg) {
-    log.Printf("Workflow consumer: [DEBUG] received message on subject=%s", msg.Subject)
-    // ... rest of handler
-}
-```
+// Changed from push subscription to pull-based consumer
+sub, err := e.js.PullSubscribe(
+    subject,
+    consumer,
+    nats.AckExplicit(),
+    nats.DeliverNew(),  // Only new messages (recovery handled separately)
+)
 
-**Proposed Fixes**:
-
-**Option A: Change DeliverAll to DeliverNew (quick fix)**
-```go
-// In internal/workflows/runtime/nats_engine.go, SubscribeDurable() around line 125
-// Change:
-nats.DeliverAll(),
-// To:
-nats.DeliverNew(),
-```
-⚠️ Caveat: This breaks recovery - we'd miss messages during restarts.
-
-**Option B: Use a pull-based consumer (recommended fix)**
-Replace the push subscription with a pull consumer that continuously fetches:
-```go
-func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler nats.MsgHandler) error {
-    sub, err := e.js.PullSubscribe(subject, consumer, nats.AckExplicit())
-    if err != nil {
-        return err
-    }
-    
-    // Start a goroutine to continuously fetch messages
-    go func() {
-        for {
-            msgs, err := sub.Fetch(10, nats.MaxWait(5*time.Second))
-            if err != nil {
-                if err == nats.ErrTimeout {
-                    continue // No messages, keep waiting
-                }
-                log.Printf("Error fetching messages: %v", err)
-                continue
-            }
-            for _, msg := range msgs {
-                handler(msg)
-            }
+// Background goroutine continuously fetches messages
+go func() {
+    for {
+        msgs, err := sub.Fetch(10, nats.MaxWait(5*time.Second))
+        if err == nats.ErrTimeout {
+            continue // No messages, keep polling
         }
-    }()
-    
-    return nil
-}
+        for _, msg := range msgs {
+            handler(msg)
+        }
+    }
+}()
 ```
 
-**Option C: Delete and recreate consumer on startup**
-```go
-// Add to nats_engine.go before Subscribe
-e.js.DeleteConsumer("WORKFLOWS", consumer)
-```
+**Recovery Mechanism**:
+- `recoverPendingRuns()` in `consumer.go` queries DB for pending runs at startup
+- Re-publishes pending steps to ensure they're processed
+- This handles the gap between `DeliverNew()` (which skips old messages) and crash recovery
 
-**Next Steps**:
-1. [ ] Verify debug logging shows messages not being received
-2. [ ] Implement fix (Option B recommended)
-3. [ ] Rebuild and test with `make build`
-4. [ ] Verify workflow runs complete successfully
-5. [ ] Run incident-response-pipeline E2E test
-
-**Test Commands**:
+**Verification**:
 ```bash
-# Check server is running
-curl -s http://localhost:8585/api/v1/version | jq .version
-
-# Create test workflow run
+# Test workflow execution
 curl -X POST http://localhost:8585/api/v1/workflow-runs \
   -H "Content-Type: application/json" \
   -d '{"workflowId": "test-inject-simple"}'
 
-# Check run status (should show "completed", not "pending")
-curl -s "http://localhost:8585/api/v1/workflow-runs?limit=1" | jq '.runs[0] | {status, current_step}'
-
-# Check logs for debug messages
-grep "\[DEBUG\] received message" /tmp/station.log
-
-# Full rebuild cycle
-cd /home/epuerta/sandbox/cloudship-sandbox/station && make build && \
-  pkill -f "stn serve" && \
-  nohup ./bin/stn serve --config /home/epuerta/.config/station/config.yaml > /tmp/station.log 2>&1 &
+# Verify run completes (status should be "completed", not stuck at "pending")
+curl -s "http://localhost:8585/api/v1/workflow-runs?limit=1" | jq '.runs[0].status'
 ```
+
+**Files Modified**:
+- `internal/workflows/runtime/nats_engine.go` - Pull-based subscription (lines 142-193)
+- `internal/workflows/runtime/consumer.go` - Recovery mechanism with `recoverPendingRuns()`
 
 ---
 
