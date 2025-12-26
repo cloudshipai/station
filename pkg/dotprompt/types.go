@@ -21,13 +21,23 @@ type DotpromptConfig struct {
 }
 
 type SandboxConfig struct {
-	Runtime        string   `yaml:"runtime,omitempty"`
-	Image          string   `yaml:"image,omitempty"`
-	TimeoutSeconds int      `yaml:"timeout_seconds,omitempty"`
-	MaxStdoutBytes int      `yaml:"max_stdout_bytes,omitempty"`
-	AllowNetwork   bool     `yaml:"allow_network,omitempty"`
-	PipPackages    []string `yaml:"pip_packages,omitempty"`
-	NpmPackages    []string `yaml:"npm_packages,omitempty"`
+	Mode           string         `yaml:"mode,omitempty"`
+	Runtime        string         `yaml:"runtime,omitempty"`
+	Image          string         `yaml:"image,omitempty"`
+	Session        string         `yaml:"session,omitempty"`
+	Limits         *SandboxLimits `yaml:"limits,omitempty"`
+	TimeoutSeconds int            `yaml:"timeout_seconds,omitempty"`
+	MaxStdoutBytes int            `yaml:"max_stdout_bytes,omitempty"`
+	AllowNetwork   bool           `yaml:"allow_network,omitempty"`
+	PipPackages    []string       `yaml:"pip_packages,omitempty"`
+	NpmPackages    []string       `yaml:"npm_packages,omitempty"`
+}
+
+type SandboxLimits struct {
+	CPUMillicores  int `yaml:"cpu_millicores,omitempty"`
+	MemoryMB       int `yaml:"memory_mb,omitempty"`
+	TimeoutSeconds int `yaml:"timeout_seconds,omitempty"`
+	WorkspaceMB    int `yaml:"workspace_mb,omitempty"`
 }
 
 func (s *SandboxConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
