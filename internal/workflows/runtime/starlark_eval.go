@@ -101,6 +101,9 @@ func (e *StarlarkEvaluator) EvaluateCondition(expression string, data map[string
 
 	globals := e.convertToStarlark(data)
 
+	globals["hasattr"] = starlark.NewBuiltin("hasattr", e.builtinHasattr)
+	globals["getattr"] = starlark.NewBuiltin("getattr", e.builtinGetattr)
+
 	fileOpts := syntax.FileOptions{}
 	expr, err := fileOpts.ParseExpr("condition", expression, 0)
 	if err != nil {
@@ -130,6 +133,8 @@ func (e *StarlarkEvaluator) EvaluateExpression(expression string, data map[strin
 	thread.SetMaxExecutionSteps(e.maxSteps)
 
 	globals := e.convertToStarlark(data)
+	globals["hasattr"] = starlark.NewBuiltin("hasattr", e.builtinHasattr)
+	globals["getattr"] = starlark.NewBuiltin("getattr", e.builtinGetattr)
 
 	fileOpts := syntax.FileOptions{}
 	expr, err := fileOpts.ParseExpr("expression", expression, 0)
@@ -275,4 +280,80 @@ func SetNestedValue(data map[string]interface{}, path string, value interface{})
 	}
 
 	current[parts[len(parts)-1]] = value
+}
+
+func (e *StarlarkEvaluator) builtinHasattr(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("hasattr: got %d arguments, want 2", len(args))
+	}
+
+	name, ok := args[1].(starlark.String)
+	if !ok {
+		return nil, fmt.Errorf("hasattr: name must be string, not %s", args[1].Type())
+	}
+
+	switch obj := args[0].(type) {
+	case *AttrDict:
+		_, found, _ := obj.dict.Get(starlark.String(name))
+		return starlark.Bool(found), nil
+	case *starlark.Dict:
+		_, found, _ := obj.Get(starlark.String(name))
+		return starlark.Bool(found), nil
+	case starlark.HasAttrs:
+		_, err := obj.Attr(string(name))
+		return starlark.Bool(err == nil), nil
+	default:
+		return starlark.False, nil
+	}
+}
+
+func (e *StarlarkEvaluator) builtinGetattr(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
+	if len(args) < 2 || len(args) > 3 {
+		return nil, fmt.Errorf("getattr: got %d arguments, want 2 or 3", len(args))
+	}
+
+	name, ok := args[1].(starlark.String)
+	if !ok {
+		return nil, fmt.Errorf("getattr: name must be string, not %s", args[1].Type())
+	}
+
+	var defaultVal starlark.Value
+	if len(args) == 3 {
+		defaultVal = args[2]
+	}
+
+	switch obj := args[0].(type) {
+	case *AttrDict:
+		val, found, _ := obj.dict.Get(starlark.String(name))
+		if found {
+			return val, nil
+		}
+		if defaultVal != nil {
+			return defaultVal, nil
+		}
+		return nil, fmt.Errorf("attrdict has no attribute '%s'", name)
+	case *starlark.Dict:
+		val, found, _ := obj.Get(starlark.String(name))
+		if found {
+			return val, nil
+		}
+		if defaultVal != nil {
+			return defaultVal, nil
+		}
+		return nil, fmt.Errorf("dict has no key '%s'", name)
+	case starlark.HasAttrs:
+		val, err := obj.Attr(string(name))
+		if err == nil {
+			return val, nil
+		}
+		if defaultVal != nil {
+			return defaultVal, nil
+		}
+		return nil, err
+	default:
+		if defaultVal != nil {
+			return defaultVal, nil
+		}
+		return nil, fmt.Errorf("'%s' object has no attribute '%s'", args[0].Type(), name)
+	}
 }

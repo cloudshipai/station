@@ -379,20 +379,20 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(getWorkflowTool, s.handleGetWorkflow)
 
 	createWorkflowTool := mcp.NewTool("create_workflow",
-		mcp.WithDescription("Create a new workflow definition. For DSL syntax and state types (operation, switch, parallel, foreach, inject), read the 'station://docs/workflow-dsl' resource first."),
+		mcp.WithDescription("Create a new workflow definition. IMPORTANT: Read 'station://docs/workflow-dsl' resource FIRST to understand the DSL syntax, state types (agent, switch, parallel, foreach, inject, transform, human_approval), and Starlark expressions (hasattr, getattr)."),
 		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Unique workflow identifier")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable workflow name")),
 		mcp.WithString("description", mcp.Description("Workflow description")),
-		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string. See 'station://docs/workflow-dsl' resource for full DSL reference including state types, transitions, expressions, and examples.")),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string. MUST follow DSL from 'station://docs/workflow-dsl'. Key rules: 1) Use 'type: agent' with 'agent: name' for agent steps, 2) Use hasattr() in switch conditions for safe field access, 3) Use getattr() in transform expressions for defaults.")),
 	)
 	s.mcpServer.AddTool(createWorkflowTool, s.handleCreateWorkflow)
 
 	updateWorkflowTool := mcp.NewTool("update_workflow",
-		mcp.WithDescription("Update an existing workflow definition (creates new version). For DSL syntax, read 'station://docs/workflow-dsl' resource."),
+		mcp.WithDescription("Update an existing workflow definition (creates new version). For DSL syntax, read 'station://docs/workflow-dsl' resource. Remember: Use hasattr() in switch conditions, getattr() in transforms."),
 		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to update")),
 		mcp.WithString("name", mcp.Description("New workflow name")),
 		mcp.WithString("description", mcp.Description("New workflow description")),
-		mcp.WithString("definition", mcp.Required(), mcp.Description("Updated workflow definition as JSON string. See 'station://docs/workflow-dsl' resource for DSL reference.")),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Updated workflow definition as JSON. Key patterns: hasattr(obj, 'field') for safe access, getattr(obj, 'field', default) for defaults.")),
 	)
 	s.mcpServer.AddTool(updateWorkflowTool, s.handleUpdateWorkflow)
 
@@ -403,8 +403,8 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(deleteWorkflowTool, s.handleDeleteWorkflow)
 
 	validateWorkflowTool := mcp.NewTool("validate_workflow",
-		mcp.WithDescription("Validate a workflow definition without saving. Checks DSL syntax, state references, and expression validity. Read 'station://docs/workflow-dsl' resource for DSL specification."),
-		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string to validate against the DSL schema.")),
+		mcp.WithDescription("Validate a workflow definition without saving. Checks DSL syntax, state references, expression validity, and agent existence. Read 'station://docs/workflow-dsl' for DSL specification. Common issues: missing hasattr() in switch conditions, missing defaultNext in switch, unreachable states."),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string. Validation checks: state type validity, transition targets exist, agent names resolve, Starlark expression syntax.")),
 	)
 	s.mcpServer.AddTool(validateWorkflowTool, s.handleValidateWorkflow)
 

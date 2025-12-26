@@ -11,6 +11,8 @@ const workflowDSLDocumentation = `# Station Workflow DSL Reference
 
 Station uses a subset of the Serverless Workflow specification for defining multi-step automated workflows.
 
+> **TIP**: For a complete authoring guide with examples and diagrams, see the Workflow Authoring Guide at docs/station/workflow-authoring-guide.md
+
 ## Workflow Definition Structure
 
 A workflow definition is a YAML or JSON document with these top-level fields:
@@ -21,65 +23,99 @@ A workflow definition is a YAML or JSON document with these top-level fields:
 | name | string | Yes | Human-readable name |
 | version | string | No | Semantic version (e.g., "1.0") |
 | description | string | No | Brief description of what the workflow does |
+| inputSchema | object | No | JSON Schema for validating workflow input |
+| outputSchema | object | No | JSON Schema for validating workflow output |
 | start | string | Yes | ID of the first state to execute |
 | states | array | Yes | Array of state definitions |
 
 ### Example Workflow Definition
 
 ` + "```yaml" + `
-id: incident-triage
-name: "Incident Triage Workflow"
+id: incident-rca
+name: "Incident Root Cause Analysis"
 version: "1.0"
-description: "Automated incident diagnosis with approval gate"
-start: gather_info
+description: "Parallel investigation and synthesis with approval gate"
+
+inputSchema:
+  type: object
+  properties:
+    service_name:
+      type: string
+  required:
+    - service_name
+
+start: parallel-investigation
 
 states:
-  - id: gather_info
-    type: operation
-    input:
-      task: "Check Kubernetes pods in namespace {{ $.namespace }}"
+  # Parallel data gathering
+  - id: parallel-investigation
+    type: parallel
+    branches:
+      - id: check-k8s
+        start: k8s-step
+        states:
+          - id: k8s-step
+            type: agent
+            agent: k8s-investigator
+            input:
+              service: "$.input.service_name"
+            output:
+              k8s_data: "$.result"
+            end: true
+      - id: check-logs
+        start: logs-step
+        states:
+          - id: logs-step
+            type: agent
+            agent: log-analyzer
+            input:
+              service: "$.input.service_name"
+            output:
+              log_data: "$.result"
+            end: true
     output:
-      pod_status: "$.result"
-    transition: analyze
+      investigation: "$.branches"
+    transition: synthesize
 
-  - id: analyze
+  # Synthesize findings
+  - id: synthesize
+    type: agent
+    agent: rca-synthesizer
+    input:
+      k8s_data: "$.investigation.check_k8s.k8s_data"
+      log_data: "$.investigation.check_logs.log_data"
+    output:
+      rca_result: "$.result"
+    transition: check-rollback
+
+  # Conditional routing (USE hasattr for safe access!)
+  - id: check-rollback
     type: switch
-    dataPath: "$.pod_status.severity"
+    dataPath: "$.rca_result"
     conditions:
-      - if: "val == 'critical'"
-        next: escalate
-      - if: "val == 'low'"
-        next: auto_resolve
-    defaultNext: investigate
+      - if: "hasattr(rca_result, 'rollback_recommended') and rca_result.rollback_recommended == True"
+        next: request-approval
+    defaultNext: generate-report
 
-  - id: investigate
-    type: operation
-    input:
-      task: "Deep investigation of {{ $.service }}"
-    transition: request_approval
+  # Human approval gate
+  - id: request-approval
+    type: human_approval
+    message: "Approve rollback for {{input.service_name}}?"
+    timeout: 30m
+    transition: generate-report
 
-  - id: request_approval
-    type: operation  # Will be human.approval in future
-    input:
-      message: "Please approve fix deployment"
-    transition: apply_fix
-
-  - id: apply_fix
-    type: operation
-    input:
-      task: "Apply remediation"
-    end: true
-
-  - id: escalate
-    type: operation
-    input:
-      task: "Page on-call engineer"
-    end: true
-
-  - id: auto_resolve
-    type: operation
-    input:
-      task: "Log low-severity incident"
+  # Transform to build final output
+  - id: generate-report
+    type: transform
+    expression: |
+      {
+        "service": getattr(input, "service_name", "unknown"),
+        "root_cause": getattr(rca_result, "root_cause", {}),
+        "actions": getattr(rca_result, "recommended_actions", []),
+        "rollback_needed": getattr(rca_result, "rollback_recommended", False)
+      }
+    output:
+      final_report: "$.result"
     end: true
 ` + "```" + `
 
@@ -87,9 +123,40 @@ states:
 
 ## State Types
 
-### 1. Operation State (type: "operation")
+### 1. Agent State (type: "agent")
 
-Executes an agent or action. This is the most common state type.
+Executes a Station agent by name. This is the primary state type for AI-powered steps.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | Yes | Unique state identifier |
+| type | string | Yes | Must be "agent" |
+| agent | string | Yes | Agent name (resolved from environment) |
+| input | object | No | Map workflow context to agent input |
+| output | object | No | Map agent output to workflow context |
+| timeout | string | No | Agent execution timeout (e.g., "2m", "5m") |
+| transition | string | No* | Next state to execute |
+| end | boolean | No* | Mark as terminal state |
+
+*One of transition or end: true is required.
+
+` + "```yaml" + `
+- id: analyze-logs
+  type: agent
+  agent: log-analyzer                    # Agent name (must exist)
+  input:
+    service_name: "$.input.service_name" # From workflow input
+    time_range: 60                        # Static value
+  output:
+    log_analysis: "$.result"             # Store full result
+    severity: "$.result.severity"         # Store specific field
+  timeout: 2m
+  transition: check-severity
+` + "```" + `
+
+### 1b. Operation State (type: "operation") - Legacy
+
+Operation state is an older syntax that wraps agent execution. Prefer "agent" type for new workflows.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -98,29 +165,8 @@ Executes an agent or action. This is the most common state type.
 | input | object | No | Map input from workflow context to step input |
 | output | object | No | Map step output back to workflow context |
 | transition | string | No* | Next state to execute |
-| next | string | No* | Alternative to 'transition' |
-| end | boolean | No* | Mark as terminal state |
 | timeout | string | No | Step timeout (e.g., "5m", "30s") |
 | retry | object | No | Retry policy configuration |
-
-*One of transition, next, or end: true is required.
-
-#### Input/Output Mapping
-
-Use JSONPath expressions to map data between workflow context and step inputs:
-
-` + "```yaml" + `
-- id: check_pods
-  type: operation
-  input:
-    namespace: "$.input.namespace"      # From workflow input
-    service: "$.context.service_name"   # From context set by previous step
-    task: "Check pods in {{ $.input.namespace }}"  # Template string
-  output:
-    pod_count: "$.result.count"         # Store result.count in context.pod_count
-    status: "$.result.status"
-  transition: next_step
-` + "```" + `
 
 #### Retry Policy
 
@@ -137,7 +183,7 @@ retry:
 
 ### 2. Switch State (type: "switch")
 
-Conditional branching based on context data.
+Conditional branching based on context data using Starlark expressions.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -151,28 +197,49 @@ Conditional branching based on context data.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| if | string | Starlark expression (use 'val' for the dataPath value) |
+| if | string | Starlark expression - the dataPath variable is available by name |
 | next | string | State to transition to if condition is true |
+
+#### Starlark Built-in Functions
+
+**IMPORTANT**: Always use hasattr() to check if a field exists before accessing it. Agent outputs may be incomplete.
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| hasattr(obj, "field") | Check if field exists | hasattr(result, "error") |
+| getattr(obj, "field", default) | Get field with default value | getattr(result, "count", 0) |
+| len(collection) | Get length of array/dict | len(pods) > 0 |
+| type(value) | Get type name | type(val) == "string" |
 
 #### Supported Starlark Operators
 
 - Comparison: ==, !=, <, >, <=, >=
 - Logical: and, or, not
-- String: in, startswith(), endswith(), contains()
-- Type checks: type(val) == "string"
+- String: in, startswith(), endswith()
 
 ` + "```yaml" + `
-- id: check_severity
+# Example: Safe routing with hasattr
+- id: check_rollback
   type: switch
-  dataPath: "$.error_rate"
+  dataPath: "$.rca_result"
   conditions:
-    - if: "val > 0.5"
+    # ALWAYS use hasattr() for safe field access
+    - if: "hasattr(rca_result, 'rollback_recommended') and rca_result.rollback_recommended == True"
+      next: request_approval
+    - if: "hasattr(rca_result, 'severity') and rca_result.severity == 'critical'"
+      next: escalate
+  defaultNext: normal_flow
+
+# Example: Numeric comparison
+- id: check_error_rate
+  type: switch
+  dataPath: "$.metrics.error_rate"
+  conditions:
+    - if: "error_rate > 0.5"
       next: critical_path
-    - if: "val > 0.1"
+    - if: "error_rate > 0.1"
       next: warning_path
-    - if: "val <= 0.1"
-      next: normal_path
-  defaultNext: unknown_path
+  defaultNext: normal_path
 ` + "```" + `
 
 ---
@@ -256,7 +323,56 @@ Execute multiple branches concurrently.
 
 ---
 
-### 5. Foreach State (type: "foreach")
+### 5. Transform State (type: "transform")
+
+Reshape data using Starlark expressions. All workflow context variables are available.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | Yes | Unique state identifier |
+| type | string | Yes | Must be "transform" |
+| expression | string | Yes | Starlark expression (multi-line supported) |
+| output | object | No | Map result to context variables |
+| transition | string | No* | Next state |
+
+#### Writing Transform Expressions
+
+- All workflow context variables are available as globals (input, previous step outputs, etc.)
+- Use getattr(obj, "field", default) for safe field access
+- Use hasattr(obj, "field") to check existence
+- Comments with # are supported
+- The last expression becomes the output
+
+` + "```yaml" + `
+- id: build_report
+  type: transform
+  expression: |
+    # Build final report from analysis results
+    # Safe access with getattr for potentially missing fields
+    
+    report = {
+      "service_name": getattr(input, "service_name", "unknown"),
+      "root_cause": getattr(rca_result, "root_cause", {}),
+      "recommended_actions": getattr(rca_result, "recommended_actions", []),
+      "rollback_recommended": getattr(rca_result, "rollback_recommended", False),
+      "timeline": getattr(rca_result, "timeline", [])
+    }
+    
+    # Last expression is the output
+    report
+  output:
+    final_report: "$.result"
+  end: true
+` + "```" + `
+
+#### Transform vs Inject
+
+- **inject**: Insert static or JSONPath-referenced data
+- **transform**: Compute new data using Starlark logic
+
+---
+
+### 6. Foreach State (type: "foreach")
 
 Iterate over an array, executing a sub-workflow for each item.
 
@@ -390,11 +506,58 @@ Parameters:
 
 ---
 
+## Common Patterns
+
+### Safe Field Access in Switch Conditions
+
+Agent outputs may not include all expected fields. Always use hasattr():
+
+` + "```yaml" + `
+# BAD - will fail if field missing
+- if: "result.rollback_recommended == True"
+
+# GOOD - checks existence first  
+- if: "hasattr(result, 'rollback_recommended') and result.rollback_recommended == True"
+` + "```" + `
+
+### Building Reports with Transform
+
+Use transform to assemble final output from multiple sources:
+
+` + "```yaml" + `
+- id: final-report
+  type: transform
+  expression: |
+    {
+      "service": getattr(input, "service_name", "unknown"),
+      "findings": getattr(analysis, "findings", []),
+      "severity": getattr(analysis, "severity", "unknown"),
+      "timestamp": "2025-01-01T00:00:00Z"
+    }
+  output:
+    report: "$.result"
+  end: true
+` + "```" + `
+
+---
+
 ## Resources
 
-- Read existing workflows: station://workflows
-- Get workflow details: station://workflows/{workflow_id}
-- List workflow runs: station://workflow-runs
+- **Workflow Authoring Guide**: docs/station/workflow-authoring-guide.md (comprehensive guide with examples)
+- **Starlark Expressions**: docs/developers/starlark-expressions.md
+- **List workflows**: station://workflows
+- **Get workflow details**: station://workflows/{workflow_id}
+- **List workflow runs**: station://workflow-runs
+
+## API Tools
+
+| Tool | Description |
+|------|-------------|
+| create_workflow | Create a new workflow definition |
+| update_workflow | Update existing workflow (creates new version) |
+| validate_workflow | Validate definition without saving |
+| start_workflow_run | Start a new workflow run |
+| get_workflow_run | Get run status and details |
 `
 
 // handleWorkflowDSLResource returns the comprehensive Workflow DSL documentation
