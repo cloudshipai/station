@@ -68,6 +68,7 @@ func init() {
 	rootCmd.AddCommand(mockCmd)
 	rootCmd.AddCommand(fakerCmd)
 	rootCmd.AddCommand(handlers.NewJaegerCmd())
+	rootCmd.AddCommand(workflowCmd)
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 
@@ -99,6 +100,12 @@ func init() {
 	benchmarkCmd.AddCommand(benchmarkEvaluateCmd)
 	benchmarkCmd.AddCommand(benchmarkListCmd)
 	benchmarkCmd.AddCommand(benchmarkTasksCmd)
+
+	workflowCmd.AddCommand(workflowListCmd)
+	workflowCmd.AddCommand(workflowShowCmd)
+	workflowCmd.AddCommand(workflowRunCmd)
+	workflowCmd.AddCommand(workflowRunsCmd)
+	workflowCmd.AddCommand(workflowInspectCmd)
 
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
@@ -206,6 +213,17 @@ func init() {
 
 	// Benchmark command flags
 	benchmarkEvaluateCmd.Flags().BoolP("verbose", "v", false, "Show detailed metric analysis and evidence")
+
+	// Workflow command flags
+	workflowShowCmd.Flags().Int64("version", 0, "Specific workflow version to show (0 for latest)")
+	workflowShowCmd.Flags().BoolP("verbose", "v", false, "Show full workflow definition")
+	workflowRunCmd.Flags().String("input", "", "Input JSON for the workflow")
+	workflowRunCmd.Flags().Int64("version", 0, "Specific workflow version to run (0 for latest)")
+	workflowRunCmd.Flags().Bool("wait", false, "Wait for workflow to complete")
+	workflowRunCmd.Flags().Duration("timeout", 5*time.Minute, "Timeout when waiting for completion")
+	workflowRunsCmd.Flags().Int64("limit", 20, "Maximum number of runs to show")
+	workflowRunsCmd.Flags().String("status", "", "Filter by status (running, completed, failed)")
+	workflowInspectCmd.Flags().BoolP("verbose", "v", false, "Show detailed step output")
 
 	// Report command flags
 	reportCreateCmd.Flags().StringP("environment", "e", "", "Environment name (required)")

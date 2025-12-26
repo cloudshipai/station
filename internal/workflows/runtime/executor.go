@@ -82,8 +82,12 @@ func (e *AgentRunExecutor) SupportedTypes() []workflows.ExecutionStepType {
 }
 
 func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.ExecutionStep, runContext map[string]interface{}) (StepResult, error) {
-	input := step.Raw.Input
-	if input == nil {
+	// Deep copy input to prevent concurrent map writes when running in parallel
+	// (e.g., foreach with maxConcurrency > 1)
+	var input map[string]interface{}
+	if step.Raw.Input != nil {
+		input = deepCopyMap(step.Raw.Input)
+	} else {
 		input = make(map[string]interface{})
 	}
 

@@ -259,6 +259,7 @@ func (a *WorkflowServiceAdapter) ListPendingRuns(ctx context.Context, limit int6
 			RunID:       run.RunID,
 			WorkflowID:  run.WorkflowID,
 			CurrentStep: currentStep,
+			CreatedAt:   run.CreatedAt,
 		})
 	}
 	return result, nil

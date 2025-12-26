@@ -227,6 +227,13 @@ func GetNestedValue(data map[string]interface{}, path string) (interface{}, bool
 		return data, true
 	}
 
+	// Strip JSONPath prefix if present (e.g., "$.foo.bar" -> "foo.bar")
+	if strings.HasPrefix(path, "$.") {
+		path = path[2:]
+	} else if path == "$" {
+		return data, true
+	}
+
 	parts := strings.Split(path, ".")
 	var current interface{} = data
 

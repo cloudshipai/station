@@ -892,6 +892,37 @@ func (s *DeclarativeSync) extractOutputSchema(config *DotPromptConfig) (*string,
 		outputSchema = &schemaJSON
 	}
 
+	// Handle inline schema: output.type + output.properties (dotprompt format)
+	if outputSchema == nil {
+		if _, hasType := config.Output["type"]; hasType {
+			if _, hasProperties := config.Output["properties"]; hasProperties {
+				inlineSchema := make(map[string]interface{})
+				for key, value := range config.Output {
+					if key != "format" {
+						inlineSchema[key] = value
+					}
+				}
+
+				convertedSchema := convertYAMLMapToJSONMap(inlineSchema)
+				schemaBytes, err := json.Marshal(convertedSchema)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to marshal inline output schema to JSON: %w", err)
+				}
+				schemaJSON := string(schemaBytes)
+
+				fmt.Printf("DEBUG: Extracted inline output schema JSON: %s\n", schemaJSON)
+
+				helper := schema.NewExportHelper()
+				if err := helper.ValidateOutputSchema(schemaJSON); err != nil {
+					fmt.Printf("DEBUG: Validation failed for inline schema: %s\n", schemaJSON)
+					return nil, nil, fmt.Errorf("invalid inline output schema in agent file: %w", err)
+				}
+
+				outputSchema = &schemaJSON
+			}
+		}
+	}
+
 	// Check for preset field (predefined schema shortcut like "finops")
 	if presetData, exists := config.Output["preset"]; exists {
 		if presetStr, ok := presetData.(string); ok {

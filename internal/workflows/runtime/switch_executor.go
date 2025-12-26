@@ -49,18 +49,25 @@ func (e *SwitchExecutor) Execute(ctx context.Context, step workflows.ExecutionSt
 				Error:  strPtr(fmt.Sprintf("data path not found: %s", raw.DataPath)),
 			}, ErrInvalidDataPath
 		}
+
+		merged := make(map[string]interface{})
+		for k, v := range runContext {
+			merged[k] = v
+		}
+
 		if m, ok := val.(map[string]interface{}); ok {
-			merged := make(map[string]interface{})
-			for k, v := range runContext {
-				merged[k] = v
-			}
 			for k, v := range m {
 				merged[k] = v
 			}
-			evalData = merged
-		} else {
-			evalData["_value"] = val
 		}
+
+		// 'result' and '_value' are standard variable names for condition expressions
+		// 'val' is also supported to match documentation
+		merged["result"] = val
+		merged["_value"] = val
+		merged["val"] = val
+
+		evalData = merged
 	}
 
 	for _, cond := range raw.Conditions {
