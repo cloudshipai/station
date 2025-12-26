@@ -99,16 +99,26 @@ export const WorkflowsPage: React.FC = () => {
   const renderDefinitionsTab = () => (
     <div className="p-4">
       {workflows.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-12 max-w-lg mx-auto">
           <GitBranch className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">No workflows defined</h3>
-          <p className="text-gray-500 text-sm mb-4">
-            Create workflow definitions using YAML/JSON files or the MCP tools
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No workflows defined</h3>
+          <p className="text-gray-500 text-sm mb-6">
+            Workflows are created via MCP tools or YAML files, allowing AI agents to define and manage complex orchestration patterns.
           </p>
-          <button className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" />
-            Create Workflow
-          </button>
+          <div className="bg-gray-50 rounded-lg p-4 text-left space-y-3">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-1">Via MCP Tools (recommended)</h4>
+              <p className="text-xs text-gray-500">
+                Use <code className="bg-gray-100 px-1 py-0.5 rounded">station_create_workflow</code> to let AI agents create workflows programmatically.
+              </p>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-1">Via YAML Files</h4>
+              <p className="text-xs text-gray-500">
+                Create <code className="bg-gray-100 px-1 py-0.5 rounded">.workflow.yaml</code> files in your environment's workflows directory, then run <code className="bg-gray-100 px-1 py-0.5 rounded">stn sync</code>.
+              </p>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="grid gap-4">

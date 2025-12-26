@@ -13,6 +13,54 @@ Station uses a subset of the Serverless Workflow specification for defining mult
 
 > **TIP**: For a complete authoring guide with examples and diagrams, see the Workflow Authoring Guide at docs/station/workflow-authoring-guide.md
 
+---
+
+## ⚠️ CRITICAL: Input Variable Context Paths
+
+**Input variables are FLATTENED to the root context.** This is the #1 source of workflow errors.
+
+| Correct ✅ | Wrong ❌ |
+|-----------|---------|
+| ` + "`$.service_name`" + ` | ` + "`$.input.service_name`" + ` |
+| ` + "`$.services`" + ` | ` + "`$.input.services`" + ` |
+| ` + "`$.environment`" + ` | ` + "`$.workflow.input.environment`" + ` |
+
+**Example:** If workflow is started with input ` + "`" + `{"services": ["api", "web"], "environment": "prod"}` + "`" + `:
+
+` + "```yaml" + `
+# CORRECT - input flattened to root
+itemsPath: "$.services"           # ✅ Works
+dataPath: "$.environment"         # ✅ Works
+
+# WRONG - $.input does not exist at root level
+itemsPath: "$.input.services"     # ❌ "items not found at itemsPath"
+dataPath: "$.input.environment"   # ❌ Will fail
+` + "```" + `
+
+**Why?** The workflow engine builds context like this:
+` + "```json" + `
+{
+  "services": ["api", "web"],     // ← Input FLATTENED here (USE THIS)
+  "environment": "prod",          // ← Input FLATTENED here (USE THIS)
+  "workflow": { "input": {...} }, // ← Also stored here (internal use)
+  "steps": { ... }                // ← Step outputs stored here
+}
+` + "```" + `
+
+---
+
+## Prefer YAML for Workflow Definitions
+
+**YAML is strongly recommended over JSON** for workflow definitions:
+- More readable for complex workflows with embedded prompts
+- Supports multi-line strings naturally (for transform expressions)
+- Comments allowed (` + "`#`" + ` prefix)
+
+**File naming:** ` + "`<workflow-id>.workflow.yaml`" + ` (preferred) or ` + "`.workflow.json`" + `
+**Location:** ` + "`~/.config/station/environments/<env>/workflows/`" + `
+
+---
+
 ## Workflow Definition Structure
 
 A workflow definition is a YAML or JSON document with these top-level fields:
@@ -58,7 +106,7 @@ states:
             type: agent
             agent: k8s-investigator
             input:
-              service: "$.input.service_name"
+              service: "$.service_name"    # Input flattened to root!
             output:
               k8s_data: "$.result"
             end: true
@@ -69,7 +117,7 @@ states:
             type: agent
             agent: log-analyzer
             input:
-              service: "$.input.service_name"
+              service: "$.service_name"    # Input flattened to root!
             output:
               log_data: "$.result"
             end: true
@@ -143,13 +191,13 @@ Executes a Station agent by name. This is the primary state type for AI-powered 
 ` + "```yaml" + `
 - id: analyze-logs
   type: agent
-  agent: log-analyzer                    # Agent name (must exist)
+  agent: log-analyzer                 # Agent name (must exist)
   input:
-    service_name: "$.input.service_name" # From workflow input
-    time_range: 60                        # Static value
+    service_name: "$.service_name"    # Input is at root level!
+    time_range: 60                    # Static value
   output:
-    log_analysis: "$.result"             # Store full result
-    severity: "$.result.severity"         # Store specific field
+    log_analysis: "$.result"          # Store full result
+    severity: "$.result.severity"     # Store specific field
   timeout: 2m
   transition: check-severity
 ` + "```" + `
@@ -416,12 +464,19 @@ Iterate over an array, executing a sub-workflow for each item.
 
 ### Workflow Context Structure
 
+**Remember: Input is FLATTENED to root level!**
+
 ` + "```json" + `
 {
-  "input": { ... },      // Original workflow input
-  "context": { ... },    // Accumulated data from step outputs
-  "current_step": "...", // Current step being executed
-  "run_id": "..."        // Unique run identifier
+  "service_name": "api-gateway",     // ← Input flattened here (USE $.service_name)
+  "environment": "production",       // ← Input flattened here (USE $.environment)
+  "workflow": {
+    "input": { ... }                 // Internal copy (don't use in paths)
+  },
+  "steps": {
+    "step_id": { "result": ... }     // Step outputs stored here
+  },
+  "run_id": "..."                    // Unique run identifier
 }
 ` + "```" + `
 
@@ -431,10 +486,10 @@ Use JSONPath to reference values:
 
 | Expression | Description |
 |------------|-------------|
-| $.input.field | Access workflow input |
-| $.context.field | Access accumulated context |
-| $.field | Shorthand for $.context.field |
+| $.field | **Workflow input** (flattened to root) - USE THIS |
+| $.steps.step_id.field | Output from a specific step |
 | $.result | Output from the previous step |
+| $.item | Current item in foreach loops |
 
 ### Template Strings
 
@@ -558,6 +613,37 @@ Use transform to assemble final output from multiple sources:
 | validate_workflow | Validate definition without saving |
 | start_workflow_run | Start a new workflow run |
 | get_workflow_run | Get run status and details |
+
+---
+
+## File-Based vs MCP-Created Workflows
+
+### File-Based Workflows (Recommended for GitOps)
+
+Workflows defined in files are **automatically synced** when you run ` + "`stn sync`" + `:
+
+` + "```" + `
+~/.config/station/environments/<env>/workflows/
+├── incident-triage.workflow.yaml     # ✅ Synced on 'stn sync'
+├── deploy-pipeline.workflow.yaml     # ✅ Synced on 'stn sync'
+└── security-scan.workflow.yaml       # ✅ Synced on 'stn sync'
+` + "```" + `
+
+**Benefits:**
+- Version controlled in Git
+- Reviewable via PRs
+- Portable between environments
+- Single source of truth
+
+### MCP-Created Workflows
+
+Workflows created via ` + "`create_workflow`" + ` tool are stored in the **database only**.
+
+**Important:** MCP-created workflows are NOT automatically exported to files. For GitOps workflows, 
+create your workflow as a ` + "`.workflow.yaml`" + ` file and run ` + "`stn sync`" + `.
+
+**To export a DB workflow to file:** Use the workflow definition from ` + "`get_workflow`" + ` and save 
+it manually to ` + "`~/.config/station/environments/<env>/workflows/<id>.workflow.yaml`" + `.
 `
 
 // handleWorkflowDSLResource returns the comprehensive Workflow DSL documentation

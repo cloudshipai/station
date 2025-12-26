@@ -180,3 +180,9 @@ func (s *Server) requireAuthInServerMode(ctx context.Context) error {
 func (s *Server) SetLighthouseClient(client *lighthouse.LighthouseClient) {
 	s.lighthouseClient = client
 }
+
+// SetWorkflowService sets a workflow service with NATS engine for workflow execution
+// This should be called before Start/StartStdio if workflow execution is needed
+func (s *Server) SetWorkflowService(svc *services.WorkflowService) {
+	s.workflowService = svc
+}

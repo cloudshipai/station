@@ -1,0 +1,59 @@
+# Slack-Based Human Approval & Escalation
+# Demonstrates: Human Approval nodes, conditional logic, and security response
+id: slack-approval-escalation
+version: "1.0"
+name: "Security Alert: Blocking Action with Approval"
+description: "Analyzes a suspicious IP and requests human approval before blocking it in the firewall"
+start: analyze_ip
+
+states:
+  - id: analyze_ip
+    type: agent
+    agent: "security-analyzer"
+    prompt: "Analyze the following IP address for malicious activity: {{ip}}. Determine if it should be blocked."
+    resultPath: analysis
+    transition: check_risk
+
+  - id: check_risk
+    type: switch
+    dataPath: analysis
+    conditions:
+      - if: "risk_score > 0.8"
+        next: request_approval
+    defaultNext: log_incident
+
+  - id: request_approval
+    type: human_approval
+    prompt: "A high-risk IP ({{ip}}) was detected with risk score {{analysis.risk_score}}. Reason: {{analysis.reason}}. Should we block this IP in the production firewall?"
+    # In CloudShip, this triggers an Inertia notification or Slack block
+    resultPath: approval
+    transition: handle_approval
+
+  - id: handle_approval
+    type: switch
+    dataPath: approval
+    conditions:
+      - if: "approved == True"
+        next: block_ip
+    defaultNext: log_incident
+
+  - id: block_ip
+    type: agent
+    agent: "firewall-admin"
+    prompt: "Block IP address {{ip}} in the production firewall. Ticket Reference: {{analysis.ticket_id}}"
+    resultPath: block_result
+    transition: notify_completion
+
+  - id: log_incident
+    type: agent
+    agent: "security-logger"
+    prompt: "Log the security event for IP {{ip}}. Status: Not blocked ({{approval.reason if hasattr(approval, 'reason') else 'Low risk'}})"
+    resultPath: log_result
+    end: true
+
+  - id: notify_completion
+    type: agent
+    agent: "notifier"
+    prompt: "Send a final update: IP {{ip}} has been blocked successfully."
+    resultPath: notify_result
+    end: true

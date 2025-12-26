@@ -1,0 +1,67 @@
+# CloudWatch to JIRA Escalation
+# Demonstrates: Payload ingestion, multi-agent analysis, and external system integration
+id: cloudwatch-jira-escalation
+version: "1.0"
+name: "Infrastructure Alert: JIRA Escalation"
+description: "Automatically analyzes CloudWatch Alarms and creates deduplicated JIRA tickets"
+start: ingest_alarm
+
+states:
+  - id: ingest_alarm
+    type: inject
+    data:
+      alarm_name: "HighCPU-PaymentService"
+      alarm_description: "CPU utilization above 90% for 5 minutes"
+      metric_data:
+        service: "payment-service"
+        region: "us-east-1"
+        current_value: 94.5
+    resultPath: alarm
+    transition: analyze_logs
+
+  - id: analyze_logs
+    type: agent
+    agent: "aws-log-analyzer"
+    prompt: "Fetch and analyze logs for service {{alarm.metric_data.service}} in {{alarm.metric_data.region}} for the last 15 minutes. Identify any errors related to 'High CPU'."
+    resultPath: log_analysis
+    transition: check_duplicate
+
+  - id: check_duplicate
+    type: agent
+    agent: "jira-analyst"
+    prompt: "Check JIRA for any open tickets related to '{{alarm.alarm_name}}' for service {{alarm.metric_data.service}}."
+    resultPath: jira_check
+    transition: decide_escalation
+
+  - id: decide_escalation
+    type: switch
+    dataPath: jira_check
+    conditions:
+      - if: "has_duplicate == False"
+        next: create_ticket
+    defaultNext: comment_on_ticket
+
+  - id: create_ticket
+    type: agent
+    agent: "jira-admin"
+    prompt: |
+      Create a new JIRA ticket for service {{alarm.metric_data.service}}.
+      Summary: {{alarm.alarm_name}}
+      Description: {{alarm.alarm_description}}. 
+      Analysis: {{log_analysis.summary}}
+    resultPath: ticket_result
+    transition: notify_team
+
+  - id: comment_on_ticket
+    type: agent
+    agent: "jira-admin"
+    prompt: "Add a comment to JIRA ticket {{jira_check.existing_ticket_id}} stating that the alarm {{alarm.alarm_name}} triggered again at {{alarm.reported_at}}. New analysis: {{log_analysis.summary}}"
+    resultPath: comment_result
+    transition: notify_team
+
+  - id: notify_team
+    type: agent
+    agent: "notifier"
+    prompt: "Slack alert: Alarm {{alarm.alarm_name}} processed. JIRA Ticket: {{ticket_result.key if hasattr(ticket_result, 'key') else jira_check.existing_ticket_id}}"
+    resultPath: notify_result
+    end: true

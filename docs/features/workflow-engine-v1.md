@@ -2,9 +2,9 @@
 
 > **Status**: Draft  
 > **Created**: 2025-12-23  
-> **Updated**: 2025-12-24  
+> **Updated**: 2025-12-25  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
-> **Current Phase**: Core Engine Complete (Phases 0-14) - UI Polish Remaining
+> **Current Phase**: Core Engine Complete (Phases 0-15) - UI Polish Remaining
 
 ## 1) Overview
 
@@ -2636,6 +2636,109 @@ Implement error handling with try/catch/finally semantics.
 - `MarshalStepWithTrace` / `UnmarshalStepWithTrace` for serialization
 - Spans created for workflow runs and individual steps
 
+### Phase 15 - CLI Tooling & Production Blueprints (0.5d) ✅ COMPLETE
+
+Added developer tooling for debugging Starlark expressions and production-ready workflow blueprints.
+
+#### 15.1 CLI Debug Command
+
+- [x] Create `stn workflow debug-expression` command
+- [x] Evaluate Starlark expressions against JSON context
+- [x] Support loading context from existing workflow runs
+- [x] Add JSONPath extraction with `--data-path` flag
+
+**Files created/modified**:
+- `cmd/main/workflow.go` - Added `workflowDebugExpressionCmd` (lines 66-131)
+- `cmd/main/main.go` - Registered command and flags (lines 109, 228-230)
+
+**Command Usage**:
+```bash
+# Evaluate expression against JSON context
+stn workflow debug-expression "severity == 'critical'" \
+  --context '{"severity": "critical", "count": 5}'
+
+# Load context from an existing run
+stn workflow debug-expression "hasattr(alert, 'severity') and alert.severity == 'high'" \
+  --run-id abc123
+
+# Extract nested data with JSONPath before evaluation
+stn workflow debug-expression "len(items) > 0" \
+  --context '{"data": {"items": [1, 2, 3]}}' \
+  --data-path "$.data"
+```
+
+**Flags**:
+| Flag | Description |
+|------|-------------|
+| `--context` | JSON string to use as evaluation context |
+| `--run-id` | Load context from a specific workflow run ID |
+| `--data-path` | JSONPath expression to extract data before evaluation (default: `$`) |
+
+#### 15.2 Production Workflow Blueprints
+
+Created production-ready workflow examples demonstrating advanced patterns:
+
+- [x] `slack-approval-escalation.workflow.yaml` - Security workflow with human-in-the-loop
+- [x] `cloudwatch-jira-escalation.workflow.yaml` - DevOps workflow with JIRA integration
+
+**Files created**:
+- `examples/workflows/blueprints/slack-approval-escalation.workflow.yaml`
+- `examples/workflows/blueprints/cloudwatch-jira-escalation.workflow.yaml`
+
+**Blueprint: Slack Approval Escalation**
+
+Demonstrates:
+- `human_approval` nodes for security gates
+- `switch` conditions with `hasattr()` for safe field access
+- Agent chaining for multi-step security response
+- IP blocking with approval workflow
+
+```yaml
+# Key pattern: Safe field access in switch conditions
+- name: check_threat_level
+  type: switch
+  conditions:
+    - if: "hasattr(analysis, 'threat_level') and analysis.threat_level == 'critical'"
+      next: request_approval
+    - if: "hasattr(analysis, 'threat_level') and analysis.threat_level == 'high'"
+      next: auto_block
+  defaultNext: log_only
+```
+
+**Blueprint: CloudWatch-JIRA Escalation**
+
+Demonstrates:
+- CloudWatch alarm ingestion pattern
+- Log analysis with AI agents
+- JIRA ticket deduplication logic
+- Multi-channel notification (Slack, PagerDuty)
+- `getattr()` for default values in transforms
+
+```yaml
+# Key pattern: Default values with getattr
+- name: prepare_jira
+  type: transform
+  expression: |
+    {
+      "summary": getattr(analysis, "title", "Untitled Alert"),
+      "priority": getattr(analysis, "severity", "medium"),
+      "labels": getattr(analysis, "tags", [])
+    }
+```
+
+#### 15.3 Documentation Updates
+
+- [x] Created `docs/api-reference/workflows.mdx` - REST API reference for Mintlify docs
+- [x] Updated `docs/docs.json` - Added workflows to API Reference navigation
+- [x] Enhanced `docs/station/workflow-authoring-guide.md` - Added Examples 3 & 4
+
+**External Documentation** (CloudShip Mintlify docs):
+- `docs/api-reference/workflows.mdx` - Complete REST API reference including:
+  - Workflow definitions CRUD
+  - Workflow runs management
+  - Approvals API
+  - SSE streaming for real-time updates
+
 ---
 
 ## 10) Success Metrics (updated)
@@ -2942,4 +3045,4 @@ cd /home/epuerta/sandbox/cloudship-sandbox/station && make build && \
 
 *Created: 2025-12-23*  
 *Based on: PR #83 workflow scaffolding*  
-*Last Updated: 2025-12-25 (NATS consumer debugging)*
+*Last Updated: 2025-12-25 (Phase 15: CLI tooling, blueprints, external docs)*

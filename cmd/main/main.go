@@ -106,6 +106,7 @@ func init() {
 	workflowCmd.AddCommand(workflowRunCmd)
 	workflowCmd.AddCommand(workflowRunsCmd)
 	workflowCmd.AddCommand(workflowInspectCmd)
+	workflowCmd.AddCommand(workflowDebugExpressionCmd)
 
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
@@ -224,6 +225,9 @@ func init() {
 	workflowRunsCmd.Flags().Int64("limit", 20, "Maximum number of runs to show")
 	workflowRunsCmd.Flags().String("status", "", "Filter by status (running, completed, failed)")
 	workflowInspectCmd.Flags().BoolP("verbose", "v", false, "Show detailed step output")
+	workflowDebugExpressionCmd.Flags().String("context", "", "JSON context for evaluation")
+	workflowDebugExpressionCmd.Flags().String("run-id", "", "Load context from a specific run ID")
+	workflowDebugExpressionCmd.Flags().String("data-path", "$", "JSONPath to extract data before evaluation")
 
 	// Report command flags
 	reportCreateCmd.Flags().StringP("environment", "e", "", "Environment name (required)")
