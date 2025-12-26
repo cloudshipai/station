@@ -18,6 +18,7 @@ import (
 	"station/internal/services"
 	"station/internal/workflows"
 	"station/internal/workflows/runtime"
+	"station/pkg/models"
 )
 
 // Workflow command definitions
@@ -80,6 +81,35 @@ var (
 		Long:  "Export a workflow from the database to a YAML file in the environment's workflows directory. This enables the workflow to be included in bundles.",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runWorkflowExport,
+	}
+
+	workflowApprovalsCmd = &cobra.Command{
+		Use:   "approvals",
+		Short: "Manage workflow approvals",
+		Long:  "List, approve, or reject pending workflow approvals",
+	}
+
+	workflowApprovalsListCmd = &cobra.Command{
+		Use:   "list",
+		Short: "List pending approvals",
+		Long:  "List all pending workflow approvals awaiting decision",
+		RunE:  runWorkflowApprovalsList,
+	}
+
+	workflowApprovalsApproveCmd = &cobra.Command{
+		Use:   "approve <approval-id>",
+		Short: "Approve a workflow step",
+		Long:  "Approve a pending workflow step, allowing the workflow to continue",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runWorkflowApprovalsApprove,
+	}
+
+	workflowApprovalsRejectCmd = &cobra.Command{
+		Use:   "reject <approval-id>",
+		Short: "Reject a workflow step",
+		Long:  "Reject a pending workflow step, causing the workflow to fail",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runWorkflowApprovalsReject,
 	}
 )
 
@@ -882,4 +912,161 @@ func (a *cliRegistryStepExecutorAdapter) ExecuteStep(ctx context.Context, step w
 		}, err
 	}
 	return executor.Execute(ctx, step, runContext)
+}
+
+func runWorkflowApprovalsList(cmd *cobra.Command, args []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	repos := repositories.New(database)
+	ctx := context.Background()
+
+	approvals, err := repos.WorkflowApprovals.ListPending(ctx, 100)
+	if err != nil {
+		return fmt.Errorf("failed to list approvals: %w", err)
+	}
+
+	if !all {
+		var pending []*models.WorkflowApproval
+		for _, a := range approvals {
+			if a.Status == "pending" {
+				pending = append(pending, a)
+			}
+		}
+		approvals = pending
+	}
+
+	if len(approvals) == 0 {
+		fmt.Println("No pending approvals.")
+		return nil
+	}
+
+	fmt.Printf("Pending Approvals (%d):\n\n", len(approvals))
+	for _, a := range approvals {
+		fmt.Printf("⏸️  %s\n", a.ApprovalID)
+		fmt.Printf("   Run: %s\n", a.RunID)
+		fmt.Printf("   Step: %s\n", a.StepID)
+		fmt.Printf("   Message: %s\n", a.Message)
+		if a.Approvers != nil && *a.Approvers != "" {
+			fmt.Printf("   Approvers: %s\n", *a.Approvers)
+		}
+		if a.TimeoutAt != nil {
+			remaining := time.Until(*a.TimeoutAt)
+			if remaining > 0 {
+				fmt.Printf("   Timeout: %s (in %s)\n", a.TimeoutAt.Format(time.RFC3339), remaining.Round(time.Second))
+			} else {
+				fmt.Printf("   Timeout: %s (expired)\n", a.TimeoutAt.Format(time.RFC3339))
+			}
+		}
+		fmt.Printf("   Created: %s\n\n", a.CreatedAt.Format(time.RFC3339))
+	}
+
+	fmt.Println("💡 Use 'stn workflow approvals approve <id>' or 'stn workflow approvals reject <id>' to decide")
+	return nil
+}
+
+func runWorkflowApprovalsApprove(cmd *cobra.Command, args []string) error {
+	approvalID := args[0]
+	comment, _ := cmd.Flags().GetString("comment")
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	repos := repositories.New(database)
+
+	opts := runtime.EnvOptions()
+	engine, err := runtime.NewEngine(opts)
+	if err != nil {
+		return fmt.Errorf("failed to create workflow engine: %w", err)
+	}
+	if engine != nil {
+		defer engine.Close()
+	}
+
+	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+
+	ctx := context.Background()
+	approval, err := workflowService.ApproveWorkflowStep(ctx, services.ApproveWorkflowStepRequest{
+		ApprovalID: approvalID,
+		ApproverID: "cli-user",
+		Comment:    comment,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to approve: %w", err)
+	}
+
+	fmt.Printf("✅ Approved: %s\n", approval.ApprovalID)
+	fmt.Printf("   Run: %s\n", approval.RunID)
+	fmt.Printf("   Step: %s\n", approval.StepID)
+	fmt.Printf("   Status: %s\n", approval.Status)
+	fmt.Println("\n🚀 Workflow will resume automatically")
+	return nil
+}
+
+func runWorkflowApprovalsReject(cmd *cobra.Command, args []string) error {
+	approvalID := args[0]
+	reason, _ := cmd.Flags().GetString("reason")
+
+	if reason == "" {
+		reason = "Rejected via CLI"
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	repos := repositories.New(database)
+
+	opts := runtime.EnvOptions()
+	engine, err := runtime.NewEngine(opts)
+	if err != nil {
+		return fmt.Errorf("failed to create workflow engine: %w", err)
+	}
+	if engine != nil {
+		defer engine.Close()
+	}
+
+	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+
+	ctx := context.Background()
+	approval, err := workflowService.RejectWorkflowStep(ctx, services.RejectWorkflowStepRequest{
+		ApprovalID: approvalID,
+		RejecterID: "cli-user",
+		Reason:     reason,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reject: %w", err)
+	}
+
+	fmt.Printf("❌ Rejected: %s\n", approval.ApprovalID)
+	fmt.Printf("   Run: %s\n", approval.RunID)
+	fmt.Printf("   Step: %s\n", approval.StepID)
+	fmt.Printf("   Reason: %s\n", reason)
+	fmt.Println("\n⏹️  Workflow has been stopped")
+	return nil
 }

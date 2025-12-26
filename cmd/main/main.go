@@ -108,6 +108,10 @@ func init() {
 	workflowCmd.AddCommand(workflowInspectCmd)
 	workflowCmd.AddCommand(workflowDebugExpressionCmd)
 	workflowCmd.AddCommand(workflowExportCmd)
+	workflowCmd.AddCommand(workflowApprovalsCmd)
+	workflowApprovalsCmd.AddCommand(workflowApprovalsListCmd)
+	workflowApprovalsCmd.AddCommand(workflowApprovalsApproveCmd)
+	workflowApprovalsCmd.AddCommand(workflowApprovalsRejectCmd)
 
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
@@ -232,6 +236,9 @@ func init() {
 	workflowExportCmd.Flags().Int64("version", 0, "Specific workflow version to export (0 for latest)")
 	workflowExportCmd.Flags().StringP("environment", "e", "default", "Environment to export to")
 	workflowExportCmd.Flags().StringP("output", "o", "", "Output file path (default: environment's workflows directory)")
+	workflowApprovalsListCmd.Flags().BoolP("all", "a", false, "Show all approvals, not just pending")
+	workflowApprovalsApproveCmd.Flags().StringP("comment", "c", "", "Optional comment for the approval")
+	workflowApprovalsRejectCmd.Flags().StringP("reason", "r", "", "Reason for rejection")
 
 	// Report command flags
 	reportCreateCmd.Flags().StringP("environment", "e", "", "Environment name (required)")
