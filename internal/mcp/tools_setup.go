@@ -10,7 +10,7 @@ import (
 func (s *Server) setupTools() {
 	// Agent management tools (CRUD operations)
 	createAgentTool := mcp.NewTool("create_agent",
-		mcp.WithDescription("Create a new AI agent with specified configuration"),
+		mcp.WithDescription("Create a new AI agent with specified configuration. For sandbox options, read 'station://docs/sandbox' resource."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the agent")),
 		mcp.WithString("description", mcp.Required(), mcp.Description("Description of what the agent does")),
 		mcp.WithString("prompt", mcp.Required(), mcp.Description("System prompt for the agent")),
@@ -25,12 +25,13 @@ func (s *Server) setupTools() {
 		mcp.WithString("app_type", mcp.Description("CloudShip data ingestion app_type classification for data categorization (optional, must be provided with app). Valid values: 'inventory', 'investigations', 'opportunities', 'projections', 'events'. Auto-populated from preset if not provided. Defines the type of operational data this agent generates.")),
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context. The agent's prompt should include {{cloudship_memory}} placeholder where context will be injected.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow by truncating memory content.")),
+		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Simple: {\"runtime\": \"python\"} or full: {\"runtime\": \"python\", \"pip_packages\": [\"requests\"], \"timeout_seconds\": 30, \"limits\": {\"memory_mb\": 512}}. Modes: 'compute' (single execution, default) or 'code' (persistent session with session ID).")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
 	// Update agent tool
 	updateAgentTool := mcp.NewTool("update_agent",
-		mcp.WithDescription("Update an existing agent's configuration. Note: To manage tools, use add_tool/remove_tool instead."),
+		mcp.WithDescription("Update an existing agent's configuration. Note: To manage tools, use add_tool/remove_tool instead. For sandbox options, read 'station://docs/sandbox' resource."),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to update")),
 		mcp.WithString("name", mcp.Description("New name for the agent")),
 		mcp.WithString("description", mcp.Description("New description for the agent")),
@@ -41,6 +42,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow.")),
+		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Simple: {\"runtime\": \"python\"} or full config with limits, packages, etc. Set to \"{}\" to remove sandbox.")),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 
