@@ -136,3 +136,62 @@ func marshalResult(result *SandboxRunResult) (string, error) {
 	}
 	return string(data), nil
 }
+
+type UnifiedSandboxFactory struct {
+	computeFactory  *SandboxToolFactory
+	codeFactory     *CodeModeToolFactory
+	codeModeEnabled bool
+}
+
+func NewUnifiedSandboxFactory(
+	computeSvc *SandboxService,
+	sessionMgr *SessionManager,
+	backend SandboxBackend,
+	codeModeEnabled bool,
+) *UnifiedSandboxFactory {
+	var codeFactory *CodeModeToolFactory
+	if codeModeEnabled && sessionMgr != nil && backend != nil {
+		codeFactory = NewCodeModeToolFactory(sessionMgr, backend)
+	}
+
+	return &UnifiedSandboxFactory{
+		computeFactory:  NewSandboxToolFactory(computeSvc),
+		codeFactory:     codeFactory,
+		codeModeEnabled: codeModeEnabled,
+	}
+}
+
+func (f *UnifiedSandboxFactory) GetSandboxTools(
+	sandboxCfg *dotprompt.SandboxConfig,
+	execCtx ExecutionContext,
+) []ai.Tool {
+	if sandboxCfg == nil {
+		return nil
+	}
+
+	if sandboxCfg.Mode == "code" && f.codeFactory != nil {
+		return f.codeFactory.CreateTools(execCtx, sandboxCfg)
+	}
+
+	if f.computeFactory.ShouldAddTool(sandboxCfg) {
+		return []ai.Tool{f.computeFactory.CreateTool(sandboxCfg)}
+	}
+
+	return nil
+}
+
+func (f *UnifiedSandboxFactory) IsCodeMode(sandboxCfg *dotprompt.SandboxConfig) bool {
+	return sandboxCfg != nil && sandboxCfg.Mode == "code"
+}
+
+func (f *UnifiedSandboxFactory) ShouldAddTools(sandboxCfg *dotprompt.SandboxConfig) bool {
+	if sandboxCfg == nil {
+		return false
+	}
+
+	if sandboxCfg.Mode == "code" {
+		return f.codeModeEnabled && f.codeFactory != nil
+	}
+
+	return f.computeFactory.ShouldAddTool(sandboxCfg)
+}

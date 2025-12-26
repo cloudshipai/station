@@ -21,13 +21,43 @@ type DotpromptConfig struct {
 }
 
 type SandboxConfig struct {
-	Runtime        string   `yaml:"runtime,omitempty"`
-	Image          string   `yaml:"image,omitempty"`
-	TimeoutSeconds int      `yaml:"timeout_seconds,omitempty"`
-	MaxStdoutBytes int      `yaml:"max_stdout_bytes,omitempty"`
-	AllowNetwork   bool     `yaml:"allow_network,omitempty"`
-	PipPackages    []string `yaml:"pip_packages,omitempty"`
-	NpmPackages    []string `yaml:"npm_packages,omitempty"`
+	// Mode selects sandbox type: "compute" (V1/Dagger, default) or "code" (V2/Docker persistent)
+	Mode string `yaml:"mode,omitempty"`
+
+	// Session scoping for code mode: "workflow" (share across steps) or "agent" (per-agent-run)
+	Session string `yaml:"session,omitempty"`
+
+	// Runtime environment: "python", "node", or "bash"
+	Runtime string `yaml:"runtime,omitempty"`
+
+	// Image overrides the default container image
+	Image string `yaml:"image,omitempty"`
+
+	// TimeoutSeconds for command execution
+	TimeoutSeconds int `yaml:"timeout_seconds,omitempty"`
+
+	// MaxStdoutBytes truncates output after this limit
+	MaxStdoutBytes int `yaml:"max_stdout_bytes,omitempty"`
+
+	// AllowNetwork enables network access in sandbox
+	AllowNetwork bool `yaml:"allow_network,omitempty"`
+
+	// PipPackages to install (Python runtime)
+	PipPackages []string `yaml:"pip_packages,omitempty"`
+
+	// NpmPackages to install (Node runtime)
+	NpmPackages []string `yaml:"npm_packages,omitempty"`
+
+	// Limits for code mode resource constraints
+	Limits *SandboxLimits `yaml:"limits,omitempty"`
+}
+
+// SandboxLimits defines resource constraints for code mode
+type SandboxLimits struct {
+	TimeoutSeconds   int   `yaml:"timeout_seconds,omitempty"`
+	MaxFileSizeBytes int64 `yaml:"max_file_size_bytes,omitempty"`
+	MaxFiles         int   `yaml:"max_files,omitempty"`
+	MaxStdoutBytes   int   `yaml:"max_stdout_bytes,omitempty"`
 }
 
 func (s *SandboxConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {

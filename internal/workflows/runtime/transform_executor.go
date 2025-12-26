@@ -124,7 +124,7 @@ func (e *TransformExecutor) evaluateStarlark(expression string, input map[string
 
 	globals, err := starlark.ExecFile(thread, "transform.star", wrappedExpr, predeclared)
 	if err != nil {
-		return nil, fmt.Errorf("starlark execution failed: %w", err)
+		return nil, enhanceStarlarkError(err, predeclared)
 	}
 
 	result, ok := globals["__result__"]
@@ -429,5 +429,55 @@ func builtinGetattrDict(_ *starlark.Thread, _ *starlark.Builtin, args starlark.T
 			return defaultVal, nil
 		}
 		return nil, fmt.Errorf("'%s' object has no attribute '%s'", args[0].Type(), name)
+	}
+}
+
+func enhanceStarlarkError(err error, predeclared starlark.StringDict) error {
+	errStr := err.Error()
+
+	if !strings.Contains(errStr, "undefined:") {
+		return fmt.Errorf("starlark execution failed: %w", err)
+	}
+
+	builtins := map[string]bool{
+		"json": true, "sum": true, "hasattr": true, "getattr": true,
+		"input": true, "ctx": true,
+	}
+
+	var userVars []string
+	for name := range predeclared {
+		if !builtins[name] {
+			userVars = append(userVars, name)
+		}
+	}
+
+	sortStrings(userVars)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("starlark execution failed: %s", errStr))
+	sb.WriteString("\n\n")
+
+	if len(userVars) > 0 {
+		sb.WriteString("Available variables: ")
+		sb.WriteString(strings.Join(userVars, ", "))
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\nHints:\n")
+	sb.WriteString("  - Workflow inputs are flattened into context. Use 'ticket_id' not 'input.ticket_id'\n")
+	sb.WriteString("  - Step outputs are stored under the step ID (e.g., 'classify_ticket' not 'classification')\n")
+	sb.WriteString("  - Parallel branch results are stored under the parallel step ID as a list\n")
+	sb.WriteString("  - Use 'ctx' dict to access the full context: ctx[\"step-id\"]\n")
+
+	return fmt.Errorf("%s", sb.String())
+}
+
+func sortStrings(s []string) {
+	for i := 0; i < len(s); i++ {
+		for j := i + 1; j < len(s); j++ {
+			if s[i] > s[j] {
+				s[i], s[j] = s[j], s[i]
+			}
+		}
 	}
 }

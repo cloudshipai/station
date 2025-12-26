@@ -112,7 +112,7 @@ func TestSandboxToolInjection(t *testing.T) {
 		engine := NewAgentExecutionEngine(repos, nil)
 		require.NotNil(t, engine, "Engine should not be nil")
 		require.NotNil(t, engine.sandboxService, "SandboxService should be initialized")
-		require.NotNil(t, engine.sandboxToolFactory, "SandboxToolFactory should be initialized")
+		require.NotNil(t, engine.unifiedSandboxFactory, "UnifiedSandboxFactory should be initialized")
 
 		// Verify sandbox is enabled
 		assert.True(t, engine.sandboxService.IsEnabled(), "Sandbox should be enabled via env var")
@@ -420,7 +420,7 @@ func TestParseSandboxConfigFromAgent(t *testing.T) {
 
 	t.Run("Engine_SandboxServiceAvailable", func(t *testing.T) {
 		require.NotNil(t, engine.sandboxService, "SandboxService should be available")
-		require.NotNil(t, engine.sandboxToolFactory, "SandboxToolFactory should be available")
+		require.NotNil(t, engine.unifiedSandboxFactory, "UnifiedSandboxFactory should be available")
 		assert.True(t, engine.sandboxService.IsEnabled(), "Sandbox should be enabled")
 	})
 }

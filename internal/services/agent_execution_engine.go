@@ -67,7 +67,8 @@ type AgentExecutionEngine struct {
 	memoryClient             *lighthouse.MemoryClient     // For CloudShip memory integration (serve/stdio mode)
 	memoryAPIClient          *lighthouse.MemoryAPIClient  // For CloudShip memory integration (CLI mode - direct API)
 	sandboxService           *SandboxService              // For sandbox execution (Dagger-based isolated compute)
-	sandboxToolFactory       *SandboxToolFactory          // For creating sandbox tools
+	unifiedSandboxFactory    *UnifiedSandboxFactory       // For creating sandbox tools (supports both compute and code modes)
+	sessionManager           *SessionManager              // For managing persistent code mode sandbox sessions
 }
 
 // NewAgentExecutionEngine creates a new agent execution engine
@@ -90,7 +91,22 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		sandboxCfg.Enabled = true
 	}
 	sandboxService := NewSandboxService(sandboxCfg)
-	sandboxToolFactory := NewSandboxToolFactory(sandboxService)
+
+	codeModeEnabled := os.Getenv("STATION_SANDBOX_CODE_MODE_ENABLED") == "true"
+	var sessionManager *SessionManager
+	var dockerBackend SandboxBackend
+	if codeModeEnabled {
+		var err error
+		dockerBackend, err = NewDockerBackend()
+		if err != nil {
+			logging.Info("Failed to initialize Docker backend for code mode sandbox: %v (code mode will be disabled)", err)
+			codeModeEnabled = false
+		} else {
+			sessionManager = NewSessionManager(dockerBackend)
+			logging.Info("Sandbox code mode enabled with Docker backend")
+		}
+	}
+	unifiedSandboxFactory := NewUnifiedSandboxFactory(sandboxService, sessionManager, dockerBackend, codeModeEnabled)
 
 	return &AgentExecutionEngine{
 		repos:                    repos,
@@ -101,7 +117,8 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		deploymentContextService: NewDeploymentContextService(),
 		telemetryService:         nil,
 		sandboxService:           sandboxService,
-		sandboxToolFactory:       sandboxToolFactory,
+		unifiedSandboxFactory:    unifiedSandboxFactory,
+		sessionManager:           sessionManager,
 	}
 }
 
@@ -429,10 +446,22 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	}
 
 	sandboxConfig := aee.parseSandboxConfigFromAgent(agent, environment.Name)
-	if aee.sandboxToolFactory.ShouldAddTool(sandboxConfig) {
-		sandboxTool := aee.sandboxToolFactory.CreateTool(sandboxConfig)
-		mcpTools = append(mcpTools, sandboxTool)
-		logging.Info("Sandbox tool enabled for agent %s (runtime: %s)", agent.Name, sandboxConfig.Runtime)
+	if aee.unifiedSandboxFactory.ShouldAddTools(sandboxConfig) {
+		execCtx := ExecutionContext{
+			WorkflowRunID: "",
+			AgentRunID:    fmt.Sprintf("%d", runID),
+			AgentName:     agent.Name,
+			Environment:   environment.Name,
+		}
+		sandboxTools := aee.unifiedSandboxFactory.GetSandboxTools(sandboxConfig, execCtx)
+		for _, tool := range sandboxTools {
+			mcpTools = append(mcpTools, tool)
+		}
+		if aee.unifiedSandboxFactory.IsCodeMode(sandboxConfig) {
+			logging.Info("Sandbox code mode enabled for agent %s (%d tools)", agent.Name, len(sandboxTools))
+		} else {
+			logging.Info("Sandbox compute mode enabled for agent %s (runtime: %s)", agent.Name, sandboxConfig.Runtime)
+		}
 	}
 
 	ctx = WithParentRunID(ctx, runID)
@@ -489,6 +518,14 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	// Clean up MCP connections after execution is complete
 	aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
 	aee.activeMCPClients = nil
+
+	// Clean up sandbox sessions (for code mode) after execution
+	if aee.sessionManager != nil && aee.unifiedSandboxFactory.IsCodeMode(sandboxConfig) {
+		sessionKey := NewAgentSessionKey(fmt.Sprintf("%d", runID))
+		if err := aee.sessionManager.DestroySession(ctx, sessionKey); err != nil {
+			logging.Debug("Failed to cleanup sandbox session for agent %s: %v", agent.Name, err)
+		}
+	}
 
 	if err != nil {
 		// Check if this was a timeout

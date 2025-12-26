@@ -107,6 +107,7 @@ func init() {
 	workflowCmd.AddCommand(workflowRunsCmd)
 	workflowCmd.AddCommand(workflowInspectCmd)
 	workflowCmd.AddCommand(workflowDebugExpressionCmd)
+	workflowCmd.AddCommand(workflowExportCmd)
 
 	settingsCmd.AddCommand(settingsListCmd)
 	settingsCmd.AddCommand(settingsGetCmd)
@@ -228,6 +229,9 @@ func init() {
 	workflowDebugExpressionCmd.Flags().String("context", "", "JSON context for evaluation")
 	workflowDebugExpressionCmd.Flags().String("run-id", "", "Load context from a specific run ID")
 	workflowDebugExpressionCmd.Flags().String("data-path", "$", "JSONPath to extract data before evaluation")
+	workflowExportCmd.Flags().Int64("version", 0, "Specific workflow version to export (0 for latest)")
+	workflowExportCmd.Flags().StringP("environment", "e", "default", "Environment to export to")
+	workflowExportCmd.Flags().StringP("output", "o", "", "Output file path (default: environment's workflows directory)")
 
 	// Report command flags
 	reportCreateCmd.Flags().StringP("environment", "e", "", "Environment name (required)")
