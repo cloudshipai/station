@@ -35,15 +35,16 @@ func (s *AgentExportService) ExportAgentAfterSave(agentID int64) error {
 	return s.ExportAgentAfterSaveWithMetadata(agentID, "", "")
 }
 
-// ExportAgentAfterSaveWithMetadata exports an agent with CloudShip metadata fields
 func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app, appType string) error {
-	// Get agent details
+	return s.ExportAgentWithSandbox(agentID, app, appType, "")
+}
+
+func (s *AgentExportService) ExportAgentWithSandbox(agentID int64, app, appType, sandboxConfig string) error {
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %v", err)
 	}
 
-	// Auto-populate app/app_type from agent model if available
 	if app == "" && agent.App != "" {
 		app = agent.App
 	}
@@ -51,7 +52,6 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 		appType = agent.AppType
 	}
 
-	// Auto-populate app/app_type for known presets if still not set
 	if app == "" && appType == "" && agent.OutputSchemaPreset != nil && *agent.OutputSchemaPreset != "" {
 		if presetInfo, exists := s.schemaRegistry.GetPresetInfo(*agent.OutputSchemaPreset); exists {
 			app = presetInfo.App
@@ -59,37 +59,30 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 		}
 	}
 
-	// Get environment info
 	environment, err := s.repos.Environments.GetByID(agent.EnvironmentID)
 	if err != nil {
 		return fmt.Errorf("failed to get environment: %v", err)
 	}
 
-	// Get agent tools with details
 	toolsWithDetails, err := s.repos.AgentTools.ListAgentTools(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent tools: %v", err)
 	}
 
-
-	// Get child agents (for agents: section in frontmatter)
 	childAgents, err := s.repos.AgentAgents.ListChildAgents(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get child agents: %v", err)
 	}
-	// Generate dotprompt content using the same logic as MCP handler
-	dotpromptContent := s.generateDotpromptContent(agent, toolsWithDetails, childAgents, environment.Name, app, appType)
 
-	// Determine output file path using centralized path resolution
+	dotpromptContent := s.generateDotpromptContentWithSandbox(agent, toolsWithDetails, childAgents, environment.Name, app, appType, sandboxConfig)
+
 	outputPath := config.GetAgentPromptPath(environment.Name, agent.Name)
 
-	// Ensure directory exists
 	agentsDir := filepath.Dir(outputPath)
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create agents directory: %v", err)
 	}
 
-	// Write .prompt file to filesystem
 	if err := os.WriteFile(outputPath, []byte(dotpromptContent), 0644); err != nil {
 		return fmt.Errorf("failed to write .prompt file: %v", err)
 	}
@@ -98,24 +91,23 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 	return nil
 }
 
-// generateDotpromptContent generates the dotprompt file content with proper role structure
 func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType string) string {
-	// Build tools list
+	return s.generateDotpromptContentWithSandbox(agent, tools, childAgents, environmentName, app, appType, "")
+}
+
+func (s *AgentExportService) generateDotpromptContentWithSandbox(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig string) string {
 	var toolNames []string
 	for _, tool := range tools {
 		toolNames = append(toolNames, tool.ToolName)
 	}
 
-	// Start with YAML frontmatter (temperature config removed for gpt-5 compatibility)
 	content := fmt.Sprintf(`---
 metadata:
   name: "%s"
   description: "%s"
   tags: ["station", "agent"]`, agent.Name, agent.Description)
 
-	// Add app/app_type for CloudShip data ingestion classification if provided
 	if app != "" || appType != "" {
-		content += "\n  # Data ingestion classification for CloudShip"
 		if app != "" {
 			content += fmt.Sprintf("\n  app: \"%s\"", app)
 		}
@@ -126,7 +118,6 @@ metadata:
 
 	content += fmt.Sprintf("\nmodel: gpt-5-mini\nmax_steps: %d", agent.MaxSteps)
 
-	// Add CloudShip memory integration if configured
 	if agent.MemoryTopicKey != nil && *agent.MemoryTopicKey != "" {
 		content += "\ncloudshipai:"
 		content += fmt.Sprintf("\n  memory: \"%s\"", *agent.MemoryTopicKey)
@@ -135,7 +126,13 @@ metadata:
 		}
 	}
 
-	// Add tools if any
+	if sandboxConfig != "" {
+		sandboxYAML := s.convertSandboxJSONToYAML(sandboxConfig)
+		if sandboxYAML != "" {
+			content += "\nsandbox:\n" + s.indentLines(sandboxYAML, "  ")
+		}
+	}
+
 	if len(toolNames) > 0 {
 		content += "\ntools:\n"
 		for _, toolName := range toolNames {
@@ -143,7 +140,6 @@ metadata:
 		}
 	}
 
-	// Add child agents if any
 	if len(childAgents) > 0 {
 		content += "\nagents:\n"
 		for _, childRel := range childAgents {
@@ -151,37 +147,29 @@ metadata:
 		}
 	}
 
-	// Add input schema (always include - contains at minimum userInput)
 	inputSchemaSection, err := s.generateInputSchemaSection(agent)
 	if err == nil {
 		content += "\n" + inputSchemaSection
 	}
 
-	// Add output schema handling
 	outputSchemaSection := s.generateOutputSchemaSection(agent)
 	if outputSchemaSection != "" {
 		content += outputSchemaSection
 	}
 
-	// Close frontmatter and add role-based prompt structure
 	content += "---\n\n"
 
-	// Check if the prompt already contains role templates
 	if strings.Contains(agent.Prompt, "{{role") {
-		// Prompt already has role templates, use as-is
 		content += agent.Prompt
 	} else {
-		// Add system role with the agent's prompt
 		content += "{{role \"system\"}}\n"
 		content += agent.Prompt
 		content += "\n\n"
 
-		// Add user role with handlebars template
 		content += "{{role \"user\"}}\n"
 		content += "{{userInput}}"
 	}
 
-	// Add custom variable handlebars if they exist
 	if agent.InputSchema != nil && *agent.InputSchema != "" {
 		customVars := s.extractCustomVariableNames(agent)
 		for _, varName := range customVars {
@@ -190,6 +178,30 @@ metadata:
 	}
 
 	return content
+}
+
+func (s *AgentExportService) convertSandboxJSONToYAML(sandboxJSON string) string {
+	if sandboxJSON == "" || sandboxJSON == "{}" {
+		return ""
+	}
+
+	var sandboxMap map[string]interface{}
+	if err := json.Unmarshal([]byte(sandboxJSON), &sandboxMap); err != nil {
+		log.Printf("Warning: Failed to parse sandbox JSON: %v", err)
+		return ""
+	}
+
+	if len(sandboxMap) == 0 {
+		return ""
+	}
+
+	yamlBytes, err := yaml.Marshal(sandboxMap)
+	if err != nil {
+		log.Printf("Warning: Failed to convert sandbox to YAML: %v", err)
+		return ""
+	}
+
+	return strings.TrimSpace(string(yamlBytes))
 }
 
 // generateInputSchemaSection generates the input schema for dotprompt

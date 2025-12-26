@@ -3157,4 +3157,55 @@ curl -s "http://localhost:8585/api/v1/workflow-runs?limit=1" | jq '.runs[0].stat
 
 *Created: 2025-12-23*  
 *Based on: PR #83 workflow scaffolding*  
-*Last Updated: 2025-12-25 (Phase 15: CLI tooling, blueprints, external docs)*
+*Last Updated: 2025-12-26 (Phase 16: Approval webhooks, sandbox MCP documentation)*
+
+---
+
+## 13) Agent Sandbox Configuration
+
+Agents in workflows can execute code in isolated Docker containers via sandbox mode. This is useful for data processing, scripting, and automation tasks.
+
+### Quick Reference
+
+Sandbox configuration is specified in agent dotprompt files or via the MCP `create_agent`/`update_agent` tools:
+
+```yaml
+# In .prompt file frontmatter
+sandbox:
+  runtime: python
+  pip_packages:
+    - pandas
+    - requests
+  timeout_seconds: 60
+  limits:
+    memory_mb: 512
+```
+
+```json
+// Via MCP create_agent tool
+{
+  "sandbox": "{\"runtime\": \"python\", \"pip_packages\": [\"pandas\"]}"
+}
+```
+
+### Key Options
+
+| Field | Type | Description |
+|-------|------|-------------|
+| mode | string | `"compute"` (single execution) or `"code"` (persistent session) |
+| runtime | string | `"python"` or `"node"` |
+| pip_packages | []string | Python packages to install |
+| npm_packages | []string | Node.js packages to install |
+| timeout_seconds | int | Execution timeout (default: 30) |
+| allow_network | bool | Enable network access (default: false) |
+| limits.memory_mb | int | Memory limit in MB |
+| limits.cpu_millicores | int | CPU limit (1000 = 1 core) |
+
+### MCP Resource
+
+For complete sandbox documentation, read the MCP resource:
+```
+station://docs/sandbox
+```
+
+This resource is available via MCP and contains full configuration schema, examples, security considerations, and troubleshooting tips.

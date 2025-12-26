@@ -55,6 +55,15 @@ func (s *Server) setupStaticResources() {
 	)
 	s.mcpServer.AddResource(workflowDSLResource, s.handleWorkflowDSLResource)
 
+	// Sandbox documentation resource
+	sandboxDocsResource := mcp.NewResource(
+		"station://docs/sandbox",
+		"Agent Sandbox Configuration",
+		mcp.WithResourceDescription("Reference documentation for configuring agent sandbox (isolated code execution) - read this before using sandbox parameter in create_agent/update_agent"),
+		mcp.WithMIMEType("text/markdown"),
+	)
+	s.mcpServer.AddResource(sandboxDocsResource, s.handleSandboxDocsResource)
+
 	// Workflows list resource
 	workflowsResource := mcp.NewResource(
 		"station://workflows",

@@ -105,6 +105,14 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		memoryMaxTokens = &memoryTokens
 	}
 
+	sandboxConfig := request.GetString("sandbox", "")
+	if sandboxConfig != "" {
+		var sandboxMap map[string]interface{}
+		if err := json.Unmarshal([]byte(sandboxConfig), &sandboxMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid sandbox JSON: %v. Read 'station://docs/sandbox' for valid options.", err)), nil
+		}
+	}
+
 	// Extract tool_names array if provided
 	var toolNames []string
 	if request.Params.Arguments != nil {
@@ -156,11 +164,8 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		"message": fmt.Sprintf("Agent '%s' created successfully with max_steps=%d in environment_id=%d", name, createdAgent.MaxSteps, createdAgent.EnvironmentID),
 	}
 
-	// Automatically export agent to file-based config after successful DB save and tool assignment
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentAfterSaveWithMetadata(createdAgent.ID, app, appType); err != nil {
-			// Log the error but don't fail the request - the agent was successfully created in DB
-			// Add export error info to response for user awareness
+		if err := s.agentExportService.ExportAgentWithSandbox(createdAgent.ID, app, appType, sandboxConfig); err != nil {
 			response["export_warning"] = fmt.Sprintf("Agent created but export failed: %v. Use 'stn agent export %s' to export manually.", err, name)
 		}
 	}
@@ -309,7 +314,6 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 	app := request.GetString("app", existingAgent.App)
 	appType := request.GetString("app_type", existingAgent.AppType)
 
-	// Extract CloudShip memory integration parameters
 	var memoryTopicKey *string
 	var memoryMaxTokens *int
 	if memoryTopic := request.GetString("memory_topic", ""); memoryTopic != "" {
@@ -323,7 +327,14 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		memoryMaxTokens = existingAgent.MemoryMaxTokens
 	}
 
-	// Update the agent with memory support
+	sandboxConfig := request.GetString("sandbox", "")
+	if sandboxConfig != "" && sandboxConfig != "{}" {
+		var sandboxMap map[string]interface{}
+		if err := json.Unmarshal([]byte(sandboxConfig), &sandboxMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid sandbox JSON: %v. Read 'station://docs/sandbox' for valid options.", err)), nil
+		}
+	}
+
 	err = s.repos.Agents.UpdateWithMemory(
 		agentID,
 		name,
@@ -345,10 +356,8 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to update agent: %v", err)), nil
 	}
 
-	// Export agent to filesystem after successful update
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentAfterSave(agentID); err != nil {
-			// Add export error info to response for user awareness
+		if err := s.agentExportService.ExportAgentWithSandbox(agentID, app, appType, sandboxConfig); err != nil {
 			response := map[string]interface{}{
 				"success": true,
 				"agent": map[string]interface{}{
