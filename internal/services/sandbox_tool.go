@@ -10,15 +10,23 @@ import (
 )
 
 type SandboxToolFactory struct {
-	service *SandboxService
+	computeService  *SandboxService
+	codeToolFactory *CodeModeToolFactory
 }
 
 func NewSandboxToolFactory(svc *SandboxService) *SandboxToolFactory {
-	return &SandboxToolFactory{service: svc}
+	return &SandboxToolFactory{computeService: svc}
 }
 
-func (f *SandboxToolFactory) CreateTool(agentDefaults *dotprompt.SandboxConfig) ai.Tool {
-	defaults := f.service.MergeDefaults(agentDefaults)
+func NewSandboxToolFactoryWithCodeMode(computeSvc *SandboxService, codeSvc *CodeModeToolFactory) *SandboxToolFactory {
+	return &SandboxToolFactory{
+		computeService:  computeSvc,
+		codeToolFactory: codeSvc,
+	}
+}
+
+func (f *SandboxToolFactory) CreateComputeTool(agentDefaults *dotprompt.SandboxConfig) ai.Tool {
+	defaults := f.computeService.MergeDefaults(agentDefaults)
 
 	schema := map[string]any{
 		"type": "object",
@@ -65,7 +73,7 @@ func (f *SandboxToolFactory) CreateTool(agentDefaults *dotprompt.SandboxConfig) 
 			return nil, fmt.Errorf("sandbox_run: expected map[string]any input, got %T", input)
 		}
 		req := f.parseRequest(inputMap, defaults)
-		result, err := f.service.Run(toolCtx.Context, req)
+		result, err := f.computeService.Run(toolCtx.Context, req)
 		if err != nil {
 			return nil, err
 		}
@@ -125,8 +133,61 @@ func (f *SandboxToolFactory) parseRequest(input map[string]any, defaults Sandbox
 	return req
 }
 
+func (f *SandboxToolFactory) ShouldAddComputeTool(sandbox *dotprompt.SandboxConfig) bool {
+	if sandbox == nil || f.computeService == nil {
+		return false
+	}
+	mode := sandbox.Mode
+	if mode == "" {
+		mode = "compute"
+	}
+	return mode == "compute" && f.computeService.IsEnabled()
+}
+
+func (f *SandboxToolFactory) ShouldAddCodeTools(sandbox *dotprompt.SandboxConfig) bool {
+	if sandbox == nil || f.codeToolFactory == nil {
+		return false
+	}
+	return sandbox.Mode == "code" && f.codeToolFactory.IsEnabled()
+}
+
+func (f *SandboxToolFactory) CreateCodeTools(agentDefaults *dotprompt.SandboxConfig, execCtx ExecutionContext) []ai.Tool {
+	if f.codeToolFactory == nil {
+		return nil
+	}
+	return f.codeToolFactory.CreateAllTools(agentDefaults, execCtx)
+}
+
+func (f *SandboxToolFactory) GetSandboxTools(sandbox *dotprompt.SandboxConfig, execCtx ExecutionContext) []ai.Tool {
+	if sandbox == nil {
+		return nil
+	}
+
+	mode := sandbox.Mode
+	if mode == "" {
+		mode = "compute"
+	}
+
+	switch mode {
+	case "compute":
+		if f.ShouldAddComputeTool(sandbox) {
+			return []ai.Tool{f.CreateComputeTool(sandbox)}
+		}
+	case "code":
+		if f.ShouldAddCodeTools(sandbox) {
+			return f.CreateCodeTools(sandbox, execCtx)
+		}
+	}
+
+	return nil
+}
+
 func (f *SandboxToolFactory) ShouldAddTool(sandbox *dotprompt.SandboxConfig) bool {
-	return sandbox != nil && f.service.IsEnabled()
+	return f.ShouldAddComputeTool(sandbox)
+}
+
+func (f *SandboxToolFactory) CreateTool(agentDefaults *dotprompt.SandboxConfig) ai.Tool {
+	return f.CreateComputeTool(agentDefaults)
 }
 
 func marshalResult(result *SandboxRunResult) (string, error) {

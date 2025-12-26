@@ -2,71 +2,95 @@ package services
 
 import (
 	"context"
+	"os"
+	"sync"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type mockBackend struct {
-	sessions     map[string]*CodeSession
-	createCount  int
-	destroyCount int
-	createErr    error
-	destroyErr   error
+	mu              sync.Mutex
+	sessions        map[string]*Session
+	createCalls     int
+	destroyCalls    int
+	createError     error
+	destroyError    error
+	getSessionError error
 }
 
 func newMockBackend() *mockBackend {
 	return &mockBackend{
-		sessions: make(map[string]*CodeSession),
+		sessions: make(map[string]*Session),
 	}
 }
 
-func (m *mockBackend) CreateSession(ctx context.Context, key SessionKey, cfg SessionConfig) (*CodeSession, error) {
-	if m.createErr != nil {
-		return nil, m.createErr
+func (m *mockBackend) Ping(ctx context.Context) error { return nil }
+
+func (m *mockBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.createCalls++
+	if m.createError != nil {
+		return nil, m.createError
 	}
-	m.createCount++
-	session := &CodeSession{
-		ID:          key.String(),
-		ContainerID: "container-" + key.String(),
-		Key:         key,
-		Config:      cfg,
-		Status:      SessionStatusReady,
-		CreatedAt:   time.Now(),
-		LastUsedAt:  time.Now(),
+	session := &Session{
+		ID:         generateShortID(),
+		Image:      opts.Image,
+		Workdir:    opts.Workdir,
+		Limits:     opts.Limits,
+		CreatedAt:  time.Now(),
+		LastUsedAt: time.Now(),
 	}
-	m.sessions[key.String()] = session
+	m.sessions[session.ID] = session
+	return session, nil
+}
+
+func (m *mockBackend) GetSession(ctx context.Context, sessionID string) (*Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.getSessionError != nil {
+		return nil, m.getSessionError
+	}
+	session, ok := m.sessions[sessionID]
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
 	return session, nil
 }
 
 func (m *mockBackend) DestroySession(ctx context.Context, sessionID string) error {
-	if m.destroyErr != nil {
-		return m.destroyErr
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.destroyCalls++
+	if m.destroyError != nil {
+		return m.destroyError
 	}
-	m.destroyCount++
 	delete(m.sessions, sessionID)
 	return nil
 }
 
-func (m *mockBackend) GetSession(ctx context.Context, sessionID string) (*CodeSession, error) {
-	if s, ok := m.sessions[sessionID]; ok {
-		return s, nil
-	}
-	return nil, nil
-}
-
 func (m *mockBackend) Exec(ctx context.Context, sessionID string, req ExecRequest) (*ExecResult, error) {
-	return &ExecResult{ExitCode: 0, Stdout: "ok"}, nil
+	return &ExecResult{ExitCode: 0}, nil
 }
 
-func (m *mockBackend) WriteFile(ctx context.Context, sessionID, path string, content []byte) error {
+func (m *mockBackend) ExecAsync(ctx context.Context, sessionID string, req ExecRequest) (*ExecHandle, error) {
+	return &ExecHandle{ID: "exec-1"}, nil
+}
+
+func (m *mockBackend) ExecWait(ctx context.Context, sessionID, execID string, timeout time.Duration) (*ExecResult, error) {
+	return &ExecResult{ExitCode: 0}, nil
+}
+
+func (m *mockBackend) ExecRead(ctx context.Context, sessionID, execID string, sinceSeq int, maxChunks int) (*ExecChunks, error) {
+	return &ExecChunks{Done: true}, nil
+}
+
+func (m *mockBackend) WriteFile(ctx context.Context, sessionID, path string, content []byte, mode os.FileMode) error {
 	return nil
 }
 
-func (m *mockBackend) ReadFile(ctx context.Context, sessionID, path string) ([]byte, error) {
-	return []byte("content"), nil
+func (m *mockBackend) ReadFile(ctx context.Context, sessionID, path string, maxBytes int) ([]byte, bool, error) {
+	return nil, false, nil
 }
 
 func (m *mockBackend) ListFiles(ctx context.Context, sessionID, path string, recursive bool) ([]FileEntry, error) {
@@ -77,161 +101,195 @@ func (m *mockBackend) DeleteFile(ctx context.Context, sessionID, path string, re
 	return nil
 }
 
-var _ SandboxBackend = (*mockBackend)(nil)
-
-func TestSessionKey_String(t *testing.T) {
-	tests := []struct {
-		name     string
-		key      SessionKey
-		expected string
-	}{
-		{
-			name:     "workflow scope",
-			key:      NewWorkflowSessionKey("wf123"),
-			expected: "workflow_wf123_sandbox",
-		},
-		{
-			name:     "agent scope",
-			key:      NewAgentSessionKey("agent456"),
-			expected: "agent_agent456_sandbox",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, tt.key.String())
-		})
-	}
-}
-
-func TestExecutionContext_SessionKey(t *testing.T) {
-	ctx := ExecutionContext{
-		WorkflowRunID: "wf123",
-		AgentRunID:    "agent456",
-	}
-
-	t.Run("workflow scope with workflow ID", func(t *testing.T) {
-		key := ctx.SessionKey(SessionScopeWorkflow)
-		assert.Equal(t, SessionScopeWorkflow, key.Scope)
-		assert.Equal(t, "wf123", key.ScopeID)
-	})
-
-	t.Run("agent scope", func(t *testing.T) {
-		key := ctx.SessionKey(SessionScopeAgent)
-		assert.Equal(t, SessionScopeAgent, key.Scope)
-		assert.Equal(t, "agent456", key.ScopeID)
-	})
-
-	t.Run("workflow scope without workflow ID falls back to agent", func(t *testing.T) {
-		ctxNoWf := ExecutionContext{AgentRunID: "agent789"}
-		key := ctxNoWf.SessionKey(SessionScopeWorkflow)
-		assert.Equal(t, SessionScopeAgent, key.Scope)
-		assert.Equal(t, "agent789", key.ScopeID)
-	})
-}
-
-func TestSessionManager_GetOrCreateSession(t *testing.T) {
-	ctx := context.Background()
+func TestSessionManager_GetOrCreateSession_CreatesNew(t *testing.T) {
 	backend := newMockBackend()
 	manager := NewSessionManager(backend)
 
-	key := NewWorkflowSessionKey("test-workflow")
-	cfg := SessionConfig{Runtime: "python"}
+	key := SessionKey{Namespace: "workflow", ID: "run-123", Key: "default"}
+	session, created, err := manager.GetOrCreateSession(context.Background(), key, nil)
 
-	t.Run("creates new session", func(t *testing.T) {
-		session, err := manager.GetOrCreateSession(ctx, key, cfg)
-		require.NoError(t, err)
-		assert.Equal(t, key.String(), session.ID)
-		assert.Equal(t, 1, backend.createCount)
-		assert.Equal(t, 1, manager.SessionCount())
-	})
-
-	t.Run("returns existing session", func(t *testing.T) {
-		session, err := manager.GetOrCreateSession(ctx, key, cfg)
-		require.NoError(t, err)
-		assert.Equal(t, key.String(), session.ID)
-		assert.Equal(t, 1, backend.createCount)
-	})
-
-	t.Run("creates different session for different key", func(t *testing.T) {
-		key2 := NewWorkflowSessionKey("other-workflow")
-		session, err := manager.GetOrCreateSession(ctx, key2, cfg)
-		require.NoError(t, err)
-		assert.Equal(t, key2.String(), session.ID)
-		assert.Equal(t, 2, backend.createCount)
-		assert.Equal(t, 2, manager.SessionCount())
-	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !created {
+		t.Error("expected created=true for new session")
+	}
+	if session == nil {
+		t.Fatal("expected session to be non-nil")
+	}
+	if backend.createCalls != 1 {
+		t.Errorf("expected 1 create call, got %d", backend.createCalls)
+	}
 }
 
-func TestSessionManager_DestroySession(t *testing.T) {
-	ctx := context.Background()
+func TestSessionManager_GetOrCreateSession_ReusesExisting(t *testing.T) {
 	backend := newMockBackend()
 	manager := NewSessionManager(backend)
 
-	key := NewWorkflowSessionKey("test-workflow")
-	cfg := SessionConfig{Runtime: "python"}
+	key := SessionKey{Namespace: "workflow", ID: "run-123", Key: "default"}
 
-	_, err := manager.GetOrCreateSession(ctx, key, cfg)
-	require.NoError(t, err)
-	assert.Equal(t, 1, manager.SessionCount())
+	session1, created1, err := manager.GetOrCreateSession(context.Background(), key, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !created1 {
+		t.Error("expected created=true for first call")
+	}
 
-	err = manager.DestroySession(ctx, key)
-	require.NoError(t, err)
-	assert.Equal(t, 0, manager.SessionCount())
-	assert.Equal(t, 1, backend.destroyCount)
+	session2, created2, err := manager.GetOrCreateSession(context.Background(), key, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if created2 {
+		t.Error("expected created=false for second call")
+	}
+	if session1.ID != session2.ID {
+		t.Errorf("expected same session ID, got %s vs %s", session1.ID, session2.ID)
+	}
+	if backend.createCalls != 1 {
+		t.Errorf("expected 1 create call, got %d", backend.createCalls)
+	}
+}
+
+func TestSessionManager_DifferentKeysCreateDifferentSessions(t *testing.T) {
+	backend := newMockBackend()
+	manager := NewSessionManager(backend)
+
+	key1 := SessionKey{Namespace: "workflow", ID: "run-123", Key: "default"}
+	key2 := SessionKey{Namespace: "workflow", ID: "run-456", Key: "default"}
+
+	session1, _, _ := manager.GetOrCreateSession(context.Background(), key1, nil)
+	session2, _, _ := manager.GetOrCreateSession(context.Background(), key2, nil)
+
+	if session1.ID == session2.ID {
+		t.Error("expected different session IDs for different keys")
+	}
+	if backend.createCalls != 2 {
+		t.Errorf("expected 2 create calls, got %d", backend.createCalls)
+	}
 }
 
 func TestSessionManager_CleanupWorkflow(t *testing.T) {
-	ctx := context.Background()
 	backend := newMockBackend()
 	manager := NewSessionManager(backend)
 
-	key := NewWorkflowSessionKey("cleanup-wf")
-	cfg := SessionConfig{Runtime: "python"}
+	key1 := SessionKey{Namespace: "workflow", ID: "run-123", Key: "default"}
+	key2 := SessionKey{Namespace: "workflow", ID: "run-123", Key: "isolated"}
+	key3 := SessionKey{Namespace: "workflow", ID: "run-other", Key: "default"}
 
-	_, err := manager.GetOrCreateSession(ctx, key, cfg)
-	require.NoError(t, err)
+	manager.GetOrCreateSession(context.Background(), key1, nil)
+	manager.GetOrCreateSession(context.Background(), key2, nil)
+	manager.GetOrCreateSession(context.Background(), key3, nil)
 
-	err = manager.CleanupWorkflow(ctx, "cleanup-wf")
-	require.NoError(t, err)
-	assert.Equal(t, 0, manager.SessionCount())
+	if manager.Count() != 3 {
+		t.Fatalf("expected 3 sessions, got %d", manager.Count())
+	}
+
+	err := manager.CleanupWorkflow(context.Background(), "run-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if manager.Count() != 1 {
+		t.Errorf("expected 1 session remaining, got %d", manager.Count())
+	}
+	if backend.destroyCalls != 2 {
+		t.Errorf("expected 2 destroy calls, got %d", backend.destroyCalls)
+	}
 }
 
 func TestSessionManager_CleanupIdleSessions(t *testing.T) {
-	ctx := context.Background()
 	backend := newMockBackend()
 	manager := NewSessionManager(backend)
 
-	key1 := NewWorkflowSessionKey("wf1")
-	key2 := NewWorkflowSessionKey("wf2")
-	cfg := SessionConfig{Runtime: "python"}
+	key := SessionKey{Namespace: "agent", ID: "run-123", Key: "default"}
+	session, _, _ := manager.GetOrCreateSession(context.Background(), key, nil)
 
-	s1, _ := manager.GetOrCreateSession(ctx, key1, cfg)
-	s2, _ := manager.GetOrCreateSession(ctx, key2, cfg)
+	session.LastUsedAt = time.Now().Add(-2 * time.Hour)
 
-	s1.LastUsedAt = time.Now().Add(-2 * time.Hour)
-	s2.LastUsedAt = time.Now()
-
-	cleaned, err := manager.CleanupIdleSessions(ctx, 1*time.Hour)
-	require.NoError(t, err)
-	assert.Equal(t, 1, cleaned)
-	assert.Equal(t, 1, manager.SessionCount())
+	cleaned, err := manager.CleanupIdleSessions(context.Background(), 1*time.Hour)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cleaned != 1 {
+		t.Errorf("expected 1 cleaned session, got %d", cleaned)
+	}
+	if manager.Count() != 0 {
+		t.Errorf("expected 0 sessions remaining, got %d", manager.Count())
+	}
 }
 
-func TestSessionManager_Close(t *testing.T) {
-	ctx := context.Background()
+func TestResolveSessionKey_WorkflowContext(t *testing.T) {
+	key := ResolveSessionKey("wf-123", "agent-456", "")
+
+	if key.Namespace != "workflow" {
+		t.Errorf("expected namespace=workflow, got %s", key.Namespace)
+	}
+	if key.ID != "wf-123" {
+		t.Errorf("expected ID=wf-123, got %s", key.ID)
+	}
+	if key.Key != "default" {
+		t.Errorf("expected Key=default, got %s", key.Key)
+	}
+}
+
+func TestResolveSessionKey_AgentContext(t *testing.T) {
+	key := ResolveSessionKey("", "agent-456", "custom")
+
+	if key.Namespace != "agent" {
+		t.Errorf("expected namespace=agent, got %s", key.Namespace)
+	}
+	if key.ID != "agent-456" {
+		t.Errorf("expected ID=agent-456, got %s", key.ID)
+	}
+	if key.Key != "custom" {
+		t.Errorf("expected Key=custom, got %s", key.Key)
+	}
+}
+
+func TestSessionKey_String(t *testing.T) {
+	key := SessionKey{Namespace: "workflow", ID: "run-123", Key: "default"}
+	expected := "workflow:run-123:default"
+	if key.String() != expected {
+		t.Errorf("expected %q, got %q", expected, key.String())
+	}
+}
+
+func TestSessionManager_ConcurrentAccess(t *testing.T) {
 	backend := newMockBackend()
 	manager := NewSessionManager(backend)
 
-	cfg := SessionConfig{Runtime: "python"}
-	manager.GetOrCreateSession(ctx, NewWorkflowSessionKey("wf1"), cfg)
-	manager.GetOrCreateSession(ctx, NewWorkflowSessionKey("wf2"), cfg)
-	manager.GetOrCreateSession(ctx, NewWorkflowSessionKey("wf3"), cfg)
+	key := SessionKey{Namespace: "workflow", ID: "run-123", Key: "default"}
 
-	assert.Equal(t, 3, manager.SessionCount())
+	var wg sync.WaitGroup
+	sessions := make(chan *Session, 10)
 
-	err := manager.Close(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, 0, manager.SessionCount())
-	assert.Equal(t, 3, backend.destroyCount)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			session, _, err := manager.GetOrCreateSession(context.Background(), key, nil)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			sessions <- session
+		}()
+	}
+
+	wg.Wait()
+	close(sessions)
+
+	var firstID string
+	for session := range sessions {
+		if firstID == "" {
+			firstID = session.ID
+		} else if session.ID != firstID {
+			t.Errorf("expected all sessions to have same ID, got %s vs %s", firstID, session.ID)
+		}
+	}
+
+	if backend.createCalls != 1 {
+		t.Errorf("expected 1 create call (concurrent safety), got %d", backend.createCalls)
+	}
 }
