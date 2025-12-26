@@ -1,6 +1,13 @@
 # Sandbox: Isolated Code Execution for Agents
 
-Station provides a **Dagger-based sandbox** that allows agents to execute code (Python, Node.js, Bash) in isolated containers. This enables agents to perform deterministic computations, data transformations, and complex analysis without affecting the host system.
+Station provides sandboxed environments that allow agents to execute code in isolated containers. This enables agents to perform deterministic computations, data transformations, and complex analysis without affecting the host system.
+
+## Two Modes
+
+| Mode | Backend | Lifecycle | Use Case |
+|------|---------|-----------|----------|
+| **Compute** (default) | Dagger | Ephemeral per-call | Quick calculations, data processing |
+| **Code** | Docker | Persistent per-workflow | Full Linux environment, iterative development |
 
 ## Why Use Sandbox?
 
@@ -296,6 +303,123 @@ print(f"Data rows: {len(lines)}")
 Config: production
 Data rows: 4
 ```
+
+---
+
+## Code Mode: Persistent Linux Sandbox
+
+Code Mode provides a **full Linux environment** that persists across multiple tool calls within a workflow. Unlike Compute Mode (ephemeral), Code Mode lets agents work like developers: install packages, compile code, iterate on files, and maintain state.
+
+### Enable Code Mode
+
+```yaml
+---
+model: openai/gpt-4o
+metadata:
+  name: "Developer Agent"
+sandbox:
+  mode: code
+  session: workflow  # share container across workflow steps
+---
+
+You are a developer with access to a full Linux sandbox.
+You can install packages, compile code, and run any shell commands.
+```
+
+### Code Mode Tools
+
+When `mode: code` is set, agents receive these tools instead of `sandbox_run`:
+
+| Tool | Description |
+|------|-------------|
+| `sandbox_open` | Get or create a persistent sandbox session |
+| `sandbox_exec` | Execute any shell command |
+| `sandbox_fs_write` | Write files to the sandbox |
+| `sandbox_fs_read` | Read files from the sandbox |
+| `sandbox_fs_list` | List directory contents |
+| `sandbox_fs_delete` | Delete files or directories |
+| `sandbox_close` | Explicitly close the session (optional) |
+
+### Example: Install Packages and Compile Code
+
+```bash
+# Agent opens sandbox (ubuntu:22.04 by default)
+sandbox_open({})
+
+# Install build tools
+sandbox_exec({"command": "apt-get update && apt-get install -y build-essential"})
+
+# Write C code
+sandbox_fs_write({
+  "path": "hello.c",
+  "content": "#include <stdio.h>\nint main() { printf(\"Hello!\\n\"); return 0; }"
+})
+
+# Compile and run
+sandbox_exec({"command": "gcc -o hello hello.c && ./hello"})
+# Output: Hello!
+```
+
+### Session Scoping
+
+Sessions can be scoped to workflows (shared across steps) or agents (isolated per run):
+
+```yaml
+sandbox:
+  mode: code
+  session: workflow  # Container shared across all agents in workflow
+  # session: agent   # New container per agent run
+```
+
+**Workflow scope example:**
+
+```
+Workflow: build-and-test
+├── Step 1: code-writer agent
+│   └── sandbox_fs_write → creates source files
+├── Step 2: tester agent  
+│   └── sandbox_exec → runs tests (files still there!)
+└── Workflow completes → container destroyed
+```
+
+### Docker Image Options
+
+Specify an image directly or use shortcuts:
+
+```yaml
+sandbox:
+  mode: code
+  runtime: linux     # ubuntu:22.04 (default)
+  # runtime: python  # python:3.11-slim
+  # runtime: node    # node:20-slim
+  # image: golang:1.22  # any Docker image
+```
+
+### Code Mode Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | string | `compute` | `compute` or `code` |
+| `session` | string | `workflow` | `workflow` or `agent` |
+| `runtime` | string | `linux` | `linux`, `python`, `node`, or custom |
+| `image` | string | Auto | Override container image |
+| `timeout_seconds` | int | 60 | Command execution timeout |
+| `limits.max_file_size_bytes` | int | 10MB | Max file size |
+| `limits.max_files` | int | 100 | Max files in sandbox |
+
+### Requirements
+
+Code Mode requires Docker:
+
+```bash
+# Docker must be available
+docker ps
+
+# Station needs Docker socket access
+export DOCKER_HOST=unix:///var/run/docker.sock
+```
+
+---
 
 ## Deployment
 
