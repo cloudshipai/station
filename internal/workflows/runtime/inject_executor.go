@@ -50,11 +50,8 @@ func (e *InjectExecutor) Execute(ctx context.Context, step workflows.ExecutionSt
 	SetNestedValue(runContext, resultPath, injectedData)
 
 	return StepResult{
-		Status: StepStatusCompleted,
-		Output: map[string]interface{}{
-			"injected_path": resultPath,
-			"injected_data": injectedData,
-		},
+		Status:   StepStatusCompleted,
+		Output:   injectedData,
 		NextStep: step.Next,
 		End:      step.End,
 	}, nil

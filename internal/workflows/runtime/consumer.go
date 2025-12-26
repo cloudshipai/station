@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,6 +49,7 @@ type PendingRunInfo struct {
 	RunID       string
 	WorkflowID  string
 	CurrentStep string
+	CreatedAt   time.Time
 }
 
 // PendingRunProvider provides access to pending workflow runs for recovery
@@ -126,6 +128,10 @@ func (c *WorkflowConsumer) Start(ctx context.Context) error {
 	return nil
 }
 
+// MaxRecoveryAge defines the maximum age of pending runs to recover on startup.
+// Runs older than this are considered stale and will not be auto-recovered.
+const MaxRecoveryAge = 4 * time.Hour
+
 func (c *WorkflowConsumer) recoverPendingRuns(ctx context.Context) {
 	if c.pendingRunProvider == nil {
 		log.Println("Workflow consumer: no pending run provider configured, skipping recovery")
@@ -145,9 +151,29 @@ func (c *WorkflowConsumer) recoverPendingRuns(ctx context.Context) {
 		return
 	}
 
-	log.Printf("Workflow consumer: recovering %d pending runs", len(pendingRuns))
-
+	cutoff := time.Now().Add(-MaxRecoveryAge)
+	var recentRuns []PendingRunInfo
+	var staleCount int
 	for _, run := range pendingRuns {
+		if run.CreatedAt.Before(cutoff) {
+			staleCount++
+			continue
+		}
+		recentRuns = append(recentRuns, run)
+	}
+
+	if staleCount > 0 {
+		log.Printf("Workflow consumer: skipping %d stale runs (older than %v)", staleCount, MaxRecoveryAge)
+	}
+
+	if len(recentRuns) == 0 {
+		log.Println("Workflow consumer: no recent pending runs to recover")
+		return
+	}
+
+	log.Printf("Workflow consumer: recovering %d recent pending runs", len(recentRuns))
+
+	for _, run := range recentRuns {
 		if run.CurrentStep == "" {
 			log.Printf("Workflow consumer: skipping run %s with empty current_step", run.RunID)
 			continue
@@ -275,6 +301,7 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 			if step.Raw.ResultPath != "" {
 				SetNestedValue(updatedContext, step.Raw.ResultPath, result.Output)
 			}
+			c.applyOutputMappings(updatedContext, step.Raw.Output, result.Output)
 			_ = c.runUpdater.UpdateRunContext(ctx, runID, updatedContext)
 		}
 
@@ -355,6 +382,118 @@ func (c *WorkflowConsumer) storeStepOutput(runContext map[string]interface{}, st
 	result[stepID] = output
 
 	return result
+}
+
+func (c *WorkflowConsumer) applyOutputMappings(context map[string]interface{}, outputMappings map[string]interface{}, stepOutput map[string]interface{}) {
+	if outputMappings == nil {
+		return
+	}
+
+	for key, pathRaw := range outputMappings {
+		path, ok := pathRaw.(string)
+		if !ok {
+			continue
+		}
+
+		value := resolveJSONPath(stepOutput, path)
+		if value != nil {
+			context[key] = value
+		}
+	}
+}
+
+func resolveJSONPath(data map[string]interface{}, path string) interface{} {
+	if path == "" || path == "$" {
+		return data
+	}
+
+	path = strings.TrimPrefix(path, "$.")
+
+	if path == "result" {
+		return extractAgentResult(data)
+	}
+
+	parts := strings.Split(path, ".")
+
+	var current interface{} = data
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			var ok bool
+			current, ok = v[part]
+			if !ok {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+
+	return current
+}
+
+func isAgentExecutorOutput(data map[string]interface{}) bool {
+	_, hasResponse := data["response"]
+	_, hasAgentID := data["agent_id"]
+	return hasResponse && hasAgentID
+}
+
+func tryParseJSON(s string) (interface{}, bool) {
+	s = strings.TrimSpace(s)
+	isObject := strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")
+	isArray := strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]")
+	if !isObject && !isArray {
+		return nil, false
+	}
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(s), &parsed); err != nil {
+		return nil, false
+	}
+	return parsed, true
+}
+
+func extractJSONFromMarkdown(s string) string {
+	startMarkers := []string{"```json\n", "```json\r\n", "```\n", "```\r\n"}
+	endMarker := "```"
+
+	for _, startMarker := range startMarkers {
+		startIdx := strings.Index(s, startMarker)
+		if startIdx == -1 {
+			continue
+		}
+		contentStart := startIdx + len(startMarker)
+		remaining := s[contentStart:]
+		endIdx := strings.Index(remaining, endMarker)
+		if endIdx == -1 {
+			continue
+		}
+		return strings.TrimSpace(remaining[:endIdx])
+	}
+	return ""
+}
+
+func extractAgentResult(data map[string]interface{}) interface{} {
+	if !isAgentExecutorOutput(data) {
+		return data
+	}
+
+	response := data["response"]
+	switch r := response.(type) {
+	case string:
+		if parsed, ok := tryParseJSON(r); ok {
+			return parsed
+		}
+		if jsonStr := extractJSONFromMarkdown(r); jsonStr != "" {
+			if parsed, ok := tryParseJSON(jsonStr); ok {
+				return parsed
+			}
+		}
+		return r
+	case map[string]interface{}:
+		return r
+	default:
+		return response
+	}
 }
 
 func (c *WorkflowConsumer) scheduleNextStep(ctx context.Context, runID, nextStepID string) error {

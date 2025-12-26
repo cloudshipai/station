@@ -89,6 +89,46 @@ func loadPromptSafe(genkitApp *genkit.Genkit, agentName, promptPath string) (ai.
 	return prompt, nil
 }
 
+// DotPromptFrontmatter represents full frontmatter parsing for output format
+type DotPromptFrontmatter struct {
+	Metadata map[string]interface{} `yaml:"metadata"`
+	Model    string                 `yaml:"model"`
+	MaxSteps int                    `yaml:"max_steps"`
+	Tools    []string               `yaml:"tools"`
+	Input    map[string]interface{} `yaml:"input"`
+	Output   struct {
+		Format string                 `yaml:"format"`
+		Schema map[string]interface{} `yaml:"schema"`
+	} `yaml:"output"`
+}
+
+// parseDotPromptFrontmatter parses the full frontmatter from a dotprompt file
+func (e *GenKitExecutor) parseDotPromptFrontmatter(promptPath string) (*DotPromptFrontmatter, error) {
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the frontmatter (similar to existing dotprompt parsers)
+	parts := strings.Split(string(content), "---")
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("no frontmatter found")
+	}
+
+	// Extract YAML frontmatter (parts[1])
+	yamlContent := strings.TrimSpace(parts[1])
+	if yamlContent == "" {
+		return nil, fmt.Errorf("empty frontmatter")
+	}
+
+	var frontmatter DotPromptFrontmatter
+	if err := yaml.Unmarshal([]byte(yamlContent), &frontmatter); err != nil {
+		return nil, err
+	}
+
+	return &frontmatter, nil
+}
+
 // extractDotPromptMetadata extracts app/app_type metadata from dotprompt file if it exists
 func (e *GenKitExecutor) extractDotPromptMetadata(promptPath string) (app, appType string) {
 	content, err := os.ReadFile(promptPath)
@@ -175,6 +215,14 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}
 	}
 
+	var outputFormat string
+	if frontmatter, err := e.parseDotPromptFrontmatter(promptPath); err == nil {
+		outputFormat = frontmatter.Output.Format
+		if outputFormat != "" {
+			fmt.Printf("DEBUG: Agent %s has output.format: %s\n", agent.Name, outputFormat)
+		}
+	}
+
 	// CRITICAL: Register filtered MCP tools BEFORE loading the prompt
 	// The prompt's frontmatter may reference tools in its `tools:` section
 	// and GenKit requires those tools to already be registered actions
@@ -223,9 +271,15 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		maxTurns = 25
 	}
 
-	// Merge userVariables with userInput for dotprompt template rendering
-	// This allows agents with input schemas to receive structured parameters
-	inputMap := map[string]any{"userInput": task}
+	// DEBUG: Check if OutputSchema is populated
+	if agent.OutputSchema != nil {
+		fmt.Printf("DEBUG: Agent %s has OutputSchema: %s\n", agent.Name, *agent.OutputSchema)
+	} else {
+		fmt.Printf("DEBUG: Agent %s has NO OutputSchema (nil)\n", agent.Name)
+	}
+	effectiveTask := e.wrapTaskWithOutputSchema(task, agent)
+
+	inputMap := map[string]any{"userInput": effectiveTask}
 	if userVariables != nil {
 		for k, v := range userVariables {
 			inputMap[k] = v
@@ -237,8 +291,6 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 	// results in duplicate traces (our empty root + GenKit's generate traces).
 	// Instead, the agent_execution_engine creates a proper span with full metadata.
 
-	// Pass tools to Execute - this is CRITICAL for function calling to work
-	// Tools must be explicitly passed via ai.WithTools()
 	resp, err := agentPrompt.Execute(execCtx,
 		ai.WithInput(inputMap),
 		ai.WithMaxTurns(maxTurns),
@@ -255,7 +307,6 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}, execError
 	}
 
-	// Extract response data (use working pattern from existing code)
 	finalResponse := resp.Text()
 
 	// Extract token usage
@@ -340,6 +391,22 @@ func (e *GenKitExecutor) getAgentPromptPath(agent models.Agent, environmentName 
 	}
 
 	return promptPath, nil
+}
+
+func (e *GenKitExecutor) wrapTaskWithOutputSchema(task string, agent models.Agent) string {
+	if agent.OutputSchema == nil || *agent.OutputSchema == "" {
+		return task
+	}
+
+	fmt.Printf("DEBUG: Injecting output schema constraints for agent %s\n", agent.Name)
+	return fmt.Sprintf(`%s
+
+CRITICAL OUTPUT REQUIREMENT:
+You MUST respond with ONLY valid JSON that conforms to this exact schema:
+%s
+
+Do NOT include any explanation, markdown formatting, or text outside the JSON.
+Your entire response must be parseable as JSON.`, task, *agent.OutputSchema)
 }
 
 // getModelName builds the model name with provider prefix

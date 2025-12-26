@@ -607,6 +607,29 @@ func TestSwitchExecutor_Execute(t *testing.T) {
 			wantNextStep: "escalate",
 		},
 		{
+			name: "dataPath with scalar value uses val (documented)",
+			step: workflows.ExecutionStep{
+				ID:   "decide",
+				Type: workflows.StepTypeBranch,
+				Raw: workflows.StateSpec{
+					Type:     "switch",
+					DataPath: "result.code",
+					Conditions: []workflows.SwitchCondition{
+						{If: "val == 200", Next: "success"},
+						{If: "val >= 400", Next: "error"},
+					},
+					DefaultNext: "retry",
+				},
+			},
+			runContext: map[string]interface{}{
+				"result": map[string]interface{}{
+					"code": 200,
+				},
+			},
+			wantStatus:   StepStatusCompleted,
+			wantNextStep: "success",
+		},
+		{
 			name: "dataPath with scalar value uses _value",
 			step: workflows.ExecutionStep{
 				ID:   "decide",

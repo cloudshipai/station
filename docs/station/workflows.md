@@ -275,7 +275,7 @@ Access the UI at `http://localhost:8585` after starting Station.
 
 ## Expression Syntax
 
-Conditions use a simple expression language:
+Conditions use Starlark, a Python-like expression language:
 
 ```
 # Comparison
@@ -288,9 +288,81 @@ _value == "critical"     # _value refers to dataPath value
 _value > 100
 
 # Boolean
-true
-false
+True
+False
 ```
+
+### Dot Notation in Expressions
+
+When iterating over objects in `foreach` loops or accessing nested data, you can use clean dot notation to access fields:
+
+```yaml
+# In foreach with switch
+- id: categorize_vulnerabilities
+  type: foreach
+  itemsPath: ctx.scan.vulnerabilities
+  itemName: vuln
+  iterator:
+    states:
+      - id: route_by_severity
+        type: switch
+        dataPath: vuln
+        conditions:
+          # Dot notation - clean and readable
+          - if: "vuln.severity == 'critical'"
+            next: critical_path
+          - if: "vuln.severity == 'high'"
+            next: high_path
+          - if: "vuln.severity == 'medium'"
+            next: medium_path
+        defaultNext: low_path
+```
+
+#### Supported Patterns
+
+| Pattern | Example | Description |
+|---------|---------|-------------|
+| `item.field` | `vuln.severity` | Access field on iteration variable |
+| `item.nested.field` | `result.analysis.score` | Access deeply nested fields |
+| `item.field == "value"` | `vuln.severity == 'critical'` | Comparison with dot notation |
+| `item.boolean_field` | `vuln.exploitable` | Direct boolean field access |
+| Compound expressions | `vuln.severity == 'critical' and vuln.exploitable` | Multiple conditions |
+
+#### Examples
+
+```yaml
+# Simple field access
+- if: "item.status == 'failed'"
+  next: handle_failure
+
+# Nested field access  
+- if: "result.metrics.error_rate > 0.05"
+  next: alert
+
+# Boolean field (no comparison needed)
+- if: "config.enabled"
+  next: process
+
+# Compound with numeric comparison
+- if: "item.priority > 5 and item.status == 'pending'"
+  next: high_priority
+
+# String methods (Starlark supports Python-like methods)
+- if: "'error' in item.message.lower()"
+  next: error_handler
+```
+
+#### Bracket Notation (Alternative)
+
+You can also use bracket notation, which is equivalent:
+
+```yaml
+# These are equivalent:
+- if: "vuln.severity == 'critical'"      # Dot notation (preferred)
+- if: "vuln['severity'] == 'critical'"   # Bracket notation
+```
+
+Dot notation is cleaner and more readable, so it's recommended for most cases.
 
 ## Best Practices
 

@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"station/internal/workflows"
 )
@@ -283,10 +285,76 @@ func (e *ForeachExecutor) executeIterator(
 			SetNestedValue(iterContext, state.ResultPath, result.Output)
 		}
 
+		applyIteratorOutputMappings(iterContext, state.Output, result.Output)
+
 		if iterStep.End || result.End {
 			break
 		}
 	}
 
 	return currentOutput, nil
+}
+
+func applyIteratorOutputMappings(context map[string]interface{}, outputMappings map[string]interface{}, stepOutput map[string]interface{}) {
+	if outputMappings == nil || stepOutput == nil {
+		return
+	}
+
+	for key, pathRaw := range outputMappings {
+		path, ok := pathRaw.(string)
+		if !ok {
+			continue
+		}
+
+		value := resolveIteratorPath(stepOutput, path)
+		if value != nil {
+			context[key] = value
+		}
+	}
+}
+
+func resolveIteratorPath(data map[string]interface{}, path string) interface{} {
+	if path == "" || path == "$" {
+		return data
+	}
+
+	path = strings.TrimPrefix(path, "$.")
+
+	if path == "result" {
+		return extractIteratorResult(data)
+	}
+
+	parts := strings.Split(path, ".")
+
+	var current interface{} = data
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			var ok bool
+			current, ok = v[part]
+			if !ok {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+
+	return current
+}
+
+func extractIteratorResult(data map[string]interface{}) interface{} {
+	_, hasResponse := data["response"]
+	_, hasAgentID := data["agent_id"]
+	if hasResponse && hasAgentID {
+		responseStr, ok := data["response"].(string)
+		if ok {
+			var parsed interface{}
+			if err := json.Unmarshal([]byte(responseStr), &parsed); err == nil {
+				return parsed
+			}
+		}
+		return data["response"]
+	}
+	return data
 }

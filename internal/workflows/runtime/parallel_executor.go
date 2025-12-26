@@ -183,6 +183,8 @@ func (e *ParallelExecutor) executeBranch(ctx context.Context, branch workflows.B
 
 func classifyBranchState(state workflows.StateSpec) workflows.ExecutionStepType {
 	switch state.Type {
+	case "agent":
+		return workflows.StepTypeAgent
 	case "operation", "action", "function":
 		if task, ok := state.Input["task"]; ok {
 			if taskStr, ok := task.(string); ok {
@@ -200,8 +202,14 @@ func classifyBranchState(state workflows.StateSpec) workflows.ExecutionStepType 
 		return workflows.StepTypeParallel
 	case "set", "transform", "context", "inject":
 		return workflows.StepTypeContextOp
-	case "await", "await.signal", "await.event":
+	case "await", "await.signal", "await.event", "human_approval":
 		return workflows.StepTypeAwait
+	case "sleep", "delay", "timer":
+		return workflows.StepTypeTimer
+	case "cron", "schedule":
+		return workflows.StepTypeCron
+	case "try":
+		return workflows.StepTypeTryCatch
 	default:
 		return workflows.StepTypeCustom
 	}

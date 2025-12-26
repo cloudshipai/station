@@ -1,0 +1,207 @@
+{
+  "workflowId": "production-incident-response",
+  "name": "Production Incident Response",
+  "description": "Comprehensive incident response workflow using parallel diagnostics, conditional routing, human approval, and error handling",
+  "definition": {
+    "id": "production-incident-response",
+    "version": "1.0",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "alert_id": { "type": "string" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "service": { "type": "string" },
+        "namespace": { "type": "string" }
+      },
+      "required": ["alert_id", "severity", "service", "namespace"]
+    },
+    "start": "init_context",
+    "states": [
+      {
+        "id": "init_context",
+        "type": "inject",
+        "data": {
+          "investigation_start": "{{ now }}",
+          "status": "investigating"
+        },
+        "resultPath": "ctx.meta",
+        "transition": "gather_diagnostics"
+      },
+      {
+        "id": "gather_diagnostics",
+        "type": "parallel",
+        "branches": [
+          {
+            "name": "kubernetes_check",
+            "states": [
+              {
+                "id": "k8s_pods",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "k8s-investigator",
+                  "agent_task": "Investigate Kubernetes cluster health for service {{ ctx.service }} in namespace {{ ctx.namespace }}. Check pod status, resource usage, recent events, and any pending issues. Look for OOMKills, CrashLoopBackOff, or failed deployments."
+                },
+                "end": true
+              }
+            ]
+          },
+          {
+            "name": "aws_logs_check",
+            "states": [
+              {
+                "id": "aws_logs",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "aws-log-analyzer",
+                  "agent_task": "Analyze AWS CloudWatch logs for service {{ ctx.service }} in the last 30 minutes. Look for error patterns, exceptions, slow queries, and any anomalies that correlate with alert {{ ctx.alert_id }}."
+                },
+                "end": true
+              }
+            ]
+          },
+          {
+            "name": "grafana_metrics_check",
+            "states": [
+              {
+                "id": "grafana_metrics",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "grafana-analyst",
+                  "agent_task": "Query Grafana dashboards for {{ ctx.service }}. Check latency percentiles (p50, p95, p99), error rates, request volume, and resource utilization. Identify any anomalies in the last hour."
+                },
+                "end": true
+              }
+            ]
+          },
+          {
+            "name": "deployment_check",
+            "states": [
+              {
+                "id": "recent_deploys",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "deployment-analyst",
+                  "agent_task": "Check for recent deployments or configuration changes to {{ ctx.service }} in the last 24 hours. Identify any code changes, config updates, or infrastructure modifications that might have caused this incident."
+                },
+                "end": true
+              }
+            ]
+          }
+        ],
+        "join": { "mode": "all" },
+        "resultPath": "ctx.diagnostics",
+        "transition": "synthesize_findings"
+      },
+      {
+        "id": "synthesize_findings",
+        "type": "operation",
+        "input": {
+          "task": "agent.run",
+          "agent": "root-cause-analyzer",
+          "agent_task": "Analyze the combined diagnostic results from Kubernetes, AWS logs, Grafana metrics, and deployment history. Synthesize these findings to determine the most likely root cause for alert {{ ctx.alert_id }} affecting {{ ctx.service }}. Provide a structured analysis with: 1) Summary of findings, 2) Most likely root cause, 3) Confidence level (high/medium/low), 4) Recommended remediation actions."
+        },
+        "resultPath": "ctx.analysis",
+        "transition": "route_by_severity"
+      },
+      {
+        "id": "route_by_severity",
+        "type": "switch",
+        "dataPath": "ctx",
+        "conditions": [
+          {
+            "if": "severity == 'critical'",
+            "next": "critical_response"
+          },
+          {
+            "if": "severity == 'high'",
+            "next": "high_priority_response"
+          }
+        ],
+        "defaultNext": "standard_response"
+      },
+      {
+        "id": "critical_response",
+        "type": "operation",
+        "input": {
+          "task": "human.approval",
+          "message": "CRITICAL INCIDENT: Alert {{ ctx.alert_id }} for {{ ctx.service }}\n\nRoot Cause Analysis:\n{{ ctx.analysis.result }}\n\nThis requires immediate approval to proceed with automated remediation.",
+          "timeoutSeconds": 300
+        },
+        "resultPath": "ctx.approval",
+        "transition": "attempt_remediation"
+      },
+      {
+        "id": "high_priority_response",
+        "type": "inject",
+        "data": {
+          "auto_approved": true,
+          "reason": "High priority auto-approved with monitoring"
+        },
+        "resultPath": "ctx.approval",
+        "transition": "attempt_remediation"
+      },
+      {
+        "id": "standard_response",
+        "type": "inject",
+        "data": {
+          "auto_approved": true,
+          "reason": "Standard priority - logged for review"
+        },
+        "resultPath": "ctx.approval",
+        "transition": "generate_report"
+      },
+      {
+        "id": "attempt_remediation",
+        "type": "try_catch",
+        "try": {
+          "start": "run_remediation",
+          "states": [
+            {
+              "id": "run_remediation",
+              "type": "operation",
+              "input": {
+                "task": "agent.run",
+                "agent": "k8s-deployment-checker",
+                "agent_task": "Based on the root cause analysis, execute safe remediation for {{ ctx.service }} in {{ ctx.namespace }}. If the issue is pod-related, attempt a rolling restart. If resource-related, check if scaling is needed. Document all actions taken."
+              },
+              "resultPath": "ctx.remediation",
+              "end": true
+            }
+          ]
+        },
+        "catch": {
+          "start": "remediation_failed",
+          "states": [
+            {
+              "id": "remediation_failed",
+              "type": "inject",
+              "data": {
+                "remediation_status": "failed",
+                "error": "{{ ctx._errorMessage }}",
+                "requires_manual_intervention": true
+              },
+              "resultPath": "ctx.remediation",
+              "end": true
+            }
+          ]
+        },
+        "transition": "generate_report"
+      },
+      {
+        "id": "generate_report",
+        "type": "operation",
+        "input": {
+          "task": "agent.run",
+          "agent": "root-cause-analyzer",
+          "agent_task": "Generate a final incident report for alert {{ ctx.alert_id }}. Include: 1) Incident timeline, 2) Diagnostic findings summary, 3) Root cause determination, 4) Actions taken, 5) Remediation status, 6) Recommendations for prevention. Format as a structured report suitable for post-mortem review."
+        },
+        "resultPath": "ctx.report",
+        "end": true
+      }
+    ]
+  }
+}

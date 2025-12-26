@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"station/internal/workflows"
 )
@@ -109,6 +111,7 @@ func (e *TryCatchExecutor) executeBlock(ctx context.Context, block *workflows.It
 	currentID := startState
 	var lastResult StepResult
 	var lastErr error
+	blockOutputs := make(map[string]interface{})
 
 	for currentID != "" {
 		state, ok := stateMap[currentID]
@@ -141,13 +144,89 @@ func (e *TryCatchExecutor) executeBlock(ctx context.Context, block *workflows.It
 			return lastResult, nil
 		}
 
+		if state.ResultPath != "" {
+			SetNestedValue(runContext, state.ResultPath, lastResult.Output)
+		}
+
+		applyBlockOutputMappingsWithCollection(runContext, blockOutputs, state.Output, lastResult.Output)
+
 		if lastResult.End || lastResult.NextStep == "" {
 			break
 		}
 		currentID = lastResult.NextStep
 	}
 
+	if len(blockOutputs) > 0 {
+		lastResult.Output = blockOutputs
+	}
+
 	return lastResult, lastErr
+}
+
+func applyBlockOutputMappingsWithCollection(context, collected map[string]interface{}, outputMappings map[string]interface{}, stepOutput map[string]interface{}) {
+	if outputMappings == nil || stepOutput == nil {
+		return
+	}
+
+	for key, pathRaw := range outputMappings {
+		path, ok := pathRaw.(string)
+		if !ok {
+			continue
+		}
+
+		value := resolveBlockPath(stepOutput, path)
+		if value != nil {
+			context[key] = value
+			collected[key] = value
+		}
+	}
+}
+
+func resolveBlockPath(data map[string]interface{}, path string) interface{} {
+	if path == "" || path == "$" {
+		return data
+	}
+
+	path = strings.TrimPrefix(path, "$.")
+
+	if path == "result" {
+		return extractBlockResult(data)
+	}
+
+	parts := strings.Split(path, ".")
+
+	var current interface{} = data
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			var ok bool
+			current, ok = v[part]
+			if !ok {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+
+	return current
+}
+
+func extractBlockResult(data map[string]interface{}) interface{} {
+	_, hasResponse := data["response"]
+	_, hasAgentID := data["agent_id"]
+	if hasResponse && hasAgentID {
+		responseStr, ok := data["response"].(string)
+		if ok {
+			var parsed interface{}
+			err := json.Unmarshal([]byte(responseStr), &parsed)
+			if err == nil {
+				return parsed
+			}
+		}
+		return data["response"]
+	}
+	return data
 }
 
 func classifyState(state workflows.StateSpec) workflows.ExecutionStepType {

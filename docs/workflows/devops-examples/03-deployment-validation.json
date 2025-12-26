@@ -1,0 +1,234 @@
+{
+  "workflowId": "deployment-validation",
+  "name": "Deployment Validation Pipeline",
+  "description": "Pre and post-deployment validation using foreach, parallel, try_catch, timer, and human approval",
+  "definition": {
+    "id": "deployment-validation",
+    "version": "1.0",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "deployment_id": { "type": "string" },
+        "service": { "type": "string" },
+        "namespace": { "type": "string" },
+        "version": { "type": "string" },
+        "environments": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["deployment_id", "service", "version"]
+    },
+    "start": "init_deployment",
+    "states": [
+      {
+        "id": "init_deployment",
+        "type": "inject",
+        "data": {
+          "started_at": "{{ now }}",
+          "status": "initializing",
+          "namespace": "production",
+          "environments": ["staging", "production"]
+        },
+        "resultPath": "ctx.deployment",
+        "transition": "pre_deploy_checks"
+      },
+      {
+        "id": "pre_deploy_checks",
+        "type": "parallel",
+        "branches": [
+          {
+            "name": "current_state",
+            "states": [
+              {
+                "id": "capture_baseline",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "k8s-investigator",
+                  "agent_task": "Capture baseline state for {{ ctx.service }} before deployment. Record: current version, pod count, resource usage, and current health status."
+                },
+                "end": true
+              }
+            ]
+          },
+          {
+            "name": "dependency_check",
+            "states": [
+              {
+                "id": "check_dependencies",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "deployment-analyst",
+                  "agent_task": "Verify all dependencies for {{ ctx.service }} version {{ ctx.version }} are available and healthy. Check: database connections, upstream services, external APIs."
+                },
+                "end": true
+              }
+            ]
+          },
+          {
+            "name": "metrics_baseline",
+            "states": [
+              {
+                "id": "capture_metrics",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "grafana-analyst",
+                  "agent_task": "Capture baseline metrics for {{ ctx.service }}: current error rate, latency distribution, request volume. This will be used for post-deployment comparison."
+                },
+                "end": true
+              }
+            ]
+          }
+        ],
+        "join": { "mode": "all" },
+        "resultPath": "ctx.pre_deploy",
+        "transition": "request_deploy_approval"
+      },
+      {
+        "id": "request_deploy_approval",
+        "type": "operation",
+        "input": {
+          "task": "human.approval",
+          "message": "Deployment Approval Required\n\nService: {{ ctx.service }}\nVersion: {{ ctx.version }}\nDeployment ID: {{ ctx.deployment_id }}\n\nPre-deployment checks completed:\n{{ ctx.pre_deploy }}\n\nApprove to proceed with deployment?",
+          "timeoutSeconds": 1800
+        },
+        "resultPath": "ctx.approval",
+        "transition": "execute_deployment"
+      },
+      {
+        "id": "execute_deployment",
+        "type": "try_catch",
+        "try": {
+          "start": "deploy_to_environments",
+          "states": [
+            {
+              "id": "deploy_to_environments",
+              "type": "foreach",
+              "itemsPath": "ctx.deployment.environments",
+              "itemName": "env",
+              "maxConcurrency": 1,
+              "iterator": {
+                "start": "deploy_single_env",
+                "states": [
+                  {
+                    "id": "deploy_single_env",
+                    "type": "operation",
+                    "input": {
+                      "task": "agent.run",
+                      "agent": "k8s-deployment-checker",
+                      "agent_task": "Monitor deployment of {{ ctx.service }} version {{ ctx.version }} to {{ env }} environment. Wait for rollout to complete and verify pod health."
+                    },
+                    "transition": "wait_for_stabilization"
+                  },
+                  {
+                    "id": "wait_for_stabilization",
+                    "type": "timer",
+                    "duration": "30s",
+                    "transition": "verify_env_health"
+                  },
+                  {
+                    "id": "verify_env_health",
+                    "type": "operation",
+                    "input": {
+                      "task": "agent.run",
+                      "agent": "k8s-investigator",
+                      "agent_task": "Verify {{ ctx.service }} health in {{ env }} after deployment. Check: all pods running, no recent restarts, readiness probes passing."
+                    },
+                    "end": true
+                  }
+                ]
+              },
+              "resultPath": "ctx.env_deployments",
+              "end": true
+            }
+          ]
+        },
+        "catch": {
+          "start": "deployment_failed",
+          "states": [
+            {
+              "id": "deployment_failed",
+              "type": "operation",
+              "input": {
+                "task": "agent.run",
+                "agent": "k8s-deployment-checker",
+                "agent_task": "DEPLOYMENT FAILED for {{ ctx.service }}. Error: {{ ctx._errorMessage }}. Initiate rollback to previous version. Document the failure reason."
+              },
+              "resultPath": "ctx.rollback",
+              "end": true
+            }
+          ]
+        },
+        "transition": "post_deploy_validation"
+      },
+      {
+        "id": "post_deploy_validation",
+        "type": "parallel",
+        "branches": [
+          {
+            "name": "health_validation",
+            "states": [
+              {
+                "id": "final_health_check",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "k8s-investigator",
+                  "agent_task": "Final health validation for {{ ctx.service }} after deployment. Comprehensive check of all pods, services, and endpoints."
+                },
+                "end": true
+              }
+            ]
+          },
+          {
+            "name": "metrics_comparison",
+            "states": [
+              {
+                "id": "compare_metrics",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "grafana-analyst",
+                  "agent_task": "Compare post-deployment metrics for {{ ctx.service }} against pre-deployment baseline. Check for: increased error rates, latency regressions, unusual patterns."
+                },
+                "end": true
+              }
+            ]
+          },
+          {
+            "name": "log_analysis",
+            "states": [
+              {
+                "id": "check_logs",
+                "type": "operation",
+                "input": {
+                  "task": "agent.run",
+                  "agent": "aws-log-analyzer",
+                  "agent_task": "Analyze logs for {{ ctx.service }} since deployment. Look for: new error patterns, warnings, or anomalies that weren't present before."
+                },
+                "end": true
+              }
+            ]
+          }
+        ],
+        "join": { "mode": "all" },
+        "resultPath": "ctx.post_validation",
+        "transition": "generate_deployment_report"
+      },
+      {
+        "id": "generate_deployment_report",
+        "type": "operation",
+        "input": {
+          "task": "agent.run",
+          "agent": "root-cause-analyzer",
+          "agent_task": "Generate deployment report for {{ ctx.service }} version {{ ctx.version }}.\n\nInclude:\n1) Deployment summary (started, completed, duration)\n2) Pre-deployment state\n3) Deployment execution results per environment\n4) Post-deployment validation results\n5) Metrics comparison (before vs after)\n6) Any issues detected\n7) Overall deployment status: SUCCESS or NEEDS_ATTENTION"
+        },
+        "resultPath": "ctx.report",
+        "end": true
+      }
+    ]
+  }
+}
