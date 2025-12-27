@@ -361,8 +361,12 @@ func (e *HumanApprovalExecutor) Execute(ctx context.Context, step workflows.Exec
 		input = make(map[string]interface{})
 	}
 
+	// Check if this is a human approval step:
+	// 1. Explicit type: human_approval in YAML
+	// 2. type: operation with input.task: "human.approval"
 	action, _ := input["task"].(string)
-	if action != "human.approval" {
+	isHumanApproval := action == "human.approval" || step.Raw.Type == "human_approval"
+	if !isHumanApproval {
 		return StepResult{
 			Status:   StepStatusCompleted,
 			Output:   map[string]interface{}{"skipped": true, "reason": "not a human.approval action"},
@@ -371,7 +375,11 @@ func (e *HumanApprovalExecutor) Execute(ctx context.Context, step workflows.Exec
 		}, nil
 	}
 
+	// Get message from input or from step.Raw.Message (for type: human_approval)
 	message, _ := input["message"].(string)
+	if message == "" {
+		message = step.Raw.Message
+	}
 	if message == "" {
 		return StepResult{Status: StepStatusFailed}, ErrMessageRequired
 	}

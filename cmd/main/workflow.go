@@ -1018,13 +1018,21 @@ func runWorkflowApprovalsApprove(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create workflow engine: %w", err)
 	}
-	if engine != nil {
-		defer engine.Close()
+	if engine == nil {
+		return fmt.Errorf("NATS engine not available - ensure NATS is running")
+	}
+	defer engine.Close()
+
+	ctx := context.Background()
+
+	agentService := services.NewAgentService(repos)
+	consumer := startCLIWorkflowConsumer(ctx, repos, engine, agentService)
+	if consumer != nil {
+		defer consumer.Stop()
 	}
 
 	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
 
-	ctx := context.Background()
 	approval, err := workflowService.ApproveWorkflowStep(ctx, services.ApproveWorkflowStepRequest{
 		ApprovalID: approvalID,
 		ApproverID: "cli-user",
@@ -1038,7 +1046,56 @@ func runWorkflowApprovalsApprove(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Run: %s\n", approval.RunID)
 	fmt.Printf("   Step: %s\n", approval.StepID)
 	fmt.Printf("   Status: %s\n", approval.Status)
-	fmt.Println("\n🚀 Workflow will resume automatically")
+	fmt.Println("\n🚀 Resuming workflow...")
+
+	deadline := time.Now().Add(2 * time.Minute)
+	pollInterval := 1 * time.Second
+
+	for time.Now().Before(deadline) {
+		time.Sleep(pollInterval)
+
+		run, err := workflowService.GetRun(ctx, approval.RunID)
+		if err != nil {
+			return fmt.Errorf("failed to get run status: %w", err)
+		}
+
+		switch run.Status {
+		case "completed":
+			fmt.Printf("\n✅ Workflow completed!\n")
+			if run.CompletedAt != nil {
+				duration := run.CompletedAt.Sub(run.StartedAt)
+				fmt.Printf("   Duration: %s\n", duration)
+			}
+			return nil
+
+		case "failed":
+			fmt.Printf("\n❌ Workflow failed!\n")
+			if run.Error != nil {
+				fmt.Printf("   Error: %s\n", *run.Error)
+			}
+			return fmt.Errorf("workflow failed")
+
+		case "waiting_approval":
+			fmt.Printf("\n⏸️  Workflow paused at next approval step\n")
+			if run.CurrentStep != nil {
+				fmt.Printf("   Current Step: %s\n", *run.CurrentStep)
+			}
+			return nil
+
+		case "canceled":
+			fmt.Printf("\n⏹️  Workflow was canceled\n")
+			return fmt.Errorf("workflow canceled")
+
+		default:
+			step := "resuming"
+			if run.CurrentStep != nil {
+				step = *run.CurrentStep
+			}
+			fmt.Printf("   Status: %s (step: %s)\n", run.Status, step)
+		}
+	}
+
+	fmt.Println("\n⏳ Workflow is still running. Use 'stn workflow inspect' to check status.")
 	return nil
 }
 
