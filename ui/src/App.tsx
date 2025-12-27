@@ -3326,6 +3326,7 @@ const SettingsPage = () => {
     ai: true,
     cloudship: false,
     telemetry: false,
+    sandbox: false,
     ports: false,
     other: false,
   });
@@ -3374,6 +3375,11 @@ const SettingsPage = () => {
   const updateTelemetryConfig = (updates: any) => {
     const newTelemetry = { ...configObj.telemetry, ...updates };
     updateConfig({ telemetry: newTelemetry });
+  };
+
+  const updateSandboxConfig = (updates: any) => {
+    const newSandbox = { ...configObj.sandbox, ...updates };
+    updateConfig({ sandbox: newSandbox });
   };
 
   const handleYamlChange = (value: string | undefined) => {
@@ -3804,6 +3810,68 @@ const SettingsPage = () => {
                         )}
                       </>
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* Sandbox Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('sandbox')}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  <span>Sandbox (Code Execution)</span>
+                  {expandedSections.sandbox ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.sandbox && (
+                  <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-xs text-gray-600">Enable Sandbox</label>
+                        <p className="text-[10px] text-gray-400">Run code in isolated Docker containers</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={configObj.sandbox?.enabled || false}
+                        onChange={(e) => updateSandboxConfig({ enabled: e.target.checked })}
+                        className="bg-white border border-gray-300"
+                      />
+                    </div>
+                    
+                    {configObj.sandbox?.enabled && (
+                      <>
+                        <div className="pt-2 border-t border-gray-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <label className="text-xs text-gray-600">Enable Code Mode</label>
+                              <p className="text-[10px] text-gray-400">Persistent Docker sessions with filesystem access</p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={configObj.sandbox?.code_mode_enabled || false}
+                              onChange={(e) => updateSandboxConfig({ code_mode_enabled: e.target.checked })}
+                              className="bg-white border border-gray-300"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="pt-2 border-t border-gray-200">
+                          <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                            <div className="text-[10px] text-blue-700">
+                              <span className="font-semibold">Compute Mode:</span> Single-execution sandbox_run tool
+                              <br />
+                              <span className="font-semibold">Code Mode:</span> Persistent sessions with sandbox_open, sandbox_exec, sandbox_fs_* tools
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    
+                    <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                      <div className="text-[10px] text-amber-700">
+                        <span className="font-semibold">Requires:</span> Docker installed and running
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
