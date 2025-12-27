@@ -298,10 +298,11 @@ func (c *WorkflowConsumer) executeStep(ctx context.Context, runID string, step w
 
 		if result.Output != nil {
 			updatedContext := c.storeStepOutput(runContext, step.ID, result.Output)
+			enrichedOutput := enrichAgentOutputWithParsedResult(result.Output)
 			if step.Raw.ResultPath != "" {
-				SetNestedValue(updatedContext, step.Raw.ResultPath, result.Output)
+				SetNestedValue(updatedContext, step.Raw.ResultPath, enrichedOutput)
 			}
-			c.applyOutputMappings(updatedContext, step.Raw.Output, result.Output)
+			c.applyOutputMappings(updatedContext, step.Raw.Output, enrichedOutput)
 			_ = c.runUpdater.UpdateRunContext(ctx, runID, updatedContext)
 		}
 
@@ -374,14 +375,33 @@ func (c *WorkflowConsumer) storeStepOutput(runContext map[string]interface{}, st
 		steps = make(map[string]interface{})
 	}
 
+	processedOutput := enrichAgentOutputWithParsedResult(output)
+
 	steps[stepID] = map[string]interface{}{
-		"output": output,
+		"output": processedOutput,
 	}
 	result["steps"] = steps
 
-	result[stepID] = output
+	result[stepID] = processedOutput
 
 	return result
+}
+
+func enrichAgentOutputWithParsedResult(output map[string]interface{}) map[string]interface{} {
+	if !isAgentExecutorOutput(output) {
+		return output
+	}
+	extracted := extractAgentResult(output)
+	if extracted == nil {
+		return output
+	}
+
+	enriched := make(map[string]interface{})
+	for k, v := range output {
+		enriched[k] = v
+	}
+	enriched["result"] = extracted
+	return enriched
 }
 
 func (c *WorkflowConsumer) applyOutputMappings(context map[string]interface{}, outputMappings map[string]interface{}, stepOutput map[string]interface{}) {
