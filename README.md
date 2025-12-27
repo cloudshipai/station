@@ -852,6 +852,41 @@ Connect to your actual infrastructure tools:
 - **Databases**: PostgreSQL, MySQL, MongoDB
 - **CI/CD**: Jenkins, GitHub Actions, GitLab
 
+### Sandbox: Isolated Code Execution
+
+Agents can execute Python, Node.js, or Bash code in isolated Docker containers:
+
+**Compute Mode** - Ephemeral per-call (default):
+```yaml
+---
+metadata:
+  name: "data-processor"
+sandbox: python    # or: node, bash
+---
+Use the sandbox_run tool to process data with Python.
+```
+
+**Code Mode** - Persistent session across workflow steps:
+```yaml
+---
+metadata:
+  name: "code-developer"
+sandbox:
+  mode: code
+  session: workflow  # Share container across agents in workflow
+---
+Use sandbox_open, sandbox_exec, sandbox_fs_write to develop iteratively.
+```
+
+**Why Sandbox?**
+| Without Sandbox | With Sandbox |
+|-----------------|--------------|
+| LLM calculates (often wrong) | Python computes correctly |
+| Large JSON in context (slow) | Python parses efficiently |
+| Host execution (security risk) | Isolated container (safe) |
+
+[Sandbox Documentation →](./docs/station/sandbox.md)
+
 ---
 
 ## Try It Yourself
