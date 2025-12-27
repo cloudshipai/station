@@ -52,17 +52,28 @@ When a workflow reaches an approval step:
 
 ## Defining Approval Steps
 
-### IMPORTANT: Correct Syntax
+There are two equivalent ways to define approval steps. Both work correctly:
 
-There are two ways to define approval steps, but **only one works correctly**:
+#### Method 1: `type: human_approval` (Recommended)
 
-#### Method 1: Operation with `task: "human.approval"` (CORRECT)
+```yaml
+- id: request_approval
+  type: human_approval
+  message: "Please approve this action"   # REQUIRED - shown to approver
+  approvers: ["admin", "oncall"]          # Optional - list of allowed approvers
+  timeout_seconds: 3600                   # Optional - auto-reject after timeout
+  transition: next_step
+```
+
+This is the **recommended** approach for readability.
+
+#### Method 2: Operation with `task: "human.approval"`
 
 ```yaml
 - id: request_approval
   type: operation
   input:
-    task: "human.approval"           # REQUIRED - triggers approval executor
+    task: "human.approval"           # Triggers approval executor
     message: "Please approve this action"  # REQUIRED - shown to approver
     approvers: ["admin", "oncall"]   # Optional - list of allowed approvers
     timeout_seconds: 3600            # Optional - auto-reject after timeout
@@ -70,25 +81,7 @@ There are two ways to define approval steps, but **only one works correctly**:
   transition: next_step
 ```
 
-This is the **correct** approach because:
-- `type: operation` invokes the operation executor
-- `input.task: "human.approval"` is checked by `HumanApprovalExecutor`
-- `input.message` provides the approval prompt
-
-#### Method 2: `type: human_approval` (DOES NOT WORK AS EXPECTED)
-
-```yaml
-# WARNING: This syntax DOES NOT trigger proper approval behavior!
-- id: request_approval
-  type: human_approval
-  prompt: "Please approve this action"  # This field is ignored!
-  transition: next_step
-```
-
-**Why it doesn't work:**
-- `type: human_approval` maps to `StepTypeAwait` in the translator
-- But the `HumanApprovalExecutor` checks for `input["task"] == "human.approval"`
-- Without that input, the executor returns `{skipped: true}` and the step auto-completes
+This alternative syntax works identically and may be preferred when you want to use `input` mappings from previous steps.
 
 ### Input Parameters
 
@@ -236,12 +229,10 @@ states:
 
   # Step 2: Human approval gate - workflow PAUSES here
   - id: ask_approval
-    type: operation
-    input:
-      task: "human.approval"
-      message: "Please approve this demo workflow to continue. Type 'stn workflow approvals approve <approval-id>' to approve."
-      approvers: ["admin"]
-      timeout_seconds: 3600
+    type: human_approval
+    message: "Please approve this demo workflow to continue. Type 'stn workflow approvals approve <approval-id>' to approve."
+    approvers: ["admin"]
+    timeout_seconds: 3600
     resultPath: approval
     transition: check_result
 
@@ -411,12 +402,12 @@ Steps (4):
   ✅ approved - completed
 ```
 
-### Important: Running the Workflow Consumer
+### Running the Workflow Consumer
 
-For workflows to process steps (including approvals), the Station server must be running **continuously**:
+For workflows to process steps automatically, the Station server should be running:
 
 ```bash
-# In one terminal - start the server (keep this running!)
+# In one terminal - start the server
 stn serve
 
 # In another terminal - run workflow commands
@@ -425,11 +416,10 @@ stn workflow approvals list
 stn workflow approvals approve <id>
 ```
 
-**Critical Notes:**
-1. The server must be running BEFORE you start the workflow
-2. The server must stay running throughout the workflow lifecycle
-3. If the server stops, workflows will pause and need the server to restart to resume
-4. The approval command publishes a NATS message - the server's workflow consumer must be running to process it
+**Notes:**
+1. The `stn serve` command starts the workflow consumer that processes steps
+2. If the server is not running, `stn workflow run` will start the workflow but no steps will execute
+3. The `stn workflow approvals approve` command starts a **temporary consumer** that processes the approval and waits for the workflow to complete or reach the next pause point
 
 The server logs will show step processing:
 ```
@@ -438,13 +428,21 @@ Workflow consumer: scheduling next step ask_approval (type: await) for run c7292
 Workflow consumer: step ask_approval waiting for approval appr-c7292c89-...-ask_approval
 ```
 
-### Known Behavior: Approval Recorded but Workflow Doesn't Resume
+### Approving Without `stn serve` Running
 
-If you approve a workflow but it doesn't resume, this usually means:
-1. The server wasn't running when you approved
-2. The NATS message was lost because no consumer was listening
+As of v0.x, the `approve` command starts a temporary workflow consumer, so you can approve and resume workflows without `stn serve` running:
 
-**Solution**: Restart `stn serve`. On startup, it will check for pending runs with approved status and resume them.
+```bash
+# Server not running - workflow started earlier and paused
+stn workflow approvals approve <id>
+# The command starts a temporary consumer, processes approval, and waits for completion
+```
+
+The command will:
+1. Record the approval in the database
+2. Start a temporary workflow consumer
+3. Wait up to 2 minutes for the workflow to complete or pause at the next approval
+4. Exit automatically when done
 
 ---
 
@@ -454,22 +452,24 @@ If you approve a workflow but it doesn't resume, this usually means:
 
 **Symptom**: The workflow completes immediately without waiting for approval.
 
-**Cause**: Using `type: human_approval` instead of the correct pattern.
+**Cause**: Missing the `message` field.
 
-**Solution**: Use `type: operation` with `input.task: "human.approval"`:
+**Solution**: Ensure you have a `message` field defined:
 
 ```yaml
-# WRONG
+# CORRECT - using type: human_approval
 - id: approval_step
   type: human_approval
-  prompt: "Approve?"
+  message: "Approve?"  # REQUIRED
+  transition: next_step
 
-# CORRECT
+# ALSO CORRECT - using type: operation
 - id: approval_step
   type: operation
   input:
     task: "human.approval"
-    message: "Approve?"
+    message: "Approve?"  # REQUIRED
+  transition: next_step
 ```
 
 ### No Approvals Listed
@@ -556,8 +556,8 @@ For developers: The approval system is implemented in:
 | `internal/db/workflow_queries.go` | Database operations |
 
 The executor checks:
-1. `input["task"] == "human.approval"` - if not, returns `{skipped: true}`
-2. `input["message"]` - required for the approval prompt
+1. `input["task"] == "human.approval"` OR `step.Raw.Type == "human_approval"` - either triggers approval
+2. `input["message"]` or `step.Raw.Message` - required for the approval prompt
 3. Creates approval record via `deps.CreateApproval()`
 4. Returns `StepStatusWaitingApproval` to pause workflow
 
