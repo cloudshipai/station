@@ -508,6 +508,42 @@ stn agent call <id> "simple test" # Test basic agent functionality
   - `DEVELOPMENT.md` - Development setup and contribution guidelines
   - `API.md` - MCP API documentation and tool references
 
+## Workflow Engine Architecture
+
+### CRITICAL: Embedded & Standalone Execution
+
+**The workflow engine is fully self-contained. No external dependencies required.**
+
+| Component | Architecture |
+|-----------|--------------|
+| **NATS** | Embedded - runs inside Station process |
+| **Execution** | Direct - `stn workflow run` executes completely |
+| **Server** | NOT required - no `stn serve` needed for workflows |
+
+### Execution Entry Points
+
+| Method | Command/Interface | Notes |
+|--------|-------------------|-------|
+| **CLI** | `stn workflow run <name>` | Direct execution, blocks until complete |
+| **MCP** | MCP tool calls | Same embedded execution |
+
+### What This Means
+
+```bash
+# This runs the ENTIRE workflow to completion - NO server needed
+STATION_SANDBOX_ENABLED=true stn workflow run sandbox-data-pipeline --input '{"data": "..."}'
+
+# ❌ WRONG assumption: "workflow is stuck, need stn serve"
+# ✅ CORRECT: workflow executes inline, check for actual errors
+```
+
+### Debugging Stuck Workflows
+
+If a workflow appears stuck:
+1. Check for actual errors in logs (not missing server)
+2. Inspect step execution: `stn workflow inspect <run-id>`
+3. Check agent errors, sandbox issues, or tool failures
+
 ## Key Commands
 ```bash
 stn init          # Initialize station in project
