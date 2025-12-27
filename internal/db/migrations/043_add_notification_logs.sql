@@ -1,7 +1,5 @@
 -- +goose Up
--- Migration: 043_add_notification_logs.sql
--- Description: Add notification_logs table for webhook audit trail
-
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS notification_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     log_id TEXT NOT NULL UNIQUE,
@@ -21,6 +19,7 @@ CREATE TABLE IF NOT EXISTS notification_logs (
 CREATE INDEX IF NOT EXISTS idx_notification_logs_approval ON notification_logs(approval_id);
 CREATE INDEX IF NOT EXISTS idx_notification_logs_event_type ON notification_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_notification_logs_created ON notification_logs(created_at);
+-- +goose StatementEnd
 
 -- +goose Down
 DROP INDEX IF EXISTS idx_notification_logs_created;
