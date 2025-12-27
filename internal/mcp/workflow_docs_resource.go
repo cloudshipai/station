@@ -243,10 +243,26 @@ Conditional branching based on context data using Starlark expressions.
 
 #### Condition Object
 
+> **⚠️ CRITICAL: Use ` + "`if`" + ` and ` + "`next`" + ` - NOT ` + "`condition`" + `/` + "`transition`" + `!**
+> 
+> Using wrong field names will cause: ` + "`condition evaluation failed: parse error: got end of file`" + `
+
 | Field | Type | Description |
 |-------|------|-------------|
 | if | string | Starlark expression - the dataPath variable is available by name |
 | next | string | State to transition to if condition is true |
+
+` + "```yaml" + `
+# ✅ CORRECT
+conditions:
+  - if: "input.logs != None"
+    next: analyze-logs
+
+# ❌ WRONG (will fail silently - fields not recognized)
+conditions:
+  - condition: "$.logs != null"    # WRONG field name!
+    transition: analyze-logs       # WRONG field name!
+` + "```" + `
 
 #### Starlark Built-in Functions
 
