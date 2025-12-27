@@ -75,11 +75,21 @@ func (s *Server) handleCreateWorkflow(ctx context.Context, request mcp.CallToolR
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to create workflow: %v (validation: %+v)", err, validation)), nil
 	}
 
-	result, _ := json.MarshalIndent(map[string]interface{}{
+	response := map[string]interface{}{
 		"workflow":   workflow,
 		"validation": validation,
 		"message":    "Workflow created successfully",
-	}, "", "  ")
+	}
+
+	if s.workflowExportService != nil {
+		if err := s.workflowExportService.ExportWorkflowAfterSave(workflowID); err != nil {
+			response["export_warning"] = fmt.Sprintf("Workflow created but export failed: %v", err)
+		} else {
+			response["exported"] = true
+		}
+	}
+
+	result, _ := json.MarshalIndent(response, "", "  ")
 
 	return mcp.NewToolResultText(string(result)), nil
 }
@@ -109,11 +119,21 @@ func (s *Server) handleUpdateWorkflow(ctx context.Context, request mcp.CallToolR
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to update workflow: %v (validation: %+v)", err, validation)), nil
 	}
 
-	result, _ := json.MarshalIndent(map[string]interface{}{
+	response := map[string]interface{}{
 		"workflow":   workflow,
 		"validation": validation,
 		"message":    fmt.Sprintf("Workflow updated to version %d", workflow.Version),
-	}, "", "  ")
+	}
+
+	if s.workflowExportService != nil {
+		if err := s.workflowExportService.ExportWorkflowAfterSave(workflowID); err != nil {
+			response["export_warning"] = fmt.Sprintf("Workflow updated but export failed: %v", err)
+		} else {
+			response["exported"] = true
+		}
+	}
+
+	result, _ := json.MarshalIndent(response, "", "  ")
 
 	return mcp.NewToolResultText(string(result)), nil
 }
