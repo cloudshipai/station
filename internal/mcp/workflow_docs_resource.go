@@ -145,11 +145,13 @@ states:
         next: request-approval
     defaultNext: generate-report
 
-  # Human approval gate
+  # Human approval gate (operation syntax)
   - id: request-approval
-    type: human_approval
-    message: "Approve rollback for {{input.service_name}}?"
-    timeout: 30m
+    type: operation
+    input:
+      task: "human.approval"
+      message: "Approve rollback for {{$.service_name}}?"
+      timeout_seconds: 1800
     transition: generate-report
 
   # Transform to build final output
@@ -608,6 +610,122 @@ Use transform to assemble final output from multiple sources:
   output:
     report: "$.result"
   end: true
+` + "```" + `
+
+---
+
+## ⚠️ Common Gotchas
+
+### 1. Input Variables: $.field NOT $.input.field
+
+**#1 Source of Errors.** Workflow input is FLATTENED to root context.
+
+` + "```yaml" + `
+# ✅ CORRECT - input flattened to root
+itemsPath: "$.services"
+dataPath: "$.environment"
+input:
+  service: "$.service_name"
+
+# ❌ WRONG - $.input does not exist at root level
+itemsPath: "$.input.services"      # Will fail!
+dataPath: "$.input.environment"    # Will fail!
+` + "```" + `
+
+### 2. Switch Conditions: Use ` + "`if`" + `/` + "`next`" + ` NOT ` + "`condition`" + `/` + "`transition`" + `
+
+Using wrong field names causes: ` + "`condition evaluation failed: parse error: got end of file`" + `
+
+` + "```yaml" + `
+# ✅ CORRECT
+conditions:
+  - if: "hasattr(result, 'error') and result.error != None"
+    next: handle-error
+
+# ❌ WRONG (silently ignored - fields not recognized)
+conditions:
+  - condition: "result.error != null"    # WRONG!
+    transition: handle-error              # WRONG!
+` + "```" + `
+
+### 3. Switch DataPath: Use JSONPath ` + "`$.`" + ` Prefix
+
+Dot-notation without ` + "`$`" + ` prefix is DEPRECATED and will show warnings.
+
+` + "```yaml" + `
+# ✅ CORRECT - JSONPath with $. prefix
+- id: check-status
+  type: switch
+  dataPath: "$.rca_result"        # Good
+  conditions:
+    - if: "rca_result.severity == 'critical'"
+      next: escalate
+
+# ⚠️ DEPRECATED - dot-notation without $. prefix (logs warning)
+- id: check-status
+  type: switch
+  dataPath: "rca_result"          # Works but deprecated
+` + "```" + `
+
+### 4. Always Use hasattr() Before Accessing Fields
+
+Agent outputs may be missing expected fields. Always check existence first.
+
+` + "```yaml" + `
+# ✅ CORRECT - check field exists before accessing
+conditions:
+  - if: "hasattr(result, 'rollback_recommended') and result.rollback_recommended == True"
+    next: do-rollback
+
+# ❌ RISKY - will fail if field missing
+conditions:
+  - if: "result.rollback_recommended == True"    # Fails if field missing!
+    next: do-rollback
+` + "```" + `
+
+### 5. Transform Expression Variables
+
+All workflow context variables are available as Starlark globals. Use the variable name directly, not ` + "`$.`" + ` syntax.
+
+` + "```yaml" + `
+- id: build-summary
+  type: transform
+  expression: |
+    # ✅ CORRECT - use variable names directly (no $. prefix)
+    {
+      "service": getattr(input, "service_name", "unknown"),
+      "findings": getattr(analysis_result, "findings", []),
+      "severity": getattr(analysis_result, "severity", "low")
+    }
+` + "```" + `
+
+### 6. Foreach ItemsPath Must Point to Array
+
+The ` + "`itemsPath`" + ` must resolve to an array, not a single object.
+
+` + "```yaml" + `
+# ✅ CORRECT - itemsPath points to array
+- id: check-services
+  type: foreach
+  itemsPath: "$.services"         # Must be an array like ["api", "web"]
+  itemName: "svc"
+
+# ❌ WRONG - itemsPath pointing to non-array
+- id: check-services
+  type: foreach
+  itemsPath: "$.service_config"   # Fails if this is an object, not array
+` + "```" + `
+
+### 7. Validate Before Running
+
+Use ` + "`stn workflow validate`" + ` CLI command to catch errors before runtime:
+
+` + "```bash" + `
+# Validate workflow definition
+stn workflow validate my-workflow.workflow.yaml
+
+# Get JSON output for CI/CD
+stn workflow validate my-workflow.workflow.yaml --format json
 ` + "```" + `
 
 ---
