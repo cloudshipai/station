@@ -95,6 +95,22 @@ func (r *WorkflowRepo) Disable(ctx context.Context, workflowID string) error {
 	return r.queries.DisableWorkflow(ctx, workflowID)
 }
 
+func (r *WorkflowRepo) Delete(ctx context.Context, workflowID string) error {
+	return r.queries.DeleteWorkflow(ctx, workflowID)
+}
+
+func (r *WorkflowRepo) DeleteAll(ctx context.Context) error {
+	return r.queries.DeleteAllWorkflows(ctx)
+}
+
+func (r *WorkflowRepo) Count(ctx context.Context) (int64, error) {
+	rows, err := r.queries.ListLatestWorkflows(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(rows)), nil
+}
+
 func convertWorkflow(row queries.Workflow) *models.WorkflowDefinition {
 	var desc *string
 	if row.Description.Valid {

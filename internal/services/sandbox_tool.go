@@ -92,6 +92,8 @@ func (f *SandboxToolFactory) parseRequest(input map[string]any, defaults Sandbox
 	req := SandboxRunRequest{
 		Runtime:        defaults.Runtime,
 		TimeoutSeconds: defaults.TimeoutSeconds,
+		PipPackages:    defaults.PipPackages,
+		NpmPackages:    defaults.NpmPackages,
 	}
 
 	if v, ok := input["runtime"].(string); ok && v != "" {

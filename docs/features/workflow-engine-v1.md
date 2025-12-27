@@ -960,7 +960,169 @@ The UI consumes existing workflow APIs:
 
 ---
 
-## 8) Implementation Plan
+## 8) CLI Commands
+
+Complete CLI reference for workflow management.
+
+### 8.1 Workflow Lifecycle Commands
+
+| Command | Description |
+|---------|-------------|
+| `stn workflow list` | List all workflows |
+| `stn workflow run <id>` | Start a workflow run |
+| `stn workflow delete <id>...` | Delete one or more workflows |
+| `stn sync` | Sync workflows from file system |
+
+#### `stn workflow list`
+
+List all registered workflows.
+
+```bash
+$ stn workflow list
+📋 Workflows
+
+Found 3 workflow(s):
+• incident-triage (ID: incident-triage) [Version: 1, States: 6]
+• deploy-pipeline (ID: deploy-pipeline) [Version: 2, States: 4]
+• security-scan (ID: security-scan) [Version: 1, States: 8, Cron: */15 * * * *]
+```
+
+#### `stn workflow run <id>`
+
+Start a new workflow run.
+
+```bash
+# Basic run
+stn workflow run incident-triage
+
+# With input (JSON)
+stn workflow run incident-triage --input '{"namespace": "production", "service": "api"}'
+
+# Wait for completion (blocking)
+stn workflow run incident-triage --input '{"namespace": "prod"}' --wait
+
+# Wait with custom timeout
+stn workflow run incident-triage --wait --timeout 300
+```
+
+**Flags**:
+| Flag | Description |
+|------|-------------|
+| `--input` | JSON input for workflow (validates against inputSchema) |
+| `--wait` | Wait for workflow to complete before returning |
+| `--timeout` | Timeout in seconds when using --wait (default: 60) |
+
+#### `stn workflow delete <id>...`
+
+Delete one or more workflows by ID.
+
+```bash
+# Delete specific workflows
+stn workflow delete my-workflow-1 my-workflow-2
+✅ Deleted 2 workflow(s)
+
+# Delete all workflows (requires confirmation)
+stn workflow delete --all
+⚠️  This will delete ALL 9 workflow(s). Are you sure? [y/N]: y
+✅ Deleted 9 workflow(s)
+
+# Delete all without confirmation
+stn workflow delete --all --force
+✅ Deleted 9 workflow(s)
+```
+
+**Flags**:
+| Flag | Description |
+|------|-------------|
+| `--all` | Delete all workflows |
+| `--force`, `-f` | Skip confirmation prompt |
+
+**Notes**:
+- Deleting a workflow does NOT delete its run history (runs are preserved for audit)
+- Workflows can be re-synced from files after deletion via `stn sync`
+
+### 8.2 Debug Commands
+
+#### `stn workflow debug-expression <expr>`
+
+Evaluate Starlark expressions against a JSON context. Essential for debugging switch conditions.
+
+```bash
+# Evaluate expression against inline JSON
+stn workflow debug-expression "severity == 'critical'" \
+  --context '{"severity": "critical", "count": 5}'
+Result: True
+
+# Load context from an existing run
+stn workflow debug-expression "hasattr(alert, 'severity') and alert.severity == 'high'" \
+  --run-id abc123
+
+# Extract nested data with JSONPath before evaluation
+stn workflow debug-expression "len(items) > 0" \
+  --context '{"data": {"items": [1, 2, 3]}}' \
+  --data-path "$.data"
+Result: True
+```
+
+**Flags**:
+| Flag | Description |
+|------|-------------|
+| `--context` | JSON string to use as evaluation context |
+| `--run-id` | Load context from a specific workflow run ID |
+| `--data-path` | JSONPath expression to extract data before evaluation (default: `$`) |
+
+### 8.3 Approval Management Commands
+
+#### `stn workflow approvals list`
+
+List pending workflow approvals.
+
+```bash
+$ stn workflow approvals list
+📋 Pending Approvals
+
+ID                    Workflow           Step              Created
+appr-abc123-step1     security-review    request_approval  2025-12-26 10:30:00
+appr-def456-deploy    deploy-pipeline    approve_prod      2025-12-26 11:15:00
+
+Found 2 pending approval(s)
+```
+
+#### `stn workflow approvals approve <id>`
+
+Approve a pending workflow step.
+
+```bash
+$ stn workflow approvals approve appr-abc123-step1
+✅ Approval granted for appr-abc123-step1
+   Workflow: security-review
+   Run: abc123
+   Step: request_approval
+```
+
+#### `stn workflow approvals reject <id>`
+
+Reject a pending workflow step.
+
+```bash
+$ stn workflow approvals reject appr-abc123-step1 --reason "Needs security review first"
+❌ Approval rejected for appr-abc123-step1
+   Workflow: security-review
+   Run: abc123
+   Step: request_approval
+   Reason: Needs security review first
+```
+
+**Flags**:
+| Flag | Description |
+|------|-------------|
+| `--reason` | Reason for rejection (optional but recommended) |
+
+---
+
+## 9) Implementation Plan
+
+> **Note**: Section numbers 9+ were previously 8+. Updated 2025-12-26.
 
 ### Phase 0 - Align & Harden PR #83 Foundations (1-4h) ✅ COMPLETE
 
@@ -1240,7 +1402,7 @@ Implement type-safe workflows with agent name resolution and schema validation.
 
 ---
 
-## 9) Test Plan: Agent Name Resolution + Schema Validation
+## 10) Test Plan: Agent Name Resolution + Schema Validation
 
 ### 9.1 Unit Tests
 
@@ -2798,6 +2960,41 @@ Added bulk deletion capabilities for workflow runs via UI and API.
 
 ---
 
+### Phase 15.6 - Workflow Definition Deletion (0.25d) ✅ COMPLETE
+
+Added CLI command for deleting workflow definitions.
+
+- [x] Add `DeleteWorkflow` and `DeleteAllWorkflows` SQLC queries
+- [x] Add `Delete()`, `DeleteAll()`, `Count()` repository methods
+- [x] Add `DeleteWorkflows()` service method with bulk support
+- [x] Add `stn workflow delete` CLI command
+- [x] Support `--all` flag for bulk deletion
+- [x] Support `--force` flag to skip confirmation
+- [x] Add confirmation prompt for destructive operations
+
+**Files Modified**:
+| File | Changes |
+|------|---------|
+| `internal/db/queries/workflows.sql` | Added DeleteWorkflow, DeleteAllWorkflows queries |
+| `internal/db/repositories/workflows.go` | Added Delete(), DeleteAll(), Count() methods |
+| `internal/services/workflow_service.go` | Added DeleteWorkflows() method |
+| `cmd/main/workflow.go` | Added workflowDeleteCmd and runWorkflowDelete() |
+| `cmd/main/main.go` | Registered delete command with --all, --force flags |
+
+**Usage**:
+```bash
+# Delete specific workflows
+stn workflow delete my-workflow-1 my-workflow-2
+
+# Delete all (with confirmation)
+stn workflow delete --all
+
+# Delete all (skip confirmation)
+stn workflow delete --all --force
+```
+
+---
+
 ### Phase 16 - Approval Webhook Notifications (1d) ✅ COMPLETE
 
 Enable external notification when workflow approval is required. Essential for headless/production deployments where users aren't watching the UI.
@@ -2957,7 +3154,7 @@ For now, webhook provides open-source flexibility.
 
 ---
 
-## 10) Success Metrics (updated)
+## 11) Success Metrics (updated)
 
 ### Reliability
 
@@ -2990,7 +3187,7 @@ For now, webhook provides open-source flexibility.
 
 ---
 
-## 11) Open Questions
+## 12) Open Questions
 
 1. **Starlark sandbox limits**: What CPU/memory limits for expression evaluation?
 2. **Approval identity**: What auth system is authoritative (local users, CloudShip identity, OIDC)?
@@ -3100,7 +3297,7 @@ states:
 
 ---
 
-## 12) Known Issues & Debug Log
+## 13) Known Issues & Debug Log
 
 ### Issue: NATS Push Consumer Stops Receiving New Messages (2025-12-25)
 
@@ -3165,11 +3362,11 @@ curl -s "http://localhost:8585/api/v1/workflow-runs?limit=1" | jq '.runs[0].stat
 
 *Created: 2025-12-23*  
 *Based on: PR #83 workflow scaffolding*  
-*Last Updated: 2025-12-26 (Phase 16 COMPLETE: Approval webhooks with audit logging, documentation)*
+*Last Updated: 2025-12-26 (Phase 15.6 COMPLETE: Workflow delete CLI command; Section 8 CLI Commands added)*
 
 ---
 
-## 13) Agent Sandbox Configuration
+## 14) Agent Sandbox Configuration
 
 Agents in workflows can execute code in isolated Docker containers via sandbox mode. This is useful for data processing, scripting, and automation tasks.
 

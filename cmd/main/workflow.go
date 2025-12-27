@@ -111,6 +111,13 @@ var (
 		Args:  cobra.ExactArgs(1),
 		RunE:  runWorkflowApprovalsReject,
 	}
+
+	workflowDeleteCmd = &cobra.Command{
+		Use:   "delete [workflow-id...]",
+		Short: "Delete workflows permanently",
+		Long:  "Permanently delete workflows from the database. Use --all to delete all workflows.",
+		RunE:  runWorkflowDelete,
+	}
 )
 
 func runWorkflowDebugExpression(cmd *cobra.Command, args []string) error {
@@ -1068,5 +1075,85 @@ func runWorkflowApprovalsReject(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Step: %s\n", approval.StepID)
 	fmt.Printf("   Reason: %s\n", reason)
 	fmt.Println("\n⏹️  Workflow has been stopped")
+	return nil
+}
+
+func runWorkflowDelete(cmd *cobra.Command, args []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+	force, _ := cmd.Flags().GetBool("force")
+
+	if !all && len(args) == 0 {
+		return fmt.Errorf("specify workflow IDs to delete, or use --all to delete all workflows")
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	repos := repositories.New(database)
+	workflowService := services.NewWorkflowService(repos)
+	ctx := context.Background()
+
+	if all {
+		workflowList, err := workflowService.ListWorkflows(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list workflows: %w", err)
+		}
+
+		if len(workflowList) == 0 {
+			fmt.Println("No workflows to delete.")
+			return nil
+		}
+
+		if !force {
+			fmt.Printf("⚠️  This will permanently delete %d workflow(s):\n", len(workflowList))
+			for _, wf := range workflowList {
+				fmt.Printf("   • %s (v%d)\n", wf.WorkflowID, wf.Version)
+			}
+			fmt.Print("\nType 'yes' to confirm: ")
+			var confirm string
+			fmt.Scanln(&confirm)
+			if confirm != "yes" {
+				fmt.Println("Aborted.")
+				return nil
+			}
+		}
+
+		count, err := workflowService.DeleteWorkflows(ctx, services.DeleteWorkflowsRequest{All: true})
+		if err != nil {
+			return fmt.Errorf("failed to delete workflows: %w", err)
+		}
+
+		fmt.Printf("✅ Deleted %d workflow(s)\n", count)
+		return nil
+	}
+
+	if !force {
+		fmt.Printf("⚠️  This will permanently delete %d workflow(s):\n", len(args))
+		for _, id := range args {
+			fmt.Printf("   • %s\n", id)
+		}
+		fmt.Print("\nType 'yes' to confirm: ")
+		var confirm string
+		fmt.Scanln(&confirm)
+		if confirm != "yes" {
+			fmt.Println("Aborted.")
+			return nil
+		}
+	}
+
+	count, err := workflowService.DeleteWorkflows(ctx, services.DeleteWorkflowsRequest{WorkflowIDs: args})
+	if err != nil {
+		return fmt.Errorf("failed to delete workflows: %w", err)
+	}
+
+	fmt.Printf("✅ Deleted %d workflow(s)\n", count)
 	return nil
 }
