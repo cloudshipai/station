@@ -885,6 +885,16 @@ Use sandbox_open, sandbox_exec, sandbox_fs_write to develop iteratively.
 | Large JSON in context (slow) | Python parses efficiently |
 | Host execution (security risk) | Isolated container (safe) |
 
+**Enabling Sandbox:**
+```bash
+# Compute mode (ephemeral per-call)
+export STATION_SANDBOX_ENABLED=true
+
+# Code mode (persistent sessions - requires Docker)
+export STATION_SANDBOX_ENABLED=true
+export STATION_SANDBOX_CODE_MODE_ENABLED=true
+```
+
 [Sandbox Documentation →](./docs/station/sandbox.md)
 
 ---
