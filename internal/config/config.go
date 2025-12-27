@@ -39,6 +39,8 @@ type Config struct {
 	Webhook WebhookConfig
 	// Notifications Configuration (outbound webhooks for approvals, etc.)
 	Notifications NotificationsConfig
+	// Sandbox Configuration (isolated code execution)
+	Sandbox SandboxConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
@@ -96,6 +98,14 @@ type WebhookConfig struct {
 type NotificationsConfig struct {
 	ApprovalWebhookURL     string `yaml:"approval_webhook_url"`     // URL to POST when approval is needed
 	ApprovalWebhookTimeout int    `yaml:"approval_webhook_timeout"` // Timeout in seconds (default: 10)
+}
+
+// SandboxConfig holds settings for sandbox code execution
+type SandboxConfig struct {
+	// Enabled enables compute mode sandbox (ephemeral Dagger containers, sandbox_run tool)
+	Enabled bool `yaml:"enabled"`
+	// CodeModeEnabled enables code mode sandbox (persistent Docker sessions, sandbox_open/exec/fs_* tools)
+	CodeModeEnabled bool `yaml:"code_mode_enabled"`
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -244,6 +254,10 @@ func bindEnvVars() {
 	viper.BindEnv("notifications.approval_webhook_url", "STN_APPROVAL_WEBHOOK_URL")
 	viper.BindEnv("notifications.approval_webhook_timeout", "STN_APPROVAL_WEBHOOK_TIMEOUT")
 
+	// Sandbox config
+	viper.BindEnv("sandbox.enabled", "STATION_SANDBOX_ENABLED", "STN_SANDBOX_ENABLED")
+	viper.BindEnv("sandbox.code_mode_enabled", "STATION_SANDBOX_CODE_MODE_ENABLED", "STN_SANDBOX_CODE_MODE_ENABLED")
+
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
 	viper.BindEnv("telemetry.enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -316,6 +330,11 @@ func Load() (*Config, error) {
 		Notifications: NotificationsConfig{
 			ApprovalWebhookURL:     getEnvOrDefault("STN_APPROVAL_WEBHOOK_URL", ""),
 			ApprovalWebhookTimeout: getEnvIntOrDefault("STN_APPROVAL_WEBHOOK_TIMEOUT", 10),
+		},
+		// Sandbox Configuration - isolated code execution
+		Sandbox: SandboxConfig{
+			Enabled:         getEnvBoolOrDefault("STATION_SANDBOX_ENABLED", false),
+			CodeModeEnabled: getEnvBoolOrDefault("STATION_SANDBOX_CODE_MODE_ENABLED", false),
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,
@@ -489,6 +508,14 @@ func Load() (*Config, error) {
 		cfg.Telemetry.JaegerQueryURL = cfg.JaegerQueryURL
 	}
 
+	// Sandbox configuration overrides from config file
+	if viper.IsSet("sandbox.enabled") {
+		cfg.Sandbox.Enabled = viper.GetBool("sandbox.enabled")
+	}
+	if viper.IsSet("sandbox.code_mode_enabled") {
+		cfg.Sandbox.CodeModeEnabled = viper.GetBool("sandbox.code_mode_enabled")
+	}
+
 	// Load faker templates from config file
 	cfg.FakerTemplates = loadFakerTemplates()
 
@@ -533,6 +560,18 @@ func Load() (*Config, error) {
 	if envSampleRate := os.Getenv("STN_TELEMETRY_SAMPLE_RATE"); envSampleRate != "" {
 		if floatValue, err := strconv.ParseFloat(envSampleRate, 64); err == nil {
 			cfg.Telemetry.SampleRate = floatValue
+		}
+	}
+
+	// Sandbox environment variable overrides
+	if envEnabled := os.Getenv("STATION_SANDBOX_ENABLED"); envEnabled != "" {
+		if boolValue, err := strconv.ParseBool(envEnabled); err == nil {
+			cfg.Sandbox.Enabled = boolValue
+		}
+	}
+	if envCodeMode := os.Getenv("STATION_SANDBOX_CODE_MODE_ENABLED"); envCodeMode != "" {
+		if boolValue, err := strconv.ParseBool(envCodeMode); err == nil {
+			cfg.Sandbox.CodeModeEnabled = boolValue
 		}
 	}
 
@@ -644,6 +683,12 @@ func getBuiltInFakerTemplates() map[string]FakerTemplate {
 			Model:       "gpt-5-mini",
 		},
 	}
+}
+
+// GetLoadedConfig returns the currently loaded configuration.
+// Returns nil if Load() has not been called yet.
+func GetLoadedConfig() *Config {
+	return loadedConfig
 }
 
 // GetStationConfigDir returns the station configuration directory path

@@ -42,7 +42,24 @@ for any data transformations, calculations, or analysis tasks.
 
 ### 2. Enable Sandbox in Station
 
-Sandbox requires environment variables to be set:
+You can enable sandbox using either **config.yaml** or **environment variables**.
+
+#### Option A: config.yaml (Recommended)
+
+Add to your `config.yaml`:
+
+```yaml
+# Compute Mode only (sandbox_run tool)
+sandbox:
+  enabled: true
+
+# Code Mode (sandbox_open, sandbox_exec, sandbox_fs_* tools)
+sandbox:
+  enabled: true
+  code_mode_enabled: true
+```
+
+#### Option B: Environment Variables
 
 ```bash
 # Compute Mode (ephemeral per-call sandbox using Dagger)
@@ -53,12 +70,14 @@ export STATION_SANDBOX_ENABLED=true
 export STATION_SANDBOX_CODE_MODE_ENABLED=true
 ```
 
-| Variable | Required For | Description |
-|----------|--------------|-------------|
-| `STATION_SANDBOX_ENABLED` | Both modes | Enables sandbox functionality and `sandbox_run` tool |
-| `STATION_SANDBOX_CODE_MODE_ENABLED` | Code mode only | Enables persistent sandbox sessions with `sandbox_open`, `sandbox_exec`, `sandbox_fs_*` tools |
+#### Configuration Reference
 
-> **Note**: Code mode requires Docker to be available. Compute mode uses Dagger which can work with Docker, remote Dagger engines, or Dagger Cloud.
+| Setting | Config YAML | Environment Variable | Description |
+|---------|-------------|---------------------|-------------|
+| Sandbox Enabled | `sandbox.enabled` | `STATION_SANDBOX_ENABLED` | Enables compute mode with `sandbox_run` tool |
+| Code Mode | `sandbox.code_mode_enabled` | `STATION_SANDBOX_CODE_MODE_ENABLED` | Enables code mode with persistent sessions |
+
+> **Note**: Environment variables take precedence over config.yaml values. Code mode requires Docker to be available.
 
 ### 3. Run Your Agent
 
@@ -421,21 +440,31 @@ sandbox:
 
 ### Requirements
 
-Code Mode requires Docker and **both** environment variables:
+Code Mode requires Docker and both sandbox settings enabled.
 
+**Option A: config.yaml**
+```yaml
+sandbox:
+  enabled: true
+  code_mode_enabled: true
+```
+
+**Option B: Environment Variables**
+```bash
+export STATION_SANDBOX_ENABLED=true
+export STATION_SANDBOX_CODE_MODE_ENABLED=true
+```
+
+**Docker Requirements:**
 ```bash
 # Docker must be available
 docker ps
-
-# Enable sandbox with code mode
-export STATION_SANDBOX_ENABLED=true
-export STATION_SANDBOX_CODE_MODE_ENABLED=true
 
 # Station needs Docker socket access
 export DOCKER_HOST=unix:///var/run/docker.sock
 ```
 
-> **Important**: Without `STATION_SANDBOX_CODE_MODE_ENABLED=true`, agents with `mode: code` will not receive the code mode tools (`sandbox_open`, `sandbox_exec`, etc.).
+> **Important**: Without `code_mode_enabled: true` (or `STATION_SANDBOX_CODE_MODE_ENABLED=true`), agents with `mode: code` will not receive the code mode tools (`sandbox_open`, `sandbox_exec`, etc.).
 
 ---
 
@@ -512,9 +541,18 @@ Custom images can be enabled via `STATION_SANDBOX_ALLOWED_IMAGES`.
 Error: sandbox_run tool not found
 ```
 
-**Fix**: Ensure the correct environment variables are set:
-- For Compute mode (`sandbox_run`): `STATION_SANDBOX_ENABLED=true`
-- For Code mode (`sandbox_open`, `sandbox_exec`, etc.): `STATION_SANDBOX_ENABLED=true` AND `STATION_SANDBOX_CODE_MODE_ENABLED=true`
+**Fix**: Enable sandbox via config.yaml or environment variables:
+
+```yaml
+# config.yaml
+sandbox:
+  enabled: true
+```
+
+Or:
+```bash
+export STATION_SANDBOX_ENABLED=true
+```
 
 Also verify the agent has `sandbox:` in frontmatter.
 
@@ -524,7 +562,16 @@ Also verify the agent has `sandbox:` in frontmatter.
 # Agent has mode: code but only sees sandbox_run (or no sandbox tools)
 ```
 
-**Fix**: Ensure BOTH environment variables are set:
+**Fix**: Enable code mode via config.yaml or environment variables:
+
+```yaml
+# config.yaml
+sandbox:
+  enabled: true
+  code_mode_enabled: true
+```
+
+Or:
 ```bash
 export STATION_SANDBOX_ENABLED=true
 export STATION_SANDBOX_CODE_MODE_ENABLED=true

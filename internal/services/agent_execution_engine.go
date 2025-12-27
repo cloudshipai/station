@@ -87,13 +87,13 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 	}
 
 	sandboxCfg := DefaultSandboxConfig()
-	if os.Getenv("STATION_SANDBOX_ENABLED") == "true" {
-		sandboxCfg.Enabled = true
+	codeModeConfig := DefaultCodeModeConfig()
+
+	if cfg := config.GetLoadedConfig(); cfg != nil {
+		sandboxCfg.Enabled = cfg.Sandbox.Enabled
+		codeModeConfig.Enabled = cfg.Sandbox.CodeModeEnabled
 	}
 	sandboxService := NewSandboxService(sandboxCfg)
-
-	codeModeConfig := DefaultCodeModeConfig()
-	codeModeConfig.Enabled = os.Getenv("STATION_SANDBOX_CODE_MODE_ENABLED") == "true"
 	var sessionManager *SessionManager
 	if codeModeConfig.Enabled {
 		dockerBackend, err := NewDockerBackend(codeModeConfig)
