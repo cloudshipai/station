@@ -240,6 +240,8 @@ func init() {
 	workflowExportCmd.Flags().StringP("output", "o", "", "Output file path (default: environment's workflows directory)")
 	workflowDeleteCmd.Flags().BoolP("all", "a", false, "Delete all workflows")
 	workflowDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
+	workflowDeleteCmd.Flags().StringP("environment", "e", "default", "Environment to delete workflow files from")
+	workflowDeleteCmd.Flags().Bool("keep-file", false, "Keep the workflow file (only delete from database)")
 	workflowValidateCmd.Flags().String("format", "text", "Output format: text or json")
 	workflowApprovalsListCmd.Flags().BoolP("all", "a", false, "Show all approvals, not just pending")
 	workflowApprovalsApproveCmd.Flags().StringP("comment", "c", "", "Optional comment for the approval")

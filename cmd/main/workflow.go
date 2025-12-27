@@ -1095,6 +1095,12 @@ func runWorkflowApprovalsReject(cmd *cobra.Command, args []string) error {
 func runWorkflowDelete(cmd *cobra.Command, args []string) error {
 	all, _ := cmd.Flags().GetBool("all")
 	force, _ := cmd.Flags().GetBool("force")
+	envName, _ := cmd.Flags().GetString("environment")
+	keepFile, _ := cmd.Flags().GetBool("keep-file")
+
+	if envName == "" {
+		envName = "default"
+	}
 
 	if !all && len(args) == 0 {
 		return fmt.Errorf("specify workflow IDs to delete, or use --all to delete all workflows")
@@ -1114,6 +1120,8 @@ func runWorkflowDelete(cmd *cobra.Command, args []string) error {
 	repos := repositories.New(database)
 	workflowService := services.NewWorkflowService(repos)
 	ctx := context.Background()
+
+	var workflowIDsToDelete []string
 
 	if all {
 		workflowList, err := workflowService.ListWorkflows(ctx)
@@ -1140,36 +1148,74 @@ func runWorkflowDelete(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		for _, wf := range workflowList {
+			workflowIDsToDelete = append(workflowIDsToDelete, wf.WorkflowID)
+		}
+
 		count, err := workflowService.DeleteWorkflows(ctx, services.DeleteWorkflowsRequest{All: true})
 		if err != nil {
 			return fmt.Errorf("failed to delete workflows: %w", err)
 		}
 
-		fmt.Printf("✅ Deleted %d workflow(s)\n", count)
-		return nil
-	}
-
-	if !force {
-		fmt.Printf("⚠️  This will permanently delete %d workflow(s):\n", len(args))
-		for _, id := range args {
-			fmt.Printf("   • %s\n", id)
+		fmt.Printf("✅ Deleted %d workflow(s) from database\n", count)
+	} else {
+		if !force {
+			fmt.Printf("⚠️  This will permanently delete %d workflow(s):\n", len(args))
+			for _, id := range args {
+				fmt.Printf("   • %s\n", id)
+			}
+			fmt.Print("\nType 'yes' to confirm: ")
+			var confirm string
+			fmt.Scanln(&confirm)
+			if confirm != "yes" {
+				fmt.Println("Aborted.")
+				return nil
+			}
 		}
-		fmt.Print("\nType 'yes' to confirm: ")
-		var confirm string
-		fmt.Scanln(&confirm)
-		if confirm != "yes" {
-			fmt.Println("Aborted.")
-			return nil
+
+		workflowIDsToDelete = args
+
+		count, err := workflowService.DeleteWorkflows(ctx, services.DeleteWorkflowsRequest{WorkflowIDs: args})
+		if err != nil {
+			return fmt.Errorf("failed to delete workflows: %w", err)
+		}
+
+		fmt.Printf("✅ Deleted %d workflow(s) from database\n", count)
+	}
+
+	if !keepFile && len(workflowIDsToDelete) > 0 {
+		filesDeleted := deleteWorkflowFiles(workflowIDsToDelete, envName)
+		if filesDeleted > 0 {
+			fmt.Printf("✅ Deleted %d workflow file(s) from %s environment\n", filesDeleted, envName)
 		}
 	}
 
-	count, err := workflowService.DeleteWorkflows(ctx, services.DeleteWorkflowsRequest{WorkflowIDs: args})
-	if err != nil {
-		return fmt.Errorf("failed to delete workflows: %w", err)
-	}
-
-	fmt.Printf("✅ Deleted %d workflow(s)\n", count)
 	return nil
+}
+
+func deleteWorkflowFiles(workflowIDs []string, envName string) int {
+	deleted := 0
+	for _, workflowID := range workflowIDs {
+		yamlPath := config.GetWorkflowFilePath(envName, workflowID)
+		if _, err := os.Stat(yamlPath); err == nil {
+			if err := os.Remove(yamlPath); err != nil {
+				fmt.Printf("⚠️  Warning: failed to delete %s: %v\n", yamlPath, err)
+			} else {
+				deleted++
+			}
+			continue
+		}
+
+		jsonPath := filepath.Join(config.GetWorkflowsDir(envName), workflowID+".workflow.json")
+		if _, err := os.Stat(jsonPath); err == nil {
+			if err := os.Remove(jsonPath); err != nil {
+				fmt.Printf("⚠️  Warning: failed to delete %s: %v\n", jsonPath, err)
+			} else {
+				deleted++
+			}
+		}
+	}
+	return deleted
 }
 
 func runWorkflowValidate(cmd *cobra.Command, args []string) error {
