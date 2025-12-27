@@ -118,6 +118,10 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 		}, err
 	}
 
+	if varsRaw, ok := input["variables"].(map[string]interface{}); ok {
+		input["variables"] = resolveJSONPathExpressions(varsRaw, runContext)
+	}
+
 	if agent.InputSchema != nil && *agent.InputSchema != "" {
 		if err := e.validateInput(input, runContext, *agent.InputSchema); err != nil {
 			errStr := fmt.Sprintf("input schema validation failed: %v", err)

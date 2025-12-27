@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 
 	"station/internal/workflows"
 )
@@ -42,11 +44,16 @@ func (e *SwitchExecutor) Execute(ctx context.Context, step workflows.ExecutionSt
 
 	evalData := runContext
 	if raw.DataPath != "" {
-		val, ok := GetNestedValue(runContext, raw.DataPath)
+		dataPath := raw.DataPath
+		if !strings.HasPrefix(dataPath, "$.") && !strings.HasPrefix(dataPath, "$") {
+			log.Printf("[DEPRECATION] switch step '%s': dataPath '%s' uses dot-notation. Use JSONPath '$.%s' instead.", step.ID, dataPath, dataPath)
+		}
+
+		val, ok := GetNestedValue(runContext, dataPath)
 		if !ok {
 			return StepResult{
 				Status: StepStatusFailed,
-				Error:  strPtr(fmt.Sprintf("data path not found: %s", raw.DataPath)),
+				Error:  strPtr(fmt.Sprintf("data path not found: %s", dataPath)),
 			}, ErrInvalidDataPath
 		}
 

@@ -118,6 +118,20 @@ var (
 		Long:  "Permanently delete workflows from the database. Use --all to delete all workflows.",
 		RunE:  runWorkflowDelete,
 	}
+
+	workflowValidateCmd = &cobra.Command{
+		Use:   "validate <workflow-file>",
+		Short: "Validate a workflow definition",
+		Long: `Validate a workflow YAML file against the Station workflow schema.
+
+Checks for:
+- Required fields (id, states, types)
+- Valid step transitions
+- Starlark expression syntax
+- Duplicate step IDs`,
+		Args: cobra.ExactArgs(1),
+		RunE: runWorkflowValidate,
+	}
 )
 
 func runWorkflowDebugExpression(cmd *cobra.Command, args []string) error {
@@ -1155,5 +1169,71 @@ func runWorkflowDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✅ Deleted %d workflow(s)\n", count)
+	return nil
+}
+
+func runWorkflowValidate(cmd *cobra.Command, args []string) error {
+	filePath := args[0]
+	formatOutput, _ := cmd.Flags().GetString("format")
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	def, result, validationErr := workflows.ValidateDefinition(data)
+
+	if formatOutput == "json" {
+		output := map[string]interface{}{
+			"valid":    validationErr == nil,
+			"errors":   result.Errors,
+			"warnings": result.Warnings,
+		}
+		if def != nil {
+			output["workflow_id"] = def.ID
+			output["state_count"] = len(def.States)
+		}
+		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
+		fmt.Println(string(jsonBytes))
+		if validationErr != nil {
+			os.Exit(1)
+		}
+		return nil
+	}
+
+	fmt.Printf("\n📋 Validating: %s\n", filePath)
+
+	if len(result.Errors) > 0 {
+		fmt.Printf("\n❌ %d Validation Error(s):\n", len(result.Errors))
+		for _, e := range result.Errors {
+			fmt.Printf("   [%s] %s: %s\n", e.Code, e.Path, e.Message)
+			if e.Hint != "" {
+				fmt.Printf("         💡 %s\n", e.Hint)
+			}
+		}
+	}
+
+	if len(result.Warnings) > 0 {
+		fmt.Printf("\n⚠️  %d Warning(s):\n", len(result.Warnings))
+		for _, w := range result.Warnings {
+			fmt.Printf("   [%s] %s: %s\n", w.Code, w.Path, w.Message)
+			if w.Hint != "" {
+				fmt.Printf("         💡 %s\n", w.Hint)
+			}
+		}
+	}
+
+	if validationErr != nil {
+		fmt.Printf("\n❌ Validation failed with %d error(s)\n", len(result.Errors))
+		return fmt.Errorf("validation failed")
+	}
+
+	fmt.Printf("\n✅ Workflow is valid!\n")
+	if def != nil {
+		fmt.Printf("   ID: %s\n", def.ID)
+		fmt.Printf("   States: %d\n", len(def.States))
+		fmt.Printf("   Start: %s\n", def.Start)
+	}
+
 	return nil
 }
