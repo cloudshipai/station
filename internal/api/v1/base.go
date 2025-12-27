@@ -140,7 +140,7 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 
 	approvalExecutor := runtime.NewHumanApprovalExecutor(&approvalExecutorAdapter{repos: repos})
 	if h.cfg != nil {
-		notifier := notifications.NewWebhookNotifier(h.cfg)
+		notifier := notifications.NewWebhookNotifier(h.cfg, h.db)
 		approvalExecutor.SetNotifier(notifier)
 	}
 	registry.Register(approvalExecutor)
