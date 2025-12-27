@@ -188,6 +188,21 @@ type ModelProvider struct {
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
+type NotificationLog struct {
+	ID             int64          `json:"id"`
+	LogID          string         `json:"log_id"`
+	ApprovalID     string         `json:"approval_id"`
+	EventType      string         `json:"event_type"`
+	WebhookUrl     sql.NullString `json:"webhook_url"`
+	RequestPayload sql.NullString `json:"request_payload"`
+	ResponseStatus sql.NullInt64  `json:"response_status"`
+	ResponseBody   sql.NullString `json:"response_body"`
+	ErrorMessage   sql.NullString `json:"error_message"`
+	AttemptNumber  sql.NullInt64  `json:"attempt_number"`
+	DurationMs     sql.NullInt64  `json:"duration_ms"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+}
+
 type Report struct {
 	ID                        int64           `json:"id"`
 	Name                      string          `json:"name"`

@@ -509,3 +509,23 @@ CREATE TABLE workflow_schedules (
 
 CREATE INDEX idx_workflow_schedules_enabled ON workflow_schedules(enabled);
 CREATE INDEX idx_workflow_schedules_next_run ON workflow_schedules(next_run_at);
+
+CREATE TABLE notification_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_id TEXT NOT NULL UNIQUE,
+    approval_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    webhook_url TEXT,
+    request_payload TEXT,
+    response_status INTEGER,
+    response_body TEXT,
+    error_message TEXT,
+    attempt_number INTEGER DEFAULT 1,
+    duration_ms INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (approval_id) REFERENCES workflow_approvals(approval_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_notification_logs_approval ON notification_logs(approval_id);
+CREATE INDEX idx_notification_logs_event_type ON notification_logs(event_type);
+CREATE INDEX idx_notification_logs_created ON notification_logs(created_at);

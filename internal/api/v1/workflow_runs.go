@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"station/internal/notifications"
 	"station/internal/services"
 	"station/internal/workflows"
 )
@@ -72,6 +73,7 @@ func (h *APIHandlers) registerWorkflowRunRoutes(group *gin.RouterGroup) {
 func (h *APIHandlers) registerWorkflowApprovalRoutes(group *gin.RouterGroup) {
 	group.GET("", h.listPendingApprovals)
 	group.GET("/:approvalId", h.getApproval)
+	group.GET("/:approvalId/audit", h.getApprovalAuditLogs)
 	group.POST("/:approvalId/approve", h.approveWorkflowStep)
 	group.POST("/:approvalId/reject", h.rejectWorkflowStep)
 }
@@ -380,6 +382,22 @@ func (h *APIHandlers) getApproval(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"approval": approval})
+}
+
+func (h *APIHandlers) getApprovalAuditLogs(c *gin.Context) {
+	approvalID := c.Param("approvalId")
+
+	auditService := notifications.NewAuditService(h.db)
+	logs, err := auditService.GetLogsByApproval(c.Request.Context(), approvalID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get audit logs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"logs":  logs,
+		"count": len(logs),
+	})
 }
 
 func (h *APIHandlers) approveWorkflowStep(c *gin.Context) {

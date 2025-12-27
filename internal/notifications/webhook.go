@@ -3,8 +3,10 @@ package notifications
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -29,13 +31,14 @@ type ApprovalWebhookPayload struct {
 }
 
 type WebhookNotifier struct {
-	webhookURL string
-	timeout    time.Duration
-	baseURL    string
-	httpClient *http.Client
+	webhookURL   string
+	timeout      time.Duration
+	baseURL      string
+	httpClient   *http.Client
+	auditService *AuditService
 }
 
-func NewWebhookNotifier(cfg *config.Config) *WebhookNotifier {
+func NewWebhookNotifier(cfg *config.Config, db *sql.DB) *WebhookNotifier {
 	if cfg == nil || cfg.Notifications.ApprovalWebhookURL == "" {
 		return nil
 	}
@@ -51,10 +54,16 @@ func NewWebhookNotifier(cfg *config.Config) *WebhookNotifier {
 	}
 	dynamicAgentPort := mcpPort + 1
 
+	var auditSvc *AuditService
+	if db != nil {
+		auditSvc = NewAuditService(db)
+	}
+
 	return &WebhookNotifier{
-		webhookURL: cfg.Notifications.ApprovalWebhookURL,
-		timeout:    time.Duration(timeout) * time.Second,
-		baseURL:    fmt.Sprintf("http://localhost:%d", dynamicAgentPort),
+		webhookURL:   cfg.Notifications.ApprovalWebhookURL,
+		timeout:      time.Duration(timeout) * time.Second,
+		baseURL:      fmt.Sprintf("http://localhost:%d", dynamicAgentPort),
+		auditService: auditSvc,
 		httpClient: &http.Client{
 			Timeout: time.Duration(timeout) * time.Second,
 		},
@@ -85,7 +94,7 @@ func (w *WebhookNotifier) sendWithRetry(ctx context.Context, payload ApprovalWeb
 	var lastErr error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := w.send(ctx, payload)
+		err := w.send(ctx, payload, attempt)
 		if err == nil {
 			log.Printf("[WebhookNotifier] Successfully sent approval webhook (approval_id=%s, attempt=%d)", payload.ApprovalID, attempt)
 			return nil
@@ -108,7 +117,7 @@ func (w *WebhookNotifier) sendWithRetry(ctx context.Context, payload ApprovalWeb
 	return lastErr
 }
 
-func (w *WebhookNotifier) send(ctx context.Context, payload ApprovalWebhookPayload) error {
+func (w *WebhookNotifier) send(ctx context.Context, payload ApprovalWebhookPayload, attempt int) error {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
@@ -124,15 +133,28 @@ func (w *WebhookNotifier) send(ctx context.Context, payload ApprovalWebhookPaylo
 
 	startTime := time.Now()
 	resp, err := w.httpClient.Do(req)
-	duration := time.Since(startTime)
+	durationMs := time.Since(startTime).Milliseconds()
 
 	if err != nil {
-		return fmt.Errorf("request failed after %v: %w", duration, err)
+		if w.auditService != nil {
+			_ = w.auditService.LogWebhookFailure(ctx, payload.ApprovalID, w.webhookURL, err.Error(), 0, durationMs, attempt)
+		}
+		return fmt.Errorf("request failed after %dms: %w", durationMs, err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	respBodyStr := string(respBody)
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook returned status %d after %v", resp.StatusCode, duration)
+		if w.auditService != nil {
+			_ = w.auditService.LogWebhookFailure(ctx, payload.ApprovalID, w.webhookURL, fmt.Sprintf("HTTP %d", resp.StatusCode), resp.StatusCode, durationMs, attempt)
+		}
+		return fmt.Errorf("webhook returned status %d after %dms", resp.StatusCode, durationMs)
+	}
+
+	if w.auditService != nil {
+		_ = w.auditService.LogWebhookSuccess(ctx, payload.ApprovalID, w.webhookURL, resp.StatusCode, respBodyStr, durationMs, attempt)
 	}
 
 	return nil
