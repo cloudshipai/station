@@ -1,10 +1,10 @@
 # PRD: CloudShip Station - Workflow Orchestration Engine (V1)
 
-> **Status**: Draft  
+> **Status**: V1 Complete  
 > **Created**: 2025-12-23  
 > **Updated**: 2025-12-26  
 > **Based on**: PR #83 (`origin/codex/add-durable-workflow-engine-to-station`)
-> **Current Phase**: Core Engine Complete (Phases 0-15) - UI Polish Remaining
+> **Current Phase**: All Phases Complete (0-16) - UI Polish Remaining
 
 ## 1) Overview
 
@@ -2798,9 +2798,11 @@ Added bulk deletion capabilities for workflow runs via UI and API.
 
 ---
 
-### Phase 16 - Approval Webhook Notifications (1d) 🚧 IN PROGRESS
+### Phase 16 - Approval Webhook Notifications (1d) ✅ COMPLETE
 
 Enable external notification when workflow approval is required. Essential for headless/production deployments where users aren't watching the UI.
+
+**Completed**: 2025-12-26
 
 #### 16.1 Problem Statement
 
@@ -2850,57 +2852,63 @@ STN_APPROVAL_WEBHOOK_URL=https://hooks.slack.com/services/xxx
 #### 16.3 Implementation Tasks
 
 **Config Layer**:
-- [ ] Add `NotificationsConfig` struct to `internal/config/config.go`
-- [ ] Add `Notifications` field to main `Config` struct
-- [ ] Bind env var `STN_APPROVAL_WEBHOOK_URL`
-- [ ] Add default timeout of 10 seconds
+- [x] Add `NotificationsConfig` struct to `internal/config/config.go`
+- [x] Add `Notifications` field to main `Config` struct
+- [x] Bind env var `STN_APPROVAL_WEBHOOK_URL`
+- [x] Add default timeout of 10 seconds
 
 **Notification Service**:
-- [ ] Create `internal/notifications/webhook.go`
-- [ ] Implement `WebhookNotifier` with HTTP POST logic
-- [ ] Add retry logic (3 attempts with exponential backoff)
-- [ ] Log webhook failures (don't block workflow execution)
+- [x] Create `internal/notifications/webhook.go`
+- [x] Implement `WebhookNotifier` with HTTP POST logic
+- [x] Add retry logic (3 attempts with exponential backoff)
+- [x] Log webhook failures (don't block workflow execution)
 
 **Approval Executor Integration**:
-- [ ] Inject `WebhookNotifier` into `HumanApprovalExecutor`
-- [ ] Fire webhook after successful `CreateApproval` call
-- [ ] Construct payload with all required fields
-- [ ] Make async (don't block workflow execution on webhook)
+- [x] Inject `WebhookNotifier` into `HumanApprovalExecutor`
+- [x] Fire webhook after successful `CreateApproval` call
+- [x] Construct payload with all required fields
+- [x] Make async (don't block workflow execution on webhook)
 
 **Public API Exposure** (Port 8587 - Dynamic Agent MCP):
-- [ ] Add `SetWorkflowService()` to `DynamicAgentServer` struct
-- [ ] Add `POST /workflow-approvals/:id/approve` handler
-- [ ] Add `POST /workflow-approvals/:id/reject` handler  
-- [ ] Add `GET /workflow-approvals/:id` handler (get approval status)
-- [ ] Reuse existing auth (local mode, static API key, or OAuth)
-- [ ] Wire up in `cmd/main/server.go`
-- [ ] Document public endpoints in API reference
+- [x] Add `SetWorkflowService()` to `DynamicAgentServer` struct
+- [x] Add `POST /workflow-approvals/:id/approve` handler
+- [x] Add `POST /workflow-approvals/:id/reject` handler  
+- [x] Add `GET /workflow-approvals/:id` handler (get approval status)
+- [x] Reuse existing auth (local mode, static API key, or OAuth)
+- [x] Wire up in `cmd/main/server.go`
+- [x] Document public endpoints in API reference
 
 **Audit Logging**:
-- [ ] Create `workflow_notification_logs` table in SQLite
-- [ ] Log every webhook send attempt (approval_id, url, status_code, response_time, error)
-- [ ] Log every approve/reject action via public API (approval_id, actor, source: webhook|cli|ui)
-- [ ] Add `GET /workflow-approvals/:id/audit` endpoint to retrieve audit trail
-- [ ] Expose audit log in Workflows UI (approval detail view)
+- [x] Create `notification_logs` table in SQLite (migration 043)
+- [x] Log every webhook send attempt (approval_id, url, status_code, response_time, error)
+- [x] Log every approve/reject action via public API (approval_id, actor, source: webhook|cli|ui)
+- [x] Add `GET /workflow-approvals/:id/audit` endpoint to retrieve audit trail
+- [ ] Expose audit log in Workflows UI (approval detail view) - deferred to UI polish
 
 **CLI Commands**:
 - [x] Add `stn workflow approvals list` - list pending approvals
 - [x] Add `stn workflow approvals approve <id>` - approve via CLI
 - [x] Add `stn workflow approvals reject <id> --reason "..."` - reject via CLI
 
-#### 16.4 Files to Create/Modify
+**Documentation**:
+- [x] Create `docs/station/workflow-webhooks.md` - comprehensive webhook and approval guide
+
+#### 16.4 Files Created/Modified
 
 | File | Changes |
 |------|---------|
-| `internal/config/config.go` | Add `NotificationsConfig` struct |
-| `internal/notifications/webhook.go` | New file - webhook HTTP client with audit logging |
-| `internal/notifications/audit.go` | New file - audit log service |
-| `internal/workflows/runtime/executor.go` | Inject notifier, fire after CreateApproval |
-| `internal/mcp_agents/server.go` | Add approval endpoints on public API (8587) |
-| `internal/db/queries/notification_logs.sql` | New file - audit log table + queries |
-| `cmd/main/server.go` | Wire workflow service to DynamicAgentServer |
-| `cmd/main/workflow.go` | Add approvals subcommands |
-| `docs/station/workflows.md` | Document webhook configuration |
+| `internal/config/config.go` | Added `NotificationsConfig` struct ✅ |
+| `internal/notifications/webhook.go` | WebhookNotifier with retry and audit logging ✅ |
+| `internal/notifications/audit.go` | AuditService for webhook delivery tracking ✅ |
+| `internal/notifications/audit_test.go` | Tests for AuditService ✅ |
+| `internal/workflows/runtime/executor.go` | Injected notifier, fires after CreateApproval ✅ |
+| `internal/mcp_agents/server.go` | Added approval endpoints on public API (8587) ✅ |
+| `internal/api/v1/workflow_runs.go` | Added `/audit` endpoint ✅ |
+| `internal/api/v1/base.go` | Wire notifier to approval executor ✅ |
+| `internal/db/migrations/043_add_notification_logs.sql` | Migration for notification_logs table ✅ |
+| `internal/db/queries/notification_logs.sql` | SQLC queries for audit logs ✅ |
+| `cmd/main/workflow.go` | Added approvals subcommands ✅ |
+| `docs/station/workflow-webhooks.md` | Comprehensive webhook documentation ✅ |
 
 #### 16.5 Audit Log Schema
 
@@ -3157,7 +3165,7 @@ curl -s "http://localhost:8585/api/v1/workflow-runs?limit=1" | jq '.runs[0].stat
 
 *Created: 2025-12-23*  
 *Based on: PR #83 workflow scaffolding*  
-*Last Updated: 2025-12-26 (Phase 16: Approval webhooks, sandbox MCP documentation)*
+*Last Updated: 2025-12-26 (Phase 16 COMPLETE: Approval webhooks with audit logging, documentation)*
 
 ---
 
