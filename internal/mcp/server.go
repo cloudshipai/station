@@ -19,23 +19,24 @@ import (
 )
 
 type Server struct {
-	mcpServer          *server.MCPServer
-	httpServer         *server.StreamableHTTPServer
-	db                 db.Database
-	toolDiscoverySvc   *ToolDiscoveryService
-	agentService       services.AgentServiceInterface
-	authService        *auth.AuthService
-	repos              *repositories.Repositories
-	config             *config.Config
-	localMode          bool
-	agentExportService *services.AgentExportService
-	bundleHandler      *UnifiedBundleHandler
-	telemetryService   *telemetry.TelemetryService
-	lighthouseClient   *lighthouse.LighthouseClient
-	schemaRegistry     *schemas.SchemaRegistry
-	schedulerService   *services.SchedulerService
-	benchmarkService   *services.BenchmarkService
-	workflowService    *services.WorkflowService
+	mcpServer             *server.MCPServer
+	httpServer            *server.StreamableHTTPServer
+	db                    db.Database
+	toolDiscoverySvc      *ToolDiscoveryService
+	agentService          services.AgentServiceInterface
+	authService           *auth.AuthService
+	repos                 *repositories.Repositories
+	config                *config.Config
+	localMode             bool
+	agentExportService    *services.AgentExportService
+	bundleHandler         *UnifiedBundleHandler
+	telemetryService      *telemetry.TelemetryService
+	lighthouseClient      *lighthouse.LighthouseClient
+	schemaRegistry        *schemas.SchemaRegistry
+	schedulerService      *services.SchedulerService
+	benchmarkService      *services.BenchmarkService
+	workflowService       *services.WorkflowService
+	workflowExportService *services.WorkflowExportService
 }
 
 func NewServer(database db.Database, agentService services.AgentServiceInterface, repos *repositories.Repositories, cfg *config.Config, localMode bool) *Server {
@@ -59,29 +60,32 @@ func NewServer(database db.Database, agentService services.AgentServiceInterface
 	// Initialize scheduler service
 	schedulerService := services.NewSchedulerService(database, repos, agentService)
 
-	// Initialize benchmark service
 	benchmarkService, err := services.NewBenchmarkService(database.Conn(), cfg)
 	if err != nil {
 		log.Printf("Warning: failed to initialize benchmark service: %v", err)
 		benchmarkService = nil
 	}
 
+	workflowService := services.NewWorkflowService(repos)
+	workflowExportService := services.NewWorkflowExportService(repos, workflowService)
+
 	server := &Server{
-		mcpServer:          mcpServer,
-		httpServer:         httpServer,
-		db:                 database,
-		toolDiscoverySvc:   toolDiscoverySvc,
-		agentService:       agentService,
-		authService:        authService,
-		repos:              repos,
-		config:             cfg,
-		localMode:          localMode,
-		agentExportService: services.NewAgentExportService(repos),
-		bundleHandler:      NewUnifiedBundleHandlerWithRepos(repos),
-		schemaRegistry:     schemas.NewSchemaRegistry(),
-		schedulerService:   schedulerService,
-		benchmarkService:   benchmarkService,
-		workflowService:    services.NewWorkflowService(repos),
+		mcpServer:             mcpServer,
+		httpServer:            httpServer,
+		db:                    database,
+		toolDiscoverySvc:      toolDiscoverySvc,
+		agentService:          agentService,
+		authService:           authService,
+		repos:                 repos,
+		config:                cfg,
+		localMode:             localMode,
+		agentExportService:    services.NewAgentExportService(repos),
+		bundleHandler:         NewUnifiedBundleHandlerWithRepos(repos),
+		schemaRegistry:        schemas.NewSchemaRegistry(),
+		schedulerService:      schedulerService,
+		benchmarkService:      benchmarkService,
+		workflowService:       workflowService,
+		workflowExportService: workflowExportService,
 	}
 
 	// Setup the server capabilities
