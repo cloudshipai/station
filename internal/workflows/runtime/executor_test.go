@@ -353,6 +353,36 @@ func TestAgentRunExecutor_Execute(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "JSONPath variables resolved before schema validation",
+			step: workflows.ExecutionStep{
+				ID:   "jsonpath-resolution",
+				Type: workflows.StepTypeAgent,
+				Next: "done",
+				Raw: workflows.StateSpec{
+					Input: map[string]interface{}{
+						"agent": "schema-agent",
+						"task":  "process data",
+						"variables": map[string]interface{}{
+							"namespace": "$.ns_from_context",
+							"limit":     float64(5),
+						},
+					},
+				},
+			},
+			runContext: map[string]interface{}{
+				"_environmentID":  int64(1),
+				"ns_from_context": "resolved-namespace",
+			},
+			checkOutput: func(t *testing.T, result StepResult) {
+				if result.Error != nil {
+					t.Errorf("expected no error (JSONPath should resolve before validation), got %s", *result.Error)
+				}
+				if result.Output["agent_name"] != "schema-agent" {
+					t.Errorf("expected agent_name=schema-agent, got %v", result.Output["agent_name"])
+				}
+			},
+		},
 	}
 
 	deps.environments = map[string]int64{

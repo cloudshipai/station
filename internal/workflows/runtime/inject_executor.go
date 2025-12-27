@@ -94,3 +94,64 @@ func deepCopySlice(src []interface{}) []interface{} {
 	}
 	return dst
 }
+
+func resolveJSONPathExpressions(vars map[string]interface{}, context map[string]interface{}) map[string]interface{} {
+	if vars == nil {
+		return nil
+	}
+
+	resolved := make(map[string]interface{}, len(vars))
+	for k, v := range vars {
+		if strVal, ok := v.(string); ok && len(strVal) > 2 && strVal[0] == '$' && strVal[1] == '.' {
+			if val := resolveJSONPathFromContext(strVal, context); val != nil {
+				resolved[k] = val
+				continue
+			}
+		}
+		resolved[k] = v
+	}
+	return resolved
+}
+
+func resolveJSONPathFromContext(path string, context map[string]interface{}) interface{} {
+	if path == "" || path == "$" {
+		return context
+	}
+
+	path = path[2:]
+	parts := splitJSONPath(path)
+
+	var current interface{} = context
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			val, ok := v[part]
+			if !ok {
+				return nil
+			}
+			current = val
+		default:
+			return nil
+		}
+	}
+	return current
+}
+
+func splitJSONPath(path string) []string {
+	var parts []string
+	var current string
+	for _, r := range path {
+		if r == '.' {
+			if current != "" {
+				parts = append(parts, current)
+				current = ""
+			}
+		} else {
+			current += string(r)
+		}
+	}
+	if current != "" {
+		parts = append(parts, current)
+	}
+	return parts
+}
