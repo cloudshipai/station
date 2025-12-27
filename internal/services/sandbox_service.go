@@ -49,6 +49,8 @@ type SandboxRunRequest struct {
 	Env            map[string]string
 	Files          map[string]string
 	TimeoutSeconds int
+	PipPackages    []string
+	NpmPackages    []string
 }
 
 type SandboxArtifact struct {
@@ -160,8 +162,21 @@ func (s *SandboxService) executeInDagger(ctx context.Context, req SandboxRunRequ
 
 	ctr := client.Container().
 		From(image).
-		WithWorkdir("/work").
-		WithNewFile("/work/"+filename, req.Code)
+		WithWorkdir("/work")
+
+	// Install pip packages for Python runtime
+	if req.Runtime == "python" && len(req.PipPackages) > 0 {
+		pipArgs := append([]string{"pip", "install", "--quiet"}, req.PipPackages...)
+		ctr = ctr.WithExec(pipArgs)
+	}
+
+	// Install npm packages for Node runtime
+	if req.Runtime == "node" && len(req.NpmPackages) > 0 {
+		npmArgs := append([]string{"npm", "install", "--silent"}, req.NpmPackages...)
+		ctr = ctr.WithExec(npmArgs)
+	}
+
+	ctr = ctr.WithNewFile("/work/"+filename, req.Code)
 
 	for path, contents := range req.Files {
 		safePath := strings.TrimPrefix(path, "/")
@@ -243,6 +258,12 @@ func (s *SandboxService) MergeDefaults(agentSandbox *dotprompt.SandboxConfig) Sa
 		}
 		if agentSandbox.TimeoutSeconds > 0 {
 			req.TimeoutSeconds = agentSandbox.TimeoutSeconds
+		}
+		if len(agentSandbox.PipPackages) > 0 {
+			req.PipPackages = agentSandbox.PipPackages
+		}
+		if len(agentSandbox.NpmPackages) > 0 {
+			req.NpmPackages = agentSandbox.NpmPackages
 		}
 	}
 

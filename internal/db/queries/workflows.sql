@@ -41,3 +41,9 @@ ORDER BY version DESC;
 UPDATE workflows
 SET status = 'disabled', updated_at = CURRENT_TIMESTAMP
 WHERE workflow_id = sqlc.arg(workflow_id);
+
+-- name: DeleteWorkflow :exec
+DELETE FROM workflows WHERE workflow_id = sqlc.arg(workflow_id);
+
+-- name: DeleteAllWorkflows :exec
+DELETE FROM workflows;

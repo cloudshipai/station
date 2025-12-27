@@ -10,6 +10,24 @@ import (
 	"database/sql"
 )
 
+const deleteAllWorkflows = `-- name: DeleteAllWorkflows :exec
+DELETE FROM workflows
+`
+
+func (q *Queries) DeleteAllWorkflows(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllWorkflows)
+	return err
+}
+
+const deleteWorkflow = `-- name: DeleteWorkflow :exec
+DELETE FROM workflows WHERE workflow_id = ?1
+`
+
+func (q *Queries) DeleteWorkflow(ctx context.Context, workflowID string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkflow, workflowID)
+	return err
+}
+
 const disableWorkflow = `-- name: DisableWorkflow :exec
 UPDATE workflows
 SET status = 'disabled', updated_at = CURRENT_TIMESTAMP

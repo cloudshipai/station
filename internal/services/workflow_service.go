@@ -233,6 +233,35 @@ func (s *WorkflowService) DisableWorkflow(ctx context.Context, workflowID string
 	return s.repos.Workflows.Disable(ctx, workflowID)
 }
 
+type DeleteWorkflowsRequest struct {
+	WorkflowIDs []string
+	All         bool
+}
+
+func (s *WorkflowService) DeleteWorkflows(ctx context.Context, req DeleteWorkflowsRequest) (int64, error) {
+	if req.All {
+		count, err := s.repos.Workflows.Count(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.repos.Workflows.DeleteAll(ctx); err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
+
+	if len(req.WorkflowIDs) > 0 {
+		for _, id := range req.WorkflowIDs {
+			if err := s.repos.Workflows.Delete(ctx, id); err != nil {
+				return 0, fmt.Errorf("failed to delete workflow %s: %w", id, err)
+			}
+		}
+		return int64(len(req.WorkflowIDs)), nil
+	}
+
+	return 0, nil
+}
+
 func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequest) (*models.WorkflowRun, workflows.ValidationResult, error) {
 	definition, err := s.GetWorkflow(ctx, req.WorkflowID, req.Version)
 	if err != nil {
