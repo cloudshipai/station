@@ -94,9 +94,12 @@ func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 		server.WithRecovery(),
 	)
 
-	// Load agents as tools
 	if err := das.loadAgentsAsTools(); err != nil {
 		return err
+	}
+
+	if err := das.loadWorkflowsAsTools(); err != nil {
+		log.Printf("Warning: failed to load workflow tools: %v", err)
 	}
 
 	// Create OAuth handler if enabled
