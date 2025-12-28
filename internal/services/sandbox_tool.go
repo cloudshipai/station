@@ -214,6 +214,8 @@ func NewUnifiedSandboxFactory(
 	var codeFactory *CodeModeToolFactory
 	if codeModeConfig.Enabled && sessionMgr != nil {
 		codeFactory = NewCodeModeToolFactory(sessionMgr, codeModeConfig)
+		// Start background cleanup routine to destroy idle sandbox containers
+		codeFactory.StartCleanupRoutine(codeModeConfig.CleanupInterval, codeModeConfig.IdleTimeout)
 	}
 
 	return &UnifiedSandboxFactory{
