@@ -635,17 +635,8 @@ func (f *CodeModeToolFactory) buildSessionOptions(agentDefaults *dotprompt.Sandb
 	opts.NetworkEnabled = agentDefaults.AllowNetwork
 
 	if agentDefaults.Limits != nil {
-		if agentDefaults.Limits.CPUMillicores > 0 {
-			opts.Limits.CPUMillicores = agentDefaults.Limits.CPUMillicores
-		}
-		if agentDefaults.Limits.MemoryMB > 0 {
-			opts.Limits.MemoryMB = agentDefaults.Limits.MemoryMB
-		}
 		if agentDefaults.Limits.TimeoutSeconds > 0 {
 			opts.Limits.TimeoutSeconds = agentDefaults.Limits.TimeoutSeconds
-		}
-		if agentDefaults.Limits.WorkspaceMB > 0 {
-			opts.Limits.WorkspaceMB = agentDefaults.Limits.WorkspaceMB
 		}
 	}
 
