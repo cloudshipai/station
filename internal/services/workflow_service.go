@@ -370,11 +370,11 @@ func (s *WorkflowService) GetRun(ctx context.Context, runID string) (*models.Wor
 	return s.repos.WorkflowRuns.Get(ctx, runID)
 }
 
-func (s *WorkflowService) ListRuns(ctx context.Context, workflowID, status string, limit int64) ([]*models.WorkflowRun, error) {
+func (s *WorkflowService) ListRuns(ctx context.Context, workflowID, status string, limit, offset int64) ([]*models.WorkflowRun, error) {
 	if limit == 0 {
 		limit = 50
 	}
-	return s.repos.WorkflowRuns.List(ctx, workflowID, status, limit)
+	return s.repos.WorkflowRuns.List(ctx, workflowID, status, limit, offset)
 }
 
 type DeleteRunsRequest struct {
@@ -404,7 +404,7 @@ func (s *WorkflowService) DeleteRuns(ctx context.Context, req DeleteRunsRequest)
 	}
 
 	if req.Status != "" {
-		runs, err := s.repos.WorkflowRuns.List(ctx, "", req.Status, 10000)
+		runs, err := s.repos.WorkflowRuns.List(ctx, "", req.Status, 10000, 0)
 		if err != nil {
 			return 0, err
 		}
@@ -415,7 +415,7 @@ func (s *WorkflowService) DeleteRuns(ctx context.Context, req DeleteRunsRequest)
 	}
 
 	if req.WorkflowID != "" {
-		runs, err := s.repos.WorkflowRuns.List(ctx, req.WorkflowID, "", 10000)
+		runs, err := s.repos.WorkflowRuns.List(ctx, req.WorkflowID, "", 10000, 0)
 		if err != nil {
 			return 0, err
 		}

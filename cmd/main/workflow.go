@@ -476,6 +476,7 @@ func runWorkflowRuns(cmd *cobra.Command, args []string) error {
 		workflowID = args[0]
 	}
 	limit, _ := cmd.Flags().GetInt64("limit")
+	offset, _ := cmd.Flags().GetInt64("offset")
 	status, _ := cmd.Flags().GetString("status")
 
 	cfg, err := config.Load()
@@ -493,7 +494,7 @@ func runWorkflowRuns(cmd *cobra.Command, args []string) error {
 	workflowService := services.NewWorkflowService(repos)
 
 	ctx := context.Background()
-	runs, err := workflowService.ListRuns(ctx, workflowID, status, limit)
+	runs, err := workflowService.ListRuns(ctx, workflowID, status, limit, offset)
 	if err != nil {
 		return fmt.Errorf("failed to list runs: %w", err)
 	}

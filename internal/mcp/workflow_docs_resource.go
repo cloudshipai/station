@@ -616,6 +616,51 @@ Use transform to assemble final output from multiple sources:
 
 ## ⚠️ Common Gotchas
 
+### 0. State Definition: Use ` + "`id`" + ` and ` + "`transition`" + ` NOT ` + "`name`" + ` and ` + "`next`" + `
+
+**CRITICAL: The UI visualization will break if you use wrong field names!**
+
+The workflow engine uses specific field names for state identification and transitions:
+
+| Correct ✅ | Wrong ❌ | Purpose |
+|-----------|---------|---------|
+| ` + "`id`" + ` | ` + "`name`" + ` | State identifier |
+| ` + "`transition`" + ` | ` + "`next`" + ` | Next state reference |
+| ` + "`end: true`" + ` | (omitting next) | Terminal state marker |
+
+` + "```yaml" + `
+# ✅ CORRECT - uses id, transition, end
+states:
+  - id: check_logs           # Correct field for state ID
+    type: agent
+    agent: log-analyzer
+    transition: send_alert   # Correct field for next state
+    
+  - id: send_alert
+    type: agent  
+    agent: alerter
+    end: true                # Correct way to mark terminal state
+
+# ❌ WRONG - uses name, next (UI won't render, may cause runtime issues)
+states:
+  - name: check_logs         # WRONG! Use 'id' not 'name'
+    type: agent
+    agent: log-analyzer
+    next: send_alert         # WRONG! Use 'transition' not 'next'
+    
+  - name: send_alert
+    type: agent
+    agent: alerter
+    # Missing 'end: true' - terminal states must be explicit
+` + "```" + `
+
+**Symptoms of using wrong fields:**
+- UI shows only "START" node in workflow visualization
+- Console error: ` + "`Elk layout error: Id must be a string`" + `
+- Workflow may execute but states aren't properly tracked
+
+---
+
 ### 1. Input Variables: $.field NOT $.input.field
 
 **#1 Source of Errors.** Workflow input is FLATTENED to root context.

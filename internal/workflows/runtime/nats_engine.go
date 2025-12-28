@@ -62,12 +62,20 @@ func NewEngine(opts Options) (*NATSEngine, error) {
 	}
 	engine.js = js
 
-	_, err = js.AddStream(&nats.StreamConfig{
+	storageType := nats.FileStorage
+	if opts.Embedded {
+		storageType = nats.MemoryStorage
+		_ = js.DeleteStream(opts.Stream)
+	}
+
+	streamConfig := &nats.StreamConfig{
 		Name:     opts.Stream,
 		Subjects: []string{fmt.Sprintf("%s.>", opts.SubjectPrefix)},
-		Storage:  nats.FileStorage,
-	})
-	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+		Storage:  storageType,
+	}
+
+	_, err = js.AddStream(streamConfig)
+	if err != nil {
 		engine.Close()
 		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}
@@ -131,10 +139,8 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 		consumer = e.opts.ConsumerName
 	}
 
-	log.Printf("NATS Engine: Binding to shared durable consumer=%s for subject=%s", consumer, subject)
+	log.Printf("NATS Engine: Setting up consumer=%s for subject=%s (embedded=%v)", consumer, subject, e.opts.Embedded)
 
-	// Create durable consumer config if it doesn't exist
-	// Multiple instances with same consumer name = work queue pattern (HA scale-out)
 	consumerConfig := &nats.ConsumerConfig{
 		Durable:       consumer,
 		FilterSubject: subject,
@@ -144,11 +150,14 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 		DeliverPolicy: nats.DeliverAllPolicy,
 	}
 
-	// Try to add consumer (will return error if exists, which is fine - we'll bind to it)
+	if e.opts.Embedded {
+		_ = e.js.DeleteConsumer(e.opts.Stream, consumer)
+		log.Printf("NATS Engine: Deleted existing consumer for clean embedded state")
+	}
+
 	_, err := e.js.AddConsumer(e.opts.Stream, consumerConfig)
 	if err != nil {
-		// Consumer already exists is expected in HA setup - multiple instances bind to same consumer
-		log.Printf("NATS Engine: Consumer setup note: %v (this is normal if consumer already exists)", err)
+		log.Printf("NATS Engine: Consumer setup note: %v", err)
 	}
 
 	// Bind to the shared durable consumer
@@ -169,27 +178,44 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 			info.Name, info.NumPending, info.NumWaiting, info.NumAckPending)
 	}
 
-	go e.pullFetchLoop(sub, handler)
+	workerPoolSize := e.opts.WorkerPoolSize
+	if workerPoolSize <= 0 {
+		workerPoolSize = 10
+	}
+	go e.pullFetchLoop(sub, handler, workerPoolSize)
 
 	return sub, nil
 }
 
-func (e *NATSEngine) pullFetchLoop(sub *nats.Subscription, handler func(msg *nats.Msg)) {
-	log.Printf("NATS Engine: Starting pull fetch loop")
+func (e *NATSEngine) pullFetchLoop(sub *nats.Subscription, handler func(msg *nats.Msg), workerPoolSize int) {
+	log.Printf("NATS Engine: Starting pull fetch loop with %d concurrent workers", workerPoolSize)
+
+	workCh := make(chan *nats.Msg, workerPoolSize*2)
+
+	for i := 0; i < workerPoolSize; i++ {
+		go func(workerID int) {
+			for msg := range workCh {
+				log.Printf("NATS Engine: [Worker %d] Processing message on subject=%s", workerID, msg.Subject)
+				handler(msg)
+			}
+		}(i)
+	}
 
 	for {
 		if !sub.IsValid() {
 			log.Printf("NATS Engine: Subscription no longer valid, stopping fetch loop")
+			close(workCh)
 			return
 		}
 
-		msgs, err := sub.Fetch(10, nats.MaxWait(5*time.Second))
+		msgs, err := sub.Fetch(workerPoolSize, nats.MaxWait(5*time.Second))
 		if err != nil {
 			if err == nats.ErrTimeout {
 				continue
 			}
 			if err == nats.ErrConnectionClosed || err == nats.ErrConsumerDeleted {
 				log.Printf("NATS Engine: Connection or consumer closed, stopping fetch loop")
+				close(workCh)
 				return
 			}
 			log.Printf("NATS Engine: Fetch error: %v", err)
@@ -198,8 +224,8 @@ func (e *NATSEngine) pullFetchLoop(sub *nats.Subscription, handler func(msg *nat
 		}
 
 		for _, msg := range msgs {
-			log.Printf("NATS Engine: [PULL] Fetched message on subject=%s", msg.Subject)
-			handler(msg)
+			log.Printf("NATS Engine: [PULL] Dispatching message to worker pool: subject=%s", msg.Subject)
+			workCh <- msg
 		}
 	}
 }
@@ -232,12 +258,13 @@ func NewEmbeddedEngineForTests() (*NATSEngine, error) {
 	serverOpts.JetStream = true
 	srv := natsserver_test.RunServer(&serverOpts)
 	opts := Options{
-		Enabled:       true,
-		URL:           srv.ClientURL(),
-		Stream:        "WORKFLOW_EVENTS",
-		SubjectPrefix: "workflow",
-		ConsumerName:  "test-consumer",
-		Embedded:      false,
+		Enabled:        true,
+		URL:            srv.ClientURL(),
+		Stream:         "WORKFLOW_EVENTS",
+		SubjectPrefix:  "workflow",
+		ConsumerName:   "test-consumer",
+		Embedded:       true,
+		WorkerPoolSize: 10,
 	}
 	engine, err := NewEngine(opts)
 	if err != nil {

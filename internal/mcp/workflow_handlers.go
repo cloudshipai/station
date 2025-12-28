@@ -232,8 +232,9 @@ func (s *Server) handleListWorkflowRuns(ctx context.Context, request mcp.CallToo
 	workflowID := request.GetString("workflow_id", "")
 	status := request.GetString("status", "")
 	limit := int64(request.GetInt("limit", 50))
+	offset := int64(request.GetInt("offset", 0))
 
-	runs, err := s.workflowService.ListRuns(ctx, workflowID, status, limit)
+	runs, err := s.workflowService.ListRuns(ctx, workflowID, status, limit, offset)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to list workflow runs: %v", err)), nil
 	}

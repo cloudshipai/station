@@ -279,7 +279,7 @@ func (a *WorkflowServiceAdapter) GetStep(ctx context.Context, runID, stepID stri
 }
 
 func (a *WorkflowServiceAdapter) ListPendingRuns(ctx context.Context, limit int64) ([]PendingRunInfo, error) {
-	runs, err := a.repos.WorkflowRuns.List(ctx, "", "pending", limit)
+	runs, err := a.repos.WorkflowRuns.List(ctx, "", "pending", limit, 0)
 	if err != nil {
 		return nil, err
 	}

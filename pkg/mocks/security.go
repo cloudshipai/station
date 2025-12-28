@@ -321,7 +321,7 @@ func NewTrivyMock() *MockServer {
 					"category":     "general",
 					"severity":     "CRITICAL",
 					"title":        "Generic API Key",
-					"match":        "api_key = \"sk_live_1234567890abcdef\"",
+					"match":        "api_key = \"test_key_1234567890abcdef\"",
 					"file":         ".env.example",
 					"line":         23,
 					"start_column": 1,

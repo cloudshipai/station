@@ -222,11 +222,12 @@ func (r *WorkflowRunRepo) Get(ctx context.Context, runID string) (*models.Workfl
 	return convertWorkflowRun(row), nil
 }
 
-func (r *WorkflowRunRepo) List(ctx context.Context, workflowID, status string, limit int64) ([]*models.WorkflowRun, error) {
+func (r *WorkflowRunRepo) List(ctx context.Context, workflowID, status string, limit, offset int64) ([]*models.WorkflowRun, error) {
 	params := queries.ListWorkflowRunsParams{
 		WorkflowID: nil,
 		Status:     nil,
 		Limit:      limit,
+		Offset:     offset,
 	}
 	if workflowID != "" {
 		params.WorkflowID = workflowID

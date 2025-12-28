@@ -43,7 +43,8 @@ FROM workflow_runs
 WHERE (sqlc.narg(workflow_id) IS NULL OR workflow_id = sqlc.narg(workflow_id))
   AND (sqlc.narg(status) IS NULL OR status = sqlc.narg(status))
 ORDER BY created_at DESC
-LIMIT sqlc.arg(limit);
+LIMIT sqlc.arg(limit)
+OFFSET sqlc.arg(offset);
 
 -- name: UpdateWorkflowRunStatus :exec
 UPDATE workflow_runs
