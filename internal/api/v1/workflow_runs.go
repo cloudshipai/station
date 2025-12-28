@@ -191,7 +191,14 @@ func (h *APIHandlers) listWorkflowRuns(c *gin.Context) {
 		}
 	}
 
-	runs, err := h.workflowService.ListRuns(c.Request.Context(), workflowID, status, limit)
+	offset := int64(0)
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	runs, err := h.workflowService.ListRuns(c.Request.Context(), workflowID, status, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list workflow runs"})
 		return
@@ -201,6 +208,7 @@ func (h *APIHandlers) listWorkflowRuns(c *gin.Context) {
 		"runs":    runs,
 		"count":   len(runs),
 		"limit":   limit,
+		"offset":  offset,
 		"filters": gin.H{"workflowId": workflowID, "status": status},
 	})
 }

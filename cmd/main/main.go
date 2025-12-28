@@ -230,6 +230,7 @@ func init() {
 	workflowRunCmd.Flags().Bool("wait", false, "Wait for workflow to complete")
 	workflowRunCmd.Flags().Duration("timeout", 5*time.Minute, "Timeout when waiting for completion")
 	workflowRunsCmd.Flags().Int64("limit", 20, "Maximum number of runs to show")
+	workflowRunsCmd.Flags().Int64("offset", 0, "Number of runs to skip for pagination")
 	workflowRunsCmd.Flags().String("status", "", "Filter by status (running, completed, failed)")
 	workflowInspectCmd.Flags().BoolP("verbose", "v", false, "Show detailed step output")
 	workflowDebugExpressionCmd.Flags().String("context", "", "JSON context for evaluation")

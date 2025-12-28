@@ -430,6 +430,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("workflow_id", mcp.Description("Filter by workflow ID")),
 		mcp.WithString("status", mcp.Description("Filter by status (running, completed, failed, cancelled, paused)")),
 		mcp.WithNumber("limit", mcp.Description("Maximum runs to return (default: 50)")),
+		mcp.WithNumber("offset", mcp.Description("Number of runs to skip for pagination (default: 0)")),
 	)
 	s.mcpServer.AddTool(listWorkflowRunsTool, s.handleListWorkflowRuns)
 

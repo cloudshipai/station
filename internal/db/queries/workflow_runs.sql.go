@@ -206,17 +206,24 @@ FROM workflow_runs
 WHERE (?1 IS NULL OR workflow_id = ?1)
   AND (?2 IS NULL OR status = ?2)
 ORDER BY created_at DESC
-LIMIT ?3
+LIMIT ?4
+OFFSET ?3
 `
 
 type ListWorkflowRunsParams struct {
 	WorkflowID interface{} `json:"workflow_id"`
 	Status     interface{} `json:"status"`
+	Offset     int64       `json:"offset"`
 	Limit      int64       `json:"limit"`
 }
 
 func (q *Queries) ListWorkflowRuns(ctx context.Context, arg ListWorkflowRunsParams) ([]WorkflowRun, error) {
-	rows, err := q.db.QueryContext(ctx, listWorkflowRuns, arg.WorkflowID, arg.Status, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, listWorkflowRuns,
+		arg.WorkflowID,
+		arg.Status,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
