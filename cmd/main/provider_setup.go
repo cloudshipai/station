@@ -22,10 +22,14 @@ type ProviderConfig struct {
 	BaseURL  string
 }
 
-// getProviderModels returns example models for each provider (any model string is accepted)
 func getProviderModels() map[string][]string {
 	return map[string][]string{
 		"openai": config.GetSupportedOpenAIModels(),
+		"anthropic": {
+			"claude-sonnet-4-20250514",
+			"claude-3-7-sonnet-20250219",
+			"claude-3-5-haiku-20241022",
+		},
 		"gemini": {
 			"gemini-2.5-flash",
 			"gemini-2.5-pro",
@@ -38,11 +42,11 @@ func getDefaultProvider() (string, string) {
 	return "openai", "gpt-5-mini"
 }
 
-// Provider descriptions for better UX
 var providerDescriptions = map[string]string{
-	"openai": "OpenAI models - GPT-5, GPT-4o, and more (any model accepted)",
-	"gemini": "Google's Gemini models - Fast, capable, and cost-effective",
-	"custom": "Configure a custom provider (any OpenAI-compatible endpoint)",
+	"openai":    "OpenAI models - GPT-4o, and more (any model accepted)",
+	"anthropic": "Anthropic's Claude models - Claude Sonnet 4, Claude 3.7, etc.",
+	"gemini":    "Google's Gemini models - Fast, capable, and cost-effective",
+	"custom":    "Configure a custom provider (any OpenAI-compatible endpoint)",
 }
 
 // setupProviderInteractively runs the interactive provider setup
@@ -96,8 +100,10 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 	return &ProviderConfig{Provider: provider, Model: model, BaseURL: ""}, nil
 }
 
-// detectProviderFromEnv checks environment variables for API keys
 func detectProviderFromEnv() (string, string) {
+	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		return "anthropic", "claude-sonnet-4-20250514"
+	}
 	if os.Getenv("OPENAI_API_KEY") != "" {
 		recommended := config.GetRecommendedOpenAIModels()
 		return "openai", recommended["cost_effective"]
@@ -328,10 +334,10 @@ var (
 			Render("Submit")
 )
 
-// selectProvider shows interactive provider selection
 func selectProvider() (string, error) {
 	items := []list.Item{
 		item("openai"),
+		item("anthropic"),
 		item("gemini"),
 		item("custom"),
 	}

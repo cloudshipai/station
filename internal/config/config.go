@@ -783,18 +783,18 @@ func getAIAPIKey() string {
 		return key
 	}
 
-	// Fall back to provider-specific keys for backward compatibility
 	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
 	switch provider {
 	case "openai":
 		return os.Getenv("OPENAI_API_KEY")
+	case "anthropic":
+		return os.Getenv("ANTHROPIC_API_KEY")
 	case "gemini":
 		if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
 			return key
 		}
 		return os.Getenv("GEMINI_API_KEY")
 	case "cloudflare":
-		// Cloudflare Workers AI uses CF_TOKEN for authentication
 		if key := os.Getenv("CF_TOKEN"); key != "" {
 			return key
 		}
@@ -803,7 +803,6 @@ func getAIAPIKey() string {
 		}
 		return os.Getenv("CLOUDFLARE_API_TOKEN")
 	case "ollama":
-		// Ollama typically doesn't need API keys for local instances
 		return ""
 	default:
 		return ""
@@ -820,23 +819,20 @@ func getAIModelDefault() string {
 		return model
 	}
 
-	// Provide sane defaults based on provider
 	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
 	switch provider {
 	case "openai":
-		// Any model string is passed through to OpenAI API via GenKit
-		// GPT-5 family: gpt-5.2, gpt-5.1, gpt-5, gpt-5-mini, gpt-5-nano
-		// GPT-4 family: gpt-4.1, gpt-4o, gpt-4o-mini, gpt-4-turbo
-		// Reasoning: o4-mini, o3, o3-mini
-		return "gpt-5-mini" // Fast and cost-effective default
+		return "gpt-4o-mini"
+	case "anthropic":
+		return "claude-sonnet-4-20250514"
 	case "gemini":
-		return "gemini-2.5-flash" // Google's latest fast model
+		return "gemini-2.5-flash"
 	case "cloudflare":
-		return "@cf/openai/gpt-oss-120b" // Cloudflare Workers AI GPT-OSS model
+		return "@cf/openai/gpt-oss-120b"
 	case "ollama":
-		return "llama3" // Popular local model
+		return "llama3"
 	default:
-		return "gpt-5-mini" // Safe, cost-effective fallback
+		return "gpt-4o-mini"
 	}
 }
 
