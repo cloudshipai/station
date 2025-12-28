@@ -712,6 +712,158 @@ func TestSandboxService_Run_OutputTruncation(t *testing.T) {
 // Benchmarks
 // =============================================================================
 
+func TestCollectCodeModeEnvVars(t *testing.T) {
+	origEnv := os.Environ()
+	defer func() {
+		os.Clearenv()
+		for _, e := range origEnv {
+			parts := strings.SplitN(e, "=", 2)
+			if len(parts) == 2 {
+				os.Setenv(parts[0], parts[1])
+			}
+		}
+	}()
+
+	os.Setenv("STN_CODE_DATABASE_URL", "postgres://test")
+	os.Setenv("STN_CODE_API_KEY", "secret123")
+	os.Setenv("STN_CODE_EMPTY", "")
+	os.Setenv("STN_OTHER_VAR", "should-not-be-included")
+	os.Setenv("NORMAL_VAR", "also-excluded")
+
+	env := collectCodeModeEnvVars()
+
+	if env["DATABASE_URL"] != "postgres://test" {
+		t.Errorf("DATABASE_URL = %q, want %q", env["DATABASE_URL"], "postgres://test")
+	}
+	if env["API_KEY"] != "secret123" {
+		t.Errorf("API_KEY = %q, want %q", env["API_KEY"], "secret123")
+	}
+	if env["EMPTY"] != "" {
+		t.Errorf("EMPTY = %q, want empty string", env["EMPTY"])
+	}
+	if _, ok := env["STN_OTHER_VAR"]; ok {
+		t.Error("STN_OTHER_VAR should not be in env (wrong prefix)")
+	}
+	if _, ok := env["NORMAL_VAR"]; ok {
+		t.Error("NORMAL_VAR should not be in env (no prefix)")
+	}
+	if _, ok := env["OTHER_VAR"]; ok {
+		t.Error("OTHER_VAR should not be in env")
+	}
+}
+
+func TestSandboxService_Run_STN_CODE_EnvVars_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	if !isDockerAvailable() {
+		t.Skip("Skipping integration test: Docker not available")
+	}
+
+	origEnv := os.Environ()
+	defer func() {
+		os.Clearenv()
+		for _, e := range origEnv {
+			parts := strings.SplitN(e, "=", 2)
+			if len(parts) == 2 {
+				os.Setenv(parts[0], parts[1])
+			}
+		}
+	}()
+
+	os.Setenv("STN_CODE_TEST_SECRET", "from-host-env")
+	os.Setenv("STN_CODE_ANOTHER_VAR", "also-from-host")
+
+	cfg := DefaultSandboxConfig()
+	cfg.Enabled = true
+	svc := NewSandboxService(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	req := SandboxRunRequest{
+		Runtime: "python",
+		Code:    "import os; print(f'SECRET={os.environ.get(\"TEST_SECRET\", \"missing\")}'); print(f'ANOTHER={os.environ.get(\"ANOTHER_VAR\", \"missing\")}')",
+	}
+
+	result, err := svc.Run(ctx, req)
+
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Run() returned nil result")
+	}
+
+	if !result.OK {
+		t.Errorf("Run() failed: stdout=%s, stderr=%s, error=%s", result.Stdout, result.Stderr, result.Error)
+	}
+
+	if !strings.Contains(result.Stdout, "SECRET=from-host-env") {
+		t.Errorf("STN_CODE_TEST_SECRET not propagated. stdout=%q", result.Stdout)
+	}
+
+	if !strings.Contains(result.Stdout, "ANOTHER=also-from-host") {
+		t.Errorf("STN_CODE_ANOTHER_VAR not propagated. stdout=%q", result.Stdout)
+	}
+
+	t.Logf("Result: %s", result.Stdout)
+}
+
+func TestSandboxService_Run_EnvVarOverride_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	if !isDockerAvailable() {
+		t.Skip("Skipping integration test: Docker not available")
+	}
+
+	origEnv := os.Environ()
+	defer func() {
+		os.Clearenv()
+		for _, e := range origEnv {
+			parts := strings.SplitN(e, "=", 2)
+			if len(parts) == 2 {
+				os.Setenv(parts[0], parts[1])
+			}
+		}
+	}()
+
+	os.Setenv("STN_CODE_MY_VAR", "from-host")
+
+	cfg := DefaultSandboxConfig()
+	cfg.Enabled = true
+	svc := NewSandboxService(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	req := SandboxRunRequest{
+		Runtime: "python",
+		Code:    "import os; print(f'MY_VAR={os.environ.get(\"MY_VAR\", \"missing\")}')",
+		Env:     map[string]string{"MY_VAR": "from-request"},
+	}
+
+	result, err := svc.Run(ctx, req)
+
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+
+	if !result.OK {
+		t.Errorf("Run() failed: stdout=%s, stderr=%s, error=%s", result.Stdout, result.Stderr, result.Error)
+	}
+
+	if !strings.Contains(result.Stdout, "MY_VAR=from-request") {
+		t.Errorf("Request env should override STN_CODE_* env. stdout=%q", result.Stdout)
+	}
+
+	t.Logf("Result: %s", result.Stdout)
+}
+
 func BenchmarkSandboxService_isImageAllowed(b *testing.B) {
 	cfg := DefaultSandboxConfig()
 	cfg.Enabled = true

@@ -183,6 +183,9 @@ func (s *SandboxService) executeInDagger(ctx context.Context, req SandboxRunRequ
 		ctr = ctr.WithNewFile("/work/"+safePath, contents)
 	}
 
+	for k, v := range collectCodeModeEnvVars() {
+		ctr = ctr.WithEnvVariable(k, v)
+	}
 	for k, v := range req.Env {
 		ctr = ctr.WithEnvVariable(k, v)
 	}

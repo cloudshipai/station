@@ -466,6 +466,24 @@ export DOCKER_HOST=unix:///var/run/docker.sock
 
 > **Important**: Without `code_mode_enabled: true` (or `STATION_SANDBOX_CODE_MODE_ENABLED=true`), agents with `mode: code` will not receive the code mode tools (`sandbox_open`, `sandbox_exec`, etc.).
 
+### Environment Variable Propagation
+
+Station automatically propagates environment variables with the `STN_CODE_` prefix to all sandbox containers (both compute and code mode). The prefix is stripped when injected into the container.
+
+```bash
+# Set on host:
+export STN_CODE_DATABASE_URL=postgres://localhost/mydb
+export STN_CODE_API_KEY=secret123
+
+# Inside sandbox container, these become:
+# DATABASE_URL=postgres://localhost/mydb
+# API_KEY=secret123
+```
+
+This enables zero-config deployments where secrets and configuration can be passed to sandboxed code execution without exposing all host environment variables.
+
+**Precedence**: If the agent's tool call includes an `env` parameter with the same variable name, the tool call value takes precedence over the `STN_CODE_*` value.
+
 ---
 
 ## Deployment
