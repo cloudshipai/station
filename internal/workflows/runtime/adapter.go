@@ -15,6 +15,7 @@ type WorkflowServiceAdapter struct {
 	repos     *repositories.Repositories
 	engine    Engine
 	planCache map[string]workflows.ExecutionPlan
+	telemetry *WorkflowTelemetry
 }
 
 func NewWorkflowServiceAdapter(repos *repositories.Repositories, engine Engine) *WorkflowServiceAdapter {
@@ -36,6 +37,10 @@ func (a *WorkflowServiceAdapter) GetCachedPlan(runID string) (workflows.Executio
 
 func (a *WorkflowServiceAdapter) RemoveCachedPlan(runID string) {
 	delete(a.planCache, runID)
+}
+
+func (a *WorkflowServiceAdapter) SetTelemetry(t *WorkflowTelemetry) {
+	a.telemetry = t
 }
 
 func (a *WorkflowServiceAdapter) UpdateRunStatus(ctx context.Context, runID, status string, currentStep *string, errMsg *string) error {
@@ -105,24 +110,54 @@ func (a *WorkflowServiceAdapter) CompleteRun(ctx context.Context, runID string, 
 
 	a.RemoveCachedPlan(runID)
 
-	return a.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
+	var workflowID string
+	var duration time.Duration
+	if a.telemetry != nil {
+		if run, err := a.repos.WorkflowRuns.Get(ctx, runID); err == nil {
+			workflowID = run.WorkflowID
+			duration = now.Sub(run.StartedAt)
+		}
+	}
+
+	err := a.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
 		RunID:       runID,
 		Status:      "completed",
 		Result:      resultJSON,
 		CompletedAt: &now,
 	})
+
+	if a.telemetry != nil && workflowID != "" {
+		a.telemetry.EndRunSpan(ctx, runID, workflowID, "completed", duration, nil)
+	}
+
+	return err
 }
 
 func (a *WorkflowServiceAdapter) FailRun(ctx context.Context, runID string, errMsg string) error {
 	now := time.Now()
 	a.RemoveCachedPlan(runID)
 
-	return a.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
+	var workflowID string
+	var duration time.Duration
+	if a.telemetry != nil {
+		if run, err := a.repos.WorkflowRuns.Get(ctx, runID); err == nil {
+			workflowID = run.WorkflowID
+			duration = now.Sub(run.StartedAt)
+		}
+	}
+
+	err := a.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
 		RunID:       runID,
 		Status:      "failed",
 		Error:       &errMsg,
 		CompletedAt: &now,
 	})
+
+	if a.telemetry != nil && workflowID != "" {
+		a.telemetry.EndRunSpan(ctx, runID, workflowID, "failed", duration, fmt.Errorf("%s", errMsg))
+	}
+
+	return err
 }
 
 func (a *WorkflowServiceAdapter) RecordStepStart(ctx context.Context, runID, stepID string, stepType string) error {

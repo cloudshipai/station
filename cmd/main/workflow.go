@@ -341,13 +341,16 @@ func runWorkflowRun(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
+	telemetry, _ := runtime.NewWorkflowTelemetry()
+
 	agentService := services.NewAgentService(repos)
-	consumer := startCLIWorkflowConsumer(ctx, repos, engine, agentService)
+	consumer := startCLIWorkflowConsumer(ctx, repos, engine, agentService, telemetry)
 	if consumer != nil {
 		defer consumer.Stop()
 	}
 
 	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+	workflowService.SetTelemetry(telemetry)
 
 	// Get default environment ID
 	var environmentID int64 = 1
@@ -702,7 +705,7 @@ func runWorkflowExport(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func startCLIWorkflowConsumer(ctx context.Context, repos *repositories.Repositories, engine *runtime.NATSEngine, agentService services.AgentServiceInterface) *runtime.WorkflowConsumer {
+func startCLIWorkflowConsumer(ctx context.Context, repos *repositories.Repositories, engine *runtime.NATSEngine, agentService services.AgentServiceInterface, telemetry *runtime.WorkflowTelemetry) *runtime.WorkflowConsumer {
 	registry := runtime.NewExecutorRegistry()
 	registry.Register(runtime.NewInjectExecutor())
 	registry.Register(runtime.NewSwitchExecutor())
@@ -719,9 +722,15 @@ func startCLIWorkflowConsumer(ctx context.Context, repos *repositories.Repositor
 	registry.Register(runtime.NewForeachExecutor(stepAdapter))
 
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
+	if telemetry != nil {
+		adapter.SetTelemetry(telemetry)
+	}
 
 	consumer := runtime.NewWorkflowConsumer(engine, registry, adapter, adapter, adapter)
 	consumer.SetPendingRunProvider(adapter)
+	if telemetry != nil {
+		consumer.SetTelemetry(telemetry)
+	}
 
 	if err := consumer.Start(ctx); err != nil {
 		log.Printf("Workflow consumer: failed to start: %v", err)
@@ -1025,13 +1034,16 @@ func runWorkflowApprovalsApprove(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
+	telemetry, _ := runtime.NewWorkflowTelemetry()
+
 	agentService := services.NewAgentService(repos)
-	consumer := startCLIWorkflowConsumer(ctx, repos, engine, agentService)
+	consumer := startCLIWorkflowConsumer(ctx, repos, engine, agentService, telemetry)
 	if consumer != nil {
 		defer consumer.Stop()
 	}
 
 	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+	workflowService.SetTelemetry(telemetry)
 
 	approval, err := workflowService.ApproveWorkflowStep(ctx, services.ApproveWorkflowStepRequest{
 		ApprovalID: approvalID,

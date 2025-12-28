@@ -28,6 +28,7 @@ type APIHandlers struct {
 	workflowService      *services.WorkflowService
 	workflowConsumer     *runtime.WorkflowConsumer
 	workflowEngine       runtime.Engine
+	workflowTelemetry    *runtime.WorkflowTelemetry
 	localMode            bool
 	cfg                  *config.Config
 }
@@ -40,7 +41,9 @@ func NewAPIHandlers(
 	localMode bool,
 ) *APIHandlers {
 	engine := mustInitWorkflowEngine()
+	workflowTelemetry, _ := runtime.NewWorkflowTelemetry()
 	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+	workflowService.SetTelemetry(workflowTelemetry)
 	agentService := services.NewAgentService(repos)
 
 	h := &APIHandlers{
@@ -51,6 +54,7 @@ func NewAPIHandlers(
 		agentExportService:   services.NewAgentExportService(repos),
 		workflowService:      workflowService,
 		workflowEngine:       engine,
+		workflowTelemetry:    workflowTelemetry,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 	}
@@ -68,7 +72,9 @@ func NewAPIHandlersWithConfig(
 	cfg *config.Config,
 ) *APIHandlers {
 	engine := mustInitWorkflowEngine()
+	workflowTelemetry, _ := runtime.NewWorkflowTelemetry()
 	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+	workflowService.SetTelemetry(workflowTelemetry)
 	agentService := services.NewAgentService(repos)
 
 	h := &APIHandlers{
@@ -79,6 +85,7 @@ func NewAPIHandlersWithConfig(
 		agentExportService:   services.NewAgentExportService(repos),
 		workflowService:      workflowService,
 		workflowEngine:       engine,
+		workflowTelemetry:    workflowTelemetry,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 		cfg:                  cfg,
@@ -98,7 +105,9 @@ func NewAPIHandlersWithAgentService(
 	agentService *services.AgentService,
 ) *APIHandlers {
 	engine := mustInitWorkflowEngine()
+	workflowTelemetry, _ := runtime.NewWorkflowTelemetry()
 	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+	workflowService.SetTelemetry(workflowTelemetry)
 
 	h := &APIHandlers{
 		repos:                repos,
@@ -108,6 +117,7 @@ func NewAPIHandlersWithAgentService(
 		agentExportService:   services.NewAgentExportService(repos),
 		workflowService:      workflowService,
 		workflowEngine:       engine,
+		workflowTelemetry:    workflowTelemetry,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 		cfg:                  cfg,
@@ -155,9 +165,15 @@ func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, en
 	registry.Register(runtime.NewForeachExecutor(stepAdapter))
 
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
+	if h.workflowTelemetry != nil {
+		adapter.SetTelemetry(h.workflowTelemetry)
+	}
 
 	consumer := runtime.NewWorkflowConsumer(natsEngine, registry, adapter, adapter, adapter)
 	consumer.SetPendingRunProvider(adapter)
+	if h.workflowTelemetry != nil {
+		consumer.SetTelemetry(h.workflowTelemetry)
+	}
 	h.workflowConsumer = consumer
 
 	if err := consumer.Start(context.Background()); err != nil {

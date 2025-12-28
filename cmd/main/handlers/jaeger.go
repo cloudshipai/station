@@ -12,12 +12,11 @@ import (
 
 // JaegerDockerCompose is the default docker-compose configuration for Jaeger
 const JaegerDockerCompose = `# Station Jaeger Configuration
-# Provides OpenTelemetry tracing with persistent storage
+# Provides OpenTelemetry tracing with in-memory storage
 # 
 # Usage:
 #   stn jaeger up    - Start Jaeger
 #   stn jaeger down  - Stop Jaeger
-#   stn jaeger clean - Remove all data and start fresh
 
 services:
   jaeger:
@@ -30,16 +29,7 @@ services:
       - "4318:4318"     # OTLP HTTP
       - "14268:14268"   # Jaeger thrift HTTP
     environment:
-      - SPAN_STORAGE_TYPE=badger
-      - BADGER_EPHEMERAL=false
-      - BADGER_DIRECTORY_VALUE=/badger/data
-      - BADGER_DIRECTORY_KEY=/badger/key
-    volumes:
-      - jaeger-data:/badger
-
-volumes:
-  jaeger-data:
-    name: station-jaeger-data
+      - SPAN_STORAGE_TYPE=memory
 `
 
 // GetJaegerComposePath returns the path to the jaeger docker-compose file

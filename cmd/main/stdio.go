@@ -165,9 +165,12 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to initialize workflow engine: %v (workflow execution disabled)\n", err)
 	}
 
+	telemetry, _ := runtime.NewWorkflowTelemetry()
+
 	var workflowService *services.WorkflowService
 	if workflowEngine != nil {
 		workflowService = services.NewWorkflowServiceWithEngine(repos, workflowEngine)
+		workflowService.SetTelemetry(telemetry)
 		_, _ = fmt.Fprintf(os.Stderr, "✅ Workflow engine initialized (embedded NATS)\n")
 	} else {
 		workflowService = services.NewWorkflowService(repos)
@@ -175,7 +178,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 
 	var workflowConsumer *runtime.WorkflowConsumer
 	if workflowEngine != nil {
-		workflowConsumer = startStdioWorkflowConsumer(ctx, repos, workflowEngine, agentSvc)
+		workflowConsumer = startStdioWorkflowConsumer(ctx, repos, workflowEngine, agentSvc, telemetry)
 		if workflowConsumer != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "✅ Workflow consumer started\n")
 		}
@@ -289,7 +292,7 @@ func isPortAvailable(port int) bool {
 	return true
 }
 
-func startStdioWorkflowConsumer(ctx context.Context, repos *repositories.Repositories, engine *runtime.NATSEngine, agentService services.AgentServiceInterface) *runtime.WorkflowConsumer {
+func startStdioWorkflowConsumer(ctx context.Context, repos *repositories.Repositories, engine *runtime.NATSEngine, agentService services.AgentServiceInterface, telemetry *runtime.WorkflowTelemetry) *runtime.WorkflowConsumer {
 	registry := runtime.NewExecutorRegistry()
 	registry.Register(runtime.NewInjectExecutor())
 	registry.Register(runtime.NewSwitchExecutor())
@@ -306,9 +309,15 @@ func startStdioWorkflowConsumer(ctx context.Context, repos *repositories.Reposit
 	registry.Register(runtime.NewForeachExecutor(stepAdapter))
 
 	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
+	if telemetry != nil {
+		adapter.SetTelemetry(telemetry)
+	}
 
 	consumer := runtime.NewWorkflowConsumer(engine, registry, adapter, adapter, adapter)
 	consumer.SetPendingRunProvider(adapter)
+	if telemetry != nil {
+		consumer.SetTelemetry(telemetry)
+	}
 
 	if err := consumer.Start(ctx); err != nil {
 		log.Printf("Workflow consumer: failed to start: %v", err)

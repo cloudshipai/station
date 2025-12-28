@@ -20,6 +20,7 @@ type WorkflowService struct {
 	repos     *repositories.Repositories
 	engine    runtime.Engine
 	scheduler *WorkflowSchedulerService
+	telemetry *runtime.WorkflowTelemetry
 }
 
 // WorkflowDefinitionInput captures required fields to create or update a workflow.
@@ -82,6 +83,17 @@ func NewWorkflowServiceWithEngine(repos *repositories.Repositories, engine runti
 
 func (s *WorkflowService) SetScheduler(scheduler *WorkflowSchedulerService) {
 	s.scheduler = scheduler
+}
+
+// SetTelemetry sets the workflow telemetry for distributed tracing.
+// When set, workflow runs will create parent spans that connect all step and agent spans.
+func (s *WorkflowService) SetTelemetry(t *runtime.WorkflowTelemetry) {
+	s.telemetry = t
+}
+
+// GetTelemetry returns the workflow telemetry instance (used by consumer to share telemetry).
+func (s *WorkflowService) GetTelemetry() *runtime.WorkflowTelemetry {
+	return s.telemetry
 }
 
 func (s *WorkflowService) registerCronScheduleIfNeeded(ctx context.Context, def *workflows.Definition, version int64) {
@@ -308,7 +320,10 @@ func (s *WorkflowService) StartRun(ctx context.Context, req StartWorkflowRunRequ
 	runID := uuid.NewString()
 	now := time.Now()
 
-	// Pre-compile execution plan to check step types
+	if s.telemetry != nil {
+		ctx = s.telemetry.StartRunSpan(ctx, runID, req.WorkflowID)
+	}
+
 	plan := workflows.CompileExecutionPlan(parsed)
 
 	// If start step is a cron trigger, skip to its next step (cron is just a trigger definition)
@@ -414,7 +429,8 @@ func (s *WorkflowService) DeleteRuns(ctx context.Context, req DeleteRunsRequest)
 }
 
 func (s *WorkflowService) CancelRun(ctx context.Context, runID, reason string) (*models.WorkflowRun, error) {
-	if _, err := s.repos.WorkflowRuns.Get(ctx, runID); err != nil {
+	run, err := s.repos.WorkflowRuns.Get(ctx, runID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -430,6 +446,12 @@ func (s *WorkflowService) CancelRun(ctx context.Context, runID, reason string) (
 	}); err != nil {
 		return nil, err
 	}
+
+	if s.telemetry != nil {
+		duration := now.Sub(run.StartedAt)
+		s.telemetry.EndRunSpan(ctx, runID, run.WorkflowID, "canceled", duration, fmt.Errorf("canceled: %s", reason))
+	}
+
 	_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
 		"type":   models.EventTypeRunCanceled,
 		"reason": reason,
@@ -505,6 +527,11 @@ func (s *WorkflowService) ResumeRun(ctx context.Context, runID, note string) (*m
 }
 
 func (s *WorkflowService) CompleteRun(ctx context.Context, runID string, result json.RawMessage, summary string) (*models.WorkflowRun, error) {
+	run, err := s.repos.WorkflowRuns.Get(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+
 	now := time.Now()
 	if err := s.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
 		RunID:       runID,
@@ -515,6 +542,12 @@ func (s *WorkflowService) CompleteRun(ctx context.Context, runID string, result 
 	}); err != nil {
 		return nil, err
 	}
+
+	if s.telemetry != nil {
+		duration := now.Sub(run.StartedAt)
+		s.telemetry.EndRunSpan(ctx, runID, run.WorkflowID, "completed", duration, nil)
+	}
+
 	_ = s.emitRunEvent(ctx, runID, map[string]interface{}{
 		"type":   models.EventTypeRunCompleted,
 		"result": string(result),
@@ -791,6 +824,9 @@ func (s *WorkflowService) failAfterRejection(ctx context.Context, runID, reason 
 	if reason == "" {
 		reason = "approval rejected"
 	}
+
+	run, _ := s.repos.WorkflowRuns.Get(ctx, runID)
+
 	now := time.Now()
 	_ = s.repos.WorkflowRuns.Update(ctx, repositories.UpdateWorkflowRunParams{
 		RunID:       runID,
@@ -798,6 +834,11 @@ func (s *WorkflowService) failAfterRejection(ctx context.Context, runID, reason 
 		Error:       &reason,
 		CompletedAt: &now,
 	})
+
+	if s.telemetry != nil && run != nil {
+		duration := now.Sub(run.StartedAt)
+		s.telemetry.EndRunSpan(ctx, runID, run.WorkflowID, "failed", duration, fmt.Errorf("rejected: %s", reason))
+	}
 }
 
 func (s *WorkflowService) resumeAfterApproval(ctx context.Context, runID, stepID string) {
