@@ -509,13 +509,31 @@ func (b *DockerBackend) truncateOutput(data []byte) (string, bool) {
 	return string(data[:b.config.MaxStdoutBytes]) + "\n... [truncated]", true
 }
 
+// normalizeWorkspacePath handles LLM path normalization: "/workspace/foo.py" -> "foo.py"
+func normalizeWorkspacePath(path string) string {
+	path = strings.TrimPrefix(path, "/")
+
+	if path == "workspace" || path == "workspace/" {
+		return "."
+	}
+	if strings.HasPrefix(path, "workspace/") {
+		path = strings.TrimPrefix(path, "workspace/")
+	}
+
+	if path == "" {
+		return "."
+	}
+
+	return path
+}
+
 func (b *DockerBackend) WriteFile(ctx context.Context, sessionID, path string, content []byte, mode os.FileMode) error {
 	session, err := b.GetSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
 
-	path = strings.TrimPrefix(path, "/")
+	path = normalizeWorkspacePath(path)
 	fullPath := filepath.Join(session.WorkspacePath, path)
 
 	dir := filepath.Dir(fullPath)
@@ -540,7 +558,7 @@ func (b *DockerBackend) ReadFile(ctx context.Context, sessionID, path string, ma
 		return nil, false, err
 	}
 
-	path = strings.TrimPrefix(path, "/")
+	path = normalizeWorkspacePath(path)
 	fullPath := filepath.Join(session.WorkspacePath, path)
 
 	info, err := os.Stat(fullPath)
@@ -583,10 +601,7 @@ func (b *DockerBackend) ListFiles(ctx context.Context, sessionID, path string, r
 		return nil, err
 	}
 
-	if path == "" {
-		path = "."
-	}
-	path = strings.TrimPrefix(path, "/")
+	path = normalizeWorkspacePath(path)
 	basePath := filepath.Join(session.WorkspacePath, path)
 
 	var entries []FileEntry
@@ -657,7 +672,7 @@ func (b *DockerBackend) DeleteFile(ctx context.Context, sessionID, path string, 
 		return err
 	}
 
-	path = strings.TrimPrefix(path, "/")
+	path = normalizeWorkspacePath(path)
 	fullPath := filepath.Join(session.WorkspacePath, path)
 
 	if fullPath == session.WorkspacePath {

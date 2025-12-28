@@ -92,6 +92,12 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 	if cfg := config.GetLoadedConfig(); cfg != nil {
 		sandboxCfg.Enabled = cfg.Sandbox.Enabled
 		codeModeConfig.Enabled = cfg.Sandbox.CodeModeEnabled
+		if cfg.Sandbox.IdleTimeoutMinutes > 0 {
+			codeModeConfig.IdleTimeout = time.Duration(cfg.Sandbox.IdleTimeoutMinutes) * time.Minute
+		}
+		if cfg.Sandbox.CleanupIntervalMinutes > 0 {
+			codeModeConfig.CleanupInterval = time.Duration(cfg.Sandbox.CleanupIntervalMinutes) * time.Minute
+		}
 	}
 	sandboxService := NewSandboxService(sandboxCfg)
 	var sessionManager *SessionManager

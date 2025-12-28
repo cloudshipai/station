@@ -102,10 +102,10 @@ type NotificationsConfig struct {
 
 // SandboxConfig holds settings for sandbox code execution
 type SandboxConfig struct {
-	// Enabled enables compute mode sandbox (ephemeral Dagger containers, sandbox_run tool)
-	Enabled bool `yaml:"enabled"`
-	// CodeModeEnabled enables code mode sandbox (persistent Docker sessions, sandbox_open/exec/fs_* tools)
-	CodeModeEnabled bool `yaml:"code_mode_enabled"`
+	Enabled                bool `yaml:"enabled"`
+	CodeModeEnabled        bool `yaml:"code_mode_enabled"`
+	IdleTimeoutMinutes     int  `yaml:"idle_timeout_minutes"`
+	CleanupIntervalMinutes int  `yaml:"cleanup_interval_minutes"`
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -257,6 +257,8 @@ func bindEnvVars() {
 	// Sandbox config
 	viper.BindEnv("sandbox.enabled", "STATION_SANDBOX_ENABLED", "STN_SANDBOX_ENABLED")
 	viper.BindEnv("sandbox.code_mode_enabled", "STATION_SANDBOX_CODE_MODE_ENABLED", "STN_SANDBOX_CODE_MODE_ENABLED")
+	viper.BindEnv("sandbox.idle_timeout_minutes", "STN_SANDBOX_IDLE_TIMEOUT_MINUTES")
+	viper.BindEnv("sandbox.cleanup_interval_minutes", "STN_SANDBOX_CLEANUP_INTERVAL_MINUTES")
 
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -333,8 +335,10 @@ func Load() (*Config, error) {
 		},
 		// Sandbox Configuration - isolated code execution
 		Sandbox: SandboxConfig{
-			Enabled:         getEnvBoolOrDefault("STATION_SANDBOX_ENABLED", false),
-			CodeModeEnabled: getEnvBoolOrDefault("STATION_SANDBOX_CODE_MODE_ENABLED", false),
+			Enabled:                getEnvBoolOrDefault("STATION_SANDBOX_ENABLED", false),
+			CodeModeEnabled:        getEnvBoolOrDefault("STATION_SANDBOX_CODE_MODE_ENABLED", false),
+			IdleTimeoutMinutes:     getEnvIntOrDefault("STN_SANDBOX_IDLE_TIMEOUT_MINUTES", 30),
+			CleanupIntervalMinutes: getEnvIntOrDefault("STN_SANDBOX_CLEANUP_INTERVAL_MINUTES", 5),
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,
@@ -514,6 +518,12 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("sandbox.code_mode_enabled") {
 		cfg.Sandbox.CodeModeEnabled = viper.GetBool("sandbox.code_mode_enabled")
+	}
+	if viper.IsSet("sandbox.idle_timeout_minutes") {
+		cfg.Sandbox.IdleTimeoutMinutes = viper.GetInt("sandbox.idle_timeout_minutes")
+	}
+	if viper.IsSet("sandbox.cleanup_interval_minutes") {
+		cfg.Sandbox.CleanupIntervalMinutes = viper.GetInt("sandbox.cleanup_interval_minutes")
 	}
 
 	// Load faker templates from config file
