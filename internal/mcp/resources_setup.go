@@ -45,6 +45,33 @@ func (s *Server) setupStaticResources() {
 		mcp.WithMIMEType("application/json"),
 	)
 	s.mcpServer.AddResource(configsResource, s.handleMCPConfigsResource)
+
+	// Workflow DSL documentation resource
+	workflowDSLResource := mcp.NewResource(
+		"station://docs/workflow-dsl",
+		"Workflow DSL Reference",
+		mcp.WithResourceDescription("Complete reference documentation for the Station Workflow DSL - read this before creating or editing workflows"),
+		mcp.WithMIMEType("text/markdown"),
+	)
+	s.mcpServer.AddResource(workflowDSLResource, s.handleWorkflowDSLResource)
+
+	// Sandbox documentation resource
+	sandboxDocsResource := mcp.NewResource(
+		"station://docs/sandbox",
+		"Agent Sandbox Configuration",
+		mcp.WithResourceDescription("Reference documentation for configuring agent sandbox (isolated code execution) - read this before using sandbox parameter in create_agent/update_agent"),
+		mcp.WithMIMEType("text/markdown"),
+	)
+	s.mcpServer.AddResource(sandboxDocsResource, s.handleSandboxDocsResource)
+
+	// Workflows list resource
+	workflowsResource := mcp.NewResource(
+		"station://workflows",
+		"Station Workflows",
+		mcp.WithResourceDescription("List all workflow definitions. See station://docs/workflow-dsl for DSL reference."),
+		mcp.WithMIMEType("text/markdown"),
+	)
+	s.mcpServer.AddResource(workflowsResource, s.handleWorkflowsListResource)
 }
 
 // setupResourceTemplates adds dynamic resource templates for parameterized access

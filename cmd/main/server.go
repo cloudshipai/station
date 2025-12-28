@@ -181,14 +181,20 @@ func runMainServer() error {
 		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
 	}
 
-	// Initialize scheduler service for cron-based agent execution (using direct execution)
 	schedulerSvc := services.NewSchedulerService(database, repos, agentSvc)
-
-	// Start scheduler service
 	if err := schedulerSvc.Start(); err != nil {
 		return fmt.Errorf("failed to start scheduler service: %w", err)
 	}
 	defer schedulerSvc.Stop()
+
+	workflowService := services.NewWorkflowService(repos)
+	workflowSchedulerSvc := services.NewWorkflowSchedulerService(repos, workflowService)
+	if err := workflowSchedulerSvc.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start workflow scheduler service: %w", err)
+	}
+	defer workflowSchedulerSvc.Stop()
+
+	syncer.SetWorkflowScheduler(workflowSchedulerSvc)
 
 	// Initialize remote control service for server mode CloudShip integration
 	var remoteControlSvc *lighthouseServices.RemoteControlService
@@ -253,6 +259,7 @@ func runMainServer() error {
 		log.Printf("✅ Lighthouse client configured for MCP server IngestData dual flow")
 	}
 	dynamicAgentServer := mcp_agents.NewDynamicAgentServerWithConfig(repos, agentSvc, localMode, environmentName, cfg)
+	dynamicAgentServer.SetWorkflowService(workflowService)
 	apiServer := api.New(cfg, database, localMode, nil)
 
 	// Initialize ToolDiscoveryService for lighthouse and API compatibility
@@ -263,8 +270,10 @@ func runMainServer() error {
 	// Share agent service with API server so CloudShip telemetry info propagates to traces
 	apiServer.SetAgentService(agentSvc)
 
-	// Check if dev mode is enabled (default: false for production deployments)
-	devMode := os.Getenv("STN_DEV_MODE") == "true"
+	apiServer.InitializeHandlers()
+	apiServer.SetWorkflowScheduler(workflowSchedulerSvc)
+
+	devMode := viper.GetBool("dev_mode")
 
 	// Conditional goroutine count based on dev mode
 	if devMode {

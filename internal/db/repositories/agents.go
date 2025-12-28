@@ -164,6 +164,14 @@ func (r *AgentRepo) GetByNameAndEnvironment(name string, environmentID int64) (*
 	return convertAgentFromSQLc(agent), nil
 }
 
+func (r *AgentRepo) GetByNameGlobal(name string) (*models.Agent, error) {
+	agent, err := r.queries.GetAgentByNameGlobal(context.Background(), name)
+	if err != nil {
+		return nil, err
+	}
+	return convertAgentFromSQLc(agent), nil
+}
+
 func (r *AgentRepo) List() ([]*models.Agent, error) {
 	agents, err := r.queries.ListAgents(context.Background())
 	if err != nil {

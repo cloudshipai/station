@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"station/internal/config"
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
 	"station/internal/logging"
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"gopkg.in/yaml.v2"
 )
 
 // AgentExecutionResult contains the result of an agent execution
@@ -64,6 +66,9 @@ type AgentExecutionEngine struct {
 	activeMCPClients         []*mcp.GenkitMCPClient       // Store active connections for cleanup after execution
 	memoryClient             *lighthouse.MemoryClient     // For CloudShip memory integration (serve/stdio mode)
 	memoryAPIClient          *lighthouse.MemoryAPIClient  // For CloudShip memory integration (CLI mode - direct API)
+	sandboxService           *SandboxService              // For sandbox execution (Dagger-based isolated compute)
+	unifiedSandboxFactory    *UnifiedSandboxFactory       // For creating sandbox tools (supports both compute and code modes)
+	sessionManager           *SessionManager              // For managing persistent code mode sandbox sessions
 }
 
 // NewAgentExecutionEngine creates a new agent execution engine
@@ -74,14 +79,39 @@ func NewAgentExecutionEngine(repos *repositories.Repositories, agentService Agen
 // NewAgentExecutionEngineWithLighthouse creates a new agent execution engine with optional Lighthouse integration
 func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, agentService AgentServiceInterface, lighthouseClient *lighthouse.LighthouseClient) *AgentExecutionEngine {
 	mcpConnManager := NewMCPConnectionManager(repos, nil)
-	// Store reference to agent service for agent tool integration
 	mcpConnManager.agentService = agentService
 
-	// Check environment variable for connection pooling
 	if os.Getenv("STATION_MCP_POOLING") == "true" {
 		mcpConnManager.EnableConnectionPooling()
 		logging.Info("🏊 MCP connection pooling enabled via STATION_MCP_POOLING environment variable")
 	}
+
+	sandboxCfg := DefaultSandboxConfig()
+	codeModeConfig := DefaultCodeModeConfig()
+
+	if cfg := config.GetLoadedConfig(); cfg != nil {
+		sandboxCfg.Enabled = cfg.Sandbox.Enabled
+		codeModeConfig.Enabled = cfg.Sandbox.CodeModeEnabled
+		if cfg.Sandbox.IdleTimeoutMinutes > 0 {
+			codeModeConfig.IdleTimeout = time.Duration(cfg.Sandbox.IdleTimeoutMinutes) * time.Minute
+		}
+		if cfg.Sandbox.CleanupIntervalMinutes > 0 {
+			codeModeConfig.CleanupInterval = time.Duration(cfg.Sandbox.CleanupIntervalMinutes) * time.Minute
+		}
+	}
+	sandboxService := NewSandboxService(sandboxCfg)
+	var sessionManager *SessionManager
+	if codeModeConfig.Enabled {
+		dockerBackend, err := NewDockerBackend(codeModeConfig)
+		if err != nil {
+			logging.Info("Failed to initialize Docker backend for code mode sandbox: %v (code mode will be disabled)", err)
+			codeModeConfig.Enabled = false
+		} else {
+			sessionManager = NewSessionManager(dockerBackend)
+			logging.Info("Sandbox code mode enabled with Docker backend")
+		}
+	}
+	unifiedSandboxFactory := NewUnifiedSandboxFactory(sandboxService, sessionManager, codeModeConfig)
 
 	return &AgentExecutionEngine{
 		repos:                    repos,
@@ -90,7 +120,10 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		mcpConnManager:           mcpConnManager,
 		lighthouseClient:         lighthouseClient,
 		deploymentContextService: NewDeploymentContextService(),
-		telemetryService:         nil, // Set via SetTelemetryService() after construction
+		telemetryService:         nil,
+		sandboxService:           sandboxService,
+		unifiedSandboxFactory:    unifiedSandboxFactory,
+		sessionManager:           sessionManager,
 	}
 }
 
@@ -375,12 +408,10 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 
 	logging.Debug("Dotprompt execution using %d tools (filtered from %d available)", len(mcpTools), len(allMCPTools))
 
-	// Add filtered tools count to span
 	if span != nil {
 		span.SetAttributes(attribute.Int("agent.filtered_tools_count", len(mcpTools)))
 	}
 
-	// Use our new dotprompt + genkit execution system with progressive logging
 	logging.Debug("Creating dotprompt executor")
 	executor := dotprompt.NewGenKitExecutor()
 
@@ -414,13 +445,30 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		defer execSpan.End()
 	}
 
-	// Get environment name using repository layer for dotprompt file path resolution
 	environment, err := aee.repos.Environments.GetByID(agent.EnvironmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment (ID: %d) for agent %s: %w", agent.EnvironmentID, agent.Name, err)
 	}
 
-	// Add parent run ID to context for hierarchical agent execution tracking
+	sandboxConfig := aee.parseSandboxConfigFromAgent(agent, environment.Name)
+	if aee.unifiedSandboxFactory.ShouldAddTools(sandboxConfig) {
+		execCtx := ExecutionContext{
+			WorkflowRunID:      "",
+			AgentRunID:         fmt.Sprintf("%d", runID),
+			SandboxSessionName: "",
+		}
+		sandboxTools := aee.unifiedSandboxFactory.GetSandboxTools(sandboxConfig, execCtx)
+		for _, tool := range sandboxTools {
+			mcpTools = append(mcpTools, tool)
+		}
+		if aee.unifiedSandboxFactory.IsCodeMode(sandboxConfig) {
+			logging.Info("Sandbox code mode enabled for agent %s (%d tools)", agent.Name, len(sandboxTools))
+		} else {
+			logging.Info("Sandbox compute mode enabled for agent %s (runtime: %s)", agent.Name, sandboxConfig.Runtime)
+		}
+	}
+
+	ctx = WithParentRunID(ctx, runID)
 	ctx = WithParentRunID(ctx, runID)
 
 	// Add current run ID to context for trace correlation
@@ -474,6 +522,16 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	// Clean up MCP connections after execution is complete
 	aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
 	aee.activeMCPClients = nil
+
+	// Clean up sandbox sessions (for code mode) after execution
+	if aee.sessionManager != nil && aee.unifiedSandboxFactory.IsCodeMode(sandboxConfig) {
+		sessionKey := ResolveSessionKey("", fmt.Sprintf("%d", runID), "")
+		if session, getErr := aee.sessionManager.GetSession(ctx, sessionKey); getErr == nil {
+			if closeErr := aee.sessionManager.CloseSession(ctx, session.ID); closeErr != nil {
+				logging.Debug("Failed to cleanup sandbox session for agent %s: %v", agent.Name, closeErr)
+			}
+		}
+	}
 
 	if err != nil {
 		// Check if this was a timeout
@@ -967,4 +1025,36 @@ func (aee *AgentExecutionEngine) convertTokenUsage(usage map[string]interface{})
 	}
 
 	return tokenUsage
+}
+
+type sandboxFrontmatter struct {
+	Sandbox *dotprompt.SandboxConfig `yaml:"sandbox"`
+}
+
+func (aee *AgentExecutionEngine) parseSandboxConfigFromAgent(agent *models.Agent, environmentName string) *dotprompt.SandboxConfig {
+	promptPath := config.GetAgentPromptPath(environmentName, agent.Name)
+
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		logging.Debug("Failed to read dotprompt file for sandbox config: %v", err)
+		return nil
+	}
+
+	parts := strings.Split(string(content), "---")
+	if len(parts) < 3 {
+		return nil
+	}
+
+	yamlContent := strings.TrimSpace(parts[1])
+	if yamlContent == "" {
+		return nil
+	}
+
+	var fm sandboxFrontmatter
+	if err := yaml.Unmarshal([]byte(yamlContent), &fm); err != nil {
+		logging.Debug("Failed to parse sandbox config from dotprompt: %v", err)
+		return nil
+	}
+
+	return fm.Sandbox
 }

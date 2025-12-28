@@ -1,0 +1,261 @@
+# Complex Data Flow Workflow
+# Demonstrates: All data flow patterns combined
+#
+# This workflow shows a realistic incident response pipeline:
+# 1. Trigger with incident details
+# 2. Parallel investigation (k8s, logs, metrics)
+# 3. Foreach check of affected services
+# 4. Transform and correlate findings
+# 5. Route based on severity
+# 6. Generate appropriate response
+
+id: dataflow-complex
+version: "1.0"
+name: "Complex Incident Response Pipeline"
+description: "Full incident response with parallel, foreach, transforms, and routing"
+
+inputSchema:
+  type: object
+  properties:
+    incident_id:
+      type: string
+    description:
+      type: string
+    namespace:
+      type: string
+    affected_services:
+      type: array
+      items:
+        type: string
+    severity:
+      type: string
+      enum: [low, medium, high, critical]
+    reported_by:
+      type: string
+  required: [incident_id, description, namespace, severity]
+
+outputSchema:
+  type: object
+  properties:
+    incident_id:
+      type: string
+    resolution:
+      type: object
+    actions_taken:
+      type: array
+
+start: initial_triage
+
+states:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PHASE 1: Initial Triage
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  - name: initial_triage
+    type: transform
+    expression: |
+      {
+        "incident": {
+          "id": input.incident_id,
+          "description": input.description,
+          "severity": input.severity,
+          "namespace": input.namespace
+        },
+        "investigation_params": {
+          "namespace": input.namespace,
+          "time_range": "1h" if input.severity in ["low", "medium"] else "4h",
+          "services": input.get("affected_services", [])
+        },
+        "metadata": {
+          "reported_by": input.get("reported_by", "unknown"),
+          "started_at": ctx._timestamp
+        }
+      }
+    resultPath: "steps.triage"
+    next: parallel_investigation
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PHASE 2: Parallel Investigation
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  - name: parallel_investigation
+    type: parallel
+    branches:
+      - name: kubernetes
+        agent: "k8s-investigator"
+        # Receives: steps.triage.output
+        
+      - name: logs
+        agent: "aws-log-analyzer"
+        # Receives: steps.triage.output
+        
+      - name: metrics
+        agent: "grafana-analyst"
+        # Receives: steps.triage.output
+    
+    join:
+      mode: all
+    outputAggregation: merge
+    # Output: { kubernetes: {...}, logs: {...}, metrics: {...} }
+    resultPath: "steps.investigation"
+    next: check_affected_services
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PHASE 3: Foreach Service Check (if services specified)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  - name: check_affected_services
+    type: switch
+    conditions:
+      - if: "len(ctx.steps.triage.output.investigation_params.services) > 0"
+        next: foreach_service_check
+    defaultNext: correlate_findings
+
+  - name: foreach_service_check
+    type: foreach
+    itemsPath: "$.investigation_params.services"  # From triage output
+    itemVariable: "service_name"
+    agent: "k8s-deployment-checker"
+    maxConcurrency: 3
+    outputAggregation: array
+    resultPath: "steps.service_checks"
+    next: correlate_findings
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PHASE 4: Correlate All Findings
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  - name: correlate_findings
+    type: transform
+    expression: |
+      {
+        "incident": ctx.steps.triage.output.incident,
+        "findings": {
+          "kubernetes": ctx.steps.investigation.output.kubernetes,
+          "logs": ctx.steps.investigation.output.logs,
+          "metrics": ctx.steps.investigation.output.metrics,
+          "service_checks": ctx.steps.get("service_checks", {}).get("output", [])
+        },
+        "summary": {
+          "k8s_issues": len(ctx.steps.investigation.output.kubernetes.get("issues", [])),
+          "log_errors": len(ctx.steps.investigation.output.logs.get("errors", [])),
+          "metric_anomalies": len(ctx.steps.investigation.output.metrics.get("anomalies", []))
+        }
+      }
+    resultPath: "steps.correlation"
+    next: root_cause_analysis
+
+  - name: root_cause_analysis
+    type: agent
+    agent: "root-cause-analyzer"
+    # Receives: Correlated findings from all sources
+    resultPath: "steps.analysis"
+    next: route_by_severity
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PHASE 5: Route by Severity
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  - name: route_by_severity
+    type: switch
+    conditions:
+      - if: "ctx.steps.triage.output.incident.severity == 'critical'"
+        next: critical_response
+      - if: "ctx.steps.triage.output.incident.severity == 'high'"
+        next: high_response
+    defaultNext: standard_response
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PHASE 6: Response Generation
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  - name: critical_response
+    type: transform
+    expression: |
+      {
+        "alert_level": "CRITICAL",
+        "pager_duty": True,
+        "slack_channel": "#incident-critical",
+        "analysis": ctx.steps.analysis.output,
+        "recommended_actions": [
+          "Immediate escalation required",
+          "Page on-call engineer",
+          "Consider rollback if deployment-related"
+        ]
+      }
+    resultPath: "steps.response_prep"
+    next: generate_report
+
+  - name: high_response
+    type: transform
+    expression: |
+      {
+        "alert_level": "HIGH",
+        "pager_duty": False,
+        "slack_channel": "#incident-high",
+        "analysis": ctx.steps.analysis.output,
+        "recommended_actions": [
+          "Review within 1 hour",
+          "Notify team lead"
+        ]
+      }
+    resultPath: "steps.response_prep"
+    next: generate_report
+
+  - name: standard_response
+    type: transform
+    expression: |
+      {
+        "alert_level": "STANDARD",
+        "pager_duty": False,
+        "slack_channel": "#incident-general",
+        "analysis": ctx.steps.analysis.output,
+        "recommended_actions": [
+          "Review during business hours",
+          "Add to sprint backlog if recurring"
+        ]
+      }
+    resultPath: "steps.response_prep"
+    next: generate_report
+
+  - name: generate_report
+    type: agent
+    agent: "deployment-analyst"
+    # Receives: Response preparation with analysis
+    resultPath: "steps.report"
+    next: finalize
+
+  - name: finalize
+    type: transform
+    expression: |
+      {
+        "incident_id": ctx.steps.triage.output.incident.id,
+        "status": "analyzed",
+        "severity": ctx.steps.triage.output.incident.severity,
+        "alert_level": ctx.steps.response_prep.output.alert_level,
+        "root_cause": ctx.steps.analysis.output.get("cause", "Unknown"),
+        "confidence": ctx.steps.analysis.output.get("confidence", 0),
+        "report": ctx.steps.report.output,
+        "actions_taken": ctx.steps.response_prep.output.recommended_actions,
+        "metadata": {
+          "started_at": ctx.steps.triage.output.metadata.started_at,
+          "completed_at": ctx._timestamp,
+          "reported_by": ctx.steps.triage.output.metadata.reported_by
+        }
+      }
+    end: true
+
+# Trigger example:
+# curl -X POST http://localhost:8585/api/v1/workflow-runs \
+#   -H "Content-Type: application/json" \
+#   -d '{
+#     "workflow_id": "dataflow-complex",
+#     "input": {
+#       "incident_id": "INC-2025-001",
+#       "description": "Payment service returning 500 errors, checkout failing",
+#       "namespace": "production",
+#       "affected_services": ["payment-service", "checkout-service", "api-gateway"],
+#       "severity": "critical",
+#       "reported_by": "monitoring-alert"
+#     }
+#   }'

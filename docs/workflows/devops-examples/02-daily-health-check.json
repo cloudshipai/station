@@ -1,0 +1,156 @@
+{
+  "workflowId": "daily-health-check",
+  "name": "Daily Infrastructure Health Check",
+  "description": "Scheduled daily health check using cron, foreach, parallel, and switch patterns to monitor multiple services",
+  "definition": {
+    "id": "daily-health-check",
+    "version": "1.0",
+    "start": "schedule",
+    "states": [
+      {
+        "id": "schedule",
+        "type": "cron",
+        "cron": "0 9 * * *",
+        "timezone": "America/Chicago",
+        "enabled": true,
+        "input": {
+          "check_type": "daily",
+          "services": [
+            { "name": "api-gateway", "namespace": "production", "critical": true },
+            { "name": "auth-service", "namespace": "production", "critical": true },
+            { "name": "user-service", "namespace": "production", "critical": false },
+            { "name": "notification-service", "namespace": "production", "critical": false }
+          ],
+          "thresholds": {
+            "error_rate_percent": 1.0,
+            "latency_p99_ms": 500,
+            "pod_restart_count": 3
+          }
+        },
+        "transition": "check_all_services"
+      },
+      {
+        "id": "check_all_services",
+        "type": "foreach",
+        "itemsPath": "ctx.services",
+        "itemName": "service",
+        "maxConcurrency": 2,
+        "iterator": {
+          "start": "service_health_check",
+          "states": [
+            {
+              "id": "service_health_check",
+              "type": "parallel",
+              "branches": [
+                {
+                  "name": "k8s_status",
+                  "states": [
+                    {
+                      "id": "check_k8s",
+                      "type": "operation",
+                      "input": {
+                        "task": "agent.run",
+                        "agent": "k8s-investigator",
+                        "agent_task": "Check Kubernetes health for {{ service.name }} in {{ service.namespace }}. Report: pod count, ready status, recent restarts, resource utilization, and any pending issues."
+                      },
+                      "end": true
+                    }
+                  ]
+                },
+                {
+                  "name": "metrics_status",
+                  "states": [
+                    {
+                      "id": "check_metrics",
+                      "type": "operation",
+                      "input": {
+                        "task": "agent.run",
+                        "agent": "grafana-analyst",
+                        "agent_task": "Query metrics for {{ service.name }}. Get: current error rate, latency percentiles, request volume, and compare to 24h baseline."
+                      },
+                      "end": true
+                    }
+                  ]
+                }
+              ],
+              "join": { "mode": "all" },
+              "resultPath": "service_result",
+              "end": true
+            }
+          ]
+        },
+        "resultPath": "ctx.service_checks",
+        "transition": "aggregate_results"
+      },
+      {
+        "id": "aggregate_results",
+        "type": "operation",
+        "input": {
+          "task": "agent.run",
+          "agent": "root-cause-analyzer",
+          "agent_task": "Aggregate and analyze health check results for all services. For each service, determine: 1) Overall health status (healthy/degraded/unhealthy), 2) Any threshold violations, 3) Trends vs yesterday. Provide a summary dashboard view."
+        },
+        "resultPath": "ctx.aggregate",
+        "transition": "evaluate_health"
+      },
+      {
+        "id": "evaluate_health",
+        "type": "switch",
+        "dataPath": "ctx.aggregate",
+        "conditions": [
+          {
+            "if": "'unhealthy' in str(result)",
+            "next": "alert_oncall"
+          },
+          {
+            "if": "'degraded' in str(result)",
+            "next": "log_warning"
+          }
+        ],
+        "defaultNext": "report_healthy"
+      },
+      {
+        "id": "alert_oncall",
+        "type": "operation",
+        "input": {
+          "task": "agent.run",
+          "agent": "aws-monitor-alerter",
+          "agent_task": "HEALTH CHECK ALERT: One or more services are unhealthy. Details: {{ ctx.aggregate.result }}. Create a high-priority alert for the on-call team."
+        },
+        "resultPath": "ctx.alert",
+        "transition": "finalize_report"
+      },
+      {
+        "id": "log_warning",
+        "type": "inject",
+        "data": {
+          "status": "warning",
+          "message": "Some services are degraded but operational"
+        },
+        "resultPath": "ctx.status",
+        "transition": "finalize_report"
+      },
+      {
+        "id": "report_healthy",
+        "type": "inject",
+        "data": {
+          "status": "healthy",
+          "message": "All services operating normally"
+        },
+        "resultPath": "ctx.status",
+        "transition": "finalize_report"
+      },
+      {
+        "id": "finalize_report",
+        "type": "operation",
+        "input": {
+          "task": "agent.run",
+          "agent": "root-cause-analyzer",
+          "agent_task": "Generate daily health report. Overall status: {{ ctx.status.status }}. Include: 1) Executive summary, 2) Per-service status, 3) Any alerts triggered, 4) Recommendations for the day."
+        },
+        "resultPath": "ctx.daily_report",
+        "end": true
+      }
+    ]
+  }
+}

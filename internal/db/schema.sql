@@ -397,3 +397,135 @@ AFTER UPDATE ON reports
 BEGIN
     UPDATE reports SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+
+-- Workflows table for versioned workflow definitions
+CREATE TABLE workflows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    version INTEGER NOT NULL,
+    definition TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(workflow_id, version)
+);
+
+-- Workflow runs table for execution metadata
+CREATE TABLE workflow_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL UNIQUE,
+    workflow_id TEXT NOT NULL,
+    workflow_version INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    current_step TEXT,
+    input TEXT,
+    context TEXT,
+    result TEXT,
+    error TEXT,
+    summary TEXT,
+    options TEXT,
+    last_signal TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+);
+
+CREATE INDEX idx_workflow_runs_workflow ON workflow_runs(workflow_id);
+CREATE INDEX idx_workflow_runs_status ON workflow_runs(status);
+
+-- Workflow run steps table to track step attempts and history
+CREATE TABLE workflow_run_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    step_id TEXT NOT NULL,
+    attempt INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL,
+    input TEXT,
+    output TEXT,
+    error TEXT,
+    metadata TEXT,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    UNIQUE(run_id, step_id, attempt),
+    FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_workflow_run_steps_run ON workflow_run_steps(run_id);
+
+CREATE TABLE workflow_run_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    step_id TEXT,
+    payload TEXT,
+    actor TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(run_id, seq),
+    FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_workflow_run_events_run ON workflow_run_events(run_id);
+CREATE INDEX idx_workflow_run_events_type ON workflow_run_events(event_type);
+
+CREATE TABLE workflow_approvals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    approval_id TEXT NOT NULL UNIQUE,
+    run_id TEXT NOT NULL,
+    step_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    summary_path TEXT,
+    approvers TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    decided_by TEXT,
+    decided_at DATETIME,
+    decision_reason TEXT,
+    timeout_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_workflow_approvals_run ON workflow_approvals(run_id);
+CREATE INDEX idx_workflow_approvals_status ON workflow_approvals(status);
+
+CREATE TABLE workflow_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id TEXT NOT NULL,
+    workflow_version INTEGER NOT NULL,
+    cron_expression TEXT NOT NULL,
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    input TEXT,
+    last_run_at DATETIME,
+    next_run_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(workflow_id, workflow_version)
+);
+
+CREATE INDEX idx_workflow_schedules_enabled ON workflow_schedules(enabled);
+CREATE INDEX idx_workflow_schedules_next_run ON workflow_schedules(next_run_at);
+
+CREATE TABLE notification_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_id TEXT NOT NULL UNIQUE,
+    approval_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    webhook_url TEXT,
+    request_payload TEXT,
+    response_status INTEGER,
+    response_body TEXT,
+    error_message TEXT,
+    attempt_number INTEGER DEFAULT 1,
+    duration_ms INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (approval_id) REFERENCES workflow_approvals(approval_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_notification_logs_approval ON notification_logs(approval_id);
+CREATE INDEX idx_notification_logs_event_type ON notification_logs(event_type);
+CREATE INDEX idx_notification_logs_created ON notification_logs(created_at);

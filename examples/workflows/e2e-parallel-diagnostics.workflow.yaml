@@ -1,0 +1,59 @@
+# E2E Test: Parallel Execution Workflow
+# Tests parallel execution of multiple agents gathering diagnostics concurrently
+id: e2e-parallel-diagnostics
+version: "1.0"
+name: "E2E Parallel Diagnostics"
+description: "Runs k8s-investigator, aws-log-analyzer, and grafana-analyst in parallel to gather system diagnostics"
+start: init
+
+states:
+  - id: init
+    type: inject
+    data:
+      namespace: "production"
+      service: "api-gateway"
+      time_range: "1h"
+    resultPath: ctx
+    transition: gather_diagnostics
+
+  - id: gather_diagnostics
+    type: parallel
+    branches:
+      - name: kubernetes
+        states:
+          - id: k8s_check
+            type: operation
+            input:
+              task: "agent.run"
+              agent: "k8s-investigator"
+              agent_task: "Investigate kubernetes health in namespace {{ ctx.namespace }}. Check pod status, resource usage, and any pending issues."
+            end: true
+      - name: aws_logs
+        states:
+          - id: aws_check
+            type: operation
+            input:
+              task: "agent.run"
+              agent: "aws-log-analyzer"
+              agent_task: "Analyze AWS CloudWatch logs for service {{ ctx.service }} in the last {{ ctx.time_range }}. Look for errors and anomalies."
+            end: true
+      - name: grafana_metrics
+        states:
+          - id: grafana_check
+            type: operation
+            input:
+              task: "agent.run"
+              agent: "grafana-analyst"
+              agent_task: "Query Grafana dashboards for {{ ctx.service }} metrics. Check latency, error rates, and throughput for the last {{ ctx.time_range }}."
+            end: true
+    join:
+      mode: "all"
+    transition: analyze_results
+
+  - id: analyze_results
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "root-cause-analyzer"
+      agent_task: "Analyze the combined diagnostics from kubernetes, AWS logs, and Grafana metrics. Provide a summary of system health and any identified issues."
+    end: true

@@ -37,6 +37,10 @@ type Config struct {
 	Telemetry TelemetryConfig
 	// Webhook Configuration
 	Webhook WebhookConfig
+	// Notifications Configuration (outbound webhooks for approvals, etc.)
+	Notifications NotificationsConfig
+	// Sandbox Configuration (isolated code execution)
+	Sandbox SandboxConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
@@ -88,6 +92,20 @@ type OAuthConfig struct {
 type WebhookConfig struct {
 	Enabled bool   `yaml:"enabled"` // Enable the /execute webhook endpoint (default: true)
 	APIKey  string `yaml:"api_key"` // Static API key for webhook auth (optional, overrides user API keys)
+}
+
+// NotificationsConfig holds settings for outbound notifications (webhooks for approvals, etc.)
+type NotificationsConfig struct {
+	ApprovalWebhookURL     string `yaml:"approval_webhook_url"`     // URL to POST when approval is needed
+	ApprovalWebhookTimeout int    `yaml:"approval_webhook_timeout"` // Timeout in seconds (default: 10)
+}
+
+// SandboxConfig holds settings for sandbox code execution
+type SandboxConfig struct {
+	Enabled                bool `yaml:"enabled"`
+	CodeModeEnabled        bool `yaml:"code_mode_enabled"`
+	IdleTimeoutMinutes     int  `yaml:"idle_timeout_minutes"`
+	CleanupIntervalMinutes int  `yaml:"cleanup_interval_minutes"`
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -232,6 +250,16 @@ func bindEnvVars() {
 	viper.BindEnv("webhook.enabled", "STN_WEBHOOK_ENABLED")
 	viper.BindEnv("webhook.api_key", "STN_WEBHOOK_API_KEY")
 
+	// Notifications config (outbound webhooks for approvals)
+	viper.BindEnv("notifications.approval_webhook_url", "STN_APPROVAL_WEBHOOK_URL")
+	viper.BindEnv("notifications.approval_webhook_timeout", "STN_APPROVAL_WEBHOOK_TIMEOUT")
+
+	// Sandbox config
+	viper.BindEnv("sandbox.enabled", "STATION_SANDBOX_ENABLED", "STN_SANDBOX_ENABLED")
+	viper.BindEnv("sandbox.code_mode_enabled", "STATION_SANDBOX_CODE_MODE_ENABLED", "STN_SANDBOX_CODE_MODE_ENABLED")
+	viper.BindEnv("sandbox.idle_timeout_minutes", "STN_SANDBOX_IDLE_TIMEOUT_MINUTES")
+	viper.BindEnv("sandbox.cleanup_interval_minutes", "STN_SANDBOX_CLEANUP_INTERVAL_MINUTES")
+
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
 	viper.BindEnv("telemetry.enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -299,6 +327,18 @@ func Load() (*Config, error) {
 		Webhook: WebhookConfig{
 			Enabled: getEnvBoolOrDefault("STN_WEBHOOK_ENABLED", true), // Default enabled
 			APIKey:  getEnvOrDefault("STN_WEBHOOK_API_KEY", ""),       // Optional static API key
+		},
+		// Notifications Configuration - outbound webhooks for approvals
+		Notifications: NotificationsConfig{
+			ApprovalWebhookURL:     getEnvOrDefault("STN_APPROVAL_WEBHOOK_URL", ""),
+			ApprovalWebhookTimeout: getEnvIntOrDefault("STN_APPROVAL_WEBHOOK_TIMEOUT", 10),
+		},
+		// Sandbox Configuration - isolated code execution
+		Sandbox: SandboxConfig{
+			Enabled:                getEnvBoolOrDefault("STATION_SANDBOX_ENABLED", false),
+			CodeModeEnabled:        getEnvBoolOrDefault("STATION_SANDBOX_CODE_MODE_ENABLED", false),
+			IdleTimeoutMinutes:     getEnvIntOrDefault("STN_SANDBOX_IDLE_TIMEOUT_MINUTES", 30),
+			CleanupIntervalMinutes: getEnvIntOrDefault("STN_SANDBOX_CLEANUP_INTERVAL_MINUTES", 5),
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,
@@ -472,6 +512,20 @@ func Load() (*Config, error) {
 		cfg.Telemetry.JaegerQueryURL = cfg.JaegerQueryURL
 	}
 
+	// Sandbox configuration overrides from config file
+	if viper.IsSet("sandbox.enabled") {
+		cfg.Sandbox.Enabled = viper.GetBool("sandbox.enabled")
+	}
+	if viper.IsSet("sandbox.code_mode_enabled") {
+		cfg.Sandbox.CodeModeEnabled = viper.GetBool("sandbox.code_mode_enabled")
+	}
+	if viper.IsSet("sandbox.idle_timeout_minutes") {
+		cfg.Sandbox.IdleTimeoutMinutes = viper.GetInt("sandbox.idle_timeout_minutes")
+	}
+	if viper.IsSet("sandbox.cleanup_interval_minutes") {
+		cfg.Sandbox.CleanupIntervalMinutes = viper.GetInt("sandbox.cleanup_interval_minutes")
+	}
+
 	// Load faker templates from config file
 	cfg.FakerTemplates = loadFakerTemplates()
 
@@ -516,6 +570,18 @@ func Load() (*Config, error) {
 	if envSampleRate := os.Getenv("STN_TELEMETRY_SAMPLE_RATE"); envSampleRate != "" {
 		if floatValue, err := strconv.ParseFloat(envSampleRate, 64); err == nil {
 			cfg.Telemetry.SampleRate = floatValue
+		}
+	}
+
+	// Sandbox environment variable overrides
+	if envEnabled := os.Getenv("STATION_SANDBOX_ENABLED"); envEnabled != "" {
+		if boolValue, err := strconv.ParseBool(envEnabled); err == nil {
+			cfg.Sandbox.Enabled = boolValue
+		}
+	}
+	if envCodeMode := os.Getenv("STATION_SANDBOX_CODE_MODE_ENABLED"); envCodeMode != "" {
+		if boolValue, err := strconv.ParseBool(envCodeMode); err == nil {
+			cfg.Sandbox.CodeModeEnabled = boolValue
 		}
 	}
 
@@ -627,6 +693,12 @@ func getBuiltInFakerTemplates() map[string]FakerTemplate {
 			Model:       "gpt-5-mini",
 		},
 	}
+}
+
+// GetLoadedConfig returns the currently loaded configuration.
+// Returns nil if Load() has not been called yet.
+func GetLoadedConfig() *Config {
+	return loadedConfig
 }
 
 // GetStationConfigDir returns the station configuration directory path

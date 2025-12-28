@@ -1,0 +1,79 @@
+# E2E Test: Switch/Conditional Routing Workflow
+# Tests conditional branching based on alert severity
+id: e2e-switch-routing
+version: "1.0"
+name: "E2E Switch Routing"
+description: "Routes alerts to different agents based on severity level"
+start: inject_alert
+
+states:
+  - id: inject_alert
+    type: inject
+    data:
+      severity: "high"
+      source: "prometheus"
+      alert_name: "HighErrorRate"
+      threshold: 0.05
+      current_value: 0.12
+    resultPath: alert
+    transition: route_by_severity
+
+  - id: route_by_severity
+    type: switch
+    dataPath: alert.severity
+    conditions:
+      - if: "_value == 'critical'"
+        next: critical_response
+      - if: "_value == 'high'"
+        next: high_severity_response
+      - if: "_value == 'medium'"
+        next: medium_severity_response
+    defaultNext: low_severity_response
+
+  - id: critical_response
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "alert-investigator"
+      agent_task: "CRITICAL ALERT: {{ alert.alert_name }} from {{ alert.source }}. Current value {{ alert.current_value }} exceeds threshold {{ alert.threshold }}. Investigate immediately and prepare incident response."
+    transition: escalate
+
+  - id: escalate
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "k8s-deployment-checker"
+      agent_task: "Check recent deployments that might have caused the critical alert {{ alert.alert_name }}. Look for recent changes in the last 2 hours."
+    end: true
+
+  - id: high_severity_response
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "alert-investigator"
+      agent_task: "HIGH severity alert: {{ alert.alert_name }} from {{ alert.source }}. Investigate the root cause. Current value {{ alert.current_value }} vs threshold {{ alert.threshold }}."
+    transition: analyze_high
+
+  - id: analyze_high
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "root-cause-analyzer"
+      agent_task: "Perform root cause analysis for high severity alert {{ alert.alert_name }}. Identify contributing factors and recommend remediation."
+    end: true
+
+  - id: medium_severity_response
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "grafana-analyst"
+      agent_task: "Medium severity alert {{ alert.alert_name }}. Check Grafana metrics for trends and determine if this is a developing issue or a transient spike."
+    end: true
+
+  - id: low_severity_response
+    type: operation
+    input:
+      task: "agent.run"
+      agent: "aws-log-analyzer"
+      agent_task: "Low severity alert {{ alert.alert_name }}. Check logs for any related warnings or patterns. Document findings for future reference."
+    end: true

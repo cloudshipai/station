@@ -21,7 +21,8 @@ import (
 type DeclarativeSync struct {
 	repos                  *repositories.Repositories
 	config                 *config.Config
-	customVariableResolver VariableResolver // Custom resolver for UI integration
+	customVariableResolver VariableResolver
+	workflowScheduler      *WorkflowSchedulerService
 }
 
 // SyncOptions controls sync behavior
@@ -34,7 +35,6 @@ type SyncOptions struct {
 	Confirm     bool
 }
 
-// SyncResult contains results of a sync operation
 type SyncResult struct {
 	Environment         string
 	AgentsProcessed     int
@@ -44,6 +44,10 @@ type SyncResult struct {
 	ValidationMessages  []string
 	MCPServersProcessed int
 	MCPServersConnected int
+	WorkflowsProcessed  int
+	WorkflowsSynced     int
+	WorkflowsSkipped    int
+	WorkflowsDisabled   int
 	Operations          []SyncOperation
 	Duration            time.Duration
 }
@@ -76,9 +80,24 @@ func NewDeclarativeSync(repos *repositories.Repositories, config *config.Config)
 	}
 }
 
-// SetVariableResolver sets a custom variable resolver for UI integration
 func (s *DeclarativeSync) SetVariableResolver(resolver VariableResolver) {
 	s.customVariableResolver = resolver
+}
+
+func (s *DeclarativeSync) SetWorkflowScheduler(scheduler *WorkflowSchedulerService) {
+	s.workflowScheduler = scheduler
+	s.registerExistingCronSchedules(scheduler)
+}
+
+func (s *DeclarativeSync) registerExistingCronSchedules(scheduler *WorkflowSchedulerService) {
+	if scheduler == nil {
+		return
+	}
+	ctx := context.Background()
+	workflowService := NewWorkflowService(s.repos)
+	if err := workflowService.RegisterCronSchedules(ctx, scheduler); err != nil {
+		fmt.Printf("Warning: Failed to register cron schedules on startup: %v\n", err)
+	}
 }
 
 // SyncEnvironment synchronizes a specific environment
@@ -129,7 +148,32 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	result.ValidationMessages = append(result.ValidationMessages, agentResult.ValidationMessages...)
 	result.Operations = append(result.Operations, agentResult.Operations...)
 
-	// 5. Cleanup orphaned configs, servers, and tools (declarative sync)
+	// 5. Sync workflow definition files from workflows/ directory
+	workflowsDir := config.GetWorkflowsDir(environmentName)
+	workflowResult, err := s.syncWorkflows(ctx, workflowsDir, environmentName, options)
+	if err != nil {
+		fmt.Printf("Warning: Failed to sync workflows for %s: %v\n", environmentName, err)
+		result.ValidationErrors++
+		result.ValidationMessages = append(result.ValidationMessages,
+			fmt.Sprintf("Workflow sync failed: %v", err))
+	} else if workflowResult != nil {
+		result.WorkflowsProcessed = workflowResult.WorkflowsProcessed
+		result.WorkflowsSynced = workflowResult.WorkflowsSynced
+		result.WorkflowsSkipped = workflowResult.WorkflowsSkipped
+		result.WorkflowsDisabled = workflowResult.WorkflowsDisabled
+		for _, syncErr := range workflowResult.Errors {
+			result.Operations = append(result.Operations, SyncOperation{
+				Type:        OpTypeError,
+				Target:      syncErr.WorkflowID,
+				Description: syncErr.Error,
+			})
+		}
+		if workflowResult.WorkflowsSynced > 0 {
+			fmt.Printf("Synced %d workflows for environment %s\n", workflowResult.WorkflowsSynced, environmentName)
+		}
+	}
+
+	// 6. Cleanup orphaned configs, servers, and tools (declarative sync)
 	cleanupResult, err := s.cleanupOrphanedResources(ctx, envDir, environmentName, options)
 	if err != nil {
 		fmt.Printf("Warning: Failed to cleanup orphaned resources for %s: %v\n", environmentName, err)
@@ -148,10 +192,27 @@ func (s *DeclarativeSync) SyncEnvironment(ctx context.Context, environmentName s
 	return result, nil
 }
 
-// validateMCPDependencies validates that all MCP dependencies are available
+func (s *DeclarativeSync) syncWorkflows(ctx context.Context, workflowsDir, environmentName string, options SyncOptions) (*WorkflowSyncResult, error) {
+	if _, err := os.Stat(workflowsDir); os.IsNotExist(err) {
+		return &WorkflowSyncResult{}, nil
+	}
+
+	workflowService := NewWorkflowService(s.repos)
+	result, err := workflowService.SyncWorkflowFiles(ctx, workflowsDir)
+	if err != nil {
+		return result, err
+	}
+
+	if s.workflowScheduler != nil && result.WorkflowsSynced > 0 {
+		if err := workflowService.RegisterCronSchedules(ctx, s.workflowScheduler); err != nil {
+			fmt.Printf("Warning: Failed to register cron schedules: %v\n", err)
+		}
+	}
+
+	return result, nil
+}
+
 func (s *DeclarativeSync) validateMCPDependencies(environmentName string) error {
-	// For now, skip complex validation to avoid circular imports
-	// TODO: Implement proper MCP dependency validation
 	fmt.Printf("Debug: Skipping MCP dependency validation for environment: %s\n", environmentName)
 	return nil
 }

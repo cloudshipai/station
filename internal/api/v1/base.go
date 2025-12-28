@@ -1,33 +1,37 @@
 package v1
 
 import (
+	"context"
 	"database/sql"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"station/internal/auth"
 	"station/internal/config"
 	"station/internal/db/repositories"
+	"station/internal/notifications"
 	"station/internal/services"
 	"station/internal/telemetry"
+	"station/internal/workflows"
+	"station/internal/workflows/runtime"
 )
 
-// APIHandlers contains all the API handlers and their dependencies
 type APIHandlers struct {
-	repos        *repositories.Repositories
-	db           *sql.DB // Database connection for benchmark analyzer
-	agentService services.AgentServiceInterface
-	// mcpConfigService removed - using file-based configs only
-	toolDiscoveryService *services.ToolDiscoveryService // restored for lighthouse/API compatibility
-	// genkitService removed - service no longer exists
-	// executionQueueSvc removed - using direct execution instead
-	agentExportService *services.AgentExportService
-	telemetryService   *telemetry.TelemetryService
-	localMode          bool
-	cfg                *config.Config // Config for OAuth settings
+	repos                *repositories.Repositories
+	db                   *sql.DB
+	agentService         services.AgentServiceInterface
+	toolDiscoveryService *services.ToolDiscoveryService
+	agentExportService   *services.AgentExportService
+	telemetryService     *telemetry.TelemetryService
+	workflowService      *services.WorkflowService
+	workflowConsumer     *runtime.WorkflowConsumer
+	workflowEngine       runtime.Engine
+	localMode            bool
+	cfg                  *config.Config
 }
 
-// NewAPIHandlers creates a new API handlers instance
 func NewAPIHandlers(
 	repos *repositories.Repositories,
 	db *sql.DB,
@@ -35,18 +39,26 @@ func NewAPIHandlers(
 	telemetryService *telemetry.TelemetryService,
 	localMode bool,
 ) *APIHandlers {
-	return &APIHandlers{
+	engine := mustInitWorkflowEngine()
+	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+	agentService := services.NewAgentService(repos)
+
+	h := &APIHandlers{
 		repos:                repos,
 		db:                   db,
-		agentService:         services.NewAgentService(repos),
+		agentService:         agentService,
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
+		workflowService:      workflowService,
+		workflowEngine:       engine,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 	}
+
+	h.startWorkflowConsumer(repos, engine, agentService)
+	return h
 }
 
-// NewAPIHandlersWithConfig creates a new API handlers instance with config
 func NewAPIHandlersWithConfig(
 	repos *repositories.Repositories,
 	db *sql.DB,
@@ -55,20 +67,27 @@ func NewAPIHandlersWithConfig(
 	localMode bool,
 	cfg *config.Config,
 ) *APIHandlers {
-	return &APIHandlers{
+	engine := mustInitWorkflowEngine()
+	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+	agentService := services.NewAgentService(repos)
+
+	h := &APIHandlers{
 		repos:                repos,
 		db:                   db,
-		agentService:         services.NewAgentService(repos),
+		agentService:         agentService,
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
+		workflowService:      workflowService,
+		workflowEngine:       engine,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 		cfg:                  cfg,
 	}
+
+	h.startWorkflowConsumer(repos, engine, agentService)
+	return h
 }
 
-// NewAPIHandlersWithAgentService creates API handlers with an existing agent service
-// This ensures CloudShip telemetry info (org_id, station_id) is propagated to traces
 func NewAPIHandlersWithAgentService(
 	repos *repositories.Repositories,
 	db *sql.DB,
@@ -78,19 +97,294 @@ func NewAPIHandlersWithAgentService(
 	cfg *config.Config,
 	agentService *services.AgentService,
 ) *APIHandlers {
-	return &APIHandlers{
+	engine := mustInitWorkflowEngine()
+	workflowService := services.NewWorkflowServiceWithEngine(repos, engine)
+
+	h := &APIHandlers{
 		repos:                repos,
 		db:                   db,
-		agentService:         agentService, // Use provided agent service with CloudShip telemetry
+		agentService:         agentService,
 		toolDiscoveryService: toolDiscoveryService,
 		agentExportService:   services.NewAgentExportService(repos),
+		workflowService:      workflowService,
+		workflowEngine:       engine,
 		telemetryService:     telemetryService,
 		localMode:            localMode,
 		cfg:                  cfg,
 	}
+
+	h.startWorkflowConsumer(repos, engine, agentService)
+	return h
 }
 
-// telemetryMiddleware tracks API requests
+func mustInitWorkflowEngine() runtime.Engine {
+	opts := runtime.EnvOptions()
+	engine, err := runtime.NewEngine(opts)
+	if err != nil {
+		return nil
+	}
+	return engine
+}
+
+func (h *APIHandlers) startWorkflowConsumer(repos *repositories.Repositories, engine runtime.Engine, agentService services.AgentServiceInterface) {
+	natsEngine, ok := engine.(*runtime.NATSEngine)
+	if !ok || natsEngine == nil {
+		log.Println("Workflow consumer: NATS engine not enabled, skipping consumer start")
+		return
+	}
+
+	registry := runtime.NewExecutorRegistry()
+	registry.Register(runtime.NewInjectExecutor())
+	registry.Register(runtime.NewSwitchExecutor())
+	registry.Register(runtime.NewAgentRunExecutor(&agentExecutorAdapter{agentService: agentService, repos: repos}))
+
+	approvalExecutor := runtime.NewHumanApprovalExecutor(&approvalExecutorAdapter{repos: repos})
+	if h.cfg != nil {
+		notifier := notifications.NewWebhookNotifier(h.cfg, h.db)
+		approvalExecutor.SetNotifier(notifier)
+	}
+	registry.Register(approvalExecutor)
+	registry.Register(runtime.NewCustomExecutor(nil))
+	registry.Register(runtime.NewCronExecutor())
+	registry.Register(runtime.NewTimerExecutor())
+	registry.Register(runtime.NewTryCatchExecutor(registry))
+	registry.Register(runtime.NewTransformExecutor())
+
+	stepAdapter := &registryStepExecutorAdapter{registry: registry}
+	registry.Register(runtime.NewParallelExecutor(stepAdapter))
+	registry.Register(runtime.NewForeachExecutor(stepAdapter))
+
+	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
+
+	consumer := runtime.NewWorkflowConsumer(natsEngine, registry, adapter, adapter, adapter)
+	consumer.SetPendingRunProvider(adapter)
+	h.workflowConsumer = consumer
+
+	if err := consumer.Start(context.Background()); err != nil {
+		log.Printf("Workflow consumer: failed to start: %v", err)
+	}
+}
+
+func (h *APIHandlers) StopWorkflowConsumer() {
+	if h.workflowConsumer != nil {
+		h.workflowConsumer.Stop()
+	}
+}
+
+func (h *APIHandlers) SetWorkflowScheduler(scheduler *services.WorkflowSchedulerService) {
+	if h.workflowService != nil {
+		h.workflowService.SetScheduler(scheduler)
+	}
+}
+
+type agentExecutorAdapter struct {
+	agentService services.AgentServiceInterface
+	repos        *repositories.Repositories
+}
+
+func (a *agentExecutorAdapter) GetAgentByID(ctx context.Context, id int64) (runtime.AgentInfo, error) {
+	agent, err := a.agentService.GetAgent(ctx, id)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *agentExecutorAdapter) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameAndEnvironment(name, environmentID)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *agentExecutorAdapter) GetAgentByNameGlobal(ctx context.Context, name string) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameGlobal(name)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *agentExecutorAdapter) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	env, err := a.repos.Environments.GetByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return env.ID, nil
+}
+
+func (a *agentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {
+	userID := int64(1)
+
+	agentRun, err := a.repos.AgentRuns.Create(ctx, agentID, userID, task, "", 0, nil, nil, "running", nil)
+	if err != nil {
+		log.Printf("❌ Workflow agent step: Failed to create agent run: %v", err)
+		return runtime.AgentExecutionResult{}, err
+	}
+
+	result, err := a.agentService.ExecuteAgentWithRunID(ctx, agentID, task, agentRun.ID, variables)
+	if err != nil {
+		log.Printf("❌ Workflow agent step: Execution failed for run %d: %v", agentRun.ID, err)
+		completedAt := time.Now()
+		errorMsg := err.Error()
+		a.repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx, agentRun.ID, errorMsg, 0, nil, nil, "failed", &completedAt,
+			nil, nil, nil, nil, nil, nil, &errorMsg,
+		)
+		return runtime.AgentExecutionResult{}, err
+	}
+
+	log.Printf("✅ Workflow agent step: Completed run %d for agent %d", agentRun.ID, agentID)
+
+	completedAt := time.Now()
+	var inputTokens, outputTokens, totalTokens *int64
+	var durationSeconds *float64
+	var modelName *string
+	var stepsTaken int64
+
+	if result.Extra != nil {
+		if tokenUsage, ok := result.Extra["token_usage"].(map[string]interface{}); ok {
+			if val, ok := tokenUsage["input_tokens"].(float64); ok {
+				v := int64(val)
+				inputTokens = &v
+			}
+			if val, ok := tokenUsage["output_tokens"].(float64); ok {
+				v := int64(val)
+				outputTokens = &v
+			}
+			if val, ok := tokenUsage["total_tokens"].(float64); ok {
+				v := int64(val)
+				totalTokens = &v
+			}
+		}
+		if dur, ok := result.Extra["duration_seconds"].(float64); ok {
+			durationSeconds = &dur
+		}
+		if model, ok := result.Extra["model_name"].(string); ok {
+			modelName = &model
+		}
+		if steps, ok := result.Extra["steps_taken"].(int64); ok {
+			stepsTaken = steps
+		} else if steps, ok := result.Extra["steps_taken"].(float64); ok {
+			stepsTaken = int64(steps)
+		}
+	}
+
+	a.repos.AgentRuns.UpdateCompletionWithMetadata(
+		ctx, agentRun.ID, result.Content, stepsTaken, nil, nil, "completed", &completedAt,
+		inputTokens, outputTokens, totalTokens, durationSeconds, modelName, nil, nil,
+	)
+
+	return runtime.AgentExecutionResult{
+		Response:  result.Content,
+		StepCount: stepsTaken,
+		ToolsUsed: 0,
+	}, nil
+}
+
+type approvalExecutorAdapter struct {
+	repos *repositories.Repositories
+}
+
+func (a *approvalExecutorAdapter) CreateApproval(ctx context.Context, params runtime.CreateApprovalParams) (runtime.ApprovalInfo, error) {
+	var summaryPath *string
+	if params.SummaryPath != "" {
+		summaryPath = &params.SummaryPath
+	}
+
+	var approvers *string
+	if len(params.Approvers) > 0 {
+		joined := ""
+		for i, ap := range params.Approvers {
+			if i > 0 {
+				joined += ","
+			}
+			joined += ap
+		}
+		approvers = &joined
+	}
+
+	var timeoutAt *time.Time
+	if params.TimeoutSecs > 0 {
+		t := time.Now().Add(time.Duration(params.TimeoutSecs) * time.Second)
+		timeoutAt = &t
+	}
+
+	approval, err := a.repos.WorkflowApprovals.Create(ctx, repositories.CreateWorkflowApprovalParams{
+		ApprovalID:  params.ApprovalID,
+		RunID:       params.RunID,
+		StepID:      params.StepID,
+		Message:     params.Message,
+		SummaryPath: summaryPath,
+		Approvers:   approvers,
+		TimeoutAt:   timeoutAt,
+	})
+	if err != nil {
+		return runtime.ApprovalInfo{}, err
+	}
+
+	return runtime.ApprovalInfo{
+		ID:     approval.ApprovalID,
+		Status: approval.Status,
+	}, nil
+}
+
+func (a *approvalExecutorAdapter) GetApproval(ctx context.Context, approvalID string) (runtime.ApprovalInfo, error) {
+	approval, err := a.repos.WorkflowApprovals.Get(ctx, approvalID)
+	if err != nil {
+		return runtime.ApprovalInfo{}, err
+	}
+
+	info := runtime.ApprovalInfo{
+		ID:     approval.ApprovalID,
+		Status: approval.Status,
+	}
+	if approval.DecidedBy != nil {
+		info.DecidedBy = *approval.DecidedBy
+	}
+	if approval.DecisionReason != nil {
+		info.DecisionReason = *approval.DecisionReason
+	}
+	return info, nil
+}
+
+// registryStepExecutorAdapter implements BranchExecutorDeps and IteratorExecutorDeps
+// by delegating step execution to the executor registry.
+type registryStepExecutorAdapter struct {
+	registry *runtime.ExecutorRegistry
+}
+
+func (a *registryStepExecutorAdapter) ExecuteStep(ctx context.Context, step workflows.ExecutionStep, runContext map[string]interface{}) (runtime.StepResult, error) {
+	executor, err := a.registry.GetExecutor(step.Type)
+	if err != nil {
+		return runtime.StepResult{
+			Status: runtime.StepStatusFailed,
+			Error:  strPtr(err.Error()),
+		}, err
+	}
+	return executor.Execute(ctx, step, runContext)
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
 func (h *APIHandlers) telemetryMiddleware() gin.HandlerFunc {
 	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		// Track API request telemetry
@@ -183,6 +477,21 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	// Report routes - accessible to regular users in server mode
 	reportsGroup := router.Group("/reports")
 	h.registerReportRoutes(reportsGroup)
+
+	// Workflow definition routes - admin only in server mode
+	workflowGroup := router.Group("/workflows")
+	if !h.localMode {
+		workflowGroup.Use(h.requireAdminInServerMode())
+	}
+	h.registerWorkflowRoutes(workflowGroup)
+
+	// Workflow run routes - accessible to regular users
+	workflowRunsGroup := router.Group("/workflow-runs")
+	h.registerWorkflowRunRoutes(workflowRunsGroup)
+
+	// Workflow approval routes - accessible to regular users
+	workflowApprovalsGroup := router.Group("/workflow-approvals")
+	h.registerWorkflowApprovalRoutes(workflowApprovalsGroup)
 
 	// Settings routes - admin only
 	settingsGroup := router.Group("/settings")

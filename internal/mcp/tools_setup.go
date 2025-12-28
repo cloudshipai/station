@@ -10,7 +10,7 @@ import (
 func (s *Server) setupTools() {
 	// Agent management tools (CRUD operations)
 	createAgentTool := mcp.NewTool("create_agent",
-		mcp.WithDescription("Create a new AI agent with specified configuration"),
+		mcp.WithDescription("Create a new AI agent with specified configuration. For sandbox options, read 'station://docs/sandbox' resource."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the agent")),
 		mcp.WithString("description", mcp.Required(), mcp.Description("Description of what the agent does")),
 		mcp.WithString("prompt", mcp.Required(), mcp.Description("System prompt for the agent")),
@@ -25,12 +25,13 @@ func (s *Server) setupTools() {
 		mcp.WithString("app_type", mcp.Description("CloudShip data ingestion app_type classification for data categorization (optional, must be provided with app). Valid values: 'inventory', 'investigations', 'opportunities', 'projections', 'events'. Auto-populated from preset if not provided. Defines the type of operational data this agent generates.")),
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context. The agent's prompt should include {{cloudship_memory}} placeholder where context will be injected.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow by truncating memory content.")),
+		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Simple: {\"runtime\": \"python\"} or full: {\"runtime\": \"python\", \"pip_packages\": [\"requests\"], \"timeout_seconds\": 30, \"limits\": {\"memory_mb\": 512}}. Modes: 'compute' (single execution, default) or 'code' (persistent session with session ID).")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
 	// Update agent tool
 	updateAgentTool := mcp.NewTool("update_agent",
-		mcp.WithDescription("Update an existing agent's configuration. Note: To manage tools, use add_tool/remove_tool instead."),
+		mcp.WithDescription("Update an existing agent's configuration. Note: To manage tools, use add_tool/remove_tool instead. For sandbox options, read 'station://docs/sandbox' resource."),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to update")),
 		mcp.WithString("name", mcp.Description("New name for the agent")),
 		mcp.WithString("description", mcp.Description("New description for the agent")),
@@ -41,6 +42,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow.")),
+		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Simple: {\"runtime\": \"python\"} or full config with limits, packages, etc. Set to \"{}\" to remove sandbox.")),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 
@@ -364,5 +366,122 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(generateAndTestAgentTool, s.handleGenerateAndTestAgent)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 38)
+	// Workflow Management Tools
+	listWorkflowsTool := mcp.NewTool("list_workflows",
+		mcp.WithDescription("List all workflow definitions"),
+		mcp.WithString("status", mcp.Description("Filter by status (active, disabled)")),
+	)
+	s.mcpServer.AddTool(listWorkflowsTool, s.handleListWorkflows)
+
+	getWorkflowTool := mcp.NewTool("get_workflow",
+		mcp.WithDescription("Get a workflow definition by ID"),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to retrieve")),
+		mcp.WithNumber("version", mcp.Description("Specific version to retrieve (default: latest)")),
+	)
+	s.mcpServer.AddTool(getWorkflowTool, s.handleGetWorkflow)
+
+	createWorkflowTool := mcp.NewTool("create_workflow",
+		mcp.WithDescription("Create a new workflow definition. IMPORTANT: Read 'station://docs/workflow-dsl' resource FIRST to understand the DSL syntax, state types (agent, switch, parallel, foreach, inject, transform, human_approval), and Starlark expressions (hasattr, getattr)."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Unique workflow identifier")),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable workflow name")),
+		mcp.WithString("description", mcp.Description("Workflow description")),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string. MUST follow DSL from 'station://docs/workflow-dsl'. Key rules: 1) Use 'type: agent' with 'agent: name' for agent steps, 2) Use hasattr() in switch conditions for safe field access, 3) Use getattr() in transform expressions for defaults.")),
+	)
+	s.mcpServer.AddTool(createWorkflowTool, s.handleCreateWorkflow)
+
+	updateWorkflowTool := mcp.NewTool("update_workflow",
+		mcp.WithDescription("Update an existing workflow definition (creates new version). For DSL syntax, read 'station://docs/workflow-dsl' resource. Remember: Use hasattr() in switch conditions, getattr() in transforms."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to update")),
+		mcp.WithString("name", mcp.Description("New workflow name")),
+		mcp.WithString("description", mcp.Description("New workflow description")),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Updated workflow definition as JSON. Key patterns: hasattr(obj, 'field') for safe access, getattr(obj, 'field', default) for defaults.")),
+	)
+	s.mcpServer.AddTool(updateWorkflowTool, s.handleUpdateWorkflow)
+
+	deleteWorkflowTool := mcp.NewTool("delete_workflow",
+		mcp.WithDescription("Disable a workflow definition (soft delete)"),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to disable")),
+	)
+	s.mcpServer.AddTool(deleteWorkflowTool, s.handleDeleteWorkflow)
+
+	validateWorkflowTool := mcp.NewTool("validate_workflow",
+		mcp.WithDescription("Validate a workflow definition without saving. Checks DSL syntax, state references, expression validity, and agent existence. Read 'station://docs/workflow-dsl' for DSL specification. Common issues: missing hasattr() in switch conditions, missing defaultNext in switch, unreachable states."),
+		mcp.WithString("definition", mcp.Required(), mcp.Description("Workflow definition as JSON string. Validation checks: state type validity, transition targets exist, agent names resolve, Starlark expression syntax.")),
+	)
+	s.mcpServer.AddTool(validateWorkflowTool, s.handleValidateWorkflow)
+
+	// Workflow Run Management Tools
+	startWorkflowRunTool := mcp.NewTool("start_workflow_run",
+		mcp.WithDescription("Start a new workflow run (async). Returns run ID immediately."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to run")),
+		mcp.WithNumber("version", mcp.Description("Workflow version to run (default: latest)")),
+		mcp.WithString("input", mcp.Description("Input data as JSON string")),
+	)
+	s.mcpServer.AddTool(startWorkflowRunTool, s.handleStartWorkflowRun)
+
+	getWorkflowRunTool := mcp.NewTool("get_workflow_run",
+		mcp.WithDescription("Get status and details of a workflow run"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to retrieve")),
+	)
+	s.mcpServer.AddTool(getWorkflowRunTool, s.handleGetWorkflowRun)
+
+	listWorkflowRunsTool := mcp.NewTool("list_workflow_runs",
+		mcp.WithDescription("List workflow runs with filtering"),
+		mcp.WithString("workflow_id", mcp.Description("Filter by workflow ID")),
+		mcp.WithString("status", mcp.Description("Filter by status (running, completed, failed, cancelled, paused)")),
+		mcp.WithNumber("limit", mcp.Description("Maximum runs to return (default: 50)")),
+	)
+	s.mcpServer.AddTool(listWorkflowRunsTool, s.handleListWorkflowRuns)
+
+	cancelWorkflowRunTool := mcp.NewTool("cancel_workflow_run",
+		mcp.WithDescription("Cancel a running workflow"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to cancel")),
+		mcp.WithString("reason", mcp.Description("Cancellation reason")),
+	)
+	s.mcpServer.AddTool(cancelWorkflowRunTool, s.handleCancelWorkflowRun)
+
+	pauseWorkflowRunTool := mcp.NewTool("pause_workflow_run",
+		mcp.WithDescription("Pause a running workflow"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to pause")),
+		mcp.WithString("reason", mcp.Description("Pause reason")),
+	)
+	s.mcpServer.AddTool(pauseWorkflowRunTool, s.handlePauseWorkflowRun)
+
+	resumeWorkflowRunTool := mcp.NewTool("resume_workflow_run",
+		mcp.WithDescription("Resume a paused workflow"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to resume")),
+	)
+	s.mcpServer.AddTool(resumeWorkflowRunTool, s.handleResumeWorkflowRun)
+
+	getWorkflowRunStepsTool := mcp.NewTool("get_workflow_run_steps",
+		mcp.WithDescription("Get execution steps for a workflow run"),
+		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID to get steps for")),
+	)
+	s.mcpServer.AddTool(getWorkflowRunStepsTool, s.handleGetWorkflowRunSteps)
+
+	// Workflow Approval Tools
+	listPendingApprovalsTool := mcp.NewTool("list_workflow_approvals",
+		mcp.WithDescription("List pending workflow approvals"),
+		mcp.WithString("run_id", mcp.Description("Filter by run ID")),
+		mcp.WithNumber("limit", mcp.Description("Maximum approvals to return (default: 50)")),
+	)
+	s.mcpServer.AddTool(listPendingApprovalsTool, s.handleListWorkflowApprovals)
+
+	approveWorkflowStepTool := mcp.NewTool("approve_workflow_step",
+		mcp.WithDescription("Approve a pending workflow step"),
+		mcp.WithString("approval_id", mcp.Required(), mcp.Description("Approval ID to approve")),
+		mcp.WithString("comment", mcp.Description("Approval comment")),
+		mcp.WithString("approver_id", mcp.Description("Approver identifier (default: mcp-user)")),
+	)
+	s.mcpServer.AddTool(approveWorkflowStepTool, s.handleApproveWorkflowStep)
+
+	rejectWorkflowStepTool := mcp.NewTool("reject_workflow_step",
+		mcp.WithDescription("Reject a pending workflow step"),
+		mcp.WithString("approval_id", mcp.Required(), mcp.Description("Approval ID to reject")),
+		mcp.WithString("reason", mcp.Description("Rejection reason")),
+		mcp.WithString("rejecter_id", mcp.Description("Rejecter identifier (default: mcp-user)")),
+	)
+	s.mcpServer.AddTool(rejectWorkflowStepTool, s.handleRejectWorkflowStep)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 53)
 }

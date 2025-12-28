@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"station/internal/api"
 	"station/internal/config"
@@ -19,6 +20,8 @@ import (
 	"station/internal/logging"
 	"station/internal/mcp"
 	"station/internal/services"
+	"station/internal/workflows"
+	"station/internal/workflows/runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -156,8 +159,30 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
 
-	// Create MCP server for stdio communication
+	workflowOpts := runtime.EnvOptions()
+	workflowEngine, err := runtime.NewEngine(workflowOpts)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to initialize workflow engine: %v (workflow execution disabled)\n", err)
+	}
+
+	var workflowService *services.WorkflowService
+	if workflowEngine != nil {
+		workflowService = services.NewWorkflowServiceWithEngine(repos, workflowEngine)
+		_, _ = fmt.Fprintf(os.Stderr, "✅ Workflow engine initialized (embedded NATS)\n")
+	} else {
+		workflowService = services.NewWorkflowService(repos)
+	}
+
+	var workflowConsumer *runtime.WorkflowConsumer
+	if workflowEngine != nil {
+		workflowConsumer = startStdioWorkflowConsumer(ctx, repos, workflowEngine, agentSvc)
+		if workflowConsumer != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "✅ Workflow consumer started\n")
+		}
+	}
+
 	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
+	mcpServer.SetWorkflowService(workflowService)
 
 	// Set lighthouse client for surgical telemetry integration
 	if lighthouseClient != nil {
@@ -235,7 +260,6 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	// Clean shutdown of remote control service for CloudShip management
 	if remoteControlSvc != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down remote control service...\n")
 		if err := remoteControlSvc.Stop(); err != nil {
@@ -243,14 +267,19 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Jaeger/tracing managed externally via config.yaml otel_endpoint
+	if workflowConsumer != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down workflow consumer...\n")
+		workflowConsumer.Stop()
+	}
 
-	// Note: Lighthouse client cleanup happens automatically via context cancellation
+	if workflowEngine != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "🛑 Shutting down workflow engine...\n")
+		workflowEngine.Close()
+	}
 
 	return nil
 }
 
-// isPortAvailable checks if a port is available on localhost
 func isPortAvailable(port int) bool {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -258,4 +287,237 @@ func isPortAvailable(port int) bool {
 	}
 	_ = ln.Close()
 	return true
+}
+
+func startStdioWorkflowConsumer(ctx context.Context, repos *repositories.Repositories, engine *runtime.NATSEngine, agentService services.AgentServiceInterface) *runtime.WorkflowConsumer {
+	registry := runtime.NewExecutorRegistry()
+	registry.Register(runtime.NewInjectExecutor())
+	registry.Register(runtime.NewSwitchExecutor())
+	registry.Register(runtime.NewAgentRunExecutor(&stdioAgentExecutorAdapter{agentService: agentService, repos: repos}))
+	registry.Register(runtime.NewHumanApprovalExecutor(&stdioApprovalExecutorAdapter{repos: repos}))
+	registry.Register(runtime.NewCustomExecutor(nil))
+	registry.Register(runtime.NewCronExecutor())
+	registry.Register(runtime.NewTimerExecutor())
+	registry.Register(runtime.NewTryCatchExecutor(registry))
+	registry.Register(runtime.NewTransformExecutor())
+
+	stepAdapter := &stdioRegistryStepExecutorAdapter{registry: registry}
+	registry.Register(runtime.NewParallelExecutor(stepAdapter))
+	registry.Register(runtime.NewForeachExecutor(stepAdapter))
+
+	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
+
+	consumer := runtime.NewWorkflowConsumer(engine, registry, adapter, adapter, adapter)
+	consumer.SetPendingRunProvider(adapter)
+
+	if err := consumer.Start(ctx); err != nil {
+		log.Printf("Workflow consumer: failed to start: %v", err)
+		return nil
+	}
+
+	log.Println("Workflow consumer started for stdio mode")
+	return consumer
+}
+
+type stdioAgentExecutorAdapter struct {
+	agentService services.AgentServiceInterface
+	repos        *repositories.Repositories
+}
+
+func (a *stdioAgentExecutorAdapter) GetAgentByID(ctx context.Context, id int64) (runtime.AgentInfo, error) {
+	agent, err := a.agentService.GetAgent(ctx, id)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *stdioAgentExecutorAdapter) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameAndEnvironment(name, environmentID)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *stdioAgentExecutorAdapter) GetAgentByNameGlobal(ctx context.Context, name string) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameGlobal(name)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *stdioAgentExecutorAdapter) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	env, err := a.repos.Environments.GetByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return env.ID, nil
+}
+
+func (a *stdioAgentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {
+	userID := int64(1)
+
+	agentRun, err := a.repos.AgentRuns.Create(ctx, agentID, userID, task, "", 0, nil, nil, "running", nil)
+	if err != nil {
+		log.Printf("❌ Workflow agent step: Failed to create agent run: %v", err)
+		return runtime.AgentExecutionResult{}, err
+	}
+
+	result, err := a.agentService.ExecuteAgentWithRunID(ctx, agentID, task, agentRun.ID, variables)
+	if err != nil {
+		log.Printf("❌ Workflow agent step: Execution failed for run %d: %v", agentRun.ID, err)
+		completedAt := time.Now()
+		errorMsg := err.Error()
+		a.repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx, agentRun.ID, errorMsg, 0, nil, nil, "failed", &completedAt,
+			nil, nil, nil, nil, nil, nil, &errorMsg,
+		)
+		return runtime.AgentExecutionResult{}, err
+	}
+
+	log.Printf("✅ Workflow agent step: Completed run %d for agent %d", agentRun.ID, agentID)
+
+	completedAt := time.Now()
+	var inputTokens, outputTokens, totalTokens *int64
+	var durationSeconds *float64
+	var modelName *string
+	var stepsTaken int64
+
+	if result.Extra != nil {
+		if tokenUsage, ok := result.Extra["token_usage"].(map[string]interface{}); ok {
+			if val, ok := tokenUsage["input_tokens"].(float64); ok {
+				v := int64(val)
+				inputTokens = &v
+			}
+			if val, ok := tokenUsage["output_tokens"].(float64); ok {
+				v := int64(val)
+				outputTokens = &v
+			}
+			if val, ok := tokenUsage["total_tokens"].(float64); ok {
+				v := int64(val)
+				totalTokens = &v
+			}
+		}
+		if dur, ok := result.Extra["duration_seconds"].(float64); ok {
+			durationSeconds = &dur
+		}
+		if model, ok := result.Extra["model_name"].(string); ok {
+			modelName = &model
+		}
+		if steps, ok := result.Extra["steps_taken"].(int64); ok {
+			stepsTaken = steps
+		} else if steps, ok := result.Extra["steps_taken"].(float64); ok {
+			stepsTaken = int64(steps)
+		}
+	}
+
+	a.repos.AgentRuns.UpdateCompletionWithMetadata(
+		ctx, agentRun.ID, result.Content, stepsTaken, nil, nil, "completed", &completedAt,
+		inputTokens, outputTokens, totalTokens, durationSeconds, modelName, nil, nil,
+	)
+
+	return runtime.AgentExecutionResult{
+		Response:  result.Content,
+		StepCount: stepsTaken,
+		ToolsUsed: 0,
+	}, nil
+}
+
+type stdioApprovalExecutorAdapter struct {
+	repos *repositories.Repositories
+}
+
+func (a *stdioApprovalExecutorAdapter) CreateApproval(ctx context.Context, params runtime.CreateApprovalParams) (runtime.ApprovalInfo, error) {
+	var summaryPath *string
+	if params.SummaryPath != "" {
+		summaryPath = &params.SummaryPath
+	}
+
+	var approvers *string
+	if len(params.Approvers) > 0 {
+		joined := ""
+		for i, ap := range params.Approvers {
+			if i > 0 {
+				joined += ","
+			}
+			joined += ap
+		}
+		approvers = &joined
+	}
+
+	var timeoutAt *time.Time
+	if params.TimeoutSecs > 0 {
+		t := time.Now().Add(time.Duration(params.TimeoutSecs) * time.Second)
+		timeoutAt = &t
+	}
+
+	approval, err := a.repos.WorkflowApprovals.Create(ctx, repositories.CreateWorkflowApprovalParams{
+		ApprovalID:  params.ApprovalID,
+		RunID:       params.RunID,
+		StepID:      params.StepID,
+		Message:     params.Message,
+		SummaryPath: summaryPath,
+		Approvers:   approvers,
+		TimeoutAt:   timeoutAt,
+	})
+	if err != nil {
+		return runtime.ApprovalInfo{}, err
+	}
+
+	return runtime.ApprovalInfo{
+		ID:     approval.ApprovalID,
+		Status: approval.Status,
+	}, nil
+}
+
+func (a *stdioApprovalExecutorAdapter) GetApproval(ctx context.Context, approvalID string) (runtime.ApprovalInfo, error) {
+	approval, err := a.repos.WorkflowApprovals.Get(ctx, approvalID)
+	if err != nil {
+		return runtime.ApprovalInfo{}, err
+	}
+
+	info := runtime.ApprovalInfo{
+		ID:     approval.ApprovalID,
+		Status: approval.Status,
+	}
+	if approval.DecidedBy != nil {
+		info.DecidedBy = *approval.DecidedBy
+	}
+	if approval.DecisionReason != nil {
+		info.DecisionReason = *approval.DecisionReason
+	}
+	return info, nil
+}
+
+type stdioRegistryStepExecutorAdapter struct {
+	registry *runtime.ExecutorRegistry
+}
+
+func (a *stdioRegistryStepExecutorAdapter) ExecuteStep(ctx context.Context, step workflows.ExecutionStep, runContext map[string]interface{}) (runtime.StepResult, error) {
+	executor, err := a.registry.GetExecutor(step.Type)
+	if err != nil {
+		errStr := err.Error()
+		return runtime.StepResult{
+			Status: runtime.StepStatusFailed,
+			Error:  &errStr,
+		}, err
+	}
+	return executor.Execute(ctx, step, runContext)
 }

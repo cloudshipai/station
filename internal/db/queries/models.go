@@ -188,6 +188,21 @@ type ModelProvider struct {
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
+type NotificationLog struct {
+	ID             int64          `json:"id"`
+	LogID          string         `json:"log_id"`
+	ApprovalID     string         `json:"approval_id"`
+	EventType      string         `json:"event_type"`
+	WebhookUrl     sql.NullString `json:"webhook_url"`
+	RequestPayload sql.NullString `json:"request_payload"`
+	ResponseStatus sql.NullInt64  `json:"response_status"`
+	ResponseBody   sql.NullString `json:"response_body"`
+	ErrorMessage   sql.NullString `json:"error_message"`
+	AttemptNumber  sql.NullInt64  `json:"attempt_number"`
+	DurationMs     sql.NullInt64  `json:"duration_ms"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+}
+
 type Report struct {
 	ID                        int64           `json:"id"`
 	Name                      string          `json:"name"`
@@ -293,4 +308,92 @@ type WebhookDelivery struct {
 	NextRetryAt     sql.NullTime   `json:"next_retry_at"`
 	DeliveredAt     sql.NullTime   `json:"delivered_at"`
 	CreatedAt       sql.NullTime   `json:"created_at"`
+}
+
+type Workflow struct {
+	ID          int64          `json:"id"`
+	WorkflowID  string         `json:"workflow_id"`
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	Version     int64          `json:"version"`
+	Definition  string         `json:"definition"`
+	Status      string         `json:"status"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+type WorkflowApproval struct {
+	ID             int64          `json:"id"`
+	ApprovalID     string         `json:"approval_id"`
+	RunID          string         `json:"run_id"`
+	StepID         string         `json:"step_id"`
+	Message        string         `json:"message"`
+	SummaryPath    sql.NullString `json:"summary_path"`
+	Approvers      sql.NullString `json:"approvers"`
+	Status         string         `json:"status"`
+	DecidedBy      sql.NullString `json:"decided_by"`
+	DecidedAt      sql.NullTime   `json:"decided_at"`
+	DecisionReason sql.NullString `json:"decision_reason"`
+	TimeoutAt      sql.NullTime   `json:"timeout_at"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+	UpdatedAt      sql.NullTime   `json:"updated_at"`
+}
+
+type WorkflowRun struct {
+	ID              int64          `json:"id"`
+	RunID           string         `json:"run_id"`
+	WorkflowID      string         `json:"workflow_id"`
+	WorkflowVersion int64          `json:"workflow_version"`
+	Status          string         `json:"status"`
+	CurrentStep     sql.NullString `json:"current_step"`
+	Input           sql.NullString `json:"input"`
+	Context         sql.NullString `json:"context"`
+	Result          sql.NullString `json:"result"`
+	Error           sql.NullString `json:"error"`
+	Summary         sql.NullString `json:"summary"`
+	Options         sql.NullString `json:"options"`
+	LastSignal      sql.NullString `json:"last_signal"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
+	UpdatedAt       sql.NullTime   `json:"updated_at"`
+	StartedAt       sql.NullTime   `json:"started_at"`
+	CompletedAt     sql.NullTime   `json:"completed_at"`
+}
+
+type WorkflowRunEvent struct {
+	ID        int64          `json:"id"`
+	RunID     string         `json:"run_id"`
+	Seq       int64          `json:"seq"`
+	EventType string         `json:"event_type"`
+	StepID    sql.NullString `json:"step_id"`
+	Payload   sql.NullString `json:"payload"`
+	Actor     sql.NullString `json:"actor"`
+	CreatedAt sql.NullTime   `json:"created_at"`
+}
+
+type WorkflowRunStep struct {
+	ID          int64          `json:"id"`
+	RunID       string         `json:"run_id"`
+	StepID      string         `json:"step_id"`
+	Attempt     int64          `json:"attempt"`
+	Status      string         `json:"status"`
+	Input       sql.NullString `json:"input"`
+	Output      sql.NullString `json:"output"`
+	Error       sql.NullString `json:"error"`
+	Metadata    sql.NullString `json:"metadata"`
+	StartedAt   sql.NullTime   `json:"started_at"`
+	CompletedAt sql.NullTime   `json:"completed_at"`
+}
+
+type WorkflowSchedule struct {
+	ID              int64          `json:"id"`
+	WorkflowID      string         `json:"workflow_id"`
+	WorkflowVersion int64          `json:"workflow_version"`
+	CronExpression  string         `json:"cron_expression"`
+	Timezone        string         `json:"timezone"`
+	Enabled         bool           `json:"enabled"`
+	Input           sql.NullString `json:"input"`
+	LastRunAt       sql.NullTime   `json:"last_run_at"`
+	NextRunAt       sql.NullTime   `json:"next_run_at"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
+	UpdatedAt       sql.NullTime   `json:"updated_at"`
 }

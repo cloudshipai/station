@@ -340,6 +340,7 @@ func (s *BundleService) generateManifest(sourceDir string) (*BundleManifest, err
 		Agents:                []AgentManifestInfo{},
 		MCPServers:            []MCPServerManifestInfo{},
 		Tools:                 []ToolManifestInfo{},
+		Workflows:             []WorkflowManifestInfo{},
 		AgentMCPRelationships: []AgentMCPRelationship{},
 		RequiredVariables:     []VariableRequirement{},
 		Reports:               []ReportManifestInfo{},
@@ -434,6 +435,25 @@ func (s *BundleService) generateManifest(sourceDir string) (*BundleManifest, err
 		}
 	}
 
+	// Parse workflows directory
+	workflowsDir := filepath.Join(sourceDir, "workflows")
+	if _, err := os.Stat(workflowsDir); err == nil {
+		workflowFiles, err := os.ReadDir(workflowsDir)
+		if err == nil {
+			for _, wf := range workflowFiles {
+				name := wf.Name()
+				if strings.HasSuffix(name, ".workflow.yaml") ||
+					strings.HasSuffix(name, ".workflow.yml") ||
+					strings.HasSuffix(name, ".workflow.json") {
+					workflowInfo, err := s.parseWorkflowFile(filepath.Join(workflowsDir, name))
+					if err == nil {
+						manifest.Workflows = append(manifest.Workflows, *workflowInfo)
+					}
+				}
+			}
+		}
+	}
+
 	return manifest, nil
 }
 
@@ -499,7 +519,146 @@ func (s *BundleService) parseDatasetDir(dirPath string) (*DatasetManifestInfo, e
 	return info, nil
 }
 
-// parseReportFile extracts metadata from an exported report JSON file
+func (s *BundleService) parseWorkflowFile(filePath string) (*WorkflowManifestInfo, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var rawData map[string]interface{}
+	if strings.HasSuffix(filePath, ".json") {
+		if err := json.Unmarshal(data, &rawData); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := yaml.Unmarshal(data, &rawData); err != nil {
+			return nil, err
+		}
+	}
+
+	info := &WorkflowManifestInfo{}
+
+	if id, ok := rawData["id"].(string); ok {
+		info.ID = id
+	} else {
+		base := filepath.Base(filePath)
+		for _, suffix := range []string{".workflow.yaml", ".workflow.yml", ".workflow.json"} {
+			if strings.HasSuffix(base, suffix) {
+				info.ID = strings.TrimSuffix(base, suffix)
+				break
+			}
+		}
+	}
+
+	if name, ok := rawData["name"].(string); ok {
+		info.Name = name
+	} else {
+		info.Name = info.ID
+	}
+
+	if desc, ok := rawData["description"].(string); ok {
+		info.Description = desc
+	}
+
+	if ver, ok := rawData["version"].(string); ok {
+		info.Version = ver
+	}
+
+	if start, ok := rawData["start"].(string); ok {
+		info.StartState = start
+	}
+
+	stateTypesSet := make(map[string]bool)
+	agentsSet := make(map[string]bool)
+
+	if states, ok := rawData["states"].([]interface{}); ok {
+		info.StateCount = len(states)
+		for _, state := range states {
+			if stateMap, ok := state.(map[string]interface{}); ok {
+				if stateType, ok := stateMap["type"].(string); ok {
+					stateTypesSet[stateType] = true
+				}
+				if action, ok := stateMap["action"].(string); ok {
+					if action == "human.approval" {
+						info.HasApproval = true
+					}
+					if action == "agent.run" {
+						if input, ok := stateMap["input"].(map[string]interface{}); ok {
+							if agentName, ok := input["agent"].(string); ok {
+								agentsSet[agentName] = true
+							}
+						}
+					}
+				}
+				s.extractAgentsFromBranches(stateMap, agentsSet, stateTypesSet, &info.HasApproval)
+			}
+		}
+	}
+
+	for stateType := range stateTypesSet {
+		info.StateTypes = append(info.StateTypes, stateType)
+	}
+	for agent := range agentsSet {
+		info.Agents = append(info.Agents, agent)
+	}
+
+	return info, nil
+}
+
+func (s *BundleService) extractAgentsFromBranches(stateMap map[string]interface{}, agentsSet map[string]bool, stateTypesSet map[string]bool, hasApproval *bool) {
+	if branches, ok := stateMap["branches"].([]interface{}); ok {
+		for _, branch := range branches {
+			if branchMap, ok := branch.(map[string]interface{}); ok {
+				if branchStates, ok := branchMap["states"].([]interface{}); ok {
+					for _, bs := range branchStates {
+						if bsMap, ok := bs.(map[string]interface{}); ok {
+							if stateType, ok := bsMap["type"].(string); ok {
+								stateTypesSet[stateType] = true
+							}
+							if action, ok := bsMap["action"].(string); ok {
+								if action == "human.approval" {
+									*hasApproval = true
+								}
+								if action == "agent.run" {
+									if input, ok := bsMap["input"].(map[string]interface{}); ok {
+										if agentName, ok := input["agent"].(string); ok {
+											agentsSet[agentName] = true
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if iterator, ok := stateMap["iterator"].(map[string]interface{}); ok {
+		if iterStates, ok := iterator["states"].([]interface{}); ok {
+			for _, is := range iterStates {
+				if isMap, ok := is.(map[string]interface{}); ok {
+					if stateType, ok := isMap["type"].(string); ok {
+						stateTypesSet[stateType] = true
+					}
+					if action, ok := isMap["action"].(string); ok {
+						if action == "human.approval" {
+							*hasApproval = true
+						}
+						if action == "agent.run" {
+							if input, ok := isMap["input"].(map[string]interface{}); ok {
+								if agentName, ok := input["agent"].(string); ok {
+									agentsSet[agentName] = true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func (s *BundleService) parseReportFile(filePath string) (*ReportManifestInfo, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -862,6 +1021,7 @@ func (s *BundleService) GetBundleInfo(environmentPath string) (*BundleInfo, erro
 		EnvironmentPath: environmentPath,
 		AgentFiles:      []string{},
 		MCPConfigs:      []string{},
+		WorkflowFiles:   []string{},
 		OtherFiles:      []string{},
 	}
 
@@ -891,9 +1051,13 @@ func (s *BundleService) GetBundleInfo(environmentPath string) (*BundleInfo, erro
 			return err
 		}
 
-		// Categorize files
 		if strings.HasPrefix(relPath, "agents/") && strings.HasSuffix(relPath, ".prompt") {
 			info.AgentFiles = append(info.AgentFiles, relPath)
+		} else if strings.HasPrefix(relPath, "workflows/") &&
+			(strings.HasSuffix(relPath, ".workflow.yaml") ||
+				strings.HasSuffix(relPath, ".workflow.yml") ||
+				strings.HasSuffix(relPath, ".workflow.json")) {
+			info.WorkflowFiles = append(info.WorkflowFiles, relPath)
 		} else if strings.HasSuffix(relPath, ".json") && !strings.Contains(relPath, "/") {
 			info.MCPConfigs = append(info.MCPConfigs, relPath)
 		} else {
@@ -910,11 +1074,11 @@ func (s *BundleService) GetBundleInfo(environmentPath string) (*BundleInfo, erro
 	return info, nil
 }
 
-// BundleInfo contains information about a bundle
 type BundleInfo struct {
 	EnvironmentPath string   `json:"environment_path"`
 	AgentFiles      []string `json:"agent_files"`
 	MCPConfigs      []string `json:"mcp_configs"`
+	WorkflowFiles   []string `json:"workflow_files"`
 	OtherFiles      []string `json:"other_files"`
 }
 
@@ -925,6 +1089,7 @@ type BundleManifest struct {
 	Agents                []AgentManifestInfo     `json:"agents"`
 	MCPServers            []MCPServerManifestInfo `json:"mcp_servers"`
 	Tools                 []ToolManifestInfo      `json:"tools"`
+	Workflows             []WorkflowManifestInfo  `json:"workflows,omitempty"`
 	AgentMCPRelationships []AgentMCPRelationship  `json:"agent_mcp_relationships"`
 	RequiredVariables     []VariableRequirement   `json:"required_variables"`
 	Reports               []ReportManifestInfo    `json:"reports,omitempty"`
@@ -955,6 +1120,19 @@ type DatasetManifestInfo struct {
 	HasAnalysis   bool     `json:"has_analysis"`
 	HasLLMEval    bool     `json:"has_llm_evaluation"`
 	QualityScore  *float64 `json:"quality_score,omitempty"`
+}
+
+// WorkflowManifestInfo contains workflow metadata for the manifest
+type WorkflowManifestInfo struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Version     string   `json:"version,omitempty"`
+	StartState  string   `json:"start_state,omitempty"`
+	StateCount  int      `json:"state_count"`
+	StateTypes  []string `json:"state_types,omitempty"`
+	Agents      []string `json:"agents,omitempty"`
+	HasApproval bool     `json:"has_approval"`
 }
 
 // BundleMetadata contains high-level bundle information
@@ -1011,15 +1189,15 @@ type VariableRequirement struct {
 	Default     interface{} `json:"default,omitempty"`
 }
 
-// BundleInstallResult contains the result of bundle installation
 type BundleInstallResult struct {
-	Success         bool   `json:"success"`
-	Message         string `json:"message"`
-	EnvironmentName string `json:"environment_name"`
-	BundlePath      string `json:"bundle_path"`
-	InstalledAgents int    `json:"installed_agents"`
-	InstalledMCPs   int    `json:"installed_mcps"`
-	Error           string `json:"error,omitempty"`
+	Success            bool   `json:"success"`
+	Message            string `json:"message"`
+	EnvironmentName    string `json:"environment_name"`
+	BundlePath         string `json:"bundle_path"`
+	InstalledAgents    int    `json:"installed_agents"`
+	InstalledMCPs      int    `json:"installed_mcps"`
+	InstalledWorkflows int    `json:"installed_workflows"`
+	Error              string `json:"error,omitempty"`
 }
 
 // InstallBundle installs a bundle from URL or file path to create a new environment
@@ -1122,8 +1300,7 @@ func (s *BundleService) InstallBundleWithOptions(bundleLocation, environmentName
 			}
 		}
 
-		// Extract bundle to environment directory (replaces existing content)
-		agentCount, mcpCount, err := s.extractBundle(bundlePath, envDir)
+		agentCount, mcpCount, workflowCount, err := s.extractBundle(bundlePath, envDir)
 		if err != nil {
 			return &BundleInstallResult{
 				Success: false,
@@ -1136,21 +1313,17 @@ func (s *BundleService) InstallBundleWithOptions(bundleLocation, environmentName
 			action = "merged"
 		}
 		return &BundleInstallResult{
-			Success:         true,
-			Message:         fmt.Sprintf("Bundle %s successfully to environment '%s'", action, environmentName),
-			EnvironmentName: environmentName,
-			BundlePath:      bundlePath,
-			InstalledAgents: agentCount,
-			InstalledMCPs:   mcpCount,
+			Success:            true,
+			Message:            fmt.Sprintf("Bundle %s successfully to environment '%s'", action, environmentName),
+			EnvironmentName:    environmentName,
+			BundlePath:         bundlePath,
+			InstalledAgents:    agentCount,
+			InstalledMCPs:      mcpCount,
+			InstalledWorkflows: workflowCount,
 		}, nil
 	} else {
-		// Fallback to filesystem-only mode (no database)
-		// This is for backwards compatibility when service is used without repos
-
-		// Extract bundle to environment directory
-		agentCount, mcpCount, err := s.extractBundle(bundlePath, envDir)
+		agentCount, mcpCount, workflowCount, err := s.extractBundle(bundlePath, envDir)
 		if err != nil {
-			// Clean up environment directory on failure
 			os.RemoveAll(envDir)
 			return &BundleInstallResult{
 				Success: false,
@@ -1159,12 +1332,13 @@ func (s *BundleService) InstallBundleWithOptions(bundleLocation, environmentName
 		}
 
 		return &BundleInstallResult{
-			Success:         true,
-			Message:         fmt.Sprintf("Bundle installed successfully to environment '%s' (filesystem only - run 'stn sync' to register in database)", environmentName),
-			EnvironmentName: environmentName,
-			BundlePath:      bundlePath,
-			InstalledAgents: agentCount,
-			InstalledMCPs:   mcpCount,
+			Success:            true,
+			Message:            fmt.Sprintf("Bundle installed successfully to environment '%s' (filesystem only - run 'stn sync' to register in database)", environmentName),
+			EnvironmentName:    environmentName,
+			BundlePath:         bundlePath,
+			InstalledAgents:    agentCount,
+			InstalledMCPs:      mcpCount,
+			InstalledWorkflows: workflowCount,
 		}, nil
 	}
 }
@@ -1264,82 +1438,77 @@ func (s *BundleService) copyBundle(srcPath, bundlesDir string) (string, error) {
 	return destPath, nil
 }
 
-// extractBundle extracts a tar.gz bundle to the environment directory
-func (s *BundleService) extractBundle(bundlePath, envDir string) (int, int, error) {
-	// Create environment directory
+func (s *BundleService) extractBundle(bundlePath, envDir string) (int, int, int, error) {
 	if err := os.MkdirAll(envDir, 0755); err != nil {
-		return 0, 0, fmt.Errorf("failed to create environment directory: %v", err)
+		return 0, 0, 0, fmt.Errorf("failed to create environment directory: %v", err)
 	}
 
-	// Open the bundle file
 	file, err := os.Open(bundlePath)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to open bundle: %v", err)
+		return 0, 0, 0, fmt.Errorf("failed to open bundle: %v", err)
 	}
 	defer func() { _ = file.Close() }()
 
-	// Create gzip reader
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to create gzip reader: %v", err)
+		return 0, 0, 0, fmt.Errorf("failed to create gzip reader: %v", err)
 	}
 	defer func() { _ = gzipReader.Close() }()
 
-	// Create tar reader
 	tarReader := tar.NewReader(gzipReader)
 
 	agentCount := 0
 	mcpCount := 0
+	workflowCount := 0
 
-	// Extract files
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return 0, 0, fmt.Errorf("failed to read tar entry: %v", err)
+			return 0, 0, 0, fmt.Errorf("failed to read tar entry: %v", err)
 		}
 
-		// Create the full file path
 		destPath := filepath.Join(envDir, header.Name)
 
-		// Ensure the directory exists
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			return 0, 0, fmt.Errorf("failed to create directory: %v", err)
+			return 0, 0, 0, fmt.Errorf("failed to create directory: %v", err)
 		}
 
-		// Extract based on type
 		switch header.Typeflag {
 		case tar.TypeReg:
-			// Regular file
 			outFile, err := os.Create(destPath)
 			if err != nil {
-				return 0, 0, fmt.Errorf("failed to create file %s: %v", destPath, err)
+				return 0, 0, 0, fmt.Errorf("failed to create file %s: %v", destPath, err)
 			}
 
 			_, err = io.Copy(outFile, tarReader)
 			outFile.Close()
 			if err != nil {
-				return 0, 0, fmt.Errorf("failed to write file %s: %v", destPath, err)
+				return 0, 0, 0, fmt.Errorf("failed to write file %s: %v", destPath, err)
 			}
 
-			// Count agents and MCP configs
-			if (strings.HasPrefix(header.Name, "agents/") || strings.HasPrefix(header.Name, "./agents/")) && strings.HasSuffix(header.Name, ".prompt") {
+			name := header.Name
+			if (strings.HasPrefix(name, "agents/") || strings.HasPrefix(name, "./agents/")) && strings.HasSuffix(name, ".prompt") {
 				agentCount++
-			} else if strings.HasSuffix(header.Name, ".json") {
+			} else if (strings.HasPrefix(name, "workflows/") || strings.HasPrefix(name, "./workflows/")) &&
+				(strings.HasSuffix(name, ".workflow.yaml") ||
+					strings.HasSuffix(name, ".workflow.yml") ||
+					strings.HasSuffix(name, ".workflow.json")) {
+				workflowCount++
+			} else if strings.HasSuffix(name, ".json") && !strings.Contains(name, "/") {
 				mcpCount++
 			}
 
 		case tar.TypeDir:
-			// Directory
 			if err := os.MkdirAll(destPath, 0755); err != nil {
-				return 0, 0, fmt.Errorf("failed to create directory %s: %v", destPath, err)
+				return 0, 0, 0, fmt.Errorf("failed to create directory %s: %v", destPath, err)
 			}
 		}
 	}
 
-	return agentCount, mcpCount, nil
+	return agentCount, mcpCount, workflowCount, nil
 }
 
 // generateBundleNameFromURL generates a meaningful filename from URL

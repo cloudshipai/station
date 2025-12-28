@@ -25,6 +25,8 @@ import { LiveDemoPage } from './components/pages/LiveDemoPage';
 import { GettingStartedPage } from './components/pages/GettingStartedPage';
 import { ReportsPage } from './components/pages/ReportsPage';
 import { ReportDetailPage } from './components/pages/ReportDetailPage';
+import { WorkflowsPage } from './components/workflows/WorkflowsPage';
+import { WorkflowDetailPage } from './components/workflows/WorkflowDetailPage';
 import Editor from '@monaco-editor/react';
 
 import { agentsApi, mcpServersApi, environmentsApi, agentRunsApi, bundlesApi, syncApi } from './api/station';
@@ -243,6 +245,7 @@ const Layout = ({ children }: any) => {
     if (path.startsWith('/mcps')) return 'mcps';
     if (path.startsWith('/mcp-directory')) return 'mcp-directory';
     if (path.startsWith('/runs')) return 'runs';
+    if (path.startsWith('/workflows')) return 'workflows';
     if (path.startsWith('/reports')) return 'reports';
     if (path.startsWith('/environments')) return 'environments';
     if (path.startsWith('/bundles')) return 'bundles';
@@ -296,6 +299,7 @@ const Layout = ({ children }: any) => {
   const sidebarItems = [
     { id: 'agents', label: 'Agents', icon: Bot, path: currentEnvironmentName ? `/agents/${currentEnvironmentName}` : '/agents' },
     { id: 'runs', label: 'Runs', icon: MessageSquare, path: '/runs' },
+    { id: 'workflows', label: 'Workflows', icon: GitBranch, path: '/workflows' },
     { id: 'mcps', label: 'MCP Servers', icon: Server, path: currentEnvironmentName ? `/mcps/${currentEnvironmentName}` : '/mcps' },
     { id: 'mcp-directory', label: 'MCP Directory', icon: Database, path: '/mcp-directory' },
     { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
@@ -3322,6 +3326,7 @@ const SettingsPage = () => {
     ai: true,
     cloudship: false,
     telemetry: false,
+    sandbox: false,
     ports: false,
     other: false,
   });
@@ -3370,6 +3375,11 @@ const SettingsPage = () => {
   const updateTelemetryConfig = (updates: any) => {
     const newTelemetry = { ...configObj.telemetry, ...updates };
     updateConfig({ telemetry: newTelemetry });
+  };
+
+  const updateSandboxConfig = (updates: any) => {
+    const newSandbox = { ...configObj.sandbox, ...updates };
+    updateConfig({ sandbox: newSandbox });
   };
 
   const handleYamlChange = (value: string | undefined) => {
@@ -3804,6 +3814,68 @@ const SettingsPage = () => {
                 )}
               </div>
 
+              {/* Sandbox Section */}
+              <div className="mb-4">
+                <button
+                  onClick={() => toggleSection('sandbox')}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  <span>Sandbox (Code Execution)</span>
+                  {expandedSections.sandbox ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {expandedSections.sandbox && (
+                  <div className="mt-2 space-y-3 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-xs text-gray-600">Enable Sandbox</label>
+                        <p className="text-[10px] text-gray-400">Run code in isolated Docker containers</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={configObj.sandbox?.enabled || false}
+                        onChange={(e) => updateSandboxConfig({ enabled: e.target.checked })}
+                        className="bg-white border border-gray-300"
+                      />
+                    </div>
+                    
+                    {configObj.sandbox?.enabled && (
+                      <>
+                        <div className="pt-2 border-t border-gray-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <label className="text-xs text-gray-600">Enable Code Mode</label>
+                              <p className="text-[10px] text-gray-400">Persistent Docker sessions with filesystem access</p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={configObj.sandbox?.code_mode_enabled || false}
+                              onChange={(e) => updateSandboxConfig({ code_mode_enabled: e.target.checked })}
+                              className="bg-white border border-gray-300"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="pt-2 border-t border-gray-200">
+                          <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                            <div className="text-[10px] text-blue-700">
+                              <span className="font-semibold">Compute Mode:</span> Single-execution sandbox_run tool
+                              <br />
+                              <span className="font-semibold">Code Mode:</span> Persistent sessions with sandbox_open, sandbox_exec, sandbox_fs_* tools
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    
+                    <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                      <div className="text-[10px] text-amber-700">
+                        <span className="font-semibold">Requires:</span> Docker installed and running
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Server Ports Section */}
               <div className="mb-4">
                 <button
@@ -4104,6 +4176,8 @@ function App() {
                   <Route path="/mcps/:env" element={<MCPServersPage />} />
                   <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
                   <Route path="/runs" element={<RunsPage />} />
+                  <Route path="/workflows" element={<WorkflowsPage />} />
+                  <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
                   <Route path="/reports" element={<ReportsPageWrapper />} />
                   <Route path="/reports/:reportId" element={<ReportDetailPageWrapper />} />
                   <Route path="/environments" element={<EnvironmentsPage />} />
