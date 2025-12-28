@@ -12,6 +12,7 @@ import (
 	"station/internal/logging"
 
 	"github.com/firebase/genkit/go/genkit"
+	"github.com/firebase/genkit/go/plugins/compat_oai/anthropic"
 	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 	"github.com/openai/openai-go/option"
@@ -19,7 +20,7 @@ import (
 
 // GenKitProvider manages GenKit initialization and AI provider configuration
 type GenKitProvider struct {
-	mu              sync.RWMutex   // Protect concurrent access to provider config fields
+	mu              sync.RWMutex // Protect concurrent access to provider config fields
 	genkitApp       *genkit.Genkit
 	currentProvider string         // Track current AI provider to detect changes
 	currentAPIKey   string         // Track current API key to detect changes
@@ -189,16 +190,42 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 			genkit.WithPromptDir(promptDir))
 		err = nil // GenKit v1.0.1 Init doesn't return error
 
+	case "anthropic":
+		logging.Debug("Setting up Anthropic plugin with model: %s", cfg.AIModel)
+
+		// Build request options for Anthropic plugin
+		var opts []option.RequestOption
+		if cfg.AIAPIKey != "" {
+			opts = append(opts, option.WithAPIKey(cfg.AIAPIKey))
+		}
+
+		// Create prompt directory for dotprompt support
+		promptDir := "/tmp/station-prompts"
+		_ = os.MkdirAll(promptDir, 0755)
+
+		// Use official GenKit Anthropic plugin
+		anthropicPlugin := &anthropic.Anthropic{
+			Opts: opts,
+		}
+
+		logging.Debug("About to call genkit.Init for Anthropic plugin, GENKIT_ENV='%s'", os.Getenv("GENKIT_ENV"))
+		genkitApp = genkit.Init(ctx,
+			genkit.WithPlugins(anthropicPlugin),
+			genkit.WithPromptDir(promptDir))
+		err = nil // GenKit v1.0.1 Init doesn't return error
+
 	default:
 		return fmt.Errorf("unsupported AI provider: %s\n\n"+
 			"Station automatically detects providers based on model names:\n"+
 			"  • gemini-*: Routes to Google Gemini provider\n"+
-			"  • gpt-*, claude-*, llama*, etc: Routes to OpenAI-compatible provider\n\n"+
+			"  • claude-*: Routes to Anthropic provider\n"+
+			"  • gpt-*, llama*, etc: Routes to OpenAI-compatible provider\n\n"+
 			"Supported configurations:\n"+
 			"  • OpenAI models: Use any gpt-* model name with OPENAI_API_KEY\n"+
+			"  • Anthropic models: Use any claude-* model name with ANTHROPIC_API_KEY\n"+
 			"  • Gemini models: Use any gemini-* model name with GEMINI_API_KEY or GOOGLE_API_KEY\n"+
 			"  • OpenAI-compatible APIs: Use any model name with ai_base_url configured\n"+
-			"    Examples: Anthropic, Ollama, Together AI, etc.\n\n"+
+			"    Examples: Ollama, Together AI, etc.\n\n"+
 			"Set ai_base_url in config.yml or use --base-url with 'stn init' for custom endpoints.",
 			cfg.AIProvider)
 	}
@@ -228,31 +255,16 @@ func (gp *GenKitProvider) GetPluginInfo() map[string]interface{} {
 	}
 }
 
-// detectProviderFromModel auto-detects the provider based on model name
 func detectProviderFromModel(modelName, configuredProvider string) string {
 	modelLower := strings.ToLower(modelName)
 
-	// If model starts with gemini-, it's definitely a Gemini model
 	if strings.HasPrefix(modelLower, "gemini") {
 		return "gemini"
 	}
 
-	// Known Gemini models
-	geminiModels := []string{
-		"gemini-pro", "gemini-pro-vision", "gemini-1.5-pro", "gemini-1.5-flash",
-		"gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
-	}
-	for _, geminiModel := range geminiModels {
-		if modelLower == geminiModel {
-			return "gemini"
-		}
+	if strings.HasPrefix(modelLower, "claude") {
+		return "anthropic"
 	}
 
-	// For all other models (gpt-*, claude-*, llama*, etc.), use OpenAI-compatible
-	// This allows Station to work with:
-	// - OpenAI models (gpt-4, gpt-3.5-turbo, etc.)
-	// - Anthropic models via OpenAI-compatible API (claude-3-sonnet, etc.)
-	// - Local models via Ollama (llama3, mistral, etc.)
-	// - Any other OpenAI-compatible endpoint
-	return "openai"
+	return configuredProvider
 }
