@@ -113,7 +113,7 @@ func (c *WorkflowConsumer) Start(ctx context.Context) error {
 	subject := fmt.Sprintf("%s.run.*.step.*.schedule", c.engine.opts.SubjectPrefix)
 	log.Printf("Workflow consumer: subscribing to %s", subject)
 
-	sub, err := c.engine.SubscribeDurable(subject, "workflow-step-consumer", c.handleMessage)
+	sub, err := c.engine.SubscribeDurable(subject, "", c.handleMessage)
 	if err != nil {
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}

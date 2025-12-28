@@ -131,20 +131,32 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 		consumer = e.opts.ConsumerName
 	}
 
-	ephemeralConsumerName := fmt.Sprintf("%s-%d", consumer, time.Now().UnixNano())
+	log.Printf("NATS Engine: Binding to shared durable consumer=%s for subject=%s", consumer, subject)
 
-	log.Printf("NATS Engine: Creating ephemeral pull consumer=%s for subject=%s", ephemeralConsumerName, subject)
-
-	if err := e.js.DeleteConsumer(e.opts.Stream, consumer); err == nil {
-		log.Printf("NATS Engine: Deleted old consumer %s", consumer)
+	// Create durable consumer config if it doesn't exist
+	// Multiple instances with same consumer name = work queue pattern (HA scale-out)
+	consumerConfig := &nats.ConsumerConfig{
+		Durable:       consumer,
+		FilterSubject: subject,
+		AckPolicy:     nats.AckExplicitPolicy,
+		AckWait:       60 * time.Second,
+		MaxDeliver:    3,
+		DeliverPolicy: nats.DeliverAllPolicy,
 	}
 
+	// Try to add consumer (will return error if exists, which is fine - we'll bind to it)
+	_, err := e.js.AddConsumer(e.opts.Stream, consumerConfig)
+	if err != nil {
+		// Consumer already exists is expected in HA setup - multiple instances bind to same consumer
+		log.Printf("NATS Engine: Consumer setup note: %v (this is normal if consumer already exists)", err)
+	}
+
+	// Bind to the shared durable consumer
+	// In HA mode, multiple instances bind to the SAME consumer = NATS distributes work
 	sub, err := e.js.PullSubscribe(
 		subject,
-		ephemeralConsumerName,
-		nats.AckExplicit(),
-		nats.ManualAck(),
-		nats.DeliverNew(),
+		consumer,
+		nats.Bind(e.opts.Stream, consumer),
 	)
 	if err != nil {
 		log.Printf("NATS Engine: PullSubscribe failed: %v", err)
@@ -153,8 +165,8 @@ func (e *NATSEngine) SubscribeDurable(subject, consumer string, handler func(msg
 
 	info, infoErr := sub.ConsumerInfo()
 	if infoErr == nil {
-		log.Printf("NATS Engine: Pull consumer info - Name=%s, NumPending=%d, NumAckPending=%d, NumRedelivered=%d, Delivered.Stream=%d",
-			info.Name, info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Stream)
+		log.Printf("NATS Engine: Bound to shared consumer - Name=%s, NumPending=%d, NumWaiting=%d, NumAckPending=%d",
+			info.Name, info.NumPending, info.NumWaiting, info.NumAckPending)
 	}
 
 	go e.pullFetchLoop(sub, handler)
