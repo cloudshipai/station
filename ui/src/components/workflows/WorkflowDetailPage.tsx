@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import yaml from 'js-yaml';
 import { WorkflowFlowPanel } from './WorkflowFlowPanel';
+import { WorkflowTimelineView } from './WorkflowTimelineView';
 import { 
   GitBranch, 
   Play, 
@@ -591,6 +592,11 @@ export const WorkflowDetailPage: React.FC = () => {
                   })}
                 </div>
               )}
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Execution Trace</h3>
+              <WorkflowTimelineView runId={selectedRun.run_id} />
             </div>
           </div>
         ) : (

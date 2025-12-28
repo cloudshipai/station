@@ -191,6 +191,8 @@ export const bundlesApi = {
 export const tracesApi = {
   getByRunId: (runId: number) => 
     apiClient.get<{run_id: number, trace: JaegerTrace, error?: string, suggestion?: string}>(`/traces/run/${runId}`),
+  getByWorkflowRunId: (runId: string) =>
+    apiClient.get<{run_id: string, trace: JaegerTrace, error?: string, suggestion?: string}>(`/traces/workflow-run/${runId}`),
   getByTraceId: (traceId: string) =>
     apiClient.get<{trace_id: string, trace: JaegerTrace, error?: string}>(`/traces/trace/${traceId}`),
 };

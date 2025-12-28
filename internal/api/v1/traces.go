@@ -67,6 +67,7 @@ type JaegerTraceResponse struct {
 func (h *APIHandlers) registerTracesRoutes(router *gin.RouterGroup) {
 	tracesGroup := router.Group("/traces")
 	tracesGroup.GET("/run/:run_id", h.getTraceByRunID)
+	tracesGroup.GET("/workflow-run/:run_id", h.getTraceByWorkflowRunID)
 	tracesGroup.GET("/trace/:trace_id", h.getTraceByTraceID)
 }
 
@@ -127,6 +128,80 @@ func (h *APIHandlers) getTraceByRunID(c *gin.Context) {
 	if len(jaegerResp.Data) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":      "No traces found for this run",
+			"run_id":     runID,
+			"suggestion": "Traces may not be available yet or telemetry is disabled",
+		})
+		return
+	}
+
+	// Find the trace with the most spans (this is typically the main execution trace)
+	mainTrace := jaegerResp.Data[0]
+	for _, trace := range jaegerResp.Data {
+		if len(trace.Spans) > len(mainTrace.Spans) {
+			mainTrace = trace
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"run_id": runID,
+		"trace":  mainTrace,
+	})
+}
+
+// getTraceByWorkflowRunID fetches traces for a specific workflow run from Jaeger
+func (h *APIHandlers) getTraceByWorkflowRunID(c *gin.Context) {
+	runID := c.Param("run_id")
+	if runID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid workflow run ID"})
+		return
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load config"})
+		return
+	}
+
+	// Query Jaeger by tag: workflow.run_id=<run_id>
+	// Note: Use tag=key:value format, not tags={json} format
+	jaegerURL := fmt.Sprintf("%s/api/traces?service=station&tag=workflow.run_id:%s&limit=10",
+		cfg.JaegerQueryURL, runID)
+
+	resp, err := http.Get(jaegerURL)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":      "Failed to query Jaeger",
+			"details":    err.Error(),
+			"jaeger_url": cfg.JaegerQueryURL,
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		c.JSON(resp.StatusCode, gin.H{
+			"error":  "Jaeger query failed",
+			"status": resp.StatusCode,
+			"body":   string(body),
+		})
+		return
+	}
+
+	// Parse Jaeger response
+	var jaegerResp JaegerTraceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&jaegerResp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to parse Jaeger response",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Return trace data
+	if len(jaegerResp.Data) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":      "No traces found for this workflow run",
 			"run_id":     runID,
 			"suggestion": "Traces may not be available yet or telemetry is disabled",
 		})
