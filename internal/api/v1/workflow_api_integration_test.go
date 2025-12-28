@@ -79,7 +79,7 @@ func TestWorkflowAPIEndToEnd(t *testing.T) {
 			"id":    "demo-api",
 			"start": "start",
 			"states": []map[string]interface{}{
-				{"id": "start", "type": "operation", "input": map[string]interface{}{"task": "agent.run"}, "transition": "finish"},
+				{"id": "start", "type": "operation", "input": map[string]interface{}{"task": "agent.run", "agent": "test-agent"}, "transition": "finish"},
 				{"id": "finish", "type": "operation", "input": map[string]interface{}{"task": "custom.run"}},
 			},
 		},
