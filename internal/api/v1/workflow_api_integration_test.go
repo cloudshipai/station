@@ -43,6 +43,21 @@ func TestWorkflowAPIEndToEnd(t *testing.T) {
 	defer testDB.Close()
 	repos := repositories.New(testDB)
 
+	// Create environment and test agent (required for workflow validation)
+	env, err := repos.Environments.Create("test-env-api", nil, 1)
+	if err != nil {
+		t.Fatalf("failed to create environment: %v", err)
+	}
+	_, err = repos.Agents.Create(
+		"test-agent",
+		"Test agent for workflow API test",
+		"You are a test agent",
+		5, env.ID, 1, nil, nil, false, nil, nil, "", "",
+	)
+	if err != nil {
+		t.Fatalf("failed to create test agent: %v", err)
+	}
+
 	// Embedded NATS engine for scheduling
 	engine, err := runtime.NewEmbeddedEngineForTests()
 	if err != nil {
