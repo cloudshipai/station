@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -11,6 +12,12 @@ import (
 
 	"github.com/firebase/genkit/go/ai"
 )
+
+// CodeModeEnvVarPrefix is the prefix for environment variables that should be
+// propagated to sandbox containers. Variables with this prefix will have the
+// prefix stripped and be passed to the container.
+// Example: STN_CODE_DATABASE_URL=postgres://... -> DATABASE_URL=postgres://...
+const CodeModeEnvVarPrefix = "STN_CODE_"
 
 type CodeModeToolFactory struct {
 	sessionManager *SessionManager
@@ -622,6 +629,8 @@ func (f *CodeModeToolFactory) CreateCloseTool() ai.Tool {
 func (f *CodeModeToolFactory) buildSessionOptions(agentDefaults *dotprompt.SandboxConfig) SessionOptions {
 	opts := DefaultSessionOptions()
 
+	opts.Env = collectCodeModeEnvVars()
+
 	if agentDefaults == nil {
 		return opts
 	}
@@ -641,6 +650,20 @@ func (f *CodeModeToolFactory) buildSessionOptions(agentDefaults *dotprompt.Sandb
 	}
 
 	return opts
+}
+
+func collectCodeModeEnvVars() map[string]string {
+	env := make(map[string]string)
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, CodeModeEnvVarPrefix) {
+			parts := strings.SplitN(e, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimPrefix(parts[0], CodeModeEnvVarPrefix)
+				env[key] = parts[1]
+			}
+		}
+	}
+	return env
 }
 
 func runtimeToDefaultImage(runtime string) string {
