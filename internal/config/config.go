@@ -1,11 +1,14 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -27,10 +30,14 @@ type Config struct {
 	// Workspace Configuration
 	Workspace string // Custom workspace path (overrides XDG paths)
 	// AI Provider Configuration
-	AIProvider string // openai, ollama, gemini
-	AIAPIKey   string // The API key for the AI provider
-	AIModel    string // Model name (e.g., gpt-4o, llama3, gemini-pro)
-	AIBaseURL  string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
+	AIProvider          string // openai, ollama, gemini
+	AIAPIKey            string // The API key for the AI provider
+	AIModel             string // Model name (e.g., gpt-4o, llama3, gemini-pro)
+	AIBaseURL           string // Base URL for OpenAI-compatible endpoints (Ollama, etc)
+	AIAuthType          string // "api_key" or "oauth" - determined by provider auth
+	AIOAuthToken        string // OAuth access token (when AIAuthType == "oauth")
+	AIOAuthRefreshToken string // OAuth refresh token for token renewal
+	AIOAuthExpiresAt    int64  // OAuth token expiry timestamp (Unix ms)
 	// CloudShip Integration
 	CloudShip CloudShipConfig
 	// Telemetry Configuration (distributed tracing)
@@ -225,6 +232,10 @@ func bindEnvVars() {
 	viper.BindEnv("ai_provider", "STN_AI_PROVIDER", "STATION_AI_PROVIDER")
 	viper.BindEnv("ai_model", "STN_AI_MODEL", "STATION_AI_MODEL")
 	viper.BindEnv("ai_base_url", "STN_AI_BASE_URL", "STATION_AI_BASE_URL")
+	viper.BindEnv("ai_auth_type", "STN_AI_AUTH_TYPE")
+	viper.BindEnv("ai_oauth_token", "STN_AI_OAUTH_TOKEN")
+	viper.BindEnv("ai_oauth_refresh_token", "STN_AI_OAUTH_REFRESH_TOKEN")
+	viper.BindEnv("ai_oauth_expires_at", "STN_AI_OAUTH_EXPIRES_AT")
 
 	// CloudShip config - these are critical for container deployments
 	viper.BindEnv("cloudship.enabled", "STN_CLOUDSHIP_ENABLED")
@@ -285,10 +296,14 @@ func Load() (*Config, error) {
 		// Workspace Configuration
 		Workspace: getEnvOrDefault("STATION_WORKSPACE", ""), // Custom workspace path
 		// AI Provider Configuration with STN_ prefix and sane defaults
-		AIProvider: getEnvOrDefault("STN_AI_PROVIDER", "openai"), // Default to OpenAI
-		AIAPIKey:   getAIAPIKey(),                                // Smart fallback for API keys
-		AIModel:    getAIModelDefault(),                          // Provider-specific defaults
-		AIBaseURL:  getEnvOrDefault("STN_AI_BASE_URL", ""),       // Empty means use provider default
+		AIProvider:          getEnvOrDefault("STN_AI_PROVIDER", "openai"), // Default to OpenAI
+		AIAPIKey:            getAIAPIKey(),                                // Smart fallback for API keys
+		AIModel:             getAIModelDefault(),                          // Provider-specific defaults
+		AIBaseURL:           getEnvOrDefault("STN_AI_BASE_URL", ""),       // Empty means use provider default
+		AIAuthType:          getAIAuthType(),
+		AIOAuthToken:        getAIOAuthToken(),
+		AIOAuthRefreshToken: viper.GetString("ai_oauth_refresh_token"),
+		AIOAuthExpiresAt:    viper.GetInt64("ai_oauth_expires_at"),
 		// CloudShip Integration (disabled by default)
 		// When enabled, connects to Lighthouse via TLS on port 443 (managed by Fly.io)
 		CloudShip: CloudShipConfig{
@@ -784,6 +799,12 @@ func getAIAPIKey() string {
 	}
 
 	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
+
+	// Check provider_auth.json for OAuth-derived keys (from stn provider login)
+	if key := getProviderAuthKey(provider); key != "" {
+		return key
+	}
+
 	switch provider {
 	case "openai":
 		return os.Getenv("OPENAI_API_KEY")
@@ -809,7 +830,222 @@ func getAIAPIKey() string {
 	}
 }
 
-// getAIModelDefault provides provider-specific model defaults
+type providerAuthInfo struct {
+	APIKey      string
+	AuthType    string
+	AccessToken string
+}
+
+func getClaudeCodeCredentials() *providerAuthInfo {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	credFile := filepath.Join(homeDir, ".claude", ".credentials.json")
+	data, err := os.ReadFile(credFile)
+	if err != nil {
+		return nil
+	}
+
+	var creds struct {
+		ClaudeAiOauth struct {
+			AccessToken  string `json:"accessToken"`
+			RefreshToken string `json:"refreshToken"`
+			ExpiresAt    int64  `json:"expiresAt"`
+		} `json:"claudeAiOauth"`
+	}
+
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return nil
+	}
+
+	if creds.ClaudeAiOauth.AccessToken == "" {
+		return nil
+	}
+
+	now := currentTimeMs()
+	if creds.ClaudeAiOauth.ExpiresAt > 0 && creds.ClaudeAiOauth.ExpiresAt < now {
+		return nil
+	}
+
+	return &providerAuthInfo{
+		AuthType:    "oauth",
+		AccessToken: creds.ClaudeAiOauth.AccessToken,
+	}
+}
+
+func currentTimeMs() int64 {
+	return time.Now().UnixMilli()
+}
+
+type oauthTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
+func refreshClaudeToken(refreshToken string) *oauthTokenResponse {
+	reqBody := map[string]string{
+		"grant_type":    "refresh_token",
+		"refresh_token": refreshToken,
+		"client_id":     "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil
+	}
+
+	req, err := http.NewRequest("POST", "https://console.anthropic.com/v1/oauth/token", strings.NewReader(string(jsonBody)))
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var tokenResp oauthTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil
+	}
+
+	return &tokenResp
+}
+
+func SaveOAuthTokens(accessToken, refreshToken string, expiresAt int64) error {
+	viper.Set("ai_auth_type", "oauth")
+	viper.Set("ai_oauth_token", accessToken)
+	viper.Set("ai_oauth_refresh_token", refreshToken)
+	viper.Set("ai_oauth_expires_at", expiresAt)
+
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" {
+		return fmt.Errorf("no config file in use")
+	}
+
+	return viper.WriteConfig()
+}
+
+func getConfigOAuthCredentials() *providerAuthInfo {
+	authType := viper.GetString("ai_auth_type")
+	if authType != "oauth" {
+		return nil
+	}
+
+	accessToken := viper.GetString("ai_oauth_token")
+	refreshToken := viper.GetString("ai_oauth_refresh_token")
+	expiresAt := viper.GetInt64("ai_oauth_expires_at")
+
+	if accessToken == "" {
+		return nil
+	}
+
+	now := currentTimeMs()
+	bufferMs := int64(5 * 60 * 1000)
+	if expiresAt > 0 && expiresAt < (now+bufferMs) {
+		if refreshToken != "" {
+			tokens := refreshClaudeToken(refreshToken)
+			if tokens != nil && tokens.AccessToken != "" {
+				newExpiresAt := now + (tokens.ExpiresIn * 1000)
+				newRefresh := tokens.RefreshToken
+				if newRefresh == "" {
+					newRefresh = refreshToken
+				}
+				_ = SaveOAuthTokens(tokens.AccessToken, newRefresh, newExpiresAt)
+				return &providerAuthInfo{
+					AuthType:    "oauth",
+					AccessToken: tokens.AccessToken,
+				}
+			}
+		}
+		return nil
+	}
+
+	return &providerAuthInfo{
+		AuthType:    "oauth",
+		AccessToken: accessToken,
+	}
+}
+
+func getProviderAuthInfo(providerName string) *providerAuthInfo {
+	if providerName == "anthropic" {
+		if creds := getConfigOAuthCredentials(); creds != nil {
+			return creds
+		}
+		if creds := getClaudeCodeCredentials(); creds != nil {
+			return creds
+		}
+	}
+
+	authFile := filepath.Join(GetStationConfigDir(), "provider_auth.json")
+	data, err := os.ReadFile(authFile)
+	if err != nil {
+		return nil
+	}
+
+	var authStore struct {
+		Providers map[string]struct {
+			APIKey      string `json:"api_key"`
+			AuthType    string `json:"auth_type"`
+			AccessToken string `json:"access_token"`
+		} `json:"providers"`
+	}
+
+	if err := json.Unmarshal(data, &authStore); err != nil {
+		return nil
+	}
+
+	if creds, ok := authStore.Providers[providerName]; ok {
+		return &providerAuthInfo{
+			APIKey:      creds.APIKey,
+			AuthType:    creds.AuthType,
+			AccessToken: creds.AccessToken,
+		}
+	}
+
+	return nil
+}
+
+func getProviderAuthKey(providerName string) string {
+	info := getProviderAuthInfo(providerName)
+	if info == nil {
+		return ""
+	}
+	return info.APIKey
+}
+
+func getAIAuthType() string {
+	if override := os.Getenv("STN_AI_AUTH_TYPE"); override != "" {
+		return override
+	}
+
+	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
+	info := getProviderAuthInfo(provider)
+	if info != nil && info.AuthType == "oauth" {
+		return "oauth"
+	}
+	return "api_key"
+}
+
+func getAIOAuthToken() string {
+	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
+	info := getProviderAuthInfo(provider)
+	if info != nil {
+		return info.AccessToken
+	}
+	return ""
+}
+
 func getAIModelDefault() string {
 	// Check for explicit model configuration first
 	if model := os.Getenv("STN_AI_MODEL"); model != "" {

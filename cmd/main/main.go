@@ -69,6 +69,7 @@ func init() {
 	rootCmd.AddCommand(fakerCmd)
 	rootCmd.AddCommand(handlers.NewJaegerCmd())
 	rootCmd.AddCommand(workflowCmd)
+	rootCmd.AddCommand(providerCmd)
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 

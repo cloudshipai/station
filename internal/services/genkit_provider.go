@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -191,19 +192,19 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		err = nil // GenKit v1.0.1 Init doesn't return error
 
 	case "anthropic":
-		logging.Debug("Setting up Anthropic plugin with model: %s", cfg.AIModel)
+		logging.Debug("Setting up Anthropic plugin with model: %s, auth_type: %s", cfg.AIModel, cfg.AIAuthType)
 
-		// Build request options for Anthropic plugin
 		var opts []option.RequestOption
-		if cfg.AIAPIKey != "" {
+		if cfg.AIAuthType == "oauth" && cfg.AIOAuthToken != "" {
+			logging.Info("Using OAuth authentication for Anthropic (Claude Max/Pro subscription)")
+			opts = append(opts, option.WithMiddleware(newAnthropicOAuthMiddleware(cfg.AIOAuthToken)))
+		} else if cfg.AIAPIKey != "" {
 			opts = append(opts, option.WithAPIKey(cfg.AIAPIKey))
 		}
 
-		// Create prompt directory for dotprompt support
 		promptDir := "/tmp/station-prompts"
 		_ = os.MkdirAll(promptDir, 0755)
 
-		// Use official GenKit Anthropic plugin
 		anthropicPlugin := &anthropic.Anthropic{
 			Opts: opts,
 		}
@@ -212,7 +213,7 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		genkitApp = genkit.Init(ctx,
 			genkit.WithPlugins(anthropicPlugin),
 			genkit.WithPromptDir(promptDir))
-		err = nil // GenKit v1.0.1 Init doesn't return error
+		err = nil
 
 	default:
 		return fmt.Errorf("unsupported AI provider: %s\n\n"+
@@ -267,4 +268,36 @@ func detectProviderFromModel(modelName, configuredProvider string) string {
 	}
 
 	return configuredProvider
+}
+
+type anthropicOAuthTransport struct {
+	accessToken string
+	base        http.RoundTripper
+}
+
+func (t *anthropicOAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	newReq := req.Clone(req.Context())
+	newReq.Header.Del("x-api-key")
+	newReq.Header.Set("Authorization", "Bearer "+t.accessToken)
+	existing := newReq.Header.Get("anthropic-beta")
+	beta := "oauth-2025-04-20"
+	if existing != "" {
+		beta = existing + "," + beta
+	}
+	newReq.Header.Set("anthropic-beta", beta)
+	return t.base.RoundTrip(newReq)
+}
+
+func newAnthropicOAuthMiddleware(accessToken string) option.Middleware {
+	return func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		req.Header.Del("x-api-key")
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		existing := req.Header.Get("anthropic-beta")
+		beta := "oauth-2025-04-20"
+		if existing != "" {
+			beta = existing + "," + beta
+		}
+		req.Header.Set("anthropic-beta", beta)
+		return next(req)
+	}
 }

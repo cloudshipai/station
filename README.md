@@ -147,6 +147,84 @@ Restart your editor. Station automatically starts:
 
 ---
 
+## AI Provider Authentication
+
+Station supports multiple authentication methods for AI providers.
+
+### API Keys (Default)
+
+The simplest way to authenticate - set your API key as an environment variable:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# Google Gemini
+export GEMINI_API_KEY="..."
+
+# Anthropic (API billing)
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+```
+
+### Anthropic OAuth (Claude Max/Pro Subscription)
+
+Use your Claude Max or Claude Pro subscription instead of pay-per-token API billing. This is the same authentication method used by Claude Code CLI.
+
+**Setup:**
+```bash
+# Authenticate with your Claude subscription
+stn auth anthropic login
+
+# This will:
+# 1. Open your browser to claude.ai
+# 2. You authorize Station
+# 3. Paste the code back to the terminal
+# 4. Tokens are stored in your config.yaml
+```
+
+**Configure Station to use Anthropic:**
+```yaml
+# config.yaml
+ai_provider: anthropic
+ai_model: claude-sonnet-4-20250514
+```
+
+**Check status:**
+```bash
+stn auth anthropic status
+# ✅ Authenticated with Anthropic
+#    Token expires: 2025-01-15T10:30:00Z (23h remaining)
+```
+
+**Logout:**
+```bash
+stn auth anthropic logout
+```
+
+**Authentication Priority:**
+| Priority | Method | Description |
+|----------|--------|-------------|
+| 1 | `STN_AI_AUTH_TYPE=api_key` | Force API key mode (override) |
+| 2 | Station OAuth tokens | From `stn auth anthropic login` |
+| 3 | Claude Code credentials | From `~/.claude/.credentials.json` |
+| 4 | `ANTHROPIC_API_KEY` env var | Standard API key |
+
+**Remote Deployment:**
+
+For deployed Station instances (Docker, K8s, Fly.io), use API keys:
+
+```bash
+# In production, use API key authentication
+docker run \
+  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  -e STN_AI_PROVIDER=anthropic \
+  station:latest
+```
+
+OAuth tokens are designed for local/interactive use. For production deployments, API keys provide simpler credential management.
+
+---
+
 ## How You Interface: MCP-Driven Platform
 
 **Station is driven entirely through MCP tools in your AI assistant.** No complex CLI commands or web forms - just natural language requests that use the 41 available MCP tools.
