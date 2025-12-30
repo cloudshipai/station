@@ -471,13 +471,13 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	}
 
 	sandboxConfig := aee.parseSandboxConfigFromAgent(agent, environment.Name)
-	execCtx := ExecutionContext{
+	toolExecCtx := ExecutionContext{
 		WorkflowRunID:      workflowRunID,
 		AgentRunID:         fmt.Sprintf("%d", runID),
 		SandboxSessionName: "",
 	}
 	if aee.unifiedSandboxFactory.ShouldAddTools(sandboxConfig) {
-		sandboxTools := aee.unifiedSandboxFactory.GetSandboxTools(sandboxConfig, execCtx)
+		sandboxTools := aee.unifiedSandboxFactory.GetSandboxTools(sandboxConfig, toolExecCtx)
 		for _, tool := range sandboxTools {
 			mcpTools = append(mcpTools, tool)
 		}
@@ -491,7 +491,7 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	codingConfig := aee.parseCodingConfigFromAgent(agent, environment.Name)
 	logging.Info("[CODING DEBUG] Agent %s: codingConfig=%+v, factory=%v", agent.Name, codingConfig, aee.codingToolFactory != nil)
 	if aee.codingToolFactory != nil && aee.codingToolFactory.ShouldAddTools(codingConfig) {
-		codingTools := aee.codingToolFactory.GetCodingTools(codingConfig)
+		codingTools := aee.codingToolFactory.GetCodingTools(codingConfig, toolExecCtx)
 		for _, tool := range codingTools {
 			mcpTools = append(mcpTools, tool)
 		}

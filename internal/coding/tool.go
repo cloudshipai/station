@@ -10,9 +10,15 @@ import (
 	"github.com/firebase/genkit/go/ai"
 )
 
+type ExecutionContext struct {
+	WorkflowRunID string
+	AgentRunID    string
+}
+
 type ToolFactory struct {
 	backend          Backend
 	workspaceManager *WorkspaceManager
+	execContext      ExecutionContext
 }
 
 type ToolFactoryOption func(*ToolFactory)
@@ -20,6 +26,12 @@ type ToolFactoryOption func(*ToolFactory)
 func WithWorkspaceManager(wm *WorkspaceManager) ToolFactoryOption {
 	return func(f *ToolFactory) {
 		f.workspaceManager = wm
+	}
+}
+
+func WithExecutionContext(ctx ExecutionContext) ToolFactoryOption {
+	return func(f *ToolFactory) {
+		f.execContext = ctx
 	}
 }
 
@@ -195,6 +207,11 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 		scopeStr, _ := inputMap["scope"].(string)
 		scopeID, _ := inputMap["scope_id"].(string)
 
+		if scopeStr == "" && f.execContext.WorkflowRunID != "" {
+			scopeStr = "workflow"
+			scopeID = f.execContext.WorkflowRunID
+		}
+
 		var workspaceID string
 		managed := false
 		var gitCreds *GitCredentials
@@ -209,15 +226,26 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 				scopeID = fmt.Sprintf("session_%d", time.Now().UnixNano())
 			}
 
-			ws, err := f.workspaceManager.Create(toolCtx.Context, scope, scopeID)
-			if err != nil {
-				return nil, fmt.Errorf("coding_open: create workspace: %w", err)
+			if scope == ScopeWorkflow {
+				if existingWs, err := f.workspaceManager.GetByScope(scope, scopeID); err == nil {
+					workspacePath = existingWs.Path
+					workspaceID = existingWs.ID
+					managed = true
+					gitCreds = f.workspaceManager.GetGitCredentials()
+				}
 			}
 
-			workspacePath = ws.Path
-			workspaceID = ws.ID
-			managed = true
-			gitCreds = f.workspaceManager.GetGitCredentials()
+			if workspacePath == "" {
+				ws, err := f.workspaceManager.Create(toolCtx.Context, scope, scopeID)
+				if err != nil {
+					return nil, fmt.Errorf("coding_open: create workspace: %w", err)
+				}
+
+				workspacePath = ws.Path
+				workspaceID = ws.ID
+				managed = true
+				gitCreds = f.workspaceManager.GetGitCredentials()
+			}
 		}
 
 		opts := SessionOptions{

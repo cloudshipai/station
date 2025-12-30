@@ -101,12 +101,12 @@ func TestCodingToolFactory_GetCodingTools(t *testing.T) {
 	})
 
 	t.Run("ReturnsNilWhenConfigDisabled", func(t *testing.T) {
-		tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: false})
+		tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: false}, ExecutionContext{})
 		assert.Nil(t, tools)
 	})
 
 	t.Run("ReturnsFiveToolsWhenEnabled", func(t *testing.T) {
-		tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: true})
+		tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: true}, ExecutionContext{})
 		require.Len(t, tools, 5)
 
 		toolNames := make(map[string]bool)
@@ -130,7 +130,7 @@ func TestCodingToolFactory_ToolNames(t *testing.T) {
 		},
 	})
 
-	tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: true})
+	tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: true}, ExecutionContext{})
 	require.Len(t, tools, 5)
 
 	expectedNames := []string{"coding_open", "code", "coding_close", "coding_commit", "coding_push"}

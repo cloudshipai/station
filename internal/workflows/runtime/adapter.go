@@ -11,11 +11,14 @@ import (
 	"station/internal/workflows"
 )
 
+type WorkflowCleanupFunc func(ctx context.Context, runID string)
+
 type WorkflowServiceAdapter struct {
-	repos     *repositories.Repositories
-	engine    Engine
-	planCache map[string]workflows.ExecutionPlan
-	telemetry *WorkflowTelemetry
+	repos        *repositories.Repositories
+	engine       Engine
+	planCache    map[string]workflows.ExecutionPlan
+	telemetry    *WorkflowTelemetry
+	cleanupFuncs []WorkflowCleanupFunc
 }
 
 func NewWorkflowServiceAdapter(repos *repositories.Repositories, engine Engine) *WorkflowServiceAdapter {
@@ -41,6 +44,16 @@ func (a *WorkflowServiceAdapter) RemoveCachedPlan(runID string) {
 
 func (a *WorkflowServiceAdapter) SetTelemetry(t *WorkflowTelemetry) {
 	a.telemetry = t
+}
+
+func (a *WorkflowServiceAdapter) AddCleanupFunc(f WorkflowCleanupFunc) {
+	a.cleanupFuncs = append(a.cleanupFuncs, f)
+}
+
+func (a *WorkflowServiceAdapter) runCleanup(ctx context.Context, runID string) {
+	for _, f := range a.cleanupFuncs {
+		f(ctx, runID)
+	}
 }
 
 func (a *WorkflowServiceAdapter) UpdateRunStatus(ctx context.Context, runID, status string, currentStep *string, errMsg *string) error {
@@ -130,6 +143,8 @@ func (a *WorkflowServiceAdapter) CompleteRun(ctx context.Context, runID string, 
 		a.telemetry.EndRunSpan(ctx, runID, workflowID, "completed", duration, nil)
 	}
 
+	a.runCleanup(ctx, runID)
+
 	return err
 }
 
@@ -156,6 +171,8 @@ func (a *WorkflowServiceAdapter) FailRun(ctx context.Context, runID string, errM
 	if a.telemetry != nil && workflowID != "" {
 		a.telemetry.EndRunSpan(ctx, runID, workflowID, "failed", duration, fmt.Errorf("%s", errMsg))
 	}
+
+	a.runCleanup(ctx, runID)
 
 	return err
 }

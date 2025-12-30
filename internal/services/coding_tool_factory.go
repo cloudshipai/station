@@ -79,12 +79,16 @@ func (f *CodingToolFactory) ShouldAddTools(codingCfg *dotprompt.CodingConfig) bo
 	return f.IsEnabled()
 }
 
-func (f *CodingToolFactory) GetCodingTools(codingCfg *dotprompt.CodingConfig) []ai.Tool {
+func (f *CodingToolFactory) GetCodingTools(codingCfg *dotprompt.CodingConfig, execCtx ExecutionContext) []ai.Tool {
 	if !f.ShouldAddTools(codingCfg) {
 		return nil
 	}
 
-	toolFactory := coding.NewToolFactory(f.backend, coding.WithWorkspaceManager(f.workspaceManager))
+	codingExecCtx := coding.ExecutionContext{
+		WorkflowRunID: execCtx.WorkflowRunID,
+		AgentRunID:    execCtx.AgentRunID,
+	}
+	toolFactory := coding.NewToolFactory(f.backend, coding.WithWorkspaceManager(f.workspaceManager), coding.WithExecutionContext(codingExecCtx))
 	return toolFactory.CreateAllTools()
 }
 
@@ -103,4 +107,16 @@ func (f *CodingToolFactory) CheckHealth(ctx context.Context) error {
 	healthCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	return f.backend.Ping(healthCtx)
+}
+
+func (f *CodingToolFactory) CleanupWorkflowWorkspace(ctx context.Context, workflowRunID string) {
+	if !f.IsEnabled() || f.workspaceManager == nil {
+		return
+	}
+	ws, err := f.workspaceManager.GetByScope(coding.ScopeWorkflow, workflowRunID)
+	if err != nil {
+		return
+	}
+	logging.Info("Cleaning up coding workspace for workflow %s (workspace: %s)", workflowRunID, ws.ID)
+	f.workspaceManager.Cleanup(ctx, ws)
 }
