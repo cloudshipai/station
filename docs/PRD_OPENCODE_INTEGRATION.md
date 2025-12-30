@@ -1,9 +1,9 @@
 # PRD: Station + OpenCode Integration
 
-**Status**: Phase 1-6 Complete, E2E Verified ✅  
+**Status**: Phase 1-7 Complete, E2E Verified ✅  
 **Author**: Station Team  
 **Date**: 2025-12-30  
-**Version**: 0.8
+**Version**: 0.9
 
 ---
 
@@ -355,6 +355,71 @@ input := map[string]any{
 - `TestToolFactory_CreateCloseTool_WithWorkspace` (2 subtests)
 
 **Total Tests:** 45 test functions passing in `internal/coding/`
+
+### ✅ Phase 7: Engine Integration & Git Credentials (COMPLETE)
+
+**Date**: 2025-12-30
+
+**Goal**: Wire WorkspaceManager into the agent execution engine and add git credential management.
+
+**Files Created:**
+| File | Purpose |
+|------|---------|
+| `internal/coding/git_credentials.go` | GitCredentials struct, InjectCredentials, RedactString, RedactURL, RedactError |
+| `internal/coding/git_credentials_test.go` | 25+ test cases for credential injection and redaction |
+
+**Files Modified:**
+| File | Changes |
+|------|---------|
+| `internal/config/config.go` | Added `CodingGitConfig` struct with TokenEnvVar, Token, UserName, UserEmail |
+| `internal/coding/workspace.go` | Added GitCredentials to WorkspaceManager, updated CloneRepo to inject credentials |
+| `internal/coding/tool.go` | Updated CreatePushTool to use GIT_ASKPASS for authenticated push |
+| `internal/services/coding_tool_factory.go` | Wired WorkspaceManager with GitCredentials from config |
+
+**Features Implemented:**
+
+| Feature | Description |
+|---------|-------------|
+| `GitCredentials` | Manages git authentication with token injection |
+| `InjectCredentials` | Rewrites HTTPS URLs to include token (`https://x-access-token:TOKEN@github.com/...`) |
+| `RedactString` | Removes sensitive data from logs (GitHub tokens, Bearer tokens, API keys) |
+| `RedactURL` | URL-aware redaction preserving structure |
+| `RedactError` | Wraps errors with redacted messages while preserving type |
+| `createGitAskpassScript` | Creates temporary script for git push authentication |
+
+**Credential Flow by Mode:**
+
+| Mode | Behavior |
+|------|----------|
+| **stdio/CLI** | Uses host git credentials by default (no config needed) |
+| **container/`stn serve`** | Requires explicit `git.token_env` or `git.token` in config |
+
+**Configuration Example:**
+
+```yaml
+# config.yaml
+coding:
+  backend: opencode
+  opencode:
+    url: http://localhost:4096
+  workspace_base_path: /tmp/station-coding
+  cleanup_policy: on_session_end
+  git:
+    token_env: GITHUB_TOKEN       # Read token from this env var (recommended)
+    # token: ${GITHUB_TOKEN}      # Or specify directly with env expansion
+    user_name: "Station Bot"      # Git commit author name
+    user_email: "bot@example.com" # Git commit author email
+```
+
+**Test Results:** 58+ test functions passing in `internal/coding/`
+
+**Remaining Phase 7 Tasks:**
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| Configurable Timeouts | Add timeout settings for tasks, clone, push operations | Medium |
+| Error Recovery | Implement retry logic with exponential backoff | Medium |
+| Health Monitoring | Add health check for OpenCode connection | Low |
 
 ---
 

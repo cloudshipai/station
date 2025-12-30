@@ -127,6 +127,26 @@ type CodingConfig struct {
 	TaskTimeoutMin    int                  `yaml:"task_timeout_min"`
 	WorkspaceBasePath string               `yaml:"workspace_base_path"`
 	CleanupPolicy     string               `yaml:"cleanup_policy"`
+	Git               CodingGitConfig      `yaml:"git"`
+}
+
+// CodingGitConfig holds git credentials and identity for coding operations.
+// In stdio/CLI mode, host credentials are used by default (leave empty).
+// In container/serve mode, explicit token configuration is required for private repos.
+type CodingGitConfig struct {
+	// TokenEnvVar is the environment variable name containing the GitHub token
+	// (e.g., "GITHUB_TOKEN"). Recommended approach - keeps token out of config files.
+	TokenEnvVar string `yaml:"token_env"`
+
+	// Token is a direct GitHub token value. Supports environment variable expansion
+	// (e.g., "${GITHUB_TOKEN}"). Use TokenEnvVar instead when possible.
+	Token string `yaml:"token"`
+
+	// UserName for git commits (default: "Station Bot")
+	UserName string `yaml:"user_name"`
+
+	// UserEmail for git commits (default: "station@cloudship.ai")
+	UserEmail string `yaml:"user_email"`
 }
 
 type CodingOpenCodeConfig struct {
@@ -1080,7 +1100,11 @@ func getAIAuthType() string {
 		return override
 	}
 
-	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
+	// Read provider from viper config first, then fall back to env var
+	provider := viper.GetString("ai_provider")
+	if provider == "" {
+		provider = getEnvOrDefault("STN_AI_PROVIDER", "openai")
+	}
 	info := getProviderAuthInfo(provider)
 	if info != nil && info.AuthType == "oauth" {
 		return "oauth"
@@ -1089,7 +1113,11 @@ func getAIAuthType() string {
 }
 
 func getAIOAuthToken() string {
-	provider := getEnvOrDefault("STN_AI_PROVIDER", "openai")
+	// Read provider from viper config first, then fall back to env var
+	provider := viper.GetString("ai_provider")
+	if provider == "" {
+		provider = getEnvOrDefault("STN_AI_PROVIDER", "openai")
+	}
 	info := getProviderAuthInfo(provider)
 	if info != nil {
 		return info.AccessToken

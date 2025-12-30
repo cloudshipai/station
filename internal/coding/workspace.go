@@ -41,10 +41,11 @@ type Workspace struct {
 }
 
 type WorkspaceManager struct {
-	basePath      string
-	cleanupPolicy CleanupPolicy
-	mu            sync.RWMutex
-	workspaces    map[string]*Workspace
+	basePath       string
+	cleanupPolicy  CleanupPolicy
+	gitCredentials *GitCredentials
+	mu             sync.RWMutex
+	workspaces     map[string]*Workspace
 }
 
 type WorkspaceManagerOption func(*WorkspaceManager)
@@ -55,6 +56,10 @@ func WithBasePath(path string) WorkspaceManagerOption {
 
 func WithCleanupPolicy(policy CleanupPolicy) WorkspaceManagerOption {
 	return func(m *WorkspaceManager) { m.cleanupPolicy = policy }
+}
+
+func WithGitCredentials(creds *GitCredentials) WorkspaceManagerOption {
+	return func(m *WorkspaceManager) { m.gitCredentials = creds }
 }
 
 func NewWorkspaceManager(opts ...WorkspaceManagerOption) *WorkspaceManager {
@@ -302,11 +307,16 @@ func (m *WorkspaceManager) CleanupAll(ctx context.Context) error {
 }
 
 func (m *WorkspaceManager) CloneRepo(ctx context.Context, ws *Workspace, repoURL, branch string) error {
+	cloneURL := repoURL
+	if m.gitCredentials != nil && m.gitCredentials.HasToken() {
+		cloneURL = m.gitCredentials.InjectCredentials(repoURL)
+	}
+
 	args := []string{"clone"}
 	if branch != "" {
 		args = append(args, "-b", branch)
 	}
-	args = append(args, repoURL, ".")
+	args = append(args, cloneURL, ".")
 
 	cloneCmd := exec.CommandContext(ctx, "git", args...)
 	cloneCmd.Dir = ws.Path
@@ -315,7 +325,7 @@ func (m *WorkspaceManager) CloneRepo(ctx context.Context, ws *Workspace, repoURL
 	cloneCmd.Stderr = &stderr
 
 	if err := cloneCmd.Run(); err != nil {
-		return fmt.Errorf("git clone: %s", stderr.String())
+		return RedactError(fmt.Errorf("git clone %s: %s", repoURL, stderr.String()))
 	}
 
 	m.mu.Lock()
@@ -323,6 +333,10 @@ func (m *WorkspaceManager) CloneRepo(ctx context.Context, ws *Workspace, repoURL
 	m.mu.Unlock()
 
 	return nil
+}
+
+func (m *WorkspaceManager) GetGitCredentials() *GitCredentials {
+	return m.gitCredentials
 }
 
 func (m *WorkspaceManager) GetCommitsSince(ctx context.Context, ws *Workspace, since string) ([]string, error) {

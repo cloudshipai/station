@@ -38,9 +38,18 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 		cleanupPolicy = coding.CleanupManual
 	}
 
+	var gitCreds *coding.GitCredentials
+	if cfg.Git.TokenEnvVar != "" || cfg.Git.Token != "" {
+		gitCreds = coding.NewGitCredentials(cfg.Git.Token, cfg.Git.TokenEnvVar)
+		if gitCreds.HasToken() {
+			logging.Debug("Git credentials configured for coding operations")
+		}
+	}
+
 	workspaceManager := coding.NewWorkspaceManager(
 		coding.WithBasePath(basePath),
 		coding.WithCleanupPolicy(cleanupPolicy),
+		coding.WithGitCredentials(gitCreds),
 	)
 
 	logging.Info("Coding tool factory initialized with OpenCode backend (URL: %s, workspace: %s)", cfg.OpenCode.URL, basePath)

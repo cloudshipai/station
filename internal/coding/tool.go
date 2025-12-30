@@ -530,8 +530,19 @@ func (f *ToolFactory) CreatePushTool() ai.Tool {
 		pushCmd.Stdout = &stdout
 		pushCmd.Stderr = &stderr
 
+		if f.workspaceManager != nil && f.workspaceManager.GetGitCredentials() != nil {
+			creds := f.workspaceManager.GetGitCredentials()
+			if creds.HasToken() {
+				askpassScript, cleanup, err := createGitAskpassScript(creds.Token)
+				if err == nil {
+					defer cleanup()
+					pushCmd.Env = append(os.Environ(), "GIT_ASKPASS="+askpassScript, "GIT_TERMINAL_PROMPT=0")
+				}
+			}
+		}
+
 		if err := pushCmd.Run(); err != nil {
-			combined := strings.TrimSpace(stdout.String() + stderr.String())
+			combined := RedactString(strings.TrimSpace(stdout.String() + stderr.String()))
 			return GitPushResult{
 				Success: false,
 				Remote:  remote,
