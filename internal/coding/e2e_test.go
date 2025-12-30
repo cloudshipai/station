@@ -44,7 +44,10 @@ func TestE2E_OpenCodeIntegration(t *testing.T) {
 	var session *Session
 	t.Run("create_session", func(t *testing.T) {
 		var err error
-		session, err = backend.CreateSession(ctx, workspaceDir, "E2E Test Session")
+		session, err = backend.CreateSession(ctx, SessionOptions{
+			WorkspacePath: workspaceDir,
+			Title:         "E2E Test Session",
+		})
 		if err != nil {
 			t.Fatalf("Failed to create session: %v", err)
 		}
@@ -136,7 +139,10 @@ func TestE2E_GitCommitFlow(t *testing.T) {
 
 	backend := NewOpenCodeBackend(cfg)
 
-	session, err := backend.CreateSession(ctx, workspaceDir, "Git Flow Test")
+	session, err := backend.CreateSession(ctx, SessionOptions{
+		WorkspacePath: workspaceDir,
+		Title:         "Git Flow Test",
+	})
 	if err != nil {
 		t.Fatalf("Failed to create session: %v", err)
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,25 +12,31 @@ import (
 )
 
 type mockBackend struct {
-	pingErr       error
-	createSession *Session
-	createErr     error
-	getSession    *Session
-	getErr        error
-	closeErr      error
-	executeResult *Result
-	executeErr    error
-	lastTask      Task
-	lastSessionID string
-	lastWorkspace string
+	pingErr         error
+	createSession   *Session
+	createErr       error
+	getSession      *Session
+	getErr          error
+	closeErr        error
+	executeResult   *Result
+	executeErr      error
+	gitCommitResult *GitCommitResult
+	gitCommitErr    error
+	gitPushResult   *GitPushResult
+	gitPushErr      error
+	lastTask        Task
+	lastSessionID   string
+	lastWorkspace   string
+	lastOpts        SessionOptions
 }
 
 func (m *mockBackend) Ping(ctx context.Context) error {
 	return m.pingErr
 }
 
-func (m *mockBackend) CreateSession(ctx context.Context, workspacePath, title string) (*Session, error) {
-	m.lastWorkspace = workspacePath
+func (m *mockBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
+	m.lastWorkspace = opts.WorkspacePath
+	m.lastOpts = opts
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
@@ -40,8 +45,8 @@ func (m *mockBackend) CreateSession(ctx context.Context, workspacePath, title st
 	}
 	return &Session{
 		ID:            "test-session-1",
-		WorkspacePath: workspacePath,
-		Title:         title,
+		WorkspacePath: opts.WorkspacePath,
+		Title:         opts.Title,
 		CreatedAt:     time.Now(),
 	}, nil
 }
@@ -66,6 +71,36 @@ func (m *mockBackend) Execute(ctx context.Context, sessionID string, task Task) 
 		return nil, m.executeErr
 	}
 	return m.executeResult, nil
+}
+
+func (m *mockBackend) GitCommit(ctx context.Context, sessionID string, message string, addAll bool) (*GitCommitResult, error) {
+	m.lastSessionID = sessionID
+	if m.gitCommitErr != nil {
+		return nil, m.gitCommitErr
+	}
+	if m.gitCommitResult != nil {
+		return m.gitCommitResult, nil
+	}
+	return &GitCommitResult{
+		Success:    true,
+		CommitHash: "abc123",
+		Message:    message,
+	}, nil
+}
+
+func (m *mockBackend) GitPush(ctx context.Context, sessionID string, remote, branch string, setUpstream bool) (*GitPushResult, error) {
+	m.lastSessionID = sessionID
+	if m.gitPushErr != nil {
+		return nil, m.gitPushErr
+	}
+	if m.gitPushResult != nil {
+		return m.gitPushResult, nil
+	}
+	return &GitPushResult{
+		Success: true,
+		Remote:  remote,
+		Branch:  branch,
+	}, nil
 }
 
 func TestToolFactory_CreateOpenTool(t *testing.T) {
@@ -102,13 +137,31 @@ func TestToolFactory_CreateOpenTool(t *testing.T) {
 		}
 	})
 
-	t.Run("missing workspace_path", func(t *testing.T) {
+	t.Run("with_repo_url", func(t *testing.T) {
 		toolCtx := &ai.ToolContext{Context: context.Background()}
-		input := map[string]any{}
+		input := map[string]any{
+			"repo_url": "https://github.com/org/repo.git",
+			"branch":   "main",
+		}
 
-		_, err := tool.RunRaw(toolCtx, input)
-		if err == nil {
-			t.Error("expected error for missing workspace_path")
+		result, err := tool.RunRaw(toolCtx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		output, ok := result.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map output, got %T", result)
+		}
+
+		if output["repo_cloned"] != true {
+			t.Error("expected repo_cloned = true")
+		}
+		if mock.lastOpts.RepoURL != "https://github.com/org/repo.git" {
+			t.Errorf("repo_url not passed correctly: %s", mock.lastOpts.RepoURL)
+		}
+		if mock.lastOpts.Branch != "main" {
+			t.Errorf("branch not passed correctly: %s", mock.lastOpts.Branch)
 		}
 	})
 
@@ -333,7 +386,7 @@ func TestToolFactory_CreateCommitTool(t *testing.T) {
 
 	t.Run("session_not_found", func(t *testing.T) {
 		mock := &mockBackend{
-			getErr: errors.New("session not found"),
+			gitCommitErr: errors.New("session not found"),
 		}
 		factory := NewToolFactory(mock)
 		tool := factory.CreateCommitTool()
@@ -347,6 +400,54 @@ func TestToolFactory_CreateCommitTool(t *testing.T) {
 		_, err := tool.RunRaw(toolCtx, input)
 		if err == nil {
 			t.Error("expected error for session not found")
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		mock := &mockBackend{
+			gitCommitResult: &GitCommitResult{
+				Success:      true,
+				CommitHash:   "abc123def",
+				Message:      "test commit",
+				FilesChanged: 2,
+				Insertions:   10,
+				Deletions:    5,
+			},
+		}
+		factory := NewToolFactory(mock)
+		tool := factory.CreateCommitTool()
+
+		toolCtx := &ai.ToolContext{Context: context.Background()}
+		input := map[string]any{
+			"session_id": "test-session",
+			"message":    "test commit",
+			"add_all":    true,
+		}
+
+		result, err := tool.RunRaw(toolCtx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		output, ok := result.(*GitCommitResult)
+		if !ok {
+			resultMap, isMap := result.(map[string]any)
+			if !isMap {
+				t.Fatalf("expected *GitCommitResult or map, got %T", result)
+			}
+			if resultMap["success"] != true {
+				t.Error("expected success")
+			}
+			if resultMap["commit_hash"] != "abc123def" {
+				t.Errorf("commit hash = %v, want %q", resultMap["commit_hash"], "abc123def")
+			}
+			return
+		}
+		if !output.Success {
+			t.Error("expected success")
+		}
+		if output.CommitHash != "abc123def" {
+			t.Errorf("commit hash = %q, want %q", output.CommitHash, "abc123def")
 		}
 	})
 }
@@ -368,7 +469,7 @@ func TestToolFactory_CreatePushTool(t *testing.T) {
 
 	t.Run("session_not_found", func(t *testing.T) {
 		mock := &mockBackend{
-			getErr: errors.New("session not found"),
+			gitPushErr: errors.New("session not found"),
 		}
 		factory := NewToolFactory(mock)
 		tool := factory.CreatePushTool()
@@ -383,39 +484,64 @@ func TestToolFactory_CreatePushTool(t *testing.T) {
 			t.Error("expected error for session not found")
 		}
 	})
+
+	t.Run("success", func(t *testing.T) {
+		mock := &mockBackend{
+			gitPushResult: &GitPushResult{
+				Success: true,
+				Remote:  "origin",
+				Branch:  "main",
+				Message: "pushed to origin/main",
+			},
+		}
+		factory := NewToolFactory(mock)
+		tool := factory.CreatePushTool()
+
+		toolCtx := &ai.ToolContext{Context: context.Background()}
+		input := map[string]any{
+			"session_id":   "test-session",
+			"remote":       "origin",
+			"branch":       "main",
+			"set_upstream": true,
+		}
+
+		result, err := tool.RunRaw(toolCtx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		output, ok := result.(*GitPushResult)
+		if !ok {
+			resultMap, isMap := result.(map[string]any)
+			if !isMap {
+				t.Fatalf("expected *GitPushResult or map, got %T", result)
+			}
+			if resultMap["success"] != true {
+				t.Error("expected success")
+			}
+			if resultMap["remote"] != "origin" {
+				t.Errorf("remote = %v, want %q", resultMap["remote"], "origin")
+			}
+			return
+		}
+		if !output.Success {
+			t.Error("expected success")
+		}
+		if output.Remote != "origin" {
+			t.Errorf("remote = %q, want %q", output.Remote, "origin")
+		}
+	})
 }
 
-func TestToolFactory_CreateCommitTool_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	tmpDir := t.TempDir()
-
-	initCmd := exec.Command("git", "init")
-	initCmd.Dir = tmpDir
-	if err := initCmd.Run(); err != nil {
-		t.Fatalf("git init failed: %v", err)
-	}
-
-	configCmd1 := exec.Command("git", "config", "user.email", "test@example.com")
-	configCmd1.Dir = tmpDir
-	configCmd1.Run()
-
-	configCmd2 := exec.Command("git", "config", "user.name", "Test User")
-	configCmd2.Dir = tmpDir
-	configCmd2.Run()
-
-	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("hello"), 0644); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
-	}
-
-	session := &Session{
-		ID:            "test-session",
-		WorkspacePath: tmpDir,
-	}
+func TestToolFactory_CreateCommitTool_ViaBackend(t *testing.T) {
 	mock := &mockBackend{
-		getSession: session,
+		gitCommitResult: &GitCommitResult{
+			Success:      true,
+			CommitHash:   "abc123def456",
+			Message:      "Initial commit",
+			FilesChanged: 1,
+			Insertions:   5,
+		},
 	}
 	factory := NewToolFactory(mock)
 	tool := factory.CreateCommitTool()
@@ -432,29 +558,18 @@ func TestToolFactory_CreateCommitTool_Integration(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	output, ok := result.(GitCommitResult)
-	if !ok {
-		resultMap, isMap := result.(map[string]any)
-		if !isMap {
-			t.Fatalf("expected GitCommitResult or map, got %T", result)
-		}
-		if resultMap["success"] != true {
-			t.Errorf("expected success=true, got %v (error: %v)", resultMap["success"], resultMap["error"])
-		}
-		if resultMap["commit_hash"] == "" || resultMap["commit_hash"] == nil {
-			t.Error("expected non-empty commit_hash")
-		}
-		return
+	resultMap, isMap := result.(map[string]any)
+	if !isMap {
+		t.Fatalf("expected map result, got %T", result)
 	}
-
-	if !output.Success {
-		t.Errorf("expected success, got error: %s", output.Error)
+	if resultMap["success"] != true {
+		t.Errorf("expected success=true, got %v (error: %v)", resultMap["success"], resultMap["error"])
 	}
-	if output.CommitHash == "" {
-		t.Error("expected non-empty commit hash")
+	if resultMap["commit_hash"] == "" || resultMap["commit_hash"] == nil {
+		t.Error("expected non-empty commit_hash")
 	}
-	if output.Message != "Initial commit" {
-		t.Errorf("message = %q, want %q", output.Message, "Initial commit")
+	if mock.lastSessionID != "test-session" {
+		t.Errorf("expected session_id to be passed to backend, got %s", mock.lastSessionID)
 	}
 }
 
@@ -559,12 +674,6 @@ func TestToolFactory_CreateOpenTool_ManagedWorkspace(t *testing.T) {
 		if output["workspace_path"] == "" || output["workspace_path"] == nil {
 			t.Error("expected non-empty workspace_path")
 		}
-
-		wsPath := output["workspace_path"].(string)
-		gitDir := filepath.Join(wsPath, ".git")
-		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-			t.Error("expected .git directory in managed workspace")
-		}
 	})
 
 	t.Run("uses_workflow_scope", func(t *testing.T) {
@@ -626,16 +735,21 @@ func TestToolFactory_CreateOpenTool_NoWorkspaceManager(t *testing.T) {
 	factory := NewToolFactory(mock)
 	tool := factory.CreateOpenTool()
 
-	t.Run("requires_path_without_workspace_manager", func(t *testing.T) {
+	t.Run("backend_creates_workspace_automatically", func(t *testing.T) {
 		toolCtx := &ai.ToolContext{Context: context.Background()}
 		input := map[string]any{}
 
-		_, err := tool.RunRaw(toolCtx, input)
-		if err == nil {
-			t.Error("expected error when workspace_path omitted and no WorkspaceManager")
+		result, err := tool.RunRaw(toolCtx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-		if !errors.Is(err, nil) && err.Error() != "coding_open: workspace_path is required (no WorkspaceManager configured)" {
-			t.Logf("got expected error type: %v", err)
+
+		output := result.(map[string]any)
+		if output["managed"] == true {
+			t.Error("expected managed=false when no WorkspaceManager")
+		}
+		if output["session_id"] == "" || output["session_id"] == nil {
+			t.Error("expected non-empty session_id")
 		}
 	})
 }

@@ -1,15 +1,10 @@
 package coding
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/firebase/genkit/go/ai"
@@ -139,6 +134,8 @@ func (f *ToolFactory) CreateCodeTool() ai.Tool {
 
 type CodingOpenInput struct {
 	WorkspacePath string `json:"workspace_path,omitempty"`
+	RepoURL       string `json:"repo_url,omitempty"`
+	Branch        string `json:"branch,omitempty"`
 	Title         string `json:"title,omitempty"`
 	Scope         string `json:"scope,omitempty"`
 	ScopeID       string `json:"scope_id,omitempty"`
@@ -148,6 +145,7 @@ type CodingOpenOutput struct {
 	SessionID     string `json:"session_id"`
 	WorkspacePath string `json:"workspace_path"`
 	WorkspaceID   string `json:"workspace_id,omitempty"`
+	RepoCloned    bool   `json:"repo_cloned,omitempty"`
 	Managed       bool   `json:"managed"`
 }
 
@@ -155,9 +153,17 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"repo_url": map[string]any{
+				"type":        "string",
+				"description": "Git repository URL to clone (e.g., https://github.com/org/repo.git). The backend will clone this repo.",
+			},
+			"branch": map[string]any{
+				"type":        "string",
+				"description": "Git branch to checkout after cloning (optional, defaults to default branch)",
+			},
 			"workspace_path": map[string]any{
 				"type":        "string",
-				"description": "Path to workspace. If omitted and WorkspaceManager is configured, a managed workspace is created automatically.",
+				"description": "Explicit workspace path. Usually not needed - the backend creates workspaces automatically.",
 			},
 			"title": map[string]any{
 				"type":        "string",
@@ -182,6 +188,8 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 			return nil, fmt.Errorf("coding_open: expected map input")
 		}
 
+		repoURL, _ := inputMap["repo_url"].(string)
+		branch, _ := inputMap["branch"].(string)
 		workspacePath, _ := inputMap["workspace_path"].(string)
 		title, _ := inputMap["title"].(string)
 		scopeStr, _ := inputMap["scope"].(string)
@@ -189,12 +197,9 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 
 		var workspaceID string
 		managed := false
+		var gitCreds *GitCredentials
 
-		if workspacePath == "" {
-			if f.workspaceManager == nil {
-				return nil, fmt.Errorf("coding_open: workspace_path is required (no WorkspaceManager configured)")
-			}
-
+		if workspacePath == "" && f.workspaceManager != nil {
 			scope := ScopeAgent
 			if scopeStr == "workflow" {
 				scope = ScopeWorkflow
@@ -209,16 +214,21 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 				return nil, fmt.Errorf("coding_open: create workspace: %w", err)
 			}
 
-			if err := f.workspaceManager.InitGit(toolCtx.Context, ws); err != nil {
-				return nil, fmt.Errorf("coding_open: init git: %w", err)
-			}
-
 			workspacePath = ws.Path
 			workspaceID = ws.ID
 			managed = true
+			gitCreds = f.workspaceManager.GetGitCredentials()
 		}
 
-		session, err := f.backend.CreateSession(toolCtx.Context, workspacePath, title)
+		opts := SessionOptions{
+			WorkspacePath:  workspacePath,
+			Title:          title,
+			RepoURL:        repoURL,
+			Branch:         branch,
+			GitCredentials: gitCreds,
+		}
+
+		session, err := f.backend.CreateSession(toolCtx.Context, opts)
 		if err != nil {
 			return nil, fmt.Errorf("coding_open: %w", err)
 		}
@@ -227,13 +237,14 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 			SessionID:     session.ID,
 			WorkspacePath: session.WorkspacePath,
 			WorkspaceID:   workspaceID,
+			RepoCloned:    repoURL != "",
 			Managed:       managed,
 		}, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"coding_open",
-		"Open a coding session. Provide workspace_path for existing repos, or omit for auto-managed workspace.",
+		"Open a coding session. Provide repo_url to clone a repository, or workspace_path for existing local repos.",
 		schema,
 		toolFunc,
 	)
@@ -366,69 +377,17 @@ func (f *ToolFactory) CreateCommitTool() ai.Tool {
 			return nil, fmt.Errorf("coding_commit: message is required")
 		}
 
-		session, err := f.backend.GetSession(toolCtx.Context, sessionID)
+		result, err := f.backend.GitCommit(toolCtx.Context, sessionID, message, addAll)
 		if err != nil {
 			return nil, fmt.Errorf("coding_commit: %w", err)
 		}
-
-		workDir := session.WorkspacePath
-		if !filepath.IsAbs(workDir) {
-			return nil, fmt.Errorf("coding_commit: workspace path must be absolute: %s", workDir)
-		}
-
-		if addAll {
-			addCmd := exec.CommandContext(toolCtx.Context, "git", "add", "-A")
-			addCmd.Dir = workDir
-			if out, err := addCmd.CombinedOutput(); err != nil {
-				return GitCommitResult{
-					Success: false,
-					Message: message,
-					Error:   fmt.Sprintf("git add failed: %s: %s", err, string(out)),
-				}, nil
-			}
-		}
-
-		var stdout, stderr bytes.Buffer
-		commitCmd := exec.CommandContext(toolCtx.Context, "git", "commit", "-m", message)
-		commitCmd.Dir = workDir
-		commitCmd.Stdout = &stdout
-		commitCmd.Stderr = &stderr
-
-		if err := commitCmd.Run(); err != nil {
-			combined := strings.TrimSpace(stdout.String() + stderr.String())
-			if strings.Contains(combined, "nothing to commit") {
-				return GitCommitResult{
-					Success: true,
-					Message: message,
-					Error:   "nothing to commit, working tree clean",
-				}, nil
-			}
-			return GitCommitResult{
-				Success: false,
-				Message: message,
-				Error:   fmt.Sprintf("git commit failed: %s: %s", err, combined),
-			}, nil
-		}
-
-		result := GitCommitResult{
-			Success: true,
-			Message: message,
-		}
-
-		hashCmd := exec.CommandContext(toolCtx.Context, "git", "rev-parse", "HEAD")
-		hashCmd.Dir = workDir
-		if hashOut, err := hashCmd.Output(); err == nil {
-			result.CommitHash = strings.TrimSpace(string(hashOut))
-		}
-
-		result.FilesChanged, result.Insertions, result.Deletions = parseGitCommitStats(stdout.String())
 
 		return result, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"coding_commit",
-		"Commit changes in the coding session workspace. Stages all changes by default.",
+		"Commit changes in the coding session workspace. The backend executes git commands.",
 		schema,
 		toolFunc,
 	)
@@ -495,89 +454,17 @@ func (f *ToolFactory) CreatePushTool() ai.Tool {
 			return nil, fmt.Errorf("coding_push: session_id is required")
 		}
 
-		session, err := f.backend.GetSession(toolCtx.Context, sessionID)
+		result, err := f.backend.GitPush(toolCtx.Context, sessionID, remote, branch, setUpstream)
 		if err != nil {
 			return nil, fmt.Errorf("coding_push: %w", err)
 		}
 
-		workDir := session.WorkspacePath
-		if !filepath.IsAbs(workDir) {
-			return nil, fmt.Errorf("coding_push: workspace path must be absolute: %s", workDir)
-		}
-
-		if remote == "" {
-			remote = "origin"
-		}
-
-		if branch == "" {
-			branchCmd := exec.CommandContext(toolCtx.Context, "git", "rev-parse", "--abbrev-ref", "HEAD")
-			branchCmd.Dir = workDir
-			if out, err := branchCmd.Output(); err == nil {
-				branch = strings.TrimSpace(string(out))
-			} else {
-				branch = "HEAD"
-			}
-		}
-
-		args := []string{"push"}
-		if setUpstream {
-			args = append(args, "-u")
-		}
-		args = append(args, remote, branch)
-
-		pushTimeout := 2 * time.Minute
-		if f.workspaceManager != nil {
-			pushTimeout = f.workspaceManager.GetPushTimeout()
-		}
-		pushCtx, cancel := context.WithTimeout(toolCtx.Context, pushTimeout)
-		defer cancel()
-
-		var stdout, stderr bytes.Buffer
-		pushCmd := exec.CommandContext(pushCtx, "git", args...)
-		pushCmd.Dir = workDir
-		pushCmd.Stdout = &stdout
-		pushCmd.Stderr = &stderr
-
-		if f.workspaceManager != nil && f.workspaceManager.GetGitCredentials() != nil {
-			creds := f.workspaceManager.GetGitCredentials()
-			if creds.HasToken() {
-				askpassScript, cleanup, err := createGitAskpassScript(creds.Token)
-				if err == nil {
-					defer cleanup()
-					pushCmd.Env = append(os.Environ(), "GIT_ASKPASS="+askpassScript, "GIT_TERMINAL_PROMPT=0")
-				}
-			}
-		}
-
-		if err := pushCmd.Run(); err != nil {
-			if pushCtx.Err() == context.DeadlineExceeded {
-				return GitPushResult{
-					Success: false,
-					Remote:  remote,
-					Branch:  branch,
-					Error:   fmt.Sprintf("git push timed out after %v", pushTimeout),
-				}, nil
-			}
-			combined := RedactString(strings.TrimSpace(stdout.String() + stderr.String()))
-			return GitPushResult{
-				Success: false,
-				Remote:  remote,
-				Branch:  branch,
-				Error:   fmt.Sprintf("git push failed: %s: %s", err, combined),
-			}, nil
-		}
-
-		return GitPushResult{
-			Success: true,
-			Remote:  remote,
-			Branch:  branch,
-			Message: strings.TrimSpace(stderr.String()),
-		}, nil
+		return result, nil
 	}
 
 	return ai.NewToolWithInputSchema(
 		"coding_push",
-		"Push commits to the remote repository.",
+		"Push commits to the remote repository. The backend executes git push.",
 		schema,
 		toolFunc,
 	)

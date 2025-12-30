@@ -29,7 +29,10 @@ func TestOpenCodeBackend_CreateAndGetSession(t *testing.T) {
 
 	backend := NewOpenCodeBackend(cfg)
 
-	session, err := backend.CreateSession(context.Background(), "/workspaces/test", "test")
+	session, err := backend.CreateSession(context.Background(), SessionOptions{
+		WorkspacePath: "/workspaces/test",
+		Title:         "test",
+	})
 	if err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
@@ -73,7 +76,7 @@ func TestOpenCodeBackend_CloseSession(t *testing.T) {
 	}
 	backend := NewOpenCodeBackend(cfg)
 
-	session, _ := backend.CreateSession(context.Background(), "/ws", "test")
+	session, _ := backend.CreateSession(context.Background(), SessionOptions{WorkspacePath: "/ws", Title: "test"})
 
 	err := backend.CloseSession(context.Background(), session.ID)
 	if err != nil {
@@ -115,7 +118,7 @@ func TestOpenCodeBackend_Execute(t *testing.T) {
 	}
 	backend := NewOpenCodeBackend(cfg)
 
-	session, _ := backend.CreateSession(context.Background(), "/ws", "test")
+	session, _ := backend.CreateSession(context.Background(), SessionOptions{WorkspacePath: "/ws", Title: "test"})
 
 	result, err := backend.Execute(context.Background(), session.ID, Task{
 		Instruction: "Fix the null pointer exception",
@@ -155,7 +158,7 @@ func TestOpenCodeBackend_Execute_Timeout(t *testing.T) {
 	backend := NewOpenCodeBackend(cfg)
 	backend.taskTimeout = 100 * time.Millisecond
 
-	session, _ := backend.CreateSession(context.Background(), "/ws", "test")
+	session, _ := backend.CreateSession(context.Background(), SessionOptions{WorkspacePath: "/ws", Title: "test"})
 
 	result, err := backend.Execute(context.Background(), session.ID, Task{
 		Instruction: "Do something slow",

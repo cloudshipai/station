@@ -3,6 +3,7 @@ package coding
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,8 +47,13 @@ func (b *OpenCodeBackend) Ping(ctx context.Context) error {
 	return b.client.Health(ctx)
 }
 
-func (b *OpenCodeBackend) CreateSession(ctx context.Context, workspacePath, title string) (*Session, error) {
-	backendID, err := b.client.CreateSession(ctx, workspacePath, title)
+func (b *OpenCodeBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
+	workspacePath := opts.WorkspacePath
+	if workspacePath == "" {
+		workspacePath = fmt.Sprintf("/tmp/opencode-workspace-%d", time.Now().UnixNano())
+	}
+
+	backendID, err := b.client.CreateSession(ctx, workspacePath, opts.Title)
 	if err != nil {
 		return nil, &Error{Op: "CreateSession", Err: err}
 	}
@@ -56,9 +62,26 @@ func (b *OpenCodeBackend) CreateSession(ctx context.Context, workspacePath, titl
 		ID:               fmt.Sprintf("coding_%d", time.Now().UnixNano()),
 		BackendSessionID: backendID,
 		WorkspacePath:    workspacePath,
-		Title:            title,
+		Title:            opts.Title,
 		CreatedAt:        time.Now(),
 		LastUsedAt:       time.Now(),
+		Metadata:         make(map[string]string),
+	}
+
+	if opts.RepoURL != "" {
+		session.Metadata["repo_url"] = opts.RepoURL
+		if opts.Branch != "" {
+			session.Metadata["branch"] = opts.Branch
+		}
+
+		cloneTask := b.buildCloneTask(opts.RepoURL, opts.Branch, opts.GitCredentials)
+		result, err := b.executeInternal(ctx, session, Task{Instruction: cloneTask})
+		if err != nil {
+			return nil, &Error{Op: "CreateSession", Err: fmt.Errorf("clone repo: %w", err)}
+		}
+		if !result.Success {
+			return nil, &Error{Op: "CreateSession", Err: fmt.Errorf("clone repo failed: %s", result.Error)}
+		}
 	}
 
 	b.mu.Lock()
@@ -66,6 +89,18 @@ func (b *OpenCodeBackend) CreateSession(ctx context.Context, workspacePath, titl
 	b.mu.Unlock()
 
 	return session, nil
+}
+
+func (b *OpenCodeBackend) buildCloneTask(repoURL, branch string, creds *GitCredentials) string {
+	url := repoURL
+	if creds != nil && creds.HasToken() {
+		url = creds.InjectCredentials(repoURL)
+	}
+
+	if branch != "" {
+		return fmt.Sprintf("Clone the git repository: git clone --branch %s %s . && git status", branch, url)
+	}
+	return fmt.Sprintf("Clone the git repository: git clone %s . && git status", url)
 }
 
 func (b *OpenCodeBackend) GetSession(ctx context.Context, sessionID string) (*Session, error) {
@@ -97,7 +132,10 @@ func (b *OpenCodeBackend) Execute(ctx context.Context, sessionID string, task Ta
 	if err != nil {
 		return nil, err
 	}
+	return b.executeInternal(ctx, session, task)
+}
 
+func (b *OpenCodeBackend) executeInternal(ctx context.Context, session *Session, task Task) (*Result, error) {
 	b.mu.Lock()
 	session.LastUsedAt = time.Now()
 	b.mu.Unlock()
@@ -142,7 +180,7 @@ func (b *OpenCodeBackend) Execute(ctx context.Context, sessionID string, task Ta
 				},
 			}, nil
 		}
-		return nil, &Error{Op: "Execute", Session: sessionID, Err: err}
+		return nil, &Error{Op: "Execute", Session: session.ID, Err: err}
 	}
 
 	span.SetAttributes(
@@ -188,6 +226,130 @@ func (b *OpenCodeBackend) Execute(ctx context.Context, sessionID string, task Ta
 			FinishReason: resp.FinishReason,
 		},
 	}, nil
+}
+
+func (b *OpenCodeBackend) GitCommit(ctx context.Context, sessionID string, message string, addAll bool) (*GitCommitResult, error) {
+	session, err := b.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var task string
+	if addAll {
+		task = fmt.Sprintf(`Run git commands to commit changes:
+1. git add -A
+2. git commit -m "%s"
+3. git rev-parse HEAD (to get commit hash)
+4. Report: commit hash, files changed, insertions, deletions`, message)
+	} else {
+		task = fmt.Sprintf(`Run git commands to commit staged changes:
+1. git commit -m "%s"
+2. git rev-parse HEAD (to get commit hash)
+3. Report: commit hash, files changed, insertions, deletions`, message)
+	}
+
+	result, err := b.executeInternal(ctx, session, Task{Instruction: task})
+	if err != nil {
+		return nil, err
+	}
+
+	commitResult := &GitCommitResult{
+		Success: result.Success,
+		Message: message,
+	}
+
+	if !result.Success {
+		commitResult.Error = result.Error
+		if commitResult.Error == "" {
+			commitResult.Error = result.Summary
+		}
+		return commitResult, nil
+	}
+
+	commitResult.CommitHash, commitResult.FilesChanged, commitResult.Insertions, commitResult.Deletions =
+		parseGitOutputFromSummary(result.Summary)
+
+	return commitResult, nil
+}
+
+func (b *OpenCodeBackend) GitPush(ctx context.Context, sessionID string, remote, branch string, setUpstream bool) (*GitPushResult, error) {
+	session, err := b.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if remote == "" {
+		remote = "origin"
+	}
+
+	var task string
+	if branch == "" {
+		if setUpstream {
+			task = fmt.Sprintf("Run: git push -u %s HEAD", remote)
+		} else {
+			task = fmt.Sprintf("Run: git push %s HEAD", remote)
+		}
+	} else {
+		if setUpstream {
+			task = fmt.Sprintf("Run: git push -u %s %s", remote, branch)
+		} else {
+			task = fmt.Sprintf("Run: git push %s %s", remote, branch)
+		}
+	}
+
+	result, err := b.executeInternal(ctx, session, Task{Instruction: task})
+	if err != nil {
+		return nil, err
+	}
+
+	pushResult := &GitPushResult{
+		Remote:  remote,
+		Branch:  branch,
+		Success: result.Success,
+	}
+
+	if !result.Success {
+		pushResult.Error = result.Error
+		if pushResult.Error == "" {
+			pushResult.Error = result.Summary
+		}
+	} else {
+		pushResult.Message = result.Summary
+	}
+
+	return pushResult, nil
+}
+
+func parseGitOutputFromSummary(summary string) (hash string, files, insertions, deletions int) {
+	lines := strings.Split(summary, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		if strings.HasPrefix(line, "Commit hash:") || strings.HasPrefix(line, "commit hash:") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				hash = strings.TrimSpace(parts[1])
+			}
+		}
+
+		if len(line) == 40 && isHexString(line) {
+			hash = line
+		}
+
+		if strings.Contains(line, "file") && strings.Contains(line, "changed") {
+			files, insertions, deletions = parseGitCommitStats(line)
+		}
+	}
+	return
+}
+
+func isHexString(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (b *OpenCodeBackend) buildPrompt(task Task, workspacePath string) string {
