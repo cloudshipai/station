@@ -121,10 +121,12 @@ type SandboxConfig struct {
 }
 
 type CodingConfig struct {
-	Backend        string               `yaml:"backend"`
-	OpenCode       CodingOpenCodeConfig `yaml:"opencode"`
-	MaxAttempts    int                  `yaml:"max_attempts"`
-	TaskTimeoutMin int                  `yaml:"task_timeout_min"`
+	Backend           string               `yaml:"backend"`
+	OpenCode          CodingOpenCodeConfig `yaml:"opencode"`
+	MaxAttempts       int                  `yaml:"max_attempts"`
+	TaskTimeoutMin    int                  `yaml:"task_timeout_min"`
+	WorkspaceBasePath string               `yaml:"workspace_base_path"`
+	CleanupPolicy     string               `yaml:"cleanup_policy"`
 }
 
 type CodingOpenCodeConfig struct {

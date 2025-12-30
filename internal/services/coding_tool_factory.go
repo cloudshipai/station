@@ -1,6 +1,9 @@
 package services
 
 import (
+	"os"
+	"path/filepath"
+
 	"station/internal/coding"
 	"station/internal/config"
 	"station/internal/logging"
@@ -10,8 +13,9 @@ import (
 )
 
 type CodingToolFactory struct {
-	backend coding.Backend
-	enabled bool
+	backend          coding.Backend
+	workspaceManager *coding.WorkspaceManager
+	enabled          bool
 }
 
 func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
@@ -22,11 +26,29 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 
 	backend := coding.NewOpenCodeBackend(cfg)
 
-	logging.Info("Coding tool factory initialized with OpenCode backend (URL: %s)", cfg.OpenCode.URL)
+	basePath := cfg.WorkspaceBasePath
+	if basePath == "" {
+		basePath = filepath.Join(os.TempDir(), "station-coding")
+	}
+
+	cleanupPolicy := coding.CleanupOnSessionEnd
+	if cfg.CleanupPolicy == "on_success" {
+		cleanupPolicy = coding.CleanupOnSuccess
+	} else if cfg.CleanupPolicy == "manual" {
+		cleanupPolicy = coding.CleanupManual
+	}
+
+	workspaceManager := coding.NewWorkspaceManager(
+		coding.WithBasePath(basePath),
+		coding.WithCleanupPolicy(cleanupPolicy),
+	)
+
+	logging.Info("Coding tool factory initialized with OpenCode backend (URL: %s, workspace: %s)", cfg.OpenCode.URL, basePath)
 
 	return &CodingToolFactory{
-		backend: backend,
-		enabled: true,
+		backend:          backend,
+		workspaceManager: workspaceManager,
+		enabled:          true,
 	}
 }
 
@@ -46,8 +68,12 @@ func (f *CodingToolFactory) GetCodingTools(codingCfg *dotprompt.CodingConfig) []
 		return nil
 	}
 
-	toolFactory := coding.NewToolFactory(f.backend)
+	toolFactory := coding.NewToolFactory(f.backend, coding.WithWorkspaceManager(f.workspaceManager))
 	return toolFactory.CreateAllTools()
+}
+
+func (f *CodingToolFactory) GetWorkspaceManager() *coding.WorkspaceManager {
+	return f.workspaceManager
 }
 
 func (f *CodingToolFactory) GetBackend() coding.Backend {
