@@ -13,6 +13,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/db"
+	"station/internal/genkit/anthropic_oauth"
 	"station/pkg/faker/session"
 	"station/pkg/faker/toolcache"
 
@@ -219,6 +220,42 @@ func NewMCPFaker(targetCmd string, targetArgs []string, targetEnv map[string]str
 			plugin := &googlegenai.GoogleAI{}
 			app = genkit.Init(ctx, genkit.WithPlugins(plugin))
 
+		case "anthropic":
+			if stationConfig.AIAuthType == "oauth" && stationConfig.AIOAuthToken != "" {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Using Anthropic OAuth plugin\n")
+				}
+				oauthPlugin := &anthropic_oauth.AnthropicOAuth{
+					OAuthToken: stationConfig.AIOAuthToken,
+				}
+				app = genkit.Init(ctx, genkit.WithPlugins(oauthPlugin))
+			} else if stationConfig.AIAPIKey != "" {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] Using Anthropic API key\n")
+				}
+				oauthPlugin := &anthropic_oauth.AnthropicOAuth{
+					APIKey: stationConfig.AIAPIKey,
+				}
+				app = genkit.Init(ctx, genkit.WithPlugins(oauthPlugin))
+			} else {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[FAKER] No Anthropic credentials, falling back to OpenAI\n")
+				}
+				openaiKey := os.Getenv("OPENAI_API_KEY")
+				if openaiKey == "" {
+					return nil, fmt.Errorf("faker requires OPENAI_API_KEY when Anthropic has no credentials")
+				}
+				httpClient := &http.Client{Timeout: 60 * time.Second}
+				plugin := &openai.OpenAI{
+					APIKey: openaiKey,
+					Opts:   []option.RequestOption{option.WithHTTPClient(httpClient)},
+				}
+				app = genkit.Init(ctx, genkit.WithPlugins(plugin))
+				stationConfig.AIProvider = "openai"
+				stationConfig.AIModel = "gpt-4o-mini"
+				stationConfig.AIAPIKey = openaiKey
+			}
+
 		default:
 			return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini)", stationConfig.AIProvider)
 		}
@@ -410,6 +447,42 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 	case "googlegenai", "gemini":
 		plugin := &googlegenai.GoogleAI{}
 		app = genkit.Init(ctx, genkit.WithPlugins(plugin))
+
+	case "anthropic":
+		if stationConfig.AIAuthType == "oauth" && stationConfig.AIOAuthToken != "" {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Using Anthropic OAuth plugin\n")
+			}
+			oauthPlugin := &anthropic_oauth.AnthropicOAuth{
+				OAuthToken: stationConfig.AIOAuthToken,
+			}
+			app = genkit.Init(ctx, genkit.WithPlugins(oauthPlugin))
+		} else if stationConfig.AIAPIKey != "" {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] Using Anthropic API key\n")
+			}
+			oauthPlugin := &anthropic_oauth.AnthropicOAuth{
+				APIKey: stationConfig.AIAPIKey,
+			}
+			app = genkit.Init(ctx, genkit.WithPlugins(oauthPlugin))
+		} else {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[FAKER] No Anthropic credentials, falling back to OpenAI\n")
+			}
+			openaiKey := os.Getenv("OPENAI_API_KEY")
+			if openaiKey == "" {
+				return nil, fmt.Errorf("faker requires OPENAI_API_KEY when Anthropic has no credentials")
+			}
+			httpClient := &http.Client{Timeout: 120 * time.Second}
+			plugin := &openai.OpenAI{
+				APIKey: openaiKey,
+				Opts:   []option.RequestOption{option.WithHTTPClient(httpClient)},
+			}
+			app = genkit.Init(ctx, genkit.WithPlugins(plugin))
+			stationConfig.AIProvider = "openai"
+			stationConfig.AIModel = "gpt-4o-mini"
+			stationConfig.AIAPIKey = openaiKey
+		}
 
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s (use 'openai' or 'gemini')", stationConfig.AIProvider)

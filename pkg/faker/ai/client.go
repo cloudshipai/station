@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"station/internal/config"
+	"station/internal/genkit/anthropic_oauth"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -49,12 +51,32 @@ func NewClient(cfg *config.Config, debug bool) (Client, error) {
 	}
 
 	// Initialize GenKit based on provider
+	// NOTE: Faker only supports OpenAI and Gemini for AI generation.
+	// If Anthropic is configured, we fallback to OpenAI (using OPENAI_API_KEY from env).
+	// This is needed because the faker module runs as a subprocess (MCP server)
+	// and inherits the parent's AI provider config, but doesn't implement Anthropic.
 	var app *genkit.Genkit
-	switch strings.ToLower(cfg.AIProvider) {
+	effectiveProvider := strings.ToLower(cfg.AIProvider)
+	switch effectiveProvider {
 	case "openai":
 		app = initializeOpenAI(ctx, cfg, debug)
 	case "googlegenai", "gemini":
 		app = initializeGoogleAI(ctx, cfg, debug)
+	case "anthropic":
+		app = initializeAnthropic(ctx, cfg, debug)
+		if app == nil {
+			if debug {
+				fmt.Printf("[FAKER AI] No Anthropic credentials, falling back to OpenAI\n")
+			}
+			openaiKey := os.Getenv("OPENAI_API_KEY")
+			if openaiKey == "" {
+				return nil, fmt.Errorf("faker requires OPENAI_API_KEY when Anthropic has no credentials")
+			}
+			cfg.AIProvider = "openai"
+			cfg.AIModel = "gpt-4o-mini"
+			cfg.AIAPIKey = openaiKey
+			app = initializeOpenAI(ctx, cfg, debug)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini)", cfg.AIProvider)
 	}
@@ -93,9 +115,30 @@ func initializeOpenAI(ctx context.Context, cfg *config.Config, debug bool) *genk
 
 // initializeGoogleAI sets up GenKit with Google AI plugin
 func initializeGoogleAI(ctx context.Context, cfg *config.Config, debug bool) *genkit.Genkit {
-	// Use environment variable for API key
 	plugin := &googlegenai.GoogleAI{}
 	return genkit.Init(ctx, genkit.WithPlugins(plugin))
+}
+
+// initializeAnthropic sets up GenKit with Anthropic OAuth plugin
+func initializeAnthropic(ctx context.Context, cfg *config.Config, debug bool) *genkit.Genkit {
+	if cfg.AIAuthType == "oauth" && cfg.AIOAuthToken != "" {
+		if debug {
+			fmt.Printf("[FAKER AI] Using Anthropic OAuth plugin\n")
+		}
+		plugin := &anthropic_oauth.AnthropicOAuth{
+			OAuthToken: cfg.AIOAuthToken,
+		}
+		return genkit.Init(ctx, genkit.WithPlugins(plugin))
+	} else if cfg.AIAPIKey != "" {
+		if debug {
+			fmt.Printf("[FAKER AI] Using Anthropic API key\n")
+		}
+		plugin := &anthropic_oauth.AnthropicOAuth{
+			APIKey: cfg.AIAPIKey,
+		}
+		return genkit.Init(ctx, genkit.WithPlugins(plugin))
+	}
+	return nil
 }
 
 // Generate generates a text response from a prompt

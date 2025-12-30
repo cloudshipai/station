@@ -240,8 +240,10 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 
 	// Create MCP client based on config type
 	var mcpClient *mcp.GenkitMCPClient
+	logging.Info("[MCP-DEBUG] About to create MCP client for server '%s'", serverName)
 	if serverConfig.URL != "" {
 		// HTTP-based MCP server
+		logging.Info("[MCP-DEBUG] Creating HTTP-based MCP client for '%s' with URL: %s", serverName, serverConfig.URL)
 		mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
 			Name:    "_",
 			Version: "1.0.0",
@@ -250,6 +252,7 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 				Timeout: 180 * time.Second, // 3 minutes for long-running tools like OpenCode
 			},
 		})
+		logging.Info("[MCP-DEBUG] HTTP MCP client creation completed for '%s', err=%v", serverName, err)
 	} else if serverConfig.Command != "" {
 		// Stdio-based MCP server
 		var envSlice []string
@@ -257,6 +260,7 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 			envSlice = append(envSlice, key+"="+value)
 		}
 
+		logging.Info("[MCP-DEBUG] Creating Stdio-based MCP client for '%s' with command: %s %v", serverName, serverConfig.Command, serverConfig.Args)
 		mcpClient, err = mcp.NewGenkitMCPClient(mcp.MCPClientOptions{
 			Name:    "_",
 			Version: "1.0.0",
@@ -266,6 +270,7 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 				Env:     envSlice,
 			},
 		})
+		logging.Info("[MCP-DEBUG] Stdio MCP client creation completed for '%s', err=%v", serverName, err)
 	} else {
 		return nil, nil, fmt.Errorf("invalid MCP server config for %s", serverName)
 	}
@@ -275,10 +280,12 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 	}
 
 	// Get tools with timeout
+	logging.Info("[MCP-DEBUG] About to call GetActiveTools for '%s' with genkitApp=%p", serverName, mcm.genkitApp)
 	toolCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	serverTools, err := mcpClient.GetActiveTools(toolCtx, mcm.genkitApp)
+	logging.Info("[MCP-DEBUG] GetActiveTools completed for '%s', got %d tools, err=%v", serverName, len(serverTools), err)
 	if err != nil {
 		logging.Error(" CRITICAL MCP ERROR: Failed to get tools from server '%s': %v", serverName, err)
 		span.RecordError(err)

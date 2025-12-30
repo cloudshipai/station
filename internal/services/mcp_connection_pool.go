@@ -138,10 +138,12 @@ func (mcm *MCPConnectionManager) startPooledServer(ctx context.Context, server s
 		return nil
 	}
 
-	logging.Info("Starting pooled MCP server: %s", server.key)
+	logging.Info("[MCP-POOL-DEBUG] Starting pooled MCP server: %s (name=%s)", server.key, server.name)
+	logging.Info("[MCP-POOL-DEBUG] About to call createServerClient...")
 
 	// Create server client (same logic as connectToMCPServer)
 	client, tools, err := mcm.createServerClient(ctx, server.name, server.config)
+	logging.Info("[MCP-POOL-DEBUG] createServerClient returned for %s: client=%p, tools=%d, err=%v", server.key, client, len(tools), err)
 	if err != nil {
 		span.RecordError(err)
 		span.SetAttributes(

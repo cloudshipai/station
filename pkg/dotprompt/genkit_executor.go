@@ -307,6 +307,17 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 		}, execError
 	}
 
+	// Guard against nil response (can happen if GenKit fails internally without error)
+	if resp == nil {
+		execError := fmt.Errorf("dotprompt.Execute() returned nil response without error")
+		return &ExecutionResponse{
+			Success:  false,
+			Response: "",
+			Duration: time.Since(startTime),
+			Error:    execError.Error(),
+		}, execError
+	}
+
 	finalResponse := resp.Text()
 
 	// Extract token usage

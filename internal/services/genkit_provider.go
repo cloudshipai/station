@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -135,6 +136,7 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 
 	// Initialize Genkit with the configured AI provider
 	logging.Info("Initializing GenKit with provider: %s, model: %s", cfg.AIProvider, cfg.AIModel)
+	logging.Info("[CONFIG DEBUG] AIAuthType='%s', AIOAuthToken length=%d", cfg.AIAuthType, len(cfg.AIOAuthToken))
 
 	// Disable telemetry by default to prevent "traces export" connection errors
 	// Only enable if explicitly requested via environment variable
@@ -204,9 +206,19 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 				OAuthToken: cfg.AIOAuthToken,
 			}
 
+			deadline, hasDeadline := ctx.Deadline()
+			logging.Info("[ANTHROPIC-OAUTH] About to call genkit.Init() with AnthropicOAuth plugin...")
+			logging.Info("[ANTHROPIC-OAUTH] Plugin Name() = %s", oauthPlugin.Name())
+			logging.Info("[ANTHROPIC-OAUTH] OAuth token length = %d", len(cfg.AIOAuthToken))
+			logging.Info("[ANTHROPIC-OAUTH] Context has deadline: %v, deadline: %v", hasDeadline, deadline)
+
 			genkitApp = genkit.Init(ctx,
 				genkit.WithPlugins(oauthPlugin),
 				genkit.WithPromptDir(promptDir))
+
+			logging.Info("[ANTHROPIC-OAUTH] genkit.Init() returned successfully!")
+			logging.Info("[ANTHROPIC-OAUTH] genkitApp is nil: %v", genkitApp == nil)
+			logging.Info("[ANTHROPIC-OAUTH] Goroutine count after init: %d", runtime.NumGoroutine())
 		} else {
 			logging.Debug("Using compat_oai Anthropic plugin (API key auth)")
 

@@ -15,6 +15,11 @@ func getTestOAuthToken(t *testing.T) string {
 	os.Setenv("STN_AI_PROVIDER", "anthropic")
 	defer os.Unsetenv("STN_AI_PROVIDER")
 
+	// Initialize viper to read from config file BEFORE calling Load()
+	if err := config.InitViper(""); err != nil {
+		t.Skipf("Cannot initialize viper: %v", err)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		t.Skipf("Cannot load config: %v", err)
@@ -33,6 +38,9 @@ func TestAnthropicOAuthMiddleware(t *testing.T) {
 	reqBody := map[string]interface{}{
 		"model":      "claude-sonnet-4-20250514",
 		"max_tokens": 100,
+		"system": []map[string]interface{}{
+			{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
+		},
 		"messages": []map[string]string{
 			{"role": "user", "content": "Say 'OAuth works!' and nothing else."},
 		},
@@ -51,7 +59,7 @@ func TestAnthropicOAuthMiddleware(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("anthropic-version", "2023-06-01")
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
+	req.Header.Set("anthropic-beta", "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -111,8 +119,9 @@ func TestMiddlewareFunction(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer "+token {
 			t.Error("Authorization header not set correctly")
 		}
-		if r.Header.Get("anthropic-beta") != "oauth-2025-04-20" {
-			t.Error("anthropic-beta header not set correctly")
+		expectedBeta := "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14"
+		if r.Header.Get("anthropic-beta") != expectedBeta {
+			t.Errorf("anthropic-beta header not set correctly, got: %s", r.Header.Get("anthropic-beta"))
 		}
 
 		return http.DefaultClient.Do(r)

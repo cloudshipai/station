@@ -68,9 +68,9 @@ func (g *Generator) Generate(ctx context.Context, req *ai.ModelRequest, cb func(
 
 	// Choose streaming or non-streaming based on callback
 	if cb != nil {
-		return g.generateStream(ctx, params, cb)
+		return g.generateStream(ctx, params, cb, req)
 	}
-	return g.generateComplete(ctx, params)
+	return g.generateComplete(ctx, params, req)
 }
 
 // buildParams converts GenKit ModelRequest to Anthropic MessageNewParams
@@ -250,17 +250,16 @@ func (g *Generator) applyConfig(params *anthropic.MessageNewParams, config inter
 }
 
 // generateComplete performs a non-streaming API call
-func (g *Generator) generateComplete(ctx context.Context, params anthropic.MessageNewParams) (*ai.ModelResponse, error) {
+func (g *Generator) generateComplete(ctx context.Context, params anthropic.MessageNewParams, originalReq *ai.ModelRequest) (*ai.ModelResponse, error) {
 	message, err := g.client.Messages.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic API error: %w", err)
 	}
-
-	return g.buildResponse(message), nil
+	return g.buildResponse(message, originalReq), nil
 }
 
 // generateStream performs a streaming API call
-func (g *Generator) generateStream(ctx context.Context, params anthropic.MessageNewParams, cb func(context.Context, *ai.ModelResponseChunk) error) (*ai.ModelResponse, error) {
+func (g *Generator) generateStream(ctx context.Context, params anthropic.MessageNewParams, cb func(context.Context, *ai.ModelResponseChunk) error, originalReq *ai.ModelRequest) (*ai.ModelResponse, error) {
 	stream := g.client.Messages.NewStreaming(ctx, params)
 
 	// Accumulate the full message
@@ -329,8 +328,7 @@ func (g *Generator) generateStream(ctx context.Context, params anthropic.Message
 		return nil, fmt.Errorf("stream error: %w", err)
 	}
 
-	// Build final response from accumulated message
-	return g.buildResponse(&fullMessage), nil
+	return g.buildResponse(&fullMessage, originalReq), nil
 }
 
 // toolCallAccumulator helps accumulate streamed tool calls
@@ -342,8 +340,9 @@ type toolCallAccumulator struct {
 }
 
 // buildResponse converts an Anthropic Message to GenKit ModelResponse
-func (g *Generator) buildResponse(msg *anthropic.Message) *ai.ModelResponse {
+func (g *Generator) buildResponse(msg *anthropic.Message, originalReq *ai.ModelRequest) *ai.ModelResponse {
 	resp := &ai.ModelResponse{
+		Request: originalReq, // Required for History() to work
 		Message: &ai.Message{
 			Role:    ai.RoleModel,
 			Content: make([]*ai.Part, 0),
