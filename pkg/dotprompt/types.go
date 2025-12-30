@@ -17,7 +17,21 @@ type DotpromptConfig struct {
 	Metadata     AgentMetadata          `yaml:"metadata"`
 	Station      ExecutionMetadata      `yaml:"station,omitempty"`
 	Sandbox      *SandboxConfig         `yaml:"sandbox,omitempty"`
+	Coding       *CodingConfig          `yaml:"coding,omitempty"`
 	CustomFields map[string]interface{} `yaml:",inline"`
+}
+
+// CodingConfig defines configuration for AI coding backend integration
+type CodingConfig struct {
+	// Enabled turns on coding tools for this agent
+	Enabled bool `yaml:"enabled,omitempty"`
+
+	// Backend selects the coding backend: "opencode" (default)
+	Backend string `yaml:"backend,omitempty"`
+
+	// WorkspacePath is the default workspace for coding sessions
+	// If not set, agent must provide it via coding_open tool
+	WorkspacePath string `yaml:"workspace_path,omitempty"`
 }
 
 type SandboxConfig struct {

@@ -69,6 +69,7 @@ type AgentExecutionEngine struct {
 	sandboxService           *SandboxService              // For sandbox execution (Dagger-based isolated compute)
 	unifiedSandboxFactory    *UnifiedSandboxFactory       // For creating sandbox tools (supports both compute and code modes)
 	sessionManager           *SessionManager              // For managing persistent code mode sandbox sessions
+	codingToolFactory        *CodingToolFactory           // For creating AI coding backend tools (OpenCode)
 }
 
 // NewAgentExecutionEngine creates a new agent execution engine
@@ -113,6 +114,15 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 	}
 	unifiedSandboxFactory := NewUnifiedSandboxFactory(sandboxService, sessionManager, codeModeConfig)
 
+	// Initialize coding tool factory for AI coding backend integration
+	var codingToolFactory *CodingToolFactory
+	if cfg := config.GetLoadedConfig(); cfg != nil && cfg.Coding.Backend != "" {
+		codingToolFactory = NewCodingToolFactory(cfg.Coding)
+		if codingToolFactory.IsEnabled() {
+			logging.Info("Coding tool factory initialized with %s backend", cfg.Coding.Backend)
+		}
+	}
+
 	return &AgentExecutionEngine{
 		repos:                    repos,
 		agentService:             agentService,
@@ -124,6 +134,7 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		sandboxService:           sandboxService,
 		unifiedSandboxFactory:    unifiedSandboxFactory,
 		sessionManager:           sessionManager,
+		codingToolFactory:        codingToolFactory,
 	}
 }
 
@@ -466,6 +477,20 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		} else {
 			logging.Info("Sandbox compute mode enabled for agent %s (runtime: %s)", agent.Name, sandboxConfig.Runtime)
 		}
+	}
+
+	codingConfig := aee.parseCodingConfigFromAgent(agent, environment.Name)
+	logging.Info("[CODING DEBUG] Agent %s: codingConfig=%+v, factory=%v", agent.Name, codingConfig, aee.codingToolFactory != nil)
+	if aee.codingToolFactory != nil && aee.codingToolFactory.ShouldAddTools(codingConfig) {
+		codingTools := aee.codingToolFactory.GetCodingTools(codingConfig)
+		for _, tool := range codingTools {
+			mcpTools = append(mcpTools, tool)
+		}
+		logging.Info("Coding tools enabled for agent %s (%d tools: coding_open, code, coding_close)", agent.Name, len(codingTools))
+	} else {
+		logging.Info("[CODING DEBUG] Coding tools NOT enabled for agent %s: factoryNil=%v, shouldAdd=%v",
+			agent.Name, aee.codingToolFactory == nil,
+			aee.codingToolFactory != nil && aee.codingToolFactory.ShouldAddTools(codingConfig))
 	}
 
 	ctx = WithParentRunID(ctx, runID)
@@ -1031,6 +1056,10 @@ type sandboxFrontmatter struct {
 	Sandbox *dotprompt.SandboxConfig `yaml:"sandbox"`
 }
 
+type codingFrontmatter struct {
+	Coding *dotprompt.CodingConfig `yaml:"coding"`
+}
+
 func (aee *AgentExecutionEngine) parseSandboxConfigFromAgent(agent *models.Agent, environmentName string) *dotprompt.SandboxConfig {
 	promptPath := config.GetAgentPromptPath(environmentName, agent.Name)
 
@@ -1057,4 +1086,32 @@ func (aee *AgentExecutionEngine) parseSandboxConfigFromAgent(agent *models.Agent
 	}
 
 	return fm.Sandbox
+}
+
+func (aee *AgentExecutionEngine) parseCodingConfigFromAgent(agent *models.Agent, environmentName string) *dotprompt.CodingConfig {
+	promptPath := config.GetAgentPromptPath(environmentName, agent.Name)
+
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		logging.Debug("Failed to read dotprompt file for coding config: %v", err)
+		return nil
+	}
+
+	parts := strings.Split(string(content), "---")
+	if len(parts) < 3 {
+		return nil
+	}
+
+	yamlContent := strings.TrimSpace(parts[1])
+	if yamlContent == "" {
+		return nil
+	}
+
+	var fm codingFrontmatter
+	if err := yaml.Unmarshal([]byte(yamlContent), &fm); err != nil {
+		logging.Debug("Failed to parse coding config from dotprompt: %v", err)
+		return nil
+	}
+
+	return fm.Coding
 }
