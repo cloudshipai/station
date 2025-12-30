@@ -411,15 +411,15 @@ coding:
     user_email: "bot@example.com" # Git commit author email
 ```
 
-**Test Results:** 58+ test functions passing in `internal/coding/`
+**Test Results:** 61+ test functions passing in `internal/coding/`
 
-**Remaining Phase 7 Tasks:**
+**Completed Production Hardening:**
 
-| Task | Description | Priority |
-|------|-------------|----------|
-| Configurable Timeouts | Add timeout settings for tasks, clone, push operations | Medium |
-| Error Recovery | Implement retry logic with exponential backoff | Medium |
-| Health Monitoring | Add health check for OpenCode connection | Low |
+| Task | Status | Implementation |
+|------|--------|----------------|
+| Configurable Timeouts | ✅ Complete | `CloneTimeoutSec`, `PushTimeoutSec` in CodingConfig with context-based timeouts |
+| Retry Logic | ✅ Complete | `doWithRetry` with exponential backoff (initial, max, multiplier) |
+| Health Monitoring | ✅ Complete | `CheckHealth()` method on CodingToolFactory with 10s timeout |
 
 ---
 

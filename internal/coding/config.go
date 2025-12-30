@@ -26,3 +26,17 @@ func OpenCodeURLFromConfig(cfg config.CodingConfig) string {
 	}
 	return cfg.OpenCode.URL
 }
+
+func CloneTimeoutFromConfig(cfg config.CodingConfig) time.Duration {
+	if cfg.CloneTimeoutSec <= 0 {
+		return 5 * time.Minute // default 5 minutes for clone operations
+	}
+	return time.Duration(cfg.CloneTimeoutSec) * time.Second
+}
+
+func PushTimeoutFromConfig(cfg config.CodingConfig) time.Duration {
+	if cfg.PushTimeoutSec <= 0 {
+		return 2 * time.Minute // default 2 minutes for push operations
+	}
+	return time.Duration(cfg.PushTimeoutSec) * time.Second
+}

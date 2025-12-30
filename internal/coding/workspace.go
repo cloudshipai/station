@@ -44,6 +44,8 @@ type WorkspaceManager struct {
 	basePath       string
 	cleanupPolicy  CleanupPolicy
 	gitCredentials *GitCredentials
+	cloneTimeout   time.Duration
+	pushTimeout    time.Duration
 	mu             sync.RWMutex
 	workspaces     map[string]*Workspace
 }
@@ -62,10 +64,20 @@ func WithGitCredentials(creds *GitCredentials) WorkspaceManagerOption {
 	return func(m *WorkspaceManager) { m.gitCredentials = creds }
 }
 
+func WithCloneTimeout(d time.Duration) WorkspaceManagerOption {
+	return func(m *WorkspaceManager) { m.cloneTimeout = d }
+}
+
+func WithPushTimeout(d time.Duration) WorkspaceManagerOption {
+	return func(m *WorkspaceManager) { m.pushTimeout = d }
+}
+
 func NewWorkspaceManager(opts ...WorkspaceManagerOption) *WorkspaceManager {
 	m := &WorkspaceManager{
 		basePath:      filepath.Join(os.TempDir(), "station-coding"),
 		cleanupPolicy: CleanupOnSessionEnd,
+		cloneTimeout:  5 * time.Minute,
+		pushTimeout:   2 * time.Minute,
 		workspaces:    make(map[string]*Workspace),
 	}
 	for _, opt := range opts {
@@ -318,13 +330,19 @@ func (m *WorkspaceManager) CloneRepo(ctx context.Context, ws *Workspace, repoURL
 	}
 	args = append(args, cloneURL, ".")
 
-	cloneCmd := exec.CommandContext(ctx, "git", args...)
+	cloneCtx, cancel := context.WithTimeout(ctx, m.cloneTimeout)
+	defer cancel()
+
+	cloneCmd := exec.CommandContext(cloneCtx, "git", args...)
 	cloneCmd.Dir = ws.Path
 
 	var stderr bytes.Buffer
 	cloneCmd.Stderr = &stderr
 
 	if err := cloneCmd.Run(); err != nil {
+		if cloneCtx.Err() == context.DeadlineExceeded {
+			return RedactError(fmt.Errorf("git clone %s: timed out after %v", repoURL, m.cloneTimeout))
+		}
 		return RedactError(fmt.Errorf("git clone %s: %s", repoURL, stderr.String()))
 	}
 
@@ -337,6 +355,10 @@ func (m *WorkspaceManager) CloneRepo(ctx context.Context, ws *Workspace, repoURL
 
 func (m *WorkspaceManager) GetGitCredentials() *GitCredentials {
 	return m.gitCredentials
+}
+
+func (m *WorkspaceManager) GetPushTimeout() time.Duration {
+	return m.pushTimeout
 }
 
 func (m *WorkspaceManager) GetCommitsSince(ctx context.Context, ws *Workspace, since string) ([]string, error) {

@@ -102,3 +102,69 @@ func TestOpenCodeURLFromConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestCloneTimeoutFromConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      config.CodingConfig
+		expected time.Duration
+	}{
+		{
+			name:     "zero uses default",
+			cfg:      config.CodingConfig{CloneTimeoutSec: 0},
+			expected: 5 * time.Minute,
+		},
+		{
+			name:     "negative uses default",
+			cfg:      config.CodingConfig{CloneTimeoutSec: -1},
+			expected: 5 * time.Minute,
+		},
+		{
+			name:     "positive value in seconds",
+			cfg:      config.CodingConfig{CloneTimeoutSec: 120},
+			expected: 120 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CloneTimeoutFromConfig(tt.cfg)
+			if got != tt.expected {
+				t.Errorf("CloneTimeoutFromConfig() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPushTimeoutFromConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      config.CodingConfig
+		expected time.Duration
+	}{
+		{
+			name:     "zero uses default",
+			cfg:      config.CodingConfig{PushTimeoutSec: 0},
+			expected: 2 * time.Minute,
+		},
+		{
+			name:     "negative uses default",
+			cfg:      config.CodingConfig{PushTimeoutSec: -1},
+			expected: 2 * time.Minute,
+		},
+		{
+			name:     "positive value in seconds",
+			cfg:      config.CodingConfig{PushTimeoutSec: 60},
+			expected: 60 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PushTimeoutFromConfig(tt.cfg)
+			if got != tt.expected {
+				t.Errorf("PushTimeoutFromConfig() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}

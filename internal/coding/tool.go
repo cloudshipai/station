@@ -2,6 +2,7 @@ package coding
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -524,8 +525,15 @@ func (f *ToolFactory) CreatePushTool() ai.Tool {
 		}
 		args = append(args, remote, branch)
 
+		pushTimeout := 2 * time.Minute
+		if f.workspaceManager != nil {
+			pushTimeout = f.workspaceManager.GetPushTimeout()
+		}
+		pushCtx, cancel := context.WithTimeout(toolCtx.Context, pushTimeout)
+		defer cancel()
+
 		var stdout, stderr bytes.Buffer
-		pushCmd := exec.CommandContext(toolCtx.Context, "git", args...)
+		pushCmd := exec.CommandContext(pushCtx, "git", args...)
 		pushCmd.Dir = workDir
 		pushCmd.Stdout = &stdout
 		pushCmd.Stderr = &stderr
@@ -542,6 +550,14 @@ func (f *ToolFactory) CreatePushTool() ai.Tool {
 		}
 
 		if err := pushCmd.Run(); err != nil {
+			if pushCtx.Err() == context.DeadlineExceeded {
+				return GitPushResult{
+					Success: false,
+					Remote:  remote,
+					Branch:  branch,
+					Error:   fmt.Sprintf("git push timed out after %v", pushTimeout),
+				}, nil
+			}
 			combined := RedactString(strings.TrimSpace(stdout.String() + stderr.String()))
 			return GitPushResult{
 				Success: false,

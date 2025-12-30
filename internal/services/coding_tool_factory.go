@@ -1,8 +1,10 @@
 package services
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"station/internal/coding"
 	"station/internal/config"
@@ -46,10 +48,15 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 		}
 	}
 
+	cloneTimeout := coding.CloneTimeoutFromConfig(cfg)
+	pushTimeout := coding.PushTimeoutFromConfig(cfg)
+
 	workspaceManager := coding.NewWorkspaceManager(
 		coding.WithBasePath(basePath),
 		coding.WithCleanupPolicy(cleanupPolicy),
 		coding.WithGitCredentials(gitCreds),
+		coding.WithCloneTimeout(cloneTimeout),
+		coding.WithPushTimeout(pushTimeout),
 	)
 
 	logging.Info("Coding tool factory initialized with OpenCode backend (URL: %s, workspace: %s)", cfg.OpenCode.URL, basePath)
@@ -87,4 +94,13 @@ func (f *CodingToolFactory) GetWorkspaceManager() *coding.WorkspaceManager {
 
 func (f *CodingToolFactory) GetBackend() coding.Backend {
 	return f.backend
+}
+
+func (f *CodingToolFactory) CheckHealth(ctx context.Context) error {
+	if !f.IsEnabled() {
+		return nil
+	}
+	healthCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return f.backend.Ping(healthCtx)
 }

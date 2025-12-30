@@ -125,6 +125,8 @@ type CodingConfig struct {
 	OpenCode          CodingOpenCodeConfig `yaml:"opencode"`
 	MaxAttempts       int                  `yaml:"max_attempts"`
 	TaskTimeoutMin    int                  `yaml:"task_timeout_min"`
+	CloneTimeoutSec   int                  `yaml:"clone_timeout_sec"`
+	PushTimeoutSec    int                  `yaml:"push_timeout_sec"`
 	WorkspaceBasePath string               `yaml:"workspace_base_path"`
 	CleanupPolicy     string               `yaml:"cleanup_policy"`
 	Git               CodingGitConfig      `yaml:"git"`
