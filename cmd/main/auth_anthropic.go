@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -18,6 +19,23 @@ import (
 	"github.com/spf13/viper"
 	"station/internal/config"
 )
+
+type AnthropicOAuthModel struct {
+	ID          string
+	Name        string
+	Description string
+	Default     bool
+}
+
+func GetAnthropicOAuthModels() []AnthropicOAuthModel {
+	return []AnthropicOAuthModel{
+		{ID: "claude-opus-4-5-20251101", Name: "Claude Opus 4.5", Description: "Most capable model - best for complex tasks", Default: true},
+		{ID: "claude-opus-4-20250514", Name: "Claude Opus 4", Description: "Previous Opus version"},
+		{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Description: "Balanced performance and speed"},
+		{ID: "claude-sonnet-4-20250514", Name: "Claude Sonnet 4", Description: "Fast and efficient"},
+		{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Description: "Fastest model - best for simple tasks"},
+	}
+}
 
 const anthropicClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 
@@ -91,7 +109,7 @@ func runAuthAnthropic(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to generate PKCE: %w", err)
 	}
 
-	authURL := buildAuthURL(mode, pkce.Challenge)
+	authURL := buildAuthURL(mode, pkce)
 
 	fmt.Println("Opening browser to authenticate with Anthropic...")
 	fmt.Println()
@@ -143,11 +161,66 @@ func runAuthAnthropic(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("   Station will automatically refresh tokens as needed.")
 	fmt.Println()
-	fmt.Println("To use Anthropic as your AI provider, ensure your config has:")
-	fmt.Println("   ai_provider: anthropic")
-	fmt.Println("   ai_model: claude-sonnet-4-20250514")
+
+	selectedModel := selectAnthropicModel(reader)
+
+	viper.Set("ai_provider", "anthropic")
+	viper.Set("ai_model", selectedModel)
+
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" {
+		configFile = config.GetConfigRoot() + "/config.yaml"
+	}
+
+	if err := viper.WriteConfigAs(configFile); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Printf("✅ Configuration saved!\n")
+	fmt.Printf("   ai_provider: anthropic\n")
+	fmt.Printf("   ai_model: %s\n", selectedModel)
+	fmt.Println()
+	fmt.Println("You can change models anytime with: stn model")
 
 	return nil
+}
+
+func selectAnthropicModel(reader *bufio.Reader) string {
+	models := GetAnthropicOAuthModels()
+
+	fmt.Println("Select a model for your Claude Max/Pro subscription:")
+	fmt.Println()
+
+	var defaultModel string
+	for i, model := range models {
+		marker := "  "
+		if model.Default {
+			marker = "* "
+			defaultModel = model.ID
+		}
+		fmt.Printf("%s[%d] %s\n", marker, i+1, model.Name)
+		fmt.Printf("      %s\n", model.Description)
+		fmt.Printf("      ID: %s\n", model.ID)
+		fmt.Println()
+	}
+
+	fmt.Printf("Enter number (1-%d) or press Enter for default [%s]: ", len(models), models[0].Name)
+
+	input, err := reader.ReadString('\n')
+	if err != nil || strings.TrimSpace(input) == "" {
+		return defaultModel
+	}
+
+	input = strings.TrimSpace(input)
+	choice := 0
+	_, err = fmt.Sscanf(input, "%d", &choice)
+	if err != nil || choice < 1 || choice > len(models) {
+		fmt.Printf("Invalid selection, using default: %s\n", defaultModel)
+		return defaultModel
+	}
+
+	return models[choice-1].ID
 }
 
 func runAuthAnthropicStatus(cmd *cobra.Command, args []string) error {
@@ -229,25 +302,28 @@ func generatePKCE() (*pkceParams, error) {
 	}, nil
 }
 
-func buildAuthURL(mode, challenge string) string {
+func buildAuthURL(mode string, pkce *pkceParams) string {
 	var host string
 	if mode == "console" {
 		host = "console.anthropic.com"
 	} else {
 		host = "claude.ai"
 	}
+	// Match OpenCode's scopes exactly - do NOT use user:sessions:claude_code
+	// as that restricts tokens to Claude Code app only
+	scope := "org:create_api_key user:profile user:inference"
 
-	params := []string{
-		"code=true",
-		"client_id=" + anthropicClientID,
-		"response_type=code",
-		"redirect_uri=https://console.anthropic.com/oauth/code/callback",
-		"scope=org:create_api_key user:profile user:inference",
-		"code_challenge=" + challenge,
-		"code_challenge_method=S256",
-	}
+	params := url.Values{}
+	params.Set("code", "true")
+	params.Set("client_id", anthropicClientID)
+	params.Set("response_type", "code")
+	params.Set("redirect_uri", "https://console.anthropic.com/oauth/code/callback")
+	params.Set("scope", scope)
+	params.Set("code_challenge", pkce.Challenge)
+	params.Set("code_challenge_method", "S256")
+	params.Set("state", pkce.Verifier)
 
-	return fmt.Sprintf("https://%s/oauth/authorize?%s", host, strings.Join(params, "&"))
+	return fmt.Sprintf("https://%s/oauth/authorize?%s", host, params.Encode())
 }
 
 type oauthTokens struct {
@@ -259,20 +335,18 @@ type oauthTokens struct {
 func exchangeCodeForTokens(codeInput, verifier string) (*oauthTokens, error) {
 	parts := strings.Split(codeInput, "#")
 	code := parts[0]
-	state := ""
+	state := verifier
 	if len(parts) > 1 {
 		state = parts[1]
 	}
 
 	reqBody := map[string]string{
 		"code":          code,
+		"state":         state,
 		"grant_type":    "authorization_code",
 		"client_id":     anthropicClientID,
 		"redirect_uri":  "https://console.anthropic.com/oauth/code/callback",
 		"code_verifier": verifier,
-	}
-	if state != "" {
-		reqBody["state"] = state
 	}
 
 	jsonBody, err := json.Marshal(reqBody)

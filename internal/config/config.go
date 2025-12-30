@@ -48,6 +48,8 @@ type Config struct {
 	Notifications NotificationsConfig
 	// Sandbox Configuration (isolated code execution)
 	Sandbox SandboxConfig
+	// Coding Configuration (AI coding backend)
+	Coding CodingConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
@@ -109,10 +111,25 @@ type NotificationsConfig struct {
 
 // SandboxConfig holds settings for sandbox code execution
 type SandboxConfig struct {
-	Enabled                bool `yaml:"enabled"`
-	CodeModeEnabled        bool `yaml:"code_mode_enabled"`
-	IdleTimeoutMinutes     int  `yaml:"idle_timeout_minutes"`
-	CleanupIntervalMinutes int  `yaml:"cleanup_interval_minutes"`
+	Enabled                bool   `yaml:"enabled"`
+	CodeModeEnabled        bool   `yaml:"code_mode_enabled"`
+	IdleTimeoutMinutes     int    `yaml:"idle_timeout_minutes"`
+	CleanupIntervalMinutes int    `yaml:"cleanup_interval_minutes"`
+	OpenCodeEnabled        bool   `yaml:"opencode_enabled"`
+	OpenCodeServerURL      string `yaml:"opencode_server_url"`
+	OpenCodeModel          string `yaml:"opencode_model"`
+}
+
+type CodingConfig struct {
+	Backend        string               `yaml:"backend"`
+	OpenCode       CodingOpenCodeConfig `yaml:"opencode"`
+	MaxAttempts    int                  `yaml:"max_attempts"`
+	TaskTimeoutMin int                  `yaml:"task_timeout_min"`
+}
+
+type CodingOpenCodeConfig struct {
+	URL   string `yaml:"url"`
+	Model string `yaml:"model"`
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -271,6 +288,13 @@ func bindEnvVars() {
 	viper.BindEnv("sandbox.idle_timeout_minutes", "STN_SANDBOX_IDLE_TIMEOUT_MINUTES")
 	viper.BindEnv("sandbox.cleanup_interval_minutes", "STN_SANDBOX_CLEANUP_INTERVAL_MINUTES")
 
+	// Coding config
+	viper.BindEnv("coding.backend", "STN_CODING_BACKEND")
+	viper.BindEnv("coding.opencode.url", "STN_CODING_OPENCODE_URL")
+	viper.BindEnv("coding.opencode.model", "STN_CODING_OPENCODE_MODEL")
+	viper.BindEnv("coding.max_attempts", "STN_CODING_MAX_ATTEMPTS")
+	viper.BindEnv("coding.task_timeout_min", "STN_CODING_TASK_TIMEOUT_MIN")
+
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
 	viper.BindEnv("telemetry.enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -354,6 +378,15 @@ func Load() (*Config, error) {
 			CodeModeEnabled:        getEnvBoolOrDefault("STATION_SANDBOX_CODE_MODE_ENABLED", false),
 			IdleTimeoutMinutes:     getEnvIntOrDefault("STN_SANDBOX_IDLE_TIMEOUT_MINUTES", 30),
 			CleanupIntervalMinutes: getEnvIntOrDefault("STN_SANDBOX_CLEANUP_INTERVAL_MINUTES", 5),
+		},
+		Coding: CodingConfig{
+			Backend: "opencode",
+			OpenCode: CodingOpenCodeConfig{
+				URL:   "http://localhost:4096",
+				Model: "",
+			},
+			MaxAttempts:    3,
+			TaskTimeoutMin: 10,
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,
@@ -539,6 +572,22 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("sandbox.cleanup_interval_minutes") {
 		cfg.Sandbox.CleanupIntervalMinutes = viper.GetInt("sandbox.cleanup_interval_minutes")
+	}
+
+	if viper.IsSet("coding.backend") {
+		cfg.Coding.Backend = viper.GetString("coding.backend")
+	}
+	if viper.IsSet("coding.opencode.url") {
+		cfg.Coding.OpenCode.URL = viper.GetString("coding.opencode.url")
+	}
+	if viper.IsSet("coding.opencode.model") {
+		cfg.Coding.OpenCode.Model = viper.GetString("coding.opencode.model")
+	}
+	if viper.IsSet("coding.max_attempts") {
+		cfg.Coding.MaxAttempts = viper.GetInt("coding.max_attempts")
+	}
+	if viper.IsSet("coding.task_timeout_min") {
+		cfg.Coding.TaskTimeoutMin = viper.GetInt("coding.task_timeout_min")
 	}
 
 	// Load faker templates from config file

@@ -1,8 +1,11 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -280,7 +283,7 @@ func (t *anthropicOAuthTransport) RoundTrip(req *http.Request) (*http.Response, 
 	newReq.Header.Del("x-api-key")
 	newReq.Header.Set("Authorization", "Bearer "+t.accessToken)
 	existing := newReq.Header.Get("anthropic-beta")
-	beta := "oauth-2025-04-20"
+	beta := "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14"
 	if existing != "" {
 		beta = existing + "," + beta
 	}
@@ -290,14 +293,85 @@ func (t *anthropicOAuthTransport) RoundTrip(req *http.Request) (*http.Response, 
 
 func newAnthropicOAuthMiddleware(accessToken string) option.Middleware {
 	return func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		logging.Debug("[OAuth] Anthropic OAuth middleware triggered for %s %s", req.Method, req.URL.Path)
+
 		req.Header.Del("x-api-key")
+		tokenPreview := accessToken
+		if len(tokenPreview) > 20 {
+			tokenPreview = tokenPreview[:20]
+		}
 		req.Header.Set("Authorization", "Bearer "+accessToken)
+		logging.Debug("[OAuth] Token preview: %s...", tokenPreview)
 		existing := req.Header.Get("anthropic-beta")
-		beta := "oauth-2025-04-20"
+		beta := "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14"
 		if existing != "" {
 			beta = existing + "," + beta
 		}
 		req.Header.Set("anthropic-beta", beta)
-		return next(req)
+		logging.Debug("[OAuth] Set Authorization header and beta headers: %s", beta)
+
+		if req.Body != nil && req.Method == "POST" {
+			body, err := io.ReadAll(req.Body)
+			req.Body.Close()
+			if err == nil && len(body) > 0 {
+				logging.Debug("[OAuth] Original request body size: %d bytes", len(body))
+				modifiedBody := injectClaudeCodeSystemPrompt(body)
+				logging.Debug("[OAuth] Modified request body size: %d bytes", len(modifiedBody))
+				req.Body = io.NopCloser(bytes.NewReader(modifiedBody))
+				req.ContentLength = int64(len(modifiedBody))
+			}
+		}
+
+		resp, err := next(req)
+		if err != nil {
+			logging.Debug("[OAuth] Request failed: %v", err)
+		} else {
+			logging.Debug("[OAuth] Response status: %d", resp.StatusCode)
+		}
+		return resp, err
 	}
+}
+
+const claudeCodeSystemPrompt = "You are Claude Code, Anthropic's official CLI for Claude."
+
+func injectClaudeCodeSystemPrompt(body []byte) []byte {
+	var reqBody map[string]interface{}
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		logging.Debug("[OAuth] Failed to parse request body as JSON: %v", err)
+		return body
+	}
+
+	claudeCodeEntry := map[string]interface{}{
+		"type": "text",
+		"text": claudeCodeSystemPrompt,
+	}
+
+	if system, ok := reqBody["system"]; ok {
+		switch s := system.(type) {
+		case []interface{}:
+			logging.Debug("[OAuth] Existing system is array with %d elements, prepending Claude Code prompt", len(s))
+			reqBody["system"] = append([]interface{}{claudeCodeEntry}, s...)
+		case string:
+			logging.Debug("[OAuth] Existing system is string, converting to array with Claude Code prompt")
+			reqBody["system"] = []interface{}{
+				claudeCodeEntry,
+				map[string]interface{}{"type": "text", "text": s},
+			}
+		default:
+			logging.Debug("[OAuth] Existing system has unexpected type %T, replacing with Claude Code prompt", s)
+			reqBody["system"] = []interface{}{claudeCodeEntry}
+		}
+	} else {
+		logging.Debug("[OAuth] No existing system field, adding Claude Code prompt")
+		reqBody["system"] = []interface{}{claudeCodeEntry}
+	}
+
+	modifiedBody, err := json.Marshal(reqBody)
+	if err != nil {
+		logging.Debug("[OAuth] Failed to marshal modified body: %v", err)
+		return body
+	}
+
+	logging.Debug("[OAuth] Successfully injected Claude Code system prompt")
+	return modifiedBody
 }
