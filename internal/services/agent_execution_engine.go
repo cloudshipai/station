@@ -461,13 +461,22 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		return nil, fmt.Errorf("failed to get environment (ID: %d) for agent %s: %w", agent.EnvironmentID, agent.Name, err)
 	}
 
-	sandboxConfig := aee.parseSandboxConfigFromAgent(agent, environment.Name)
-	if aee.unifiedSandboxFactory.ShouldAddTools(sandboxConfig) {
-		execCtx := ExecutionContext{
-			WorkflowRunID:      "",
-			AgentRunID:         fmt.Sprintf("%d", runID),
-			SandboxSessionName: "",
+	// Extract workflow run ID from user variables if agent is running in workflow context
+	var workflowRunID string
+	if runIDRaw, ok := userVariables["_runID"]; ok {
+		if runIDStr, ok := runIDRaw.(string); ok {
+			workflowRunID = runIDStr
+			logging.Info("Agent %s running in workflow context (workflowRunID=%s)", agent.Name, workflowRunID)
 		}
+	}
+
+	sandboxConfig := aee.parseSandboxConfigFromAgent(agent, environment.Name)
+	execCtx := ExecutionContext{
+		WorkflowRunID:      workflowRunID,
+		AgentRunID:         fmt.Sprintf("%d", runID),
+		SandboxSessionName: "",
+	}
+	if aee.unifiedSandboxFactory.ShouldAddTools(sandboxConfig) {
 		sandboxTools := aee.unifiedSandboxFactory.GetSandboxTools(sandboxConfig, execCtx)
 		for _, tool := range sandboxTools {
 			mcpTools = append(mcpTools, tool)

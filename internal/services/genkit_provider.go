@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -14,7 +13,6 @@ import (
 	"station/internal/logging"
 
 	"github.com/firebase/genkit/go/genkit"
-	"github.com/firebase/genkit/go/plugins/compat_oai/anthropic"
 	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 	"github.com/openai/openai-go/option"
@@ -199,42 +197,29 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 		promptDir := "/tmp/station-prompts"
 		_ = os.MkdirAll(promptDir, 0755)
 
-		if cfg.AIAuthType == "oauth" && cfg.AIOAuthToken != "" {
-			logging.Info("Using native Anthropic OAuth plugin with full tool support (Claude Max/Pro)")
+		// Always use our custom native Anthropic plugin for FULL tool support
+		// The GenKit compat_oai/anthropic plugin explicitly disables tools because
+		// "Anthropic supports tool use, but it's not compatible with the OpenAI API"
+		var anthropicPlugin *anthropic_oauth.AnthropicOAuth
 
-			oauthPlugin := &anthropic_oauth.AnthropicOAuth{
+		if cfg.AIAuthType == "oauth" && cfg.AIOAuthToken != "" {
+			logging.Info("Using native Anthropic plugin with OAuth authentication (full tool support)")
+			anthropicPlugin = &anthropic_oauth.AnthropicOAuth{
 				OAuthToken: cfg.AIOAuthToken,
 			}
-
-			deadline, hasDeadline := ctx.Deadline()
-			logging.Info("[ANTHROPIC-OAUTH] About to call genkit.Init() with AnthropicOAuth plugin...")
-			logging.Info("[ANTHROPIC-OAUTH] Plugin Name() = %s", oauthPlugin.Name())
-			logging.Info("[ANTHROPIC-OAUTH] OAuth token length = %d", len(cfg.AIOAuthToken))
-			logging.Info("[ANTHROPIC-OAUTH] Context has deadline: %v, deadline: %v", hasDeadline, deadline)
-
-			genkitApp = genkit.Init(ctx,
-				genkit.WithPlugins(oauthPlugin),
-				genkit.WithPromptDir(promptDir))
-
-			logging.Info("[ANTHROPIC-OAUTH] genkit.Init() returned successfully!")
-			logging.Info("[ANTHROPIC-OAUTH] genkitApp is nil: %v", genkitApp == nil)
-			logging.Info("[ANTHROPIC-OAUTH] Goroutine count after init: %d", runtime.NumGoroutine())
+		} else if cfg.AIAPIKey != "" {
+			logging.Info("Using native Anthropic plugin with API key authentication (full tool support)")
+			anthropicPlugin = &anthropic_oauth.AnthropicOAuth{
+				APIKey: cfg.AIAPIKey,
+			}
 		} else {
-			logging.Debug("Using compat_oai Anthropic plugin (API key auth)")
-
-			var opts []option.RequestOption
-			if cfg.AIAPIKey != "" {
-				opts = append(opts, option.WithAPIKey(cfg.AIAPIKey))
-			}
-
-			anthropicPlugin := &anthropic.Anthropic{
-				Opts: opts,
-			}
-
-			genkitApp = genkit.Init(ctx,
-				genkit.WithPlugins(anthropicPlugin),
-				genkit.WithPromptDir(promptDir))
+			return fmt.Errorf("Anthropic provider requires either OAuth token (ai_oauth_token) or API key (ANTHROPIC_API_KEY)")
 		}
+
+		logging.Debug("Initializing GenKit with native Anthropic plugin...")
+		genkitApp = genkit.Init(ctx,
+			genkit.WithPlugins(anthropicPlugin),
+			genkit.WithPromptDir(promptDir))
 		err = nil
 
 	default:
