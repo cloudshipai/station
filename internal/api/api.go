@@ -46,6 +46,7 @@ import (
 	"station/internal/telemetry"
 	"station/internal/ui"
 	"station/internal/version"
+	"station/internal/workflows/runtime"
 	// "station/pkg/crypto" // Removed - no longer needed for file-based configs
 )
 
@@ -63,6 +64,11 @@ type Server struct {
 	// genkitService removed - service no longer exists
 	// executionQueueSvc removed - using direct execution instead
 	localMode bool
+
+	// Workflow components - injected from server.go to avoid duplicate engines
+	workflowService   *services.WorkflowService
+	workflowEngine    runtime.Engine
+	workflowTelemetry *runtime.WorkflowTelemetry
 }
 
 func New(cfg *internalconfig.Config, database db.Database, localMode bool, telemetryService *telemetry.TelemetryService) *Server {
@@ -102,15 +108,33 @@ func (s *Server) SetWorkflowScheduler(scheduler *services.WorkflowSchedulerServi
 	}
 }
 
+func (s *Server) SetWorkflowComponents(workflowService *services.WorkflowService, engine runtime.Engine, telemetry *runtime.WorkflowTelemetry) {
+	s.workflowService = workflowService
+	s.workflowEngine = engine
+	s.workflowTelemetry = telemetry
+}
+
 // InitializeHandlers initializes the API handlers and starts the workflow consumer.
-// This must be called after SetAgentService and before Start (or independently if API server is disabled).
+// This must be called after SetAgentService and SetWorkflowComponents, and before Start.
 func (s *Server) InitializeHandlers() {
 	if s.handlers != nil {
 		return
 	}
 
-	if s.agentService != nil {
-		// Use shared agent service with CloudShip telemetry info (org_id, station_id)
+	if s.workflowService != nil && s.agentService != nil {
+		s.handlers = v1.NewAPIHandlersWithWorkflow(
+			s.repos,
+			s.db.Conn(),
+			s.toolDiscoveryService,
+			s.telemetryService,
+			s.localMode,
+			s.cfg,
+			s.agentService,
+			s.workflowService,
+			s.workflowEngine,
+			s.workflowTelemetry,
+		)
+	} else if s.agentService != nil {
 		s.handlers = v1.NewAPIHandlersWithAgentService(
 			s.repos,
 			s.db.Conn(),
@@ -121,7 +145,6 @@ func (s *Server) InitializeHandlers() {
 			s.agentService,
 		)
 	} else {
-		// Fall back to creating new agent service (without CloudShip telemetry)
 		s.handlers = v1.NewAPIHandlersWithConfig(
 			s.repos,
 			s.db.Conn(),

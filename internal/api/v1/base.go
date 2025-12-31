@@ -132,6 +132,37 @@ func NewAPIHandlersWithAgentService(
 	return h
 }
 
+func NewAPIHandlersWithWorkflow(
+	repos *repositories.Repositories,
+	db *sql.DB,
+	toolDiscoveryService *services.ToolDiscoveryService,
+	telemetryService *telemetry.TelemetryService,
+	localMode bool,
+	cfg *config.Config,
+	agentService *services.AgentService,
+	workflowService *services.WorkflowService,
+	workflowEngine runtime.Engine,
+	workflowTelemetry *runtime.WorkflowTelemetry,
+) *APIHandlers {
+	h := &APIHandlers{
+		repos:                repos,
+		db:                   db,
+		agentService:         agentService,
+		toolDiscoveryService: toolDiscoveryService,
+		agentExportService:   services.NewAgentExportService(repos),
+		workflowService:      workflowService,
+		workflowEngine:       workflowEngine,
+		workflowTelemetry:    workflowTelemetry,
+		telemetryService:     telemetryService,
+		localMode:            localMode,
+		cfg:                  cfg,
+	}
+
+	h.initFilesHandler()
+	log.Printf("[APIHandlers] Using external workflow engine - no consumer started (server.go handles it)")
+	return h
+}
+
 func mustInitWorkflowEngine() runtime.Engine {
 	opts := runtime.EnvOptions()
 	engine, err := runtime.NewEngine(opts)

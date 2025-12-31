@@ -16,7 +16,10 @@ import (
 	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/mcp"
 	"station/internal/mcp_agents"
+	"station/internal/notifications"
 	"station/internal/services"
+	"station/internal/workflows"
+	"station/internal/workflows/runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -213,12 +216,39 @@ func runMainServer() error {
 	}
 	defer schedulerSvc.Stop()
 
-	workflowService := services.NewWorkflowService(repos)
+	// Initialize workflow engine for NATS-based workflow execution
+	workflowOpts := runtime.EnvOptions()
+	workflowEngine, err := runtime.NewEngine(workflowOpts)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize workflow engine: %v (workflow execution disabled)", err)
+	}
+
+	workflowTelemetry, _ := runtime.NewWorkflowTelemetry()
+
+	var workflowService *services.WorkflowService
+	if workflowEngine != nil {
+		workflowService = services.NewWorkflowServiceWithEngine(repos, workflowEngine)
+		workflowService.SetTelemetry(workflowTelemetry)
+		log.Printf("✅ Workflow engine initialized (embedded NATS)")
+	} else {
+		workflowService = services.NewWorkflowService(repos)
+		log.Printf("⚠️  Workflow engine not available - workflows will not execute")
+	}
+
 	workflowSchedulerSvc := services.NewWorkflowSchedulerService(repos, workflowService)
 	if err := workflowSchedulerSvc.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow scheduler service: %w", err)
 	}
 	defer workflowSchedulerSvc.Stop()
+
+	// Start workflow consumer to process workflow steps
+	var workflowConsumer *runtime.WorkflowConsumer
+	if workflowEngine != nil {
+		workflowConsumer = startServerWorkflowConsumer(ctx, repos, workflowEngine, agentSvc, workflowTelemetry, cfg, database)
+		if workflowConsumer != nil {
+			log.Printf("✅ Workflow consumer started")
+		}
+	}
 
 	syncer.SetWorkflowScheduler(workflowSchedulerSvc)
 
@@ -295,6 +325,10 @@ func runMainServer() error {
 	apiServer.SetServices(toolDiscoveryService)
 	// Share agent service with API server so CloudShip telemetry info propagates to traces
 	apiServer.SetAgentService(agentSvc)
+	// Share workflow components so APIHandlers uses the SAME engine (avoids duplicate engines)
+	if workflowEngine != nil {
+		apiServer.SetWorkflowComponents(workflowService, workflowEngine, workflowTelemetry)
+	}
 
 	apiServer.InitializeHandlers()
 	apiServer.SetWorkflowScheduler(workflowSchedulerSvc)
@@ -389,6 +423,16 @@ func runMainServer() error {
 		}
 	}
 
+	if workflowConsumer != nil {
+		log.Printf("🛑 Shutting down workflow consumer...")
+		workflowConsumer.Stop()
+	}
+
+	if workflowEngine != nil {
+		log.Printf("🛑 Shutting down workflow engine...")
+		workflowEngine.Close()
+	}
+
 	// Stop Lighthouse client
 	if lighthouseClient != nil {
 		if err := lighthouseClient.Close(); err != nil {
@@ -450,4 +494,257 @@ func ensureDefaultEnvironment(_ context.Context, repos *repositories.Repositorie
 
 	log.Printf("✅ Created default environment (ID: %d)", defaultEnv.ID)
 	return nil
+}
+
+func startServerWorkflowConsumer(
+	ctx context.Context,
+	repos *repositories.Repositories,
+	engine *runtime.NATSEngine,
+	agentService services.AgentServiceInterface,
+	telemetry *runtime.WorkflowTelemetry,
+	cfg *config.Config,
+	database *db.DB,
+) *runtime.WorkflowConsumer {
+	registry := runtime.NewExecutorRegistry()
+	registry.Register(runtime.NewInjectExecutor())
+	registry.Register(runtime.NewSwitchExecutor())
+	registry.Register(runtime.NewAgentRunExecutor(&serverAgentExecutorAdapter{agentService: agentService, repos: repos}))
+
+	approvalExecutor := runtime.NewHumanApprovalExecutor(&serverApprovalExecutorAdapter{repos: repos})
+	if cfg != nil && database != nil {
+		notifier := notifications.NewWebhookNotifier(cfg, database.Conn())
+		approvalExecutor.SetNotifier(notifier)
+	}
+	registry.Register(approvalExecutor)
+	registry.Register(runtime.NewCustomExecutor(nil))
+	registry.Register(runtime.NewCronExecutor())
+	registry.Register(runtime.NewTimerExecutor())
+	registry.Register(runtime.NewTryCatchExecutor(registry))
+	registry.Register(runtime.NewTransformExecutor())
+
+	stepAdapter := &serverRegistryStepExecutorAdapter{registry: registry}
+	registry.Register(runtime.NewParallelExecutor(stepAdapter))
+	registry.Register(runtime.NewForeachExecutor(stepAdapter))
+
+	adapter := runtime.NewWorkflowServiceAdapter(repos, engine)
+	if telemetry != nil {
+		adapter.SetTelemetry(telemetry)
+	}
+
+	consumer := runtime.NewWorkflowConsumer(engine, registry, adapter, adapter, adapter)
+	consumer.SetPendingRunProvider(adapter)
+	if telemetry != nil {
+		consumer.SetTelemetry(telemetry)
+	}
+
+	if err := consumer.Start(ctx); err != nil {
+		log.Printf("Workflow consumer: failed to start: %v", err)
+		return nil
+	}
+
+	log.Println("Workflow consumer started for server mode")
+	return consumer
+}
+
+type serverAgentExecutorAdapter struct {
+	agentService services.AgentServiceInterface
+	repos        *repositories.Repositories
+}
+
+func (a *serverAgentExecutorAdapter) GetAgentByID(ctx context.Context, id int64) (runtime.AgentInfo, error) {
+	agent, err := a.agentService.GetAgent(ctx, id)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *serverAgentExecutorAdapter) GetAgentByNameAndEnvironment(ctx context.Context, name string, environmentID int64) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameAndEnvironment(name, environmentID)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *serverAgentExecutorAdapter) GetAgentByNameGlobal(ctx context.Context, name string) (runtime.AgentInfo, error) {
+	agent, err := a.repos.Agents.GetByNameGlobal(name)
+	if err != nil {
+		return runtime.AgentInfo{}, err
+	}
+	return runtime.AgentInfo{
+		ID:           agent.ID,
+		Name:         agent.Name,
+		InputSchema:  agent.InputSchema,
+		OutputSchema: agent.OutputSchema,
+	}, nil
+}
+
+func (a *serverAgentExecutorAdapter) GetEnvironmentIDByName(ctx context.Context, name string) (int64, error) {
+	env, err := a.repos.Environments.GetByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return env.ID, nil
+}
+
+func (a *serverAgentExecutorAdapter) ExecuteAgent(ctx context.Context, agentID int64, task string, variables map[string]interface{}) (runtime.AgentExecutionResult, error) {
+	userID := int64(1)
+
+	agentRun, err := a.repos.AgentRuns.Create(ctx, agentID, userID, task, "", 0, nil, nil, "running", nil)
+	if err != nil {
+		log.Printf("Workflow agent step: Failed to create agent run: %v", err)
+		return runtime.AgentExecutionResult{}, err
+	}
+
+	result, err := a.agentService.ExecuteAgentWithRunID(ctx, agentID, task, agentRun.ID, variables)
+	if err != nil {
+		log.Printf("Workflow agent step: Execution failed for run %d: %v", agentRun.ID, err)
+		completedAt := time.Now()
+		errorMsg := err.Error()
+		a.repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx, agentRun.ID, errorMsg, 0, nil, nil, "failed", &completedAt,
+			nil, nil, nil, nil, nil, nil, &errorMsg,
+		)
+		return runtime.AgentExecutionResult{}, err
+	}
+
+	log.Printf("Workflow agent step: Completed run %d for agent %d", agentRun.ID, agentID)
+
+	completedAt := time.Now()
+	var inputTokens, outputTokens, totalTokens *int64
+	var durationSeconds *float64
+	var modelName *string
+	var stepsTaken int64
+
+	if result.Extra != nil {
+		if tokenUsage, ok := result.Extra["token_usage"].(map[string]interface{}); ok {
+			if val, ok := tokenUsage["input_tokens"].(float64); ok {
+				v := int64(val)
+				inputTokens = &v
+			}
+			if val, ok := tokenUsage["output_tokens"].(float64); ok {
+				v := int64(val)
+				outputTokens = &v
+			}
+			if val, ok := tokenUsage["total_tokens"].(float64); ok {
+				v := int64(val)
+				totalTokens = &v
+			}
+		}
+		if dur, ok := result.Extra["duration_seconds"].(float64); ok {
+			durationSeconds = &dur
+		}
+		if model, ok := result.Extra["model_name"].(string); ok {
+			modelName = &model
+		}
+		if steps, ok := result.Extra["steps_taken"].(int64); ok {
+			stepsTaken = steps
+		} else if steps, ok := result.Extra["steps_taken"].(float64); ok {
+			stepsTaken = int64(steps)
+		}
+	}
+
+	a.repos.AgentRuns.UpdateCompletionWithMetadata(
+		ctx, agentRun.ID, result.Content, stepsTaken, nil, nil, "completed", &completedAt,
+		inputTokens, outputTokens, totalTokens, durationSeconds, modelName, nil, nil,
+	)
+
+	return runtime.AgentExecutionResult{
+		Response:  result.Content,
+		StepCount: stepsTaken,
+		ToolsUsed: 0,
+	}, nil
+}
+
+type serverApprovalExecutorAdapter struct {
+	repos *repositories.Repositories
+}
+
+func (a *serverApprovalExecutorAdapter) CreateApproval(ctx context.Context, params runtime.CreateApprovalParams) (runtime.ApprovalInfo, error) {
+	var summaryPath *string
+	if params.SummaryPath != "" {
+		summaryPath = &params.SummaryPath
+	}
+
+	var approvers *string
+	if len(params.Approvers) > 0 {
+		joined := ""
+		for i, ap := range params.Approvers {
+			if i > 0 {
+				joined += ","
+			}
+			joined += ap
+		}
+		approvers = &joined
+	}
+
+	var timeoutAt *time.Time
+	if params.TimeoutSecs > 0 {
+		t := time.Now().Add(time.Duration(params.TimeoutSecs) * time.Second)
+		timeoutAt = &t
+	}
+
+	approval, err := a.repos.WorkflowApprovals.Create(ctx, repositories.CreateWorkflowApprovalParams{
+		ApprovalID:  params.ApprovalID,
+		RunID:       params.RunID,
+		StepID:      params.StepID,
+		Message:     params.Message,
+		SummaryPath: summaryPath,
+		Approvers:   approvers,
+		TimeoutAt:   timeoutAt,
+	})
+	if err != nil {
+		return runtime.ApprovalInfo{}, err
+	}
+
+	return runtime.ApprovalInfo{
+		ID:     approval.ApprovalID,
+		Status: approval.Status,
+	}, nil
+}
+
+func (a *serverApprovalExecutorAdapter) GetApproval(ctx context.Context, approvalID string) (runtime.ApprovalInfo, error) {
+	approval, err := a.repos.WorkflowApprovals.Get(ctx, approvalID)
+	if err != nil {
+		return runtime.ApprovalInfo{}, err
+	}
+
+	info := runtime.ApprovalInfo{
+		ID:     approval.ApprovalID,
+		Status: approval.Status,
+	}
+	if approval.DecidedBy != nil {
+		info.DecidedBy = *approval.DecidedBy
+	}
+	if approval.DecisionReason != nil {
+		info.DecisionReason = *approval.DecisionReason
+	}
+	return info, nil
+}
+
+type serverRegistryStepExecutorAdapter struct {
+	registry *runtime.ExecutorRegistry
+}
+
+func (a *serverRegistryStepExecutorAdapter) ExecuteStep(ctx context.Context, step workflows.ExecutionStep, runContext map[string]interface{}) (runtime.StepResult, error) {
+	executor, err := a.registry.GetExecutor(step.Type)
+	if err != nil {
+		errStr := err.Error()
+		return runtime.StepResult{
+			Status: runtime.StepStatusFailed,
+			Error:  &errStr,
+		}, err
+	}
+	return executor.Execute(ctx, step, runContext)
 }
