@@ -518,6 +518,67 @@ input:
   task: "Check pods in {{ $.namespace }} for service {{ $.service }}"
 ` + "```" + `
 
+### Agent Step Template Variables (userInput)
+
+For agent steps, use the ` + "`userInput`" + ` field with ` + "`${varName}`" + ` syntax (NOT ` + "`{{ }}`" + `):
+
+` + "```yaml" + `
+# Agent steps use userInput for the task prompt
+- id: review-code
+  type: agent
+  agent: qa-engineer
+  input:
+    userInput: "Review the file ${file} in repo ${repo}. Focus on: ${focus}"
+  output:
+    review_result: "$.result"
+  transition: next-step
+` + "```" + `
+
+**Key differences:**
+| Syntax | Where Used | When Interpolated |
+|--------|------------|-------------------|
+| ` + "`{{ $.field }}`" + ` | JSONPath in input/output mappings | During context resolution |
+| ` + "`${varName}`" + ` | Agent userInput strings | Before agent execution |
+
+**How ` + "`${varName}`" + ` interpolation works:**
+
+1. Workflow input and previous step outputs are flattened to runContext
+2. Before executing an agent, ` + "`${varName}`" + ` placeholders are replaced with values from runContext
+3. The agent receives the interpolated string as its task
+
+` + "```yaml" + `
+# Example: Multi-step workflow with template variables
+id: code-qa-pipeline
+name: "Code QA Pipeline"
+start: write_code
+
+states:
+  - id: write_code
+    type: agent
+    agent: coder
+    input:
+      # ${task} comes from workflow input
+      userInput: "Write this code: ${task}. Save to /workspace/"
+    output:
+      code_result: "$.result"
+    transition: qa_review
+
+  - id: qa_review
+    type: agent
+    agent: qa-engineer
+    input:
+      # Previous step outputs are available for interpolation
+      userInput: "Review the code. Previous step said: ${code_result}"
+    output:
+      qa_result: "$.result"
+    end: true
+` + "```" + `
+
+**Available variables for interpolation:**
+- All workflow input fields (e.g., ` + "`${repo}`" + `, ` + "`${file}`" + `)
+- Previous step outputs (e.g., ` + "`${step_id.result}`" + `)
+- Internal fields starting with ` + "`_`" + ` are skipped
+
 ---
 
 ## Validation Warnings

@@ -40,6 +40,10 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 }
 
 func (s *AgentExportService) ExportAgentWithSandbox(agentID int64, app, appType, sandboxConfig string) error {
+	return s.ExportAgentWithConfigs(agentID, app, appType, sandboxConfig, "")
+}
+
+func (s *AgentExportService) ExportAgentWithConfigs(agentID int64, app, appType, sandboxConfig, codingConfig string) error {
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %v", err)
@@ -74,7 +78,7 @@ func (s *AgentExportService) ExportAgentWithSandbox(agentID int64, app, appType,
 		return fmt.Errorf("failed to get child agents: %v", err)
 	}
 
-	dotpromptContent := s.generateDotpromptContentWithSandbox(agent, toolsWithDetails, childAgents, environment.Name, app, appType, sandboxConfig)
+	dotpromptContent := s.generateDotpromptContentWithConfigs(agent, toolsWithDetails, childAgents, environment.Name, app, appType, sandboxConfig, codingConfig)
 
 	outputPath := config.GetAgentPromptPath(environment.Name, agent.Name)
 
@@ -92,10 +96,14 @@ func (s *AgentExportService) ExportAgentWithSandbox(agentID int64, app, appType,
 }
 
 func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType string) string {
-	return s.generateDotpromptContentWithSandbox(agent, tools, childAgents, environmentName, app, appType, "")
+	return s.generateDotpromptContentWithConfigs(agent, tools, childAgents, environmentName, app, appType, "", "")
 }
 
 func (s *AgentExportService) generateDotpromptContentWithSandbox(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig string) string {
+	return s.generateDotpromptContentWithConfigs(agent, tools, childAgents, environmentName, app, appType, sandboxConfig, "")
+}
+
+func (s *AgentExportService) generateDotpromptContentWithConfigs(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig, codingConfig string) string {
 	var toolNames []string
 	for _, tool := range tools {
 		toolNames = append(toolNames, tool.ToolName)
@@ -130,6 +138,13 @@ metadata:
 		sandboxYAML := s.convertSandboxJSONToYAML(sandboxConfig)
 		if sandboxYAML != "" {
 			content += "\nsandbox:\n" + s.indentLines(sandboxYAML, "  ")
+		}
+	}
+
+	if codingConfig != "" {
+		codingYAML := s.convertCodingJSONToYAML(codingConfig)
+		if codingYAML != "" {
+			content += "\ncoding:\n" + s.indentLines(codingYAML, "  ")
 		}
 	}
 
@@ -198,6 +213,30 @@ func (s *AgentExportService) convertSandboxJSONToYAML(sandboxJSON string) string
 	yamlBytes, err := yaml.Marshal(sandboxMap)
 	if err != nil {
 		log.Printf("Warning: Failed to convert sandbox to YAML: %v", err)
+		return ""
+	}
+
+	return strings.TrimSpace(string(yamlBytes))
+}
+
+func (s *AgentExportService) convertCodingJSONToYAML(codingJSON string) string {
+	if codingJSON == "" || codingJSON == "{}" {
+		return ""
+	}
+
+	var codingMap map[string]interface{}
+	if err := json.Unmarshal([]byte(codingJSON), &codingMap); err != nil {
+		log.Printf("Warning: Failed to parse coding JSON: %v", err)
+		return ""
+	}
+
+	if len(codingMap) == 0 {
+		return ""
+	}
+
+	yamlBytes, err := yaml.Marshal(codingMap)
+	if err != nil {
+		log.Printf("Warning: Failed to convert coding to YAML: %v", err)
 		return ""
 	}
 

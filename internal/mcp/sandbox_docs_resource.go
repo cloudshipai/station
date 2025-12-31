@@ -50,7 +50,7 @@ Sandbox mode enables agents to execute code in isolated Docker containers. This 
 | mode | string | "compute" | Execution mode: "compute" (single execution) or "code" (persistent session) |
 | runtime | string | "python" | Runtime environment: "python" or "node" |
 | image | string | - | Custom Docker image (overrides runtime) |
-| session | string | - | Session ID for "code" mode (enables state persistence) |
+| session | string | "agent" | Session scoping: "workflow" (share across workflow steps) or "agent" (per-agent-run, default) |
 | timeout_seconds | int | 30 | Maximum execution time per run |
 | max_stdout_bytes | int | 1048576 | Maximum stdout size (1MB default) |
 | allow_network | bool | false | Enable network access in sandbox |
@@ -96,12 +96,31 @@ Maintains state between executions. Ideal for:
 ` + "```json" + `
 {
   "mode": "code",
-  "runtime": "python",
-  "session": "data-analysis-session-1"
+  "runtime": "python"
 }
 ` + "```" + `
 
 **Note:** In code mode, variables and imports persist between runs within the same session.
+
+#### Workflow Scoped Sessions
+
+When running agents as part of a workflow, use ` + "`session: \"workflow\"`" + ` to share sandbox state across all workflow steps:
+
+` + "```json" + `
+{
+  "mode": "code",
+  "runtime": "python",
+  "session": "workflow",
+  "pip_packages": ["pandas"]
+}
+` + "```" + `
+
+This is ideal for multi-step workflows where:
+- Step 1 loads and processes data
+- Step 2 analyzes the processed data
+- Step 3 generates reports from the analysis
+
+All steps share the same container workspace and Python session, so variables defined in Step 1 are available in Step 2 and Step 3.
 
 ---
 

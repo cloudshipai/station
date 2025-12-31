@@ -12,6 +12,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
 	"station/internal/logging"
+	"station/internal/storage"
 	dotprompt "station/pkg/dotprompt"
 	"station/pkg/models"
 	"station/pkg/schema"
@@ -159,6 +160,13 @@ func (aee *AgentExecutionEngine) SetMemoryAPIClient(apiClient *lighthouse.Memory
 	aee.memoryAPIClient = apiClient
 	if apiClient != nil {
 		logging.Info("CloudShip memory API client configured for agent execution engine (CLI mode)")
+	}
+}
+
+func (aee *AgentExecutionEngine) SetFileStore(store storage.FileStore) {
+	if aee.unifiedSandboxFactory != nil {
+		aee.unifiedSandboxFactory.SetFileStore(store)
+		logging.Info("File store configured for sandbox file staging")
 	}
 }
 

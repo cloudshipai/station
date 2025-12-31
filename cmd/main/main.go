@@ -70,6 +70,13 @@ func init() {
 	rootCmd.AddCommand(handlers.NewJaegerCmd())
 	rootCmd.AddCommand(workflowCmd)
 	rootCmd.AddCommand(providerCmd)
+	rootCmd.AddCommand(filesCmd)
+
+	filesCmd.AddCommand(filesUploadCmd)
+	filesCmd.AddCommand(filesDownloadCmd)
+	filesCmd.AddCommand(filesListCmd)
+	filesCmd.AddCommand(filesDeleteCmd)
+	filesCmd.AddCommand(filesInfoCmd)
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 
@@ -263,6 +270,18 @@ func init() {
 	settingsGetCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	settingsSetCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	settingsSetCmd.Flags().String("description", "", "Description for the setting")
+
+	filesUploadCmd.Flags().String("station", "", "Station API endpoint (use HTTP API instead of local NATS)")
+	filesUploadCmd.Flags().String("key", "", "Custom file key (default: auto-generated)")
+	filesUploadCmd.Flags().String("ttl", "", "Time-to-live for the file (e.g., 24h, 7d)")
+	filesDownloadCmd.Flags().String("station", "", "Station API endpoint (use HTTP API instead of local NATS)")
+	filesDownloadCmd.Flags().StringP("output", "o", "", "Output file path (default: derived from key)")
+	filesListCmd.Flags().String("station", "", "Station API endpoint (use HTTP API instead of local NATS)")
+	filesListCmd.Flags().String("prefix", "", "Filter files by key prefix")
+	filesListCmd.Flags().Bool("json", false, "Output in JSON format")
+	filesDeleteCmd.Flags().String("station", "", "Station API endpoint (use HTTP API instead of local NATS)")
+	filesDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
+	filesInfoCmd.Flags().String("station", "", "Station API endpoint (use HTTP API instead of local NATS)")
 
 	// Bind flags to viper
 	viper.BindPFlag("ssh_port", serveCmd.Flags().Lookup("ssh-port"))

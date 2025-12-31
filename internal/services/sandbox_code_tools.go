@@ -3,11 +3,14 @@ package services
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"station/internal/storage"
 	"station/pkg/dotprompt"
 
 	"github.com/firebase/genkit/go/ai"
@@ -22,6 +25,7 @@ const CodeModeEnvVarPrefix = "STN_CODE_"
 type CodeModeToolFactory struct {
 	sessionManager *SessionManager
 	config         CodeModeConfig
+	fileStore      storage.FileStore
 }
 
 func NewCodeModeToolFactory(sessionManager *SessionManager, config CodeModeConfig) *CodeModeToolFactory {
@@ -29,6 +33,10 @@ func NewCodeModeToolFactory(sessionManager *SessionManager, config CodeModeConfi
 		sessionManager: sessionManager,
 		config:         config,
 	}
+}
+
+func (f *CodeModeToolFactory) SetFileStore(store storage.FileStore) {
+	f.fileStore = store
 }
 
 func (f *CodeModeToolFactory) IsEnabled() bool {
@@ -49,7 +57,7 @@ type ExecutionContext struct {
 }
 
 func (f *CodeModeToolFactory) CreateAllTools(agentDefaults *dotprompt.SandboxConfig, execCtx ExecutionContext) []ai.Tool {
-	return []ai.Tool{
+	tools := []ai.Tool{
 		f.CreateOpenTool(agentDefaults, execCtx),
 		f.CreateExecTool(agentDefaults),
 		f.CreateFsWriteTool(),
@@ -58,6 +66,15 @@ func (f *CodeModeToolFactory) CreateAllTools(agentDefaults *dotprompt.SandboxCon
 		f.CreateFsDeleteTool(),
 		f.CreateCloseTool(),
 	}
+
+	if f.fileStore != nil {
+		tools = append(tools,
+			f.CreateStageFileTool(),
+			f.CreatePublishFileTool(),
+		)
+	}
+
+	return tools
 }
 
 type SandboxOpenInput struct {
@@ -624,6 +641,238 @@ func (f *CodeModeToolFactory) CreateCloseTool() ai.Tool {
 		schema,
 		toolFunc,
 	)
+}
+
+type SandboxStageFileInput struct {
+	SandboxID   string `json:"sandbox_id"`
+	FileKey     string `json:"file_key"`
+	Destination string `json:"destination"`
+}
+
+type SandboxStageFileOutput struct {
+	OK        bool   `json:"ok"`
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+func (f *CodeModeToolFactory) CreateStageFileTool() ai.Tool {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"sandbox_id": map[string]any{
+				"type":        "string",
+				"description": "Sandbox session ID from sandbox_open",
+			},
+			"file_key": map[string]any{
+				"type":        "string",
+				"description": "File key from file upload (e.g., files/f_abc123)",
+			},
+			"destination": map[string]any{
+				"type":        "string",
+				"description": "Destination path in sandbox relative to /workspace (e.g., input/data.csv)",
+			},
+		},
+		"required": []string{"sandbox_id", "file_key", "destination"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_stage_file: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		fileKey, _ := inputMap["file_key"].(string)
+		destination, _ := inputMap["destination"].(string)
+
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_stage_file: sandbox_id is required")
+		}
+		if fileKey == "" {
+			return nil, fmt.Errorf("sandbox_stage_file: file_key is required")
+		}
+		if destination == "" {
+			return nil, fmt.Errorf("sandbox_stage_file: destination is required")
+		}
+
+		if strings.Contains(destination, "..") {
+			return nil, fmt.Errorf("sandbox_stage_file: path traversal not allowed")
+		}
+
+		session, err := f.sessionManager.GetSessionByID(toolCtx.Context, sandboxID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_stage_file: %w", err)
+		}
+
+		reader, info, err := f.fileStore.Get(toolCtx.Context, fileKey)
+		if err != nil {
+			if storage.IsNotFound(err) {
+				return nil, fmt.Errorf("sandbox_stage_file: file not found: %s", fileKey)
+			}
+			return nil, fmt.Errorf("sandbox_stage_file: failed to fetch file: %w", err)
+		}
+		defer reader.Close()
+
+		content, err := io.ReadAll(reader)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_stage_file: failed to read file: %w", err)
+		}
+
+		destDir := filepath.Dir(destination)
+		if destDir != "." && destDir != "/" {
+			mkdirResult, err := f.sessionManager.backend.Exec(toolCtx.Context, session.ID, ExecRequest{
+				Cmd:            []string{"mkdir", "-p", destDir},
+				TimeoutSeconds: 10,
+			})
+			if err != nil || mkdirResult.ExitCode != 0 {
+				return nil, fmt.Errorf("sandbox_stage_file: failed to create directory %s", destDir)
+			}
+		}
+
+		if err := f.sessionManager.backend.WriteFile(toolCtx.Context, session.ID, destination, content, 0644); err != nil {
+			return nil, fmt.Errorf("sandbox_stage_file: failed to write file: %w", err)
+		}
+
+		return SandboxStageFileOutput{
+			OK:        true,
+			Path:      destination,
+			SizeBytes: info.Size,
+		}, nil
+	}
+
+	return ai.NewToolWithInputSchema(
+		"sandbox_stage_file",
+		"Stage a file from the file store into the sandbox. Use this to bring uploaded files into the sandbox for processing.",
+		schema,
+		toolFunc,
+	)
+}
+
+type SandboxPublishFileInput struct {
+	SandboxID string `json:"sandbox_id"`
+	Source    string `json:"source"`
+	FileKey   string `json:"file_key,omitempty"`
+}
+
+type SandboxPublishFileOutput struct {
+	OK        bool   `json:"ok"`
+	FileKey   string `json:"file_key"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+func (f *CodeModeToolFactory) CreatePublishFileTool() ai.Tool {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"sandbox_id": map[string]any{
+				"type":        "string",
+				"description": "Sandbox session ID from sandbox_open",
+			},
+			"source": map[string]any{
+				"type":        "string",
+				"description": "Source file path in sandbox relative to /workspace (e.g., output/result.csv)",
+			},
+			"file_key": map[string]any{
+				"type":        "string",
+				"description": "Optional custom file key. If not provided, a unique key is generated.",
+			},
+		},
+		"required": []string{"sandbox_id", "source"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("sandbox_publish_file: expected map input")
+		}
+
+		sandboxID, _ := inputMap["sandbox_id"].(string)
+		source, _ := inputMap["source"].(string)
+		fileKey, _ := inputMap["file_key"].(string)
+
+		if sandboxID == "" {
+			return nil, fmt.Errorf("sandbox_publish_file: sandbox_id is required")
+		}
+		if source == "" {
+			return nil, fmt.Errorf("sandbox_publish_file: source is required")
+		}
+
+		if strings.Contains(source, "..") {
+			return nil, fmt.Errorf("sandbox_publish_file: path traversal not allowed")
+		}
+
+		session, err := f.sessionManager.GetSessionByID(toolCtx.Context, sandboxID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_publish_file: %w", err)
+		}
+
+		content, _, err := f.sessionManager.backend.ReadFile(toolCtx.Context, session.ID, source, 0)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_publish_file: failed to read file: %w", err)
+		}
+
+		if fileKey == "" {
+			fileID := storage.GenerateFileID()
+			fileKey = storage.GenerateUserFileKey(fileID)
+		}
+
+		contentType := detectContentTypeFromPath(source)
+
+		info, err := f.fileStore.Put(toolCtx.Context, fileKey, strings.NewReader(string(content)), storage.PutOptions{
+			ContentType: contentType,
+			Description: filepath.Base(source),
+			Metadata: map[string]string{
+				"original_path": source,
+				"sandbox_id":    sandboxID,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_publish_file: failed to upload file: %w", err)
+		}
+
+		return SandboxPublishFileOutput{
+			OK:        true,
+			FileKey:   info.Key,
+			SizeBytes: info.Size,
+		}, nil
+	}
+
+	return ai.NewToolWithInputSchema(
+		"sandbox_publish_file",
+		"Publish a file from the sandbox to the file store. Use this to make output files available for download.",
+		schema,
+		toolFunc,
+	)
+}
+
+func detectContentTypeFromPath(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".csv":
+		return "text/csv"
+	case ".json":
+		return "application/json"
+	case ".xml":
+		return "application/xml"
+	case ".txt":
+		return "text/plain"
+	case ".pdf":
+		return "application/pdf"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".zip":
+		return "application/zip"
+	case ".tar":
+		return "application/x-tar"
+	case ".gz":
+		return "application/gzip"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 func (f *CodeModeToolFactory) buildSessionOptions(agentDefaults *dotprompt.SandboxConfig) SessionOptions {

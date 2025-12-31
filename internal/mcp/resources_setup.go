@@ -64,6 +64,15 @@ func (s *Server) setupStaticResources() {
 	)
 	s.mcpServer.AddResource(sandboxDocsResource, s.handleSandboxDocsResource)
 
+	// Coding (OpenCode) documentation resource
+	codingDocsResource := mcp.NewResource(
+		"station://docs/coding",
+		"OpenCode Coding Backend Configuration",
+		mcp.WithResourceDescription("Reference documentation for configuring OpenCode AI coding backend - read this before using coding parameter in create_agent/update_agent"),
+		mcp.WithMIMEType("text/markdown"),
+	)
+	s.mcpServer.AddResource(codingDocsResource, s.handleCodingDocsResource)
+
 	// Workflows list resource
 	workflowsResource := mcp.NewResource(
 		"station://workflows",

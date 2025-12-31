@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"station/internal/storage"
 	"station/pkg/dotprompt"
 
 	"github.com/firebase/genkit/go/ai"
@@ -258,4 +259,10 @@ func (f *UnifiedSandboxFactory) ShouldAddTools(sandboxCfg *dotprompt.SandboxConf
 	}
 
 	return f.computeFactory.ShouldAddTool(sandboxCfg)
+}
+
+func (f *UnifiedSandboxFactory) SetFileStore(store storage.FileStore) {
+	if f.codeFactory != nil {
+		f.codeFactory.SetFileStore(store)
+	}
 }

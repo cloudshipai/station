@@ -15,6 +15,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/lighthouse"
 	"station/internal/logging"
+	"station/internal/storage"
 	"station/pkg/models"
 )
 
@@ -106,6 +107,12 @@ func (s *AgentService) SetMemoryClient(mc *lighthouse.MemoryClient) {
 func (s *AgentService) SetMemoryAPIClient(apiClient *lighthouse.MemoryAPIClient) {
 	if s.executionEngine != nil {
 		s.executionEngine.SetMemoryAPIClient(apiClient)
+	}
+}
+
+func (s *AgentService) SetFileStore(store storage.FileStore) {
+	if s.executionEngine != nil {
+		s.executionEngine.SetFileStore(store)
 	}
 }
 

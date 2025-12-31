@@ -113,6 +113,14 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
+	codingConfig := request.GetString("coding", "")
+	if codingConfig != "" {
+		var codingMap map[string]interface{}
+		if err := json.Unmarshal([]byte(codingConfig), &codingMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid coding JSON: %v. Valid options: {\"enabled\": true, \"backend\": \"opencode\", \"workspace_path\": \"...\"}", err)), nil
+		}
+	}
+
 	// Extract tool_names array if provided
 	var toolNames []string
 	if request.Params.Arguments != nil {
@@ -165,7 +173,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentWithSandbox(createdAgent.ID, app, appType, sandboxConfig); err != nil {
+		if err := s.agentExportService.ExportAgentWithConfigs(createdAgent.ID, app, appType, sandboxConfig, codingConfig); err != nil {
 			response["export_warning"] = fmt.Sprintf("Agent created but export failed: %v. Use 'stn agent export %s' to export manually.", err, name)
 		}
 	}
@@ -335,6 +343,14 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
+	codingConfig := request.GetString("coding", "")
+	if codingConfig != "" && codingConfig != "{}" {
+		var codingMap map[string]interface{}
+		if err := json.Unmarshal([]byte(codingConfig), &codingMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid coding JSON: %v. Valid options: {\"enabled\": true, \"backend\": \"opencode\", \"workspace_path\": \"...\"}", err)), nil
+		}
+	}
+
 	err = s.repos.Agents.UpdateWithMemory(
 		agentID,
 		name,
@@ -357,7 +373,7 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentWithSandbox(agentID, app, appType, sandboxConfig); err != nil {
+		if err := s.agentExportService.ExportAgentWithConfigs(agentID, app, appType, sandboxConfig, codingConfig); err != nil {
 			response := map[string]interface{}{
 				"success": true,
 				"agent": map[string]interface{}{

@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"station/internal/config"
 	"station/internal/services"
 )
 
@@ -138,22 +142,99 @@ func (s *Server) handleUpdateWorkflow(ctx context.Context, request mcp.CallToolR
 	return mcp.NewToolResultText(string(result)), nil
 }
 
+func (s *Server) handleArchiveWorkflow(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	workflowID, err := request.RequireString("workflow_id")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'workflow_id' parameter: %v", err)), nil
+	}
+
+	// Verify workflow exists before archiving
+	if _, err := s.workflowService.GetWorkflow(ctx, workflowID, 0); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Workflow not found: %v", err)), nil
+	}
+
+	if err := s.workflowService.DisableWorkflow(ctx, workflowID); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to archive workflow: %v", err)), nil
+	}
+
+	result, _ := json.MarshalIndent(map[string]interface{}{
+		"workflow_id": workflowID,
+		"message":     "Workflow archived (disabled) successfully. Use delete_workflow for permanent removal.",
+	}, "", "  ")
+
+	return mcp.NewToolResultText(string(result)), nil
+}
+
 func (s *Server) handleDeleteWorkflow(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	workflowID, err := request.RequireString("workflow_id")
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Missing 'workflow_id' parameter: %v", err)), nil
 	}
 
-	if err := s.workflowService.DisableWorkflow(ctx, workflowID); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to disable workflow: %v", err)), nil
+	environmentName := "default"
+	if envName, err := request.RequireString("environment_name"); err == nil && envName != "" {
+		environmentName = envName
 	}
 
+	// Verify workflow exists before deleting
+	if _, err := s.workflowService.GetWorkflow(ctx, workflowID, 0); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Workflow not found: %v", err)), nil
+	}
+
+	deleteReq := services.DeleteWorkflowsRequest{
+		WorkflowIDs: []string{workflowID},
+	}
+	deletedCount, err := s.workflowService.DeleteWorkflows(ctx, deleteReq)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to delete workflow from database: %v", err)), nil
+	}
+
+	filesDeleted := deleteWorkflowFiles([]string{workflowID}, environmentName)
+
 	result, _ := json.MarshalIndent(map[string]interface{}{
-		"workflow_id": workflowID,
-		"message":     "Workflow disabled successfully",
+		"workflow_id":   workflowID,
+		"environment":   environmentName,
+		"db_deleted":    deletedCount,
+		"files_deleted": filesDeleted,
+		"message":       "Workflow permanently deleted from database and filesystem",
 	}, "", "  ")
 
 	return mcp.NewToolResultText(string(result)), nil
+}
+
+// deleteWorkflowFiles removes workflow definition files from the filesystem.
+// It first tries to delete the YAML file (preferred format via GetWorkflowFilePath),
+// and if that doesn't exist, falls back to the legacy JSON format (.workflow.json).
+// Only one format should exist per workflow, so we use continue after YAML deletion.
+func deleteWorkflowFiles(workflowIDs []string, envName string) int {
+	deleted := 0
+	for _, workflowID := range workflowIDs {
+		yamlPath := config.GetWorkflowFilePath(envName, workflowID)
+		if _, err := os.Stat(yamlPath); err == nil {
+			if err := os.Remove(yamlPath); err != nil {
+				slog.Warn("failed to delete workflow YAML file",
+					"workflow_id", workflowID,
+					"path", yamlPath,
+					"error", err)
+			} else {
+				deleted++
+			}
+			continue
+		}
+
+		jsonPath := filepath.Join(config.GetWorkflowsDir(envName), workflowID+".workflow.json")
+		if _, err := os.Stat(jsonPath); err == nil {
+			if err := os.Remove(jsonPath); err != nil {
+				slog.Warn("failed to delete workflow JSON file",
+					"workflow_id", workflowID,
+					"path", jsonPath,
+					"error", err)
+			} else {
+				deleted++
+			}
+		}
+	}
+	return deleted
 }
 
 func (s *Server) handleValidateWorkflow(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

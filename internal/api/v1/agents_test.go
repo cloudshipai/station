@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"station/internal/services"
+	"station/internal/storage"
 	"station/pkg/models"
 )
 
@@ -142,6 +143,8 @@ func (m *MockAgentService) UpdateAgentPrompt(ctx context.Context, agentID int64,
 	agent.Prompt = prompt
 	return nil
 }
+
+func (m *MockAgentService) SetFileStore(store storage.FileStore) {}
 
 // MockAgentExportService for testing - just set to nil since it's optional
 // The real handler will check for nil and skip export

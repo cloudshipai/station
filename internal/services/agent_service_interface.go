@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 
+	"station/internal/storage"
 	"station/pkg/models"
 )
 
@@ -23,6 +24,9 @@ type AgentServiceInterface interface {
 	UpdateAgent(ctx context.Context, agentID int64, config *AgentConfig) (*models.Agent, error)
 	UpdateAgentPrompt(ctx context.Context, agentID int64, prompt string) error
 	DeleteAgent(ctx context.Context, agentID int64) error
+
+	// SetFileStore configures the file store for sandbox file staging
+	SetFileStore(store storage.FileStore)
 }
 
 // AgentConfig represents the configuration for creating/updating an agent

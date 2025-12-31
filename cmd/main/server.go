@@ -11,6 +11,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/db/repositories"
+	"station/internal/genkit/anthropic_oauth"
 	"station/internal/lighthouse"
 	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/mcp"
@@ -30,9 +31,10 @@ import (
 
 // genkitSetup holds the initialized Genkit components
 type genkitSetup struct {
-	app          *genkit.Genkit
-	openaiPlugin *openai.OpenAI // Official GenKit v1.0.1 OpenAI plugin
-	geminiPlugin *googlegenai.GoogleAI
+	app             *genkit.Genkit
+	openaiPlugin    *openai.OpenAI // Official GenKit v1.0.1 OpenAI plugin
+	geminiPlugin    *googlegenai.GoogleAI
+	anthropicPlugin *anthropic_oauth.AnthropicOAuth
 }
 
 // initializeGenkit initializes Genkit with configured AI provider
@@ -71,11 +73,35 @@ func initializeGenkit(ctx context.Context, cfg *config.Config) (*genkitSetup, er
 		}
 		genkitApp = genkit.Init(ctx, genkit.WithPlugins(geminiPlugin))
 		// GenKit v1.0.1 Init doesn't return error
+	case "anthropic":
+		log.Printf("Setting up Anthropic plugin with model: %s, auth_type: %s", cfg.AIModel, cfg.AIAuthType)
+
+		var anthropicPlugin *anthropic_oauth.AnthropicOAuth
+
+		if cfg.AIAuthType == "oauth" && cfg.AIOAuthToken != "" {
+			log.Printf("Using native Anthropic plugin with OAuth authentication (full tool support)")
+			anthropicPlugin = &anthropic_oauth.AnthropicOAuth{
+				OAuthToken: cfg.AIOAuthToken,
+			}
+		} else if cfg.AIAPIKey != "" {
+			log.Printf("Using native Anthropic plugin with API key authentication (full tool support)")
+			anthropicPlugin = &anthropic_oauth.AnthropicOAuth{
+				APIKey: cfg.AIAPIKey,
+			}
+		} else {
+			return nil, fmt.Errorf("Anthropic provider requires either OAuth token (ai_oauth_token) or API key (ANTHROPIC_API_KEY)")
+		}
+
+		genkitApp = genkit.Init(ctx, genkit.WithPlugins(anthropicPlugin))
+		return &genkitSetup{
+			app:             genkitApp,
+			anthropicPlugin: anthropicPlugin,
+		}, nil
 	case "ollama":
 		// For now, main server only supports OpenAI - Ollama support will be added
 		return nil, fmt.Errorf("Ollama provider not yet supported in main server (use OpenAI for now)")
 	default:
-		return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini, ollama)", cfg.AIProvider)
+		return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini, anthropic, ollama)", cfg.AIProvider)
 	}
 
 	return &genkitSetup{

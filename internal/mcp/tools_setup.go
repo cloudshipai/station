@@ -25,7 +25,8 @@ func (s *Server) setupTools() {
 		mcp.WithString("app_type", mcp.Description("CloudShip data ingestion app_type classification for data categorization (optional, must be provided with app). Valid values: 'inventory', 'investigations', 'opportunities', 'projections', 'events'. Auto-populated from preset if not provided. Defines the type of operational data this agent generates.")),
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context. The agent's prompt should include {{cloudship_memory}} placeholder where context will be injected.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow by truncating memory content.")),
-		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Simple: {\"runtime\": \"python\"} or full: {\"runtime\": \"python\", \"pip_packages\": [\"requests\"], \"timeout_seconds\": 30, \"limits\": {\"memory_mb\": 512}}. Modes: 'compute' (single execution, default) or 'code' (persistent session with session ID).")),
+		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Modes: 'compute' (single execution, default) or 'code' (persistent session). For code mode, use 'session': 'workflow' to share sandbox across workflow steps, or 'agent' (default) for per-agent sessions. Example: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\", \"pip_packages\": [\"pandas\"]}. Full options: mode, session, runtime, image, timeout_seconds, allow_network, pip_packages, npm_packages, limits.")),
+		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Enables coding_open, code, coding_close, coding_commit, coding_push tools. Example: {\"enabled\": true, \"backend\": \"opencode\", \"workspace_path\": \"/tmp/my-project\"}. Options: enabled (bool), backend (\"opencode\"), workspace_path (optional default workspace).")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
@@ -42,7 +43,8 @@ func (s *Server) setupTools() {
 		mcp.WithString("output_schema_preset", mcp.Description("Predefined schema preset (e.g., 'finops') - alternative to output_schema")),
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow.")),
-		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Simple: {\"runtime\": \"python\"} or full config with limits, packages, etc. Set to \"{}\" to remove sandbox.")),
+		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. For code mode with workflow scoping: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\"}. Set to \"{}\" to remove sandbox. Options: mode (compute/code), session (workflow/agent), runtime, pip_packages, npm_packages, timeout_seconds, allow_network, limits.")),
+		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Set to \"{}\" to remove. Example: {\"enabled\": true, \"backend\": \"opencode\"}.")),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 
@@ -398,9 +400,16 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(updateWorkflowTool, s.handleUpdateWorkflow)
 
+	archiveWorkflowTool := mcp.NewTool("archive_workflow",
+		mcp.WithDescription("Archive (soft delete) a workflow definition. The workflow remains in the database but is disabled and won't run. Use delete_workflow for permanent removal."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to archive")),
+	)
+	s.mcpServer.AddTool(archiveWorkflowTool, s.handleArchiveWorkflow)
+
 	deleteWorkflowTool := mcp.NewTool("delete_workflow",
-		mcp.WithDescription("Disable a workflow definition (soft delete)"),
-		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to disable")),
+		mcp.WithDescription("Permanently delete a workflow from both database and filesystem. This action cannot be undone. Use archive_workflow to disable without deleting."),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("Workflow ID to permanently delete")),
+		mcp.WithString("environment_name", mcp.Description("Environment name for file deletion (default: 'default')")),
 	)
 	s.mcpServer.AddTool(deleteWorkflowTool, s.handleDeleteWorkflow)
 

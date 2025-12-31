@@ -17,6 +17,7 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/services"
+	"station/internal/storage"
 	"station/internal/workflows"
 	"station/internal/workflows/runtime"
 	"station/pkg/models"
@@ -109,6 +110,8 @@ func (m *mockAgentService) UpdateAgentPrompt(ctx context.Context, agentID int64,
 func (m *mockAgentService) DeleteAgent(ctx context.Context, agentID int64) error {
 	return fmt.Errorf("not implemented in mock")
 }
+
+func (m *mockAgentService) SetFileStore(store storage.FileStore) {}
 
 func (m *mockAgentService) registerAgent(agent *models.Agent) {
 	m.mu.Lock()

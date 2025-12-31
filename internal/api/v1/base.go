@@ -13,6 +13,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/notifications"
 	"station/internal/services"
+	"station/internal/storage"
 	"station/internal/telemetry"
 	"station/internal/workflows"
 	"station/internal/workflows/runtime"
@@ -29,6 +30,7 @@ type APIHandlers struct {
 	workflowConsumer     *runtime.WorkflowConsumer
 	workflowEngine       runtime.Engine
 	workflowTelemetry    *runtime.WorkflowTelemetry
+	filesHandler         *FilesHandler
 	localMode            bool
 	cfg                  *config.Config
 }
@@ -59,6 +61,7 @@ func NewAPIHandlers(
 		localMode:            localMode,
 	}
 
+	h.initFilesHandler()
 	h.startWorkflowConsumer(repos, engine, agentService)
 	return h
 }
@@ -91,6 +94,7 @@ func NewAPIHandlersWithConfig(
 		cfg:                  cfg,
 	}
 
+	h.initFilesHandler()
 	h.startWorkflowConsumer(repos, engine, agentService)
 	return h
 }
@@ -123,6 +127,7 @@ func NewAPIHandlersWithAgentService(
 		cfg:                  cfg,
 	}
 
+	h.initFilesHandler()
 	h.startWorkflowConsumer(repos, engine, agentService)
 	return h
 }
@@ -191,6 +196,41 @@ func (h *APIHandlers) SetWorkflowScheduler(scheduler *services.WorkflowScheduler
 	if h.workflowService != nil {
 		h.workflowService.SetScheduler(scheduler)
 	}
+}
+
+// initFilesHandler initializes the files handler using the workflow engine's JetStream.
+// This is called automatically by constructors when NATS is available.
+func (h *APIHandlers) initFilesHandler() {
+	natsEngine, ok := h.workflowEngine.(*runtime.NATSEngine)
+	if !ok || natsEngine == nil {
+		log.Println("Files handler: NATS engine not available, file storage disabled")
+		return
+	}
+
+	js := natsEngine.JetStream()
+	if js == nil {
+		log.Println("Files handler: JetStream not available, file storage disabled")
+		return
+	}
+
+	store, err := storage.NewNATSFileStore(js, storage.DefaultConfig())
+	if err != nil {
+		log.Printf("Files handler: Failed to initialize file store: %v", err)
+		return
+	}
+
+	h.filesHandler = NewFilesHandler(store)
+
+	if h.agentService != nil {
+		h.agentService.SetFileStore(store)
+	}
+
+	log.Println("Files handler: Initialized with NATS Object Store")
+}
+
+// SetFileStore allows setting a custom file store (useful for testing)
+func (h *APIHandlers) SetFileStore(store storage.FileStore) {
+	h.filesHandler = NewFilesHandler(store)
 }
 
 type agentExecutorAdapter struct {
@@ -535,6 +575,16 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	bundlesGroup.GET("/cloudship", h.listCloudShipBundles)
 	bundlesGroup.POST("", h.createBundle)
 	bundlesGroup.POST("/install", h.installBundle)
+
+	// Files routes - file staging via NATS Object Store
+	if h.filesHandler != nil {
+		filesGroup := router.Group("/files")
+		filesGroup.POST("", h.filesHandler.Upload)
+		filesGroup.GET("", h.filesHandler.List)
+		filesGroup.GET("/:key", h.filesHandler.Download)
+		filesGroup.HEAD("/:key", h.filesHandler.GetInfo)
+		filesGroup.DELETE("/:key", h.filesHandler.Delete)
+	}
 
 	// Demo Bundles routes
 	demoBundlesGroup := router.Group("/demo-bundles")

@@ -2,10 +2,12 @@ package mcp_agents
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"station/internal/auth"
@@ -18,6 +20,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+//go:embed openapi.yaml
+var openAPISpec string
 
 // authRequiredKey is a context key to signal that auth is required but not provided
 type authRequiredKey struct{}
@@ -124,22 +129,18 @@ func (das *DynamicAgentServer) Start(ctx context.Context, port int) error {
 
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 
-	// Create HTTP mux for multiple routes
 	mux := http.NewServeMux()
 
-	// MCP endpoint (default routes)
-	mux.Handle("/", das.httpServer)
+	mux.HandleFunc("/health", das.handleHealth)
+	mux.HandleFunc("/openapi.yaml", das.handleOpenAPISpec)
+	mux.HandleFunc("/execute", das.handleExecuteWebhook)
+	mux.HandleFunc("/runs/", das.handleAgentRuns)
+	mux.HandleFunc("/workflow-runs/", das.handleWorkflowRuns)
+	mux.HandleFunc("/workflow-runs", das.handleWorkflowRuns)
+	mux.HandleFunc("/workflow-approvals/", das.handleWorkflowApprovals)
 	mux.Handle("/mcp", das.httpServer)
 	mux.Handle("/mcp/", das.httpServer)
-
-	// Webhook execute endpoint
-	mux.HandleFunc("/execute", das.handleExecuteWebhook)
-
-	// Health check endpoint
-	mux.HandleFunc("/health", das.handleHealth)
-
-	// Workflow approval endpoints (public API for external approve/reject)
-	mux.HandleFunc("/workflow-approvals/", das.handleWorkflowApprovals)
+	mux.HandleFunc("/", das.handleNotFound)
 
 	// Determine the final handler based on auth configuration
 	var handler http.Handler = mux
@@ -321,6 +322,22 @@ func (das *DynamicAgentServer) handleHealth(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+func (das *DynamicAgentServer) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(openAPISpec))
+}
+
+func (das *DynamicAgentServer) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   "not_found",
+		Message: fmt.Sprintf("Unknown endpoint: %s %s. Try /health, /execute, /runs/{id}, /workflow-runs, /mcp", r.Method, r.URL.Path),
+	})
+}
+
 func (das *DynamicAgentServer) handleWorkflowApprovals(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -451,8 +468,179 @@ func (das *DynamicAgentServer) handleRejectAction(w http.ResponseWriter, r *http
 	})
 }
 
+func (das *DynamicAgentServer) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	_, err := das.authenticateWebhookRequest(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "unauthorized",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/runs/")
+	if path == "" || path == "/" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "Run ID required: /runs/{id}",
+		})
+		return
+	}
+
+	runID, err := strconv.ParseInt(path, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "Invalid run ID",
+		})
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "method_not_allowed", Message: "Use GET /runs/{id}"})
+		return
+	}
+
+	run, err := das.repos.AgentRuns.GetByIDWithDetails(r.Context(), runID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "not_found",
+			Message: fmt.Sprintf("Run %d not found", runID),
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"run": run})
+}
+
+type StartWorkflowRequest struct {
+	WorkflowID string                 `json:"workflow_id"`
+	Input      map[string]interface{} `json:"input,omitempty"`
+	Version    *int64                 `json:"version,omitempty"`
+}
+
+type WorkflowRunResponse struct {
+	RunID      string `json:"run_id"`
+	WorkflowID string `json:"workflow_id"`
+	Status     string `json:"status"`
+	Message    string `json:"message"`
+}
+
+func (das *DynamicAgentServer) handleWorkflowRuns(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if das.workflowService == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "service_unavailable",
+			Message: "Workflow service not configured",
+		})
+		return
+	}
+
+	_, err := das.authenticateWebhookRequest(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "unauthorized",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/workflow-runs")
+	path = strings.TrimPrefix(path, "/")
+
+	switch {
+	case r.Method == http.MethodPost && path == "":
+		das.handleStartWorkflow(w, r)
+	case r.Method == http.MethodGet && path != "":
+		das.handleGetWorkflowRun(w, r, path)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "method_not_allowed",
+			Message: "Use POST /workflow-runs to start, GET /workflow-runs/{id} for status",
+		})
+	}
+}
+
+func (das *DynamicAgentServer) handleStartWorkflow(w http.ResponseWriter, r *http.Request) {
+	var req StartWorkflowRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "Invalid JSON: " + err.Error(),
+		})
+		return
+	}
+
+	if req.WorkflowID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "bad_request",
+			Message: "workflow_id is required",
+		})
+		return
+	}
+
+	inputJSON, _ := json.Marshal(req.Input)
+
+	version := int64(0)
+	if req.Version != nil {
+		version = *req.Version
+	}
+
+	run, _, err := das.workflowService.StartRun(r.Context(), services.StartWorkflowRunRequest{
+		WorkflowID: req.WorkflowID,
+		Version:    version,
+		Input:      inputJSON,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "workflow_start_failed",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	log.Printf("Webhook: Started workflow (Run ID: %s, Workflow: %s)", run.RunID, req.WorkflowID)
+
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(WorkflowRunResponse{
+		RunID:      run.RunID,
+		WorkflowID: req.WorkflowID,
+		Status:     string(run.Status),
+		Message:    "Workflow run started",
+	})
+}
+
+func (das *DynamicAgentServer) handleGetWorkflowRun(w http.ResponseWriter, r *http.Request, runID string) {
+	run, err := das.workflowService.GetRun(r.Context(), runID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "not_found",
+			Message: fmt.Sprintf("Workflow run '%s' not found", runID),
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"run": run})
+}
+
 func (das *DynamicAgentServer) authenticateWebhookRequest(r *http.Request) (*models.User, error) {
-	// Local mode: default admin user (no auth required)
 	if das.localMode {
 		return &models.User{ID: 1, Username: "local", IsAdmin: true}, nil
 	}

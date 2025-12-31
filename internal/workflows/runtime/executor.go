@@ -156,6 +156,8 @@ func (e *AgentRunExecutor) Execute(ctx context.Context, step workflows.Execution
 		}
 	}
 
+	task = interpolateTemplateVars(task, runContext)
+
 	result, err := e.deps.ExecuteAgent(ctx, agent.ID, task, variables)
 	if err != nil {
 		errStr := err.Error()
@@ -277,6 +279,10 @@ func (e *AgentRunExecutor) extractTask(input map[string]interface{}, stepID stri
 		return agentTask
 	}
 
+	if userInput, ok := input["userInput"].(string); ok && userInput != "" {
+		return userInput
+	}
+
 	return fmt.Sprintf("Execute workflow step: %s", stepID)
 }
 
@@ -290,6 +296,22 @@ func (e *AgentRunExecutor) extractTaskFromDataFlow(stepInput, staticInput map[st
 	}
 
 	return e.extractTask(staticInput, stepID)
+}
+
+func interpolateTemplateVars(template string, context map[string]interface{}) string {
+	result := template
+	for key, value := range context {
+		if key[0] == '_' {
+			continue
+		}
+		placeholder := "${" + key + "}"
+		if strVal, ok := value.(string); ok {
+			result = strings.ReplaceAll(result, placeholder, strVal)
+		} else if value != nil {
+			result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", value))
+		}
+	}
+	return result
 }
 
 func (e *AgentRunExecutor) validateInput(input map[string]interface{}, runContext map[string]interface{}, schemaJSON string) error {

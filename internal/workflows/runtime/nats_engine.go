@@ -19,6 +19,7 @@ type Engine interface {
 	PublishStepSchedule(ctx context.Context, runID, stepID string, payload any) error
 	PublishStepWithTrace(ctx context.Context, runID, stepID string, step workflows.ExecutionStep) error
 	SubscribeDurable(subject, consumer string, handler func(msg *nats.Msg)) (*nats.Subscription, error)
+	JetStream() nats.JetStreamContext
 	Close()
 }
 
@@ -237,6 +238,13 @@ func (e *NATSEngine) publishJSON(subject string, value any) error {
 	}
 	_, err = e.js.Publish(subject, data)
 	return err
+}
+
+func (e *NATSEngine) JetStream() nats.JetStreamContext {
+	if e == nil {
+		return nil
+	}
+	return e.js
 }
 
 func (e *NATSEngine) Close() {

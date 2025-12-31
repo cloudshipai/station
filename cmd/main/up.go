@@ -12,10 +12,119 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
+
+	"station/internal/services"
+	"station/internal/version"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
+
+type UpMetadata struct {
+	SourceType    string    `json:"source_type"`
+	SourceName    string    `json:"source_name"`
+	SourcePath    string    `json:"source_path"`
+	VariablesFile string    `json:"variables_file"`
+	ConfiguredAt  time.Time `json:"configured_at"`
+	StnVersion    string    `json:"stn_version"`
+}
+
+const upMetadataFile = ".stn-up-metadata.json"
+
+func readVariablesYml(envPath string) (map[string]string, error) {
+	variablesPath := filepath.Join(envPath, "variables.yml")
+	data, err := os.ReadFile(variablesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]string), nil
+		}
+		return nil, fmt.Errorf("failed to read variables.yml: %w", err)
+	}
+
+	var rawVars map[string]interface{}
+	if err := yaml.Unmarshal(data, &rawVars); err != nil {
+		return nil, fmt.Errorf("failed to parse variables.yml: %w", err)
+	}
+
+	vars := make(map[string]string)
+	for key, value := range rawVars {
+		vars[key] = fmt.Sprintf("%v", value)
+	}
+	return vars, nil
+}
+
+func mergeVariablesWithEnv(variables map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for key, defaultValue := range variables {
+		if envValue := os.Getenv(key); envValue != "" {
+			merged[key] = envValue
+		} else {
+			merged[key] = defaultValue
+		}
+	}
+	return merged
+}
+
+func writeUpMetadata(imageName string, metadata UpMetadata) error {
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	metadataPath := fmt.Sprintf("/home/station/.config/station/%s", upMetadataFile)
+	writeCmd := dockerCommand("run", "--rm",
+		"-v", "station-config:/home/station/.config/station",
+		imageName,
+		"sh", "-c", fmt.Sprintf("echo '%s' > %s", string(data), metadataPath))
+	return writeCmd.Run()
+}
+
+func readUpMetadata(imageName string) (*UpMetadata, error) {
+	metadataPath := fmt.Sprintf("/home/station/.config/station/%s", upMetadataFile)
+	readCmd := dockerCommand("run", "--rm",
+		"-v", "station-config:/home/station/.config/station",
+		imageName,
+		"cat", metadataPath)
+
+	output, err := readCmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var metadata UpMetadata
+	if err := json.Unmarshal(output, &metadata); err != nil {
+		return nil, err
+	}
+	return &metadata, nil
+}
+
+func bundleEnvironmentOnTheFly(envName string) (string, string, error) {
+	envPath := filepath.Join(os.Getenv("HOME"), ".config", "station", "environments", envName)
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		return "", "", fmt.Errorf("environment not found: %s\nExpected at: %s", envName, envPath)
+	}
+
+	bundleService := services.NewBundleService()
+	tarData, err := bundleService.CreateBundle(envPath)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create bundle: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "stn-up-bundle-*.tar.gz")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	if _, err := tmpFile.Write(tarData); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return "", "", fmt.Errorf("failed to write bundle: %w", err)
+	}
+	tmpFile.Close()
+
+	return tmpFile.Name(), envPath, nil
+}
 
 // dockerCommand creates an exec.Command for docker with proper environment inheritance
 func dockerCommand(args ...string) *exec.Cmd {
@@ -25,7 +134,7 @@ func dockerCommand(args ...string) *exec.Cmd {
 }
 
 var upCmd = &cobra.Command{
-	Use:   "up",
+	Use:   "up [environment]",
 	Short: "Start Station server in a Docker container",
 	Long: `Start a containerized Station server with isolated configuration and workspace access.
 
@@ -33,47 +142,30 @@ This command:
 - Builds or uses existing Station runtime container
 - Stores all configuration in Docker volume (isolated from host)
 - Mounts your workspace directory with correct file permissions
-- Automatically configures .mcp.json for Claude integration
-- Exposes ports for API (8585), MCP (8586), Dynamic Agent MCP (8587)
+- Exposes Dynamic Agent MCP port (8587) by default
+- Use --dev to also expose UI (8585) and MCP (8586) ports
 
-Key Features:
-- Config management via UI (restart container to apply changes)
-- Workspace files maintain your user ownership (no root permission issues)
-- Data persists across container restarts in Docker volume
-- Install bundles directly from CloudShip with --bundle flag
-- Auto-imports host config from ~/.config/station when using --bundle
+Port Modes:
+  Default:  Only 8587 (Dynamic Agent MCP) - for production/CloudShip
+  --dev:    8585 (UI) + 8586 (MCP) + 8587 - for local development
 
 Examples:
-  # Basic usage
-  stn up                                    # Start with current directory as workspace
-  stn up --workspace ~/code                 # Use specific directory as workspace
+  # Production mode (only 8587 exposed)
+  stn up default
+  stn up my-environment
 
-  # Start with a CloudShip bundle (uses ~/.config/station/config.yaml if exists)
-  stn init --provider openai                # One-time setup on host
-  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a   # No --provider needed!
+  # Development mode (all ports exposed)
+  stn up default --dev
+  stn up my-environment --dev
+
+  # Start with a CloudShip bundle
+  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a -e AWS_KEY=$AWS_KEY
   
-  # Bundle with additional env vars
-  stn up --bundle e26b414a-f076-4135-927f-810bc1dc892a -e AWS_ACCESS_KEY_ID=$AWS_KEY
-
-  # First-time setup with configuration (uses environment variables)
-  stn up --provider openai --ship           # Init with OpenAI (requires OPENAI_API_KEY env var)
-  stn up --provider gemini --model gemini-2.0-flash-exp --yes
-
-  # Pass API key via flag (no environment variable needed)
-  stn up --provider openai --api-key sk-xxx... --yes
-  stn up --provider gemini --api-key xxx... --model gemini-2.0-flash-exp --yes
-
-  # Custom provider (Ollama, Anthropic, etc.)
-  stn up --provider custom --base-url http://localhost:11434/v1 --model llama2
-
-  # Advanced options
-  stn up --upgrade                          # Rebuild container image first
-  stn up --env CUSTOM_VAR=value            # Pass additional env vars
-
-To reset and start fresh with a new bundle:
-  stn down --remove-volumes
-  stn up --bundle <new-bundle-id>
+  # Reset and reconfigure
+  stn down --remove-volume
+  stn up new-environment
 `,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runUp,
 }
 
@@ -82,8 +174,7 @@ func init() {
 	upCmd.Flags().BoolP("detach", "d", true, "Run container in background")
 	upCmd.Flags().Bool("upgrade", false, "Rebuild container image before starting")
 	upCmd.Flags().StringSlice("env", []string{}, "Additional environment variables to pass through")
-	upCmd.Flags().Bool("develop", false, "Enable Genkit Developer UI mode (exposes port 4033 for reflection API)")
-	upCmd.Flags().String("environment", "default", "Station environment to use in develop mode (e.g., default, production, security)")
+	upCmd.Flags().Bool("dev", false, "Development mode: expose UI (8585) and MCP (8586) ports. Default only exposes Dynamic Agent MCP (8587)")
 
 	// Init flags for first-time setup
 	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, anthropic, custom). Defaults to openai")
@@ -102,7 +193,6 @@ func init() {
 }
 
 func runUp(cmd *cobra.Command, args []string) error {
-	// Check if Docker daemon is running
 	checkDockerCmd := dockerCommand("info")
 	checkDockerCmd.Stdout = nil
 	checkDockerCmd.Stderr = nil
@@ -110,11 +200,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Docker daemon is not running. Please start Docker Desktop and try again")
 	}
 
-	// Check if container is already running
 	if containerID := getRunningStationContainer(); containerID != "" {
 		fmt.Printf("✅ Station server already running (container: %s)\n", containerID[:12])
-
-		// Update workspace mount if requested
 		workspace, _ := cmd.Flags().GetString("workspace")
 		if workspace != "" {
 			fmt.Printf("ℹ️  To change workspace, run 'stn down' first, then 'stn up --workspace %s'\n", workspace)
@@ -122,7 +209,76 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Determine workspace directory
+	imageName := "station-server:latest"
+	bundleSource, _ := cmd.Flags().GetString("bundle")
+	originalBundleFlag := bundleSource
+	envArg := ""
+	if len(args) > 0 {
+		envArg = args[0]
+	}
+
+	if envArg != "" && bundleSource != "" {
+		return fmt.Errorf("cannot specify both environment argument and --bundle flag")
+	}
+
+	checkVolumeCmd := dockerCommand("volume", "inspect", "station-config")
+	checkVolumeCmd.Stdout = nil
+	checkVolumeCmd.Stderr = nil
+	volumeExists := checkVolumeCmd.Run() == nil
+
+	var existingMetadata *UpMetadata
+	if volumeExists {
+		if !dockerImageExists(imageName) {
+			if err := buildRuntimeContainer(); err != nil {
+				return fmt.Errorf("failed to build container: %w", err)
+			}
+		}
+		existingMetadata, _ = readUpMetadata(imageName)
+	}
+
+	if envArg == "" && bundleSource == "" {
+		if existingMetadata != nil {
+			fmt.Printf("🔄 Restarting previously configured Station (%s: %s)\n",
+				existingMetadata.SourceType, existingMetadata.SourceName)
+		} else if !volumeExists {
+			return fmt.Errorf("no configuration found\n\nUsage:\n  stn up <environment>           Bundle and serve local environment\n  stn up --bundle <id>           Download and serve CloudShip bundle\n\nExample:\n  stn up default")
+		}
+	}
+
+	if (envArg != "" || bundleSource != "") && existingMetadata != nil {
+		newSource := envArg
+		if bundleSource != "" {
+			newSource = bundleSource
+		}
+		if existingMetadata.SourceName != newSource {
+			return fmt.Errorf("already configured with %s: %s\n\nTo reconfigure, run:\n  stn down --remove-volume\n  stn up %s",
+				existingMetadata.SourceType, existingMetadata.SourceName, newSource)
+		}
+	}
+
+	var envVariables map[string]string
+	var envPath string
+
+	if envArg != "" {
+		fmt.Printf("📦 Bundling environment: %s\n", envArg)
+		bundlePath, path, err := bundleEnvironmentOnTheFly(envArg)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(bundlePath)
+		bundleSource = bundlePath
+		envPath = path
+
+		vars, err := readVariablesYml(envPath)
+		if err != nil {
+			return fmt.Errorf("failed to read variables.yml: %w", err)
+		}
+		envVariables = mergeVariablesWithEnv(vars)
+		if len(envVariables) > 0 {
+			fmt.Printf("📋 Loaded %d variables from variables.yml\n", len(envVariables))
+		}
+	}
+
 	workspace, _ := cmd.Flags().GetString("workspace")
 	if workspace == "" {
 		var err error
@@ -132,27 +288,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Resolve to absolute path
 	absWorkspace, err := filepath.Abs(workspace)
 	if err != nil {
 		return fmt.Errorf("failed to resolve workspace path: %w", err)
 	}
 
-	// Check if workspace exists
 	if _, err := os.Stat(absWorkspace); os.IsNotExist(err) {
 		return fmt.Errorf("workspace directory does not exist: %s", absWorkspace)
 	}
 
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
-
-	// Image name for all operations
-	imageName := "station-server:latest"
-
-	// Check if station-config volume exists
-	checkVolumeCmd := dockerCommand("volume", "inspect", "station-config")
-	checkVolumeCmd.Stdout = nil
-	checkVolumeCmd.Stderr = nil
-	volumeExists := checkVolumeCmd.Run() == nil
 
 	needsInit := false
 	if !volumeExists {
@@ -164,7 +309,6 @@ func runUp(cmd *cobra.Command, args []string) error {
 		fmt.Printf("✅ Created Station data volume\n")
 		needsInit = true
 	} else {
-		// Volume exists, check if it contains config
 		checkConfigCmd := dockerCommand("run", "--rm",
 			"-v", "station-config:/home/station/.config/station",
 			imageName,
@@ -203,9 +347,6 @@ func runUp(cmd *cobra.Command, args []string) error {
 	gid := os.Getgid()
 
 	// Initialize the container volume if needed
-	// Check for --bundle flag
-	bundleSource, _ := cmd.Flags().GetString("bundle")
-
 	if needsInit {
 		// Check if host has existing Station config we can use
 		hostConfigDir := filepath.Join(os.Getenv("HOME"), ".config", "station")
@@ -482,22 +623,32 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Printf("✅ Bundle installed to default environment!\n")
+
+		metadata := UpMetadata{
+			ConfiguredAt: time.Now(),
+			StnVersion:   version.Version,
+		}
+		if envArg != "" {
+			metadata.SourceType = "environment"
+			metadata.SourceName = envArg
+			metadata.SourcePath = envPath
+			metadata.VariablesFile = filepath.Join(envPath, "variables.yml")
+		} else {
+			metadata.SourceType = "bundle"
+			metadata.SourceName = originalBundleFlag
+			metadata.SourcePath = ""
+		}
+		if err := writeUpMetadata(imageName, metadata); err != nil {
+			log.Printf("Warning: Failed to save metadata: %v", err)
+		}
 	}
 
 	// Prepare Docker run command
 	dockerArgs := []string{"run", "--name", "station-server"}
 
-	// Don't expose port 4033 - genkit start manages the reflection API
-	developMode, _ := cmd.Flags().GetBool("develop")
-
-	// Add detach flag if requested (but not in develop mode - needs to stay foreground)
+	devMode, _ := cmd.Flags().GetBool("dev")
 	detach, _ := cmd.Flags().GetBool("detach")
-	if developMode {
-		// Force foreground mode for genkit start compatibility
-		// Use -i (not -it) since genkit start doesn't provide a TTY
-		dockerArgs = append(dockerArgs, "-i")
-		detach = false // Override detach flag
-	} else if detach {
+	if detach {
 		dockerArgs = append(dockerArgs, "-d")
 	} else {
 		dockerArgs = append(dockerArgs, "-it")
@@ -547,16 +698,10 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Named volume for cache (persists across container restarts)
 	dockerArgs = append(dockerArgs, "-v", "station-cache:/home/station/.cache")
 
-	// Port mappings
-	dockerArgs = append(dockerArgs,
-		"-p", "8586:8586", // MCP
-		"-p", "8587:8587", // Dynamic Agent MCP (MCPPort+1)
-		"-p", "8585:8585", // UI/API
-	)
-
-	// Add Genkit Developer UI port if --develop flag is set
-	if developMode {
-		dockerArgs = append(dockerArgs, "-p", "4000:4000") // Genkit Developer UI
+	// Port mappings - default only exposes Dynamic Agent MCP (8587)
+	dockerArgs = append(dockerArgs, "-p", "8587:8587")
+	if devMode {
+		dockerArgs = append(dockerArgs, "-p", "8585:8585", "-p", "8586:8586")
 	}
 
 	// Note: Jaeger UI port (16686) not mapped - run Jaeger separately if needed
@@ -567,9 +712,11 @@ func runUp(cmd *cobra.Command, args []string) error {
 		log.Printf("Warning: Some environment variables may not be set: %v", err)
 	}
 
-	// Enable Genkit Developer UI mode if --develop flag is set
-	if developMode {
-		dockerArgs = append(dockerArgs, "-e", "GENKIT_ENV=dev")
+	// Add variables from variables.yml (for stn up <environment>)
+	if envVariables != nil {
+		for key, value := range envVariables {
+			dockerArgs = append(dockerArgs, "-e", fmt.Sprintf("%s=%s", key, value))
+		}
 	}
 
 	// Ensure STATION_CONFIG_DIR is set for proper paths
@@ -581,14 +728,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Set working directory
 	dockerArgs = append(dockerArgs, "-w", "/workspace")
 
-	// Add image and command - use 'genkit start' in develop mode to enable Developer UI
-	if developMode {
-		environment, _ := cmd.Flags().GetString("environment")
-		dockerArgs = append(dockerArgs, imageName, "genkit", "start", "--non-interactive", "--", "stn", "develop", "--env", environment)
-	} else {
-		// Telemetry enabled via config.yaml otel_endpoint - no --jaeger flag needed
-		dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586")
-	}
+	dockerArgs = append(dockerArgs, imageName, "stn", "serve", "--database", "/home/station/.config/station/station.db", "--mcp-port", "8586")
 
 	// Run the container
 	fmt.Printf("🐳 Starting container...\n")
@@ -603,37 +743,29 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 
-	// Update .mcp.json
-	if err := updateMCPConfig(absWorkspace); err != nil {
-		log.Printf("Warning: Failed to update .mcp.json: %v", err)
-		fmt.Printf("⚠️  Please manually add Station to your .mcp.json:\n")
-		fmt.Printf(`  "station": {
+	if devMode {
+		if err := updateMCPConfig(absWorkspace); err != nil {
+			log.Printf("Warning: Failed to update .mcp.json: %v", err)
+			fmt.Printf("⚠️  Please manually add Station to your .mcp.json:\n")
+			fmt.Printf(`  "station": {
     "url": "http://localhost:8586/mcp",
     "transport": "http"
   }` + "\n")
+		}
 	}
 
 	fmt.Printf("\n✅ Station server started successfully!\n")
-	fmt.Printf("🔗 MCP: http://localhost:8586/mcp\n")
 	fmt.Printf("🔗 Dynamic Agent MCP: http://localhost:8587/mcp\n")
-	fmt.Printf("🔗 UI:  http://localhost:8585\n")
+	if devMode {
+		fmt.Printf("🔗 MCP: http://localhost:8586/mcp\n")
+		fmt.Printf("🔗 UI:  http://localhost:8585\n")
+	}
 	fmt.Printf("📁 Workspace: %s\n", absWorkspace)
 
-	// Show Jaeger URL if enabled
-	// Telemetry info - Jaeger should be run separately if needed
-	fmt.Printf("💡 Telemetry exports to OTEL endpoint in config (run Jaeger separately if needed)\n")
-
-	if developMode {
-		environment, _ := cmd.Flags().GetString("environment")
-		fmt.Printf("\n🧪 Genkit Developer UI Mode Enabled!\n")
-		fmt.Printf("📖 Container is running: genkit start -- stn develop --env %s\n", environment)
-		fmt.Printf("🔗 Genkit Developer UI: http://localhost:4000\n")
-		fmt.Printf("🔗 Station UI: http://localhost:8585\n")
-		fmt.Printf("💡 All agents and MCP tools from '%s' environment available\n", environment)
-	}
-
 	if detach {
-		fmt.Printf("\n💡 Configuration: Managed via UI at http://localhost:8585/settings\n")
+		if devMode {
+			fmt.Printf("\n💡 Configuration: Managed via UI at http://localhost:8585/settings\n")
+		}
 		fmt.Printf("💡 Run 'stn logs' to see container output\n")
 		fmt.Printf("💡 Run 'stn down' to stop (data preserved in volume)\n")
 		fmt.Printf("💡 Run 'stn down --remove-volume' to delete all data\n")
@@ -675,45 +807,40 @@ func dockerImageExists(imageName string) bool {
 }
 
 func buildRuntimeContainer() error {
-	// Check if Dockerfile exists (development mode)
 	_, dockerfileErr := os.Stat("Dockerfile")
-	hasDockerfile := dockerfileErr == nil
+	hasLocalDockerfile := dockerfileErr == nil
 
-	// Try pulling pre-built image first (production/normal use)
+	if hasLocalDockerfile {
+		fmt.Printf("🔨 Building Station container from local Dockerfile...\n")
+		buildCmd := dockerCommand("build",
+			"--build-arg", "INSTALL_SHIP=true",
+			"-t", "station-server:latest",
+			".")
+		buildCmd.Stdout = os.Stdout
+		buildCmd.Stderr = os.Stderr
+
+		if err := buildCmd.Run(); err != nil {
+			return fmt.Errorf("failed to build image: %w", err)
+		}
+
+		fmt.Printf("✅ Successfully built Station container from local source\n")
+		return nil
+	}
+
 	fmt.Printf("📥 Pulling Station container from registry...\n")
 	pullCmd := dockerCommand("pull", "ghcr.io/cloudshipai/station:latest")
 	pullCmd.Stdout = os.Stdout
 	pullCmd.Stderr = os.Stderr
 
-	pullErr := pullCmd.Run()
-	if pullErr == nil {
-		// Successfully pulled, tag for local use
-		tagCmd := dockerCommand("tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
-		if tagErr := tagCmd.Run(); tagErr != nil {
-			return fmt.Errorf("failed to tag pulled image: %w", tagErr)
-		}
-		fmt.Printf("✅ Successfully pulled Station container\n")
-		return nil
+	if pullErr := pullCmd.Run(); pullErr != nil {
+		return fmt.Errorf("failed to pull image from registry: %w", pullErr)
 	}
 
-	// Pull failed, try building if Dockerfile exists (development mode)
-	if !hasDockerfile {
-		return fmt.Errorf("failed to pull image and no Dockerfile found for local build: %w", pullErr)
+	tagCmd := dockerCommand("tag", "ghcr.io/cloudshipai/station:latest", "station-server:latest")
+	if tagErr := tagCmd.Run(); tagErr != nil {
+		return fmt.Errorf("failed to tag pulled image: %w", tagErr)
 	}
-
-	fmt.Printf("⚠️  Pull failed, building from Dockerfile (development mode)...\n")
-	buildCmd := dockerCommand("build",
-		"--build-arg", "INSTALL_SHIP=true",
-		"-t", "station-server:latest",
-		".")
-	buildCmd.Stdout = os.Stdout
-	buildCmd.Stderr = os.Stderr
-
-	if err := buildCmd.Run(); err != nil {
-		return fmt.Errorf("failed to build image: %w", err)
-	}
-
-	fmt.Printf("✅ Successfully built Station container\n")
+	fmt.Printf("✅ Successfully pulled Station container\n")
 	return nil
 }
 

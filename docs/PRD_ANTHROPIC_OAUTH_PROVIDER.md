@@ -134,8 +134,24 @@ stn auth anthropic logout
 ## Known Limitations
 
 1. **Claude Code System Prompt Required**: OAuth tokens are only authorized for Claude Code, so the system prompt must be present
-2. **Faker Fallback**: Faker MCP servers cannot use Anthropic OAuth (falls back to OpenAI/Gemini)
-3. **Token Expiry**: Tokens expire after ~4 hours, but automatic refresh handles this
+2. **Token Expiry**: Tokens expire after ~4 hours, but automatic refresh handles this
+
+## Why We Use a Custom Plugin (Not GenKit's compat_oai/anthropic)
+
+GenKit's official `compat_oai/anthropic` plugin **explicitly disables tool support** for all models:
+
+```go
+// From genkit/go/plugins/compat_oai/anthropic/anthropic.go
+Tools: false, // NOTE: Anthropic supports tool use, but it's not compatible with the OpenAI API
+```
+
+This is because the plugin uses the OpenAI SDK to call Anthropic's API via their "OpenAI-compatible" endpoint, but tool calling formats are incompatible between the two APIs.
+
+Our custom `internal/genkit/anthropic_oauth/` plugin:
+- Uses `anthropic-sdk-go` directly with native Anthropic API
+- Properly implements Anthropic's tool calling format
+- Supports both OAuth and API key authentication
+- Works with all Claude models including tool use
 
 ## Success Criteria: ✅ ALL MET
 

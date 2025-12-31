@@ -1,0 +1,704 @@
+openapi: 3.1.0
+info:
+  title: Station Dynamic Agent MCP API
+  description: |
+    REST API for Station's Dynamic Agent MCP server (port 8587).
+    
+    This API provides:
+    - Agent execution via webhooks
+    - Agent run status tracking
+    - Workflow execution and management
+    - Workflow approval handling
+    - MCP protocol endpoint
+    
+    ## Authentication
+    
+    In **local mode** (default for `stn up`), no authentication is required.
+    
+    In **production mode**, authenticate using one of:
+    - `Authorization: Bearer <api_key>` - User API key
+    - `X-API-Key: <webhook_key>` - Static webhook API key (STN_WEBHOOK_API_KEY)
+    - OAuth 2.0 token (when CloudShip OAuth is enabled)
+  version: 1.0.0
+  contact:
+    name: CloudShip
+    url: https://cloudshipai.com
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8587
+    description: Local development server
+  - url: https://{station-host}:8587
+    description: Production station
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Agents
+    description: Agent execution and status
+  - name: Workflows
+    description: Workflow execution and management
+  - name: Approvals
+    description: Workflow approval handling
+  - name: MCP
+    description: Model Context Protocol endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the Dynamic Agent MCP server
+      operationId: getHealth
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                environment: default
+
+  /execute:
+    post:
+      tags:
+        - Agents
+      summary: Execute an agent
+      description: |
+        Triggers execution of a Station agent with the given task.
+        Returns immediately with a run ID that can be used to poll for status.
+      operationId: executeAgent
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRequest'
+            examples:
+              byName:
+                summary: Execute by agent name
+                value:
+                  agent_name: coder
+                  task: "Review the code in main.go"
+              byId:
+                summary: Execute by agent ID
+                value:
+                  agent_id: 1
+                  task: "Fix the bug in utils.py"
+                  variables:
+                    target_file: utils.py
+      responses:
+        '200':
+          description: Agent execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Webhook endpoint disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /runs/{runId}:
+    get:
+      tags:
+        - Agents
+      summary: Get agent run status
+      description: |
+        Retrieves the status and details of an agent run.
+        Poll this endpoint to track execution progress.
+      operationId: getAgentRun
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - {}
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          description: The numeric run ID returned from /execute
+          schema:
+            type: integer
+            format: int64
+          example: 1
+      responses:
+        '200':
+          description: Run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRunResponse'
+        '400':
+          description: Invalid run ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /workflow-runs:
+    post:
+      tags:
+        - Workflows
+      summary: Start a workflow
+      description: |
+        Starts execution of a workflow with the given inputs.
+        Returns a run ID that can be used to track progress.
+      operationId: startWorkflow
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartWorkflowRequest'
+            example:
+              workflow_id: code-review
+              input:
+                pr_url: "https://github.com/org/repo/pull/123"
+      responses:
+        '200':
+          description: Workflow started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Workflow service not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /workflow-runs/{runId}:
+    get:
+      tags:
+        - Workflows
+      summary: Get workflow run status
+      description: Retrieves the status and details of a workflow run
+      operationId: getWorkflowRun
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - {}
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          description: The workflow run ID
+          schema:
+            type: string
+          example: "wf-run-abc123"
+      responses:
+        '200':
+          description: Workflow run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunDetailResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workflow run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /workflow-approvals/{approvalId}:
+    get:
+      tags:
+        - Approvals
+      summary: Get approval details
+      description: Retrieves details of a pending workflow approval
+      operationId: getApproval
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          description: The approval ID
+          schema:
+            type: string
+          example: "approval-xyz789"
+      responses:
+        '200':
+          description: Approval details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalResponse'
+        '404':
+          description: Approval not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /workflow-approvals/{approvalId}/approve:
+    post:
+      tags:
+        - Approvals
+      summary: Approve a workflow step
+      description: Approves a pending workflow step, allowing execution to continue
+      operationId: approveWorkflowStep
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          description: The approval ID
+          schema:
+            type: string
+        - name: X-Actor-ID
+          in: header
+          required: false
+          description: ID of the user approving (defaults to "anonymous")
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  description: Optional comment for the approval
+            example:
+              comment: "Looks good, approved!"
+      responses:
+        '200':
+          description: Approval successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalActionResponse'
+        '400':
+          description: Approval failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /workflow-approvals/{approvalId}/reject:
+    post:
+      tags:
+        - Approvals
+      summary: Reject a workflow step
+      description: Rejects a pending workflow step, stopping execution
+      operationId: rejectWorkflowStep
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          description: The approval ID
+          schema:
+            type: string
+        - name: X-Actor-ID
+          in: header
+          required: false
+          description: ID of the user rejecting (defaults to "anonymous")
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for rejection
+            example:
+              reason: "This action is too risky, needs more review"
+      responses:
+        '200':
+          description: Rejection successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalActionResponse'
+        '400':
+          description: Rejection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mcp:
+    post:
+      tags:
+        - MCP
+      summary: MCP Protocol endpoint
+      description: |
+        Model Context Protocol (MCP) endpoint for tool discovery and invocation.
+        
+        This endpoint implements the MCP specification for:
+        - Tool listing (`tools/list`)
+        - Tool invocation (`tools/call`)
+        - Session management
+        
+        Agents and workflows are exposed as MCP tools with names like:
+        - `agent_coder` - Execute the coder agent
+        - `workflow_code_review` - Run the code-review workflow
+        - `get_workflow_run_status` - Check workflow status
+      operationId: mcpEndpoint
+      security:
+        - bearerAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPRequest'
+            examples:
+              initialize:
+                summary: Initialize MCP session
+                value:
+                  jsonrpc: "2.0"
+                  method: initialize
+                  params:
+                    protocolVersion: "2024-11-05"
+                    capabilities: {}
+                    clientInfo:
+                      name: my-client
+                      version: "1.0.0"
+                  id: 1
+              listTools:
+                summary: List available tools
+                value:
+                  jsonrpc: "2.0"
+                  method: tools/list
+                  id: 2
+              callTool:
+                summary: Call a tool
+                value:
+                  jsonrpc: "2.0"
+                  method: tools/call
+                  params:
+                    name: agent_coder
+                    arguments:
+                      task: "Review the code"
+                  id: 3
+      responses:
+        '200':
+          description: MCP response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResponse'
+        '400':
+          description: Invalid MCP request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: User API key or OAuth access token
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Static webhook API key (STN_WEBHOOK_API_KEY)
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        environment:
+          type: string
+          description: The active environment name
+
+    ExecuteRequest:
+      type: object
+      required:
+        - task
+      properties:
+        agent_name:
+          type: string
+          description: Name of the agent to execute (mutually exclusive with agent_id)
+        agent_id:
+          type: integer
+          format: int64
+          description: ID of the agent to execute (mutually exclusive with agent_name)
+        task:
+          type: string
+          description: The task/prompt to send to the agent
+        variables:
+          type: object
+          additionalProperties: true
+          description: Optional variables to pass to the agent
+
+    ExecuteResponse:
+      type: object
+      required:
+        - run_id
+        - agent_id
+        - agent_name
+        - status
+        - message
+      properties:
+        run_id:
+          type: integer
+          format: int64
+          description: Unique identifier for this execution run
+        agent_id:
+          type: integer
+          format: int64
+        agent_name:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed]
+        message:
+          type: string
+
+    AgentRunResponse:
+      type: object
+      properties:
+        run:
+          type: object
+          properties:
+            id:
+              type: integer
+              format: int64
+            agent_id:
+              type: integer
+              format: int64
+            agent_name:
+              type: string
+            status:
+              type: string
+              enum: [pending, running, completed, failed]
+            task:
+              type: string
+            result:
+              type: string
+            error:
+              type: string
+            started_at:
+              type: string
+              format: date-time
+            completed_at:
+              type: string
+              format: date-time
+
+    StartWorkflowRequest:
+      type: object
+      required:
+        - workflow_id
+      properties:
+        workflow_id:
+          type: string
+          description: ID/name of the workflow to start
+        input:
+          type: object
+          additionalProperties: true
+          description: Input parameters for the workflow
+        version:
+          type: integer
+          format: int64
+          description: Optional specific workflow version
+
+    WorkflowRunResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+        workflow_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, waiting_approval, completed, failed]
+        message:
+          type: string
+
+    WorkflowRunDetailResponse:
+      type: object
+      properties:
+        run:
+          type: object
+          properties:
+            id:
+              type: string
+            workflow_id:
+              type: string
+            status:
+              type: string
+            current_step:
+              type: string
+            steps:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  status:
+                    type: string
+                  started_at:
+                    type: string
+                    format: date-time
+                  completed_at:
+                    type: string
+                    format: date-time
+
+    ApprovalResponse:
+      type: object
+      properties:
+        approval:
+          type: object
+          properties:
+            id:
+              type: string
+            workflow_run_id:
+              type: string
+            step_name:
+              type: string
+            status:
+              type: string
+              enum: [pending, approved, rejected]
+            created_at:
+              type: string
+              format: date-time
+
+    ApprovalActionResponse:
+      type: object
+      properties:
+        approval:
+          type: object
+        message:
+          type: string
+
+    MCPRequest:
+      type: object
+      required:
+        - jsonrpc
+        - method
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          const: "2.0"
+        method:
+          type: string
+          description: MCP method name
+        params:
+          type: object
+          additionalProperties: true
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+
+    MCPResponse:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          const: "2.0"
+        result:
+          type: object
+          additionalProperties: true
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+
+    MCPErrorResponse:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          const: "2.0"
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
