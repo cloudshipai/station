@@ -28,7 +28,7 @@ type Session struct {
 	ContainerID   string            // Docker container ID
 	Image         string            // Container image
 	Workdir       string            // Working directory inside container
-	WorkspacePath string            // Host path to workspace bind mount
+	WorkspacePath string            // Host path to workspace (used by OpenCodeBackend, empty for DockerBackend)
 	Env           map[string]string // Environment variables
 	Limits        ResourceLimits    // Resource limits
 	CreatedAt     time.Time         // When the session was created
@@ -131,31 +131,29 @@ type FileEntry struct {
 
 // CodeModeConfig holds configuration for the code mode sandbox backend
 type CodeModeConfig struct {
-	Enabled          bool          // Whether code mode is enabled
-	WorkspaceBaseDir string        // Base directory for workspace bind mounts
-	AllowedImages    []string      // Allowed container images
-	DefaultImage     string        // Default image if not specified
-	DefaultTimeout   time.Duration // Default execution timeout
-	MaxStdoutBytes   int           // Maximum stdout bytes to capture
-	MaxStderrBytes   int           // Maximum stderr bytes to capture
-	CleanupInterval  time.Duration // How often to cleanup idle sessions
-	IdleTimeout      time.Duration // How long before idle session is cleaned up
-	DockerHost       string        // Docker host (empty = default)
+	Enabled         bool          // Whether code mode is enabled
+	AllowedImages   []string      // Allowed container images
+	DefaultImage    string        // Default image if not specified
+	DefaultTimeout  time.Duration // Default execution timeout
+	MaxStdoutBytes  int           // Maximum stdout bytes to capture
+	MaxStderrBytes  int           // Maximum stderr bytes to capture
+	CleanupInterval time.Duration // How often to cleanup idle sessions
+	IdleTimeout     time.Duration // How long before idle session is cleaned up
+	DockerHost      string        // Docker host (empty = default)
 }
 
 // DefaultCodeModeConfig returns sensible defaults
 func DefaultCodeModeConfig() CodeModeConfig {
 	return CodeModeConfig{
-		Enabled:          false,
-		WorkspaceBaseDir: "/tmp/station-sandboxes",
-		AllowedImages:    []string{"python:3.11-slim", "python:3.12-slim", "node:20-slim", "node:22-slim", "ubuntu:22.04", "ubuntu:24.04"},
-		DefaultImage:     "python:3.11-slim",
-		DefaultTimeout:   2 * time.Minute,
-		MaxStdoutBytes:   1024 * 1024, // 1MB
-		MaxStderrBytes:   1024 * 1024, // 1MB
-		CleanupInterval:  5 * time.Minute,
-		IdleTimeout:      30 * time.Minute,
-		DockerHost:       "",
+		Enabled:         false,
+		AllowedImages:   []string{"python:3.11-slim", "python:3.12-slim", "node:20-slim", "node:22-slim", "ubuntu:22.04", "ubuntu:24.04"},
+		DefaultImage:    "python:3.11-slim",
+		DefaultTimeout:  2 * time.Minute,
+		MaxStdoutBytes:  1024 * 1024,
+		MaxStderrBytes:  1024 * 1024,
+		CleanupInterval: 5 * time.Minute,
+		IdleTimeout:     30 * time.Minute,
+		DockerHost:      "",
 	}
 }
 

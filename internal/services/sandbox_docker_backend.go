@@ -15,15 +15,13 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-// DockerBackend implements SandboxBackend using the Docker API with persistent
-// containers and bind-mounted workspaces.
 type DockerBackend struct {
 	client   *client.Client
+	io       *DockerIO
 	config   CodeModeConfig
 	mu       sync.RWMutex
 	sessions map[string]*Session
@@ -58,12 +56,9 @@ func NewDockerBackend(cfg CodeModeConfig) (*DockerBackend, error) {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	if err := os.MkdirAll(cfg.WorkspaceBaseDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create workspace base dir: %w", err)
-	}
-
 	return &DockerBackend{
 		client:   cli,
+		io:       NewDockerIO(cli),
 		config:   cfg,
 		sessions: make(map[string]*Session),
 		execs:    make(map[string]*execState),
@@ -84,14 +79,8 @@ func (b *DockerBackend) CreateSession(ctx context.Context, opts SessionOptions) 
 	}
 
 	sessionID := fmt.Sprintf("sbx_%s", generateShortID())
-	workspacePath := filepath.Join(b.config.WorkspaceBaseDir, sessionID)
-
-	if err := os.MkdirAll(workspacePath, 0755); err != nil {
-		return nil, &SandboxError{Op: "CreateSession", Session: sessionID, Err: fmt.Errorf("create workspace: %w", err)}
-	}
 
 	if err := b.ensureImage(ctx, opts.Image); err != nil {
-		os.RemoveAll(workspacePath)
 		return nil, &SandboxError{Op: "CreateSession", Session: sessionID, Err: fmt.Errorf("pull image: %w", err)}
 	}
 
@@ -116,13 +105,6 @@ func (b *DockerBackend) CreateSession(ctx context.Context, opts SessionOptions) 
 	}
 
 	hostConfig := &container.HostConfig{
-		Mounts: []mount.Mount{
-			{
-				Type:   mount.TypeBind,
-				Source: workspacePath,
-				Target: workdir,
-			},
-		},
 		AutoRemove:  false,
 		NetworkMode: "none",
 	}
@@ -140,26 +122,28 @@ func (b *DockerBackend) CreateSession(ctx context.Context, opts SessionOptions) 
 
 	resp, err := b.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, sessionID)
 	if err != nil {
-		os.RemoveAll(workspacePath)
 		return nil, &SandboxError{Op: "CreateSession", Session: sessionID, Err: fmt.Errorf("create container: %w", err)}
 	}
 
 	if err := b.client.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		b.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
-		os.RemoveAll(workspacePath)
 		return nil, &SandboxError{Op: "CreateSession", Session: sessionID, Err: fmt.Errorf("start container: %w", err)}
 	}
 
+	if err := b.io.MkdirP(ctx, resp.ID, workdir); err != nil {
+		b.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		return nil, &SandboxError{Op: "CreateSession", Session: sessionID, Err: fmt.Errorf("create workspace: %w", err)}
+	}
+
 	session := &Session{
-		ID:            sessionID,
-		ContainerID:   resp.ID,
-		Image:         opts.Image,
-		Workdir:       workdir,
-		WorkspacePath: workspacePath,
-		Env:           opts.Env,
-		Limits:        opts.Limits,
-		CreatedAt:     time.Now(),
-		LastUsedAt:    time.Now(),
+		ID:          sessionID,
+		ContainerID: resp.ID,
+		Image:       opts.Image,
+		Workdir:     workdir,
+		Env:         opts.Env,
+		Limits:      opts.Limits,
+		CreatedAt:   time.Now(),
+		LastUsedAt:  time.Now(),
 	}
 
 	b.mu.Lock()
@@ -201,10 +185,6 @@ func (b *DockerBackend) DestroySession(ctx context.Context, sessionID string) er
 	timeout := 10
 	_ = b.client.ContainerStop(ctx, session.ContainerID, container.StopOptions{Timeout: &timeout})
 	_ = b.client.ContainerRemove(ctx, session.ContainerID, container.RemoveOptions{Force: true})
-
-	if session.WorkspacePath != "" {
-		os.RemoveAll(session.WorkspacePath)
-	}
 
 	return nil
 }
@@ -534,18 +514,21 @@ func (b *DockerBackend) WriteFile(ctx context.Context, sessionID, path string, c
 	}
 
 	path = normalizeWorkspacePath(path)
-	fullPath := filepath.Join(session.WorkspacePath, path)
+	fullPath := filepath.Join(session.Workdir, path)
 
 	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return &SandboxError{Op: "WriteFile", Session: sessionID, Err: fmt.Errorf("create directory: %w", err)}
+	if dir != "" && dir != "." && dir != "/" {
+		if err := b.io.MkdirP(ctx, session.ContainerID, dir); err != nil {
+			return &SandboxError{Op: "WriteFile", Session: sessionID, Err: fmt.Errorf("create directory: %w", err)}
+		}
 	}
 
-	if mode == 0 {
-		mode = 0644
+	fileMode := int64(mode)
+	if fileMode == 0 {
+		fileMode = 0644
 	}
 
-	if err := os.WriteFile(fullPath, content, mode); err != nil {
+	if err := b.io.CopyToContainer(ctx, session.ContainerID, fullPath, content, fileMode); err != nil {
 		return &SandboxError{Op: "WriteFile", Session: sessionID, Err: fmt.Errorf("write file: %w", err)}
 	}
 
@@ -559,36 +542,14 @@ func (b *DockerBackend) ReadFile(ctx context.Context, sessionID, path string, ma
 	}
 
 	path = normalizeWorkspacePath(path)
-	fullPath := filepath.Join(session.WorkspacePath, path)
-
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return nil, false, &SandboxError{Op: "ReadFile", Session: sessionID, Err: fmt.Errorf("stat file: %w", err)}
-	}
-
-	if info.IsDir() {
-		return nil, false, &SandboxError{Op: "ReadFile", Session: sessionID, Err: fmt.Errorf("path is a directory")}
-	}
+	fullPath := filepath.Join(session.Workdir, path)
 
 	if maxBytes <= 0 {
 		maxBytes = b.config.MaxStdoutBytes
 	}
 
-	f, err := os.Open(fullPath)
+	content, truncated, err := b.io.CopyFromContainerWithLimit(ctx, session.ContainerID, fullPath, maxBytes)
 	if err != nil {
-		return nil, false, &SandboxError{Op: "ReadFile", Session: sessionID, Err: fmt.Errorf("open file: %w", err)}
-	}
-	defer f.Close()
-
-	truncated := info.Size() > int64(maxBytes)
-	readSize := maxBytes
-	if int64(readSize) > info.Size() {
-		readSize = int(info.Size())
-	}
-
-	content := make([]byte, readSize)
-	_, err = io.ReadFull(f, content)
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, false, &SandboxError{Op: "ReadFile", Session: sessionID, Err: fmt.Errorf("read file: %w", err)}
 	}
 
@@ -602,65 +563,11 @@ func (b *DockerBackend) ListFiles(ctx context.Context, sessionID, path string, r
 	}
 
 	path = normalizeWorkspacePath(path)
-	basePath := filepath.Join(session.WorkspacePath, path)
+	fullPath := filepath.Join(session.Workdir, path)
 
-	var entries []FileEntry
-
-	if recursive {
-		err = filepath.Walk(basePath, func(p string, info os.FileInfo, err error) error {
-			if err != nil {
-				return nil
-			}
-
-			relPath, _ := filepath.Rel(session.WorkspacePath, p)
-			if relPath == "." {
-				return nil
-			}
-
-			entryType := "file"
-			if info.IsDir() {
-				entryType = "dir"
-			}
-
-			entries = append(entries, FileEntry{
-				Path:      relPath,
-				Type:      entryType,
-				Size:      info.Size(),
-				Mode:      fmt.Sprintf("%04o", info.Mode().Perm()),
-				MtimeUnix: info.ModTime().Unix(),
-			})
-			return nil
-		})
-	} else {
-		dirEntries, readErr := os.ReadDir(basePath)
-		if readErr != nil {
-			return nil, &SandboxError{Op: "ListFiles", Session: sessionID, Err: fmt.Errorf("read directory: %w", readErr)}
-		}
-
-		for _, de := range dirEntries {
-			info, infoErr := de.Info()
-			if infoErr != nil {
-				continue
-			}
-
-			entryType := "file"
-			if de.IsDir() {
-				entryType = "dir"
-			}
-
-			relPath := filepath.Join(path, de.Name())
-			entries = append(entries, FileEntry{
-				Path:      relPath,
-				Type:      entryType,
-				Size:      info.Size(),
-				Mode:      fmt.Sprintf("%04o", info.Mode().Perm()),
-				MtimeUnix: info.ModTime().Unix(),
-			})
-		}
-	}
-
+	entries, err := b.io.ListDir(ctx, session.ContainerID, fullPath, recursive)
 	if err != nil {
-		return nil, &SandboxError{Op: "ListFiles", Session: sessionID, Err: fmt.Errorf("walk directory: %w", err)}
+		return nil, &SandboxError{Op: "ListFiles", Session: sessionID, Err: fmt.Errorf("list directory: %w", err)}
 	}
 
 	return entries, nil
@@ -673,28 +580,23 @@ func (b *DockerBackend) DeleteFile(ctx context.Context, sessionID, path string, 
 	}
 
 	path = normalizeWorkspacePath(path)
-	fullPath := filepath.Join(session.WorkspacePath, path)
+	fullPath := filepath.Join(session.Workdir, path)
 
-	if fullPath == session.WorkspacePath {
+	if fullPath == session.Workdir || path == "." || path == "" {
 		return &SandboxError{Op: "DeleteFile", Session: sessionID, Err: fmt.Errorf("cannot delete workspace root")}
 	}
 
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return &SandboxError{Op: "DeleteFile", Session: sessionID, Err: fmt.Errorf("stat path: %w", err)}
+	if !recursive {
+		isDir, err := b.io.IsDir(ctx, session.ContainerID, fullPath)
+		if err != nil {
+			return &SandboxError{Op: "DeleteFile", Session: sessionID, Err: fmt.Errorf("stat path: %w", err)}
+		}
+		if isDir {
+			return &SandboxError{Op: "DeleteFile", Session: sessionID, Err: fmt.Errorf("path is a directory, use recursive=true")}
+		}
 	}
 
-	if info.IsDir() && !recursive {
-		return &SandboxError{Op: "DeleteFile", Session: sessionID, Err: fmt.Errorf("path is a directory, use recursive=true")}
-	}
-
-	if recursive {
-		err = os.RemoveAll(fullPath)
-	} else {
-		err = os.Remove(fullPath)
-	}
-
-	if err != nil {
+	if err := b.io.DeletePath(ctx, session.ContainerID, fullPath, recursive); err != nil {
 		return &SandboxError{Op: "DeleteFile", Session: sessionID, Err: fmt.Errorf("delete: %w", err)}
 	}
 

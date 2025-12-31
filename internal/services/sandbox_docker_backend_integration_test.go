@@ -4,8 +4,6 @@ package services
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -15,7 +13,6 @@ func skipIfNoDocker(t *testing.T) *DockerBackend {
 
 	cfg := DefaultCodeModeConfig()
 	cfg.Enabled = true
-	cfg.WorkspaceBaseDir = filepath.Join(os.TempDir(), "sandbox-test-"+generateShortID())
 
 	backend, err := NewDockerBackend(cfg)
 	if err != nil {
@@ -28,7 +25,6 @@ func skipIfNoDocker(t *testing.T) *DockerBackend {
 
 	t.Cleanup(func() {
 		backend.Close()
-		os.RemoveAll(cfg.WorkspaceBaseDir)
 	})
 
 	return backend
@@ -57,9 +53,6 @@ func TestDockerBackend_Integration_CreateDestroySession(t *testing.T) {
 	}
 	if session.ContainerID == "" {
 		t.Error("expected container ID to be set")
-	}
-	if session.WorkspacePath == "" {
-		t.Error("expected workspace path to be set")
 	}
 
 	retrieved, err := backend.GetSession(ctx, session.ID)

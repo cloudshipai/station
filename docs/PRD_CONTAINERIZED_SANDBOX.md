@@ -1,9 +1,9 @@
 # PRD: Containerized Sandbox Support
 
-**Status**: Draft  
+**Status**: In Progress  
 **Author**: Station Team  
 **Date**: 2025-12-31  
-**Version**: 0.1
+**Version**: 1.0
 
 ---
 
@@ -18,11 +18,24 @@ bind source path does not exist: /tmp/station-sandboxes/sbx_7999184118503
 
 ### Root Cause
 
-The `DockerBackend` creates sandboxes by:
-1. Creating a workspace directory on the host: `/tmp/station-sandboxes/sbx_XXX`
-2. Bind-mounting that directory into a new sandbox container
+The `DockerBackend` creates sandboxes using **bind mounts**:
 
-When Station runs inside a container, it uses **Docker-in-Docker** (DinD) by mounting the Docker socket (`/var/run/docker.sock`). The Docker daemon runs on the **host**, not inside the Station container.
+```go
+hostConfig := &container.HostConfig{
+    Mounts: []mount.Mount{
+        {
+            Type:   mount.TypeBind,
+            Source: workspacePath,  // /tmp/station-sandboxes/sbx_XXX
+            Target: workdir,
+        },
+    },
+}
+```
+
+When Station runs inside a container with Docker-in-Docker (socket mounted):
+- Station creates `/tmp/station-sandboxes/sbx_XXX` inside its container
+- Docker daemon (on host) looks for the path on the **host filesystem**
+- Path doesn't exist on host → mount fails
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -49,341 +62,518 @@ When Station runs inside a container, it uses **Docker-in-Docker** (DinD) by mou
 
 ---
 
-## Options Analysis
+## Target Environments
 
-### Option 1: Docker Volumes (Instead of Bind Mounts)
+The solution must work across all these deployment scenarios:
 
-**Approach**: Replace bind mounts with named Docker volumes that are managed by the Docker daemon.
+| Environment | Docker Available | Current Status | Target |
+|-------------|------------------|----------------|--------|
+| Linux native (`stn serve`) | ✅ | ✅ Works | ✅ |
+| macOS native (`stn serve`) | ✅ | ✅ Works | ✅ |
+| `stn up` (Docker-in-Docker) | ✅ | ❌ Fails | ✅ |
+| EC2 / VM | ✅ | ✅ Works | ✅ |
+| ECS Fargate | ❌ | ❌ N/A | ⚠️ Cloud fallback |
+| Kubernetes | ❌* | ❌ N/A | ⚠️ Cloud fallback |
+| Fly.io | ❌ | ❌ N/A | ⚠️ Cloud fallback |
 
-**Implementation**:
-```go
-// Instead of bind mount from host path
-hostConfig := &container.HostConfig{
-    Mounts: []mount.Mount{
-        {
-            Type:   mount.TypeBind,
-            Source: workspacePath,  // Host path that doesn't exist in DinD
-            Target: workdir,
-        },
-    },
-}
-
-// Use Docker volume
-hostConfig := &container.HostConfig{
-    Mounts: []mount.Mount{
-        {
-            Type:   mount.TypeVolume,
-            Source: "station-sandbox-" + sessionID,  // Named volume
-            Target: workdir,
-        },
-    },
-}
-```
-
-**File I/O Changes**: 
-- `WriteFile`, `ReadFile`, `ListFiles`, `DeleteFile` must use Docker API instead of host filesystem
-- Use `docker cp` or exec `cat`/`tee` commands
-
-**Pros**:
-- Works in any Docker environment (native, DinD, remote daemon)
-- No host filesystem access required
-- Volumes persist across container restarts
-
-**Cons**:
-- File operations become more complex (Docker API instead of direct FS)
-- Slower for large file operations
-- Requires cleanup of volumes (can accumulate)
-
-**Effort**: Medium (3-5 days)
+*Kubernetes typically uses containerd, not Docker.
 
 ---
 
-### Option 2: Shared Volume Between Station and Sandboxes
+## Solution: Docker API File Operations
 
-**Approach**: Mount a shared volume in both Station container AND sandbox containers.
+### Core Insight
 
-**Implementation**:
-```yaml
-# stn up mounts this volume
-station-container:
-  volumes:
-    - station-sandboxes:/shared-sandboxes
+The problem is **not** Docker containers themselves—it's that we use **bind mounts** which require shared filesystem access. The fix: **use Docker API for all file operations** instead of host filesystem.
 
-# Sandbox containers also mount it
-sandbox-container:
-  volumes:
-    - station-sandboxes:/workspace
+### Current vs New Architecture
+
+```
+CURRENT (breaks in DinD):
+┌─────────────┐                      ┌─────────────┐
+│   Station   │                      │   Sandbox   │
+│             │  bind mount          │  Container  │
+│ /tmp/sbx_X/ │◄────────────────────►│ /workspace/ │
+│  (host FS)  │                      │             │
+└─────────────┘                      └─────────────┘
+     │
+     └── os.WriteFile(), os.ReadFile() ← Direct FS access
+
+NEW (works everywhere):
+┌─────────────┐                      ┌─────────────┐
+│   Station   │     Docker API       │   Sandbox   │
+│             │◄────────────────────►│  Container  │
+│             │  CopyToContainer()   │ /workspace/ │
+│             │  CopyFromContainer() │             │
+└─────────────┘  ContainerExec()     └─────────────┘
+                     │
+                     └── No bind mount, no shared FS
 ```
 
-```go
-// DockerBackend uses the shared volume path
-cfg.WorkspaceBaseDir = "/shared-sandboxes"  // Inside volume, not /tmp
-```
+### File Operation Changes
 
-**Pros**:
-- Minimal code changes (just config path)
-- Direct filesystem access works
-- Fast file operations
-
-**Cons**:
-- Station container must know to mount the volume
-- All sandboxes share the same volume (isolation via subdirectories)
-- Requires coordination in `stn up` command
-
-**Effort**: Low (1-2 days)
+| Operation | Current Implementation | New Implementation |
+|-----------|----------------------|-------------------|
+| `WriteFile` | `os.WriteFile(hostPath)` | `docker cp` via `CopyToContainer()` |
+| `ReadFile` | `os.ReadFile(hostPath)` | `docker cp` via `CopyFromContainer()` |
+| `ListFiles` | `os.ReadDir(hostPath)` | `docker exec ls -la` or `find` |
+| `DeleteFile` | `os.Remove(hostPath)` | `docker exec rm` |
+| Container Create | Bind mount workspace | No mount, empty `/workspace` |
+| Cleanup | `os.RemoveAll` + container remove | Just container remove |
 
 ---
 
-### Option 3: Sysbox Runtime (Nested Docker)
+## Integration with NATS File Staging
 
-**Approach**: Use [Sysbox](https://github.com/nestybox/sysbox) runtime to enable true nested containers.
+The sandbox system already has NATS Object Store integration for file staging (see `PRD_SANDBOX_FILE_STAGING.md`):
 
-**Implementation**:
-```bash
-# Run Station container with Sysbox runtime
-docker run --runtime=sysbox-runc station-server:latest
+```
+┌──────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   User   │────►│  NATS OS    │────►│   Station   │────►│   Sandbox   │
+│          │     │ (staging)   │     │             │     │  Container  │
+│ upload   │     │             │     │ stage_file  │     │             │
+│ download │◄────│ files/f_XXX │◄────│ publish_file│◄────│ /workspace/ │
+└──────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
-With Sysbox, the Station container gets its own Docker daemon, so bind mounts work normally.
+### Tools Integration
 
-**Pros**:
-- No code changes required
-- Full Docker functionality inside container
-- Better security isolation
-
-**Cons**:
-- Requires Sysbox installation on host
-- Not available on all platforms (Linux only, specific kernels)
-- Additional runtime dependency
-- Heavier resource usage (nested Docker daemon)
-
-**Effort**: Low (code) / High (infrastructure requirements)
-
----
-
-### Option 4: Remote Docker Host
-
-**Approach**: Configure Station to use a remote Docker daemon for sandboxes.
-
-**Implementation**:
-```yaml
-# Station config
-sandbox:
-  docker_host: "tcp://sandbox-docker-host:2375"
-  workspace_base_dir: "/sandboxes"  # Path on REMOTE host
-```
-
-The remote Docker host has the sandbox workspace directory accessible.
-
-**Pros**:
-- Scales sandbox execution to dedicated infrastructure
-- Station container stays lightweight
-- Can use specialized sandbox hosts (GPU, etc.)
-
-**Cons**:
-- Requires separate Docker host infrastructure
-- Network latency for Docker API calls
-- More complex deployment
-- Security considerations for remote Docker
-
-**Effort**: Medium (2-3 days code + infrastructure)
-
----
-
-### Option 5: exec-based File Operations (Hybrid)
-
-**Approach**: Keep Docker volumes but use `docker exec` for all file operations instead of direct filesystem access.
-
-**Implementation**:
-```go
-func (b *DockerBackend) WriteFile(ctx context.Context, sessionID, path string, content []byte, mode os.FileMode) error {
-    // Instead of os.WriteFile on host filesystem...
-    // Use docker exec to write inside the container
-    cmd := []string{"tee", path}
-    execResp, _ := b.client.ContainerExecCreate(ctx, session.ContainerID, container.ExecOptions{
-        Cmd:         cmd,
-        AttachStdin: true,
-    })
-    // Write content via stdin
-}
-```
-
-**Pros**:
-- Works with any Docker setup
-- File operations happen inside sandbox container
-- No shared volume coordination needed
-
-**Cons**:
-- Slower than direct FS access
-- More complex implementation
-- exec overhead for each file operation
-
-**Effort**: Medium (3-4 days)
-
----
-
-### Option 6: E2B / Modal / Cloud Sandboxes
-
-**Approach**: Use a cloud sandbox provider instead of local Docker.
-
-**Services**:
-- [E2B](https://e2b.dev/) - Cloud sandboxes for AI agents
-- [Modal](https://modal.com/) - Serverless container execution
-- [Fly Machines](https://fly.io/docs/machines/) - On-demand VMs
-
-**Implementation**:
-```go
-type E2BSandboxBackend struct {
-    client *e2b.Client
-}
-
-func (b *E2BSandboxBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-    sandbox, _ := b.client.Sandbox.Create(ctx, e2b.SandboxCreateParams{
-        Template: "python",
-    })
-    return &Session{ID: sandbox.ID, ...}, nil
-}
-```
-
-**Pros**:
-- No Docker infrastructure needed
-- Scales automatically
-- Works from any environment
-- Pre-built templates for common runtimes
-
-**Cons**:
-- External dependency (vendor lock-in)
-- Cost per sandbox execution
-- Network latency
-- Requires API keys / auth
-
-**Effort**: Medium (2-3 days for integration)
-
----
-
-## Recommendation
-
-### Short-term (Quick Fix): Option 2 - Shared Volume
-
-This is the fastest path to get sandboxes working in `stn up`:
-
-1. Modify `stn up` to create and mount a shared volume: `station-sandboxes`
-2. Set `WorkspaceBaseDir` to `/shared-sandboxes` inside the container
-3. Sandbox containers mount the same volume with a subdirectory target
-
-**Changes Required**:
-- `cmd/main/up.go`: Add volume mount for sandboxes
-- `internal/services/sandbox_code_types.go`: Make `WorkspaceBaseDir` configurable
-- `internal/services/sandbox_docker_backend.go`: Detect containerized mode
-
-### Medium-term: Option 1 - Docker Volumes
-
-For a more robust solution that works in all scenarios:
-
-1. Create named Docker volumes for each sandbox session
-2. Implement Docker API-based file operations
-3. Add volume cleanup on session destroy
-
-### Long-term: Option 6 - Cloud Sandboxes
-
-For production CloudShip deployments:
-
-1. Integrate E2B or similar for cloud-hosted sandboxes
-2. Keep local Docker as fallback for self-hosted
-3. Add sandbox provider abstraction layer
+| Tool | Source | Destination | Transport |
+|------|--------|-------------|-----------|
+| `sandbox_stage_file` | NATS Object Store | Sandbox `/workspace` | Docker API |
+| `sandbox_publish_file` | Sandbox `/workspace` | NATS Object Store | Docker API |
+| `sandbox_fs_write` | Tool input (LLM) | Sandbox `/workspace` | Docker API |
+| `sandbox_fs_read` | Sandbox `/workspace` | Tool output (LLM) | Docker API |
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Shared Volume (Quick Fix)
+### Phase 1: Docker API File Operations
 
-**File**: `cmd/main/up.go`
+Create helper functions for Docker-based file I/O:
+
+**File**: `internal/services/sandbox_docker_io.go`
 
 ```go
-// Add to container creation
-dockerArgs = append(dockerArgs,
-    "-v", "station-sandboxes:/shared-sandboxes",
+package services
+
+import (
+    "archive/tar"
+    "bytes"
+    "context"
+    "io"
+    "path/filepath"
+
+    "github.com/docker/docker/api/types"
+    "github.com/docker/docker/api/types/container"
+    "github.com/docker/docker/client"
 )
+
+// CopyToContainer writes content to a path inside a container using docker cp
+func CopyToContainer(ctx context.Context, cli *client.Client, containerID, destPath string, content []byte, mode int64) error {
+    // Create tar archive with single file
+    var buf bytes.Buffer
+    tw := tar.NewWriter(&buf)
+    
+    header := &tar.Header{
+        Name: filepath.Base(destPath),
+        Mode: mode,
+        Size: int64(len(content)),
+    }
+    tw.WriteHeader(header)
+    tw.Write(content)
+    tw.Close()
+    
+    // Copy to container
+    return cli.CopyToContainer(ctx, containerID, filepath.Dir(destPath), &buf, types.CopyToContainerOptions{})
+}
+
+// CopyFromContainer reads content from a path inside a container using docker cp
+func CopyFromContainer(ctx context.Context, cli *client.Client, containerID, srcPath string) ([]byte, error) {
+    reader, _, err := cli.CopyFromContainer(ctx, containerID, srcPath)
+    if err != nil {
+        return nil, err
+    }
+    defer reader.Close()
+    
+    // Extract from tar
+    tr := tar.NewReader(reader)
+    _, err = tr.Next()
+    if err != nil {
+        return nil, err
+    }
+    
+    return io.ReadAll(tr)
+}
+
+// ExecInContainer runs a command and returns output
+func ExecInContainer(ctx context.Context, cli *client.Client, containerID string, cmd []string) (string, string, int, error) {
+    execConfig := container.ExecOptions{
+        Cmd:          cmd,
+        AttachStdout: true,
+        AttachStderr: true,
+    }
+    
+    execResp, err := cli.ContainerExecCreate(ctx, containerID, execConfig)
+    if err != nil {
+        return "", "", -1, err
+    }
+    
+    attachResp, err := cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
+    if err != nil {
+        return "", "", -1, err
+    }
+    defer attachResp.Close()
+    
+    // Read output...
+    // Return stdout, stderr, exitCode, nil
+}
 ```
+
+### Phase 2: Update DockerBackend
+
+**File**: `internal/services/sandbox_docker_backend.go`
+
+1. **Remove bind mount from `CreateSession`**:
+
+```go
+func (b *DockerBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
+    // ... validation ...
+    
+    sessionID := fmt.Sprintf("sbx_%s", generateShortID())
+    
+    // NO workspace directory creation on host
+    // NO bind mount
+    
+    containerConfig := &container.Config{
+        Image:      opts.Image,
+        WorkingDir: "/workspace",  // Always /workspace inside container
+        Env:        env,
+        Cmd:        []string{"sleep", "infinity"},
+    }
+    
+    hostConfig := &container.HostConfig{
+        // NO Mounts - empty workspace created by Dockerfile or mkdir
+        AutoRemove:  false,
+        NetworkMode: "none",
+    }
+    
+    // Create and start container
+    resp, err := b.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, sessionID)
+    // ...
+    
+    // Initialize /workspace directory inside container
+    b.execSimple(ctx, resp.ID, []string{"mkdir", "-p", "/workspace"})
+    
+    return &Session{
+        ID:          sessionID,
+        ContainerID: resp.ID,
+        Workdir:     "/workspace",
+        // NO WorkspacePath - we don't use host filesystem
+    }, nil
+}
+```
+
+2. **Replace filesystem operations**:
+
+```go
+func (b *DockerBackend) WriteFile(ctx context.Context, sessionID, path string, content []byte, mode os.FileMode) error {
+    session, err := b.GetSession(ctx, sessionID)
+    if err != nil {
+        return err
+    }
+    
+    path = normalizeWorkspacePath(path)
+    destPath := filepath.Join("/workspace", path)
+    
+    // Create parent directory
+    dir := filepath.Dir(destPath)
+    if dir != "/workspace" {
+        b.execSimple(ctx, session.ContainerID, []string{"mkdir", "-p", dir})
+    }
+    
+    // Use Docker API to copy file into container
+    return CopyToContainer(ctx, b.client, session.ContainerID, destPath, content, int64(mode))
+}
+
+func (b *DockerBackend) ReadFile(ctx context.Context, sessionID, path string, maxBytes int) ([]byte, bool, error) {
+    session, err := b.GetSession(ctx, sessionID)
+    if err != nil {
+        return nil, false, err
+    }
+    
+    path = normalizeWorkspacePath(path)
+    srcPath := filepath.Join("/workspace", path)
+    
+    // Use Docker API to copy file from container
+    content, err := CopyFromContainer(ctx, b.client, session.ContainerID, srcPath)
+    if err != nil {
+        return nil, false, err
+    }
+    
+    // Truncate if needed
+    truncated := len(content) > maxBytes
+    if truncated {
+        content = content[:maxBytes]
+    }
+    
+    return content, truncated, nil
+}
+
+func (b *DockerBackend) ListFiles(ctx context.Context, sessionID, path string, recursive bool) ([]FileEntry, error) {
+    session, err := b.GetSession(ctx, sessionID)
+    if err != nil {
+        return nil, err
+    }
+    
+    path = normalizeWorkspacePath(path)
+    targetPath := filepath.Join("/workspace", path)
+    
+    // Use find command for listing
+    var cmd []string
+    if recursive {
+        cmd = []string{"find", targetPath, "-printf", "%P\t%s\t%m\t%T@\t%y\n"}
+    } else {
+        cmd = []string{"find", targetPath, "-maxdepth", "1", "-printf", "%P\t%s\t%m\t%T@\t%y\n"}
+    }
+    
+    stdout, _, exitCode, err := ExecInContainer(ctx, b.client, session.ContainerID, cmd)
+    if err != nil || exitCode != 0 {
+        return nil, err
+    }
+    
+    // Parse find output into []FileEntry
+    return parseFileEntries(stdout), nil
+}
+
+func (b *DockerBackend) DeleteFile(ctx context.Context, sessionID, path string, recursive bool) error {
+    session, err := b.GetSession(ctx, sessionID)
+    if err != nil {
+        return err
+    }
+    
+    path = normalizeWorkspacePath(path)
+    targetPath := filepath.Join("/workspace", path)
+    
+    cmd := []string{"rm"}
+    if recursive {
+        cmd = append(cmd, "-rf")
+    }
+    cmd = append(cmd, targetPath)
+    
+    _, _, exitCode, err := ExecInContainer(ctx, b.client, session.ContainerID, cmd)
+    if err != nil || exitCode != 0 {
+        return fmt.Errorf("delete failed: exit code %d", exitCode)
+    }
+    
+    return nil
+}
+```
+
+3. **Simplify cleanup**:
+
+```go
+func (b *DockerBackend) DestroySession(ctx context.Context, sessionID string) error {
+    b.mu.Lock()
+    session, ok := b.sessions[sessionID]
+    if ok {
+        delete(b.sessions, sessionID)
+    }
+    b.mu.Unlock()
+    
+    if !ok {
+        return &SandboxError{Op: "DestroySession", Session: sessionID, Err: ErrSessionNotFound}
+    }
+    
+    timeout := 10
+    _ = b.client.ContainerStop(ctx, session.ContainerID, container.StopOptions{Timeout: &timeout})
+    _ = b.client.ContainerRemove(ctx, session.ContainerID, container.RemoveOptions{Force: true})
+    
+    // NO os.RemoveAll - no host filesystem to clean up
+    
+    return nil
+}
+```
+
+### Phase 3: Configuration
+
+Add detection for containerized mode:
 
 **File**: `internal/services/sandbox_code_types.go`
 
 ```go
-// Make WorkspaceBaseDir environment-aware
+type CodeModeConfig struct {
+    Enabled          bool
+    // REMOVED: WorkspaceBaseDir - no longer needed
+    UseDockerAPI     bool          // Always true now, kept for backwards compat
+    DefaultTimeout   time.Duration
+    IdleTimeout      time.Duration
+    CleanupInterval  time.Duration
+    MaxStdoutBytes   int
+    AllowedImages    []string
+    DockerHost       string
+}
+
 func DefaultCodeModeConfig() CodeModeConfig {
-    baseDir := os.Getenv("STATION_SANDBOX_DIR")
-    if baseDir == "" {
-        baseDir = "/tmp/station-sandboxes"
-    }
     return CodeModeConfig{
-        WorkspaceBaseDir: baseDir,
-        // ...
+        Enabled:         true,
+        UseDockerAPI:    true,  // Default to Docker API for universal support
+        DefaultTimeout:  5 * time.Minute,
+        IdleTimeout:     30 * time.Minute,
+        CleanupInterval: 5 * time.Minute,
+        MaxStdoutBytes:  1024 * 1024, // 1MB
+        AllowedImages:   []string{"python:3.11-slim", "node:20-slim", "ubuntu:22.04"},
     }
 }
 ```
 
-**File**: `internal/services/sandbox_docker_backend.go`
+### Phase 4: Testing
+
+**File**: `internal/services/sandbox_docker_backend_test.go`
 
 ```go
-// Update CreateSession to handle shared volume
-func (b *DockerBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-    // ... existing code ...
+func TestDockerBackend_WriteReadFile_NoBindMount(t *testing.T) {
+    backend := setupTestBackend(t)
     
-    hostConfig := &container.HostConfig{
-        Mounts: []mount.Mount{
-            {
-                Type:   mount.TypeVolume,  // Use TypeVolume instead of TypeBind
-                Source: "station-sandboxes",
-                Target: "/shared-sandboxes",
-            },
-        },
-    }
+    session, err := backend.CreateSession(ctx, SessionOptions{
+        Image: "python:3.11-slim",
+    })
+    require.NoError(t, err)
+    defer backend.DestroySession(ctx, session.ID)
     
-    // Session workspace is a subdirectory within the shared volume
-    workspacePath := filepath.Join("/shared-sandboxes", sessionID)
+    // Write file using Docker API
+    content := []byte("hello world")
+    err = backend.WriteFile(ctx, session.ID, "test.txt", content, 0644)
+    require.NoError(t, err)
+    
+    // Read file using Docker API
+    data, truncated, err := backend.ReadFile(ctx, session.ID, "test.txt", 1024)
+    require.NoError(t, err)
+    assert.False(t, truncated)
+    assert.Equal(t, content, data)
+    
+    // Verify via exec
+    result, err := backend.Exec(ctx, session.ID, ExecRequest{
+        Cmd: []string{"cat", "/workspace/test.txt"},
+    })
+    require.NoError(t, err)
+    assert.Equal(t, "hello world", result.Stdout)
+}
+
+func TestDockerBackend_ListFiles_NoBindMount(t *testing.T) {
+    // Test ListFiles works via docker exec
+}
+
+func TestDockerBackend_DeleteFile_NoBindMount(t *testing.T) {
+    // Test DeleteFile works via docker exec
+}
+
+func TestDockerBackend_LargeFile_NoBindMount(t *testing.T) {
+    // Test multi-MB file transfer via Docker API
 }
 ```
 
-### Phase 2: Docker Volume Backend
+---
 
-Create `sandbox_volume_backend.go` that uses named volumes and Docker API for file ops.
+## Migration Path
 
-### Phase 3: Cloud Provider Abstraction
+### Backwards Compatibility
 
-Create `sandbox_cloud_backend.go` with E2B integration and provider interface.
+The change is transparent to users:
+- Same tool interface (`sandbox_fs_write`, `sandbox_fs_read`, etc.)
+- Same behavior from agent perspective
+- Works in more environments
+
+### Performance Considerations
+
+| Operation | Bind Mount | Docker API | Notes |
+|-----------|------------|------------|-------|
+| Write 1KB | ~0.1ms | ~5ms | Tar creation + API call |
+| Write 1MB | ~1ms | ~50ms | Acceptable for most use cases |
+| Write 100MB | ~50ms | ~2s | Large files should use NATS staging |
+| Read 1KB | ~0.1ms | ~5ms | Similar to write |
+| Exec | Same | Same | No change |
+
+For large files, use the NATS file staging system (`sandbox_stage_file` / `sandbox_publish_file`).
+
+---
+
+## Future Enhancements
+
+### Cloud Sandbox Fallback
+
+For environments without Docker (ECS Fargate, K8s, Fly.io):
+
+```go
+type SandboxBackend interface {
+    CreateSession(ctx context.Context, opts SessionOptions) (*Session, error)
+    Exec(ctx context.Context, sessionID string, req ExecRequest) (*ExecResult, error)
+    WriteFile(ctx context.Context, sessionID, path string, content []byte, mode os.FileMode) error
+    ReadFile(ctx context.Context, sessionID, path string, maxBytes int) ([]byte, bool, error)
+    ListFiles(ctx context.Context, sessionID, path string, recursive bool) ([]FileEntry, error)
+    DeleteFile(ctx context.Context, sessionID, path string, recursive bool) error
+    DestroySession(ctx context.Context, sessionID string) error
+}
+
+// Implementations:
+type DockerAPIBackend struct { ... }  // Uses Docker API (this PRD)
+type E2BBackend struct { ... }        // Uses E2B cloud sandboxes
+type ModalBackend struct { ... }      // Uses Modal.com
+```
+
+Auto-detection:
+```go
+func NewSandboxBackend(cfg Config) (SandboxBackend, error) {
+    if dockerAvailable() {
+        return NewDockerAPIBackend(cfg)
+    }
+    if cfg.E2BAPIKey != "" {
+        return NewE2BBackend(cfg.E2BAPIKey)
+    }
+    return nil, errors.New("no sandbox backend available")
+}
+```
 
 ---
 
 ## Success Criteria
 
-- [ ] `stn up default --dev` can run agents with sandbox tools
-- [ ] `sandbox_open`, `sandbox_exec`, `sandbox_fs_*` tools work in containerized mode
-- [ ] File staging (`sandbox_stage_file`, `sandbox_publish_file`) works
-- [ ] Sandbox containers are properly cleaned up
-- [ ] Performance is acceptable (<500ms for file operations)
+- [ ] `sandbox_open` works in `stn up` containerized mode
+- [ ] `sandbox_exec` works in `stn up` containerized mode
+- [ ] `sandbox_fs_write` / `sandbox_fs_read` work in `stn up` mode
+- [ ] `sandbox_stage_file` / `sandbox_publish_file` work end-to-end
+- [ ] All existing sandbox tests pass
+- [ ] New tests for Docker API file operations
+- [ ] Performance acceptable (<100ms for 1MB file operations)
 
 ---
 
-## Testing
+## Testing Commands
 
 ```bash
-# Test containerized sandbox
-stn up default --dev
+# Rebuild and test containerized
+cd station
+make rebuild-all
+stn down && stn up default --dev
+
+# Test agent execution with sandbox
 curl -X POST http://localhost:8587/execute \
   -H "Content-Type: application/json" \
-  -d '{"agent_name": "coder", "task": "Write a hello.py and run it"}'
+  -d '{"agent_name": "coder", "task": "Create a hello.py file that prints hello world, then run it"}'
 
-# Verify sandbox was created and destroyed
+# Check logs
+stn logs -f
+
+# Verify sandbox was created
 docker ps -a | grep sbx_
-docker volume ls | grep station-sandbox
 ```
 
 ---
 
 ## References
 
-- [Docker Volumes Documentation](https://docs.docker.com/storage/volumes/)
-- [Docker-in-Docker Best Practices](https://jpetazzo.github.io/2015/09/03/do-not-use-docker-in-docker-for-ci/)
-- [Sysbox Runtime](https://github.com/nestybox/sysbox)
-- [E2B Sandbox SDK](https://e2b.dev/docs)
+- [Docker SDK for Go - CopyToContainer](https://pkg.go.dev/github.com/docker/docker/client#Client.CopyToContainer)
+- [Docker SDK for Go - CopyFromContainer](https://pkg.go.dev/github.com/docker/docker/client#Client.CopyFromContainer)
+- [PRD: Sandbox File Staging](./PRD_SANDBOX_FILE_STAGING.md)
+- [Station Sandbox Architecture](./station/sandbox-architecture.md)
