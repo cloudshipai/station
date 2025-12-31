@@ -147,6 +147,79 @@ Restart your editor. Station automatically starts:
 
 ---
 
+## Running Station with `stn up`
+
+The easiest way to run Station is with `stn up` - a single command that starts Station in a Docker container with everything configured.
+
+### Primary Use Case: Running Bundles
+
+`stn up` is designed to make it trivial to run agent bundles from your CloudShip account or the community:
+
+```bash
+# Run a bundle from CloudShip (by ID or name)
+stn up --bundle finops-cost-analyzer
+
+# Run a bundle from URL
+stn up --bundle https://example.com/my-bundle.tar.gz
+
+# Run a local bundle file
+stn up --bundle ./my-custom-agents.tar.gz
+```
+
+This is the recommended way for most users to get started - just pick a bundle and go.
+
+### Secondary Use Case: Testing Local Configurations
+
+Developers can also use `stn up` to test their local agent configurations in an isolated container environment:
+
+```bash
+# Test your local workspace in a container
+stn up --workspace ~/my-agents
+
+# Test with a specific environment
+stn up --environment production
+
+# Test with development tools enabled
+stn up --develop
+```
+
+This lets you validate that your agents work correctly in the same containerized environment they'll run in production.
+
+### Quick Commands
+
+```bash
+# Start Station (interactive setup on first run)
+stn up
+
+# Start with specific AI provider
+stn up --provider openai --model gpt-4o
+
+# Check status
+stn status
+
+# View logs
+stn logs -f
+
+# Stop Station
+stn down
+
+# Stop and remove all data (fresh start)
+stn down --remove-volume
+```
+
+### What `stn up` Provides
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Web UI | 8585 | Configuration interface |
+| MCP Server | 8586 | Main MCP endpoint for tools |
+| Agent MCP | 8587 | Dynamic agent execution |
+| Jaeger UI | 16686 | Distributed tracing |
+
+**[See Container Lifecycle](./docs/station/container-lifecycle.md) for detailed architecture.**
+
+---
+
 ## AI Provider Authentication
 
 Station supports multiple authentication methods for AI providers.
