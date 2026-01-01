@@ -10,7 +10,9 @@
     "dev": "bun --watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/",
-    "format": "biome format --write src/"
+    "format": "biome format --write src/",
+    "test:integration": "./test/run-tests.sh",
+    "test:harness": "bun run test/harness.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.0.0",

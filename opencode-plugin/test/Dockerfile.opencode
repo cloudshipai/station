@@ -1,0 +1,16 @@
+FROM oven/bun:1.1-alpine
+
+RUN apk add --no-cache curl git
+
+RUN curl -fsSL https://opencode.ai/install | sh
+ENV PATH="/root/.opencode/bin:${PATH}"
+
+RUN mkdir -p /workspaces /root/.config/opencode/plugin
+
+COPY opencode.json /root/.config/opencode/opencode.json
+
+WORKDIR /workspace
+
+EXPOSE 4096
+
+CMD ["opencode", "serve", "--port", "4096"]
