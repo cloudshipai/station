@@ -192,36 +192,29 @@ func TestOpenCodeBackend_Ping(t *testing.T) {
 
 func TestOpenCodeBackend_BuildPrompt(t *testing.T) {
 	backend := &OpenCodeBackend{}
-	workspacePath := "/test/workspace"
+	workDir := "Working directory: /test/workspace\nCreate this directory if needed and perform all operations there.\n\n"
 
-	tests := []struct {
-		name     string
-		task     Task
-		expected string
-	}{
-		{
-			name:     "instruction only",
-			task:     Task{Instruction: "Fix the bug"},
-			expected: "IMPORTANT: Work in directory: /test/workspace\nAll file operations must use this path.\n\nFix the bug",
-		},
-		{
-			name:     "with context",
-			task:     Task{Instruction: "Fix the bug", Context: "Users report crashes"},
-			expected: "IMPORTANT: Work in directory: /test/workspace\nAll file operations must use this path.\n\nContext: Users report crashes\n\nTask: Fix the bug",
-		},
-		{
-			name:     "with files",
-			task:     Task{Instruction: "Fix the bug", Files: []string{"auth.go", "user.go"}},
-			expected: "IMPORTANT: Work in directory: /test/workspace\nAll file operations must use this path.\n\nFix the bug\n\nFocus on these files: [auth.go user.go]",
-		},
-	}
+	t.Run("basic task", func(t *testing.T) {
+		got := backend.buildPrompt(Task{Instruction: "Fix the bug"}, "/test/workspace")
+		expected := workDir + "Task: Fix the bug"
+		if got != expected {
+			t.Errorf("buildPrompt() = %q, want %q", got, expected)
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := backend.buildPrompt(tt.task, workspacePath)
-			if got != tt.expected {
-				t.Errorf("buildPrompt() = %q, want %q", got, tt.expected)
-			}
-		})
-	}
+	t.Run("with context", func(t *testing.T) {
+		got := backend.buildPrompt(Task{Instruction: "Fix the bug", Context: "Users report crashes"}, "/test/workspace")
+		expected := workDir + "Context: Users report crashes\n\nTask: Fix the bug"
+		if got != expected {
+			t.Errorf("buildPrompt() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("with files", func(t *testing.T) {
+		got := backend.buildPrompt(Task{Instruction: "Fix the bug", Files: []string{"auth.go", "user.go"}}, "/test/workspace")
+		expected := workDir + "Task: Fix the bug\n\nFocus on these files: [auth.go user.go]"
+		if got != expected {
+			t.Errorf("buildPrompt() = %q, want %q", got, expected)
+		}
+	})
 }

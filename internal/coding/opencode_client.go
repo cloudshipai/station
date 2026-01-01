@@ -84,7 +84,11 @@ func (c *OpenCodeClient) CreateSession(ctx context.Context, directory, title str
 	reqBody := createSessionRequest{Title: title}
 	body, _ := json.Marshal(reqBody)
 
-	url := fmt.Sprintf("%s/session?directory=%s", c.baseURL, directory)
+	// If directory is empty, don't pass it - OpenCode will use its CWD
+	url := c.baseURL + "/session"
+	if directory != "" {
+		url += "?directory=" + directory
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
@@ -165,7 +169,10 @@ func (c *OpenCodeClient) SendMessage(ctx context.Context, sessionID, directory, 
 	}
 	body, _ := json.Marshal(reqBody)
 
-	url := fmt.Sprintf("%s/session/%s/message?directory=%s", c.baseURL, sessionID, directory)
+	url := fmt.Sprintf("%s/session/%s/message", c.baseURL, sessionID)
+	if directory != "" {
+		url += "?directory=" + directory
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

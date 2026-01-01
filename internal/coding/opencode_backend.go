@@ -48,12 +48,14 @@ func (b *OpenCodeBackend) Ping(ctx context.Context) error {
 }
 
 func (b *OpenCodeBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	workspacePath := opts.WorkspacePath
-	if workspacePath == "" {
-		workspacePath = fmt.Sprintf("/tmp/opencode-workspace-%d", time.Now().UnixNano())
+	runID := fmt.Sprintf("run-%d", time.Now().UnixNano())
+	workspacePath := runID
+
+	if opts.WorkspacePath != "" {
+		workspacePath = opts.WorkspacePath
 	}
 
-	backendID, err := b.client.CreateSession(ctx, workspacePath, opts.Title)
+	backendID, err := b.client.CreateSession(ctx, "", opts.Title)
 	if err != nil {
 		return nil, &Error{Op: "CreateSession", Err: err}
 	}
@@ -353,15 +355,22 @@ func isHexString(s string) bool {
 }
 
 func (b *OpenCodeBackend) buildPrompt(task Task, workspacePath string) string {
-	prompt := fmt.Sprintf("IMPORTANT: Work in directory: %s\nAll file operations must use this path.\n\n%s", workspacePath, task.Instruction)
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("Working directory: %s\nCreate this directory if needed and perform all operations there.\n\n", workspacePath))
 
 	if task.Context != "" {
-		prompt = fmt.Sprintf("IMPORTANT: Work in directory: %s\nAll file operations must use this path.\n\nContext: %s\n\nTask: %s", workspacePath, task.Context, task.Instruction)
+		sb.WriteString("Context: ")
+		sb.WriteString(task.Context)
+		sb.WriteString("\n\n")
 	}
+
+	sb.WriteString("Task: ")
+	sb.WriteString(task.Instruction)
 
 	if len(task.Files) > 0 {
-		prompt = fmt.Sprintf("%s\n\nFocus on these files: %v", prompt, task.Files)
+		sb.WriteString(fmt.Sprintf("\n\nFocus on these files: %v", task.Files))
 	}
 
-	return prompt
+	return sb.String()
 }
