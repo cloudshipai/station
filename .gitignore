@@ -188,6 +188,7 @@ stn-test
 *.db-wal
 
 # Architecture docs (private working documents)
+.architecture/
 lighthouse.md
 lighthouse-payloads.md
 ~/
