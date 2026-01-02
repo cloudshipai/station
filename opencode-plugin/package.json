@@ -1,18 +1,28 @@
 {
   "name": "@cloudshipai/opencode-plugin",
   "version": "0.1.0",
-  "description": "OpenCode plugin for Station integration via NATS",
+  "description": "OpenCode plugin for Station integration via NATS - bridges AI coding tasks to CloudShip Station orchestration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target bun",
+    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "bun --watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
     "test:integration": "./test/run-tests.sh",
-    "test:harness": "bun run test/harness.ts"
+    "test:harness": "bun run test/harness.ts",
+    "prepublishOnly": "bun run build && bun run build:types",
+    "version": "bun run lint && bun run typecheck"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.0.0",
@@ -29,19 +39,36 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "keywords": [
     "opencode",
     "plugin",
     "station",
     "cloudship",
-    "nats"
+    "nats",
+    "ai-coding",
+    "coding-agent",
+    "orchestration"
   ],
   "license": "MIT",
+  "author": "CloudShip AI <hello@cloudship.ai>",
+  "homepage": "https://github.com/cloudshipai/station/tree/main/opencode-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/cloudshipai/station/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/cloudshipai/station.git",
+    "url": "git+https://github.com/cloudshipai/station.git",
     "directory": "opencode-plugin"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.1.0"
   }
 }
