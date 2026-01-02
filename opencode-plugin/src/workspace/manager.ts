@@ -51,8 +51,6 @@ export class WorkspaceManager {
       };
     }
 
-    await mkdir(workspacePath, { recursive: true });
-
     if (gitConfig?.url) {
       await this.gitClone(workspacePath, gitConfig);
       const gitInfo = await this.getGitInfo(workspacePath);
@@ -63,6 +61,8 @@ export class WorkspaceManager {
         git: gitInfo || undefined,
       };
     }
+
+    await mkdir(workspacePath, { recursive: true });
 
     return {
       name,
@@ -84,18 +84,24 @@ export class WorkspaceManager {
     const url = this.injectCredentials(config.url, config.token);
     const branch = config.branch || this.config.git.defaultBranch;
 
-    const cloneCmd = config.ref
-      ? `git clone ${url} . && git checkout ${config.ref}`
-      : `git clone --branch ${branch} ${url} .`;
-
-    await this.shell`cd ${workspacePath} && ${cloneCmd}`;
+    try {
+      if (config.ref) {
+        await this.shell`git clone ${url} ${workspacePath}`;
+        await this.shell`cd ${workspacePath} && git checkout ${config.ref}`;
+      } else {
+        await this.shell`git clone --branch ${branch} ${url} ${workspacePath}`;
+      }
+    } catch (err) {
+      console.error("[station-plugin] git clone failed:", err);
+      throw new Error(`git clone failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async gitPull(workspacePath: string): Promise<void> {
     try {
       await this.shell`cd ${workspacePath} && git pull --ff-only`;
     } catch (err) {
-      console.warn(`[station-plugin] git pull failed in ${workspacePath}:`, err);
+      console.warn("[station-plugin] git pull failed in", workspacePath, err);
     }
   }
 
@@ -106,9 +112,9 @@ export class WorkspaceManager {
       const commitResult = await this.shell`cd ${workspacePath} && git rev-parse HEAD`;
 
       return {
-        url: String(urlResult).trim(),
-        branch: String(branchResult).trim(),
-        commit: String(commitResult).trim(),
+        url: urlResult.text().trim(),
+        branch: branchResult.text().trim(),
+        commit: commitResult.text().trim(),
       };
     } catch {
       return null;
@@ -118,7 +124,7 @@ export class WorkspaceManager {
   async isGitDirty(workspacePath: string): Promise<boolean> {
     try {
       const result = await this.shell`cd ${workspacePath} && git status --porcelain`;
-      return String(result).trim().length > 0;
+      return result.text().trim().length > 0;
     } catch {
       return false;
     }

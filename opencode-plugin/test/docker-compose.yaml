@@ -7,35 +7,24 @@ services:
       - "8222:8222"
     volumes:
       - nats-data:/data
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+
 
   opencode:
     build:
-      context: .
-      dockerfile: Dockerfile.opencode
+      context: ..
+      dockerfile: test/Dockerfile.opencode
     environment:
       - NATS_URL=nats://nats:4222
       - OPENCODE_WORKSPACE_DIR=/workspaces
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     volumes:
-      - ../dist:/plugin:ro
       - opencode-workspaces:/workspaces
     depends_on:
-      nats:
-        condition: service_healthy
+      - nats
     ports:
-      - "4096:4096"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4096/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      - "4097:4096"
+    working_dir: /workspaces
 
 volumes:
   nats-data:

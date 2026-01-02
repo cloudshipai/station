@@ -89,6 +89,7 @@ export class TaskHandler {
 
       const response = await this.executePrompt(
         session.opencodeID,
+        workspace.path,
         task,
         publisher
       );
@@ -153,6 +154,7 @@ export class TaskHandler {
 
   private async executePrompt(
     sessionID: string,
+    workspacePath: string,
     task: CodingTask,
     publisher: EventPublisher
   ): Promise<{
@@ -162,6 +164,7 @@ export class TaskHandler {
   }> {
     const promptOptions: Parameters<OpencodeClient["session"]["prompt"]>[0] = {
       path: { id: sessionID },
+      query: { directory: workspacePath },
       body: {
         parts: [{ type: "text" as const, text: task.prompt }],
       },
@@ -178,13 +181,34 @@ export class TaskHandler {
       };
     }
 
-    const result = await this.client.session.prompt(promptOptions);
+    let result: Awaited<ReturnType<OpencodeClient["session"]["prompt"]>>;
+    try {
+      result = await this.client.session.prompt(promptOptions);
+    } catch (promptError) {
+      const errorStr = String(promptError);
+      const isSessionNotFound = 
+        errorStr.includes("NotFoundError") ||
+        errorStr.includes("Unexpected EOF") ||
+        errorStr.includes("JSON Parse error");
+      
+      if (isSessionNotFound) {
+        console.error(`[station-plugin] Session ${sessionID} not found - possible race condition:`, promptError);
+        throw new Error(`Session ${sessionID} not found. OpenCode may not have persisted the session. Try again.`);
+      }
+      
+      console.error("[station-plugin] Prompt threw exception:", promptError);
+      throw promptError;
+    }
+
+    console.log("[station-plugin] Prompt result keys:", Object.keys(result || {}));
 
     if ("error" in result && result.error) {
+      console.error("[station-plugin] Prompt returned error:", result.error);
       throw new Error(`Prompt failed: ${JSON.stringify(result.error)}`);
     }
 
     if (!result.data) {
+      console.error("[station-plugin] Prompt returned no data, full result:", JSON.stringify(result));
       throw new Error("Prompt failed: no data in response");
     }
 

@@ -1,3 +1,8 @@
+// Top-level logging - if this doesn't appear, the module isn't being imported at all
+console.log("[station-plugin] ========================================");
+console.log("[station-plugin] Module file loaded at top level");
+console.log("[station-plugin] ========================================");
+
 import type { Plugin, Hooks, PluginInput } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import { NATSClient } from "./nats/client";
@@ -5,6 +10,11 @@ import { TaskHandler } from "./nats/handler";
 import { DEFAULT_CONFIG, type PluginConfig, type SessionState } from "./types";
 
 export type { CodingTask, CodingResult, CodingStreamEvent, PluginConfig } from "./types";
+
+let globalNats: NATSClient | null = null;
+let globalTaskHandler: TaskHandler | null = null;
+let globalConnected = false;
+let initPromise: Promise<void> | null = null;
 
 const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
   const { client, $: shell, directory } = input;
@@ -17,27 +27,37 @@ const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
     },
   };
 
-  const nats = new NATSClient(config);
-  const connected = await nats.connect();
+  if (!initPromise) {
+    initPromise = (async () => {
+      globalNats = new NATSClient(config);
+      globalConnected = await globalNats.connect();
 
-  if (!connected) {
-    console.log("[station-plugin] Running in standalone mode (no NATS)");
+      if (!globalConnected) {
+        console.log("[station-plugin] Running in standalone mode (no NATS)");
+      }
+
+      globalTaskHandler = new TaskHandler(client, globalConnected ? globalNats : null, shell, config);
+
+      if (globalConnected && globalTaskHandler) {
+        const handler = globalTaskHandler;
+        await globalNats.subscribe(config.subjects.task, async (data) => {
+          await handler.handle(data);
+        });
+        console.log(`[station-plugin] Subscribed to ${config.subjects.task}`);
+      }
+    })();
   }
 
-  const taskHandler = new TaskHandler(client, connected ? nats : null, shell, config);
-
-  if (connected) {
-    await nats.subscribe(config.subjects.task, async (data) => {
-      await taskHandler.handle(data);
-    });
-    console.log(`[station-plugin] Subscribed to ${config.subjects.task}`);
-  }
+  await initPromise;
 
   const hooks: Hooks = {
     event: async ({ event }) => {
-      if (event.type === "server.instance.disposed") {
+      if (event.type === "server.instance.disposed" && globalNats) {
         console.log("[station-plugin] Shutting down...");
-        await nats.close();
+        await globalNats.close();
+        globalNats = null;
+        globalTaskHandler = null;
+        initPromise = null;
       }
     },
 
@@ -52,10 +72,10 @@ const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
             .describe("KV bucket"),
         },
         execute: async ({ key, bucket }) => {
-          if (!connected) {
+          if (!globalConnected || !globalNats) {
             return JSON.stringify({ error: "NATS not connected" });
           }
-          const value = await nats.kvGet(key, bucket as "sessions" | "state");
+          const value = await globalNats.kvGet(key, bucket as "sessions" | "state");
           return JSON.stringify({ value });
         },
       }),
@@ -71,10 +91,10 @@ const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
             .describe("KV bucket"),
         },
         execute: async ({ key, value, bucket }) => {
-          if (!connected) {
+          if (!globalConnected || !globalNats) {
             return JSON.stringify({ error: "NATS not connected" });
           }
-          const success = await nats.kvPut(key, value, bucket as "sessions" | "state");
+          const success = await globalNats.kvPut(key, value, bucket as "sessions" | "state");
           return JSON.stringify({ success });
         },
       }),
@@ -85,10 +105,10 @@ const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
           sessionName: tool.schema.string().describe("Session name"),
         },
         execute: async ({ sessionName }) => {
-          if (!connected) {
+          if (!globalConnected || !globalNats) {
             return JSON.stringify({ error: "NATS not connected" });
           }
-          const data = await nats.kvGet(sessionName, "sessions");
+          const data = await globalNats.kvGet(sessionName, "sessions");
           if (!data) {
             return JSON.stringify({ error: "Session not found" });
           }

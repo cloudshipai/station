@@ -1,16 +1,26 @@
-FROM oven/bun:1.1-alpine
+FROM ghcr.io/sst/opencode:latest
 
-RUN apk add --no-cache curl git
+# Install Bun runtime for plugins and git for workspace operations
+RUN apk add --no-cache curl unzip bash git \
+    && curl -fsSL https://bun.sh/install | bash \
+    && ln -s /root/.bun/bin/bun /usr/local/bin/bun \
+    && ln -s /root/.bun/bin/bunx /usr/local/bin/bunx
 
-RUN curl -fsSL https://opencode.ai/install | sh
-ENV PATH="/root/.opencode/bin:${PATH}"
+# Create plugin and config directories
+# OpenCode scans ~/.config/opencode/plugin/ for local plugins at startup
+RUN mkdir -p /root/.config/opencode/plugin \
+    && mkdir -p /root/.opencode
 
-RUN mkdir -p /workspaces /root/.config/opencode/plugin
+# Copy the built plugin to the local plugin directory
+COPY dist/index.js /root/.config/opencode/plugin/station-plugin.js
 
-COPY opencode.json /root/.config/opencode/opencode.json
+# Copy the entrypoint script
+COPY test/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-WORKDIR /workspace
+# Create default config
+COPY test/opencode.json /root/.config/opencode/opencode.json
 
-EXPOSE 4096
+WORKDIR /workspaces
 
-CMD ["opencode", "serve", "--port", "4096"]
+ENTRYPOINT ["/entrypoint.sh"]

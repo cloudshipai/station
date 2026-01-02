@@ -29,13 +29,17 @@ export class SessionManager {
     if (continueSession) {
       const existing = await this.getSession(sessionName);
       if (existing) {
-        await this.updateLastUsed(sessionName);
-        return {
-          name: sessionName,
-          opencodeID: existing.opencodeID,
-          created: false,
-          messageCount: existing.messageCount,
-        };
+        const stillExists = await this.verifySessionExists(existing.opencodeID, workspacePath);
+        if (stillExists) {
+          await this.updateLastUsed(sessionName);
+          return {
+            name: sessionName,
+            opencodeID: existing.opencodeID,
+            created: false,
+            messageCount: existing.messageCount,
+          };
+        }
+        console.log(`[station-plugin] Session ${existing.opencodeID} no longer exists, creating new`);
       }
     }
 
@@ -48,6 +52,11 @@ export class SessionManager {
     }
 
     const session = result.data;
+
+    // Wait for session to be fully persisted to disk
+    // OpenCode has a race condition where session.create returns before the session file is written
+    // For git repos with many files, OpenCode may take 15+ seconds to index
+    await this.waitForSessionReady(session.id, workspacePath, 50, 100); // 5 seconds should be enough now
 
     const state: SessionState = {
       sessionName,
@@ -67,6 +76,59 @@ export class SessionManager {
       created: true,
       messageCount: 0,
     };
+  }
+
+  private async verifySessionExists(opencodeID: string, workspacePath: string): Promise<boolean> {
+    try {
+      const result = await this.client.session.get({ 
+        path: { id: opencodeID },
+        query: { directory: workspacePath }
+      });
+      return !result.error && !!result.data;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Wait for OpenCode to persist the session to disk.
+   * 
+   * OpenCode has a race condition where session.create() returns before the session
+   * JSON file is written to storage. If we send a prompt before the file exists,
+   * we get a NotFoundError that manifests as "JSON Parse error: Unexpected EOF".
+   * 
+   * @param sessionId - The OpenCode session ID to wait for
+   * @param maxAttempts - Max polling attempts (default 50 = 5 seconds)
+   * @param intervalMs - Polling interval in ms (default 100)
+   */
+  private async waitForSessionReady(
+    sessionId: string,
+    workspacePath: string,
+    maxAttempts = 50, 
+    intervalMs = 100
+  ): Promise<void> {
+    const startTime = Date.now();
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const exists = await this.verifySessionExists(sessionId, workspacePath);
+      if (exists) {
+        const elapsed = Date.now() - startTime;
+        if (attempt > 1) {
+          console.log(`[station-plugin] Session ${sessionId} ready after ${attempt} attempts (${elapsed}ms)`);
+        }
+        return;
+      }
+      
+      if (attempt % 10 === 0) {
+        console.log(`[station-plugin] Waiting for session ${sessionId}... attempt ${attempt}/${maxAttempts}`);
+      }
+      
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    
+    const totalWait = maxAttempts * intervalMs;
+    console.error(`[station-plugin] Session ${sessionId} NOT ready after ${maxAttempts} attempts (${totalWait}ms)`);
+    throw new Error(`Session ${sessionId} not persisted after ${totalWait}ms - OpenCode storage race condition`);
   }
 
   private async getSession(sessionName: string): Promise<SessionState | null> {
