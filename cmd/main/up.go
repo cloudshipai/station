@@ -384,12 +384,13 @@ func runUp(cmd *cobra.Command, args []string) error {
 			// - localhost URLs: rewrite to host.docker.internal for Docker networking
 			fmt.Printf("   Copying config and fixing paths for container...\n")
 
-			// Build sed command to fix paths
+			// Build sed command to fix paths (nats:// URLs stay 127.0.0.1 for embedded NATS)
 			sedCmd := `cp /host-config/config.yaml /home/station/.config/station/config.yaml && \
-					sed -i 's|database_url:.*|database_url: /home/station/.config/station/station.db|' /home/station/.config/station/config.yaml && \
-					sed -i 's|workspace:.*|workspace: /home/station/.config/station|' /home/station/.config/station/config.yaml && \
-					sed -i 's|localhost:|host.docker.internal:|g' /home/station/.config/station/config.yaml && \
-					sed -i 's|127\.0\.0\.1:|host.docker.internal:|g' /home/station/.config/station/config.yaml`
+				sed -i 's|database_url:.*|database_url: /home/station/.config/station/station.db|' /home/station/.config/station/config.yaml && \
+				sed -i 's|workspace:.*|workspace: /home/station/.config/station|' /home/station/.config/station/config.yaml && \
+				sed -i 's|localhost:|host.docker.internal:|g' /home/station/.config/station/config.yaml && \
+				sed -i 's|127\.0\.0\.1:|host.docker.internal:|g' /home/station/.config/station/config.yaml && \
+				sed -i 's|nats://host.docker.internal:|nats://127.0.0.1:|g' /home/station/.config/station/config.yaml`
 
 			// Check if STATION_LOCAL_MODE is set - check both env var and --env flags
 			localModeOverride := os.Getenv("STATION_LOCAL_MODE")
@@ -698,8 +699,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Named volume for cache (persists across container restarts)
 	dockerArgs = append(dockerArgs, "-v", "station-cache:/home/station/.cache")
 
-	// Port mappings - default only exposes Dynamic Agent MCP (8587)
-	dockerArgs = append(dockerArgs, "-p", "8587:8587")
+	// Port mappings - default only exposes Dynamic Agent MCP (8587) and embedded NATS (4222)
+	dockerArgs = append(dockerArgs, "-p", "8587:8587", "-p", "4222:4222")
 	if devMode {
 		dockerArgs = append(dockerArgs, "-p", "8585:8585", "-p", "8586:8586")
 	}

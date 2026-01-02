@@ -200,23 +200,9 @@ func runMainServer() error {
 		log.Printf("Warning: Failed to initialize Lighthouse client: %v", err)
 	}
 
-	// Initialize agent service with AgentExecutionEngine and Lighthouse integration
-	// Pass the global otelTelemetryService to avoid creating a duplicate TracerProvider
-	// This ensures org_id from CloudShip auth is properly added to all spans
-	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient, otelTelemetryService)
-
-	// Initialize MCP for the agent service
-	if err := agentSvc.InitializeMCP(ctx); err != nil {
-		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
-	}
-
-	schedulerSvc := services.NewSchedulerService(database, repos, agentSvc)
-	if err := schedulerSvc.Start(); err != nil {
-		return fmt.Errorf("failed to start scheduler service: %w", err)
-	}
-	defer schedulerSvc.Stop()
-
-	// Initialize workflow engine for NATS-based workflow execution
+	// Initialize workflow engine FIRST for NATS-based workflow execution
+	// IMPORTANT: This must happen before AgentService creation because the
+	// CodingToolFactory needs the embedded NATS server to be running
 	workflowOpts := runtime.EnvOptions()
 	workflowEngine, err := runtime.NewEngine(workflowOpts)
 	if err != nil {
@@ -234,6 +220,22 @@ func runMainServer() error {
 		workflowService = services.NewWorkflowService(repos)
 		log.Printf("⚠️  Workflow engine not available - workflows will not execute")
 	}
+
+	// Initialize agent service with AgentExecutionEngine and Lighthouse integration
+	// Pass the global otelTelemetryService to avoid creating a duplicate TracerProvider
+	// This ensures org_id from CloudShip auth is properly added to all spans
+	agentSvc := services.NewAgentServiceWithLighthouse(repos, lighthouseClient, otelTelemetryService)
+
+	// Initialize MCP for the agent service
+	if err := agentSvc.InitializeMCP(ctx); err != nil {
+		log.Printf("Warning: Failed to initialize MCP for agent service: %v", err)
+	}
+
+	schedulerSvc := services.NewSchedulerService(database, repos, agentSvc)
+	if err := schedulerSvc.Start(); err != nil {
+		return fmt.Errorf("failed to start scheduler service: %w", err)
+	}
+	defer schedulerSvc.Stop()
 
 	workflowSchedulerSvc := services.NewWorkflowSchedulerService(repos, workflowService)
 	if err := workflowSchedulerSvc.Start(ctx); err != nil {

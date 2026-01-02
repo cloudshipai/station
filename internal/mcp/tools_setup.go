@@ -27,6 +27,7 @@ func (s *Server) setupTools() {
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow by truncating memory content.")),
 		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Modes: 'compute' (single execution, default) or 'code' (persistent session). For code mode, use 'session': 'workflow' to share sandbox across workflow steps, or 'agent' (default) for per-agent sessions. Example: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\", \"pip_packages\": [\"pandas\"]}. Full options: mode, session, runtime, image, timeout_seconds, allow_network, pip_packages, npm_packages, limits.")),
 		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Enables coding_open, code, coding_close, coding_commit, coding_push tools. Example: {\"enabled\": true, \"backend\": \"opencode\", \"workspace_path\": \"/tmp/my-project\"}. Options: enabled (bool), backend (\"opencode\"), workspace_path (optional default workspace).")),
+		mcp.WithBoolean("notify", mcp.Description("Enable the notify tool for this agent to send webhook notifications (ntfy, Slack, Discord, etc.). Requires notify webhook to be configured in Station config. Default: false.")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
@@ -45,6 +46,7 @@ func (s *Server) setupTools() {
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow.")),
 		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. For code mode with workflow scoping: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\"}. Set to \"{}\" to remove sandbox. Options: mode (compute/code), session (workflow/agent), runtime, pip_packages, npm_packages, timeout_seconds, allow_network, limits.")),
 		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Set to \"{}\" to remove. Example: {\"enabled\": true, \"backend\": \"opencode\"}.")),
+		mcp.WithBoolean("notify", mcp.Description("Enable/disable the notify tool for this agent. Set to true to enable webhook notifications, false to disable.")),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 

@@ -71,6 +71,7 @@ type AgentExecutionEngine struct {
 	unifiedSandboxFactory    *UnifiedSandboxFactory       // For creating sandbox tools (supports both compute and code modes)
 	sessionManager           *SessionManager              // For managing persistent code mode sandbox sessions
 	codingToolFactory        *CodingToolFactory           // For creating AI coding backend tools (OpenCode)
+	notifyToolFactory        *NotifyToolFactory           // For creating notify tool (webhook notifications)
 }
 
 // NewAgentExecutionEngine creates a new agent execution engine
@@ -124,6 +125,14 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		}
 	}
 
+	var notifyToolFactory *NotifyToolFactory
+	if cfg := config.GetLoadedConfig(); cfg != nil && cfg.Notify.WebhookURL != "" {
+		notifyToolFactory = NewNotifyToolFactory(&cfg.Notify)
+		if notifyToolFactory.IsEnabled() {
+			logging.Info("Notify tool factory initialized with webhook URL: %s", cfg.Notify.WebhookURL)
+		}
+	}
+
 	return &AgentExecutionEngine{
 		repos:                    repos,
 		agentService:             agentService,
@@ -136,6 +145,7 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		unifiedSandboxFactory:    unifiedSandboxFactory,
 		sessionManager:           sessionManager,
 		codingToolFactory:        codingToolFactory,
+		notifyToolFactory:        notifyToolFactory,
 	}
 }
 
@@ -510,6 +520,15 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 			aee.codingToolFactory != nil && aee.codingToolFactory.ShouldAddTools(codingConfig))
 	}
 
+	notifyEnabled := aee.parseNotifyEnabledFromAgent(agent)
+	if aee.notifyToolFactory != nil && aee.notifyToolFactory.ShouldAddTool(notifyEnabled) {
+		notifyTools := aee.notifyToolFactory.GetNotifyTools()
+		for _, tool := range notifyTools {
+			mcpTools = append(mcpTools, tool)
+		}
+		logging.Info("Notify tool enabled for agent %s", agent.Name)
+	}
+
 	ctx = WithParentRunID(ctx, runID)
 	ctx = WithParentRunID(ctx, runID)
 
@@ -559,6 +578,12 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	}
 
 	// Use clean, unified dotprompt.Execute() execution path with context for timeout protection
+	logging.Info("[TOOLS DEBUG] About to call ExecuteAgent with %d mcpTools for agent %s", len(mcpTools), agent.Name)
+	for i, t := range mcpTools {
+		if tool, ok := t.(interface{ Name() string }); ok {
+			logging.Info("[TOOLS DEBUG]   Tool[%d]: %s", i, tool.Name())
+		}
+	}
 	response, err := executor.ExecuteAgent(ctx, *agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 
 	// Clean up MCP connections after execution is complete
@@ -1075,6 +1100,48 @@ type sandboxFrontmatter struct {
 
 type codingFrontmatter struct {
 	Coding *dotprompt.CodingConfig `yaml:"coding"`
+}
+
+type notifyFrontmatter struct {
+	Notify bool `yaml:"notify"`
+}
+
+func (aee *AgentExecutionEngine) parseNotifyEnabledFromAgent(agent *models.Agent) bool {
+	if agent == nil {
+		return false
+	}
+
+	env, err := aee.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		logging.Debug("Failed to get environment for notify config: %v", err)
+		return false
+	}
+
+	promptPath := config.GetAgentPromptPath(env.Name, agent.Name)
+
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		logging.Debug("Failed to read dotprompt file for notify config: %v", err)
+		return false
+	}
+
+	parts := strings.Split(string(content), "---")
+	if len(parts) < 3 {
+		return false
+	}
+
+	yamlContent := strings.TrimSpace(parts[1])
+	if yamlContent == "" {
+		return false
+	}
+
+	var fm notifyFrontmatter
+	if err := yaml.Unmarshal([]byte(yamlContent), &fm); err != nil {
+		logging.Debug("Failed to parse notify config from dotprompt: %v", err)
+		return false
+	}
+
+	return fm.Notify
 }
 
 func (aee *AgentExecutionEngine) parseSandboxConfigFromAgent(agent *models.Agent, environmentName string) *dotprompt.SandboxConfig {

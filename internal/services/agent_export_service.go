@@ -40,10 +40,10 @@ func (s *AgentExportService) ExportAgentAfterSaveWithMetadata(agentID int64, app
 }
 
 func (s *AgentExportService) ExportAgentWithSandbox(agentID int64, app, appType, sandboxConfig string) error {
-	return s.ExportAgentWithConfigs(agentID, app, appType, sandboxConfig, "")
+	return s.ExportAgentWithConfigs(agentID, app, appType, sandboxConfig, "", false)
 }
 
-func (s *AgentExportService) ExportAgentWithConfigs(agentID int64, app, appType, sandboxConfig, codingConfig string) error {
+func (s *AgentExportService) ExportAgentWithConfigs(agentID int64, app, appType, sandboxConfig, codingConfig string, notifyEnabled bool) error {
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %v", err)
@@ -78,7 +78,7 @@ func (s *AgentExportService) ExportAgentWithConfigs(agentID int64, app, appType,
 		return fmt.Errorf("failed to get child agents: %v", err)
 	}
 
-	dotpromptContent := s.generateDotpromptContentWithConfigs(agent, toolsWithDetails, childAgents, environment.Name, app, appType, sandboxConfig, codingConfig)
+	dotpromptContent := s.generateDotpromptContentWithConfigs(agent, toolsWithDetails, childAgents, environment.Name, app, appType, sandboxConfig, codingConfig, notifyEnabled)
 
 	outputPath := config.GetAgentPromptPath(environment.Name, agent.Name)
 
@@ -96,14 +96,14 @@ func (s *AgentExportService) ExportAgentWithConfigs(agentID int64, app, appType,
 }
 
 func (s *AgentExportService) generateDotpromptContent(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType string) string {
-	return s.generateDotpromptContentWithConfigs(agent, tools, childAgents, environmentName, app, appType, "", "")
+	return s.generateDotpromptContentWithConfigs(agent, tools, childAgents, environmentName, app, appType, "", "", false)
 }
 
 func (s *AgentExportService) generateDotpromptContentWithSandbox(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig string) string {
-	return s.generateDotpromptContentWithConfigs(agent, tools, childAgents, environmentName, app, appType, sandboxConfig, "")
+	return s.generateDotpromptContentWithConfigs(agent, tools, childAgents, environmentName, app, appType, sandboxConfig, "", false)
 }
 
-func (s *AgentExportService) generateDotpromptContentWithConfigs(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig, codingConfig string) string {
+func (s *AgentExportService) generateDotpromptContentWithConfigs(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig, codingConfig string, notifyEnabled bool) string {
 	var toolNames []string
 	for _, tool := range tools {
 		toolNames = append(toolNames, tool.ToolName)
@@ -146,6 +146,10 @@ metadata:
 		if codingYAML != "" {
 			content += "\ncoding:\n" + s.indentLines(codingYAML, "  ")
 		}
+	}
+
+	if notifyEnabled {
+		content += "\nnotify: true"
 	}
 
 	if len(toolNames) > 0 {

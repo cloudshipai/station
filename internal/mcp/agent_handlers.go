@@ -121,7 +121,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
-	// Extract tool_names array if provided
+	notifyEnabled := request.GetBool("notify", false)
 	var toolNames []string
 	if request.Params.Arguments != nil {
 		if argsMap, ok := request.Params.Arguments.(map[string]interface{}); ok {
@@ -173,7 +173,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentWithConfigs(createdAgent.ID, app, appType, sandboxConfig, codingConfig); err != nil {
+		if err := s.agentExportService.ExportAgentWithConfigs(createdAgent.ID, app, appType, sandboxConfig, codingConfig, notifyEnabled); err != nil {
 			response["export_warning"] = fmt.Sprintf("Agent created but export failed: %v. Use 'stn agent export %s' to export manually.", err, name)
 		}
 	}
@@ -351,6 +351,8 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
+	notifyEnabled := request.GetBool("notify", false)
+
 	err = s.repos.Agents.UpdateWithMemory(
 		agentID,
 		name,
@@ -373,7 +375,7 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentWithConfigs(agentID, app, appType, sandboxConfig, codingConfig); err != nil {
+		if err := s.agentExportService.ExportAgentWithConfigs(agentID, app, appType, sandboxConfig, codingConfig, notifyEnabled); err != nil {
 			response := map[string]interface{}{
 				"success": true,
 				"agent": map[string]interface{}{

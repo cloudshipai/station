@@ -46,6 +46,8 @@ type Config struct {
 	Webhook WebhookConfig
 	// Notifications Configuration (outbound webhooks for approvals, etc.)
 	Notifications NotificationsConfig
+	// Notify Tool Configuration (agent-initiated notifications)
+	Notify NotifyConfig
 	// Sandbox Configuration (isolated code execution)
 	Sandbox SandboxConfig
 	// Coding Configuration (AI coding backend)
@@ -107,6 +109,14 @@ type WebhookConfig struct {
 type NotificationsConfig struct {
 	ApprovalWebhookURL     string `yaml:"approval_webhook_url"`     // URL to POST when approval is needed
 	ApprovalWebhookTimeout int    `yaml:"approval_webhook_timeout"` // Timeout in seconds (default: 10)
+}
+
+// NotifyConfig holds settings for the notify tool (agent-initiated notifications)
+type NotifyConfig struct {
+	WebhookURL     string `yaml:"webhook_url"`     // URL to POST notifications (e.g., https://ntfy.sh/station)
+	APIKey         string `yaml:"api_key"`         // API key/token for authentication (optional)
+	TimeoutSeconds int    `yaml:"timeout_seconds"` // Request timeout in seconds (default: 10)
+	Format         string `yaml:"format"`          // Webhook format: "ntfy" (default), "json", or "auto"
 }
 
 // SandboxConfig holds settings for sandbox code execution
@@ -338,6 +348,12 @@ func bindEnvVars() {
 	// Notifications config (outbound webhooks for approvals)
 	viper.BindEnv("notifications.approval_webhook_url", "STN_APPROVAL_WEBHOOK_URL")
 	viper.BindEnv("notifications.approval_webhook_timeout", "STN_APPROVAL_WEBHOOK_TIMEOUT")
+
+	// Notify tool config (agent-initiated notifications)
+	viper.BindEnv("notify.webhook_url", "STN_NOTIFY_WEBHOOK_URL")
+	viper.BindEnv("notify.api_key", "STN_NOTIFY_API_KEY")
+	viper.BindEnv("notify.timeout_seconds", "STN_NOTIFY_TIMEOUT")
+	viper.BindEnv("notify.format", "STN_NOTIFY_FORMAT")
 
 	// Sandbox config
 	viper.BindEnv("sandbox.enabled", "STATION_SANDBOX_ENABLED", "STN_SANDBOX_ENABLED")
@@ -630,6 +646,22 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("sandbox.cleanup_interval_minutes") {
 		cfg.Sandbox.CleanupIntervalMinutes = viper.GetInt("sandbox.cleanup_interval_minutes")
+	}
+
+	if viper.IsSet("notify.webhook_url") {
+		cfg.Notify.WebhookURL = viper.GetString("notify.webhook_url")
+	}
+	if viper.IsSet("notify.api_key") {
+		cfg.Notify.APIKey = viper.GetString("notify.api_key")
+	}
+	if viper.IsSet("notify.timeout_seconds") {
+		cfg.Notify.TimeoutSeconds = viper.GetInt("notify.timeout_seconds")
+	}
+	if viper.IsSet("notify.format") {
+		cfg.Notify.Format = viper.GetString("notify.format")
+	}
+	if cfg.Notify.Format == "" {
+		cfg.Notify.Format = "ntfy"
 	}
 
 	if viper.IsSet("coding.backend") {

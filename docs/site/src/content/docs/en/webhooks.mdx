@@ -1,0 +1,339 @@
+---
+title: Webhooks & Notifications
+description: Configure webhooks for agent execution and approval notifications
+---
+
+# Webhooks & Notifications
+
+Station supports both inbound webhooks (for triggering agent execution) and outbound webhooks (for notifications).
+
+## Architecture
+
+```mermaid
+graph LR
+    subgraph "Inbound Webhooks"
+        External[External System<br/>CI/CD, Slack, etc.]
+        ExecuteAPI[/execute API<br/>Port 8587]
+    end
+    
+    subgraph "Station"
+        Agent[Agent Execution]
+        Workflow[Workflow Engine]
+        Notifier[Webhook Notifier]
+    end
+    
+    subgraph "Outbound Webhooks"
+        Ntfy[ntfy.sh]
+        Slack[Slack]
+        PagerDuty[PagerDuty]
+        Custom[Custom Webhook]
+    end
+    
+    External -->|POST /execute| ExecuteAPI
+    ExecuteAPI --> Agent
+    
+    Workflow -->|Approval Required| Notifier
+    Agent -->|Completion| Notifier
+    
+    Notifier --> Ntfy
+    Notifier --> Slack
+    Notifier --> PagerDuty
+    Notifier --> Custom
+```
+
+## Inbound Webhook: Execute API
+
+The `/execute` endpoint allows external systems to trigger agent execution.
+
+### Endpoint
+
+```
+POST http://localhost:8587/execute
+```
+
+### Request Format
+
+```json
+{
+  "agent_name": "file-writer",
+  "task": "Create a hello.txt file with Hello World content",
+  "variables": {
+    "custom_var": "value"
+  }
+}
+```
+
+### Response Format
+
+```json
+{
+  "run_id": 1,
+  "agent_id": 4,
+  "agent_name": "file-writer",
+  "status": "running",
+  "message": "Agent execution started"
+}
+```
+
+### Authentication
+
+Configure authentication in `config.yaml`:
+
+```yaml
+webhook:
+  enabled: true
+  api_key: your-secret-api-key  # Optional static API key
+```
+
+Or use environment variables:
+
+```bash
+export STN_WEBHOOK_ENABLED=true
+export STN_WEBHOOK_API_KEY=your-secret-api-key
+```
+
+### Example: Trigger from CI/CD
+
+```bash
+# GitHub Actions example
+curl -X POST https://your-station.example.com:8587/execute \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${STATION_API_KEY}" \
+  -d '{
+    "agent_name": "deployment-agent",
+    "task": "Deploy version ${VERSION} to production"
+  }'
+```
+
+## Outbound Webhooks: Notifications
+
+Station sends outbound webhooks for workflow approvals and can be extended for other events.
+
+### Configuration
+
+Add to `~/.config/station/config.yaml`:
+
+```yaml
+notifications:
+  # URL to POST when workflow approval is needed
+  approval_webhook_url: https://ntfy.sh/station-approvals
+  
+  # Timeout for webhook requests (seconds)
+  approval_webhook_timeout: 10
+```
+
+Or use environment variables:
+
+```bash
+export STN_APPROVAL_WEBHOOK_URL=https://ntfy.sh/station-approvals
+export STN_APPROVAL_WEBHOOK_TIMEOUT=10
+```
+
+### Approval Webhook Payload
+
+When a workflow requires human approval, Station sends:
+
+```json
+{
+  "event": "approval.requested",
+  "approval_id": "appr_abc123",
+  "workflow_id": "wf_xyz789",
+  "workflow_name": "production-deploy",
+  "run_id": "run_456",
+  "step_name": "approve-deployment",
+  "message": "Please approve deployment to production",
+  "approvers": ["admin", "devops"],
+  "timeout_seconds": 3600,
+  "created_at": "2024-01-15T10:30:00Z",
+  "approve_url": "http://localhost:8587/workflow-approvals/appr_abc123/approve",
+  "reject_url": "http://localhost:8587/workflow-approvals/appr_abc123/reject",
+  "view_url": "http://localhost:8587/workflow-approvals/appr_abc123"
+}
+```
+
+## ntfy.sh Integration
+
+[ntfy](https://ntfy.sh) is a simple HTTP-based pub-sub notification service. It's perfect for Station notifications.
+
+### Setup
+
+1. **Install the ntfy app** on your phone ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) / [iOS](https://apps.apple.com/us/app/ntfy/id1625396347))
+
+2. **Subscribe to a topic** in the app (e.g., `station-notifications`)
+
+3. **Configure Station**:
+
+```yaml
+notifications:
+  approval_webhook_url: https://ntfy.sh/station-notifications
+  approval_webhook_timeout: 10
+```
+
+4. **Test it**:
+
+```bash
+# Manual test
+curl -d "Test notification from Station" https://ntfy.sh/station-notifications
+```
+
+### Rich Notifications with ntfy
+
+For enhanced notifications, you can use a webhook proxy that transforms Station's JSON payload into ntfy's format with titles, priorities, and actions.
+
+Example proxy script (`ntfy-proxy.py`):
+
+```python
+from flask import Flask, request
+import requests
+
+app = Flask(__name__)
+NTFY_TOPIC = "https://ntfy.sh/station-notifications"
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    data = request.json
+    
+    # Build ntfy message
+    headers = {
+        "Title": f"Approval Required: {data.get('workflow_name', 'Unknown')}",
+        "Priority": "high",
+        "Tags": "warning,robot",
+        "Actions": f"view, Approve, {data.get('approve_url', '')}; "
+                   f"view, Reject, {data.get('reject_url', '')}"
+    }
+    
+    message = f"{data.get('message', 'Approval needed')}\n\nStep: {data.get('step_name', 'N/A')}"
+    
+    requests.post(NTFY_TOPIC, data=message, headers=headers)
+    return "OK", 200
+
+if __name__ == '__main__':
+    app.run(port=5000)
+```
+
+Then configure Station to use the proxy:
+
+```yaml
+notifications:
+  approval_webhook_url: http://localhost:5000/webhook
+```
+
+## Slack Integration
+
+For Slack notifications, use a Slack Incoming Webhook:
+
+1. Create a [Slack Incoming Webhook](https://api.slack.com/messaging/webhooks)
+
+2. Configure Station:
+
+```yaml
+notifications:
+  approval_webhook_url: https://hooks.slack.com/services/T00/B00/xxxx
+```
+
+Note: Slack expects a different payload format. Use a proxy to transform:
+
+```python
+@app.route('/slack-webhook', methods=['POST'])
+def slack_webhook():
+    data = request.json
+    
+    slack_payload = {
+        "text": f":robot_face: *Approval Required*",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Workflow:* {data.get('workflow_name')}\n"
+                            f"*Step:* {data.get('step_name')}\n"
+                            f"*Message:* {data.get('message')}"
+                }
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Approve"},
+                        "style": "primary",
+                        "url": data.get('approve_url')
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Reject"},
+                        "style": "danger",
+                        "url": data.get('reject_url')
+                    }
+                ]
+            }
+        ]
+    }
+    
+    requests.post(SLACK_WEBHOOK_URL, json=slack_payload)
+    return "OK", 200
+```
+
+## Webhook Security
+
+### Signature Validation
+
+Station includes a `User-Agent: Station-Webhook/1.0` header with all outbound webhooks.
+
+### Retry Logic
+
+Failed webhooks are retried with exponential backoff:
+- Attempt 1: Immediate
+- Attempt 2: 1 second delay
+- Attempt 3: 4 seconds delay
+
+### Audit Logging
+
+All webhook deliveries are logged in the database:
+
+```sql
+SELECT * FROM notification_logs 
+WHERE event_type = 'webhook_sent' 
+ORDER BY created_at DESC;
+```
+
+## Testing Webhooks
+
+### Test Inbound Webhook
+
+```bash
+# Execute an agent via webhook
+curl -X POST http://localhost:8587/execute \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "file-writer", "task": "Create test.txt"}'
+
+# Check run status
+curl http://localhost:8587/runs/1
+```
+
+### Test Outbound Webhook
+
+```bash
+# Create a workflow with an approval step, then check logs
+docker logs station-server 2>&1 | grep -i webhook
+```
+
+## Configuration Reference
+
+```yaml
+# Inbound webhook (execute endpoint)
+webhook:
+  enabled: true                    # Enable /execute endpoint
+  api_key: "your-api-key"          # Static API key (optional)
+
+# Outbound webhooks (notifications)
+notifications:
+  approval_webhook_url: "https://ntfy.sh/your-topic"
+  approval_webhook_timeout: 10     # Seconds
+```
+
+## Next Steps
+
+- **[Workflows](/station/en/workflows)** - Create workflows with approval steps
+- **[Execute API](/station/en/cli/advanced)** - Detailed API documentation
+- **[OpenCode Backend](/station/en/coding-backend)** - Configure AI coding capabilities
