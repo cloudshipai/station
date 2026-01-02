@@ -1734,38 +1734,6 @@ volumes:
 
 ---
 
-## Phase 9: Multi-Tenant Isolation (Future)
-
-When running in multi-tenant mode (CloudShip platform):
-
-### 9.1 Subject Namespacing
-
-```
-org.{org_id}.coding.task          # Per-org task queue
-org.{org_id}.coding.stream.{id}   # Per-task stream (ephemeral)
-org.{org_id}.coding.result.{id}   # Per-task result (ephemeral)
-```
-
-### 9.2 KV/Object Store Buckets
-
-```
-coding-sessions-{org_id}          # Per-org session state
-coding-state-{org_id}             # Per-org context
-coding-artifacts-{org_id}         # Per-org file storage
-```
-
-### 9.3 Workspace Isolation
-
-```
-/workspaces/{org_id}/{session_name}/
-```
-
-### 9.4 Credential Scoping
-
-Git tokens and API keys are scoped to org-level secrets in CloudShip.
-
----
-
 ## Appendix
 
 ### A. OpenCode API Reference
