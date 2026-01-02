@@ -1350,6 +1350,406 @@ INSERT INTO run_events (run_id, seq, type, payload) VALUES (
 
 ---
 
+## Phase 8: NATS-Based Communication (Next)
+
+**Status**: Plugin Complete ✅, Station Integration Pending
+
+### 8.1 Architecture Evolution
+
+The Phase 1-7 implementation uses **direct HTTP** from Station to OpenCode. This works but has limitations:
+- Requires OpenCode to be directly reachable from Station
+- No message persistence if OpenCode is temporarily down
+- Limited streaming capabilities
+- Tight coupling between Station and OpenCode lifecycle
+
+**New Architecture: NATS Message Bus**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              NATS JetStream                                   │
+│                                                                               │
+│   ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────┐  │
+│   │ station.coding.task │    │ station.coding.stream│   │ station.coding. │  │
+│   │ (task requests)     │    │ (execution events)   │   │ result          │  │
+│   └─────────────────────┘    └─────────────────────┘   └─────────────────┘  │
+│            ▲                          │                        │             │
+│            │                          ▼                        ▼             │
+├────────────┼──────────────────────────┼────────────────────────┼─────────────┤
+│            │                          │                        │             │
+│   ┌────────┴────────┐        ┌────────┴────────┐      ┌────────┴────────┐   │
+│   │  Station Agent  │        │  Station Agent  │      │  Station Agent  │   │
+│   │  (Publisher)    │        │  (Subscriber)   │      │  (Subscriber)   │   │
+│   └─────────────────┘        └─────────────────┘      └─────────────────┘   │
+│                                                                               │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │                    OpenCode Container                                 │   │
+│   │   ┌───────────────────────────────────────────────────────────────┐ │   │
+│   │   │  @cloudshipai/opencode-plugin                                  │ │   │
+│   │   │    ├── TaskHandler      (consumes task, drives OpenCode)      │ │   │
+│   │   │    ├── EventPublisher   (streams events, publishes result)    │ │   │
+│   │   │    ├── WorkspaceManager (git clone, dirty detection)          │ │   │
+│   │   │    └── SessionManager   (KV-backed session persistence)       │ │   │
+│   │   └───────────────────────────────────────────────────────────────┘ │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                               │
+│   ┌─────────────────────┐    ┌─────────────────────┐                         │
+│   │ KV: coding.sessions │    │ KV: coding.state    │                         │
+│   │ (session metadata)  │    │ (agent context)     │                         │
+│   └─────────────────────┘    └─────────────────────┘                         │
+│                                                                               │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │ Object Store: coding.artifacts                                       │   │
+│   │ (large files, diffs, snapshots)                                      │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8.2 OpenCode Plugin (Complete)
+
+The OpenCode plugin (`@cloudshipai/opencode-plugin`) is **published and tested**:
+
+- **npm**: `@cloudshipai/opencode-plugin@0.1.0` (pending NPM_TOKEN)
+- **Docker**: `ghcr.io/cloudshipai/opencode-station:0.1.0` ✅
+
+**Plugin Capabilities**:
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| NATS Connection | ✅ | Connects to NATS on startup, graceful degradation |
+| Task Subscription | ✅ | Consumes from `station.coding.task` |
+| Workspace Management | ✅ | Git clone, branch checkout, dirty detection |
+| Session Management | ✅ | Create/continue sessions, message counting |
+| Stream Events | ✅ | Real-time events to `callback.streamSubject` |
+| Result Publishing | ✅ | Final result to `callback.resultSubject` |
+| KV Tools | ✅ | `station_kv_get`, `station_kv_set`, `station_session_info` |
+
+**Test Results**: 15 integration tests passing
+
+### 8.3 Station-Side NATS Dispatcher (TODO)
+
+Station needs a **NATS-based dispatcher** to replace direct HTTP calls.
+
+**Files to Create/Modify**:
+
+| File | Changes |
+|------|---------|
+| `internal/coding/nats_backend.go` | New backend using NATS instead of HTTP |
+| `internal/coding/nats_client.go` | NATS connection, pub/sub, KV/Object Store |
+| `internal/coding/tool.go` | Update tools to use NATS backend |
+| `internal/services/coding_tool_factory.go` | Wire NATS backend based on config |
+
+**Configuration**:
+
+```yaml
+# config.yaml
+coding:
+  backend: opencode-nats  # NEW: NATS-based backend
+  nats:
+    url: nats://localhost:4222
+    subjects:
+      task: station.coding.task
+      stream: station.coding.stream
+      result: station.coding.result
+    kv:
+      sessions: coding-sessions   # KV bucket for session state
+      state: coding-state         # KV bucket for agent context
+    object_store: coding-artifacts
+  # ... existing opencode config for fallback
+```
+
+**Tool Changes**:
+
+The existing `coding_open`, `code`, `coding_close` tools would:
+
+1. **coding_open**: 
+   - Publish task to NATS with callback subjects
+   - Wait for `session_created` event on stream
+   - Return session info from result
+
+2. **code**:
+   - Publish task to NATS with session reference
+   - Subscribe to stream subject for real-time events
+   - Collect result from result subject
+   - Return completion with trace data
+
+3. **coding_close**:
+   - Publish close request via NATS
+   - Collect final workspace state
+   - Cleanup local resources
+
+### 8.4 NATS KV Store Usage
+
+**Session State (KV: `coding-sessions`)**:
+
+Stores session metadata for continuation across agent runs.
+
+```typescript
+// Key: session name (e.g., "agent-123-session-1")
+interface SessionState {
+  sessionName: string;
+  opencodeID: string;        // OpenCode's internal session ID
+  workspaceName: string;
+  workspacePath: string;
+  git?: {
+    url: string;
+    branch: string;
+    lastCommit: string;
+  };
+  messageCount: number;
+  created: number;           // Unix timestamp
+  lastUsed: number;          // Unix timestamp
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Agent Context (KV: `coding-state`)**:
+
+Stores agent-specific context for cross-run persistence.
+
+```typescript
+// Key: agent ID + context key (e.g., "finops-analyzer:last-report")
+interface AgentContext {
+  agentID: string;
+  key: string;
+  value: unknown;
+  updated: number;
+  ttl?: number;              // Optional TTL in seconds
+}
+```
+
+**Station-Side KV Operations**:
+
+```go
+// internal/coding/nats_client.go
+type NATSCodingClient struct {
+    nc       *nats.Conn
+    js       nats.JetStreamContext
+    sessions nats.KeyValue  // coding-sessions bucket
+    state    nats.KeyValue  // coding-state bucket
+}
+
+func (c *NATSCodingClient) GetSession(name string) (*SessionState, error)
+func (c *NATSCodingClient) SaveSession(session *SessionState) error
+func (c *NATSCodingClient) GetContext(agentID, key string) ([]byte, error)
+func (c *NATSCodingClient) SetContext(agentID, key string, value []byte, ttl time.Duration) error
+```
+
+### 8.5 NATS Object Store Usage
+
+**Object Store: `coding-artifacts`**
+
+For sharing large files between Station and OpenCode:
+
+| Use Case | Object Key Pattern | Direction |
+|----------|-------------------|-----------|
+| Input files | `input/{taskID}/{filename}` | Station → OpenCode |
+| Output diffs | `output/{taskID}/changes.patch` | OpenCode → Station |
+| Snapshots | `snapshot/{sessionName}/{timestamp}.tar.gz` | OpenCode → Station |
+| Binary artifacts | `artifacts/{taskID}/{filename}` | Bidirectional |
+
+**File Staging Flow**:
+
+```
+1. Station prepares large input files
+   → Upload to Object Store: input/{taskID}/data.json
+
+2. Station publishes task with file references
+   → Task includes: { files: ["input/{taskID}/data.json"] }
+
+3. Plugin downloads files to workspace
+   → GET from Object Store → /workspaces/{name}/data.json
+
+4. OpenCode processes task
+   → Reads/writes files in workspace
+
+5. Plugin stages output files
+   → Collects changes → Upload to Object Store
+
+6. Plugin publishes result with artifact references
+   → Result includes: { artifacts: ["output/{taskID}/changes.patch"] }
+
+7. Station retrieves artifacts
+   → Download from Object Store → Apply locally
+```
+
+**Station-Side Object Store Operations**:
+
+```go
+// internal/coding/nats_client.go
+type NATSCodingClient struct {
+    // ...existing fields...
+    artifacts nats.ObjectStore  // coding-artifacts store
+}
+
+func (c *NATSCodingClient) StageInputFile(taskID, filename string, data []byte) error
+func (c *NATSCodingClient) GetOutputArtifact(taskID, filename string) ([]byte, error)
+func (c *NATSCodingClient) ListArtifacts(taskID string) ([]nats.ObjectInfo, error)
+func (c *NATSCodingClient) CleanupTask(taskID string) error
+```
+
+### 8.6 Streaming Events
+
+Real-time events from OpenCode to Station for observability:
+
+**Event Types**:
+
+| Event | When | Data |
+|-------|------|------|
+| `session_created` | New session started | `{ sessionName, opencodeID, workspacePath }` |
+| `session_reused` | Continuing existing session | `{ sessionName, messageCount }` |
+| `workspace_created` | New workspace initialized | `{ workspaceName, path, git? }` |
+| `workspace_reused` | Using existing workspace | `{ workspaceName, dirty, lastCommit }` |
+| `git_clone` | Cloning repository | `{ url, branch, duration }` |
+| `git_pull` | Pulling updates | `{ branch, commits, duration }` |
+| `prompt_sent` | Task submitted to OpenCode | `{ promptLength }` |
+| `text` | Text response chunk | `{ text }` |
+| `thinking` | Reasoning text | `{ text }` |
+| `tool_start` | Tool invocation started | `{ tool, input }` |
+| `tool_end` | Tool invocation completed | `{ tool, output, duration }` |
+| `error` | Error occurred | `{ message, code, recoverable }` |
+
+**Station-Side Event Handling**:
+
+```go
+// internal/coding/nats_backend.go
+func (b *NATSBackend) streamEvents(ctx context.Context, streamSubject string) <-chan CodingEvent {
+    events := make(chan CodingEvent)
+    sub, _ := b.client.Subscribe(streamSubject, func(msg *nats.Msg) {
+        var event CodingEvent
+        json.Unmarshal(msg.Data, &event)
+        select {
+        case events <- event:
+        case <-ctx.Done():
+        }
+    })
+    // ... cleanup on context cancel
+    return events
+}
+```
+
+### 8.7 Implementation Plan
+
+| Phase | Tasks | Effort |
+|-------|-------|--------|
+| 8.1 | NATS client wrapper for Station | 2 days |
+| 8.2 | NATSBackend implementing Backend interface | 2 days |
+| 8.3 | Update coding tools to use NATS dispatch | 1 day |
+| 8.4 | KV integration for session/context | 1 day |
+| 8.5 | Object Store for file staging | 2 days |
+| 8.6 | Stream event handling and OTEL integration | 1 day |
+| 8.7 | E2E tests with Docker Compose | 1 day |
+| 8.8 | Documentation and config examples | 1 day |
+
+**Total**: ~11 days
+
+### 8.8 Configuration Examples
+
+**Minimal Setup (Local Dev)**:
+
+```yaml
+# config.yaml
+coding:
+  backend: opencode-nats
+  nats:
+    url: nats://localhost:4222
+```
+
+**Production Setup**:
+
+```yaml
+# config.yaml
+coding:
+  backend: opencode-nats
+  nats:
+    url: nats://nats.internal:4222
+    creds_file: /etc/station/nats.creds
+    subjects:
+      task: org.{org_id}.coding.task
+      stream: org.{org_id}.coding.stream.{task_id}
+      result: org.{org_id}.coding.result.{task_id}
+    kv:
+      sessions: coding-sessions-{org_id}
+      state: coding-state-{org_id}
+    object_store: coding-artifacts-{org_id}
+  workspace_base_path: /var/station/workspaces
+  cleanup_policy: on_session_end
+  git:
+    token_env: GITHUB_TOKEN
+    user_name: "Station Bot"
+    user_email: "station@company.com"
+```
+
+**Docker Compose (Testing)**:
+
+```yaml
+# docker-compose.yaml
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: -js -m 8222
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  opencode:
+    image: ghcr.io/cloudshipai/opencode-station:0.1.0
+    environment:
+      - NATS_URL=nats://nats:4222
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - workspaces:/workspaces
+    depends_on:
+      - nats
+
+  station:
+    image: ghcr.io/cloudshipai/station:latest
+    environment:
+      - STN_CODING_BACKEND=opencode-nats
+      - STN_NATS_URL=nats://nats:4222
+    volumes:
+      - workspaces:/workspaces
+    depends_on:
+      - nats
+      - opencode
+
+volumes:
+  workspaces:
+```
+
+---
+
+## Phase 9: Multi-Tenant Isolation (Future)
+
+When running in multi-tenant mode (CloudShip platform):
+
+### 9.1 Subject Namespacing
+
+```
+org.{org_id}.coding.task          # Per-org task queue
+org.{org_id}.coding.stream.{id}   # Per-task stream (ephemeral)
+org.{org_id}.coding.result.{id}   # Per-task result (ephemeral)
+```
+
+### 9.2 KV/Object Store Buckets
+
+```
+coding-sessions-{org_id}          # Per-org session state
+coding-state-{org_id}             # Per-org context
+coding-artifacts-{org_id}         # Per-org file storage
+```
+
+### 9.3 Workspace Isolation
+
+```
+/workspaces/{org_id}/{session_name}/
+```
+
+### 9.4 Credential Scoping
+
+Git tokens and API keys are scoped to org-level secrets in CloudShip.
+
+---
+
 ## Appendix
 
 ### A. OpenCode API Reference
