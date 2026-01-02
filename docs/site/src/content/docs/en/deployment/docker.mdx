@@ -1,0 +1,188 @@
+---
+title: Docker Deployment
+description: Run Station in Docker with stn up
+---
+
+# Docker Deployment
+
+Station provides a containerized deployment option via `stn up` that bundles all services into a single command.
+
+## Quick Start
+
+```bash
+# Start Station in Docker
+stn up
+
+# Check status
+stn status
+
+# View logs
+stn logs
+
+# Stop Station
+stn down
+```
+
+## Exposed Ports
+
+| Port | Service | Description |
+|------|---------|-------------|
+| **8585** | Web UI / REST API | Station dashboard and HTTP API |
+| **8586** | MCP Server | Model Context Protocol endpoint |
+| **8587** | SSH Terminal | TUI-based admin interface |
+| **16686** | Jaeger UI | Distributed tracing dashboard |
+
+## Environment Variables
+
+Configure Station via environment variables:
+
+```bash
+# AI Provider (required)
+export STN_AI_PROVIDER=anthropic  # or: openai, gemini
+export STN_AI_MODEL=claude-sonnet-4-20250514
+
+# For API key auth (alternative to Claude Max/Pro)
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export GEMINI_API_KEY=...
+
+# Start with config
+stn up
+```
+
+## With Docker Compose
+
+For production deployments, use Docker Compose:
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  station:
+    image: ghcr.io/cloudshipai/station:latest
+    ports:
+      - "8585:8585"  # Web UI
+      - "8586:8586"  # MCP Server
+      - "8587:8587"  # SSH Terminal
+    volumes:
+      - ./environments:/app/environments
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - STN_AI_PROVIDER=anthropic
+      - STN_AI_MODEL=claude-sonnet-4-20250514
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+```
+
+```bash
+docker compose up -d
+```
+
+## Bundles in Docker
+
+Install bundles before starting:
+
+```bash
+# Install bundles to local environments folder
+stn bundle install devops-tools
+
+# Then start Docker (mounts environments folder)
+stn up
+```
+
+Or mount your existing workspace:
+
+```bash
+docker run -d \
+  -v /path/to/your/workspace:/app/environments \
+  -p 8585:8585 -p 8586:8586 \
+  ghcr.io/cloudshipai/station:latest
+```
+
+## Connecting MCP Clients
+
+When running in Docker, MCP clients connect to `localhost:8586`:
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:8586/sse"]
+    }
+  }
+}
+```
+
+### Cursor
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:8586/sse"]
+    }
+  }
+}
+```
+
+## Health Checks
+
+```bash
+# Check all services
+stn status
+
+# Check specific endpoint
+curl http://localhost:8585/health
+
+# View Jaeger traces
+open http://localhost:16686
+```
+
+## Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Find process using port
+lsof -i :8585
+
+# Use different ports
+docker run -p 9585:8585 -p 9586:8586 ghcr.io/cloudshipai/station:latest
+```
+
+### Container Won't Start
+
+```bash
+# Check logs
+docker logs station
+
+# Run interactively for debugging
+docker run -it --rm ghcr.io/cloudshipai/station:latest
+```
+
+### MCP Connection Refused
+
+Ensure the container is running and port 8586 is exposed:
+
+```bash
+docker ps
+curl http://localhost:8586/health
+```
+
+## Next Steps
+
+- [Production Deployment](/station/en/deployment/production) - High availability setup
+- [Security](/station/en/deployment/security) - TLS, authentication, secrets
+- [Monitoring](/station/en/deployment/monitoring) - Metrics and alerting

@@ -7,6 +7,19 @@ description: Install Station on your system
 
 Station provides multiple installation methods to fit your environment and preferences.
 
+## Prerequisites
+
+Before installing Station, ensure you have:
+
+| Requirement | Purpose | Required |
+|-------------|---------|----------|
+| **AI Provider** | One of: Claude Max/Pro subscription, OpenAI API key, or Gemini API key | ✅ Yes |
+| **Docker** | For Jaeger tracing (`stn jaeger up`) and optional containerized mode | Recommended |
+
+:::tip[Claude Max/Pro Recommended]
+Claude Max/Pro subscribers get the best experience - authenticate with `stn auth anthropic login` after install. No API key management needed.
+:::
+
 ## Automatic Installation (Recommended)
 
 The easiest way to install Station is using our installation script:
@@ -24,6 +37,28 @@ This script will:
 
 ## Manual Installation
 
+### Download from GitHub Releases
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/cloudshipai/station/releases):
+
+```bash
+# Linux x64
+curl -Lo stn https://github.com/cloudshipai/station/releases/latest/download/stn-linux-amd64
+chmod +x stn && sudo mv stn /usr/local/bin/
+
+# Linux ARM64
+curl -Lo stn https://github.com/cloudshipai/station/releases/latest/download/stn-linux-arm64
+chmod +x stn && sudo mv stn /usr/local/bin/
+
+# macOS Intel
+curl -Lo stn https://github.com/cloudshipai/station/releases/latest/download/stn-darwin-amd64
+chmod +x stn && sudo mv stn /usr/local/bin/
+
+# macOS Apple Silicon
+curl -Lo stn https://github.com/cloudshipai/station/releases/latest/download/stn-darwin-arm64
+chmod +x stn && sudo mv stn /usr/local/bin/
+```
+
 ### Build from Source
 
 Requirements:
@@ -37,6 +72,32 @@ make local-install
 ```
 
 This will build Station and install it to `~/.local/bin/stn`.
+
+## Docker Installation
+
+Run Station in a container with all dependencies pre-configured:
+
+```bash
+# Start Station with Docker
+stn up
+
+# View status
+stn status
+
+# View logs
+stn logs
+
+# Stop Station
+stn down
+```
+
+This starts Station with:
+- **Port 8585**: Web UI and REST API
+- **Port 8586**: MCP Server
+- **Port 8587**: SSH Terminal
+- **Port 16686**: Jaeger UI (tracing)
+
+See [Docker Deployment](/station/en/deployment/docker) for advanced configuration.
 
 ## Verify Installation
 
@@ -95,15 +156,25 @@ If `stn` command is not found:
 
 ### Platform Not Supported
 
-Station supports:
-- **Linux**: x64, ARM64
-- **macOS**: Intel, Apple Silicon  
-- **Windows**: x64
+See [Supported Platforms](#supported-platforms) for the list of supported architectures.
 
-If your platform isn't supported, try [building from source](#build-from-source) or [open an issue](https://github.com/cloudshipai/station/issues).
+If your platform isn't listed, try [building from source](#build-from-source) or [open an issue](https://github.com/cloudshipai/station/issues).
 
 ## System Requirements
 
-- **OS**: Linux, macOS, Windows
-- **Database**: SQLite (built-in, no setup required)
-- **Network**: Outbound HTTPS for AI providers and MCP tool integrations
+| Component | Requirement |
+|-----------|-------------|
+| **OS** | Linux, macOS, Windows |
+| **Memory** | 512MB minimum, 1GB+ recommended |
+| **Disk** | 100MB for binary + workspace |
+| **Database** | SQLite (built-in, no setup required) |
+| **Docker** | Optional - required for `stn jaeger up` and `stn up` |
+| **Network** | Outbound HTTPS for AI providers and MCP integrations |
+
+### Supported Platforms
+
+| Platform | Architectures |
+|----------|---------------|
+| **Linux** | x64 (amd64), ARM64 |
+| **macOS** | Intel (amd64), Apple Silicon (arm64) |
+| **Windows** | x64 (amd64) |

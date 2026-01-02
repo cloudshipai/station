@@ -29,10 +29,10 @@ Build multi-agent systems that coordinate like real teams. Test with realistic s
 ### Prerequisites
 
 - **Docker** - Required for Jaeger (traces and observability)
-- **AI Provider API Key** - Choose one:
-  - `OPENAI_API_KEY` - OpenAI (GPT-4o, GPT-4o-mini, o1, etc.)
-  - `GEMINI_API_KEY` or `GOOGLE_API_KEY` - Google Gemini
-  - Custom OpenAI-compatible endpoint (Anthropic, Ollama, etc.)
+- **AI Provider** - Choose one:
+  - Claude Max/Pro subscription (no API billing)
+  - `OPENAI_API_KEY` - OpenAI (gpt-4o-mini, gpt-4o, etc.)
+  - `GEMINI_API_KEY` - Google Gemini
 
 ### 1. Install Station
 
@@ -44,68 +44,86 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 
 Choose your AI provider:
 
-**OpenAI** (recommended):
+<details>
+<summary><b>Claude Max/Pro Subscription (Recommended)</b></summary>
+
+Use your existing Claude Max or Claude Pro subscription - no API billing required.
+
 ```bash
-export OPENAI_API_KEY="sk-..."
-stn init --provider openai --ship
+# Initialize with Anthropic
+stn init --provider anthropic --ship
+
+# Authenticate with your Claude subscription
+stn auth anthropic login
 ```
 
-**Google Gemini**:
+This opens your browser to authorize Station. After authorizing, paste the code and select your model:
+
+```
+✅ Successfully authenticated with Anthropic!
+
+   You're using your Claude Max/Pro subscription.
+   Station will automatically refresh tokens as needed.
+
+Select a model for your Claude Max/Pro subscription:
+
+* [1] Claude Opus 4.5 - Most capable model
+  [2] Claude Opus 4
+  [3] Claude Sonnet 4.5 - Balanced performance
+  [4] Claude Sonnet 4 - Fast and efficient
+  [5] Claude Haiku 4.5 - Fastest model
+```
+
+</details>
+
+<details>
+<summary><b>OpenAI (API Key)</b></summary>
+
+```bash
+export OPENAI_API_KEY="sk-..."
+stn init --provider openai --ship  # defaults to gpt-4o-mini
+```
+
+</details>
+
+<details>
+<summary><b>Google Gemini (API Key)</b></summary>
+
 ```bash
 export GEMINI_API_KEY="..."
 stn init --provider gemini --ship
 ```
 
-**Custom Provider** (Anthropic, Ollama, etc.):
-```bash
-stn init --provider custom --api-key "your-key" --base-url https://api.anthropic.com/v1 --model claude-3-sonnet --ship
-```
+</details>
 
 This sets up:
 - ✅ Your chosen AI provider
-- ✅ Ship CLI for filesystem MCP tools
+- ✅ [Ship CLI](https://github.com/cloudshipai/ship) for filesystem MCP tools
 - ✅ Configuration at `~/.config/station/config.yaml`
 
-### 3. Configure in Your AI Editor
+### 3. Start Jaeger (Tracing)
 
-Add Station to your MCP settings. Choose your editor:
+Start the Jaeger tracing backend for observability:
+
+```bash
+stn jaeger up
+```
+
+This starts Jaeger UI at [http://localhost:16686](http://localhost:16686) for viewing agent execution traces.
+
+### 4. Connect Your MCP Client
+
+Choose your editor and add Station:
 
 <details>
-<summary><b>Claude Desktop</b></summary>
+<summary><b>Claude Code CLI</b></summary>
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "station": {
-      "command": "stn",
-      "args": ["stdio"],
-      "env": {
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
-      }
-    }
-  }
-}
+```bash
+claude mcp add station -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 --scope user -- stn stdio
 ```
-</details>
 
-<details>
-<summary><b>Cursor</b></summary>
+Verify with `claude mcp list`.
 
-Add to `.mcp.json` in your project:
-```json
-{
-  "mcpServers": {
-    "station": {
-      "command": "stn",
-      "args": ["stdio"],
-      "env": {
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
-      }
-    }
-  }
-}
-```
 </details>
 
 <details>
@@ -126,6 +144,52 @@ Add to `opencode.jsonc`:
   }
 }
 ```
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+Add to `.cursor/mcp.json` in your project (or `~/.cursor/mcp.json` for global):
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Claude Desktop</b></summary>
+
+| OS | Config Path |
+|-----|------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
+```
+
 </details>
 
 **Optional GitOps:** Point to a Git-backed workspace:
@@ -133,9 +197,9 @@ Add to `opencode.jsonc`:
 "command": ["stn", "--config", "/path/to/my-agents/config.yaml", "stdio"]
 ```
 
-### 4. Start Building
+### 5. Start Building
 
-Restart your editor. Station automatically starts:
+Restart your editor. Station provides:
 - ✅ **Web UI** at `http://localhost:8585` for configuration
 - ✅ **Jaeger UI** at `http://localhost:16686` for traces
 - ✅ **41 MCP tools** available in your AI assistant
@@ -144,6 +208,82 @@ Restart your editor. Station automatically starts:
 ```
 "Show me all Station MCP tools available"
 ```
+
+<details>
+<summary><b>Interactive Onboarding Guide (3-5 min tutorial)</b></summary>
+
+Copy this prompt into your AI assistant for a hands-on tour:
+
+```
+You are my Station onboarding guide. Walk me through an interactive hands-on tutorial.
+
+RULES:
+1. Create a todo list to track progress through each section
+2. At each section, STOP and let me engage before continuing
+3. Use Station MCP tools to demonstrate - don't just explain, DO IT
+4. Keep it fun and celebrate wins!
+
+THE JOURNEY:
+
+## 1. Hello World Agent
+- Create a "hello-world" agent that greets users and tells a joke
+- Call the agent and show the result
+[STOP for me to try it]
+
+## 2. Faker Tools & MCP Templates
+- Explain Faker tools (AI-generated mock data for safe development)
+- Note: Real MCP tools are added via Station UI or template.json
+- Explain MCP templates - they keep credentials safe when deploying
+- Create a "prometheus-metrics" faker for realistic metrics
+[STOP to see the faker]
+
+## 3. DevOps Investigation Agent
+- Create a "metrics-investigator" agent using our prometheus faker
+- Call it: "Check for performance issues in the last hour"
+[STOP to review the investigation]
+
+## 4. Multi-Agent Hierarchy
+- Create an "incident-coordinator" that delegates to:
+  - metrics-investigator (existing)
+  - logs-investigator (new - create a logs faker)
+- Show hierarchy structure in the .prompt file
+- Call coordinator: "Investigate why the API is slow"
+[STOP to see delegation]
+
+## 5. Inspecting Runs
+- Use inspect_run to show detailed execution
+- Explain: tool calls, delegations, timing
+[STOP to explore]
+
+## 6. Workflow with Human-in-the-Loop
+- Create a workflow: investigate → switch on severity → human_approval if high → report
+- Make it complex (switch/parallel), not sequential
+- Start the workflow
+[STOP for me to approve/reject]
+
+## 7. Evaluation & Reporting
+- Run evals with evaluate_benchmark
+- Generate a performance report
+[STOP to review]
+
+## 8. Grand Finale
+- Direct me to http://localhost:8585 (Station UI)
+- Quick tour: Agents, MCP servers, Runs, Workflows
+- Celebrate!
+
+## 9. Want More? (Optional)
+Briefly explain these advanced features (no demo needed):
+- **Schedules**: Cron-based agent scheduling
+- **Sandboxes**: Isolated code execution (Python/Node/Bash)
+- **Notify Webhooks**: Send alerts to Slack, ntfy, Discord
+- **Bundles**: Package and share agent teams
+- **Deploy**: `stn deploy` to Fly.io, Docker, K8s
+- **CloudShip**: Centralized management and team OAuth
+
+Start now with Section 1!
+```
+
+</details>
 
 ---
 

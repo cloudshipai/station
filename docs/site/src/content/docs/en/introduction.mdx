@@ -48,22 +48,24 @@ When you need agents for internal work, you need more than application-focused a
 
 ## Quick Start
 
-Get production-ready security agents in 3 simple steps:
+Get Station running in 2 minutes:
 
 ```bash
 # 1. Install Station
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
-stn init --ship
 
-# 2. Install DevOps Security Bundle
-stn bundle install https://github.com/cloudshipai/registry/releases/latest/download/devops-security-bundle.tar.gz security
+# 2. Initialize with your AI provider
+stn init --provider anthropic --ship  # or: openai, gemini
+stn auth anthropic login              # for Claude Max/Pro subscription
 
-# 3. Sync and connect to Claude Code
-stn sync
-echo '{"mcpServers":{"station":{"command":"stn","args":["stdio"]}}}' > ~/.claude_desktop_config.json
+# 3. Start Jaeger tracing
+stn jaeger up
+
+# 4. Connect to Claude Code
+claude mcp add station -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 --scope user -- stn stdio
 ```
 
-**✅ Ready!** Open [Station UI](http://localhost:8585) and start using security agents through Claude Code.
+**✅ Ready!** You now have 41 MCP tools available. Open [Station UI](http://localhost:8585) to configure agents.
 
 <img src="/station/mcp-servers.png" alt="Station Interface" style="cursor: pointer; border: 1px solid #ccc; border-radius: 8px;" onclick="window.open(this.src, '_blank')" />
 
@@ -104,8 +106,9 @@ graph TB
     subgraph "AI & Integration"
         GenKit["GenKit Framework"]
         ExternalMCP["External MCP Servers"]
-        Gemini["Gemini Provider"]
+        Anthropic["Anthropic Provider"]
         OpenAI["OpenAI Provider"]
+        Gemini["Gemini Provider"]
     end
     
     CLI --> Agent
@@ -124,15 +127,16 @@ graph TB
     
     Agent --> GenKit
     ToolDiscovery --> ExternalMCP
-    GenKit --> Gemini
+    GenKit --> Anthropic
     GenKit --> OpenAI
+    GenKit --> Gemini
 ```
 
 All interfaces connect to the core agent management system with MCP tool integration, configuration management, and security services.
 
 ## Next Steps
 
-- [Get Station running in 5 minutes →](/station/en/mcp-quickstart)
-- [Complete Claude Desktop setup →](/station/en/mcp/claude-desktop)
-- [Learn what you can do via MCP →](/station/en/mcp/tools)
-- [Browse ready-to-use bundles →](https://cloudshipai.github.io/registry)
+- [Quick Start Guide →](/station/en/quickstart) - Get running in 5 minutes
+- [Installation Options →](/station/en/installation) - Manual install, Docker, build from source
+- [Learn MCP Tools →](/station/en/mcp/tools) - What you can do via MCP
+- [Browse Bundles →](https://cloudshipai.github.io/registry) - Ready-to-use agent bundles
